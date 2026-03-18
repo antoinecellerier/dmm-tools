@@ -107,10 +107,11 @@ impl Ut61ePlusTable {
                 RangeInfo { label: "220mA",   unit: "mA",  overload_pos: 220.0,   overload_neg: -220.0 },
             ],
             dc_a: [
-                RangeInfo { label: "10A",     unit: "A",   overload_pos: 10.0,    overload_neg: -10.0 },
+                // Manual specifies 20A range (not 10A)
+                RangeInfo { label: "20A",     unit: "A",   overload_pos: 20.0,    overload_neg: -20.0 },
             ],
             ac_a: [
-                RangeInfo { label: "10A",     unit: "A",   overload_pos: 10.0,    overload_neg: -10.0 },
+                RangeInfo { label: "20A",     unit: "A",   overload_pos: 20.0,    overload_neg: -20.0 },
             ],
         }
     }

@@ -83,19 +83,22 @@ impl Measurement {
             .map(|r| r.label.to_string())
             .unwrap_or_default();
 
-        // Parse display value
+        // Parse display value.
+        // The meter pads with spaces for alignment, e.g. "- 55.79" for -55.79.
+        // Strip all spaces before parsing to handle this.
         let display_trimmed = display_raw.trim();
+        let display_compact: String = display_trimmed.chars().filter(|c| *c != ' ').collect();
         let value = if mode == Mode::Ncv {
             // NCV mode: display is a level indicator
-            let level = display_trimmed.parse::<u8>().unwrap_or(0);
+            let level = display_compact.parse::<u8>().unwrap_or(0);
             MeasuredValue::NcvLevel(level)
-        } else if display_trimmed == "OL" || display_trimmed == " OL" || display_trimmed.contains("OL") {
+        } else if display_compact == "OL" || display_compact.contains("OL") {
             MeasuredValue::Overload
         } else {
-            match display_trimmed.parse::<f64>() {
+            match display_compact.parse::<f64>() {
                 Ok(v) => MeasuredValue::Normal(v),
                 Err(_) => {
-                    debug!("measurement: could not parse display value: {:?}", display_trimmed);
+                    debug!("measurement: could not parse display value: {:?} (compact: {:?})", display_trimmed, display_compact);
                     MeasuredValue::Overload
                 }
             }
@@ -188,6 +191,15 @@ mod tests {
         assert!(m.flags.hold);
         assert!(m.flags.auto_range);
         assert!(!m.flags.rel);
+    }
+
+    #[test]
+    fn parse_negative_with_space() {
+        // The meter sends "- 55.79" (space between sign and digits) for -55.79 mV
+        let table = Ut61ePlusTable::new();
+        let payload = make_payload(0x03, 0x00, b"- 55.79", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let m = Measurement::parse(&payload, &table).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-55.79)).abs() < 1e-6));
     }
 
     #[test]

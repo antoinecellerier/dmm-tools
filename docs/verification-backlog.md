@@ -8,7 +8,7 @@ Items that need real components or specific setups to verify.
 - **DC mV (0x03):** Needs small DC voltage source. Currently only tested as auto-range from DC V.
 - **AC µA (0x0D):** Needs AC current source.
 - **AC mA (0x0F):** Needs AC current source.
-- **DC A (0x10):** Needs high-current circuit. Note: A range is 20A per manual (our table says 10A — needs fix).
+- **DC A (0x10):** Needs high-current circuit.
 - **AC A (0x11):** Needs high-current circuit.
 - **Temperature °C (0x0A):** Needs K-type thermocouple.
 - **Temperature °F (0x0B):** Needs K-type thermocouple.
@@ -29,7 +29,6 @@ Items that need real components or specific setups to verify.
 
 ### Range tables
 - Range byte values for each mode need verification against real device at each range.
-- A range is 20A per manual, our table says 10A — **confirmed bug, needs fix**.
 - DC mV mode (0x03) ranges not verified — does it share tables with DC V range 0?
 
 ### Mode byte collisions
