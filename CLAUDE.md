@@ -4,8 +4,8 @@ Rust workspace for communicating with the UNI-T UT61E+ multimeter via USB (CP211
 
 ## Project structure
 
-- `crates/ut61eplus-lib/` — library: CP2110 transport, protocol framing, measurement parsing, device tables
-- `crates/ut61eplus-cli/` — CLI binary: data logging, device enumeration, guided protocol capture tool
+- `crates/ut61eplus-lib/` — library: CP2110 transport, protocol framing, measurement parsing, device tables. `protocol` module is `pub(crate)` — consumers use `Dmm` API, not raw frame extraction.
+- `crates/ut61eplus-cli/` — CLI binary (`main.rs` for commands, `capture.rs` for guided capture tool, `format.rs` for output formatting)
 - `crates/ut61eplus-gui/` — GUI binary: real-time display and plotting (eframe/egui)
 
 ## Build & test
@@ -47,6 +47,8 @@ Rust workspace for communicating with the UNI-T UT61E+ multimeter via USB (CP211
 - Are new public types/functions documented?
 - For protocol code: are byte offsets and masks correct? Cross-check against the protocol spec in this file.
 - For unsafe or HID code: are buffer sizes correct? Can a malformed response cause a panic?
+- For GUI render paths: avoid per-frame allocations in hot loops. Use cached data with dirty flags where possible. Graph segments and gap ranges are cached — invalidate via `invalidate_cache()` when data changes.
+- For new buffers: ensure bounded growth. Graph history caps at 10K points, recording at 500K samples.
 
 ### Documentation
 - Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought
