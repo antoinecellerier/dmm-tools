@@ -678,22 +678,25 @@ impl App {
             // Windowed stats for visible graph interval
             if let Some((vmin, vmax, vavg, vcount)) = vis {
                 ui.add_space(4.0);
+                let weak = ui.visuals().weak_text_color();
                 ui.label(
-                    RichText::new("Visible")
-                        .strong()
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
+                    RichText::new("Visible").strong().small().color(weak),
                 );
                 ui.label(
-                    RichText::new(format!(
-                        "Min:{} Max:{} Avg:{} ({})",
-                        fmt(Some(vmin)),
-                        fmt(Some(vmax)),
-                        fmt(Some(vavg)),
-                        vcount,
-                    ))
-                    .font(egui::FontId::monospace(10.0))
-                    .color(ui.visuals().weak_text_color()),
+                    RichText::new(format!("Min:{}", fmt(Some(vmin))))
+                        .font(egui::FontId::monospace(10.0)).color(weak),
+                );
+                ui.label(
+                    RichText::new(format!("Max:{}", fmt(Some(vmax))))
+                        .font(egui::FontId::monospace(10.0)).color(weak),
+                );
+                ui.label(
+                    RichText::new(format!("Avg:{}", fmt(Some(vavg))))
+                        .font(egui::FontId::monospace(10.0)).color(weak),
+                );
+                ui.label(
+                    RichText::new(format!("Count: {vcount}"))
+                        .small().color(weak),
                 );
             }
         }
