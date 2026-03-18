@@ -6,7 +6,7 @@ use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 use crate::display;
 use crate::graph::Graph;
 use crate::recording::Recording;
-use crate::settings::{GraphTimeWindow, Settings, ThemeMode};
+use crate::settings::{Settings, ThemeMode};
 use crate::stats::Stats;
 
 /// Messages from the background thread to the UI.
@@ -347,23 +347,6 @@ impl App {
         });
 
         ui.horizontal(|ui| {
-            ui.label("Graph window:");
-            let mut changed = false;
-            for window in GraphTimeWindow::ALL {
-                if ui
-                    .selectable_label(self.settings.graph_time_window == *window, window.label())
-                    .clicked()
-                {
-                    self.settings.graph_time_window = *window;
-                    changed = true;
-                }
-            }
-            if changed {
-                self.settings.save();
-            }
-        });
-
-        ui.horizontal(|ui| {
             let mut changed = false;
             if ui
                 .checkbox(&mut self.settings.auto_connect, "Auto-connect on start")
@@ -575,7 +558,7 @@ impl eframe::App for App {
                         - if self.settings.show_recording { 60.0 } else { 0.0 };
                     let graph_height = graph_height.max(80.0);
                     ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                        self.graph.show(ui, self.settings.graph_time_window.as_secs());
+                        self.graph.show(ui, 0.0);
                     });
                 }
 
@@ -598,7 +581,7 @@ impl eframe::App for App {
                     ui.separator();
                     let graph_height = (ui.available_height() * 0.5).max(80.0);
                     ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                        self.graph.show(ui, self.settings.graph_time_window.as_secs());
+                        self.graph.show(ui, 0.0);
                     });
                 }
 

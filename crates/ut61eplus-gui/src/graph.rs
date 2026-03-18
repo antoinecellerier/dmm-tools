@@ -1,5 +1,5 @@
-use eframe::egui::{self, Ui};
-use egui_plot::{Line, Plot, PlotPoints, VLine};
+use eframe::egui::{self, Ui, Vec2b};
+use egui_plot::{Line, Plot, PlotBounds, PlotPoints, VLine};
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -10,6 +10,9 @@ const MAX_POINTS: usize = 10_000;
 /// we consider it a disconnect gap and break the line.
 const GAP_THRESHOLD_SECS: f64 = 5.0;
 
+/// Minimap height in logical pixels.
+const MINIMAP_HEIGHT: f32 = 40.0;
+
 /// A data point with an absolute timestamp.
 #[derive(Clone, Copy)]
 struct DataPoint {
@@ -17,14 +20,26 @@ struct DataPoint {
     value: f64,
 }
 
-/// Real-time scrolling graph of measurement values.
-/// Uses absolute timestamps so data persists across reconnects.
+/// Time window presets.
+pub const TIME_WINDOWS: &[(f64, &str)] = &[
+    (10.0, "10s"),
+    (30.0, "30s"),
+    (60.0, "1m"),
+    (300.0, "5m"),
+    (600.0, "10m"),
+];
+
+/// Real-time scrolling graph with minimap navigation.
 pub struct Graph {
     history: VecDeque<DataPoint>,
-    /// The mode string when points were recorded. Cleared on mode change.
     current_mode: Option<String>,
-    /// The time origin — first data point ever pushed.
     origin: Option<Instant>,
+    /// Time window width in seconds for the main view.
+    pub time_window_secs: f64,
+    /// When true, main graph auto-scrolls to latest data.
+    pub live: bool,
+    /// User-controlled view center (seconds from origin). Used when not live.
+    view_center: f64,
 }
 
 impl Graph {
@@ -33,10 +48,12 @@ impl Graph {
             history: VecDeque::with_capacity(MAX_POINTS),
             current_mode: None,
             origin: None,
+            time_window_secs: 60.0,
+            live: true,
+            view_center: 0.0,
         }
     }
 
-    /// Push a new data point. If mode changed, clear history.
     pub fn push(&mut self, value: f64, mode: &str) {
         let now = Instant::now();
 
@@ -61,9 +78,9 @@ impl Graph {
         self.history.clear();
         self.current_mode = None;
         self.origin = None;
+        self.live = true;
     }
 
-    /// Convert an Instant to seconds-from-origin for display.
     fn elapsed_secs(&self, t: Instant) -> f64 {
         match self.origin {
             Some(origin) => t.duration_since(origin).as_secs_f64(),
@@ -71,55 +88,38 @@ impl Graph {
         }
     }
 
-    /// Render the plot in the given UI region.
-    pub fn show(&self, ui: &mut Ui, time_window_secs: f64) {
-        // Split history into segments separated by gaps (disconnects).
-        // Each segment becomes its own Line so gaps show as breaks.
-        let segments = self.build_segments();
-
+    fn data_time_range(&self) -> (f64, f64) {
+        let x_min = self
+            .history
+            .front()
+            .map(|p| self.elapsed_secs(p.time))
+            .unwrap_or(0.0);
         let x_max = self
             .history
             .back()
             .map(|p| self.elapsed_secs(p.time))
             .unwrap_or(0.0);
-        let x_min = (x_max - time_window_secs).max(0.0);
-
-        // Find gap boundaries for shaded disconnect regions
-        let gap_ranges = self.find_gap_ranges();
-
-        let line_color = egui::Color32::from_rgb(200, 100, 100);
-        let gap_color = egui::Color32::from_rgba_premultiplied(150, 60, 60, 120);
-
-        Plot::new("measurement_plot")
-            .height(ui.available_height().max(80.0))
-            .include_x(x_min)
-            .include_x(x_max)
-            .allow_drag(false)
-            .allow_zoom(false)
-            .allow_scroll(false)
-            .x_axis_label("time (s)")
-            .show(ui, |plot_ui| {
-                for segment in segments {
-                    plot_ui.line(Line::new(segment).color(line_color));
-                }
-
-                for &(gap_start, gap_end) in &gap_ranges {
-                    plot_ui.vline(
-                        VLine::new(gap_start)
-                            .color(gap_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
-                    plot_ui.vline(
-                        VLine::new(gap_end)
-                            .color(gap_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
-                }
-            });
+        (x_min, x_max)
     }
 
-    /// Build line segments, breaking at gaps.
-    fn build_segments(&self) -> Vec<PlotPoints> {
+    /// Current view bounds (x_min, x_max) for the main graph.
+    fn view_bounds(&self) -> (f64, f64) {
+        let (_, data_max) = self.data_time_range();
+        let half = self.time_window_secs / 2.0;
+
+        if self.live {
+            let x_max = data_max;
+            let x_min = (x_max - self.time_window_secs).max(0.0);
+            (x_min, x_max)
+        } else {
+            let x_min = (self.view_center - half).max(0.0);
+            let x_max = x_min + self.time_window_secs;
+            (x_min, x_max)
+        }
+    }
+
+    /// Build raw segment data as Vec<Vec<[f64;2]>> — avoids PlotPoints clone issues.
+    fn build_raw_segments(&self) -> Vec<Vec<[f64; 2]>> {
         let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
         let mut current_segment: Vec<[f64; 2]> = Vec::new();
         let mut prev_time: Option<Instant> = None;
@@ -142,10 +142,9 @@ impl Graph {
             segments.push(current_segment);
         }
 
-        segments.into_iter().map(PlotPoints::new).collect()
+        segments
     }
 
-    /// Find (start, end) time ranges of gaps for drawing disconnect regions.
     fn find_gap_ranges(&self) -> Vec<(f64, f64)> {
         let mut gaps = Vec::new();
         let mut prev: Option<&DataPoint> = None;
@@ -163,6 +162,152 @@ impl Graph {
         }
 
         gaps
+    }
+
+    /// Render toolbar (time window buttons + live toggle).
+    pub fn show_toolbar(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+
+            for &(secs, label) in TIME_WINDOWS {
+                if ui
+                    .selectable_label(
+                        (self.time_window_secs - secs).abs() < 0.1,
+                        label,
+                    )
+                    .clicked()
+                {
+                    self.time_window_secs = secs;
+                }
+            }
+
+            ui.separator();
+
+            let live_color = if self.live {
+                egui::Color32::from_rgb(60, 180, 75)
+            } else {
+                ui.visuals().weak_text_color()
+            };
+            if ui
+                .add(egui::Button::new(
+                    egui::RichText::new("LIVE").color(live_color).small(),
+                ))
+                .clicked()
+            {
+                self.live = !self.live;
+            }
+        });
+    }
+
+    /// Render the main graph.
+    pub fn show_main(&mut self, ui: &mut Ui) {
+        let raw_segments = self.build_raw_segments();
+        let gap_ranges = self.find_gap_ranges();
+        let (view_min, view_max) = self.view_bounds();
+
+        let line_color = egui::Color32::from_rgb(200, 100, 100);
+        let gap_color = egui::Color32::from_rgba_premultiplied(150, 60, 60, 120);
+
+        let can_interact = !self.live;
+
+        let response = Plot::new("main_plot")
+            .height(ui.available_height().max(60.0))
+            .allow_drag(Vec2b::new(can_interact, false))
+            .allow_zoom(Vec2b::new(can_interact, false))
+            .allow_scroll(Vec2b::new(false, false))
+            .allow_double_click_reset(false)
+            .include_x(view_min)
+            .include_x(view_max)
+            .x_axis_label("time (s)")
+            .show(ui, |plot_ui| {
+                // Force X bounds in live mode
+                if self.live {
+                    let bounds = plot_ui.plot_bounds();
+                    plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                        [view_min, bounds.min()[1]],
+                        [view_max, bounds.max()[1]],
+                    ));
+                }
+
+                for seg in &raw_segments {
+                    plot_ui.line(
+                        Line::new(PlotPoints::new(seg.clone())).color(line_color),
+                    );
+                }
+
+                for &(gap_start, gap_end) in &gap_ranges {
+                    plot_ui.vline(
+                        VLine::new(gap_start)
+                            .color(gap_color)
+                            .style(egui_plot::LineStyle::dashed_dense()),
+                    );
+                    plot_ui.vline(
+                        VLine::new(gap_end)
+                            .color(gap_color)
+                            .style(egui_plot::LineStyle::dashed_dense()),
+                    );
+                }
+            });
+
+        // If user dragged/zoomed, capture the new view
+        if can_interact {
+            let bounds = response.transform.bounds();
+            self.view_center = (bounds.min()[0] + bounds.max()[0]) / 2.0;
+            self.time_window_secs = bounds.max()[0] - bounds.min()[0];
+        }
+
+        // Double-click to return to live mode
+        if response.response.double_clicked() {
+            self.live = true;
+        }
+    }
+
+    /// Render the minimap showing full history with viewport indicator.
+    pub fn show_minimap(&self, ui: &mut Ui) {
+        if self.history.len() < 2 {
+            ui.allocate_space(egui::vec2(ui.available_width(), MINIMAP_HEIGHT));
+            return;
+        }
+
+        let raw_segments = self.build_raw_segments();
+        let (data_min, data_max) = self.data_time_range();
+        let (view_min, view_max) = self.view_bounds();
+
+        let line_color = egui::Color32::from_rgba_premultiplied(200, 100, 100, 150);
+        let viewport_color = egui::Color32::from_rgba_premultiplied(100, 150, 255, 80);
+
+        Plot::new("minimap_plot")
+            .height(MINIMAP_HEIGHT)
+            .include_x(data_min)
+            .include_x(data_max)
+            .allow_drag(false)
+            .allow_zoom(false)
+            .allow_scroll(false)
+            .show_axes(Vec2b::new(true, false))
+            .show_grid(false)
+            .show(ui, |plot_ui| {
+                for seg in &raw_segments {
+                    plot_ui.line(
+                        Line::new(PlotPoints::new(seg.clone())).color(line_color),
+                    );
+                }
+
+                // Viewport indicator as two vertical lines
+                plot_ui.vline(VLine::new(view_min).color(viewport_color).width(2.0));
+                plot_ui.vline(VLine::new(view_max).color(viewport_color).width(2.0));
+            });
+    }
+
+    /// Combined render: toolbar + main graph + minimap.
+    pub fn show(&mut self, ui: &mut Ui, _time_window_secs: f64) {
+        self.show_toolbar(ui);
+        let minimap_reserve = MINIMAP_HEIGHT + 30.0;
+        let main_height = (ui.available_height() - minimap_reserve).max(60.0);
+        ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
+            self.show_main(ui);
+        });
+        ui.add_space(4.0);
+        self.show_minimap(ui);
     }
 
     pub fn len(&self) -> usize {
@@ -191,6 +336,7 @@ mod tests {
         let g = Graph::new();
         assert!(g.is_empty());
         assert_eq!(g.len(), 0);
+        assert!(g.live);
     }
 
     #[test]
@@ -208,9 +354,8 @@ mod tests {
         g.push(5.0, "DC V");
         g.push(5.1, "DC V");
         assert_eq!(g.len(), 2);
-
         g.push(100.0, "Ohm");
-        assert_eq!(g.len(), 1); // cleared + new point
+        assert_eq!(g.len(), 1);
     }
 
     #[test]
@@ -226,10 +371,12 @@ mod tests {
     fn clear_resets_everything() {
         let mut g = Graph::new();
         g.push(5.0, "DC V");
+        g.live = false;
         g.clear();
         assert!(g.is_empty());
         assert_eq!(g.current_mode, None);
         assert!(g.origin.is_none());
+        assert!(g.live);
     }
 
     #[test]
@@ -238,15 +385,14 @@ mod tests {
         g.push(1.0, "DC V");
         g.push(2.0, "DC V");
         g.push(3.0, "DC V");
-        let segments = g.build_segments();
-        assert_eq!(segments.len(), 1); // all one segment
+        let segments = g.build_raw_segments();
+        assert_eq!(segments.len(), 1);
     }
 
     #[test]
     fn gap_detection() {
         let mut g = Graph::new();
         g.push(1.0, "DC V");
-        // Consecutive points without real delay should produce no gaps
         g.push(2.0, "DC V");
         let gaps = g.find_gap_ranges();
         assert!(gaps.is_empty());
@@ -259,6 +405,33 @@ mod tests {
         sleep(Duration::from_millis(50));
         g.push(2.0, "DC V");
         let t = g.elapsed_secs(g.history.back().unwrap().time);
-        assert!(t >= 0.04); // at least 40ms
+        assert!(t >= 0.04);
+    }
+
+    #[test]
+    fn live_view_bounds_follow_latest() {
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.push(1.0, "DC V");
+        let (vmin, vmax) = g.view_bounds();
+        assert!(vmin >= 0.0);
+        assert!(vmax >= vmin);
+    }
+
+    #[test]
+    fn manual_view_bounds() {
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.live = false;
+        g.view_center = 50.0;
+        let (vmin, vmax) = g.view_bounds();
+        assert!((vmin - 45.0).abs() < 0.1);
+        assert!((vmax - 55.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn time_window_presets_exist() {
+        assert!(TIME_WINDOWS.len() >= 3);
+        assert_eq!(TIME_WINDOWS[0].1, "10s");
     }
 }
