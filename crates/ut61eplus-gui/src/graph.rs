@@ -127,6 +127,8 @@ impl Graph {
             self.history.clear();
             self.current_mode = Some(mode.to_string());
             self.origin = Some(now);
+            self.live = true;
+            self.view_center = 0.0;
         }
         self.current_unit = unit.to_string();
 
@@ -140,8 +142,10 @@ impl Graph {
     pub fn clear(&mut self) {
         self.history.clear();
         self.current_mode = None;
+        self.current_unit.clear();
         self.origin = None;
         self.live = true;
+        self.view_center = 0.0;
         self.y_axis_fixed = false;
         self.y_user_set = false;
     }
