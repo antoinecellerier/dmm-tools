@@ -49,6 +49,10 @@ pub struct App {
     first_frame: bool,
     /// OS default pixels_per_point, captured on first frame.
     os_ppp: Option<f32>,
+    /// Last applied theme (to avoid re-setting every frame).
+    applied_theme: Option<ThemeMode>,
+    /// User-resizable recording panel height.
+    recording_height: f32,
 }
 
 impl App {
@@ -70,14 +74,22 @@ impl App {
             cmd_tx: None,
             first_frame: true,
             os_ppp: None,
+            applied_theme: None,
+            recording_height: 120.0,
         }
     }
 
-    fn apply_theme(&self, ctx: &egui::Context) {
-        match self.settings.theme {
-            ThemeMode::Dark => ctx.set_visuals(egui::Visuals::dark()),
-            ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
-            ThemeMode::System => ctx.set_visuals(egui::Visuals::dark()),
+    fn apply_theme(&mut self, ctx: &egui::Context) {
+        let target = match self.settings.theme {
+            ThemeMode::Dark | ThemeMode::System => ThemeMode::Dark,
+            ThemeMode::Light => ThemeMode::Light,
+        };
+        if self.applied_theme != Some(target) {
+            match target {
+                ThemeMode::Dark | ThemeMode::System => ctx.set_visuals(egui::Visuals::dark()),
+                ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
+            }
+            self.applied_theme = Some(target);
         }
     }
 
@@ -89,7 +101,11 @@ impl App {
             self.os_ppp = Some(ctx.pixels_per_point());
         }
         let os_ppp = self.os_ppp.unwrap();
-        ctx.set_pixels_per_point(os_ppp * self.settings.zoom_pct as f32 / 100.0);
+        let target_ppp = os_ppp * self.settings.zoom_pct as f32 / 100.0;
+        // Only update when changed — setting ppp every frame resets panel resize state
+        if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
+            ctx.set_pixels_per_point(target_ppp);
+        }
     }
 
     fn zoom_in(&mut self) {
@@ -405,8 +421,9 @@ impl App {
                     "The USB adapter is connected but the meter \n\
                      isn't responding. To enable data transmission:\n\
                      1. Insert the USB module into the meter\n\
-                     2. Long press the USB/Hz button\n\
-                     3. The S icon appears on the LCD"
+                     2. Turn the meter on\n\
+                     3. Long press the USB/Hz button\n\
+                     4. The S icon appears on the LCD"
                 )
                 .small()
                 .color(ui.visuals().weak_text_color()),
@@ -609,6 +626,20 @@ impl App {
                     self.stats.reset();
                 }
             });
+
+            if let Some((vmin, vmax, vavg, vcount)) = vis {
+                ui.label(
+                    RichText::new(format!(
+                        "View: Min:{} Max:{} Avg:{} ({})",
+                        fmt(Some(vmin)),
+                        fmt(Some(vmax)),
+                        fmt(Some(vavg)),
+                        vcount,
+                    ))
+                    .font(egui::FontId::monospace(10.0))
+                    .color(ui.visuals().weak_text_color()),
+                );
+            }
         } else {
             ui.label(RichText::new("Statistics").strong().small());
             ui.label(
@@ -674,9 +705,9 @@ impl App {
             }
         });
 
-        // Scrollable sample log (skip in compact mode if few samples)
-        if !self.recording.samples.is_empty() && (!compact || self.recording.samples.len() > 0) {
-            let max_height = if compact { 80.0 } else { 150.0 };
+        // Scrollable sample log
+        if !self.recording.samples.is_empty() {
+            let max_height = if compact { 80.0 } else { ui.available_height().max(60.0) };
             egui::ScrollArea::vertical()
                 .max_height(max_height)
                 .stick_to_bottom(true)
@@ -769,11 +800,11 @@ impl eframe::App for App {
         let wide = ctx.screen_rect().width() >= 900.0;
 
         if wide {
-            // Wide: left side panel for reading + stats
+            // Wide: left side panel for reading + stats (resizable)
             egui::SidePanel::left("reading_panel")
-                .min_width(220.0)
-                .max_width(280.0)
-                .resizable(false)
+                .default_width(240.0)
+                .width_range(180.0..=400.0)
+                .resizable(true)
                 .show(ctx, |ui| {
                     display::show_reading(ui, self.last_measurement.as_ref());
                     self.show_remote_controls(ui);
@@ -788,23 +819,36 @@ impl eframe::App for App {
 
             // Wide: center panel for graph + recording
             egui::CentralPanel::default().show(ctx, |ui| {
-                if self.settings.show_graph {
-                    // Give graph most of the space
-                    let graph_height = ui.available_height()
-                        - if self.settings.show_recording { 60.0 } else { 0.0 };
-                    let graph_height = graph_height.max(80.0);
+                if self.settings.show_graph && self.settings.show_recording {
+                    // Split: graph on top, recording on bottom with drag separator
+                    let total = ui.available_height();
+                    let graph_height = (total - self.recording_height).max(80.0);
+
                     ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                         self.graph.show(ui, 0.0);
                     });
-                }
 
-                if self.settings.show_recording {
-                    ui.separator();
+                    // Drag handle separator
+                    let sep = ui.separator();
+                    let sep_id = ui.id().with("rec_resize");
+                    let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
+                    if sep_response.dragged() {
+                        self.recording_height = (self.recording_height - sep_response.drag_delta().y)
+                            .clamp(40.0, total - 80.0);
+                    }
+                    if sep_response.hovered() || sep_response.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                    }
+
+                    self.show_recording_section(ui, false);
+                } else if self.settings.show_graph {
+                    self.graph.show(ui, 0.0);
+                } else if self.settings.show_recording {
                     self.show_recording_section(ui, false);
                 }
             });
         } else {
-            // Narrow: single column — stats under reading (they're related)
+            // Narrow: single column
             egui::CentralPanel::default().show(ctx, |ui| {
                 display::show_reading_compact(ui, self.last_measurement.as_ref());
                 self.show_remote_controls(ui);
@@ -815,15 +859,31 @@ impl eframe::App for App {
                     self.show_stats_section(ui, true);
                 }
 
-                if self.settings.show_graph {
+                if self.settings.show_graph && self.settings.show_recording {
+                    let total = ui.available_height();
+                    let graph_height = (total - self.recording_height).max(80.0);
+
                     ui.separator();
-                    let graph_height = (ui.available_height() * 0.5).max(80.0);
                     ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                         self.graph.show(ui, 0.0);
                     });
-                }
 
-                if self.settings.show_recording {
+                    let sep = ui.separator();
+                    let sep_id = ui.id().with("rec_resize_narrow");
+                    let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
+                    if sep_response.dragged() {
+                        self.recording_height = (self.recording_height - sep_response.drag_delta().y)
+                            .clamp(40.0, total - 80.0);
+                    }
+                    if sep_response.hovered() || sep_response.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                    }
+
+                    self.show_recording_section(ui, true);
+                } else if self.settings.show_graph {
+                    ui.separator();
+                    self.graph.show(ui, 0.0);
+                } else if self.settings.show_recording {
                     ui.separator();
                     self.show_recording_section(ui, true);
                 }
