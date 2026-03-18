@@ -936,42 +936,45 @@ impl Graph {
 
     /// Build min/max envelope using a sliding window centered on each data point.
     /// Returns (min_points, max_points) as Vec<[f64; 2]>.
+    /// Build min/max envelope using a trailing sliding window.
+    /// At each data point time `t`, computes min/max of all points in `[t - window, t]`.
+    /// This answers "what was the range over the last N seconds?" with no look-ahead.
     fn build_envelope(&self, x_min: f64, x_max: f64, window_secs: f64) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
-        let half = window_secs.max(0.1) / 2.0;
+        let window = window_secs.max(0.1);
 
-        // Collect visible points sorted by time (already sorted in deque)
-        let visible: Vec<(f64, f64)> = self.history.iter()
+        // Collect points: need data back to x_min - window for edge correctness
+        let points: Vec<(f64, f64)> = self.history.iter()
             .map(|p| (self.elapsed_secs(p.time), p.value))
-            .filter(|(t, _)| *t >= x_min && *t <= x_max)
+            .filter(|(t, _)| *t >= x_min - window && *t <= x_max)
             .collect();
 
-        if visible.is_empty() {
+        if points.is_empty() {
             return (Vec::new(), Vec::new());
         }
 
-        // For each point, scan the window around it to find min/max
-        // Use two-pointer approach for efficiency
-        let n = visible.len();
+        let n = points.len();
         let mut min_pts = Vec::with_capacity(n);
         let mut max_pts = Vec::with_capacity(n);
         let mut lo = 0;
 
         for i in 0..n {
-            let (t, _) = visible[i];
-            let win_start = t - half;
-            let win_end = t + half;
+            let (t, _) = points[i];
+            // Only emit envelope points within the visible range
+            if t < x_min { continue; }
 
-            // Advance lo pointer
-            while lo < n && visible[lo].0 < win_start {
+            let win_start = t - window;
+
+            // Advance lo pointer past points before the window
+            while lo < n && points[lo].0 < win_start {
                 lo += 1;
             }
 
+            // Scan [lo..] for points in [t - window, t]
             let mut vmin = f64::INFINITY;
             let mut vmax = f64::NEG_INFINITY;
-            for j in lo..n {
-                if visible[j].0 > win_end { break; }
-                vmin = vmin.min(visible[j].1);
-                vmax = vmax.max(visible[j].1);
+            for j in lo..=i {
+                vmin = vmin.min(points[j].1);
+                vmax = vmax.max(points[j].1);
             }
 
             min_pts.push([t, vmin]);
