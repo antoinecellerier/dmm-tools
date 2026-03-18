@@ -1,6 +1,9 @@
 use chrono::{DateTime, Local};
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
+/// Maximum recording samples (~14 hours at 10Hz, ~22MB memory).
+const MAX_RECORDING_SAMPLES: usize = 500_000;
+
 /// A single recorded sample.
 #[derive(Debug, Clone)]
 pub struct Sample {
@@ -23,8 +26,8 @@ impl Sample {
             wall_time: Local::now(),
             mode: m.mode.to_string(),
             value_str,
-            unit: m.unit.clone(),
-            range_label: m.range_label.clone(),
+            unit: m.unit.to_string(),
+            range_label: m.range_label.to_string(),
             flags: m.flags.to_string(),
         }
     }
@@ -56,9 +59,13 @@ impl Recording {
     }
 
     pub fn push(&mut self, m: &Measurement) {
-        if self.active {
+        if self.active && self.samples.len() < MAX_RECORDING_SAMPLES {
             self.samples.push(Sample::from_measurement(m));
         }
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.samples.len() >= MAX_RECORDING_SAMPLES
     }
 
     pub fn duration_secs(&self) -> f64 {

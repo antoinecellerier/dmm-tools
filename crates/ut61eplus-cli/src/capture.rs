@@ -85,8 +85,8 @@ impl SampleData {
             range_byte: format!("{:#04x}", m.range),
             display_raw: m.display_raw.clone(),
             value,
-            unit: m.unit.clone(),
-            range_label: m.range_label.clone(),
+            unit: m.unit.to_string(),
+            range_label: m.range_label.to_string(),
             progress: m.progress,
             flags: SampleFlags {
                 hold: m.flags.hold,

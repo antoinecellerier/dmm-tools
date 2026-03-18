@@ -27,9 +27,9 @@ pub struct Measurement {
     pub display_raw: String,
     pub value: MeasuredValue,
     /// Unit string (e.g., "V", "mV", "kΩ").
-    pub unit: String,
+    pub unit: &'static str,
     /// Range label (e.g., "2.2V", "220mV").
-    pub range_label: String,
+    pub range_label: &'static str,
     /// Bar graph progress value (0-100).
     pub progress: u16,
     pub flags: StatusFlags,
@@ -76,12 +76,8 @@ impl Measurement {
 
         // Look up range info from device table
         let range_info = table.range_info(mode, range_byte);
-        let unit = range_info
-            .map(|r| r.unit.to_string())
-            .unwrap_or_default();
-        let range_label = range_info
-            .map(|r| r.label.to_string())
-            .unwrap_or_default();
+        let unit = range_info.map(|r| r.unit).unwrap_or("");
+        let range_label = range_info.map(|r| r.label).unwrap_or("");
 
         // Parse display value.
         // The meter pads with spaces for alignment, e.g. "- 55.79" for -55.79.

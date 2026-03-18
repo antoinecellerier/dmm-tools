@@ -654,7 +654,7 @@ impl App {
         let unit = self
             .last_measurement
             .as_ref()
-            .map(|m| m.unit.as_str())
+            .map(|m| m.unit)
             .unwrap_or("");
 
         let fmt = |v: Option<f64>| -> String {
@@ -759,7 +759,14 @@ impl App {
             }
             let count = self.recording.samples.len();
             if self.recording.active {
-                ui.label(format!("{count} smp | {:.0}s", self.recording.duration_secs()));
+                let status = format!("{count} smp | {:.0}s", self.recording.duration_secs());
+                if self.recording.is_full() {
+                    let dark = ui.visuals().dark_mode;
+                    let warn = if dark { Color32::from_rgb(230, 160, 40) } else { Color32::from_rgb(180, 100, 0) };
+                    ui.label(RichText::new(format!("{status} (buffer full)")).color(warn));
+                } else {
+                    ui.label(status);
+                }
             } else if count > 0 {
                 ui.label(format!("{count} smp"));
             }

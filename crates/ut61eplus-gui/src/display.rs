@@ -37,7 +37,7 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
                         .color(value_color),
                 );
                 ui.label(
-                    RichText::new(&m.unit)
+                    RichText::new(m.unit)
                         .font(FontId::monospace(20.0))
                         .color(ui.visuals().text_color()),
                 );
@@ -52,7 +52,7 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
                 );
                 if !m.range_label.is_empty() {
                     ui.label(
-                        RichText::new(&m.range_label)
+                        RichText::new(m.range_label)
                             .color(ui.visuals().weak_text_color()),
                     );
                 }
@@ -91,7 +91,7 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
                         .font(FontId::monospace(28.0)),
                 );
                 ui.label(
-                    RichText::new(&m.unit)
+                    RichText::new(m.unit)
                         .font(FontId::monospace(16.0)),
                 );
                 ui.separator();
