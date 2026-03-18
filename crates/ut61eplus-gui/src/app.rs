@@ -176,6 +176,11 @@ impl App {
                 DmmMessage::Connected(name) => {
                     self.connection_state = ConnectionState::Connected;
                     self.device_name = if name.is_empty() { None } else { Some(name.clone()) };
+                    // Reset state on (re)connect so graph/stats start fresh
+                    self.start_time = Instant::now();
+                    self.graph.clear();
+                    self.stats.reset();
+                    self.last_measurement = None;
                     info!("UI: connected to {name}");
                 }
                 DmmMessage::Measurement(m) => {
@@ -346,7 +351,7 @@ impl App {
 
         let fmt = |v: Option<f64>| -> String {
             match v {
-                Some(val) => format!("{val} {unit}"),
+                Some(val) => format!("{val:.4} {unit}"),
                 None => "---".to_string(),
             }
         };
