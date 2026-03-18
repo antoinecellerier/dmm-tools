@@ -168,7 +168,18 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     let devices = ut61eplus_lib::list_devices()?;
     if devices.is_empty() {
         eprintln!("{}", style("No UT61E+ devices found.").yellow());
-        eprintln!("Check USB connection and udev rules.");
+        eprintln!("Check that the CP2110 USB adapter is plugged in.");
+        #[cfg(target_os = "linux")]
+        {
+            eprintln!("On Linux, ensure the udev rule is installed:");
+            eprintln!("  {}", style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim());
+            eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
+        }
+        #[cfg(target_os = "windows")]
+        {
+            eprintln!("On Windows, ensure the CP2110 driver is installed.");
+            eprintln!("Download from: {}", style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim());
+        }
         return Ok(());
     }
     for (i, dev) in devices.iter().enumerate() {
