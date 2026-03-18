@@ -155,7 +155,7 @@ mod tests {
     fn parse_dc_voltage() {
         let table = Ut61ePlusTable::new();
         // Mode 0x02 (DCV), Range 0x01 (22V), display " 12.345"
-        let payload = make_payload(0x02, 0x01, b" 12.345", (0x05, 0x0A), (0x00, 0x01, 0x00));
+        let payload = make_payload(0x02, 0x01, b" 12.345", (0x05, 0x0A), (0x00, 0x00, 0x00));
         let m = Measurement::parse(&payload, &table).unwrap();
         assert_eq!(m.mode, Mode::DcV);
         assert_eq!(m.range, 0x01);
@@ -169,7 +169,7 @@ mod tests {
     fn parse_overload() {
         let table = Ut61ePlusTable::new();
         // Mode 0x06 (Ohm), Range 0x00 (220Ω), display "    OL "
-        let payload = make_payload(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x01, 0x00));
+        let payload = make_payload(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let m = Measurement::parse(&payload, &table).unwrap();
         assert_eq!(m.mode, Mode::Ohm);
         assert!(matches!(m.value, MeasuredValue::Overload));
@@ -179,8 +179,8 @@ mod tests {
     #[test]
     fn parse_with_hold_flag() {
         let table = Ut61ePlusTable::new();
-        // Mode 0x02 (DCV)
-        let payload = make_payload(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x01, 0x01, 0x00));
+        // Mode 0x02 (DCV), flag1=0x02 (HOLD), flag2=0x00 (AUTO on)
+        let payload = make_payload(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x02, 0x00, 0x00));
         let m = Measurement::parse(&payload, &table).unwrap();
         assert!(m.flags.hold);
         assert!(m.flags.auto_range);
@@ -197,8 +197,8 @@ mod tests {
     #[test]
     fn display_format() {
         let table = Ut61ePlusTable::new();
-        // Mode 0x02 (DCV)
-        let payload = make_payload(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x01, 0x01, 0x00));
+        // Mode 0x02 (DCV), flag1=0x02 (HOLD), flag2=0x00 (AUTO on)
+        let payload = make_payload(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x02, 0x00, 0x00));
         let m = Measurement::parse(&payload, &table).unwrap();
         let s = m.to_string();
         assert!(s.contains("5.678"));

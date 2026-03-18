@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn format_text_output() {
-        let m = make_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x01, 0x00));
+        let m = make_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
         format_measurement(&mut buf, &m, &OutputFormat::Text).unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn format_csv_output() {
-        let m = make_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x01, 0x00));
+        let m = make_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
         format_measurement(&mut buf, &m, &OutputFormat::Csv).unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -387,7 +387,8 @@ mod tests {
 
     #[test]
     fn format_json_output() {
-        let m = make_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x01, 0x01, 0x00));
+        // flag1=0x02 (HOLD), flag2=0x00 (AUTO on, inverted logic)
+        let m = make_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x02, 0x00, 0x00));
         let mut buf = Vec::new();
         format_measurement(&mut buf, &m, &OutputFormat::Json).unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -401,7 +402,7 @@ mod tests {
 
     #[test]
     fn format_csv_overload() {
-        let m = make_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x01, 0x00));
+        let m = make_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
         format_measurement(&mut buf, &m, &OutputFormat::Csv).unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -410,7 +411,7 @@ mod tests {
 
     #[test]
     fn format_json_overload() {
-        let m = make_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x01, 0x00));
+        let m = make_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
         format_measurement(&mut buf, &m, &OutputFormat::Json).unwrap();
         let output = String::from_utf8(buf).unwrap();

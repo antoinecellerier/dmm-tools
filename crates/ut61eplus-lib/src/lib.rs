@@ -178,7 +178,7 @@ mod tests {
     #[test]
     fn dmm_request_measurement() {
         let response = make_measurement_response(
-            0x02, 0x01, b"  5.678", (0x05, 0x0A), (0x00, 0x01, 0x00),
+            0x02, 0x01, b"  5.678", (0x05, 0x0A), (0x00, 0x00, 0x00),
         );
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -194,7 +194,7 @@ mod tests {
     fn dmm_split_response() {
         // Response arrives in two chunks
         let full = make_measurement_response(
-            0x06, 0x02, b" 12.345", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x06, 0x02, b" 12.345", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let (part1, part2) = full.split_at(10);
         let mock = MockTransport::new(vec![part1.to_vec(), part2.to_vec()]);
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn dmm_sends_correct_request_bytes() {
         let response = make_measurement_response(
-            0x02, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x02, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -250,7 +250,7 @@ mod tests {
     fn dmm_response_with_leading_garbage() {
         let mut data = vec![0xFF, 0xFE, 0x00]; // garbage before frame
         data.extend_from_slice(&make_measurement_response(
-            0x00, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x00, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00),
         ));
         let mock = MockTransport::new(vec![data]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -263,10 +263,10 @@ mod tests {
     #[test]
     fn dmm_multiple_measurements() {
         let r1 = make_measurement_response(
-            0x02, 0x00, b"  1.000", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x02, 0x00, b"  1.000", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let r2 = make_measurement_response(
-            0x02, 0x00, b"  2.000", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x02, 0x00, b"  2.000", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let mock = MockTransport::new(vec![r1, r2]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -304,7 +304,7 @@ mod tests {
     #[test]
     fn dmm_capacitance_mode() {
         let response = make_measurement_response(
-            0x09, 0x03, b"  4.567", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x09, 0x03, b"  4.567", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn dmm_hz_mode() {
         let response = make_measurement_response(
-            0x04, 0x02, b" 1.2345", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x04, 0x02, b" 1.2345", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -334,7 +334,7 @@ mod tests {
     #[test]
     fn dmm_negative_value() {
         let response = make_measurement_response(
-            0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x01, 0x00),
+            0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x00, 0x00),
         );
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());

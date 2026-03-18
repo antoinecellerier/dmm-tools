@@ -106,7 +106,7 @@ mod tests {
             display[0], display[1], display[2], display[3],
             display[4], display[5], display[6],
             0x00, 0x00,     // progress (raw)
-            0x30, 0x31, 0x30, // flags (with 0x30 prefix)
+            0x30, 0x30, 0x30, // flags (with 0x30 prefix, all zero = AUTO on)
         ];
         let table = Ut61ePlusTable::new();
         Measurement::parse(&payload, &table).unwrap()
