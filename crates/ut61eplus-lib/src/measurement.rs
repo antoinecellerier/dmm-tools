@@ -94,7 +94,10 @@ impl Measurement {
             match display_compact.parse::<f64>() {
                 Ok(v) => MeasuredValue::Normal(v),
                 Err(_) => {
-                    debug!("measurement: could not parse display value: {:?} (compact: {:?})", display_trimmed, display_compact);
+                    debug!(
+                        "measurement: could not parse display value: {:?} (compact: {:?})",
+                        display_trimmed, display_compact
+                    );
                     MeasuredValue::Overload
                 }
             }
@@ -136,15 +139,26 @@ mod tests {
     use super::*;
     use crate::tables::ut61e_plus::Ut61ePlusTable;
 
-    fn make_payload(mode: u8, range: u8, display: &[u8; 7], progress: (u8, u8), flags: (u8, u8, u8)) -> Vec<u8> {
+    fn make_payload(
+        mode: u8,
+        range: u8,
+        display: &[u8; 7],
+        progress: (u8, u8),
+        flags: (u8, u8, u8),
+    ) -> Vec<u8> {
         // Mode byte is raw (no 0x30 prefix).
         // Range and flag bytes have 0x30 prefix.
         // Progress bytes are raw (no 0x30 prefix).
         vec![
             mode,
             range | 0x30,
-            display[0], display[1], display[2], display[3],
-            display[4], display[5], display[6],
+            display[0],
+            display[1],
+            display[2],
+            display[3],
+            display[4],
+            display[5],
+            display[6],
             progress.0,
             progress.1,
             flags.0 | 0x30,

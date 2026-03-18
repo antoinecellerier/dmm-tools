@@ -5,14 +5,18 @@ use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
 use log::{error, info};
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use ut61eplus_lib::command::Command;
 use ut61eplus_lib::measurement::MeasuredValue;
 
 #[derive(Parser)]
-#[command(name = "ut61eplus", about = "UNI-T UT61E+ multimeter tool", after_help = "Set NO_COLOR=1 to disable colored output.\n\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools")]
+#[command(
+    name = "ut61eplus",
+    about = "UNI-T UT61E+ multimeter tool",
+    after_help = "Set NO_COLOR=1 to disable colored output.\n\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Cmd,
@@ -123,7 +127,11 @@ fn main() {
         } => cmd_read(interval_ms, format, output, count),
         Cmd::Command { action } => cmd_command(action),
         Cmd::Debug { count, interval_ms } => cmd_debug(count, interval_ms),
-        Cmd::Capture { output, steps, list_steps } => {
+        Cmd::Capture {
+            output,
+            steps,
+            list_steps,
+        } => {
             if list_steps {
                 capture::list_steps();
                 Ok(())
@@ -141,7 +149,8 @@ fn main() {
 }
 
 /// Open the meter with helpful error messages for common failures.
-fn open_with_help() -> Result<ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>, Box<dyn std::error::Error>> {
+fn open_with_help()
+-> Result<ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>, Box<dyn std::error::Error>> {
     match ut61eplus_lib::open() {
         Ok(dmm) => Ok(dmm),
         Err(ut61eplus_lib::error::Error::DeviceNotFound { .. }) => {
@@ -150,13 +159,19 @@ fn open_with_help() -> Result<ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
             #[cfg(target_os = "linux")]
             {
                 eprintln!("On Linux, ensure the udev rule is installed:");
-                eprintln!("  {}", style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim());
+                eprintln!(
+                    "  {}",
+                    style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim()
+                );
                 eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
             }
             #[cfg(target_os = "windows")]
             {
                 eprintln!("On Windows, ensure the CP2110 driver is installed.");
-                eprintln!("Download from: {}", style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim());
+                eprintln!(
+                    "Download from: {}",
+                    style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
+                );
             }
             Err("device not found".into())
         }
@@ -172,13 +187,19 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
         {
             eprintln!("On Linux, ensure the udev rule is installed:");
-            eprintln!("  {}", style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim());
+            eprintln!(
+                "  {}",
+                style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim()
+            );
             eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
         }
         #[cfg(target_os = "windows")]
         {
             eprintln!("On Windows, ensure the CP2110 driver is installed.");
-            eprintln!("Download from: {}", style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim());
+            eprintln!(
+                "Download from: {}",
+                style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
+            );
         }
         return Ok(());
     }
@@ -211,10 +232,7 @@ fn cmd_read(
     info!("connected, starting measurement loop");
 
     let mut writer: Box<dyn Write> = match &output_path {
-        Some(path) => Box::new(
-            std::fs::File::create(path)
-                .map(std::io::BufWriter::new)?,
-        ),
+        Some(path) => Box::new(std::fs::File::create(path).map(std::io::BufWriter::new)?),
         None => Box::new(std::io::stdout().lock()),
     };
 
@@ -322,7 +340,11 @@ fn cmd_debug(count: usize, interval_ms: u64) -> Result<(), Box<dyn std::error::E
                 );
             }
             Err(e) => {
-                eprintln!("{} {}", style(format!("[{i}]")).dim(), style(format!("error: {e}")).red());
+                eprintln!(
+                    "{} {}",
+                    style(format!("[{i}]")).dim(),
+                    style(format!("error: {e}")).red()
+                );
             }
         }
         i += 1;
@@ -349,12 +371,17 @@ mod tests {
         flags: (u8, u8, u8),
     ) -> Measurement {
         let payload: Vec<u8> = vec![
-            mode,               // raw, no 0x30 prefix
+            mode, // raw, no 0x30 prefix
             range | 0x30,
-            display[0], display[1], display[2], display[3],
-            display[4], display[5], display[6],
-            progress.0,         // raw, no 0x30 prefix
-            progress.1,         // raw, no 0x30 prefix
+            display[0],
+            display[1],
+            display[2],
+            display[3],
+            display[4],
+            display[5],
+            display[6],
+            progress.0, // raw, no 0x30 prefix
+            progress.1, // raw, no 0x30 prefix
             flags.0 | 0x30,
             flags.1 | 0x30,
             flags.2 | 0x30,
@@ -373,7 +400,12 @@ mod tests {
     fn clap_parse_read_defaults() {
         let cli = Cli::try_parse_from(["ut61eplus", "read"]).unwrap();
         match cli.command {
-            Cmd::Read { interval_ms, format, output, count } => {
+            Cmd::Read {
+                interval_ms,
+                format,
+                output,
+                count,
+            } => {
                 assert_eq!(interval_ms, 0);
                 assert!(matches!(format, OutputFormat::Text));
                 assert!(output.is_none());
@@ -386,14 +418,25 @@ mod tests {
     #[test]
     fn clap_parse_read_with_args() {
         let cli = Cli::try_parse_from([
-            "ut61eplus", "read",
-            "--interval-ms", "100",
-            "--format", "csv",
-            "-o", "test.csv",
-            "--count", "10",
-        ]).unwrap();
+            "ut61eplus",
+            "read",
+            "--interval-ms",
+            "100",
+            "--format",
+            "csv",
+            "-o",
+            "test.csv",
+            "--count",
+            "10",
+        ])
+        .unwrap();
         match cli.command {
-            Cmd::Read { interval_ms, format, output, count } => {
+            Cmd::Read {
+                interval_ms,
+                format,
+                output,
+                count,
+            } => {
                 assert_eq!(interval_ms, 100);
                 assert!(matches!(format, OutputFormat::Csv));
                 assert_eq!(output.as_deref(), Some("test.csv"));

@@ -103,7 +103,9 @@ impl App {
         }
     }
 
-    const ZOOM_LEVELS: &[u32] = &[30, 50, 67, 80, 90, 100, 110, 120, 133, 150, 170, 200, 240, 300];
+    const ZOOM_LEVELS: &[u32] = &[
+        30, 50, 67, 80, 90, 100, 110, 120, 133, 150, 170, 200, 240, 300,
+    ];
 
     fn apply_zoom(&mut self, ctx: &egui::Context) {
         // Capture OS default pixels_per_point on first call
@@ -119,14 +121,21 @@ impl App {
     }
 
     fn zoom_in(&mut self) {
-        if let Some(&next) = Self::ZOOM_LEVELS.iter().find(|&&z| z > self.settings.zoom_pct) {
+        if let Some(&next) = Self::ZOOM_LEVELS
+            .iter()
+            .find(|&&z| z > self.settings.zoom_pct)
+        {
             self.settings.zoom_pct = next;
             self.settings.save();
         }
     }
 
     fn zoom_out(&mut self) {
-        if let Some(&prev) = Self::ZOOM_LEVELS.iter().rev().find(|&&z| z < self.settings.zoom_pct) {
+        if let Some(&prev) = Self::ZOOM_LEVELS
+            .iter()
+            .rev()
+            .find(|&&z| z < self.settings.zoom_pct)
+        {
             self.settings.zoom_pct = prev;
             self.settings.save();
         }
@@ -173,94 +182,96 @@ impl App {
             let panic_tx = msg_tx.clone();
             let panic_ctx = ctx_clone.clone();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            info!("background thread: connecting to device");
-            let mut dmm = match ut61eplus_lib::open() {
-                Ok(mut d) => {
-                    let name = if query_name {
-                        d.get_name().unwrap_or_default()
-                    } else {
-                        String::new()
-                    };
-                    let _ = msg_tx.send(DmmMessage::Connected(name));
-                    ctx_clone.request_repaint();
-                    d
-                }
-                Err(e) => {
-                    let _ = msg_tx.send(DmmMessage::Error(e.to_string()));
-                    ctx_clone.request_repaint();
-                    return;
-                }
-            };
-
-            let mut consecutive_timeouts: u32 = 0;
-            loop {
-                if stop_rx.try_recv().is_ok() {
-                    info!("background thread: stop signal received");
-                    break;
-                }
-
-                // Process any pending remote commands
-                while let Ok(cmd) = cmd_rx.try_recv() {
-                    if let Err(e) = dmm.send_command(cmd) {
-                        warn!("background thread: command failed: {e}");
-                    }
-                }
-
-                match dmm.request_measurement() {
-                    Ok(m) => {
-                        consecutive_timeouts = 0;
-                        if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
-                            break;
-                        }
-                    }
-                    Err(ut61eplus_lib::error::Error::Timeout) => {
-                        consecutive_timeouts += 1;
-                        warn!("background thread: measurement timeout ({consecutive_timeouts})");
-                        let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));
+                info!("background thread: connecting to device");
+                let mut dmm = match ut61eplus_lib::open() {
+                    Ok(mut d) => {
+                        let name = if query_name {
+                            d.get_name().unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
+                        let _ = msg_tx.send(DmmMessage::Connected(name));
                         ctx_clone.request_repaint();
-                        if consecutive_timeouts == 5 {
-                            let _ = msg_tx.send(DmmMessage::Error(
-                                "No response from meter — is USB mode enabled?".to_string(),
-                            ));
-                            ctx_clone.request_repaint();
-                        }
+                        d
                     }
                     Err(e) => {
-                        error!("background thread: device error: {e}");
-                        let _ = msg_tx.send(DmmMessage::Disconnected(e.to_string()));
+                        let _ = msg_tx.send(DmmMessage::Error(e.to_string()));
                         ctx_clone.request_repaint();
+                        return;
+                    }
+                };
 
-                        // Reconnection loop
-                        loop {
-                            if stop_rx.try_recv().is_ok() {
-                                return;
+                let mut consecutive_timeouts: u32 = 0;
+                loop {
+                    if stop_rx.try_recv().is_ok() {
+                        info!("background thread: stop signal received");
+                        break;
+                    }
+
+                    // Process any pending remote commands
+                    while let Ok(cmd) = cmd_rx.try_recv() {
+                        if let Err(e) = dmm.send_command(cmd) {
+                            warn!("background thread: command failed: {e}");
+                        }
+                    }
+
+                    match dmm.request_measurement() {
+                        Ok(m) => {
+                            consecutive_timeouts = 0;
+                            if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
+                                break;
                             }
-                            std::thread::sleep(std::time::Duration::from_secs(2));
-                            match ut61eplus_lib::open() {
-                                Ok(mut d) => {
-                                    let name = if query_name {
-                                        d.get_name().unwrap_or_default()
-                                    } else {
-                                        String::new()
-                                    };
-                                    dmm = d;
-                                    let _ = msg_tx.send(DmmMessage::Connected(name));
-                                    ctx_clone.request_repaint();
-                                    break;
+                        }
+                        Err(ut61eplus_lib::error::Error::Timeout) => {
+                            consecutive_timeouts += 1;
+                            warn!(
+                                "background thread: measurement timeout ({consecutive_timeouts})"
+                            );
+                            let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));
+                            ctx_clone.request_repaint();
+                            if consecutive_timeouts == 5 {
+                                let _ = msg_tx.send(DmmMessage::Error(
+                                    "No response from meter — is USB mode enabled?".to_string(),
+                                ));
+                                ctx_clone.request_repaint();
+                            }
+                        }
+                        Err(e) => {
+                            error!("background thread: device error: {e}");
+                            let _ = msg_tx.send(DmmMessage::Disconnected(e.to_string()));
+                            ctx_clone.request_repaint();
+
+                            // Reconnection loop
+                            loop {
+                                if stop_rx.try_recv().is_ok() {
+                                    return;
                                 }
-                                Err(_) => continue,
+                                std::thread::sleep(std::time::Duration::from_secs(2));
+                                match ut61eplus_lib::open() {
+                                    Ok(mut d) => {
+                                        let name = if query_name {
+                                            d.get_name().unwrap_or_default()
+                                        } else {
+                                            String::new()
+                                        };
+                                        dmm = d;
+                                        let _ = msg_tx.send(DmmMessage::Connected(name));
+                                        ctx_clone.request_repaint();
+                                        break;
+                                    }
+                                    Err(_) => continue,
+                                }
                             }
                         }
                     }
-                }
 
-                ctx_clone.request_repaint();
-                if sample_interval_ms > 0 {
-                    std::thread::sleep(std::time::Duration::from_millis(
-                        sample_interval_ms as u64,
-                    ));
+                    ctx_clone.request_repaint();
+                    if sample_interval_ms > 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            sample_interval_ms as u64,
+                        ));
+                    }
                 }
-            }
             })); // end catch_unwind
             if let Err(panic) = result {
                 let msg = if let Some(s) = panic.downcast_ref::<&str>() {
@@ -301,7 +312,11 @@ impl App {
             match msg {
                 DmmMessage::Connected(name) => {
                     self.connection_state = ConnectionState::Connected;
-                    self.device_name = if name.is_empty() { None } else { Some(name.clone()) };
+                    self.device_name = if name.is_empty() {
+                        None
+                    } else {
+                        Some(name.clone())
+                    };
                     self.last_error = None;
                     info!("UI: connected to {name}");
                 }
@@ -355,7 +370,11 @@ impl App {
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
         let dark = ui.visuals().dark_mode;
-        let active_color = if dark { Color32::from_rgb(100, 180, 255) } else { Color32::from_rgb(0, 100, 200) };
+        let active_color = if dark {
+            Color32::from_rgb(100, 180, 255)
+        } else {
+            Color32::from_rgb(0, 100, 200)
+        };
 
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
@@ -406,16 +425,17 @@ impl App {
 
     fn show_connection_help(&self, ui: &mut Ui) {
         let dark = ui.visuals().dark_mode;
-        let warn_color = if dark { Color32::from_rgb(200, 120, 0) } else { Color32::from_rgb(180, 80, 0) };
+        let warn_color = if dark {
+            Color32::from_rgb(200, 120, 0)
+        } else {
+            Color32::from_rgb(180, 80, 0)
+        };
 
         // Show waiting indicator before error threshold
         if self.waiting_timeouts > 0 && self.last_error.is_none() {
             ui.add_space(4.0);
             let dots = ".".repeat((self.waiting_timeouts as usize % 4) + 1);
-            ui.label(
-                RichText::new(format!("Waiting for meter{dots}"))
-                    .color(warn_color),
-            );
+            ui.label(RichText::new(format!("Waiting for meter{dots}")).color(warn_color));
             return;
         }
 
@@ -430,10 +450,7 @@ impl App {
 
         if is_device_not_found {
             // HID device not found — dongle issue
-            ui.label(
-                RichText::new("USB adapter not found")
-                    .color(warn_color),
-            );
+            ui.label(RichText::new("USB adapter not found").color(warn_color));
             let platform_hint = if cfg!(target_os = "linux") {
                 "Check that the CP2110 USB adapter is plugged in.\n\
                  On Linux, ensure the udev rule is installed:\n\
@@ -451,15 +468,12 @@ impl App {
             };
             ui.label(
                 RichText::new(platform_hint)
-                .small()
-                .color(ui.visuals().weak_text_color()),
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
             );
         } else {
             // Dongle found but meter not responding
-            ui.label(
-                RichText::new("No response from meter")
-                    .color(warn_color),
-            );
+            ui.label(RichText::new("No response from meter").color(warn_color));
             ui.label(
                 RichText::new(
                     "The USB adapter is connected but the meter \n\
@@ -467,7 +481,7 @@ impl App {
                      1. Insert the USB module into the meter\n\
                      2. Turn the meter on\n\
                      3. Long press the USB/Hz button\n\
-                     4. The S icon appears on the LCD"
+                     4. The S icon appears on the LCD",
                 )
                 .small()
                 .color(ui.visuals().weak_text_color()),
@@ -490,7 +504,11 @@ impl App {
                     if ui.button("Disconnect").clicked() {
                         self.disconnect();
                     }
-                    let pause_label = if self.paused { "\u{25B6} Resume" } else { "\u{23F8} Pause" };
+                    let pause_label = if self.paused {
+                        "\u{25B6} Resume"
+                    } else {
+                        "\u{23F8} Pause"
+                    };
                     if ui.button(pause_label).clicked() {
                         self.paused = !self.paused;
                     }
@@ -506,9 +524,21 @@ impl App {
             }
 
             let dark = ui.visuals().dark_mode;
-            let green = if dark { Color32::from_rgb(60, 180, 75) } else { Color32::from_rgb(0, 140, 30) };
-            let orange = if dark { Color32::from_rgb(200, 120, 0) } else { Color32::from_rgb(180, 80, 0) };
-            let gray = if dark { Color32::from_rgb(150, 150, 150) } else { Color32::from_rgb(120, 120, 120) };
+            let green = if dark {
+                Color32::from_rgb(60, 180, 75)
+            } else {
+                Color32::from_rgb(0, 140, 30)
+            };
+            let orange = if dark {
+                Color32::from_rgb(200, 120, 0)
+            } else {
+                Color32::from_rgb(180, 80, 0)
+            };
+            let gray = if dark {
+                Color32::from_rgb(150, 150, 150)
+            } else {
+                Color32::from_rgb(120, 120, 120)
+            };
 
             let (dot_color, status_text) = match &self.connection_state {
                 ConnectionState::Connected => {
@@ -519,12 +549,8 @@ impl App {
                         (green, name.to_string())
                     }
                 }
-                ConnectionState::Disconnected => {
-                    (gray, "Disconnected".to_string())
-                }
-                ConnectionState::Reconnecting => {
-                    (orange, "Reconnecting...".to_string())
-                }
+                ConnectionState::Disconnected => (gray, "Disconnected".to_string()),
+                ConnectionState::Reconnecting => (orange, "Reconnecting...".to_string()),
             };
 
             let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
@@ -535,11 +561,18 @@ impl App {
                 if ui.button("\u{2699}").clicked() {
                     self.settings_open = !self.settings_open;
                 }
-                ui.hyperlink_to("Help / GitHub", "https://github.com/antoinecellerier/dmm-tools");
+                ui.hyperlink_to(
+                    "Help / GitHub",
+                    "https://github.com/antoinecellerier/dmm-tools",
+                );
                 // Show toast message (export result, etc.)
                 if let Some((msg, is_error, _)) = &self.toast {
                     let color = if *is_error {
-                        if dark { Color32::from_rgb(220, 60, 60) } else { Color32::from_rgb(180, 0, 0) }
+                        if dark {
+                            Color32::from_rgb(220, 60, 60)
+                        } else {
+                            Color32::from_rgb(180, 0, 0)
+                        }
                     } else {
                         green
                     };
@@ -564,7 +597,10 @@ impl App {
                     ThemeMode::Light => "Light",
                     ThemeMode::System => "System",
                 };
-                if ui.selectable_label(self.settings.theme == mode, label).clicked() {
+                if ui
+                    .selectable_label(self.settings.theme == mode, label)
+                    .clicked()
+                {
                     self.settings.theme = mode;
                     changed = true;
                 }
@@ -576,13 +612,22 @@ impl App {
 
         ui.horizontal(|ui| {
             let mut changed = false;
-            if ui.checkbox(&mut self.settings.show_graph, "Graph").changed() {
+            if ui
+                .checkbox(&mut self.settings.show_graph, "Graph")
+                .changed()
+            {
                 changed = true;
             }
-            if ui.checkbox(&mut self.settings.show_stats, "Statistics").changed() {
+            if ui
+                .checkbox(&mut self.settings.show_stats, "Statistics")
+                .changed()
+            {
                 changed = true;
             }
-            if ui.checkbox(&mut self.settings.show_recording, "Recording").changed() {
+            if ui
+                .checkbox(&mut self.settings.show_recording, "Recording")
+                .changed()
+            {
                 changed = true;
             }
             if changed {
@@ -661,11 +706,7 @@ impl App {
     }
 
     fn show_stats_section(&mut self, ui: &mut Ui, compact: bool) {
-        let unit = self
-            .last_measurement
-            .as_ref()
-            .map(|m| m.unit)
-            .unwrap_or("");
+        let unit = self.last_measurement.as_ref().map(|m| m.unit).unwrap_or("");
 
         let fmt = |v: Option<f64>| -> String {
             match v {
@@ -730,24 +771,26 @@ impl App {
             if let Some((vmin, vmax, vavg, vcount)) = vis {
                 ui.add_space(4.0);
                 let weak = ui.visuals().weak_text_color();
-                ui.label(
-                    RichText::new("Visible").strong().small().color(weak),
-                );
+                ui.label(RichText::new("Visible").strong().small().color(weak));
                 ui.label(
                     RichText::new(format!("Min:{}", fmt(Some(vmin))))
-                        .font(egui::FontId::monospace(11.0)).color(weak),
+                        .font(egui::FontId::monospace(11.0))
+                        .color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Max:{}", fmt(Some(vmax))))
-                        .font(egui::FontId::monospace(11.0)).color(weak),
+                        .font(egui::FontId::monospace(11.0))
+                        .color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Avg:{}", fmt(Some(vavg))))
-                        .font(egui::FontId::monospace(11.0)).color(weak),
+                        .font(egui::FontId::monospace(11.0))
+                        .color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Count: {vcount}"))
-                        .small().color(weak),
+                        .small()
+                        .color(weak),
                 );
             }
         }
@@ -772,7 +815,11 @@ impl App {
                 let status = format!("{count} smp | {:.0}s", self.recording.duration_secs());
                 if self.recording.is_full() {
                     let dark = ui.visuals().dark_mode;
-                    let warn = if dark { Color32::from_rgb(230, 160, 40) } else { Color32::from_rgb(180, 100, 0) };
+                    let warn = if dark {
+                        Color32::from_rgb(230, 160, 40)
+                    } else {
+                        Color32::from_rgb(180, 100, 0)
+                    };
                     ui.label(RichText::new(format!("{status} (buffer full)")).color(warn));
                 } else {
                     ui.label(status);
@@ -784,7 +831,11 @@ impl App {
 
         // Scrollable sample log
         if !self.recording.samples.is_empty() {
-            let max_height = if compact { 80.0 } else { ui.available_height().max(60.0) };
+            let max_height = if compact {
+                80.0
+            } else {
+                ui.available_height().max(60.0)
+            };
             egui::ScrollArea::vertical()
                 .max_height(max_height)
                 .stick_to_bottom(true)
@@ -822,7 +873,11 @@ impl App {
 
             let sep = ui.separator();
             let sep_id = ui.id().with("rec_resize");
-            let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
+            let sep_response = ui.interact(
+                sep.rect.expand2(egui::vec2(0.0, 4.0)),
+                sep_id,
+                egui::Sense::drag(),
+            );
             if sep_response.dragged() {
                 self.recording_height = (self.recording_height - sep_response.drag_delta().y)
                     .clamp(40.0, (total - 80.0).max(40.0));

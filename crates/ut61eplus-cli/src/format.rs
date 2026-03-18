@@ -56,7 +56,11 @@ pub fn format_measurement(
                     "peak_max": m.flags.peak_max,
                 }
             });
-            writeln!(w, "{}", serde_json::to_string(&obj).map_err(std::io::Error::other)?)
+            writeln!(
+                w,
+                "{}",
+                serde_json::to_string(&obj).map_err(std::io::Error::other)?
+            )
         }
     }
 }

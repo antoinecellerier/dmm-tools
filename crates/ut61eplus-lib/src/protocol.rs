@@ -22,10 +22,7 @@ pub const MEASUREMENT_PAYLOAD_LEN: usize = 14;
 /// Returns `Err` if a frame is found but the checksum is invalid.
 pub fn extract_frame(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // Scan for header
-    let Some(start) = buf
-        .windows(2)
-        .position(|w| w == HEADER)
-    else {
+    let Some(start) = buf.windows(2).position(|w| w == HEADER) else {
         return Ok(None);
     };
 
@@ -56,9 +53,7 @@ pub fn extract_frame(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let received = u16::from_be_bytes([frame[frame_len - 2], frame[frame_len - 1]]);
 
     if computed != received {
-        debug!(
-            "protocol: checksum mismatch: computed={computed:#06x}, received={received:#06x}"
-        );
+        debug!("protocol: checksum mismatch: computed={computed:#06x}, received={received:#06x}");
         return Err(Error::ChecksumMismatch {
             expected: received,
             actual: computed,

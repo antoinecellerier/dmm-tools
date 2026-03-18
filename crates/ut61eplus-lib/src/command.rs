@@ -66,10 +66,7 @@ mod tests {
     #[test]
     fn encode_hold() {
         // 0x4A + 379 = 74 + 379 = 453 = 0x01C5
-        assert_eq!(
-            Command::Hold.encode(),
-            [0xAB, 0xCD, 0x03, 0x4A, 0x01, 0xC5]
-        );
+        assert_eq!(Command::Hold.encode(), [0xAB, 0xCD, 0x03, 0x4A, 0x01, 0xC5]);
     }
 
     #[test]

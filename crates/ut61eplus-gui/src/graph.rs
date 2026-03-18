@@ -211,7 +211,8 @@ impl Graph {
         match self.origin {
             // Use checked_duration_since to avoid panic if clock goes backward
             // (can happen on VM suspend/resume or NTP adjustments).
-            Some(origin) => t.checked_duration_since(origin)
+            Some(origin) => t
+                .checked_duration_since(origin)
                 .map(|d| d.as_secs_f64())
                 .unwrap_or(0.0),
             None => 0.0,
@@ -301,10 +302,7 @@ impl Graph {
 
             for &(secs, label) in TIME_WINDOWS {
                 if ui
-                    .selectable_label(
-                        (self.time_window_secs - secs).abs() < 0.1,
-                        label,
-                    )
+                    .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
                     .clicked()
                 {
                     self.time_window_secs = secs;
@@ -315,7 +313,11 @@ impl Graph {
 
             let dark = ui.visuals().dark_mode;
             let live_color = if self.live {
-                if dark { egui::Color32::from_rgb(60, 180, 75) } else { egui::Color32::from_rgb(0, 130, 30) }
+                if dark {
+                    egui::Color32::from_rgb(60, 180, 75)
+                } else {
+                    egui::Color32::from_rgb(0, 130, 30)
+                }
             } else {
                 ui.visuals().weak_text_color()
             };
@@ -331,7 +333,11 @@ impl Graph {
             ui.separator();
 
             // Y-axis mode toggle
-            let y_label = if self.y_axis_fixed { "Y:Fixed" } else { "Y:Auto" };
+            let y_label = if self.y_axis_fixed {
+                "Y:Fixed"
+            } else {
+                "Y:Auto"
+            };
             if ui.selectable_label(self.y_axis_fixed, y_label).clicked() {
                 if !self.y_axis_fixed && !self.y_user_set {
                     // Switching to fixed: snapshot current auto-scaled range
@@ -349,24 +355,26 @@ impl Graph {
             if self.y_axis_fixed {
                 let field_width = 50.0;
                 let changed_min = ui
-                    .add(egui::TextEdit::singleline(&mut self.y_min_text).desired_width(field_width))
+                    .add(
+                        egui::TextEdit::singleline(&mut self.y_min_text).desired_width(field_width),
+                    )
                     .changed();
                 ui.label(
-                    egui::RichText::new("..").small().color(ui.visuals().weak_text_color()),
+                    egui::RichText::new("..")
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
                 );
                 let changed_max = ui
-                    .add(egui::TextEdit::singleline(&mut self.y_max_text).desired_width(field_width))
+                    .add(
+                        egui::TextEdit::singleline(&mut self.y_max_text).desired_width(field_width),
+                    )
                     .changed();
 
-                if changed_min
-                    && let Ok(v) = self.y_min_text.parse::<f64>()
-                {
+                if changed_min && let Ok(v) = self.y_min_text.parse::<f64>() {
                     self.y_fixed_min = v;
                     self.y_user_set = true;
                 }
-                if changed_max
-                    && let Ok(v) = self.y_max_text.parse::<f64>()
-                {
+                if changed_max && let Ok(v) = self.y_max_text.parse::<f64>() {
                     self.y_fixed_max = v;
                     self.y_user_set = true;
                 }
@@ -382,7 +390,10 @@ impl Graph {
             }
             if self.show_envelope {
                 let changed = ui
-                    .add(egui::TextEdit::singleline(&mut self.envelope_window_text).desired_width(30.0))
+                    .add(
+                        egui::TextEdit::singleline(&mut self.envelope_window_text)
+                            .desired_width(30.0),
+                    )
                     .changed();
                 if changed
                     && let Ok(v) = self.envelope_window_text.parse::<f64>()
@@ -390,7 +401,11 @@ impl Graph {
                 {
                     self.envelope_window_secs = v;
                 }
-                ui.label(egui::RichText::new("s").small().color(ui.visuals().weak_text_color()));
+                ui.label(
+                    egui::RichText::new("s")
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                );
             }
 
             if ui.selectable_label(self.show_ref_line, "Ref").clicked() {
@@ -401,17 +416,24 @@ impl Graph {
                     .add(egui::TextEdit::singleline(&mut self.ref_line_text).desired_width(80.0))
                     .changed();
                 if changed {
-                    self.ref_line_values = self.ref_line_text
+                    self.ref_line_values = self
+                        .ref_line_text
                         .split([',', ';', ' '])
                         .filter_map(|s| s.trim().parse::<f64>().ok())
                         .collect();
                 }
-                if ui.selectable_label(self.show_crossings, "Triggers").clicked() {
+                if ui
+                    .selectable_label(self.show_crossings, "Triggers")
+                    .clicked()
+                {
                     self.show_crossings = !self.show_crossings;
                 }
             }
 
-            if ui.selectable_label(self.cursors_active, "Cursors").clicked() {
+            if ui
+                .selectable_label(self.cursors_active, "Cursors")
+                .clicked()
+            {
                 self.cursors_active = !self.cursors_active;
                 if !self.cursors_active {
                     self.cursor_a = None;
@@ -430,7 +452,11 @@ impl Graph {
                     };
                     let unit = &self.current_unit;
                     let dark = ui.visuals().dark_mode;
-                    let delta_color = if dark { egui::Color32::from_rgb(255, 180, 100) } else { egui::Color32::from_rgb(180, 80, 0) };
+                    let delta_color = if dark {
+                        egui::Color32::from_rgb(255, 180, 100)
+                    } else {
+                        egui::Color32::from_rgb(180, 80, 0)
+                    };
                     ui.label(
                         egui::RichText::new(format!("ΔT={dt:.2} s  ΔV={dv} {unit}"))
                             .color(delta_color)
@@ -500,14 +526,46 @@ impl Graph {
         let dark = ui.visuals().dark_mode;
 
         // Theme-aware colors — darker on light theme for contrast
-        let line_color = if dark { egui::Color32::from_rgb(220, 120, 120) } else { egui::Color32::from_rgb(180, 40, 40) };
-        let gap_color = if dark { egui::Color32::from_rgb(220, 80, 80) } else { egui::Color32::from_rgba_premultiplied(200, 0, 0, 180) };
-        let mean_color = if dark { egui::Color32::from_rgb(100, 200, 100) } else { egui::Color32::from_rgb(0, 120, 0) };
-        let ref_color = if dark { egui::Color32::from_rgb(200, 200, 100) } else { egui::Color32::from_rgb(140, 100, 0) };
-        let cross_color = if dark { egui::Color32::from_rgb(255, 220, 100) } else { egui::Color32::from_rgb(150, 100, 0) };
-        let cursor_color = if dark { egui::Color32::from_rgb(255, 180, 100) } else { egui::Color32::from_rgb(180, 70, 0) };
-        let cursor_color_dim = if dark { egui::Color32::from_rgba_premultiplied(255, 180, 100, 80) } else { egui::Color32::from_rgb(180, 70, 0) };
-        let env_color = if dark { egui::Color32::from_rgba_premultiplied(100, 150, 200, 80) } else { egui::Color32::from_rgb(0, 60, 160) };
+        let line_color = if dark {
+            egui::Color32::from_rgb(220, 120, 120)
+        } else {
+            egui::Color32::from_rgb(180, 40, 40)
+        };
+        let gap_color = if dark {
+            egui::Color32::from_rgb(220, 80, 80)
+        } else {
+            egui::Color32::from_rgba_premultiplied(200, 0, 0, 180)
+        };
+        let mean_color = if dark {
+            egui::Color32::from_rgb(100, 200, 100)
+        } else {
+            egui::Color32::from_rgb(0, 120, 0)
+        };
+        let ref_color = if dark {
+            egui::Color32::from_rgb(200, 200, 100)
+        } else {
+            egui::Color32::from_rgb(140, 100, 0)
+        };
+        let cross_color = if dark {
+            egui::Color32::from_rgb(255, 220, 100)
+        } else {
+            egui::Color32::from_rgb(150, 100, 0)
+        };
+        let cursor_color = if dark {
+            egui::Color32::from_rgb(255, 180, 100)
+        } else {
+            egui::Color32::from_rgb(180, 70, 0)
+        };
+        let cursor_color_dim = if dark {
+            egui::Color32::from_rgba_premultiplied(255, 180, 100, 80)
+        } else {
+            egui::Color32::from_rgb(180, 70, 0)
+        };
+        let env_color = if dark {
+            egui::Color32::from_rgba_premultiplied(100, 150, 200, 80)
+        } else {
+            egui::Color32::from_rgb(0, 60, 160)
+        };
 
         let can_interact = !self.live;
 
@@ -517,39 +575,34 @@ impl Graph {
         let (y_min, y_max) = y_bounds.unwrap_or((-1.0, 1.0));
 
         let unit = self.current_unit.clone();
-        let y_axis = AxisHints::new_y()
-            .formatter(move |mark, _range| {
-                let decimals = (-mark.step_size.log10().round() as usize).min(6);
-                let val = eframe::emath::format_with_decimals_in_range(
-                    mark.value,
-                    decimals..=decimals,
-                );
-                if unit.is_empty() {
-                    val
-                } else {
-                    format!("{val} {unit}  ")
-                }
-            });
+        let y_axis = AxisHints::new_y().formatter(move |mark, _range| {
+            let decimals = (-mark.step_size.log10().round() as usize).min(6);
+            let val = eframe::emath::format_with_decimals_in_range(mark.value, decimals..=decimals);
+            if unit.is_empty() {
+                val
+            } else {
+                format!("{val} {unit}  ")
+            }
+        });
 
-        let x_axis = AxisHints::new_x()
-            .formatter(|mark, _range| {
-                let s = mark.value;
-                if s < 60.0 {
-                    format!("{s:.0} s")
-                } else if s < 3600.0 {
-                    let m = (s / 60.0).floor();
-                    let sec = s % 60.0;
-                    if sec.abs() < 0.5 {
-                        format!("{m:.0} m")
-                    } else {
-                        format!("{m:.0}m {sec:.0}s")
-                    }
+        let x_axis = AxisHints::new_x().formatter(|mark, _range| {
+            let s = mark.value;
+            if s < 60.0 {
+                format!("{s:.0} s")
+            } else if s < 3600.0 {
+                let m = (s / 60.0).floor();
+                let sec = s % 60.0;
+                if sec.abs() < 0.5 {
+                    format!("{m:.0} m")
                 } else {
-                    let h = (s / 3600.0).floor();
-                    let m = ((s % 3600.0) / 60.0).floor();
-                    format!("{h:.0}h {m:.0}m")
+                    format!("{m:.0}m {sec:.0}s")
                 }
-            });
+            } else {
+                let h = (s / 3600.0).floor();
+                let m = ((s % 3600.0) / 60.0).floor();
+                format!("{h:.0}h {m:.0}m")
+            }
+        });
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
@@ -599,112 +652,110 @@ impl Graph {
             });
 
         let response = plot.show(ui, |plot_ui| {
-                // Set exact bounds: our X view range + computed Y range
-                plot_ui.set_plot_bounds(PlotBounds::from_min_max(
-                    [view_min, y_min],
-                    [view_max, y_max],
-                ));
+            // Set exact bounds: our X view range + computed Y range
+            plot_ui.set_plot_bounds(PlotBounds::from_min_max(
+                [view_min, y_min],
+                [view_max, y_max],
+            ));
 
-                // Min/max envelope (drawn first so it's behind the data line)
-                if show_envelope && !env_min.is_empty() {
-                    // env_color defined above
-                    plot_ui.line(
-                        Line::new(PlotPoints::new(env_max.clone()))
-                            .color(env_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
-                    plot_ui.line(
-                        Line::new(PlotPoints::new(env_min.clone()))
-                            .color(env_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
-                }
+            // Min/max envelope (drawn first so it's behind the data line)
+            if show_envelope && !env_min.is_empty() {
+                // env_color defined above
+                plot_ui.line(
+                    Line::new(PlotPoints::new(env_max.clone()))
+                        .color(env_color)
+                        .style(egui_plot::LineStyle::dashed_dense()),
+                );
+                plot_ui.line(
+                    Line::new(PlotPoints::new(env_min.clone()))
+                        .color(env_color)
+                        .style(egui_plot::LineStyle::dashed_dense()),
+                );
+            }
 
-                for seg in raw_segments {
-                    plot_ui.line(
-                        Line::new(PlotPoints::new(seg.clone())).color(line_color),
-                    );
-                }
+            for seg in raw_segments {
+                plot_ui.line(Line::new(PlotPoints::new(seg.clone())).color(line_color));
+            }
 
-                for &(gap_start, gap_end) in gap_ranges {
-                    plot_ui.vline(
-                        VLine::new(gap_start)
-                            .color(gap_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
-                    plot_ui.vline(
-                        VLine::new(gap_end)
-                            .color(gap_color)
-                            .style(egui_plot::LineStyle::dashed_dense()),
-                    );
-                }
+            for &(gap_start, gap_end) in gap_ranges {
+                plot_ui.vline(
+                    VLine::new(gap_start)
+                        .color(gap_color)
+                        .style(egui_plot::LineStyle::dashed_dense()),
+                );
+                plot_ui.vline(
+                    VLine::new(gap_end)
+                        .color(gap_color)
+                        .style(egui_plot::LineStyle::dashed_dense()),
+                );
+            }
 
-                // Mean line overlay
-                if show_mean
-                    && let Some((_, _, avg, _)) = visible_stats
-                {
+            // Mean line overlay
+            if show_mean && let Some((_, _, avg, _)) = visible_stats {
+                plot_ui.hline(
+                    HLine::new(avg)
+                        .color(mean_color)
+                        .style(egui_plot::LineStyle::dashed_loose()),
+                );
+            }
+
+            // Reference line overlays
+            if show_ref {
+                for &v in &ref_values {
                     plot_ui.hline(
-                        HLine::new(avg)
-                            .color(mean_color)
-                            .style(egui_plot::LineStyle::dashed_loose()),
+                        HLine::new(v)
+                            .color(ref_color)
+                            .style(egui_plot::LineStyle::dashed_dense()),
                     );
                 }
+            }
 
-                // Reference line overlays
-                if show_ref {
-                    for &v in &ref_values {
-                        plot_ui.hline(
-                            HLine::new(v)
-                                .color(ref_color)
-                                .style(egui_plot::LineStyle::dashed_dense()),
-                        );
-                    }
+            // Trigger crossing markers (where data crosses reference lines)
+            if !crossings.is_empty() {
+                // cross_color defined above
+                plot_ui.points(
+                    Points::new(PlotPoints::new(crossings.clone()))
+                        .color(cross_color)
+                        .radius(4.0)
+                        .shape(egui_plot::MarkerShape::Diamond),
+                );
+            }
+
+            // Measurement cursors (vertical + horizontal Y-value lines)
+            if cursors_active {
+                // cursor_color, cursor_color_dim defined above
+                if let Some(t) = cursor_a {
+                    plot_ui.vline(VLine::new(t).color(cursor_color));
                 }
-
-                // Trigger crossing markers (where data crosses reference lines)
-                if !crossings.is_empty() {
-                    // cross_color defined above
-                    plot_ui.points(
-                        Points::new(PlotPoints::new(crossings.clone()))
-                            .color(cross_color)
-                            .radius(4.0)
-                            .shape(egui_plot::MarkerShape::Diamond),
+                if let Some(v) = cursor_va {
+                    plot_ui.hline(
+                        HLine::new(v)
+                            .color(cursor_color_dim)
+                            .style(egui_plot::LineStyle::dashed_dense()),
                     );
                 }
-
-                // Measurement cursors (vertical + horizontal Y-value lines)
-                if cursors_active {
-                    // cursor_color, cursor_color_dim defined above
-                    if let Some(t) = cursor_a {
-                        plot_ui.vline(VLine::new(t).color(cursor_color));
-                    }
-                    if let Some(v) = cursor_va {
-                        plot_ui.hline(
-                            HLine::new(v).color(cursor_color_dim)
-                                .style(egui_plot::LineStyle::dashed_dense()),
-                        );
-                    }
-                    if let Some(t) = cursor_b {
-                        plot_ui.vline(VLine::new(t).color(cursor_color));
-                    }
-                    if let Some(v) = cursor_vb {
-                        plot_ui.hline(
-                            HLine::new(v).color(cursor_color_dim)
-                                .style(egui_plot::LineStyle::dashed_dense()),
-                        );
-                    }
+                if let Some(t) = cursor_b {
+                    plot_ui.vline(VLine::new(t).color(cursor_color));
                 }
-            });
+                if let Some(v) = cursor_vb {
+                    plot_ui.hline(
+                        HLine::new(v)
+                            .color(cursor_color_dim)
+                            .style(egui_plot::LineStyle::dashed_dense()),
+                    );
+                }
+            }
+        });
 
         // Draw overlay labels using the painter + transform
         let painter = ui.painter_at(response.response.rect);
         let label_font = egui::FontId::proportional(12.0);
 
         // Mean line label
-        if show_mean
-            && let Some(avg) = mean_value
-        {
-            let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(view_max, avg));
+        if show_mean && let Some(avg) = mean_value {
+            let pos = response
+                .transform
+                .position_from_point(&egui_plot::PlotPoint::new(view_max, avg));
             painter.text(
                 egui::pos2(pos.x - 4.0, pos.y - 2.0),
                 egui::Align2::RIGHT_BOTTOM,
@@ -717,7 +768,9 @@ impl Graph {
         // Reference line labels
         if show_ref {
             for &v in &ref_values {
-                let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(view_max, v));
+                let pos = response
+                    .transform
+                    .position_from_point(&egui_plot::PlotPoint::new(view_max, v));
                 painter.text(
                     egui::pos2(pos.x - 4.0, pos.y - 2.0),
                     egui::Align2::RIGHT_BOTTOM,
@@ -732,7 +785,9 @@ impl Graph {
         if cursors_active {
             if let Some(t) = cursor_a {
                 let y_val = cursor_va.unwrap_or(0.0);
-                let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
+                let pos = response
+                    .transform
+                    .position_from_point(&egui_plot::PlotPoint::new(t, y_val));
                 painter.text(
                     egui::pos2(pos.x + 4.0, pos.y - 2.0),
                     egui::Align2::LEFT_BOTTOM,
@@ -743,7 +798,9 @@ impl Graph {
             }
             if let Some(t) = cursor_b {
                 let y_val = cursor_vb.unwrap_or(0.0);
-                let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
+                let pos = response
+                    .transform
+                    .position_from_point(&egui_plot::PlotPoint::new(t, y_val));
                 painter.text(
                     egui::pos2(pos.x + 4.0, pos.y - 2.0),
                     egui::Align2::LEFT_BOTTOM,
@@ -758,14 +815,13 @@ impl Graph {
         if can_interact && response.response.dragged() {
             let drag_px = response.response.drag_delta().x;
             // Convert pixel drag to time using the transform
-            let left = response.transform.value_from_position(
-                response.response.rect.left_top(),
-            );
-            let right = response.transform.value_from_position(
-                response.response.rect.right_top(),
-            );
-            let px_per_sec = response.response.rect.width() as f64
-                / (right.x - left.x).max(1e-6);
+            let left = response
+                .transform
+                .value_from_position(response.response.rect.left_top());
+            let right = response
+                .transform
+                .value_from_position(response.response.rect.right_top());
+            let px_per_sec = response.response.rect.width() as f64 / (right.x - left.x).max(1e-6);
             let time_delta = drag_px as f64 / px_per_sec;
             self.view_center -= time_delta;
         }
@@ -806,7 +862,8 @@ impl Graph {
         }
 
         // Cursor placement on click — snap to nearest data point
-        if self.cursors_active && response.response.clicked()
+        if self.cursors_active
+            && response.response.clicked()
             && let Some(pos) = response.response.interact_pointer_pos()
         {
             let click_t = response.transform.value_from_position(pos).x;
@@ -858,9 +915,8 @@ impl Graph {
         let painter = ui.painter_at(full_rect);
         let data_span = (data_max - data_min).max(1e-6);
 
-        let time_to_x = |t: f64| -> f32 {
-            rect.left() + ((t - data_min) / data_span) as f32 * rect.width()
-        };
+        let time_to_x =
+            |t: f64| -> f32 { rect.left() + ((t - data_min) / data_span) as f32 * rect.width() };
 
         // Background
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
@@ -872,40 +928,78 @@ impl Graph {
                 .map(|&[t, v]| {
                     let x = time_to_x(t);
                     // Simple Y mapping: find Y range from all data
-                    let y_frac = if let Some((y_lo, y_hi)) = self.y_range_for_view(data_min, data_max) {
-                        let range = (y_hi - y_lo).max(1e-10);
-                        ((v - y_lo) / range) as f32
-                    } else {
-                        0.5
-                    };
+                    let y_frac =
+                        if let Some((y_lo, y_hi)) = self.y_range_for_view(data_min, data_max) {
+                            let range = (y_hi - y_lo).max(1e-10);
+                            ((v - y_lo) / range) as f32
+                        } else {
+                            0.5
+                        };
                     let y = rect.bottom() - y_frac * rect.height();
                     egui::pos2(x, y)
                 })
                 .collect();
             for window in points.windows(2) {
-                painter.line_segment(
-                    [window[0], window[1]],
-                    egui::Stroke::new(1.0, line_color),
-                );
+                painter.line_segment([window[0], window[1]], egui::Stroke::new(1.0, line_color));
             }
         }
 
         // Draw viewport indicator as [ ] bracket markers
         let vp_left = time_to_x(view_min);
         let vp_right = time_to_x(view_max);
-        let vp_color = if dark { egui::Color32::from_rgb(100, 150, 255) } else { egui::Color32::from_rgb(0, 70, 200) };
+        let vp_color = if dark {
+            egui::Color32::from_rgb(100, 150, 255)
+        } else {
+            egui::Color32::from_rgb(0, 70, 200)
+        };
         let vp_stroke = egui::Stroke::new(2.5, vp_color);
         let bracket_w = 4.0_f32; // horizontal arm of the bracket
 
         // Left bracket [
-        painter.line_segment([egui::pos2(vp_left, rect.top()), egui::pos2(vp_left, rect.bottom())], vp_stroke);
-        painter.line_segment([egui::pos2(vp_left, rect.top()), egui::pos2(vp_left + bracket_w, rect.top())], vp_stroke);
-        painter.line_segment([egui::pos2(vp_left, rect.bottom()), egui::pos2(vp_left + bracket_w, rect.bottom())], vp_stroke);
+        painter.line_segment(
+            [
+                egui::pos2(vp_left, rect.top()),
+                egui::pos2(vp_left, rect.bottom()),
+            ],
+            vp_stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(vp_left, rect.top()),
+                egui::pos2(vp_left + bracket_w, rect.top()),
+            ],
+            vp_stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(vp_left, rect.bottom()),
+                egui::pos2(vp_left + bracket_w, rect.bottom()),
+            ],
+            vp_stroke,
+        );
 
         // Right bracket ]
-        painter.line_segment([egui::pos2(vp_right, rect.top()), egui::pos2(vp_right, rect.bottom())], vp_stroke);
-        painter.line_segment([egui::pos2(vp_right, rect.top()), egui::pos2(vp_right - bracket_w, rect.top())], vp_stroke);
-        painter.line_segment([egui::pos2(vp_right, rect.bottom()), egui::pos2(vp_right - bracket_w, rect.bottom())], vp_stroke);
+        painter.line_segment(
+            [
+                egui::pos2(vp_right, rect.top()),
+                egui::pos2(vp_right, rect.bottom()),
+            ],
+            vp_stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(vp_right, rect.top()),
+                egui::pos2(vp_right - bracket_w, rect.top()),
+            ],
+            vp_stroke,
+        );
+        painter.line_segment(
+            [
+                egui::pos2(vp_right, rect.bottom()),
+                egui::pos2(vp_right - bracket_w, rect.bottom()),
+            ],
+            vp_stroke,
+        );
 
         // Draw X-axis time labels
         let label_color = ui.visuals().weak_text_color();
@@ -923,7 +1017,10 @@ impl Graph {
             );
             // Small tick mark
             painter.line_segment(
-                [egui::pos2(x, rect.bottom() - 2.0), egui::pos2(x, rect.bottom())],
+                [
+                    egui::pos2(x, rect.bottom() - 2.0),
+                    egui::pos2(x, rect.bottom()),
+                ],
                 egui::Stroke::new(1.0, label_color),
             );
             t += nice_interval;
@@ -931,7 +1028,8 @@ impl Graph {
 
         // Handle click/drag navigation
         if let Some(pos) = pointer_response.interact_pointer_pos() {
-            let clicked_t = data_min + ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64 * data_span;
+            let clicked_t = data_min
+                + ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64 * data_span;
             let half = self.time_window_secs / 2.0;
             if clicked_t + half >= data_max {
                 self.live = true;
@@ -982,11 +1080,18 @@ impl Graph {
     /// Build min/max envelope using a trailing sliding window.
     /// At each data point time `t`, computes min/max of all points in `[t - window, t]`.
     /// This answers "what was the range over the last N seconds?" with no look-ahead.
-    fn build_envelope(&self, x_min: f64, x_max: f64, window_secs: f64) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
+    fn build_envelope(
+        &self,
+        x_min: f64,
+        x_max: f64,
+        window_secs: f64,
+    ) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let window = window_secs.max(0.1);
 
         // Collect points: need data back to x_min - window for edge correctness
-        let points: Vec<(f64, f64)> = self.history.iter()
+        let points: Vec<(f64, f64)> = self
+            .history
+            .iter()
             .map(|p| (self.elapsed_secs(p.time), p.value))
             .filter(|(t, _)| *t >= x_min - window && *t <= x_max)
             .collect();
@@ -1003,7 +1108,9 @@ impl Graph {
         for i in 0..n {
             let (t, _) = points[i];
             // Only emit envelope points within the visible range
-            if t < x_min { continue; }
+            if t < x_min {
+                continue;
+            }
 
             let win_start = t - window;
 
@@ -1035,7 +1142,9 @@ impl Graph {
 
         for point in &self.history {
             let t = self.elapsed_secs(point.time);
-            if t < x_min || t > x_max { continue; }
+            if t < x_min || t > x_max {
+                continue;
+            }
 
             if let Some((_, prev_v)) = prev {
                 for &thresh in thresholds {

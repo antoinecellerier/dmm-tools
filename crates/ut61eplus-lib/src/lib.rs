@@ -193,15 +193,20 @@ mod tests {
         flags: (u8, u8, u8),
     ) -> Vec<u8> {
         let payload: Vec<u8> = vec![
-            mode,               // raw, no 0x30 prefix
-            range | 0x30,       // has 0x30 prefix
-            display[0], display[1], display[2], display[3],
-            display[4], display[5], display[6],
-            progress.0,         // raw, no 0x30 prefix
-            progress.1,         // raw, no 0x30 prefix
-            flags.0 | 0x30,     // has 0x30 prefix
-            flags.1 | 0x30,     // has 0x30 prefix
-            flags.2 | 0x30,     // has 0x30 prefix
+            mode,         // raw, no 0x30 prefix
+            range | 0x30, // has 0x30 prefix
+            display[0],
+            display[1],
+            display[2],
+            display[3],
+            display[4],
+            display[5],
+            display[6],
+            progress.0,     // raw, no 0x30 prefix
+            progress.1,     // raw, no 0x30 prefix
+            flags.0 | 0x30, // has 0x30 prefix
+            flags.1 | 0x30, // has 0x30 prefix
+            flags.2 | 0x30, // has 0x30 prefix
         ];
         // Length byte = payload + 2 checksum bytes (matches real wire format)
         let len_byte = (payload.len() + 2) as u8;
@@ -215,9 +220,8 @@ mod tests {
 
     #[test]
     fn dmm_request_measurement() {
-        let response = make_measurement_response(
-            0x02, 0x01, b"  5.678", (0x05, 0x0A), (0x00, 0x00, 0x00),
-        );
+        let response =
+            make_measurement_response(0x02, 0x01, b"  5.678", (0x05, 0x0A), (0x00, 0x00, 0x00));
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
         let mut dmm = Dmm::new(mock, table);
@@ -231,9 +235,8 @@ mod tests {
     #[test]
     fn dmm_split_response() {
         // Response arrives in two chunks
-        let full = make_measurement_response(
-            0x06, 0x02, b" 12.345", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
+        let full =
+            make_measurement_response(0x06, 0x02, b" 12.345", (0x00, 0x00), (0x00, 0x00, 0x00));
         let (part1, part2) = full.split_at(10);
         let mock = MockTransport::new(vec![part1.to_vec(), part2.to_vec()]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -257,9 +260,8 @@ mod tests {
 
     #[test]
     fn dmm_sends_correct_request_bytes() {
-        let response = make_measurement_response(
-            0x02, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
+        let response =
+            make_measurement_response(0x02, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
         let mut dmm = Dmm::new(mock, table);
@@ -288,7 +290,11 @@ mod tests {
     fn dmm_response_with_leading_garbage() {
         let mut data = vec![0xFF, 0xFE, 0x00]; // garbage before frame
         data.extend_from_slice(&make_measurement_response(
-            0x00, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00),
+            0x00,
+            0x00,
+            b"  1.234",
+            (0x00, 0x00),
+            (0x00, 0x00, 0x00),
         ));
         let mock = MockTransport::new(vec![data]);
         let table = Box::new(Ut61ePlusTable::new());
@@ -300,20 +306,22 @@ mod tests {
 
     #[test]
     fn dmm_multiple_measurements() {
-        let r1 = make_measurement_response(
-            0x02, 0x00, b"  1.000", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
-        let r2 = make_measurement_response(
-            0x02, 0x00, b"  2.000", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
+        let r1 =
+            make_measurement_response(0x02, 0x00, b"  1.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let r2 =
+            make_measurement_response(0x02, 0x00, b"  2.000", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mock = MockTransport::new(vec![r1, r2]);
         let table = Box::new(Ut61ePlusTable::new());
         let mut dmm = Dmm::new(mock, table);
 
         let m1 = dmm.request_measurement().unwrap();
         let m2 = dmm.request_measurement().unwrap();
-        assert!(matches!(m1.value, measurement::MeasuredValue::Normal(v) if (v - 1.0).abs() < 1e-6));
-        assert!(matches!(m2.value, measurement::MeasuredValue::Normal(v) if (v - 2.0).abs() < 1e-6));
+        assert!(
+            matches!(m1.value, measurement::MeasuredValue::Normal(v) if (v - 1.0).abs() < 1e-6)
+        );
+        assert!(
+            matches!(m2.value, measurement::MeasuredValue::Normal(v) if (v - 2.0).abs() < 1e-6)
+        );
     }
 
     #[test]
@@ -341,9 +349,8 @@ mod tests {
 
     #[test]
     fn dmm_capacitance_mode() {
-        let response = make_measurement_response(
-            0x09, 0x03, b"  4.567", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
+        let response =
+            make_measurement_response(0x09, 0x03, b"  4.567", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
         let mut dmm = Dmm::new(mock, table);
@@ -356,9 +363,8 @@ mod tests {
 
     #[test]
     fn dmm_hz_mode() {
-        let response = make_measurement_response(
-            0x04, 0x02, b" 1.2345", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
+        let response =
+            make_measurement_response(0x04, 0x02, b" 1.2345", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
         let mut dmm = Dmm::new(mock, table);
@@ -371,14 +377,15 @@ mod tests {
 
     #[test]
     fn dmm_negative_value() {
-        let response = make_measurement_response(
-            0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x00, 0x00),
-        );
+        let response =
+            make_measurement_response(0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mock = MockTransport::new(vec![response]);
         let table = Box::new(Ut61ePlusTable::new());
         let mut dmm = Dmm::new(mock, table);
 
         let m = dmm.request_measurement().unwrap();
-        assert!(matches!(m.value, measurement::MeasuredValue::Normal(v) if (v - (-12.345)).abs() < 1e-6));
+        assert!(
+            matches!(m.value, measurement::MeasuredValue::Normal(v) if (v - (-12.345)).abs() < 1e-6)
+        );
     }
 }

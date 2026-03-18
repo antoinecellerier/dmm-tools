@@ -52,7 +52,11 @@ impl Transport for Cp2110 {
     fn write(&self, data: &[u8]) -> Result<()> {
         // CP2110 interrupt OUT: first byte is length, then payload.
         // Max payload for a single HID interrupt report is 63 bytes.
-        debug_assert!(data.len() <= 63, "data too large for single HID report: {}", data.len());
+        debug_assert!(
+            data.len() <= 63,
+            "data too large for single HID report: {}",
+            data.len()
+        );
         let mut report = Vec::with_capacity(data.len() + 1);
         report.push(data.len() as u8);
         report.extend_from_slice(data);
@@ -77,9 +81,7 @@ impl Transport for Cp2110 {
 
     fn send_feature_report(&self, data: &[u8]) -> Result<()> {
         trace!("CP2110 feature report: {:02X?}", data);
-        self.device
-            .send_feature_report(data)
-            .map_err(Error::Hid)?;
+        self.device.send_feature_report(data).map_err(Error::Hid)?;
         Ok(())
     }
 }

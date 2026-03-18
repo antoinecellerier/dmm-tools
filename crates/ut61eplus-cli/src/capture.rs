@@ -74,7 +74,9 @@ impl SampleData {
             MeasuredValue::Overload => "OL".to_string(),
             MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
         };
-        let raw_hex = m.raw_payload.iter()
+        let raw_hex = m
+            .raw_payload
+            .iter()
             .map(|b| format!("{b:02X}"))
             .collect::<Vec<_>>()
             .join(" ");
@@ -105,12 +107,27 @@ impl SampleData {
 
     pub fn summary(&self) -> String {
         let mut flag_parts = Vec::new();
-        if self.flags.auto_range { flag_parts.push("AUTO"); }
-        if self.flags.hold { flag_parts.push("HOLD"); }
-        if self.flags.rel { flag_parts.push("REL"); }
-        if self.flags.min { flag_parts.push("MIN"); }
-        if self.flags.max { flag_parts.push("MAX"); }
-        format!("{} {} [{}]", self.display_raw.trim(), self.unit, flag_parts.join(" "))
+        if self.flags.auto_range {
+            flag_parts.push("AUTO");
+        }
+        if self.flags.hold {
+            flag_parts.push("HOLD");
+        }
+        if self.flags.rel {
+            flag_parts.push("REL");
+        }
+        if self.flags.min {
+            flag_parts.push("MIN");
+        }
+        if self.flags.max {
+            flag_parts.push("MAX");
+        }
+        format!(
+            "{} {} [{}]",
+            self.display_raw.trim(),
+            self.unit,
+            flag_parts.join(" ")
+        )
     }
 }
 
@@ -125,44 +142,196 @@ pub struct CaptureStep {
 
 /// IDs for part 1 (modes) vs part 2 (flags) grouping.
 pub const MODE_STEP_IDS: &[&str] = &[
-    "dcv", "dcv_short", "acv", "dcmv", "ohm", "ohm_short", "continuity",
-    "diode", "capacitance", "hz", "duty", "ncv", "hfe", "dcua", "dcma", "dca", "temp",
+    "dcv",
+    "dcv_short",
+    "acv",
+    "dcmv",
+    "ohm",
+    "ohm_short",
+    "continuity",
+    "diode",
+    "capacitance",
+    "hz",
+    "duty",
+    "ncv",
+    "hfe",
+    "dcua",
+    "dcma",
+    "dca",
+    "temp",
 ];
 pub const FLAG_STEP_IDS: &[&str] = &[
-    "hold", "hold_off", "rel", "rel_off", "minmax", "minmax_off", "range", "auto",
+    "hold",
+    "hold_off",
+    "rel",
+    "rel_off",
+    "minmax",
+    "minmax_off",
+    "range",
+    "auto",
 ];
 
 pub fn all_capture_steps() -> Vec<CaptureStep> {
     vec![
         // Part 1: Modes
-        CaptureStep { id: "dcv", instruction: "Set meter to DC V (V\u{23CF}). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcv_short", instruction: "DC V mode: touch the two probe tips together.", command: None, samples: 3 },
-        CaptureStep { id: "acv", instruction: "Set meter to AC V (V~). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcmv", instruction: "Set meter to DC mV. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "ohm", instruction: "Set meter to \u{03A9}. Leave leads open (should show OL).", command: None, samples: 3 },
-        CaptureStep { id: "ohm_short", instruction: "\u{03A9} mode: touch the two probe tips together.", command: None, samples: 3 },
-        CaptureStep { id: "continuity", instruction: "Set meter to continuity (buzzer). Touch probes together.", command: None, samples: 3 },
-        CaptureStep { id: "diode", instruction: "Set meter to diode. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "capacitance", instruction: "Set meter to capacitance (F). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "hz", instruction: "Set meter to Hz. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "duty", instruction: "Hz mode: press USB/Hz to switch to duty cycle (%).", command: None, samples: 3 },
-        CaptureStep { id: "ncv", instruction: "Set meter to NCV. Hold near a live wire if possible.", command: None, samples: 3 },
-        CaptureStep { id: "hfe", instruction: "Set meter to hFE. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcua", instruction: "Set meter to \u{00B5}A. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcma", instruction: "Set meter to mA. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dca", instruction: "Set meter to A (if available). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "temp", instruction: "Set meter to Temperature (if K-type thermocouple available).", command: None, samples: 3 },
+        CaptureStep {
+            id: "dcv",
+            instruction: "Set meter to DC V (V\u{23CF}). Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "dcv_short",
+            instruction: "DC V mode: touch the two probe tips together.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "acv",
+            instruction: "Set meter to AC V (V~). Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "dcmv",
+            instruction: "Set meter to DC mV. Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "ohm",
+            instruction: "Set meter to \u{03A9}. Leave leads open (should show OL).",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "ohm_short",
+            instruction: "\u{03A9} mode: touch the two probe tips together.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "continuity",
+            instruction: "Set meter to continuity (buzzer). Touch probes together.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "diode",
+            instruction: "Set meter to diode. Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "capacitance",
+            instruction: "Set meter to capacitance (F). Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "hz",
+            instruction: "Set meter to Hz. Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "duty",
+            instruction: "Hz mode: press USB/Hz to switch to duty cycle (%).",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "ncv",
+            instruction: "Set meter to NCV. Hold near a live wire if possible.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "hfe",
+            instruction: "Set meter to hFE. Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "dcua",
+            instruction: "Set meter to \u{00B5}A. Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "dcma",
+            instruction: "Set meter to mA. Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "dca",
+            instruction: "Set meter to A (if available). Leave leads open.",
+            command: None,
+            samples: 3,
+        },
+        CaptureStep {
+            id: "temp",
+            instruction: "Set meter to Temperature (if K-type thermocouple available).",
+            command: None,
+            samples: 3,
+        },
         // Part 2: Flags
-        CaptureStep { id: "hold", instruction: "Sending HOLD command.", command: Some(Command::Hold), samples: 3 },
-        CaptureStep { id: "hold_off", instruction: "Toggling HOLD off.", command: Some(Command::Hold), samples: 3 },
-        CaptureStep { id: "rel", instruction: "Sending REL command.", command: Some(Command::Rel), samples: 3 },
-        CaptureStep { id: "rel_off", instruction: "Toggling REL off.", command: Some(Command::Rel), samples: 3 },
-        CaptureStep { id: "minmax", instruction: "Sending MIN/MAX command.", command: Some(Command::MinMax), samples: 3 },
-        CaptureStep { id: "minmax_off", instruction: "Exiting MIN/MAX.", command: Some(Command::ExitMinMax), samples: 3 },
-        CaptureStep { id: "range", instruction: "Sending RANGE (manual range).", command: Some(Command::Range), samples: 3 },
-        CaptureStep { id: "auto", instruction: "Sending AUTO (restore auto-range).", command: Some(Command::Auto), samples: 3 },
+        CaptureStep {
+            id: "hold",
+            instruction: "Sending HOLD command.",
+            command: Some(Command::Hold),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "hold_off",
+            instruction: "Toggling HOLD off.",
+            command: Some(Command::Hold),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "rel",
+            instruction: "Sending REL command.",
+            command: Some(Command::Rel),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "rel_off",
+            instruction: "Toggling REL off.",
+            command: Some(Command::Rel),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "minmax",
+            instruction: "Sending MIN/MAX command.",
+            command: Some(Command::MinMax),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "minmax_off",
+            instruction: "Exiting MIN/MAX.",
+            command: Some(Command::ExitMinMax),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "range",
+            instruction: "Sending RANGE (manual range).",
+            command: Some(Command::Range),
+            samples: 3,
+        },
+        CaptureStep {
+            id: "auto",
+            instruction: "Sending AUTO (restore auto-range).",
+            command: Some(Command::Auto),
+            samples: 3,
+        },
         // Part 3: Range cycle
-        CaptureStep { id: "range_cycle", instruction: "Cycle through manual ranges on DC V.", command: None, samples: 0 },
+        CaptureStep {
+            id: "range_cycle",
+            instruction: "Cycle through manual ranges on DC V.",
+            command: None,
+            samples: 0,
+        },
     ]
 }
 
@@ -235,64 +404,95 @@ pub fn run_capture_step(
     interactive: bool,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
-    if report.steps.iter().any(|s| s.id == step.id && s.status == StepStatus::Captured) {
+    if report
+        .steps
+        .iter()
+        .any(|s| s.id == step.id && s.status == StepStatus::Captured)
+    {
         eprintln!("  {} already captured, skipping", style(step.id).dim());
         return Ok(false);
     }
 
     if interactive {
         eprintln!();
-        eprintln!("{} {}", style(format!("[{}]", step.id)).cyan().bold(), step.instruction);
-        let ch = prompt_key(&format!("  {} ", style("any key=capture, s=skip, q=finish:").dim()))?;
+        eprintln!(
+            "{} {}",
+            style(format!("[{}]", step.id)).cyan().bold(),
+            step.instruction
+        );
+        let ch = prompt_key(&format!(
+            "  {} ",
+            style("any key=capture, s=skip, q=finish:").dim()
+        ))?;
         if ch == 'q' || ch == 'Q' {
-            upsert_step(report, StepResult {
-                id: step.id.to_string(),
-                instruction: step.instruction.to_string(),
-                status: StepStatus::Skipped,
-                samples: vec![],
-                screen: None,
-                error: None,
-            });
+            upsert_step(
+                report,
+                StepResult {
+                    id: step.id.to_string(),
+                    instruction: step.instruction.to_string(),
+                    status: StepStatus::Skipped,
+                    samples: vec![],
+                    screen: None,
+                    error: None,
+                },
+            );
             return Ok(true);
         }
         if ch == 's' || ch == 'S' {
-            upsert_step(report, StepResult {
-                id: step.id.to_string(),
-                instruction: step.instruction.to_string(),
-                status: StepStatus::Skipped,
-                samples: vec![],
-                screen: None,
-                error: None,
-            });
+            upsert_step(
+                report,
+                StepResult {
+                    id: step.id.to_string(),
+                    instruction: step.instruction.to_string(),
+                    status: StepStatus::Skipped,
+                    samples: vec![],
+                    screen: None,
+                    error: None,
+                },
+            );
             return Ok(false);
         }
     } else {
-        eprintln!("{} {}", style(format!("[{}]", step.id)).cyan().bold(), step.instruction);
+        eprintln!(
+            "{} {}",
+            style(format!("[{}]", step.id)).cyan().bold(),
+            step.instruction
+        );
     }
 
     if let Some(cmd) = step.command {
         if let Err(e) = dmm.send_command(cmd) {
             eprintln!("  {}", style(format!("Command failed: {e}")).red());
-            upsert_step(report, StepResult {
-                id: step.id.to_string(),
-                instruction: step.instruction.to_string(),
-                status: StepStatus::Error,
-                samples: vec![],
-                screen: None,
-                error: Some(e.to_string()),
-            });
+            upsert_step(
+                report,
+                StepResult {
+                    id: step.id.to_string(),
+                    instruction: step.instruction.to_string(),
+                    status: StepStatus::Error,
+                    samples: vec![],
+                    screen: None,
+                    error: Some(e.to_string()),
+                },
+            );
             return Ok(false);
         }
         std::thread::sleep(Duration::from_millis(200));
     }
 
     let raw_samples = capture_samples(dmm, step.samples);
-    let sample_data: Vec<SampleData> = raw_samples.iter().map(SampleData::from_measurement).collect();
+    let sample_data: Vec<SampleData> = raw_samples
+        .iter()
+        .map(SampleData::from_measurement)
+        .collect();
 
     for (i, s) in sample_data.iter().enumerate() {
         eprintln!(
             "    {} mode={}({}) range={} display={:?}",
-            style(format!("[{i}]")).dim(), s.mode_byte, s.mode, s.range_byte, s.display_raw
+            style(format!("[{i}]")).dim(),
+            s.mode_byte,
+            s.mode,
+            s.range_byte,
+            s.display_raw
         );
     }
 
@@ -300,7 +500,8 @@ pub fn run_capture_step(
         let summary = sample_data.last().expect("checked non-empty").summary();
         eprintln!("  We read: {}", style(&summary).green());
         let input = prompt(&format!(
-            "  {} ", style("Enter=correct, or type what the meter actually shows:").dim()
+            "  {} ",
+            style("Enter=correct, or type what the meter actually shows:").dim()
         ))?;
         if input.is_empty() {
             Some(format!("confirmed: {summary}"))
@@ -317,7 +518,12 @@ pub fn run_capture_step(
     let status = if sample_data.is_empty() {
         StepStatus::Timeout
     } else if sample_data.len() < step.samples {
-        eprintln!("  {} only got {}/{} samples", style("warning:").yellow(), sample_data.len(), step.samples);
+        eprintln!(
+            "  {} only got {}/{} samples",
+            style("warning:").yellow(),
+            sample_data.len(),
+            step.samples
+        );
         StepStatus::Captured
     } else {
         StepStatus::Captured
@@ -357,10 +563,20 @@ pub fn list_steps() {
     }
     eprintln!();
     eprintln!("{}", style("  Other:").cyan());
-    eprintln!("    {:<16} Cycle through manual ranges on DC V", style("range_cycle").bold());
-    eprintln!("    {:<16} Freeform captures (Part 4)", style("extra").bold());
+    eprintln!(
+        "    {:<16} Cycle through manual ranges on DC V",
+        style("range_cycle").bold()
+    );
+    eprintln!(
+        "    {:<16} Freeform captures (Part 4)",
+        style("extra").bold()
+    );
     eprintln!();
-    eprintln!("Usage: {} {}", style("ut61eplus capture --steps").dim(), style("dcmv,temp,duty").dim());
+    eprintln!(
+        "Usage: {} {}",
+        style("ut61eplus capture --steps").dim(),
+        style("dcmv,temp,duty").dim()
+    );
 }
 
 pub fn cmd_capture(
@@ -368,7 +584,8 @@ pub fn cmd_capture(
     filter: Option<Vec<String>>,
     mut dmm: ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let step_filter: Option<std::collections::HashSet<String>> = filter.map(|v| v.into_iter().collect());
+    let step_filter: Option<std::collections::HashSet<String>> =
+        filter.map(|v| v.into_iter().collect());
 
     // Verify the meter is actually responding before proceeding
     eprintln!("{}", style("Checking meter communication...").dim());
@@ -380,7 +597,12 @@ pub fn cmd_capture(
                 Ok(_) => "unknown".to_string(),
                 Err(_) => {
                     eprintln!();
-                    eprintln!("{}", style("USB adapter found but the meter is not responding.").yellow().bold());
+                    eprintln!(
+                        "{}",
+                        style("USB adapter found but the meter is not responding.")
+                            .yellow()
+                            .bold()
+                    );
                     eprintln!("To enable data transmission on the UT61E+:");
                     eprintln!("  1. Insert the USB module into the meter");
                     eprintln!("  2. Turn the meter on");
@@ -399,7 +621,12 @@ pub fn cmd_capture(
     if supported {
         eprintln!("Status: {}", style("supported model").green());
     } else {
-        eprintln!("Status: {}", style("UNKNOWN MODEL — captures are especially valuable!").yellow().bold());
+        eprintln!(
+            "Status: {}",
+            style("UNKNOWN MODEL — captures are especially valuable!")
+                .yellow()
+                .bold()
+        );
         eprintln!("        Protocol may differ from the UT61E+. Please complete");
         eprintln!("        as many steps as possible and share the report.");
     }
@@ -408,52 +635,66 @@ pub fn cmd_capture(
     // Determine output path: explicit override, or auto-name from device
     let slug = device_name
         .chars()
-        .map(|c| if c.is_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect::<String>();
     let auto_path = format!("capture-{slug}.yaml");
     let output_path = output_override.unwrap_or(auto_path);
 
     // Check for existing file — auto-resume or prompt to overwrite
     let mut report = match std::fs::read_to_string(&output_path) {
-        Ok(contents) => {
-            match serde_yaml::from_str::<CaptureReport>(&contents) {
-                Ok(r) => {
-                    let captured = r.steps.iter().filter(|s| s.status == StepStatus::Captured).count();
-                    let skipped = r.steps.iter().filter(|s| s.status == StepStatus::Skipped).count();
-                    eprintln!(
-                        "Found existing capture: {output_path} ({captured} captured, {skipped} skipped)"
-                    );
-                    let ch = prompt_key("r=resume, n=start fresh, q=abort: ")?;
-                    if ch == 'q' || ch == 'Q' {
-                        eprintln!("Aborted.");
-                        return Ok(());
-                    }
-                    if ch == 'n' || ch == 'N' {
-                        let confirm = prompt_key("This will overwrite the existing capture. Are you sure? y/n: ")?;
-                        if confirm != 'y' && confirm != 'Y' {
-                            eprintln!("Aborted.");
-                            return Ok(());
-                        }
-                        CaptureReport::default()
-                    } else if ch == 'r' || ch == 'R' {
-                        eprintln!("Resuming — already-captured steps will be skipped.\n");
-                        r
-                    } else {
-                        eprintln!("Aborted.");
-                        return Ok(());
-                    }
+        Ok(contents) => match serde_yaml::from_str::<CaptureReport>(&contents) {
+            Ok(r) => {
+                let captured = r
+                    .steps
+                    .iter()
+                    .filter(|s| s.status == StepStatus::Captured)
+                    .count();
+                let skipped = r
+                    .steps
+                    .iter()
+                    .filter(|s| s.status == StepStatus::Skipped)
+                    .count();
+                eprintln!(
+                    "Found existing capture: {output_path} ({captured} captured, {skipped} skipped)"
+                );
+                let ch = prompt_key("r=resume, n=start fresh, q=abort: ")?;
+                if ch == 'q' || ch == 'Q' {
+                    eprintln!("Aborted.");
+                    return Ok(());
                 }
-                Err(_) => {
-                    eprintln!("Found {output_path} but couldn't parse it.");
-                    let ch = prompt_key("Overwrite? y=start fresh, any other key=abort: ")?;
-                    if ch != 'y' && ch != 'Y' {
+                if ch == 'n' || ch == 'N' {
+                    let confirm = prompt_key(
+                        "This will overwrite the existing capture. Are you sure? y/n: ",
+                    )?;
+                    if confirm != 'y' && confirm != 'Y' {
                         eprintln!("Aborted.");
                         return Ok(());
                     }
                     CaptureReport::default()
+                } else if ch == 'r' || ch == 'R' {
+                    eprintln!("Resuming — already-captured steps will be skipped.\n");
+                    r
+                } else {
+                    eprintln!("Aborted.");
+                    return Ok(());
                 }
             }
-        }
+            Err(_) => {
+                eprintln!("Found {output_path} but couldn't parse it.");
+                let ch = prompt_key("Overwrite? y=start fresh, any other key=abort: ")?;
+                if ch != 'y' && ch != 'Y' {
+                    eprintln!("Aborted.");
+                    return Ok(());
+                }
+                CaptureReport::default()
+            }
+        },
         Err(_) => CaptureReport::default(),
     };
 
@@ -466,21 +707,30 @@ pub fn cmd_capture(
 
     let all_steps = all_capture_steps();
     let is_filtered = step_filter.is_some();
-    let include = |id: &str| -> bool {
-        step_filter.as_ref().is_none_or(|f| f.contains(id))
-    };
+    let include = |id: &str| -> bool { step_filter.as_ref().is_none_or(|f| f.contains(id)) };
 
     let mut done = false;
 
     // --- Part 1: Modes ---
     let has_mode_steps = MODE_STEP_IDS.iter().any(|id| include(id));
     if has_mode_steps {
-        eprintln!("{}", style("\u{2501}\u{2501}\u{2501} Part 1: Measurement Modes \u{2501}\u{2501}\u{2501}").bold());
-        eprintln!("{}", style("any key=capture, s=skip one, q=skip to end and save").dim());
+        eprintln!(
+            "{}",
+            style("\u{2501}\u{2501}\u{2501} Part 1: Measurement Modes \u{2501}\u{2501}\u{2501}")
+                .bold()
+        );
+        eprintln!(
+            "{}",
+            style("any key=capture, s=skip one, q=skip to end and save").dim()
+        );
 
         for step in all_steps.iter().filter(|s| MODE_STEP_IDS.contains(&s.id)) {
-            if done { break; }
-            if !include(step.id) { continue; }
+            if done {
+                break;
+            }
+            if !include(step.id) {
+                continue;
+            }
             done = run_capture_step(&mut dmm, step, &mut report, true)?;
             save_report(&report, &output_path)?;
         }
@@ -489,15 +739,30 @@ pub fn cmd_capture(
     // --- Part 2: Flags ---
     let has_flag_steps = FLAG_STEP_IDS.iter().any(|id| include(id));
     if !done && has_flag_steps {
-        eprintln!("\n{}", style("\u{2501}\u{2501}\u{2501} Part 2: Flags & Remote Commands \u{2501}\u{2501}\u{2501}").bold());
+        eprintln!(
+            "\n{}",
+            style(
+                "\u{2501}\u{2501}\u{2501} Part 2: Flags & Remote Commands \u{2501}\u{2501}\u{2501}"
+            )
+            .bold()
+        );
         eprintln!("Set meter to DC V mode for these tests.");
-        let ch = prompt_key(&format!("\n{} ", style("Any key when ready on DC V, q=skip to end:").dim()))?;
-        if ch == 'q' || ch == 'Q' { done = true; }
+        let ch = prompt_key(&format!(
+            "\n{} ",
+            style("Any key when ready on DC V, q=skip to end:").dim()
+        ))?;
+        if ch == 'q' || ch == 'Q' {
+            done = true;
+        }
     }
     if !done && has_flag_steps {
         for step in all_steps.iter().filter(|s| FLAG_STEP_IDS.contains(&s.id)) {
-            if done { break; }
-            if !include(step.id) { continue; }
+            if done {
+                break;
+            }
+            if !include(step.id) {
+                continue;
+            }
             done = run_capture_step(&mut dmm, step, &mut report, true)?;
             save_report(&report, &output_path)?;
         }
@@ -505,9 +770,15 @@ pub fn cmd_capture(
 
     // --- Part 3: Range cycle ---
     if !done && include("range_cycle") {
-        eprintln!("\n{}", style("\u{2501}\u{2501}\u{2501} Part 3: Range Values \u{2501}\u{2501}\u{2501}").bold());
+        eprintln!(
+            "\n{}",
+            style("\u{2501}\u{2501}\u{2501} Part 3: Range Values \u{2501}\u{2501}\u{2501}").bold()
+        );
         eprintln!("We'll cycle through manual ranges on DC V.");
-        let ch = prompt_key(&format!("\n{} ", style("Any key to start, q=skip to end:").dim()))?;
+        let ch = prompt_key(&format!(
+            "\n{} ",
+            style("Any key to start, q=skip to end:").dim()
+        ))?;
         if ch != 'q' && ch != 'Q' {
             let _ = dmm.send_command(Command::Auto);
             std::thread::sleep(Duration::from_millis(200));
@@ -519,21 +790,27 @@ pub fn cmd_capture(
                 let raw = capture_samples(&mut dmm, 2);
                 for m in &raw {
                     let s = SampleData::from_measurement(m);
-                    eprintln!("  range_step_{r}: range={} label={}", s.range_byte, s.range_label);
+                    eprintln!(
+                        "  range_step_{r}: range={} label={}",
+                        s.range_byte, s.range_label
+                    );
                     range_samples.push(s);
                 }
             }
             let _ = dmm.send_command(Command::Auto);
             std::thread::sleep(Duration::from_millis(200));
 
-            upsert_step(&mut report, StepResult {
-                id: "range_cycle".to_string(),
-                instruction: "Cycle through manual ranges on DC V".to_string(),
-                status: StepStatus::Captured,
-                samples: range_samples,
-                screen: None,
-                error: None,
-            });
+            upsert_step(
+                &mut report,
+                StepResult {
+                    id: "range_cycle".to_string(),
+                    instruction: "Cycle through manual ranges on DC V".to_string(),
+                    status: StepStatus::Captured,
+                    samples: range_samples,
+                    screen: None,
+                    error: None,
+                },
+            );
             save_report(&report, &output_path)?;
         } else {
             done = true;
@@ -555,7 +832,8 @@ pub fn cmd_capture(
             }
 
             let raw = capture_samples(&mut dmm, 3);
-            let sample_data: Vec<SampleData> = raw.iter().map(SampleData::from_measurement).collect();
+            let sample_data: Vec<SampleData> =
+                raw.iter().map(SampleData::from_measurement).collect();
 
             for (i, s) in sample_data.iter().enumerate() {
                 eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
@@ -576,14 +854,21 @@ pub fn cmd_capture(
                 None
             };
 
-            upsert_step(&mut report, StepResult {
-                id: format!("extra_{extra}"),
-                instruction: desc,
-                status: if sample_data.is_empty() { StepStatus::Timeout } else { StepStatus::Captured },
-                samples: sample_data,
-                screen,
-                error: None,
-            });
+            upsert_step(
+                &mut report,
+                StepResult {
+                    id: format!("extra_{extra}"),
+                    instruction: desc,
+                    status: if sample_data.is_empty() {
+                        StepStatus::Timeout
+                    } else {
+                        StepStatus::Captured
+                    },
+                    samples: sample_data,
+                    screen,
+                    error: None,
+                },
+            );
             save_report(&report, &output_path)?;
             extra += 1;
         }

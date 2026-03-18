@@ -18,15 +18,19 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
             // display_raw preserves leading spaces (sign placeholder) and
             // fixed decimal places per range, so numbers don't jump around.
             let (value_text, value_color) = match &m.value {
-                MeasuredValue::Normal(_) => {
-                    (format_display_raw(&m.display_raw), ui.visuals().text_color())
-                }
-                MeasuredValue::Overload => {
-                    (format_display_raw(&m.display_raw), if ui.visuals().dark_mode { Color32::from_rgb(220, 60, 60) } else { Color32::from_rgb(180, 0, 0) })
-                }
-                MeasuredValue::NcvLevel(l) => {
-                    (format!("NCV {l}"), ui.visuals().text_color())
-                }
+                MeasuredValue::Normal(_) => (
+                    format_display_raw(&m.display_raw),
+                    ui.visuals().text_color(),
+                ),
+                MeasuredValue::Overload => (
+                    format_display_raw(&m.display_raw),
+                    if ui.visuals().dark_mode {
+                        Color32::from_rgb(220, 60, 60)
+                    } else {
+                        Color32::from_rgb(180, 0, 0)
+                    },
+                ),
+                MeasuredValue::NcvLevel(l) => (format!("NCV {l}"), ui.visuals().text_color()),
             };
 
             ui.horizontal(|ui| {
@@ -46,15 +50,9 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
             // Mode, range, flags
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                ui.label(
-                    RichText::new(m.mode.to_string())
-                        .color(ui.visuals().weak_text_color()),
-                );
+                ui.label(RichText::new(m.mode.to_string()).color(ui.visuals().weak_text_color()));
                 if !m.range_label.is_empty() {
-                    ui.label(
-                        RichText::new(m.range_label)
-                            .color(ui.visuals().weak_text_color()),
-                    );
+                    ui.label(RichText::new(m.range_label).color(ui.visuals().weak_text_color()));
                 }
                 show_flags(ui, m);
             });
@@ -65,10 +63,7 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
                     .font(FontId::monospace(36.0))
                     .color(ui.visuals().weak_text_color()),
             );
-            ui.label(
-                RichText::new("No reading")
-                    .color(ui.visuals().weak_text_color()),
-            );
+            ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
         }
     }
 }
@@ -86,14 +81,8 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
 
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
-                ui.label(
-                    RichText::new(&value_text)
-                        .font(FontId::monospace(28.0)),
-                );
-                ui.label(
-                    RichText::new(m.unit)
-                        .font(FontId::monospace(16.0)),
-                );
+                ui.label(RichText::new(&value_text).font(FontId::monospace(28.0)));
+                ui.label(RichText::new(m.unit).font(FontId::monospace(16.0)));
                 ui.separator();
                 ui.label(
                     RichText::new(m.mode.to_string())
@@ -120,8 +109,16 @@ fn show_flags(ui: &mut Ui, m: &Measurement) {
     };
 
     let dark = ui.visuals().dark_mode;
-    let accent = if dark { Color32::from_rgb(100, 180, 255) } else { Color32::from_rgb(0, 100, 200) };
-    let warning = if dark { Color32::from_rgb(230, 160, 40) } else { Color32::from_rgb(180, 100, 0) };
+    let accent = if dark {
+        Color32::from_rgb(100, 180, 255)
+    } else {
+        Color32::from_rgb(0, 100, 200)
+    };
+    let warning = if dark {
+        Color32::from_rgb(230, 160, 40)
+    } else {
+        Color32::from_rgb(180, 100, 0)
+    };
 
     if m.flags.auto_range {
         badge(ui, "AUTO", accent);
