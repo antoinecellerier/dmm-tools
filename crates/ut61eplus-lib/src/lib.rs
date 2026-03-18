@@ -10,7 +10,7 @@ pub mod transport;
 
 use command::Command;
 use error::{Error, Result};
-use log::{debug, info, warn};
+use log::{debug, info};
 use measurement::Measurement;
 use tables::DeviceTable;
 use transport::Transport;
@@ -49,29 +49,44 @@ impl<T: Transport> Dmm<T> {
         Ok(())
     }
 
-    /// Read and parse a measurement response, accumulating data until a
-    /// complete frame is found. Handles responses split across multiple
-    /// HID interrupt reads.
-    fn read_response(&mut self) -> Result<Measurement> {
+    /// Request the device name from the meter.
+    ///
+    /// Returns the name string (e.g., "UT61E+"). The meter responds with
+    /// two frames: an acknowledgment (payload `FF 00`) and the name.
+    pub fn get_name(&mut self) -> Result<String> {
+        let cmd = Command::GetName.encode();
+        debug!("sending get_name request");
+        self.transport.write(&cmd)?;
+
+        // Read two frames: ack + name
+        for _ in 0..2 {
+            let payload = self.read_raw_payload()?;
+            // The name frame has ASCII payload (not the FF 00 ack)
+            if payload.first() != Some(&0xFF) {
+                let name = String::from_utf8_lossy(&payload).to_string();
+                debug!("device name: {name}");
+                return Ok(name);
+            }
+        }
+
+        Err(Error::InvalidResponse("no name frame received".to_string()))
+    }
+
+    /// Read a raw payload frame (used for non-measurement responses).
+    fn read_raw_payload(&mut self) -> Result<Vec<u8>> {
         const READ_TIMEOUT_MS: i32 = 2000;
-        // CP2110 at 9600 baud delivers data one byte at a time via HID
-        // interrupt reports. A full response is ~21 bytes, so we need
-        // enough iterations to collect them all.
         const MAX_ATTEMPTS: usize = 64;
 
         for _ in 0..MAX_ATTEMPTS {
-            // Try to extract a frame from existing buffer first
             match protocol::extract_frame(&self.rx_buf)? {
                 Some((payload, consumed)) => {
                     self.rx_buf.drain(..consumed);
-                    return Measurement::parse(&payload, self.table.as_ref());
+                    return Ok(payload);
                 }
                 None => {
-                    // Read more data
                     let mut tmp = [0u8; 64];
                     let n = self.transport.read_timeout(&mut tmp, READ_TIMEOUT_MS)?;
                     if n == 0 {
-                        warn!("read timeout, no data received");
                         return Err(Error::Timeout);
                     }
                     self.rx_buf.extend_from_slice(&tmp[..n]);
@@ -80,6 +95,12 @@ impl<T: Transport> Dmm<T> {
         }
 
         Err(Error::Timeout)
+    }
+
+    /// Read and parse a measurement response.
+    fn read_response(&mut self) -> Result<Measurement> {
+        let payload = self.read_raw_payload()?;
+        Measurement::parse(&payload, self.table.as_ref())
     }
 }
 

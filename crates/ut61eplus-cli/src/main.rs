@@ -126,9 +126,9 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn cmd_info() -> Result<(), Box<dyn std::error::Error>> {
-    let _dmm = ut61eplus_lib::open()?;
-    println!("Connected to UNI-T UT61E+");
-    println!("UART initialized (9600/8N1)");
+    let mut dmm = ut61eplus_lib::open()?;
+    let name = dmm.get_name()?;
+    println!("Device: {name}");
     Ok(())
 }
 
