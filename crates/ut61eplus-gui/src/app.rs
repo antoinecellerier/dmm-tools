@@ -79,12 +79,17 @@ impl App {
         self.start_time = Instant::now();
 
         let ctx_clone = ctx.clone();
+        let query_name = self.settings.query_device_name;
 
         std::thread::spawn(move || {
             info!("background thread: connecting to device");
             let mut dmm = match ut61eplus_lib::open() {
                 Ok(mut d) => {
-                    let name = d.get_name().unwrap_or_default();
+                    let name = if query_name {
+                        d.get_name().unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
                     let _ = msg_tx.send(DmmMessage::Connected(name));
                     ctx_clone.request_repaint();
                     d
@@ -124,7 +129,11 @@ impl App {
                             std::thread::sleep(std::time::Duration::from_secs(2));
                             match ut61eplus_lib::open() {
                                 Ok(mut d) => {
-                                    let name = d.get_name().unwrap_or_default();
+                                    let name = if query_name {
+                                        d.get_name().unwrap_or_default()
+                                    } else {
+                                        String::new()
+                                    };
                                     dmm = d;
                                     let _ = msg_tx.send(DmmMessage::Connected(name));
                                     ctx_clone.request_repaint();
@@ -297,6 +306,18 @@ impl App {
                 }
             }
             if changed {
+                self.settings.save();
+            }
+        });
+
+        ui.horizontal(|ui| {
+            if ui
+                .checkbox(
+                    &mut self.settings.query_device_name,
+                    "Show device name on connect (beeps)",
+                )
+                .changed()
+            {
                 self.settings.save();
             }
         });

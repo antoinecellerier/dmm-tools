@@ -54,6 +54,8 @@ pub struct Settings {
     pub show_stats: bool,
     pub show_recording: bool,
     pub graph_time_window: GraphTimeWindow,
+    /// Query device name on connect (causes a beep on the meter).
+    pub query_device_name: bool,
 }
 
 impl Default for Settings {
@@ -64,6 +66,7 @@ impl Default for Settings {
             show_stats: true,
             show_recording: true,
             graph_time_window: GraphTimeWindow::Minutes1,
+            query_device_name: true,
         }
     }
 }
@@ -103,6 +106,7 @@ mod tests {
         assert!(s.show_graph);
         assert!(s.show_stats);
         assert!(s.show_recording);
+        assert!(s.query_device_name);
         assert_eq!(s.theme, ThemeMode::Dark);
         assert_eq!(s.graph_time_window, GraphTimeWindow::Minutes1);
     }
@@ -115,6 +119,7 @@ mod tests {
             show_stats: true,
             show_recording: false,
             graph_time_window: GraphTimeWindow::Minutes5,
+            query_device_name: false,
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
