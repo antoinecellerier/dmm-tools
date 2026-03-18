@@ -93,8 +93,8 @@ pub struct Graph {
     /// Show min/max envelope band.
     pub show_envelope: bool,
     /// Envelope bucket width in seconds (user-configurable).
-    envelope_bucket_text: String,
-    envelope_bucket_secs: f64,
+    envelope_window_text: String,
+    envelope_window_secs: f64,
     /// Reference lines: show horizontal lines at these values.
     pub show_ref_line: bool,
     ref_line_text: String,
@@ -127,8 +127,8 @@ impl Graph {
             y_user_set: false,
             show_mean: false,
             show_envelope: false,
-            envelope_bucket_text: "1".to_string(),
-            envelope_bucket_secs: 1.0,
+            envelope_window_text: "1".to_string(),
+            envelope_window_secs: 1.0,
             show_ref_line: false,
             ref_line_text: String::new(),
             ref_line_values: Vec::new(),
@@ -349,12 +349,12 @@ impl Graph {
             }
             if self.show_envelope {
                 let changed = ui
-                    .add(egui::TextEdit::singleline(&mut self.envelope_bucket_text).desired_width(30.0))
+                    .add(egui::TextEdit::singleline(&mut self.envelope_window_text).desired_width(30.0))
                     .changed();
                 if changed {
-                    if let Ok(v) = self.envelope_bucket_text.parse::<f64>() {
+                    if let Ok(v) = self.envelope_window_text.parse::<f64>() {
                         if v > 0.0 {
-                            self.envelope_bucket_secs = v;
+                            self.envelope_window_secs = v;
                         }
                     }
                 }
@@ -506,7 +506,7 @@ impl Graph {
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
-            self.build_envelope(view_min, view_max, self.envelope_bucket_secs)
+            self.build_envelope(view_min, view_max, self.envelope_window_secs)
         } else {
             (Vec::new(), Vec::new())
         };
@@ -927,33 +927,50 @@ impl Graph {
         }
     }
 
-    /// Build min/max envelope lines for the visible window.
+    /// Build min/max envelope using a sliding window centered on each data point.
     /// Returns (min_points, max_points) as Vec<[f64; 2]>.
-    fn build_envelope(&self, x_min: f64, x_max: f64, bucket_width: f64) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
-        let span = (x_max - x_min).max(1e-6);
-        let bucket_width = bucket_width.max(0.1);
-        let num_buckets = ((span / bucket_width).ceil() as usize).max(1).min(1000);
-        let mut mins = vec![f64::INFINITY; num_buckets];
-        let mut maxs = vec![f64::NEG_INFINITY; num_buckets];
+    fn build_envelope(&self, x_min: f64, x_max: f64, window_secs: f64) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
+        let half = window_secs.max(0.1) / 2.0;
 
-        for point in &self.history {
-            let t = self.elapsed_secs(point.time);
-            if t < x_min || t > x_max { continue; }
-            let idx = ((t - x_min) / bucket_width) as usize;
-            let idx = idx.min(num_buckets - 1);
-            mins[idx] = mins[idx].min(point.value);
-            maxs[idx] = maxs[idx].max(point.value);
+        // Collect visible points sorted by time (already sorted in deque)
+        let visible: Vec<(f64, f64)> = self.history.iter()
+            .map(|p| (self.elapsed_secs(p.time), p.value))
+            .filter(|(t, _)| *t >= x_min && *t <= x_max)
+            .collect();
+
+        if visible.is_empty() {
+            return (Vec::new(), Vec::new());
         }
 
-        let mut min_pts = Vec::new();
-        let mut max_pts = Vec::new();
-        for i in 0..num_buckets {
-            if mins[i].is_finite() {
-                let t = x_min + (i as f64 + 0.5) * bucket_width;
-                min_pts.push([t, mins[i]]);
-                max_pts.push([t, maxs[i]]);
+        // For each point, scan the window around it to find min/max
+        // Use two-pointer approach for efficiency
+        let n = visible.len();
+        let mut min_pts = Vec::with_capacity(n);
+        let mut max_pts = Vec::with_capacity(n);
+        let mut lo = 0;
+
+        for i in 0..n {
+            let (t, _) = visible[i];
+            let win_start = t - half;
+            let win_end = t + half;
+
+            // Advance lo pointer
+            while lo < n && visible[lo].0 < win_start {
+                lo += 1;
             }
+
+            let mut vmin = f64::INFINITY;
+            let mut vmax = f64::NEG_INFINITY;
+            for j in lo..n {
+                if visible[j].0 > win_end { break; }
+                vmin = vmin.min(visible[j].1);
+                vmax = vmax.max(visible[j].1);
+            }
+
+            min_pts.push([t, vmin]);
+            max_pts.push([t, vmax]);
         }
+
         (min_pts, max_pts)
     }
 
