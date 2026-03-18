@@ -8,52 +8,12 @@ pub enum ThemeMode {
     System,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GraphTimeWindow {
-    Seconds30,
-    Minutes1,
-    Minutes5,
-    Minutes10,
-    Hour1,
-}
-
-impl GraphTimeWindow {
-    pub fn as_secs(&self) -> f64 {
-        match self {
-            Self::Seconds30 => 30.0,
-            Self::Minutes1 => 60.0,
-            Self::Minutes5 => 300.0,
-            Self::Minutes10 => 600.0,
-            Self::Hour1 => 3600.0,
-        }
-    }
-
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Seconds30 => "30s",
-            Self::Minutes1 => "1m",
-            Self::Minutes5 => "5m",
-            Self::Minutes10 => "10m",
-            Self::Hour1 => "1h",
-        }
-    }
-
-    pub const ALL: &[Self] = &[
-        Self::Seconds30,
-        Self::Minutes1,
-        Self::Minutes5,
-        Self::Minutes10,
-        Self::Hour1,
-    ];
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub theme: ThemeMode,
     pub show_graph: bool,
     pub show_stats: bool,
     pub show_recording: bool,
-    pub graph_time_window: GraphTimeWindow,
     /// Query device name on connect (causes a beep on the meter).
     pub query_device_name: bool,
     /// Automatically connect to the meter when the GUI starts.
@@ -71,7 +31,6 @@ impl Default for Settings {
             show_graph: true,
             show_stats: true,
             show_recording: true,
-            graph_time_window: GraphTimeWindow::Minutes1,
             query_device_name: true,
             auto_connect: true,
             zoom_pct: 100,
@@ -117,7 +76,6 @@ mod tests {
         assert!(s.show_recording);
         assert!(s.query_device_name);
         assert_eq!(s.theme, ThemeMode::Dark);
-        assert_eq!(s.graph_time_window, GraphTimeWindow::Minutes1);
     }
 
     #[test]
@@ -127,7 +85,6 @@ mod tests {
             show_graph: false,
             show_stats: true,
             show_recording: false,
-            graph_time_window: GraphTimeWindow::Minutes5,
             query_device_name: false,
             auto_connect: false,
             zoom_pct: 150,
@@ -139,23 +96,8 @@ mod tests {
         assert!(!deserialized.show_graph);
         assert!(deserialized.show_stats);
         assert!(!deserialized.show_recording);
-        assert_eq!(deserialized.graph_time_window, GraphTimeWindow::Minutes5);
         assert_eq!(deserialized.zoom_pct, 150);
         assert_eq!(deserialized.sample_interval_ms, 500);
-    }
-
-    #[test]
-    fn graph_time_window_values() {
-        assert_eq!(GraphTimeWindow::Seconds30.as_secs(), 30.0);
-        assert_eq!(GraphTimeWindow::Minutes1.as_secs(), 60.0);
-        assert_eq!(GraphTimeWindow::Minutes5.as_secs(), 300.0);
-        assert_eq!(GraphTimeWindow::Hour1.as_secs(), 3600.0);
-    }
-
-    #[test]
-    fn graph_time_window_labels() {
-        assert_eq!(GraphTimeWindow::Seconds30.label(), "30s");
-        assert_eq!(GraphTimeWindow::Hour1.label(), "1h");
     }
 
     #[test]

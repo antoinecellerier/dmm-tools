@@ -7,7 +7,6 @@ pub struct Sample {
     pub wall_time: DateTime<Local>,
     pub mode: String,
     pub value_str: String,
-    pub value_f64: Option<f64>,
     pub unit: String,
     pub range_label: String,
     pub flags: String,
@@ -15,16 +14,15 @@ pub struct Sample {
 
 impl Sample {
     pub fn from_measurement(m: &Measurement) -> Self {
-        let (value_str, value_f64) = match &m.value {
-            MeasuredValue::Normal(v) => (format!("{v}"), Some(*v)),
-            MeasuredValue::Overload => ("OL".to_string(), None),
-            MeasuredValue::NcvLevel(l) => (format!("NCV:{l}"), None),
+        let value_str = match &m.value {
+            MeasuredValue::Normal(v) => format!("{v}"),
+            MeasuredValue::Overload => "OL".to_string(),
+            MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
         };
         Self {
             wall_time: Local::now(),
             mode: m.mode.to_string(),
             value_str,
-            value_f64,
             unit: m.unit.clone(),
             range_label: m.range_label.clone(),
             flags: m.flags.to_string(),
@@ -69,22 +67,6 @@ impl Recording {
             .unwrap_or(0.0)
     }
 
-    pub fn export_csv(&self, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-        let mut wtr = csv::Writer::from_path(path)?;
-        wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
-        for s in &self.samples {
-            wtr.write_record([
-                &s.wall_time.to_rfc3339(),
-                &s.mode,
-                &s.value_str,
-                &s.unit,
-                &s.range_label,
-                &s.flags,
-            ])?;
-        }
-        wtr.flush()?;
-        Ok(())
-    }
 }
 
 impl Default for Recording {
@@ -161,28 +143,7 @@ mod tests {
         let s = Sample::from_measurement(&m);
         assert_eq!(s.mode, "DC V");
         assert_eq!(s.value_str, "5.678");
-        assert_eq!(s.value_f64, Some(5.678));
         assert_eq!(s.unit, "V");
     }
 
-    #[test]
-    fn export_csv_roundtrip() {
-        let mut r = Recording::new();
-        r.toggle();
-        let m = make_measurement(b"  5.678");
-        r.push(&m);
-        r.push(&m);
-
-        let dir = std::env::temp_dir();
-        let path = dir.join("ut61eplus_test_export.csv");
-        r.export_csv(&path).unwrap();
-
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<&str> = contents.lines().collect();
-        assert_eq!(lines.len(), 3); // header + 2 samples
-        assert!(lines[0].starts_with("timestamp,"));
-        assert!(lines[1].contains("5.678"));
-
-        let _ = std::fs::remove_file(&path);
-    }
 }

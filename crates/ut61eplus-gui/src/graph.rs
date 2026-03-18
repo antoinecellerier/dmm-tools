@@ -913,7 +913,7 @@ impl Graph {
     }
 
     /// Combined render: toolbar + main graph + minimap.
-    pub fn show(&mut self, ui: &mut Ui, _time_window_secs: f64) {
+    pub fn show(&mut self, ui: &mut Ui) {
         self.show_toolbar(ui);
         let minimap_reserve = MINIMAP_HEIGHT + 30.0;
         let main_height = (ui.available_height() - minimap_reserve).max(60.0);
@@ -1021,7 +1021,6 @@ impl Graph {
         crossings
     }
 
-    /// Find the Y value of the nearest data point to the given time.
     /// Find the nearest data point to the given time.
     /// Returns (snapped_time, value).
     fn nearest_point(&self, t: f64) -> Option<(f64, f64)> {
@@ -1036,11 +1035,13 @@ impl Graph {
         best.map(|(_, t, v)| (t, v))
     }
 
-    pub fn len(&self) -> usize {
+    #[cfg(test)]
+    fn len(&self) -> usize {
         self.history.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
         self.history.is_empty()
     }
 }

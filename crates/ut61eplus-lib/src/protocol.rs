@@ -141,7 +141,7 @@ mod tests {
         let (payload, consumed) = extract_frame(&frame).unwrap().unwrap();
         assert_eq!(consumed, 19);
         assert_eq!(payload.len(), 14);
-        assert_eq!(payload[0] & 0x0F, 0x02); // mode: DcMv
+        assert_eq!(payload[0], 0x02); // mode byte is raw (no 0x30 prefix)
         assert_eq!(payload[1] & 0x0F, 0x00); // range: 0
         assert_eq!(&payload[2..9], b" 0.0004");
     }

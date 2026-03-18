@@ -50,7 +50,9 @@ impl Cp2110 {
 
 impl Transport for Cp2110 {
     fn write(&self, data: &[u8]) -> Result<()> {
-        // CP2110 interrupt OUT: first byte is length, then payload
+        // CP2110 interrupt OUT: first byte is length, then payload.
+        // Max payload for a single HID interrupt report is 63 bytes.
+        debug_assert!(data.len() <= 63, "data too large for single HID report: {}", data.len());
         let mut report = Vec::with_capacity(data.len() + 1);
         report.push(data.len() as u8);
         report.extend_from_slice(data);

@@ -103,7 +103,7 @@ impl App {
         if self.os_ppp.is_none() {
             self.os_ppp = Some(ctx.pixels_per_point());
         }
-        let os_ppp = self.os_ppp.unwrap();
+        let Some(os_ppp) = self.os_ppp else { return };
         let target_ppp = os_ppp * self.settings.zoom_pct as f32 / 100.0;
         // Only update when changed — setting ppp every frame resets panel resize state
         if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {
@@ -208,7 +208,7 @@ impl App {
                         warn!("background thread: measurement timeout ({consecutive_timeouts})");
                         let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));
                         ctx_clone.request_repaint();
-                        if consecutive_timeouts >= 5 {
+                        if consecutive_timeouts == 5 {
                             let _ = msg_tx.send(DmmMessage::Error(
                                 "No response from meter — is USB mode enabled?".to_string(),
                             ));
@@ -314,8 +314,8 @@ impl App {
         }
 
         if clear_channel {
-            self.rx = None;
-            self.stop_tx = None;
+            // Disconnect properly: send stop signal so the background thread exits
+            self.disconnect();
         }
     }
 
@@ -853,7 +853,7 @@ impl eframe::App for App {
                     let graph_height = (total - self.recording_height).max(80.0);
 
                     ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                        self.graph.show(ui, 0.0);
+                        self.graph.show(ui);
                     });
 
                     // Drag handle separator
@@ -862,7 +862,7 @@ impl eframe::App for App {
                     let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
                     if sep_response.dragged() {
                         self.recording_height = (self.recording_height - sep_response.drag_delta().y)
-                            .clamp(40.0, total - 80.0);
+                            .clamp(40.0, (total - 80.0).max(40.0));
                     }
                     if sep_response.hovered() || sep_response.dragged() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
@@ -870,7 +870,7 @@ impl eframe::App for App {
 
                     self.show_recording_section(ui, false);
                 } else if self.settings.show_graph {
-                    self.graph.show(ui, 0.0);
+                    self.graph.show(ui);
                 } else if self.settings.show_recording {
                     self.show_recording_section(ui, false);
                 }
@@ -893,7 +893,7 @@ impl eframe::App for App {
 
                     ui.separator();
                     ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                        self.graph.show(ui, 0.0);
+                        self.graph.show(ui);
                     });
 
                     let sep = ui.separator();
@@ -901,7 +901,7 @@ impl eframe::App for App {
                     let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
                     if sep_response.dragged() {
                         self.recording_height = (self.recording_height - sep_response.drag_delta().y)
-                            .clamp(40.0, total - 80.0);
+                            .clamp(40.0, (total - 80.0).max(40.0));
                     }
                     if sep_response.hovered() || sep_response.dragged() {
                         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
@@ -910,7 +910,7 @@ impl eframe::App for App {
                     self.show_recording_section(ui, true);
                 } else if self.settings.show_graph {
                     ui.separator();
-                    self.graph.show(ui, 0.0);
+                    self.graph.show(ui);
                 } else if self.settings.show_recording {
                     ui.separator();
                     self.show_recording_section(ui, true);

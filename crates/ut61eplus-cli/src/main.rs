@@ -5,6 +5,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use serde::{Deserialize, Serialize};
 use ut61eplus_lib::command::Command;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
@@ -312,7 +313,7 @@ fn format_measurement(
                     "peak_max": m.flags.peak_max,
                 }
             });
-            writeln!(w, "{}", serde_json::to_string(&obj).unwrap())
+            writeln!(w, "{}", serde_json::to_string(&obj).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?)
         }
     }
 }
@@ -364,8 +365,6 @@ fn cmd_debug(count: usize, interval_ms: u64) -> Result<(), Box<dyn std::error::E
 }
 
 // --- Guided capture ---
-
-use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Default)]
 struct CaptureReport {
@@ -473,21 +472,21 @@ struct CaptureStep {
     samples: usize,
 }
 
-fn prompt(msg: &str) -> String {
+fn prompt(msg: &str) -> Result<String, Box<dyn std::error::Error>> {
     eprint!("{msg}");
-    std::io::stderr().flush().unwrap();
+    std::io::stderr().flush()?;
     let mut input = String::new();
-    std::io::stdin().read_line(&mut input).unwrap();
-    input.trim().to_string()
+    std::io::stdin().read_line(&mut input)?;
+    Ok(input.trim().to_string())
 }
 
-fn prompt_key(msg: &str) -> char {
+fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> {
     let term = console::Term::stderr();
     eprint!("{msg}");
-    std::io::stderr().flush().unwrap();
+    std::io::stderr().flush()?;
     let ch = term.read_char().unwrap_or('\n');
     eprintln!();
-    ch
+    Ok(ch)
 }
 
 fn capture_samples(
@@ -525,23 +524,23 @@ fn upsert_step(report: &mut CaptureReport, result: StepResult) {
     }
 }
 
-/// Run one capture step. Returns true if user wants to quit.
+/// Run one capture step. Returns Ok(true) if user wants to quit.
 fn run_capture_step(
     dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
     step: &CaptureStep,
     report: &mut CaptureReport,
     interactive: bool,
-) -> bool {
+) -> Result<bool, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
     if report.steps.iter().any(|s| s.id == step.id && s.status == "captured") {
         eprintln!("  {} already captured, skipping", style(step.id).dim());
-        return false;
+        return Ok(false);
     }
 
     if interactive {
         eprintln!();
         eprintln!("{} {}", style(format!("[{}]", step.id)).cyan().bold(), step.instruction);
-        let ch = prompt_key(&format!("  {} ", style("any key=capture, s=skip, q=finish:").dim()));
+        let ch = prompt_key(&format!("  {} ", style("any key=capture, s=skip, q=finish:").dim()))?;
         if ch == 'q' || ch == 'Q' {
             upsert_step(report, StepResult {
                 id: step.id.to_string(),
@@ -551,7 +550,7 @@ fn run_capture_step(
                 screen: None,
                 error: None,
             });
-            return true;
+            return Ok(true);
         }
         if ch == 's' || ch == 'S' {
             upsert_step(report, StepResult {
@@ -562,7 +561,7 @@ fn run_capture_step(
                 screen: None,
                 error: None,
             });
-            return false;
+            return Ok(false);
         }
     } else {
         eprintln!("{} {}", style(format!("[{}]", step.id)).cyan().bold(), step.instruction);
@@ -579,7 +578,7 @@ fn run_capture_step(
                 screen: None,
                 error: Some(e.to_string()),
             });
-            return false;
+            return Ok(false);
         }
         std::thread::sleep(Duration::from_millis(200));
     }
@@ -599,7 +598,7 @@ fn run_capture_step(
         eprintln!("  We read: {}", style(&summary).green());
         let input = prompt(&format!(
             "  {} ", style("Enter=correct, or type what the meter actually shows:").dim()
-        ));
+        ))?;
         if input.is_empty() {
             Some(format!("confirmed: {summary}"))
         } else {
@@ -628,7 +627,7 @@ fn run_capture_step(
     };
 
     upsert_step(report, result);
-    false
+    Ok(false)
 }
 
 fn all_capture_steps() -> Vec<CaptureStep> {
@@ -762,26 +761,29 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
                     eprintln!(
                         "Found existing capture: {output_path} ({captured} captured, {skipped} skipped)"
                     );
-                    let ch = prompt_key("r=resume, n=start fresh, q=abort: ");
+                    let ch = prompt_key("r=resume, n=start fresh, q=abort: ")?;
                     if ch == 'q' || ch == 'Q' {
                         eprintln!("Aborted.");
                         return Ok(());
                     }
                     if ch == 'n' || ch == 'N' {
-                        let confirm = prompt_key("This will overwrite the existing capture. Are you sure? y/n: ");
+                        let confirm = prompt_key("This will overwrite the existing capture. Are you sure? y/n: ")?;
                         if confirm != 'y' && confirm != 'Y' {
                             eprintln!("Aborted.");
                             return Ok(());
                         }
                         CaptureReport::default()
-                    } else {
+                    } else if ch == 'r' || ch == 'R' {
                         eprintln!("Resuming — already-captured steps will be skipped.\n");
                         r
+                    } else {
+                        eprintln!("Aborted.");
+                        return Ok(());
                     }
                 }
                 Err(_) => {
                     eprintln!("Found {output_path} but couldn't parse it.");
-                    let ch = prompt_key("Overwrite? y=start fresh, any other key=abort: ");
+                    let ch = prompt_key("Overwrite? y=start fresh, any other key=abort: ")?;
                     if ch != 'y' && ch != 'Y' {
                         eprintln!("Aborted.");
                         return Ok(());
@@ -817,7 +819,7 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
         for step in all_steps.iter().filter(|s| MODE_STEP_IDS.contains(&s.id)) {
             if done { break; }
             if !include(step.id) { continue; }
-            done = run_capture_step(&mut dmm, step, &mut report, true);
+            done = run_capture_step(&mut dmm, step, &mut report, true)?;
             save_report(&report, &output_path)?;
         }
     }
@@ -827,14 +829,14 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
     if !done && has_flag_steps {
         eprintln!("\n{}", style("━━━ Part 2: Flags & Remote Commands ━━━").bold());
         eprintln!("Set meter to DC V mode for these tests.");
-        let ch = prompt_key(&format!("\n{} ", style("Any key when ready on DC V, q=skip to end:").dim()));
+        let ch = prompt_key(&format!("\n{} ", style("Any key when ready on DC V, q=skip to end:").dim()))?;
         if ch == 'q' || ch == 'Q' { done = true; }
     }
     if !done && has_flag_steps {
         for step in all_steps.iter().filter(|s| FLAG_STEP_IDS.contains(&s.id)) {
             if done { break; }
             if !include(step.id) { continue; }
-            done = run_capture_step(&mut dmm, step, &mut report, true);
+            done = run_capture_step(&mut dmm, step, &mut report, true)?;
             save_report(&report, &output_path)?;
         }
     }
@@ -843,7 +845,7 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
     if !done && include("range_cycle") {
         eprintln!("\n{}", style("━━━ Part 3: Range Values ━━━").bold());
         eprintln!("We'll cycle through manual ranges on DC V.");
-        let ch = prompt_key(&format!("\n{} ", style("Any key to start, q=skip to end:").dim()));
+        let ch = prompt_key(&format!("\n{} ", style("Any key to start, q=skip to end:").dim()))?;
         if ch != 'q' && ch != 'Q' {
             let _ = dmm.send_command(Command::Auto);
             std::thread::sleep(Duration::from_millis(200));
@@ -885,7 +887,7 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
         loop {
             let desc = prompt(&format!(
                 "[extra_{extra}] Describe what you set the meter to (or 'q' to finish): "
-            ));
+            ))?;
             if desc.is_empty() || desc.to_lowercase().starts_with('q') {
                 break;
             }
@@ -901,7 +903,7 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
                 let summary = sample_data.last().unwrap().summary();
                 let input = prompt(&format!(
                     "  We read: {summary}\n  Enter=correct, or type correction: "
-                ));
+                ))?;
                 if input.is_empty() {
                     Some(format!("confirmed: {summary}"))
                 } else {
