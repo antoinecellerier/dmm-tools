@@ -531,12 +531,8 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("Sample interval:");
             let mut changed = false;
-            for &ms in &[0u32, 100, 300, 500, 1000, 2000] {
-                let label = if ms == 0 {
-                    "Fastest".to_string()
-                } else {
-                    format!("{ms}ms")
-                };
+            for &ms in &[0u32, 100, 200, 300, 500, 1000, 2000] {
+                let label = format!("{ms}ms");
                 if ui
                     .selectable_label(self.settings.sample_interval_ms == ms, label)
                     .clicked()

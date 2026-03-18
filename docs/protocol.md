@@ -6,7 +6,7 @@ The UT61E+ uses a Silicon Labs CP2110 chip as a USB HID-to-UART bridge.
 
 - **VID:** `0x10C4` (Silicon Labs)
 - **PID:** `0xEA80` (CP2110)
-- **Baud rate:** 9600
+- **Baud rate:** 9600 (confirmed; 19200 and 115200 tested — meter does not respond)
 - **Format:** 8N1
 
 ### Initialization
@@ -175,6 +175,24 @@ Verified against real device and reference implementations.
 | 0x1C | LPF A | — |
 | 0x1D | AC+DC A | — |
 | 0x1E | Inrush | — |
+
+## Sampling Rate
+
+Maximum effective sampling rate is **~10 Hz** (~100ms per request-response cycle). This is a hard limit of the 9600 baud firmware — tested and confirmed that the meter does not respond at 19200 or 115200 baud.
+
+Measured throughput (2026-03-18, CLI `--interval-ms` over 10s):
+
+| Configured delay | Samples/10s | Effective Hz |
+|-----------------|-------------|-------------|
+| 0ms (fastest) | 101 | ~10.1 |
+| 100ms | 56 | ~5.6 |
+| 200ms | ~40 | ~4.0 |
+| 300ms | 25 | ~2.5 |
+| 500ms | 18 | ~1.8 |
+| 1000ms | 9 | ~0.9 |
+| 2000ms | 5 | ~0.5 |
+
+The configured delay adds on top of the ~100ms wire round-trip time.
 
 ## Known Quirks
 
