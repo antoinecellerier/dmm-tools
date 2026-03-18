@@ -1,5 +1,5 @@
 use eframe::egui::{self, Ui, Vec2b};
-use egui_plot::{AxisHints, Line, Plot, PlotBounds, PlotPoints, VLine};
+use egui_plot::{AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, VLine};
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -88,6 +88,8 @@ pub struct Graph {
     y_fixed_max: f64,
     /// Whether the user has manually set Y-axis values this session.
     y_user_set: bool,
+    /// Show mean line overlay.
+    pub show_mean: bool,
 }
 
 impl Graph {
@@ -107,6 +109,7 @@ impl Graph {
             y_fixed_min: -1.0,
             y_fixed_max: 1.0,
             y_user_set: false,
+            show_mean: false,
         }
     }
 
@@ -309,6 +312,12 @@ impl Graph {
                     }
                 }
             }
+
+            ui.separator();
+
+            if ui.selectable_label(self.show_mean, "Mean").clicked() {
+                self.show_mean = !self.show_mean;
+            }
         });
     }
 
@@ -406,6 +415,9 @@ impl Graph {
                 }
             });
 
+        let show_mean = self.show_mean;
+        let visible_stats = self.visible_stats();
+
         let cursor_unit = self.current_unit.clone();
         let plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
@@ -453,6 +465,18 @@ impl Graph {
                             .color(gap_color)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );
+                }
+
+                // Mean line overlay
+                if show_mean {
+                    if let Some((_, _, avg, _)) = visible_stats {
+                        let mean_color = egui::Color32::from_rgba_premultiplied(100, 200, 100, 180);
+                        plot_ui.hline(
+                            HLine::new(avg)
+                                .color(mean_color)
+                                .style(egui_plot::LineStyle::dashed_loose()),
+                        );
+                    }
                 }
             });
 
