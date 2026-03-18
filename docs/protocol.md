@@ -123,41 +123,42 @@ Known commands:
 
 ## Mode Values
 
-After `& 0x0F` masking:
+Raw byte value (no masking — mode byte does NOT have 0x30 prefix).
+Verified against real device and reference implementations.
 
-| Value | Mode |
-|-------|------|
-| 0x00 | DC V |
-| 0x01 | AC V |
-| 0x02 | DC mV |
-| 0x03 | AC mV |
-| 0x04 | Ω (Resistance) |
-| 0x05 | Capacitance |
-| 0x06 | Hz (Frequency) |
-| 0x07 | Duty Cycle |
-| 0x08 | Temperature °C |
-| 0x09 | Temperature °F |
-| 0x0A | Diode |
-| 0x0B | Continuity |
-| 0x0C | DC µA |
-| 0x0D | AC µA |
-| 0x0E | DC mA |
-| 0x0F | AC mA |
-| 0x10 | DC A |
-| 0x11 | AC A |
-| 0x12 | AC+DC V |
-| 0x13 | AC+DC mV |
-| 0x14 | AC+DC µA |
-| 0x15 | AC+DC mA |
-| 0x16 | AC+DC A |
-| 0x17 | LPF V |
-| 0x18 | LPF mV |
-| 0x19 | LPF µA |
-| 0x1A | LPF mA |
-| 0x1B | LPF A |
-| 0x1C | NCV |
-| 0x1D | Peak V |
-| 0x1E | Peak mV |
+| Value | Mode | Verified |
+|-------|------|----------|
+| 0x00 | AC V | Yes |
+| 0x01 | AC mV | Yes |
+| 0x02 | DC V | Yes |
+| 0x03 | DC mV | — |
+| 0x04 | Hz (Frequency) | Yes |
+| 0x05 | Duty Cycle % | — |
+| 0x06 | Ω (Resistance) | Yes |
+| 0x07 | Continuity | Yes |
+| 0x08 | Diode | Yes |
+| 0x09 | Capacitance | Yes |
+| 0x0A | Temperature °C | — |
+| 0x0B | Temperature °F | — |
+| 0x0C | DC µA | Yes |
+| 0x0D | AC µA | — |
+| 0x0E | DC mA | Yes |
+| 0x0F | AC mA | — |
+| 0x10 | DC A | — |
+| 0x11 | AC A | — |
+| 0x12 | hFE | Yes |
+| 0x13 | Live | — |
+| 0x14 | NCV | Yes |
+| 0x15 | LoZ V | — |
+| 0x16 | AC+DC A | — |
+| 0x17 | AC+DC/DC A | — |
+| 0x18 | LPF V | — |
+| 0x19 | AC+DC V | — |
+| 0x1A | LPF mV | — |
+| 0x1B | AC+DC mV | — |
+| 0x1C | LPF A | — |
+| 0x1D | AC+DC A | — |
+| 0x1E | Inrush | — |
 
 ## Known Quirks
 
