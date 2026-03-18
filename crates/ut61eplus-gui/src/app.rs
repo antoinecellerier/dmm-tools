@@ -1,7 +1,6 @@
 use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::mpsc;
-use std::time::Instant;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
 use crate::display;
@@ -33,7 +32,6 @@ pub struct App {
     connection_state: ConnectionState,
     device_name: Option<String>,
     last_measurement: Option<Measurement>,
-    start_time: Instant,
 
     graph: Graph,
     stats: Stats,
@@ -53,7 +51,6 @@ impl App {
             connection_state: ConnectionState::Disconnected,
             device_name: None,
             last_measurement: None,
-            start_time: Instant::now(),
             graph: Graph::new(),
             stats: Stats::new(),
             recording: Recording::new(),
@@ -78,8 +75,6 @@ impl App {
         let (stop_tx, stop_rx) = mpsc::channel();
         self.rx = Some(msg_rx);
         self.stop_tx = Some(stop_tx);
-        self.start_time = Instant::now();
-
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
 
@@ -176,18 +171,13 @@ impl App {
                 DmmMessage::Connected(name) => {
                     self.connection_state = ConnectionState::Connected;
                     self.device_name = if name.is_empty() { None } else { Some(name.clone()) };
-                    // Reset state on (re)connect so graph/stats start fresh
-                    self.start_time = Instant::now();
-                    self.graph.clear();
-                    self.stats.reset();
-                    self.last_measurement = None;
+                    // Don't clear graph/stats on reconnect — timeline is continuous.
+                    // User can manually Clear if they want a fresh start.
                     info!("UI: connected to {name}");
                 }
                 DmmMessage::Measurement(m) => {
-                    let elapsed = self.start_time.elapsed().as_secs_f64();
-
                     if let MeasuredValue::Normal(v) = &m.value {
-                        self.graph.push(elapsed, *v, &m.mode.to_string());
+                        self.graph.push(*v, &m.mode.to_string());
                         self.stats.push(*v);
                     }
 
@@ -229,7 +219,6 @@ impl App {
                         self.disconnect();
                     }
                     if ui.button("Clear").clicked() {
-                        self.start_time = Instant::now();
                         self.graph.clear();
                         self.stats.reset();
                         self.last_measurement = None;
