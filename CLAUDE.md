@@ -28,9 +28,11 @@ Rust workspace for communicating with the UNI-T UT61E+ multimeter via USB (CP211
 - The UT61E+ protocol is byte-level — off-by-one errors are easy to introduce
 - Always validate checksums on received data
 - Document byte offsets and masking operations with comments referencing the protocol spec
-- Test parsing with known-good byte sequences captured from reference implementations
-- Flag bytes require `& 0x0F` masking (high nibble is 0x30); display value bytes do not
-- Our protocol understanding comes from reverse engineering (USB traces, decompiled vendor apps, community work) — not official documentation. Verify assumptions against real device behavior whenever possible. When adding new protocol features or encountering unexpected responses, capture raw hex dumps and use them to refine our understanding before coding around assumptions.
+- Test parsing with known-good byte sequences captured from real device traces
+- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=ut61eplus_lib=trace cargo run --bin ut61eplus -- debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
+- Byte masking rules (verified against device): mode byte is raw (no 0x30 prefix), range byte has 0x30 prefix (mask with `& 0x0F`), display bytes are ASCII (no masking), progress bytes are raw, flag bytes have 0x30 prefix (mask with `& 0x0F`). AUTO flag in byte 12 has inverted logic (bit clear = auto ON).
+- Our protocol understanding comes from reverse engineering (USB traces, decompiled vendor apps, community work) — not official documentation. When adding new protocol features or encountering unexpected responses, capture raw hex dumps and verify against real device behavior before coding. See `docs/verification-backlog.md` for what's been verified and what still needs testing.
+- Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go). Cross-check against these when in doubt.
 
 ### Commit discipline
 - **Every commit must include tests for new code** — write tests before or alongside the code, never defer them
