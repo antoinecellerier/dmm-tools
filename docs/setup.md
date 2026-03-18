@@ -26,4 +26,35 @@ Then re-plug the meter or log out/in.
 
 ## Troubleshooting
 
-*To be filled in as issues are discovered.*
+### "USB adapter not found"
+
+- Verify the CP2110 USB adapter is plugged in: `lsusb | grep 10C4:EA80`
+- Ensure the udev rule is installed (see above)
+- After installing the rule, re-plug the adapter or run `sudo udevadm trigger`
+
+### "No response from meter"
+
+The USB adapter is detected but the meter isn't transmitting data:
+
+1. Insert the USB module into the meter's IR port
+2. Turn the meter on
+3. Long press the **USB/Hz** button until the **S** icon appears on the LCD
+4. The S icon confirms USB data transmission is active
+
+### Permission denied on /dev/hidrawX
+
+The udev rule grants access to the `plugdev` group. Ensure your user is in that group:
+
+```sh
+sudo usermod -aG plugdev $USER
+```
+
+Log out and back in for the group change to take effect.
+
+### GUI won't start (Wayland/X11)
+
+The GUI uses eframe/egui which supports both Wayland and X11. If you encounter display issues, try forcing X11:
+
+```sh
+WINIT_UNIX_BACKEND=x11 ut61eplus-gui
+```

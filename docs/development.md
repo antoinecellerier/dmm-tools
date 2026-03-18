@@ -23,4 +23,8 @@ cargo fmt --check
 
 ## Release Process
 
-*To be defined.*
+1. Update version in root `Cargo.toml` (workspace inherits it)
+2. Run full check: `cargo build --workspace && cargo test --workspace && cargo clippy --workspace -- -D warnings`
+3. Tag the release: `git tag -a v0.x.y -m "Release v0.x.y"`
+4. Build release binaries: `cargo build --workspace --release`
+5. Binaries are in `target/release/ut61eplus` (CLI) and `target/release/ut61eplus-gui` (GUI)

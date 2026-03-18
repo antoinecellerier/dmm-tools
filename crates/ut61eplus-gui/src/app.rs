@@ -307,7 +307,7 @@ impl App {
                     self.last_measurement = Some(m);
                 }
                 DmmMessage::Disconnected(reason) => {
-                    warn!("UI: disconnected: {reason}");
+                    info!("UI: disconnected: {reason}");
                     self.connection_state = ConnectionState::Reconnecting;
                 }
                 DmmMessage::Error(e) => {
