@@ -777,6 +777,35 @@ impl App {
         }
     }
 
+    /// Render the graph+recording area with a resizable drag separator between them.
+    fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
+        if self.settings.show_graph && self.settings.show_recording {
+            let total = ui.available_height();
+            let graph_height = (total - self.recording_height).max(80.0);
+
+            ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
+                self.graph.show(ui);
+            });
+
+            let sep = ui.separator();
+            let sep_id = ui.id().with("rec_resize");
+            let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
+            if sep_response.dragged() {
+                self.recording_height = (self.recording_height - sep_response.drag_delta().y)
+                    .clamp(40.0, (total - 80.0).max(40.0));
+            }
+            if sep_response.hovered() || sep_response.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+            }
+
+            self.show_recording_section(ui, compact);
+        } else if self.settings.show_graph {
+            self.graph.show(ui);
+        } else if self.settings.show_recording {
+            self.show_recording_section(ui, compact);
+        }
+    }
+
     fn export_csv(&mut self) {
         if self.recording.samples.is_empty() {
             return;
@@ -883,33 +912,7 @@ impl eframe::App for App {
 
             // Wide: center panel for graph + recording
             egui::CentralPanel::default().show(ctx, |ui| {
-                if self.settings.show_graph && self.settings.show_recording {
-                    // Split: graph on top, recording on bottom with drag separator
-                    let total = ui.available_height();
-                    let graph_height = (total - self.recording_height).max(80.0);
-
-                    ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                        self.graph.show(ui);
-                    });
-
-                    // Drag handle separator
-                    let sep = ui.separator();
-                    let sep_id = ui.id().with("rec_resize");
-                    let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
-                    if sep_response.dragged() {
-                        self.recording_height = (self.recording_height - sep_response.drag_delta().y)
-                            .clamp(40.0, (total - 80.0).max(40.0));
-                    }
-                    if sep_response.hovered() || sep_response.dragged() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-                    }
-
-                    self.show_recording_section(ui, false);
-                } else if self.settings.show_graph {
-                    self.graph.show(ui);
-                } else if self.settings.show_recording {
-                    self.show_recording_section(ui, false);
-                }
+                self.show_graph_recording_split(ui, false);
             });
         } else {
             // Narrow: single column
@@ -923,33 +926,9 @@ impl eframe::App for App {
                     self.show_stats_section(ui, true);
                 }
 
-                if self.settings.show_graph && self.settings.show_recording {
-                    let total = ui.available_height();
-                    let graph_height = (total - self.recording_height).max(80.0);
-
+                if self.settings.show_graph || self.settings.show_recording {
                     ui.separator();
-                    ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                        self.graph.show(ui);
-                    });
-
-                    let sep = ui.separator();
-                    let sep_id = ui.id().with("rec_resize_narrow");
-                    let sep_response = ui.interact(sep.rect.expand2(egui::vec2(0.0, 4.0)), sep_id, egui::Sense::drag());
-                    if sep_response.dragged() {
-                        self.recording_height = (self.recording_height - sep_response.drag_delta().y)
-                            .clamp(40.0, (total - 80.0).max(40.0));
-                    }
-                    if sep_response.hovered() || sep_response.dragged() {
-                        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-                    }
-
-                    self.show_recording_section(ui, true);
-                } else if self.settings.show_graph {
-                    ui.separator();
-                    self.graph.show(ui);
-                } else if self.settings.show_recording {
-                    ui.separator();
-                    self.show_recording_section(ui, true);
+                    self.show_graph_recording_split(ui, true);
                 }
             });
         }
