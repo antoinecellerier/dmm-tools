@@ -22,7 +22,7 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
                     (format_display_raw(&m.display_raw), ui.visuals().text_color())
                 }
                 MeasuredValue::Overload => {
-                    (format_display_raw(&m.display_raw), Color32::from_rgb(220, 50, 50))
+                    (format_display_raw(&m.display_raw), Color32::from_rgb(200, 30, 30))
                 }
                 MeasuredValue::NcvLevel(l) => {
                     (format!("NCV {l}"), ui.visuals().text_color())
@@ -115,12 +115,13 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
 
 fn show_flags(ui: &mut Ui, m: &Measurement) {
     let badge = |ui: &mut Ui, label: &str, color: Color32| {
-        let text = RichText::new(label).small().color(color);
+        let text = RichText::new(label).small().strong().color(color);
         ui.label(text);
     };
 
-    let accent = Color32::from_rgb(100, 180, 255);
-    let warning = Color32::from_rgb(230, 160, 40);
+    let dark = ui.visuals().dark_mode;
+    let accent = if dark { Color32::from_rgb(100, 180, 255) } else { Color32::from_rgb(0, 100, 200) };
+    let warning = if dark { Color32::from_rgb(230, 160, 40) } else { Color32::from_rgb(180, 100, 0) };
 
     if m.flags.auto_range {
         badge(ui, "AUTO", accent);

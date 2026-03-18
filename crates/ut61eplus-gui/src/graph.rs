@@ -465,8 +465,8 @@ impl Graph {
         let gap_ranges = self.find_gap_ranges();
         let (view_min, view_max) = self.view_bounds();
 
-        let line_color = egui::Color32::from_rgb(200, 100, 100);
-        let gap_color = egui::Color32::from_rgba_premultiplied(150, 60, 60, 120);
+        let line_color = egui::Color32::from_rgb(180, 60, 60);
+        let gap_color = egui::Color32::from_rgba_premultiplied(180, 40, 40, 160);
 
         let can_interact = !self.live;
 
@@ -660,7 +660,7 @@ impl Graph {
 
         // Draw overlay labels using the painter + transform
         let painter = ui.painter_at(response.response.rect);
-        let label_font = egui::FontId::proportional(11.0);
+        let label_font = egui::FontId::proportional(12.0);
 
         // Mean line label
         if show_mean {
@@ -795,7 +795,7 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        let line_color = egui::Color32::from_rgba_premultiplied(200, 100, 100, 150);
+        let line_color = egui::Color32::from_rgba_premultiplied(180, 60, 60, 180);
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes
         let label_height = 14.0;
@@ -875,7 +875,7 @@ impl Graph {
                 egui::pos2(x, rect.bottom() + 2.0),
                 egui::Align2::CENTER_TOP,
                 label,
-                egui::FontId::proportional(9.0),
+                egui::FontId::proportional(11.0),
                 label_color,
             );
             // Small tick mark

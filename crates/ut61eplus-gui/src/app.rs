@@ -331,7 +331,8 @@ impl App {
             return;
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
-        let active_color = Color32::from_rgb(100, 180, 255);
+        let dark = ui.visuals().dark_mode;
+        let active_color = if dark { Color32::from_rgb(100, 180, 255) } else { Color32::from_rgb(0, 100, 200) };
 
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0;
@@ -387,7 +388,7 @@ impl App {
             let dots = ".".repeat((self.waiting_timeouts as usize % 4) + 1);
             ui.label(
                 RichText::new(format!("Waiting for meter{dots}"))
-                    .color(Color32::from_rgb(230, 160, 40)),
+                    .color(Color32::from_rgb(200, 120, 0)),
             );
             return;
         }
@@ -405,7 +406,7 @@ impl App {
             // HID device not found — dongle issue
             ui.label(
                 RichText::new("USB adapter not found")
-                    .color(Color32::from_rgb(230, 160, 40)),
+                    .color(Color32::from_rgb(200, 120, 0)),
             );
             ui.label(
                 RichText::new(
@@ -422,7 +423,7 @@ impl App {
             // Dongle found but meter not responding
             ui.label(
                 RichText::new("No response from meter")
-                    .color(Color32::from_rgb(230, 160, 40)),
+                    .color(Color32::from_rgb(200, 120, 0)),
             );
             ui.label(
                 RichText::new(
@@ -473,7 +474,7 @@ impl App {
                 ConnectionState::Connected => {
                     let name = self.device_name.as_deref().unwrap_or("Connected");
                     if self.paused {
-                        (Color32::from_rgb(230, 160, 40), format!("{name} (paused)"))
+                        (Color32::from_rgb(200, 120, 0), format!("{name} (paused)"))
                     } else {
                         (Color32::from_rgb(60, 180, 75), name.to_string())
                     }
@@ -482,12 +483,12 @@ impl App {
                     (Color32::from_rgb(150, 150, 150), "Disconnected".to_string())
                 }
                 ConnectionState::Reconnecting => {
-                    (Color32::from_rgb(230, 160, 40), "Reconnecting...".to_string())
+                    (Color32::from_rgb(200, 120, 0), "Reconnecting...".to_string())
                 }
             };
 
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
-            ui.painter().circle_filled(rect.center(), 4.0, dot_color);
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+            ui.painter().circle_filled(rect.center(), 5.0, dot_color);
             ui.label(RichText::new(status_text).small());
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -652,7 +653,7 @@ impl App {
                         fmt(Some(vavg)),
                         vcount,
                     ))
-                    .font(egui::FontId::monospace(10.0))
+                    .font(egui::FontId::monospace(11.0))
                     .color(ui.visuals().weak_text_color()),
                 );
             }
@@ -684,15 +685,15 @@ impl App {
                 );
                 ui.label(
                     RichText::new(format!("Min:{}", fmt(Some(vmin))))
-                        .font(egui::FontId::monospace(10.0)).color(weak),
+                        .font(egui::FontId::monospace(11.0)).color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Max:{}", fmt(Some(vmax))))
-                        .font(egui::FontId::monospace(10.0)).color(weak),
+                        .font(egui::FontId::monospace(11.0)).color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Avg:{}", fmt(Some(vavg))))
-                        .font(egui::FontId::monospace(10.0)).color(weak),
+                        .font(egui::FontId::monospace(11.0)).color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Count: {vcount}"))
