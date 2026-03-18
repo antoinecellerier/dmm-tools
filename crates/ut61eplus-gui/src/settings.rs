@@ -1,14 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ThemeMode {
+    #[default]
     Dark,
     Light,
     System,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     pub theme: ThemeMode,
     pub show_graph: bool,
@@ -102,11 +104,14 @@ mod tests {
 
     #[test]
     fn settings_deserialize_from_partial_json() {
-        // Should fall back to defaults for missing fields
+        // Missing fields should get defaults via #[serde(default)]
         let json = r#"{"theme":"Light"}"#;
-        let result: Result<Settings, _> = serde_json::from_str(json);
-        // serde won't fill defaults for missing required fields, so this should fail
-        // which means load() correctly falls back to default
-        assert!(result.is_err());
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(s.theme, ThemeMode::Light);
+        // All other fields should have default values
+        assert!(s.show_graph);
+        assert!(s.auto_connect);
+        assert_eq!(s.zoom_pct, 100);
+        assert_eq!(s.sample_interval_ms, 0);
     }
 }
