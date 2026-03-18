@@ -51,7 +51,7 @@ These collisions need further investigation. The reference implementations don't
 | Continuity | 0x07 | Verified (OL on open leads) |
 | Diode | 0x08 | Verified (OL on open leads) |
 | Capacitance | 0x09 | Verified (stray cap reading) |
-| DC µA | 0x0C | Verified (mode byte capture) |
+| DC µA | 0x0C | Verified (PPK2 + 56kΩ: 59µA reading, cross-checked with PPK2 ~61µA) |
 | DC mA | 0x0E | Verified (bench PSU: 10mA→22mA range, 100mA→220mA range) |
 | DC A | 0x10 | Verified (bench PSU: 100mA, range byte=0x01 for 20A) |
 | hFE | 0x12 | Verified (mode byte capture) |
