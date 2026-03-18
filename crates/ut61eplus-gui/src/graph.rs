@@ -1,5 +1,5 @@
 use eframe::egui::{self, Ui, Vec2b};
-use egui_plot::{Line, Plot, PlotBounds, PlotPoints, VLine};
+use egui_plot::{AxisHints, Line, Plot, PlotBounds, PlotPoints, VLine};
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -367,6 +367,41 @@ impl Graph {
 
         let (y_min, y_max) = y_bounds.unwrap_or((-1.0, 1.0));
 
+        let unit = self.current_unit.clone();
+        let y_axis = AxisHints::new_y()
+            .formatter(move |mark, _range| {
+                let decimals = (-mark.step_size.log10().round() as usize).min(6);
+                let val = eframe::emath::format_with_decimals_in_range(
+                    mark.value,
+                    decimals..=decimals,
+                );
+                if unit.is_empty() {
+                    val
+                } else {
+                    format!("{val} {unit}  ")
+                }
+            });
+
+        let x_axis = AxisHints::new_x()
+            .formatter(|mark, _range| {
+                let s = mark.value;
+                if s < 60.0 {
+                    format!("{s:.0} s")
+                } else if s < 3600.0 {
+                    let m = (s / 60.0).floor();
+                    let sec = s % 60.0;
+                    if sec.abs() < 0.5 {
+                        format!("{m:.0} m")
+                    } else {
+                        format!("{m:.0}m {sec:.0}s")
+                    }
+                } else {
+                    let h = (s / 3600.0).floor();
+                    let m = ((s % 3600.0) / 60.0).floor();
+                    format!("{h:.0}h {m:.0}m")
+                }
+            });
+
         let plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
             .allow_drag(Vec2b::new(can_interact, false))
@@ -374,8 +409,9 @@ impl Graph {
             .allow_scroll(Vec2b::new(false, false))
             .allow_double_click_reset(false)
             .reset()
-            .x_axis_label("time (s)")
-            .y_axis_label(&self.current_unit);
+            .custom_x_axes(vec![x_axis])
+            .custom_y_axes(vec![y_axis])
+            .y_axis_min_width(60.0);
 
         let response = plot.show(ui, |plot_ui| {
                 // Set exact bounds: our X view range + computed Y range
