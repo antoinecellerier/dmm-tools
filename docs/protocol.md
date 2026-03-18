@@ -64,7 +64,7 @@ Total: 19 bytes. Length byte = `0x10` (16 = 14 payload + 2 checksum).
 
 | Offset | Content | Masking |
 |--------|---------|---------|
-| 0 | Mode | `& 0x0F` |
+| 0 | Mode | Raw (no masking) |
 | 1 | Range | `& 0x0F` |
 | 2-8 | Display value (7 ASCII chars) | None |
 | 9 | Bar graph high nibble | Raw |
@@ -74,7 +74,8 @@ Total: 19 bytes. Length byte = `0x10` (16 = 14 payload + 2 checksum).
 | 13 | Flag byte 3 | `& 0x0F` |
 
 **Masking (verified against real device):**
-- Bytes 0, 1: mode/range — always mask with `& 0x0F` (may or may not have `0x30` high nibble)
+- Byte 0: mode — raw, no masking (does not have `0x30` prefix)
+- Byte 1: range — mask with `& 0x0F` (has `0x30` prefix)
 - Bytes 2-8: display — valid ASCII, no masking
 - Bytes 9-10: progress — raw bytes, no `0x30` prefix observed on real device
 - Bytes 11-13: flags — arrive with `0x30` high nibble, mask with `& 0x0F`
