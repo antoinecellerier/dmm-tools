@@ -473,12 +473,12 @@ impl Graph {
         // Theme-aware colors — darker on light theme for contrast
         let line_color = if dark { egui::Color32::from_rgb(200, 100, 100) } else { egui::Color32::from_rgb(180, 40, 40) };
         let gap_color = if dark { egui::Color32::from_rgba_premultiplied(180, 40, 40, 160) } else { egui::Color32::from_rgba_premultiplied(200, 0, 0, 120) };
-        let mean_color = if dark { egui::Color32::from_rgb(100, 200, 100) } else { egui::Color32::from_rgb(0, 140, 0) };
-        let ref_color = if dark { egui::Color32::from_rgb(200, 200, 100) } else { egui::Color32::from_rgb(160, 130, 0) };
-        let cross_color = if dark { egui::Color32::from_rgb(255, 220, 100) } else { egui::Color32::from_rgb(180, 130, 0) };
-        let cursor_color = if dark { egui::Color32::from_rgb(255, 180, 100) } else { egui::Color32::from_rgb(200, 100, 0) };
-        let cursor_color_dim = if dark { egui::Color32::from_rgba_premultiplied(255, 180, 100, 80) } else { egui::Color32::from_rgba_premultiplied(200, 100, 0, 120) };
-        let env_color = if dark { egui::Color32::from_rgba_premultiplied(100, 150, 200, 80) } else { egui::Color32::from_rgba_premultiplied(0, 80, 180, 100) };
+        let mean_color = if dark { egui::Color32::from_rgb(100, 200, 100) } else { egui::Color32::from_rgb(0, 120, 0) };
+        let ref_color = if dark { egui::Color32::from_rgb(200, 200, 100) } else { egui::Color32::from_rgb(140, 100, 0) };
+        let cross_color = if dark { egui::Color32::from_rgb(255, 220, 100) } else { egui::Color32::from_rgb(150, 100, 0) };
+        let cursor_color = if dark { egui::Color32::from_rgb(255, 180, 100) } else { egui::Color32::from_rgb(180, 70, 0) };
+        let cursor_color_dim = if dark { egui::Color32::from_rgba_premultiplied(255, 180, 100, 80) } else { egui::Color32::from_rgb(180, 70, 0) };
+        let env_color = if dark { egui::Color32::from_rgba_premultiplied(100, 150, 200, 80) } else { egui::Color32::from_rgb(0, 60, 160) };
 
         let can_interact = !self.live;
 
