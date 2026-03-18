@@ -40,6 +40,8 @@ pub struct App {
     rx: Option<mpsc::Receiver<DmmMessage>>,
     stop_tx: Option<mpsc::Sender<()>>,
     first_frame: bool,
+    /// OS default pixels_per_point, captured on first frame.
+    os_ppp: Option<f32>,
 }
 
 impl App {
@@ -57,6 +59,7 @@ impl App {
             rx: None,
             stop_tx: None,
             first_frame: true,
+            os_ppp: None,
         }
     }
 
@@ -65,6 +68,60 @@ impl App {
             ThemeMode::Dark => ctx.set_visuals(egui::Visuals::dark()),
             ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
             ThemeMode::System => ctx.set_visuals(egui::Visuals::dark()),
+        }
+    }
+
+    const ZOOM_LEVELS: &[u32] = &[75, 100, 125, 150, 175, 200];
+
+    fn apply_zoom(&mut self, ctx: &egui::Context) {
+        // Capture OS default on first call
+        if self.os_ppp.is_none() {
+            self.os_ppp = Some(ctx.pixels_per_point());
+        }
+        let os_ppp = self.os_ppp.unwrap();
+
+        if let Some(pct) = self.settings.zoom_pct {
+            ctx.set_pixels_per_point(os_ppp * pct as f32 / 100.0);
+        }
+        // If None, leave it at OS default (don't call set_pixels_per_point)
+    }
+
+    fn zoom_in(&mut self) {
+        let current = self.settings.zoom_pct.unwrap_or(100);
+        if let Some(&next) = Self::ZOOM_LEVELS.iter().find(|&&z| z > current) {
+            self.settings.zoom_pct = Some(next);
+            self.settings.save();
+        }
+    }
+
+    fn zoom_out(&mut self) {
+        let current = self.settings.zoom_pct.unwrap_or(100);
+        if let Some(&prev) = Self::ZOOM_LEVELS.iter().rev().find(|&&z| z < current) {
+            self.settings.zoom_pct = Some(prev);
+            self.settings.save();
+        }
+    }
+
+    fn zoom_reset(&mut self) {
+        self.settings.zoom_pct = None;
+        self.settings.save();
+    }
+
+    fn handle_keyboard_zoom(&mut self, ctx: &egui::Context) {
+        let modifiers = ctx.input(|i| i.modifiers);
+        if modifiers.command {
+            // Ctrl+= or Ctrl++ (zoom in)
+            if ctx.input(|i| i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)) {
+                self.zoom_in();
+            }
+            // Ctrl+- (zoom out)
+            if ctx.input(|i| i.key_pressed(egui::Key::Minus)) {
+                self.zoom_out();
+            }
+            // Ctrl+0 (reset)
+            if ctx.input(|i| i.key_pressed(egui::Key::Num0)) {
+                self.zoom_reset();
+            }
         }
     }
 
@@ -334,6 +391,40 @@ impl App {
             }
         });
 
+        ui.horizontal(|ui| {
+            ui.label("Zoom:");
+            let current_label = self
+                .settings
+                .zoom_pct
+                .map(|z| format!("{z}%"))
+                .unwrap_or_else(|| "OS default".to_string());
+            let mut changed = false;
+            if ui.selectable_label(self.settings.zoom_pct.is_none(), "OS default").clicked() {
+                self.zoom_reset();
+                changed = true;
+            }
+            for &level in Self::ZOOM_LEVELS {
+                if ui
+                    .selectable_label(
+                        self.settings.zoom_pct == Some(level),
+                        format!("{level}%"),
+                    )
+                    .clicked()
+                {
+                    self.settings.zoom_pct = Some(level);
+                    changed = true;
+                }
+            }
+            if changed {
+                self.settings.save();
+            }
+            ui.label(
+                RichText::new(format!("(current: {current_label}, Ctrl+/- to adjust)"))
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+        });
+
         ui.separator();
     }
 
@@ -458,6 +549,8 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.apply_theme(ctx);
+        self.apply_zoom(ctx);
+        self.handle_keyboard_zoom(ctx);
         self.drain_messages();
 
         // Auto-connect on first frame if enabled

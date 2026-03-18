@@ -58,6 +58,8 @@ pub struct Settings {
     pub query_device_name: bool,
     /// Automatically connect to the meter when the GUI starts.
     pub auto_connect: bool,
+    /// UI zoom level as percentage (100 = OS default). None = use OS default.
+    pub zoom_pct: Option<u32>,
 }
 
 impl Default for Settings {
@@ -70,6 +72,7 @@ impl Default for Settings {
             graph_time_window: GraphTimeWindow::Minutes1,
             query_device_name: true,
             auto_connect: true,
+            zoom_pct: None, // OS default
         }
     }
 }
@@ -124,6 +127,7 @@ mod tests {
             graph_time_window: GraphTimeWindow::Minutes5,
             query_device_name: false,
             auto_connect: false,
+            zoom_pct: Some(150),
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
@@ -132,6 +136,7 @@ mod tests {
         assert!(deserialized.show_stats);
         assert!(!deserialized.show_recording);
         assert_eq!(deserialized.graph_time_window, GraphTimeWindow::Minutes5);
+        assert_eq!(deserialized.zoom_pct, Some(150));
     }
 
     #[test]
