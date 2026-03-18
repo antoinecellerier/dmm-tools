@@ -73,6 +73,10 @@ Init sequence (feature reports): enable UART [0x41,0x01], configure [0x50,0x00,0
 
 Request measurement: AB CD 03 5E 01 D9. Response: AB CD + length + data, where length byte counts everything after itself (payload + 2-byte checksum). For measurements: length=0x10 (16), payload=14 bytes, checksum=2 bytes, total frame=19 bytes. Checksum: 16-bit BE sum of all bytes before checksum.
 
-Payload: byte0=mode(&0x0F), byte1=range(&0x0F), bytes2-8=display(ASCII), bytes9-10=progress(raw, no masking needed), byte11-13=flags(&0x0F). Note: mode/range bytes may or may not have 0x30 high nibble; always mask. Progress bytes arrive without 0x30 prefix.
+Payload: byte0=mode(raw, no 0x30), byte1=range(&0x0F), bytes2-8=display(ASCII), bytes9-10=progress(raw), byte11-13=flags(&0x0F).
 
-Command encoding: [AB, CD, 03, cmd, (cmd+379)>>8, (cmd+379)&0xFF].
+Mode bytes (verified): 0x00=ACV, 0x01=ACmV, 0x02=DCV, 0x03=DCmV, 0x04=Hz, 0x05=Duty%, 0x06=Ohm, 0x07=Continuity, 0x08=Diode, 0x09=Capacitance, 0x0A=TempC, 0x0B=TempF, 0x0C=DCuA, 0x0D=ACuA, 0x0E=DCmA, 0x0F=ACmA, 0x10=DCA, 0x11=ACA, 0x12=hFE, 0x14=NCV.
+
+Flag bytes: byte11(bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX), byte12(bit0=HV, bit1=LowBat, bit2=!AUTO inverted), byte13(bit0=bar_pol, bit1=PeakMIN, bit2=PeakMAX, bit3=DC).
+
+Command encoding: [AB, CD, 03, cmd, (cmd+379)>>8, (cmd+379)&0xFF]. Commands: 0x41=MinMax, 0x42=ExitMinMax, 0x46=Range, 0x47=Auto, 0x48=Rel, 0x49=Select2, 0x4A=Hold, 0x4B=Light, 0x4C=Select, 0x4D=PeakMinMax, 0x4E=ExitPeak, 0x5E=GetMeasurement, 0x5F=GetName.

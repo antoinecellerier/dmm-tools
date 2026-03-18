@@ -92,17 +92,24 @@ Combined from two nibbles: `(byte9 << 4) | byte10`. Range 0-100.
 
 ### Flag Bytes
 
+Verified against real device and ljakob/unit_ut61eplus (Python).
+
 **Byte 11 (Flag 1):**
-- Bit 0: HOLD
-- Bit 1: REL (relative/delta)
+- Bit 0: REL (relative/delta) — verified
+- Bit 1: HOLD — verified
+- Bit 2: MIN — verified
+- Bit 3: MAX — verified
 
 **Byte 12 (Flag 2):**
-- Bit 0: Auto range
-- Bit 1: MIN
-- Bit 2: MAX
+- Bit 0: HV warning (>30V)
+- Bit 1: Low battery — verified (intermittent on real device)
+- Bit 2: **!AUTO** (inverted: bit clear = auto-range ON) — verified
 
 **Byte 13 (Flag 3):**
-- Bit 0: Low battery
+- Bit 0: Bar polarity
+- Bit 1: Peak MIN
+- Bit 2: Peak MAX
+- Bit 3: DC indicator
 
 ## Command Encoding
 
@@ -112,14 +119,23 @@ To send a button press command:
 [0xAB, 0xCD, 0x03, cmd, (cmd + 379) >> 8, (cmd + 379) & 0xFF]
 ```
 
-Known commands:
-- `0x5E` — Get measurement
-- `0x48` — HOLD
-- `0x4D` — MIN/MAX
-- `0x52` — REL
-- `0x41` — RANGE
-- `0x53` — SELECT
-- `0x4C` — LIGHT (backlight)
+Known commands (from ljakob/unit_ut61eplus, verified against real device):
+
+| Byte | Command | Verified |
+|------|---------|----------|
+| `0x41` | MIN/MAX toggle | Yes (remote) |
+| `0x42` | Exit MIN/MAX | Yes (remote) |
+| `0x46` | RANGE (manual toggle) | Yes (remote) |
+| `0x47` | AUTO (restore auto-range) | Yes (remote) |
+| `0x48` | REL (relative/delta) | Yes (remote) |
+| `0x49` | SELECT2 (Hz/USB button) | Received (beep, no visible effect on DC V) |
+| `0x4A` | HOLD | Yes (remote) |
+| `0x4B` | LIGHT (backlight) | Yes (remote) |
+| `0x4C` | SELECT (orange, cycles sub-modes) | Yes (remote, cycles DC→AC+DC) |
+| `0x4D` | Peak MIN/MAX | Received (beep, no visible effect on DC V) |
+| `0x4E` | Exit Peak | Sent, not visibly confirmed |
+| `0x5E` | Get measurement | Yes |
+| `0x5F` | Get device name | — |
 
 ## Mode Values
 
@@ -162,10 +178,15 @@ Verified against real device and reference implementations.
 
 ## Known Quirks
 
-- Responses may arrive split across multiple HID interrupt reads — accumulate in a buffer and scan for complete `AB CD` frames.
-- `HidDevice::read_timeout()` returns 0 on timeout, error on USB disconnect — handle both cases.
-- The meter does not stream data — each reading requires sending the request command.
-- After mode change on the meter, the first response may have stale data from the previous mode.
+- **Byte-at-a-time delivery:** CP2110 at 9600 baud delivers response bytes one at a time via HID interrupt reports. Accumulate in a buffer and scan for complete `AB CD` frames. A full measurement response requires ~19 individual reads.
+- **Timeout vs disconnect:** `HidDevice::read_timeout()` returns 0 on timeout, error on USB disconnect — handle both cases.
+- **Request-response only:** The meter does not stream data — each reading requires sending the `0x5E` request command.
+- **Mode byte reflects active unit, not dial position:** On DC V dial with auto-range, the meter reports mode 0x02 (DCV) even when showing mV-scale values. The range byte determines the actual scale.
+- **NCV shares mode byte with Hz:** Both NCV and Hz report mode 0x04. Distinguish by display content ("EF" = no NCV detection).
+- **hFE shares mode byte with DCV:** Both report mode 0x02. Distinguish by dial position (not available via protocol — application must track).
+- **A mode shares mode byte with ACV:** DC A reports mode 0x00 (same as ACV) with range 0x01. Must use context to distinguish.
+- **AUTO flag has inverted logic:** Flag byte 12 bit 2 clear = auto-range ON.
+- **SELECT2 and Peak commands are context-dependent:** They beep (acknowledged) but only produce visible effects in specific modes (e.g., SELECT2 on AC V for frequency display).
 
 ## References
 
