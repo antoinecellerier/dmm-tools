@@ -11,7 +11,7 @@ const MAX_POINTS: usize = 10_000;
 const GAP_THRESHOLD_SECS: f64 = 5.0;
 
 /// Minimap height in logical pixels.
-const MINIMAP_HEIGHT: f32 = 40.0;
+const MINIMAP_HEIGHT: f32 = 60.0;
 
 /// A data point with an absolute timestamp.
 #[derive(Clone, Copy)]
@@ -199,6 +199,26 @@ impl Graph {
         });
     }
 
+    /// Compute Y range from data points visible in the given X range, with padding.
+    fn y_range_for_view(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
+        let mut y_min = f64::INFINITY;
+        let mut y_max = f64::NEG_INFINITY;
+        for point in &self.history {
+            let t = self.elapsed_secs(point.time);
+            if t >= x_min && t <= x_max {
+                y_min = y_min.min(point.value);
+                y_max = y_max.max(point.value);
+            }
+        }
+        if y_min.is_infinite() {
+            return None;
+        }
+        // Add 10% padding
+        let range = (y_max - y_min).max(1e-6);
+        let pad = range * 0.1;
+        Some((y_min - pad, y_max + pad))
+    }
+
     /// Render the main graph.
     pub fn show_main(&mut self, ui: &mut Ui) {
         let raw_segments = self.build_raw_segments();
@@ -210,25 +230,30 @@ impl Graph {
 
         let can_interact = !self.live;
 
-        let response = Plot::new("main_plot")
+        // Compute Y bounds from visible data
+        let y_bounds = self.y_range_for_view(view_min, view_max);
+
+        let mut plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
             .allow_drag(Vec2b::new(can_interact, false))
             .allow_zoom(Vec2b::new(can_interact, false))
             .allow_scroll(Vec2b::new(false, false))
             .allow_double_click_reset(false)
+            .auto_bounds(Vec2b::new(false, false))
             .include_x(view_min)
             .include_x(view_max)
-            .x_axis_label("time (s)")
-            .show(ui, |plot_ui| {
-                // Force X bounds in live mode
-                if self.live {
-                    let bounds = plot_ui.plot_bounds();
-                    plot_ui.set_plot_bounds(PlotBounds::from_min_max(
-                        [view_min, bounds.min()[1]],
-                        [view_max, bounds.max()[1]],
-                    ));
-                }
+            .x_axis_label("time (s)");
 
+        if let Some((y_min, y_max)) = y_bounds {
+            plot = plot.include_y(y_min).include_y(y_max);
+        }
+
+        // Reset plot memory in live mode so it doesn't fight our bounds
+        if self.live {
+            plot = plot.reset();
+        }
+
+        let response = plot.show(ui, |plot_ui| {
                 for seg in &raw_segments {
                     plot_ui.line(
                         Line::new(PlotPoints::new(seg.clone())).color(line_color),
@@ -263,7 +288,7 @@ impl Graph {
     }
 
     /// Render the minimap showing full history with viewport indicator.
-    pub fn show_minimap(&self, ui: &mut Ui) {
+    pub fn show_minimap(&mut self, ui: &mut Ui) {
         if self.history.len() < 2 {
             ui.allocate_space(egui::vec2(ui.available_width(), MINIMAP_HEIGHT));
             return;
@@ -276,15 +301,17 @@ impl Graph {
         let line_color = egui::Color32::from_rgba_premultiplied(200, 100, 100, 150);
         let viewport_color = egui::Color32::from_rgba_premultiplied(100, 150, 255, 80);
 
-        Plot::new("minimap_plot")
+        let response = Plot::new("minimap_plot")
             .height(MINIMAP_HEIGHT)
             .include_x(data_min)
             .include_x(data_max)
             .allow_drag(false)
             .allow_zoom(false)
             .allow_scroll(false)
+            .auto_bounds(Vec2b::new(false, true))
             .show_axes(Vec2b::new(true, false))
             .show_grid(false)
+            .reset()
             .show(ui, |plot_ui| {
                 for seg in &raw_segments {
                     plot_ui.line(
@@ -296,6 +323,21 @@ impl Graph {
                 plot_ui.vline(VLine::new(view_min).color(viewport_color).width(2.0));
                 plot_ui.vline(VLine::new(view_max).color(viewport_color).width(2.0));
             });
+
+        // Click or drag on minimap to navigate
+        if response.response.dragged() || response.response.clicked() {
+            if let Some(pos) = response.response.interact_pointer_pos() {
+                let clicked_point = response.transform.value_from_position(pos);
+                let half = self.time_window_secs / 2.0;
+                // If clicked area would include the latest data point, go live
+                if clicked_point.x + half >= data_max {
+                    self.live = true;
+                } else {
+                    self.view_center = clicked_point.x;
+                    self.live = false;
+                }
+            }
+        }
     }
 
     /// Combined render: toolbar + main graph + minimap.
