@@ -4,7 +4,7 @@ pub mod error;
 pub mod flags;
 pub mod measurement;
 pub mod mode;
-pub mod protocol;
+pub(crate) mod protocol;
 pub mod tables;
 pub mod transport;
 
