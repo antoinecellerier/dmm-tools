@@ -368,10 +368,11 @@ impl Graph {
                         (Some(a), Some(b)) => format!("{:.4}", (b - a).abs()),
                         _ => "---".to_string(),
                     };
+                    let unit = &self.current_unit;
                     ui.label(
-                        egui::RichText::new(format!("ΔT={dt:.2}s ΔV={dv}"))
-                            .small()
-                            .color(egui::Color32::from_rgb(255, 180, 100)),
+                        egui::RichText::new(format!("ΔT={dt:.2} s  ΔV={dv} {unit}"))
+                            .color(egui::Color32::from_rgb(255, 180, 100))
+                            .strong(),
                     );
                 } else {
                     ui.label(
@@ -484,6 +485,10 @@ impl Graph {
         let cursors_active = self.cursors_active;
         let cursor_a = self.cursor_a;
         let cursor_b = self.cursor_b;
+        let cursor_va = cursor_a.and_then(|t| self.value_at_time(t));
+        let cursor_vb = cursor_b.and_then(|t| self.value_at_time(t));
+        let mean_value = self.visible_stats().map(|(_, _, avg, _)| avg);
+        let overlay_unit = self.current_unit.clone();
         let visible_stats = self.visible_stats();
 
         let cursor_unit = self.current_unit.clone();
@@ -557,17 +562,89 @@ impl Graph {
                     );
                 }
 
-                // Measurement cursors
+                // Measurement cursors (vertical + horizontal Y-value lines)
                 if cursors_active {
                     let cursor_color = egui::Color32::from_rgb(255, 180, 100);
+                    let cursor_color_dim = egui::Color32::from_rgba_premultiplied(255, 180, 100, 80);
                     if let Some(t) = cursor_a {
                         plot_ui.vline(VLine::new(t).color(cursor_color));
+                    }
+                    if let Some(v) = cursor_va {
+                        plot_ui.hline(
+                            HLine::new(v).color(cursor_color_dim)
+                                .style(egui_plot::LineStyle::dashed_dense()),
+                        );
                     }
                     if let Some(t) = cursor_b {
                         plot_ui.vline(VLine::new(t).color(cursor_color));
                     }
+                    if let Some(v) = cursor_vb {
+                        plot_ui.hline(
+                            HLine::new(v).color(cursor_color_dim)
+                                .style(egui_plot::LineStyle::dashed_dense()),
+                        );
+                    }
                 }
             });
+
+        // Draw overlay labels using the painter + transform
+        let painter = ui.painter_at(response.response.rect);
+        let label_font = egui::FontId::proportional(11.0);
+
+        // Mean line label
+        if show_mean {
+            if let Some(avg) = mean_value {
+                let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(view_max, avg));
+                let mean_color = egui::Color32::from_rgb(100, 200, 100);
+                painter.text(
+                    egui::pos2(pos.x - 4.0, pos.y - 2.0),
+                    egui::Align2::RIGHT_BOTTOM,
+                    format!("Mean: {avg:.4} {overlay_unit}"),
+                    label_font.clone(),
+                    mean_color,
+                );
+            }
+        }
+
+        // Reference line label
+        if show_ref {
+            let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(view_max, ref_value));
+            let ref_color = egui::Color32::from_rgb(200, 200, 100);
+            painter.text(
+                egui::pos2(pos.x - 4.0, pos.y - 2.0),
+                egui::Align2::RIGHT_BOTTOM,
+                format!("Ref: {ref_value:.4} {overlay_unit}"),
+                label_font.clone(),
+                ref_color,
+            );
+        }
+
+        // Cursor labels
+        if cursors_active {
+            let cursor_color = egui::Color32::from_rgb(255, 180, 100);
+            if let Some(t) = cursor_a {
+                let y_val = cursor_va.unwrap_or(0.0);
+                let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
+                painter.text(
+                    egui::pos2(pos.x + 4.0, pos.y - 2.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("A: {y_val:.4} {overlay_unit}"),
+                    label_font.clone(),
+                    cursor_color,
+                );
+            }
+            if let Some(t) = cursor_b {
+                let y_val = cursor_vb.unwrap_or(0.0);
+                let pos = response.transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
+                painter.text(
+                    egui::pos2(pos.x + 4.0, pos.y - 2.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("B: {y_val:.4} {overlay_unit}"),
+                    label_font.clone(),
+                    cursor_color,
+                );
+            }
+        }
 
         // Handle drag: convert pixel delta to time delta
         if can_interact && response.response.dragged() {
