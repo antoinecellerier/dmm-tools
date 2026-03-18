@@ -20,8 +20,8 @@ pub struct Ut61ePlusTable {
     ac_ua: [RangeInfo; 2],
     dc_ma: [RangeInfo; 2],
     ac_ma: [RangeInfo; 2],
-    dc_a: [RangeInfo; 1],
-    ac_a: [RangeInfo; 1],
+    dc_a: [RangeInfo; 2],
+    ac_a: [RangeInfo; 2],
 }
 
 impl Ut61ePlusTable {
@@ -107,10 +107,13 @@ impl Ut61ePlusTable {
                 RangeInfo { label: "220mA",   unit: "mA",  overload_pos: 220.0,   overload_neg: -220.0 },
             ],
             dc_a: [
-                // Manual specifies 20A range (not 10A)
+                // Range 0x00 unknown — may not be used. Placeholder.
+                RangeInfo { label: "20A",     unit: "A",   overload_pos: 20.0,    overload_neg: -20.0 },
+                // Range 0x01 verified: 20A range (confirmed with bench PSU at 100mA)
                 RangeInfo { label: "20A",     unit: "A",   overload_pos: 20.0,    overload_neg: -20.0 },
             ],
             ac_a: [
+                RangeInfo { label: "20A",     unit: "A",   overload_pos: 20.0,    overload_neg: -20.0 },
                 RangeInfo { label: "20A",     unit: "A",   overload_pos: 20.0,    overload_neg: -20.0 },
             ],
         }

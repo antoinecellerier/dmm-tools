@@ -8,7 +8,7 @@ Items that need real components or specific setups to verify.
 - **DC mV (0x03):** Needs small DC voltage source. Currently only tested as auto-range from DC V.
 - **AC µA (0x0D):** Needs AC current source.
 - **AC mA (0x0F):** Needs AC current source.
-- **DC A (0x10):** Needs high-current circuit.
+- **DC A (0x10):** Verified with bench PSU (~100mA). Range byte=0x01 for 20A range.
 - **AC A (0x11):** Needs high-current circuit.
 - **Temperature °C (0x0A):** Needs K-type thermocouple.
 - **Temperature °F (0x0B):** Needs K-type thermocouple.
@@ -45,14 +45,15 @@ These collisions need further investigation. The reference implementations don't
 |---|---|---|
 | AC V | 0x00 | Verified (open leads + body voltage) |
 | AC mV | 0x01 | Verified (mode byte capture) |
-| DC V | 0x02 | Verified (open, shorted, body voltage) |
+| DC V | 0x02 | Verified (open, shorted, body voltage, bench PSU: 1V→2.2V, 5V→22V, 25V→220V ranges) |
 | Hz | 0x04 | Verified (mode byte capture) |
 | Ω | 0x06 | Verified (OL on open leads) |
 | Continuity | 0x07 | Verified (OL on open leads) |
 | Diode | 0x08 | Verified (OL on open leads) |
 | Capacitance | 0x09 | Verified (stray cap reading) |
 | DC µA | 0x0C | Verified (mode byte capture) |
-| DC mA | 0x0E | Verified (mode byte capture) |
+| DC mA | 0x0E | Verified (bench PSU: 10mA→22mA range, 100mA→220mA range) |
+| DC A | 0x10 | Verified (bench PSU: 100mA, range byte=0x01 for 20A) |
 | hFE | 0x12 | Verified (mode byte capture) |
 | NCV | 0x14 | Verified (EF display) |
 | HOLD flag | bit1 of byte11 | Verified (physical + remote) |
