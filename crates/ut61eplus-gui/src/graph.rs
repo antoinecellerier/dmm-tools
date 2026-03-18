@@ -402,6 +402,7 @@ impl Graph {
                 }
             });
 
+        let cursor_unit = self.current_unit.clone();
         let plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
             .allow_drag(Vec2b::new(can_interact, false))
@@ -411,7 +412,18 @@ impl Graph {
             .reset()
             .custom_x_axes(vec![x_axis])
             .custom_y_axes(vec![y_axis])
-            .y_axis_min_width(60.0);
+            .y_axis_min_width(60.0)
+            .label_formatter(move |_name, point| {
+                let t = point.x;
+                let time_label = if t < 60.0 {
+                    format!("{t:.1} s")
+                } else {
+                    let m = (t / 60.0).floor();
+                    let s = t % 60.0;
+                    format!("{m:.0}m {s:.1}s")
+                };
+                format!("{time_label}\n{:.4} {}", point.y, cursor_unit)
+            });
 
         let response = plot.show(ui, |plot_ui| {
                 // Set exact bounds: our X view range + computed Y range
