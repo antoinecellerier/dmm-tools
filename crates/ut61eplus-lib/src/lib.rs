@@ -51,11 +51,12 @@ impl<T: Transport> Dmm<T> {
         self.transport.write(&cmd)?;
 
         // Drain any ack/response the meter sends back.
-        // Use short timeout — we just need to clear the buffer.
+        // Use short timeout and bounded iterations to avoid discarding
+        // a measurement response that arrives immediately after the ack.
         self.rx_buf.clear();
         let mut tmp = [0u8; 64];
-        loop {
-            let n = self.transport.read_timeout(&mut tmp, 100)?;
+        for _ in 0..3 {
+            let n = self.transport.read_timeout(&mut tmp, 50)?;
             if n == 0 {
                 break;
             }

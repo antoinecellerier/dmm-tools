@@ -170,6 +170,9 @@ impl App {
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
         std::thread::spawn(move || {
+            let panic_tx = msg_tx.clone();
+            let panic_ctx = ctx_clone.clone();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             info!("background thread: connecting to device");
             let mut dmm = match ut61eplus_lib::open() {
                 Ok(mut d) => {
@@ -257,6 +260,19 @@ impl App {
                         sample_interval_ms as u64,
                     ));
                 }
+            }
+            })); // end catch_unwind
+            if let Err(panic) = result {
+                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic".to_string()
+                };
+                error!("background thread panicked: {msg}");
+                let _ = panic_tx.send(DmmMessage::Error(format!("internal error: {msg}")));
+                panic_ctx.request_repaint();
             }
         });
     }

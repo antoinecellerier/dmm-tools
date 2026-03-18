@@ -184,7 +184,11 @@ impl Graph {
 
     fn elapsed_secs(&self, t: Instant) -> f64 {
         match self.origin {
-            Some(origin) => t.duration_since(origin).as_secs_f64(),
+            // Use checked_duration_since to avoid panic if clock goes backward
+            // (can happen on VM suspend/resume or NTP adjustments).
+            Some(origin) => t.checked_duration_since(origin)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0),
             None => 0.0,
         }
     }
