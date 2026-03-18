@@ -6,3 +6,4 @@
 .vscode/
 *.iml
 /references
+*.rlib
