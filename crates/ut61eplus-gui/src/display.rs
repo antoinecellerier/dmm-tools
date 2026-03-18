@@ -22,7 +22,7 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
                     (format_display_raw(&m.display_raw), ui.visuals().text_color())
                 }
                 MeasuredValue::Overload => {
-                    (format_display_raw(&m.display_raw), Color32::from_rgb(200, 30, 30))
+                    (format_display_raw(&m.display_raw), if ui.visuals().dark_mode { Color32::from_rgb(220, 60, 60) } else { Color32::from_rgb(180, 0, 0) })
                 }
                 MeasuredValue::NcvLevel(l) => {
                     (format!("NCV {l}"), ui.visuals().text_color())

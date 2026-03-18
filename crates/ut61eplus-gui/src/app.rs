@@ -382,13 +382,16 @@ impl App {
     }
 
     fn show_connection_help(&self, ui: &mut Ui) {
+        let dark = ui.visuals().dark_mode;
+        let warn_color = if dark { Color32::from_rgb(200, 120, 0) } else { Color32::from_rgb(180, 80, 0) };
+
         // Show waiting indicator before error threshold
         if self.waiting_timeouts > 0 && self.last_error.is_none() {
             ui.add_space(4.0);
             let dots = ".".repeat((self.waiting_timeouts as usize % 4) + 1);
             ui.label(
                 RichText::new(format!("Waiting for meter{dots}"))
-                    .color(Color32::from_rgb(200, 120, 0)),
+                    .color(warn_color),
             );
             return;
         }
@@ -406,7 +409,7 @@ impl App {
             // HID device not found — dongle issue
             ui.label(
                 RichText::new("USB adapter not found")
-                    .color(Color32::from_rgb(200, 120, 0)),
+                    .color(warn_color),
             );
             ui.label(
                 RichText::new(
@@ -423,7 +426,7 @@ impl App {
             // Dongle found but meter not responding
             ui.label(
                 RichText::new("No response from meter")
-                    .color(Color32::from_rgb(200, 120, 0)),
+                    .color(warn_color),
             );
             ui.label(
                 RichText::new(
@@ -470,20 +473,25 @@ impl App {
                 }
             }
 
+            let dark = ui.visuals().dark_mode;
+            let green = if dark { Color32::from_rgb(60, 180, 75) } else { Color32::from_rgb(0, 140, 30) };
+            let orange = if dark { Color32::from_rgb(200, 120, 0) } else { Color32::from_rgb(180, 80, 0) };
+            let gray = if dark { Color32::from_rgb(150, 150, 150) } else { Color32::from_rgb(120, 120, 120) };
+
             let (dot_color, status_text) = match &self.connection_state {
                 ConnectionState::Connected => {
                     let name = self.device_name.as_deref().unwrap_or("Connected");
                     if self.paused {
-                        (Color32::from_rgb(200, 120, 0), format!("{name} (paused)"))
+                        (orange, format!("{name} (paused)"))
                     } else {
-                        (Color32::from_rgb(60, 180, 75), name.to_string())
+                        (green, name.to_string())
                     }
                 }
                 ConnectionState::Disconnected => {
-                    (Color32::from_rgb(150, 150, 150), "Disconnected".to_string())
+                    (gray, "Disconnected".to_string())
                 }
                 ConnectionState::Reconnecting => {
-                    (Color32::from_rgb(200, 120, 0), "Reconnecting...".to_string())
+                    (orange, "Reconnecting...".to_string())
                 }
             };
 

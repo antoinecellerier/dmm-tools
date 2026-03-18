@@ -284,8 +284,9 @@ impl Graph {
 
             ui.separator();
 
+            let dark = ui.visuals().dark_mode;
             let live_color = if self.live {
-                egui::Color32::from_rgb(60, 180, 75)
+                if dark { egui::Color32::from_rgb(60, 180, 75) } else { egui::Color32::from_rgb(0, 130, 30) }
             } else {
                 ui.visuals().weak_text_color()
             };
@@ -476,7 +477,7 @@ impl Graph {
         let ref_color = if dark { egui::Color32::from_rgb(200, 200, 100) } else { egui::Color32::from_rgb(160, 130, 0) };
         let cross_color = if dark { egui::Color32::from_rgb(255, 220, 100) } else { egui::Color32::from_rgb(180, 130, 0) };
         let cursor_color = if dark { egui::Color32::from_rgb(255, 180, 100) } else { egui::Color32::from_rgb(200, 100, 0) };
-        let cursor_color_dim = if dark { egui::Color32::from_rgba_premultiplied(255, 180, 100, 80) } else { egui::Color32::from_rgba_premultiplied(200, 100, 0, 60) };
+        let cursor_color_dim = if dark { egui::Color32::from_rgba_premultiplied(255, 180, 100, 80) } else { egui::Color32::from_rgba_premultiplied(200, 100, 0, 120) };
         let env_color = if dark { egui::Color32::from_rgba_premultiplied(100, 150, 200, 80) } else { egui::Color32::from_rgba_premultiplied(0, 80, 180, 100) };
 
         let can_interact = !self.live;
@@ -802,7 +803,12 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        let line_color = egui::Color32::from_rgba_premultiplied(180, 60, 60, 180);
+        let dark = ui.visuals().dark_mode;
+        let line_color = if dark {
+            egui::Color32::from_rgba_premultiplied(200, 100, 100, 180)
+        } else {
+            egui::Color32::from_rgba_premultiplied(180, 30, 30, 200)
+        };
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes
         let label_height = 14.0;
@@ -857,7 +863,7 @@ impl Graph {
         // Draw viewport indicator as [ ] bracket markers
         let vp_left = time_to_x(view_min);
         let vp_right = time_to_x(view_max);
-        let vp_color = egui::Color32::from_rgb(100, 150, 255);
+        let vp_color = if dark { egui::Color32::from_rgb(100, 150, 255) } else { egui::Color32::from_rgb(0, 70, 200) };
         let vp_stroke = egui::Stroke::new(2.5, vp_color);
         let bracket_w = 4.0_f32; // horizontal arm of the bracket
 
