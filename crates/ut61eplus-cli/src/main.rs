@@ -375,11 +375,20 @@ struct CaptureReport {
     steps: Vec<StepResult>,
 }
 
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum StepStatus {
+    Captured,
+    Skipped,
+    Timeout,
+    Error,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct StepResult {
     id: String,
     instruction: String,
-    status: String, // "captured", "skipped", "timeout", "error"
+    status: StepStatus,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     samples: Vec<SampleData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -532,7 +541,7 @@ fn run_capture_step(
     interactive: bool,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
-    if report.steps.iter().any(|s| s.id == step.id && s.status == "captured") {
+    if report.steps.iter().any(|s| s.id == step.id && s.status == StepStatus::Captured) {
         eprintln!("  {} already captured, skipping", style(step.id).dim());
         return Ok(false);
     }
@@ -545,7 +554,7 @@ fn run_capture_step(
             upsert_step(report, StepResult {
                 id: step.id.to_string(),
                 instruction: step.instruction.to_string(),
-                status: "skipped".to_string(),
+                status: StepStatus::Skipped,
                 samples: vec![],
                 screen: None,
                 error: None,
@@ -556,7 +565,7 @@ fn run_capture_step(
             upsert_step(report, StepResult {
                 id: step.id.to_string(),
                 instruction: step.instruction.to_string(),
-                status: "skipped".to_string(),
+                status: StepStatus::Skipped,
                 samples: vec![],
                 screen: None,
                 error: None,
@@ -573,7 +582,7 @@ fn run_capture_step(
             upsert_step(report, StepResult {
                 id: step.id.to_string(),
                 instruction: step.instruction.to_string(),
-                status: "error".to_string(),
+                status: StepStatus::Error,
                 samples: vec![],
                 screen: None,
                 error: Some(e.to_string()),
@@ -612,15 +621,18 @@ fn run_capture_step(
     };
 
     let status = if sample_data.is_empty() {
-        "timeout"
+        StepStatus::Timeout
+    } else if sample_data.len() < step.samples {
+        eprintln!("  {} only got {}/{} samples", style("warning:").yellow(), sample_data.len(), step.samples);
+        StepStatus::Captured
     } else {
-        "captured"
+        StepStatus::Captured
     };
 
     let result = StepResult {
         id: step.id.to_string(),
         instruction: step.instruction.to_string(),
-        status: status.to_string(),
+        status,
         samples: sample_data,
         screen,
         error: None,
@@ -756,8 +768,8 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
         Ok(contents) => {
             match serde_yaml::from_str::<CaptureReport>(&contents) {
                 Ok(r) => {
-                    let captured = r.steps.iter().filter(|s| s.status == "captured").count();
-                    let skipped = r.steps.iter().filter(|s| s.status == "skipped").count();
+                    let captured = r.steps.iter().filter(|s| s.status == StepStatus::Captured).count();
+                    let skipped = r.steps.iter().filter(|s| s.status == StepStatus::Skipped).count();
                     eprintln!(
                         "Found existing capture: {output_path} ({captured} captured, {skipped} skipped)"
                     );
@@ -867,7 +879,7 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
             upsert_step(&mut report, StepResult {
                 id: "range_cycle".to_string(),
                 instruction: "Cycle through manual ranges on DC V".to_string(),
-                status: "captured".to_string(),
+                status: StepStatus::Captured,
                 samples: range_samples,
                 screen: None,
                 error: None,
@@ -917,7 +929,7 @@ fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, lis
             upsert_step(&mut report, StepResult {
                 id: format!("extra_{extra}"),
                 instruction: desc,
-                status: if sample_data.is_empty() { "timeout".to_string() } else { "captured".to_string() },
+                status: if sample_data.is_empty() { StepStatus::Timeout } else { StepStatus::Captured },
                 samples: sample_data,
                 screen,
                 error: None,

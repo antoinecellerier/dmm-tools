@@ -1,6 +1,7 @@
 use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::mpsc;
+use std::time::Instant;
 use ut61eplus_lib::command::Command;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
@@ -55,6 +56,10 @@ pub struct App {
     applied_theme: Option<ThemeMode>,
     /// User-resizable recording panel height.
     recording_height: f32,
+    /// Transient status toast (message, is_error, timestamp).
+    toast: Option<(String, bool, Instant)>,
+    /// One-shot receiver for CSV export result.
+    export_result_rx: Option<mpsc::Receiver<(String, bool)>>,
 }
 
 impl App {
@@ -79,6 +84,8 @@ impl App {
             os_ppp: None,
             applied_theme: None,
             recording_height: 120.0,
+            toast: None,
+            export_result_rx: None,
         }
     }
 
@@ -503,6 +510,15 @@ impl App {
                 if ui.button("\u{2699}").clicked() {
                     self.settings_open = !self.settings_open;
                 }
+                // Show toast message (export result, etc.)
+                if let Some((msg, is_error, _)) = &self.toast {
+                    let color = if *is_error {
+                        if dark { Color32::from_rgb(220, 60, 60) } else { Color32::from_rgb(180, 0, 0) }
+                    } else {
+                        green
+                    };
+                    ui.label(RichText::new(msg).small().color(color));
+                }
             });
         });
     }
@@ -761,46 +777,58 @@ impl App {
         }
     }
 
-    fn export_csv(&self) {
+    fn export_csv(&mut self) {
         if self.recording.samples.is_empty() {
             return;
         }
         // Clone samples so the file dialog + write runs on a separate thread
         // without blocking the UI.
         let samples = self.recording.samples.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<(String, bool)>();
         std::thread::spawn(move || {
             if let Some(path) = rfd::FileDialog::new()
                 .set_file_name("measurements.csv")
                 .add_filter("CSV", &["csv"])
                 .save_file()
             {
-                let mut wtr = match csv::Writer::from_path(&path) {
-                    Ok(w) => w,
+                let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+                    let mut wtr = csv::Writer::from_path(&path)?;
+                    wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
+                    for s in &samples {
+                        wtr.write_record([
+                            &s.wall_time.to_rfc3339(),
+                            &s.mode,
+                            &s.value_str,
+                            &s.unit,
+                            &s.range_label,
+                            &s.flags,
+                        ])?;
+                    }
+                    wtr.flush()?;
+                    Ok(())
+                })();
+                match result {
+                    Ok(()) => {
+                        info!("exported {} samples to {}", samples.len(), path.display());
+                        let _ = tx.send((format!("Exported {} samples", samples.len()), false));
+                    }
                     Err(e) => {
                         error!("CSV export failed: {e}");
-                        return;
+                        let _ = tx.send((format!("Export failed: {e}"), true));
                     }
-                };
-                if wtr
-                    .write_record(["timestamp", "mode", "value", "unit", "range", "flags"])
-                    .is_err()
-                {
-                    return;
                 }
-                for s in &samples {
-                    let _ = wtr.write_record([
-                        &s.wall_time.to_rfc3339(),
-                        &s.mode,
-                        &s.value_str,
-                        &s.unit,
-                        &s.range_label,
-                        &s.flags,
-                    ]);
-                }
-                let _ = wtr.flush();
-                info!("exported {} samples to {}", samples.len(), path.display());
             }
         });
+        self.export_result_rx = Some(rx);
+    }
+
+    fn poll_export_result(&mut self) {
+        if let Some(rx) = &self.export_result_rx {
+            if let Ok((msg, is_error)) = rx.try_recv() {
+                self.toast = Some((msg, is_error, Instant::now()));
+                self.export_result_rx = None;
+            }
+        }
     }
 }
 
@@ -810,6 +838,14 @@ impl eframe::App for App {
         self.apply_zoom(ctx);
         self.handle_keyboard_zoom(ctx);
         self.drain_messages();
+        self.poll_export_result();
+
+        // Expire toast after 4 seconds
+        if let Some((_, _, when)) = &self.toast {
+            if when.elapsed().as_secs() >= 4 {
+                self.toast = None;
+            }
+        }
 
         // Auto-connect on first frame if enabled
         if self.first_frame {
