@@ -305,13 +305,13 @@ impl Graph {
             .height(MINIMAP_HEIGHT)
             .include_x(data_min)
             .include_x(data_max)
-            .allow_drag(false)
+            .allow_drag(true)  // enable so we get pointer events
             .allow_zoom(false)
             .allow_scroll(false)
             .auto_bounds(Vec2b::new(false, true))
             .show_axes(Vec2b::new(true, false))
             .show_grid(false)
-            .reset()
+            .reset() // reset every frame so our drag doesn't move the minimap view
             .show(ui, |plot_ui| {
                 for seg in &raw_segments {
                     plot_ui.line(
@@ -324,18 +324,16 @@ impl Graph {
                 plot_ui.vline(VLine::new(view_max).color(viewport_color).width(2.0));
             });
 
-        // Click or drag on minimap to navigate
-        if response.response.dragged() || response.response.clicked() {
-            if let Some(pos) = response.response.interact_pointer_pos() {
-                let clicked_point = response.transform.value_from_position(pos);
-                let half = self.time_window_secs / 2.0;
-                // If clicked area would include the latest data point, go live
-                if clicked_point.x + half >= data_max {
-                    self.live = true;
-                } else {
-                    self.view_center = clicked_point.x;
-                    self.live = false;
-                }
+        // Click or drag on minimap to navigate the main view
+        if let Some(pos) = response.response.interact_pointer_pos() {
+            let clicked_point = response.transform.value_from_position(pos);
+            let half = self.time_window_secs / 2.0;
+            // If viewport would include the latest data point, go live
+            if clicked_point.x + half >= data_max {
+                self.live = true;
+            } else {
+                self.view_center = clicked_point.x;
+                self.live = false;
             }
         }
     }
