@@ -526,6 +526,7 @@ impl App {
                 if ui.button("\u{2699}").clicked() {
                     self.settings_open = !self.settings_open;
                 }
+                ui.hyperlink_to("Help / GitHub", "https://github.com/antoinecellerier/dmm-tools");
                 // Show toast message (export result, etc.)
                 if let Some((msg, is_error, _)) = &self.toast {
                     let color = if *is_error {

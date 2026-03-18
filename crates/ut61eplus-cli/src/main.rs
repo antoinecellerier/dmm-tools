@@ -12,7 +12,7 @@ use ut61eplus_lib::command::Command;
 use ut61eplus_lib::measurement::MeasuredValue;
 
 #[derive(Parser)]
-#[command(name = "ut61eplus", about = "UNI-T UT61E+ multimeter tool", after_help = "Set NO_COLOR=1 to disable colored output.\nhttps://github.com/antoinecellerier/dmm-tools")]
+#[command(name = "ut61eplus", about = "UNI-T UT61E+ multimeter tool", after_help = "Set NO_COLOR=1 to disable colored output.\n\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools")]
 struct Cli {
     #[command(subcommand)]
     command: Cmd,
