@@ -630,7 +630,7 @@ impl App {
             if let Some((vmin, vmax, vavg, vcount)) = vis {
                 ui.label(
                     RichText::new(format!(
-                        "View: Min:{} Max:{} Avg:{} ({})",
+                        "Visible: Min:{} Max:{} Avg:{} ({})",
                         fmt(Some(vmin)),
                         fmt(Some(vmax)),
                         fmt(Some(vavg)),
@@ -663,7 +663,7 @@ impl App {
             if let Some((vmin, vmax, vavg, vcount)) = vis {
                 ui.add_space(4.0);
                 ui.label(
-                    RichText::new("Visible window")
+                    RichText::new("Visible")
                         .strong()
                         .small()
                         .color(ui.visuals().weak_text_color()),
