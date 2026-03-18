@@ -427,22 +427,42 @@ impl App {
         if self.recording.samples.is_empty() {
             return;
         }
-        if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("measurements.csv")
-            .add_filter("CSV", &["csv"])
-            .save_file()
-        {
-            match self.recording.export_csv(&path) {
-                Ok(()) => {
-                    info!(
-                        "exported {} samples to {}",
-                        self.recording.samples.len(),
-                        path.display()
-                    );
+        // Clone samples so the file dialog + write runs on a separate thread
+        // without blocking the UI.
+        let samples = self.recording.samples.clone();
+        std::thread::spawn(move || {
+            if let Some(path) = rfd::FileDialog::new()
+                .set_file_name("measurements.csv")
+                .add_filter("CSV", &["csv"])
+                .save_file()
+            {
+                let mut wtr = match csv::Writer::from_path(&path) {
+                    Ok(w) => w,
+                    Err(e) => {
+                        error!("CSV export failed: {e}");
+                        return;
+                    }
+                };
+                if wtr
+                    .write_record(["timestamp", "mode", "value", "unit", "range", "flags"])
+                    .is_err()
+                {
+                    return;
                 }
-                Err(e) => error!("CSV export failed: {e}"),
+                for s in &samples {
+                    let _ = wtr.write_record([
+                        &s.wall_time.to_rfc3339(),
+                        &s.mode,
+                        &s.value_str,
+                        &s.unit,
+                        &s.range_label,
+                        &s.flags,
+                    ]);
+                }
+                let _ = wtr.flush();
+                info!("exported {} samples to {}", samples.len(), path.display());
             }
-        }
+        });
     }
 }
 
