@@ -56,6 +56,12 @@ enum Cmd {
         /// Output file (default: capture-<device>.yaml). Overrides auto-naming.
         #[arg(short, long)]
         output: Option<String>,
+        /// Only run specific steps (comma-separated IDs, e.g. "dcmv,temp,duty")
+        #[arg(long, value_delimiter = ',')]
+        steps: Option<Vec<String>>,
+        /// List all available step IDs and exit
+        #[arg(long)]
+        list_steps: bool,
     },
 }
 
@@ -114,7 +120,7 @@ fn main() {
         } => cmd_read(interval_ms, format, output, count),
         Cmd::Command { action } => cmd_command(action),
         Cmd::Debug { count, interval_ms } => cmd_debug(count, interval_ms),
-        Cmd::Capture { output } => cmd_capture(output),
+        Cmd::Capture { output, steps, list_steps } => cmd_capture(output, steps, list_steps),
     };
 
     if let Err(e) = result {
@@ -625,7 +631,77 @@ fn run_capture_step(
     false
 }
 
-fn cmd_capture(output_override: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+fn all_capture_steps() -> Vec<CaptureStep> {
+    vec![
+        // Part 1: Modes
+        CaptureStep { id: "dcv", instruction: "Set meter to DC V (V⎓). Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "dcv_short", instruction: "DC V mode: touch the two probe tips together.", command: None, samples: 3 },
+        CaptureStep { id: "acv", instruction: "Set meter to AC V (V~). Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "dcmv", instruction: "Set meter to DC mV. Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "ohm", instruction: "Set meter to Ω. Leave leads open (should show OL).", command: None, samples: 3 },
+        CaptureStep { id: "ohm_short", instruction: "Ω mode: touch the two probe tips together.", command: None, samples: 3 },
+        CaptureStep { id: "continuity", instruction: "Set meter to continuity (buzzer). Touch probes together.", command: None, samples: 3 },
+        CaptureStep { id: "diode", instruction: "Set meter to diode. Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "capacitance", instruction: "Set meter to capacitance (F). Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "hz", instruction: "Set meter to Hz. Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "duty", instruction: "Hz mode: press USB/Hz to switch to duty cycle (%).", command: None, samples: 3 },
+        CaptureStep { id: "ncv", instruction: "Set meter to NCV. Hold near a live wire if possible.", command: None, samples: 3 },
+        CaptureStep { id: "hfe", instruction: "Set meter to hFE. Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "dcua", instruction: "Set meter to µA. Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "dcma", instruction: "Set meter to mA. Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "dca", instruction: "Set meter to A (if available). Leave leads open.", command: None, samples: 3 },
+        CaptureStep { id: "temp", instruction: "Set meter to Temperature (if K-type thermocouple available).", command: None, samples: 3 },
+        // Part 2: Flags
+        CaptureStep { id: "hold", instruction: "Sending HOLD command.", command: Some(Command::Hold), samples: 3 },
+        CaptureStep { id: "hold_off", instruction: "Toggling HOLD off.", command: Some(Command::Hold), samples: 3 },
+        CaptureStep { id: "rel", instruction: "Sending REL command.", command: Some(Command::Rel), samples: 3 },
+        CaptureStep { id: "rel_off", instruction: "Toggling REL off.", command: Some(Command::Rel), samples: 3 },
+        CaptureStep { id: "minmax", instruction: "Sending MIN/MAX command.", command: Some(Command::MinMax), samples: 3 },
+        CaptureStep { id: "minmax_off", instruction: "Exiting MIN/MAX.", command: Some(Command::ExitMinMax), samples: 3 },
+        CaptureStep { id: "range", instruction: "Sending RANGE (manual range).", command: Some(Command::Range), samples: 3 },
+        CaptureStep { id: "auto", instruction: "Sending AUTO (restore auto-range).", command: Some(Command::Auto), samples: 3 },
+        // Part 3: Range cycle
+        CaptureStep { id: "range_cycle", instruction: "Cycle through manual ranges on DC V.", command: None, samples: 0 },
+    ]
+}
+
+/// IDs for part 1 (modes) vs part 2 (flags) grouping
+const MODE_STEP_IDS: &[&str] = &[
+    "dcv", "dcv_short", "acv", "dcmv", "ohm", "ohm_short", "continuity",
+    "diode", "capacitance", "hz", "duty", "ncv", "hfe", "dcua", "dcma", "dca", "temp",
+];
+const FLAG_STEP_IDS: &[&str] = &[
+    "hold", "hold_off", "rel", "rel_off", "minmax", "minmax_off", "range", "auto",
+];
+
+fn cmd_capture(output_override: Option<String>, filter: Option<Vec<String>>, list_steps: bool) -> Result<(), Box<dyn std::error::Error>> {
+    if list_steps {
+        let steps = all_capture_steps();
+        eprintln!("{}", style("Available capture steps:").bold());
+        eprintln!();
+        eprintln!("{}", style("  Measurement modes:").cyan());
+        for s in &steps {
+            if MODE_STEP_IDS.contains(&s.id) {
+                eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
+            }
+        }
+        eprintln!();
+        eprintln!("{}", style("  Flags & commands:").cyan());
+        for s in &steps {
+            if FLAG_STEP_IDS.contains(&s.id) {
+                eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
+            }
+        }
+        eprintln!();
+        eprintln!("{}", style("  Other:").cyan());
+        eprintln!("    {:<16} {}", style("range_cycle").bold(), "Cycle through manual ranges on DC V");
+        eprintln!("    {:<16} {}", style("extra_N").bold(), "Freeform captures (Part 4)");
+        eprintln!();
+        eprintln!("Usage: {} {}", style("ut61eplus capture --steps").dim(), style("dcmv,temp,duty").dim());
+        return Ok(());
+    }
+
+    let step_filter: Option<std::collections::HashSet<String>> = filter.map(|v| v.into_iter().collect());
     eprintln!("{}", style("=== UT61E+ Protocol Capture Tool ===").bold().cyan());
     eprintln!("This tool walks you through a series of steps to capture protocol");
     eprintln!("data from your meter. The output can be shared in bug reports.");
@@ -720,70 +796,51 @@ fn cmd_capture(output_override: Option<String>) -> Result<(), Box<dyn std::error
     eprintln!("Output file: {output_path}\n");
 
     report.date = chrono::Local::now().to_rfc3339();
-    report.tool_version = env!("CARGO_PKG_VERSION").to_string();
+    report.tool_version = format!("{} ({})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
     report.device_name = device_name;
     report.supported = supported;
 
-    let mode_steps: &[CaptureStep] = &[
-        CaptureStep { id: "dcv", instruction: "Set meter to DC V (V⎓). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcv_short", instruction: "DC V mode: touch the two probe tips together.", command: None, samples: 3 },
-        CaptureStep { id: "acv", instruction: "Set meter to AC V (V~). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcmv", instruction: "Set meter to DC mV. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "ohm", instruction: "Set meter to Ω. Leave leads open (should show OL).", command: None, samples: 3 },
-        CaptureStep { id: "ohm_short", instruction: "Ω mode: touch the two probe tips together.", command: None, samples: 3 },
-        CaptureStep { id: "continuity", instruction: "Set meter to continuity (buzzer). Touch probes together.", command: None, samples: 3 },
-        CaptureStep { id: "diode", instruction: "Set meter to diode. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "capacitance", instruction: "Set meter to capacitance (F). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "hz", instruction: "Set meter to Hz. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "duty", instruction: "Hz mode: press USB/Hz to switch to duty cycle (%).", command: None, samples: 3 },
-        CaptureStep { id: "ncv", instruction: "Set meter to NCV. Hold near a live wire if possible.", command: None, samples: 3 },
-        CaptureStep { id: "hfe", instruction: "Set meter to hFE. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcua", instruction: "Set meter to µA. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dcma", instruction: "Set meter to mA. Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "dca", instruction: "Set meter to A (if available). Leave leads open.", command: None, samples: 3 },
-        CaptureStep { id: "temp", instruction: "Set meter to Temperature (if K-type thermocouple available).", command: None, samples: 3 },
-    ];
-
-    let flag_steps: &[CaptureStep] = &[
-        CaptureStep { id: "hold", instruction: "Sending HOLD command.", command: Some(Command::Hold), samples: 3 },
-        CaptureStep { id: "hold_off", instruction: "Toggling HOLD off.", command: Some(Command::Hold), samples: 3 },
-        CaptureStep { id: "rel", instruction: "Sending REL command.", command: Some(Command::Rel), samples: 3 },
-        CaptureStep { id: "rel_off", instruction: "Toggling REL off.", command: Some(Command::Rel), samples: 3 },
-        CaptureStep { id: "minmax", instruction: "Sending MIN/MAX command.", command: Some(Command::MinMax), samples: 3 },
-        CaptureStep { id: "minmax_off", instruction: "Exiting MIN/MAX.", command: Some(Command::ExitMinMax), samples: 3 },
-        CaptureStep { id: "range", instruction: "Sending RANGE (manual range).", command: Some(Command::Range), samples: 3 },
-        CaptureStep { id: "auto", instruction: "Sending AUTO (restore auto-range).", command: Some(Command::Auto), samples: 3 },
-    ];
+    let all_steps = all_capture_steps();
+    let is_filtered = step_filter.is_some();
+    let include = |id: &str| -> bool {
+        step_filter.as_ref().map_or(true, |f| f.contains(id))
+    };
 
     let mut done = false;
 
     // --- Part 1: Modes ---
-    eprintln!("{}", style("━━━ Part 1: Measurement Modes ━━━").bold());
-    eprintln!("{}", style("any key=capture, s=skip one, q=skip to end and save").dim());
+    let has_mode_steps = MODE_STEP_IDS.iter().any(|id| include(id));
+    if has_mode_steps {
+        eprintln!("{}", style("━━━ Part 1: Measurement Modes ━━━").bold());
+        eprintln!("{}", style("any key=capture, s=skip one, q=skip to end and save").dim());
 
-    for step in mode_steps {
-        if done { break; }
-        done = run_capture_step(&mut dmm, step, &mut report, true);
-        save_report(&report, &output_path)?;
+        for step in all_steps.iter().filter(|s| MODE_STEP_IDS.contains(&s.id)) {
+            if done { break; }
+            if !include(step.id) { continue; }
+            done = run_capture_step(&mut dmm, step, &mut report, true);
+            save_report(&report, &output_path)?;
+        }
     }
 
     // --- Part 2: Flags ---
-    if !done {
+    let has_flag_steps = FLAG_STEP_IDS.iter().any(|id| include(id));
+    if !done && has_flag_steps {
         eprintln!("\n{}", style("━━━ Part 2: Flags & Remote Commands ━━━").bold());
         eprintln!("Set meter to DC V mode for these tests.");
         let ch = prompt_key(&format!("\n{} ", style("Any key when ready on DC V, q=skip to end:").dim()));
         if ch == 'q' || ch == 'Q' { done = true; }
     }
-    if !done {
-        for step in flag_steps {
+    if !done && has_flag_steps {
+        for step in all_steps.iter().filter(|s| FLAG_STEP_IDS.contains(&s.id)) {
             if done { break; }
+            if !include(step.id) { continue; }
             done = run_capture_step(&mut dmm, step, &mut report, true);
             save_report(&report, &output_path)?;
         }
     }
 
     // --- Part 3: Range cycle ---
-    if !done {
+    if !done && include("range_cycle") {
         eprintln!("\n{}", style("━━━ Part 3: Range Values ━━━").bold());
         eprintln!("We'll cycle through manual ranges on DC V.");
         let ch = prompt_key(&format!("\n{} ", style("Any key to start, q=skip to end:").dim()));
@@ -819,8 +876,8 @@ fn cmd_capture(output_override: Option<String>) -> Result<(), Box<dyn std::error
         }
     }
 
-    // --- Part 4: Freeform ---
-    if !done {
+    // --- Part 4: Freeform (skip if filtered) ---
+    if !done && !is_filtered {
         eprintln!("\n{}", style("━━━ Part 4: Additional Captures (optional) ━━━").bold());
         eprintln!("Set the meter to any mode/state not covered above.\n");
 
