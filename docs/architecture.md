@@ -51,7 +51,10 @@ All protocol logic lives in the library crate.
 ### ut61eplus-gui
 
 `eframe`/`egui` application. Runs a background `std::thread` for device I/O,
-communicates with the UI via `mpsc` channels. Real-time plot via `egui_plot`.
+communicates with the UI via `mpsc` channels. Main graph via `egui_plot`,
+minimap via custom painter. Features: responsive layout, dark/light themes,
+PPK2-style minimap navigation, continuous timeline across reconnects,
+UI zoom (Ctrl+/-), CSV recording/export, persistent settings.
 
 ## Key Design Decisions
 

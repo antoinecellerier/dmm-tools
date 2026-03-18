@@ -13,9 +13,9 @@
 ### Subcommands
 
 - `ut61eplus list` — enumerate connected devices
-- `ut61eplus info` — connect to device and print device info
+- `ut61eplus info` — connect and print device name (queried from meter)
 - `ut61eplus read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`
-- `ut61eplus command` — send button press to meter (hold/minmax/rel/range/select/light)
+- `ut61eplus command` — send button presses: hold, min-max, exit-min-max, rel, range, auto, select, select2, light, peak-min-max, exit-peak
 - `ut61eplus debug` — raw hex dump mode for protocol development
 
 ## GUI Layout
@@ -23,26 +23,26 @@
 ### Theme
 
 - Supports light and dark mode, toggled via settings
-- Default: follows system preference (egui `Visuals`)
-- Connected status: green indicator dot
-- Disconnected/error: red indicator dot
-- Warnings (low battery): orange text
+- Default: dark
+- Connected status: green indicator dot + device name (e.g., "UT61E+")
+- Disconnected/error: grey indicator dot
+- Reconnecting: orange indicator dot
 
 ### Top Bar
 
-Compact toolbar row: app title, connect/disconnect button, connection status indicator, settings gear icon (right-aligned).
+Compact toolbar row: app title, Connect/Disconnect button, Clear button (resets graph/stats), connection status with device name, settings gear icon (right-aligned).
 
 ### Settings Panel
 
-Toggled by the gear icon. Dropdown/popup with:
+Toggled by the gear icon. Contains:
 
-- **Theme:** Dark / Light / System
-- **Show graph:** toggle
-- **Show statistics:** toggle
-- **Show recording:** toggle
-- **Graph time window:** 30s / 1m / 5m / 10m / 1h
+- **Theme:** Dark / Light
+- **Panels:** Show/hide Graph, Statistics, Recording
+- **Auto-connect on start:** default on
+- **Show device name on connect (beeps):** default on — queries device name via protocol, which causes the meter to beep
+- **Zoom:** UI scale selector (30%-300%, Firefox-style non-linear levels) + keyboard shortcuts (Ctrl+/-, Ctrl+0 to reset). 100% = OS default scale. Persists across sessions.
 
-Settings persist across sessions via a config file (`~/.config/ut61eplus/settings.json`).
+Settings persist to `~/.config/ut61eplus/settings.json`.
 
 ### Responsive Layout
 
@@ -50,12 +50,12 @@ Threshold at ~900px available width:
 
 **Wide (≥ 900px):** Two-column layout.
 - Left column (fixed ~220px): reading display, mode/range/flags, statistics panel
-- Right column (remaining width): graph (top, fills space), recording bar (bottom)
+- Right column (remaining width): graph toolbar + main graph + minimap, recording bar
 
 **Narrow (< 900px):** Single-column stack.
 - Reading (compact single line for mode/flags)
-- Graph
-- Statistics (compact 2-line grid)
+- Statistics (compact line)
+- Graph (toolbar + main + minimap)
 - Recording (single-line toolbar)
 
 ### Reading Display
@@ -63,29 +63,45 @@ Threshold at ~900px available width:
 - Primary value in large monospace font (e.g., "5.678")
 - Unit adjacent, slightly smaller ("V")
 - Mode, range label, and active flags below
-- Flags shown as subtle badges: AUTO, HOLD, REL, MIN, MAX
+- Flags shown as subtle colored badges: AUTO, HOLD, REL, MIN, MAX
 - Low battery warning shown as orange "LOW BAT" badge
 
 ### Graph Panel
 
-- `egui_plot` scrolling time series
-- X-axis: elapsed time in seconds, scrolling window (configurable)
-- Y-axis: auto-scaling with some padding
-- Configurable time window (30s to 1h)
-- History buffer: ~10,000 points (VecDeque, oldest dropped)
-- Handles mode changes by clearing the plot (unit change = incompatible data)
-- Overload values shown as gaps in the line
+Three components stacked vertically:
+
+**Toolbar:**
+- Time window presets: 5s, 10s, 30s, 1m, 5m, 10m
+- LIVE toggle button (green when active)
+
+**Main graph:**
+- `egui_plot` time series with auto-scaling Y axis (10% padding)
+- In LIVE mode: auto-scrolls to latest data, drag/zoom disabled
+- In browse mode (click LIVE to toggle, or click minimap): drag to pan X, scroll wheel to zoom X. Y auto-scales to visible data.
+- Double-click to return to LIVE mode
+- Disconnect gaps shown as dashed red vertical line pairs
+- Consistent line color across reconnects
+- Timeline is continuous across disconnects (data not cleared on reconnect)
+
+**Minimap:**
+- Custom-painted thin strip showing full capture history
+- Viewport indicator as [ ] bracket markers (thick blue lines)
+- Click/drag to navigate: moves main graph viewport to clicked time
+- Clicking near the latest data re-enables LIVE mode
+- Time axis labels with smart interval selection
+
+**History:** ~10,000 points (VecDeque, oldest dropped). Mode changes clear the graph (incompatible units).
 
 ### Statistics Panel
 
-- Min, Max, Avg values with units
+- Min, Max, Avg values with units (4 decimal places)
 - Sample count
-- Reset button clears all stats
-- Resets automatically on mode change
+- Reset button clears stats
+- Stats persist across reconnects (use Clear button for full reset)
 
 ### Recording Panel
 
-- Record toggle button (changes to "Stop" when active)
-- Export CSV button (opens file dialog via `rfd`)
+- Record/Stop toggle button
+- Export CSV button (opens file dialog on separate thread — no UI freeze)
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand
