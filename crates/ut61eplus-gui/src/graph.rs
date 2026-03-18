@@ -92,6 +92,9 @@ pub struct Graph {
     pub show_mean: bool,
     /// Show min/max envelope band.
     pub show_envelope: bool,
+    /// Envelope bucket width in seconds (user-configurable).
+    envelope_bucket_text: String,
+    envelope_bucket_secs: f64,
     /// Reference lines: show horizontal lines at these values.
     pub show_ref_line: bool,
     ref_line_text: String,
@@ -124,6 +127,8 @@ impl Graph {
             y_user_set: false,
             show_mean: false,
             show_envelope: false,
+            envelope_bucket_text: "1".to_string(),
+            envelope_bucket_secs: 1.0,
             show_ref_line: false,
             ref_line_text: String::new(),
             ref_line_values: Vec::new(),
@@ -342,6 +347,19 @@ impl Graph {
             if ui.selectable_label(self.show_envelope, "Min/Max").clicked() {
                 self.show_envelope = !self.show_envelope;
             }
+            if self.show_envelope {
+                let changed = ui
+                    .add(egui::TextEdit::singleline(&mut self.envelope_bucket_text).desired_width(30.0))
+                    .changed();
+                if changed {
+                    if let Ok(v) = self.envelope_bucket_text.parse::<f64>() {
+                        if v > 0.0 {
+                            self.envelope_bucket_secs = v;
+                        }
+                    }
+                }
+                ui.label(egui::RichText::new("s").small().color(ui.visuals().weak_text_color()));
+            }
 
             if ui.selectable_label(self.show_ref_line, "Ref").clicked() {
                 self.show_ref_line = !self.show_ref_line;
@@ -488,7 +506,7 @@ impl Graph {
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
-            self.build_envelope(view_min, view_max, 100)
+            self.build_envelope(view_min, view_max, self.envelope_bucket_secs)
         } else {
             (Vec::new(), Vec::new())
         };
@@ -911,9 +929,10 @@ impl Graph {
 
     /// Build min/max envelope lines for the visible window.
     /// Returns (min_points, max_points) as Vec<[f64; 2]>.
-    fn build_envelope(&self, x_min: f64, x_max: f64, num_buckets: usize) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
+    fn build_envelope(&self, x_min: f64, x_max: f64, bucket_width: f64) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let span = (x_max - x_min).max(1e-6);
-        let bucket_width = span / num_buckets as f64;
+        let bucket_width = bucket_width.max(0.1);
+        let num_buckets = ((span / bucket_width).ceil() as usize).max(1).min(1000);
         let mut mins = vec![f64::INFINITY; num_buckets];
         let mut maxs = vec![f64::NEG_INFINITY; num_buckets];
 
