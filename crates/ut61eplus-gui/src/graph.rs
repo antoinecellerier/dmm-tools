@@ -1,5 +1,5 @@
 use eframe::egui::{self, Ui};
-use egui_plot::{Line, Plot, PlotPoints, VLine};
+use egui_plot::{Line, Plot, PlotPoints};
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -84,8 +84,11 @@ impl Graph {
             .unwrap_or(0.0);
         let x_min = (x_max - time_window_secs).max(0.0);
 
-        // Find gap boundaries for vertical markers
-        let gap_times = self.find_gap_times();
+        // Find gap boundaries for shaded disconnect regions
+        let gap_ranges = self.find_gap_ranges();
+
+        let line_color = egui::Color32::from_rgb(200, 100, 100);
+        let gap_color = egui::Color32::from_rgba_premultiplied(80, 40, 40, 60);
 
         Plot::new("measurement_plot")
             .height(ui.available_height().max(80.0))
@@ -96,16 +99,28 @@ impl Graph {
             .allow_scroll(false)
             .x_axis_label("time (s)")
             .show(ui, |plot_ui| {
-                for segment in segments {
-                    plot_ui.line(Line::new(segment));
-                }
-                // Draw subtle vertical lines at disconnect points
-                for gap_t in gap_times {
-                    plot_ui.vline(
-                        VLine::new(gap_t)
-                            .color(egui::Color32::from_rgba_premultiplied(150, 80, 80, 100))
-                            .style(egui_plot::LineStyle::dashed_dense()),
+                // Draw gap shading as filled rectangles (two vertical lines + polygon)
+                for &(gap_start, gap_end) in &gap_ranges {
+                    let bounds = plot_ui.plot_bounds();
+                    let y_min = bounds.min()[1];
+                    let y_max = bounds.max()[1];
+                    // Shaded rectangle as a filled polygon
+                    let rect_points = PlotPoints::new(vec![
+                        [gap_start, y_min],
+                        [gap_start, y_max],
+                        [gap_end, y_max],
+                        [gap_end, y_min],
+                    ]);
+                    plot_ui.polygon(
+                        egui_plot::Polygon::new(rect_points)
+                            .fill_color(gap_color)
+                            .stroke(egui::Stroke::NONE),
                     );
+                }
+
+                // Draw all line segments with consistent color
+                for segment in segments {
+                    plot_ui.line(Line::new(segment).color(line_color));
                 }
             });
     }
@@ -137,8 +152,8 @@ impl Graph {
         segments.into_iter().map(PlotPoints::new).collect()
     }
 
-    /// Find the midpoint times of gaps for drawing disconnect markers.
-    fn find_gap_times(&self) -> Vec<f64> {
+    /// Find (start, end) time ranges of gaps for drawing disconnect regions.
+    fn find_gap_ranges(&self) -> Vec<(f64, f64)> {
         let mut gaps = Vec::new();
         let mut prev: Option<&DataPoint> = None;
 
@@ -146,10 +161,9 @@ impl Graph {
             if let Some(p) = prev {
                 let gap = point.time.duration_since(p.time).as_secs_f64();
                 if gap > GAP_THRESHOLD_SECS {
-                    // Place marker at the midpoint of the gap
                     let t1 = self.elapsed_secs(p.time);
                     let t2 = self.elapsed_secs(point.time);
-                    gaps.push((t1 + t2) / 2.0);
+                    gaps.push((t1, t2));
                 }
             }
             prev = Some(point);
@@ -239,12 +253,10 @@ mod tests {
     fn gap_detection() {
         let mut g = Graph::new();
         g.push(1.0, "DC V");
-        // Simulate a gap by inserting a point with a manually offset time
-        // We can't easily fake Instant, but we can test that consecutive
-        // points without real delay produce one segment
+        // Consecutive points without real delay should produce no gaps
         g.push(2.0, "DC V");
-        let gaps = g.find_gap_times();
-        assert!(gaps.is_empty()); // no real gap since pushed back-to-back
+        let gaps = g.find_gap_ranges();
+        assert!(gaps.is_empty());
     }
 
     #[test]
