@@ -60,6 +60,10 @@ pub struct App {
     toast: Option<(String, bool, Instant)>,
     /// One-shot receiver for CSV export result.
     export_result_rx: Option<mpsc::Receiver<(String, bool)>>,
+    /// Cached height of non-reading content at scale=1 for big meter mode.
+    meter_content_height: f32,
+    /// Last window size used to compute big meter scale (recompute on change).
+    meter_last_size: (u32, u32),
 }
 
 impl App {
@@ -86,6 +90,8 @@ impl App {
             recording_height: 120.0,
             toast: None,
             export_result_rx: None,
+            meter_content_height: 200.0, // initial estimate, measured on first frame
+            meter_last_size: (0, 0),
         }
     }
 
@@ -363,7 +369,7 @@ impl App {
         }
     }
 
-    fn show_remote_controls(&mut self, ui: &mut Ui) {
+    fn show_remote_controls(&mut self, ui: &mut Ui, scale: f32) {
         // Only show controls when we have actual measurement data
         if self.connection_state != ConnectionState::Connected || self.last_measurement.is_none() {
             return;
@@ -376,8 +382,10 @@ impl App {
             Color32::from_rgb(0, 100, 200)
         };
 
+        let font_size = 12.0 * scale;
+
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0;
+            ui.spacing_mut().item_spacing.x = 3.0 * scale;
 
             let hold = flags.is_some_and(|f| f.hold);
             let rel = flags.is_some_and(|f| f.rel);
@@ -386,7 +394,6 @@ impl App {
             let min_max = flags.is_some_and(|f| f.min || f.max);
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
-            // Buttons with protocol feedback (flag-based state)
             for &(label, active, cmd) in &[
                 ("HOLD", hold, Command::Hold),
                 ("REL", rel, Command::Rel),
@@ -396,26 +403,31 @@ impl App {
                 ("PEAK", peak, Command::PeakMinMax),
             ] {
                 let text = if active {
-                    RichText::new(label).small().color(active_color).strong()
+                    RichText::new(label)
+                        .font(egui::FontId::proportional(font_size))
+                        .color(active_color)
+                        .strong()
                 } else {
-                    RichText::new(label).small()
+                    RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
                 if ui.add(egui::Button::new(text)).clicked() {
                     self.send_command(cmd);
                 }
             }
 
-            // SELECT: mode cycle — no toggle state, mode is visible in reading
             if ui
-                .add(egui::Button::new(RichText::new("SELECT").small()))
+                .add(egui::Button::new(
+                    RichText::new("SELECT").font(egui::FontId::proportional(font_size)),
+                ))
                 .clicked()
             {
                 self.send_command(Command::Select);
             }
 
-            // LIGHT: no protocol feedback for backlight state
             if ui
-                .add(egui::Button::new(RichText::new("LIGHT").small()))
+                .add(egui::Button::new(
+                    RichText::new("LIGHT").font(egui::FontId::proportional(font_size)),
+                ))
                 .clicked()
             {
                 self.send_command(Command::Light);
@@ -705,8 +717,10 @@ impl App {
         ui.separator();
     }
 
-    fn show_stats_section(&mut self, ui: &mut Ui, compact: bool) {
+    fn show_stats_section(&mut self, ui: &mut Ui, compact: bool, scale: f32) {
         let unit = self.last_measurement.as_ref().map(|m| m.unit).unwrap_or("");
+        let main_font = 12.0 * scale;
+        let sub_font = 11.0 * scale;
 
         let fmt = |v: Option<f64>| -> String {
             match v {
@@ -728,9 +742,14 @@ impl App {
                         fmt(self.stats.avg()),
                         self.stats.count,
                     ))
-                    .font(egui::FontId::monospace(12.0)),
+                    .font(egui::FontId::monospace(main_font)),
                 );
-                if ui.small_button("Reset").clicked() {
+                if ui
+                    .add(egui::Button::new(
+                        RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
+                    ))
+                    .clicked()
+                {
                     self.stats.reset();
                 }
             });
@@ -744,26 +763,38 @@ impl App {
                         fmt(Some(vavg)),
                         vcount,
                     ))
-                    .font(egui::FontId::monospace(11.0))
+                    .font(egui::FontId::monospace(sub_font))
                     .color(ui.visuals().weak_text_color()),
                 );
             }
         } else {
-            ui.label(RichText::new("Statistics").strong().small());
+            ui.label(
+                RichText::new("Statistics")
+                    .strong()
+                    .font(egui::FontId::proportional(sub_font)),
+            );
             ui.label(
                 RichText::new(format!("Min:{}", fmt(self.stats.min)))
-                    .font(egui::FontId::monospace(12.0)),
+                    .font(egui::FontId::monospace(main_font)),
             );
             ui.label(
                 RichText::new(format!("Max:{}", fmt(self.stats.max)))
-                    .font(egui::FontId::monospace(12.0)),
+                    .font(egui::FontId::monospace(main_font)),
             );
             ui.label(
                 RichText::new(format!("Avg:{}", fmt(self.stats.avg())))
-                    .font(egui::FontId::monospace(12.0)),
+                    .font(egui::FontId::monospace(main_font)),
             );
-            ui.label(format!("Count: {}", self.stats.count));
-            if ui.small_button("Reset").clicked() {
+            ui.label(
+                RichText::new(format!("Count: {}", self.stats.count))
+                    .font(egui::FontId::proportional(main_font)),
+            );
+            if ui
+                .add(egui::Button::new(
+                    RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
+                ))
+                .clicked()
+            {
                 self.stats.reset();
             }
 
@@ -771,25 +802,30 @@ impl App {
             if let Some((vmin, vmax, vavg, vcount)) = vis {
                 ui.add_space(4.0);
                 let weak = ui.visuals().weak_text_color();
-                ui.label(RichText::new("Visible").strong().small().color(weak));
+                ui.label(
+                    RichText::new("Visible")
+                        .strong()
+                        .font(egui::FontId::proportional(sub_font))
+                        .color(weak),
+                );
                 ui.label(
                     RichText::new(format!("Min:{}", fmt(Some(vmin))))
-                        .font(egui::FontId::monospace(11.0))
+                        .font(egui::FontId::monospace(sub_font))
                         .color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Max:{}", fmt(Some(vmax))))
-                        .font(egui::FontId::monospace(11.0))
+                        .font(egui::FontId::monospace(sub_font))
                         .color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Avg:{}", fmt(Some(vavg))))
-                        .font(egui::FontId::monospace(11.0))
+                        .font(egui::FontId::monospace(sub_font))
                         .color(weak),
                 );
                 ui.label(
                     RichText::new(format!("Count: {vcount}"))
-                        .small()
+                        .font(egui::FontId::proportional(sub_font))
                         .color(weak),
                 );
             }
@@ -980,7 +1016,49 @@ impl eframe::App for App {
         // Determine layout mode before panels
         let wide = ctx.screen_rect().width() >= 900.0;
 
-        if wide {
+        let meter_only = !self.settings.show_graph && !self.settings.show_recording;
+
+        if meter_only {
+            // Big meter mode: compute scale from window size, only recalculate
+            // when the window is resized to avoid frame-to-frame oscillation.
+            egui::CentralPanel::default().show(ctx, |ui| {
+                let size = ctx.screen_rect();
+                let current_size = (size.width() as u32, size.height() as u32);
+                let needs_recalc = current_size != self.meter_last_size;
+
+                ui.centered_and_justified(|ui| {
+                    ui.vertical(|ui| {
+                        let scale = display::show_reading_large(
+                            ui,
+                            self.last_measurement.as_ref(),
+                            self.meter_content_height,
+                        );
+                        let after_reading = ui.cursor().top();
+                        self.show_remote_controls(ui, scale);
+                        self.show_connection_help(ui);
+
+                        if self.settings.show_stats {
+                            ui.add_space(12.0 * scale);
+                            ui.separator();
+                            self.show_stats_section(ui, false, scale);
+                        }
+
+                        // Update cached height on window resize. Run twice
+                        // (by not setting meter_last_size the first time) so
+                        // the second pass uses the measured height from the first.
+                        if needs_recalc && scale > 0.0 {
+                            let total_below_reading = ui.cursor().top() - after_reading;
+                            let measured = total_below_reading / scale;
+                            if (self.meter_content_height - measured).abs() < 1.0 {
+                                // Converged — lock in this size
+                                self.meter_last_size = current_size;
+                            }
+                            self.meter_content_height = measured;
+                        }
+                    });
+                });
+            });
+        } else if wide {
             // Wide: left side panel for reading + stats (resizable)
             egui::SidePanel::left("reading_panel")
                 .default_width(240.0)
@@ -988,13 +1066,13 @@ impl eframe::App for App {
                 .resizable(true)
                 .show(ctx, |ui| {
                     display::show_reading(ui, self.last_measurement.as_ref());
-                    self.show_remote_controls(ui);
+                    self.show_remote_controls(ui, 1.0);
                     self.show_connection_help(ui);
                     ui.add_space(8.0);
 
                     if self.settings.show_stats {
                         ui.separator();
-                        self.show_stats_section(ui, false);
+                        self.show_stats_section(ui, false, 1.0);
                     }
                 });
 
@@ -1006,12 +1084,12 @@ impl eframe::App for App {
             // Narrow: single column
             egui::CentralPanel::default().show(ctx, |ui| {
                 display::show_reading_compact(ui, self.last_measurement.as_ref());
-                self.show_remote_controls(ui);
+                self.show_remote_controls(ui, 1.0);
                 self.show_connection_help(ui);
 
                 if self.settings.show_stats {
                     ui.separator();
-                    self.show_stats_section(ui, true);
+                    self.show_stats_section(ui, true, 1.0);
                 }
 
                 if self.settings.show_graph || self.settings.show_recording {

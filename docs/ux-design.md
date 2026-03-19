@@ -61,6 +61,12 @@ Threshold at ~900px available width:
 - Graph (toolbar + main + minimap)
 - Recording (resizable via drag handle)
 
+**Big meter mode (graph + recording both hidden):** Single centered display.
+- Reading, buttons, and stats scale to fill available space
+- Font size computed from both available width and height
+- Buttons and stats scale proportionally with the reading
+- Useful as a large bench-meter display or for presentations
+
 ### Reading Display
 
 - Primary value uses meter's raw 7-char display string in monospace font for stable formatting

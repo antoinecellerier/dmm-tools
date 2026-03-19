@@ -10,13 +10,13 @@ fn format_display_raw(raw: &str) -> String {
     format!("{trimmed:>7}")
 }
 
-/// Render the large primary reading display.
-pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
+/// Render the primary reading display at the given font size.
+fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size: f32) {
+    let unit_size = value_size * 0.55;
+    let mode_size = (value_size * 0.4).max(12.0);
+
     match measurement {
         Some(m) => {
-            // Use the meter's 7-char display string for stable formatting.
-            // display_raw preserves leading spaces (sign placeholder) and
-            // fixed decimal places per range, so numbers don't jump around.
             let (value_text, value_color) = match &m.value {
                 MeasuredValue::Normal(_) => (
                     format_display_raw(&m.display_raw),
@@ -37,22 +37,29 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.label(
                     RichText::new(&value_text)
-                        .font(FontId::monospace(36.0))
+                        .font(FontId::monospace(value_size))
                         .color(value_color),
                 );
                 ui.label(
                     RichText::new(m.unit)
-                        .font(FontId::monospace(20.0))
+                        .font(FontId::monospace(unit_size))
                         .color(ui.visuals().text_color()),
                 );
             });
 
-            // Mode, range, flags
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                ui.label(RichText::new(m.mode.to_string()).color(ui.visuals().weak_text_color()));
+                ui.label(
+                    RichText::new(m.mode.to_string())
+                        .font(FontId::proportional(mode_size))
+                        .color(ui.visuals().weak_text_color()),
+                );
                 if !m.range_label.is_empty() {
-                    ui.label(RichText::new(m.range_label).color(ui.visuals().weak_text_color()));
+                    ui.label(
+                        RichText::new(m.range_label)
+                            .font(FontId::proportional(mode_size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
                 }
                 show_flags(ui, m);
             });
@@ -60,12 +67,50 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
         None => {
             ui.label(
                 RichText::new("---")
-                    .font(FontId::monospace(36.0))
+                    .font(FontId::monospace(value_size))
                     .color(ui.visuals().weak_text_color()),
             );
             ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
         }
     }
+}
+
+/// Render the large primary reading display.
+pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
+    show_reading_sized(ui, measurement, 36.0);
+}
+
+/// Render an extra-large reading that scales to fill available space.
+/// Used when graph and recording panels are hidden ("big meter" mode).
+/// Returns a scale factor (1.0 = normal) for other UI elements to match.
+///
+/// `base_content_height`: total height of all content below the reading
+/// (buttons, stats, etc.) rendered at scale=1. The caller measures this
+/// once and passes it in so we can compute the optimal scale.
+pub fn show_reading_large(
+    ui: &mut Ui,
+    measurement: Option<&Measurement>,
+    base_content_height: f32,
+) -> f32 {
+    let available_w = ui.available_width();
+    let available_h = ui.available_height();
+
+    // Width-based limit: 7 value chars + ~3 unit chars ≈ 5.5 char widths
+    let size_from_w = available_w / 5.5;
+
+    // Height-based limit: total height scales linearly with font size.
+    // At base (size=36, scale=1):
+    //   reading_h ≈ 36 * 1.8 (value line + mode line)
+    //   other_h   = base_content_height (buttons, stats, gaps)
+    // At scale s/36:
+    //   total = s * 1.8 + base_content_height * (s / 36)
+    //         = s * (1.8 + base_content_height / 36)
+    let height_coeff = 1.8 + base_content_height / 36.0;
+    let size_from_h = available_h / height_coeff;
+
+    let size = size_from_w.min(size_from_h).max(36.0);
+    show_reading_sized(ui, measurement, size);
+    size / 36.0
 }
 
 /// Render the reading as a compact single line (for narrow layout).
