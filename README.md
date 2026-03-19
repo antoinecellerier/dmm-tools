@@ -123,3 +123,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit bug reports, protocol c
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) for details.
+
+
+## References
+
+- [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Protocol reverse engineering and Python implementation
+- [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Protocol reverse engineering and Go implementation
+- [Silicon Labs AN433](https://www.silabs.com/documents/public/application-notes/AN433-CP2110-4-Interface-Specification.pdf) — CP2110/4 HID-to-UART interface specification
+- [UT61B+/D+/E+ | User Manual](https://meters.uni-trend.com/download/ut61b-d-e-user-manual/) - UNIT-T user manual
