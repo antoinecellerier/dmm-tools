@@ -1,7 +1,8 @@
 mod capture;
 mod format;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 use console::style;
 use log::{error, info};
 use std::io::Write;
@@ -57,6 +58,18 @@ enum Cmd {
         /// Interval between requests in milliseconds
         #[arg(long, default_value = "500")]
         interval_ms: u64,
+    },
+    /// Generate shell completions
+    #[command(after_help = "\
+Install completions for your shell:
+  bash:  ut61eplus completions bash > ~/.local/share/bash-completion/completions/ut61eplus
+  zsh:   ut61eplus completions zsh > ~/.zfunc/_ut61eplus
+  fish:  ut61eplus completions fish > ~/.config/fish/completions/ut61eplus.fish
+  pwsh:  ut61eplus completions powershell >> $PROFILE")]
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Option<Shell>,
     },
     /// Guided protocol capture for bug reports and verification
     Capture {
@@ -125,6 +138,24 @@ fn main() {
             output,
             count,
         } => cmd_read(interval_ms, format, output, count),
+        Cmd::Completions { shell } => match shell {
+            Some(shell) => {
+                clap_complete::generate(
+                    shell,
+                    &mut Cli::command(),
+                    "ut61eplus",
+                    &mut std::io::stdout(),
+                );
+                Ok(())
+            }
+            None => {
+                let _ = Cli::command()
+                    .find_subcommand_mut("completions")
+                    .unwrap()
+                    .print_long_help();
+                Ok(())
+            }
+        },
         Cmd::Command { action } => cmd_command(action),
         Cmd::Debug { count, interval_ms } => cmd_debug(count, interval_ms),
         Cmd::Capture {
@@ -526,6 +557,17 @@ mod tests {
         let output = String::from_utf8(buf).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed["value"], "OL");
+    }
+
+    #[test]
+    fn clap_parse_completions() {
+        let cli = Cli::try_parse_from(["ut61eplus", "completions", "bash"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Cmd::Completions {
+                shell: Some(Shell::Bash)
+            }
+        ));
     }
 
     #[test]
