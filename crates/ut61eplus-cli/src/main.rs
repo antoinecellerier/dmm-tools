@@ -12,9 +12,20 @@ use std::time::Duration;
 use ut61eplus_lib::command::Command;
 use ut61eplus_lib::measurement::MeasuredValue;
 
+fn version_string() -> &'static str {
+    let version = env!("CARGO_PKG_VERSION");
+    let hash = env!("GIT_HASH");
+    if version.contains("-dev") {
+        Box::leak(format!("{version} ({hash})").into_boxed_str())
+    } else {
+        version
+    }
+}
+
 #[derive(Parser)]
 #[command(
     name = "ut61eplus",
+    version = version_string(),
     about = "UNI-T UT61E+ multimeter tool",
     after_help = "Set NO_COLOR=1 to disable colored output.\n\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]

@@ -503,7 +503,7 @@ impl App {
 
     fn show_top_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("UT61E+").strong());
+            ui.label(RichText::new(crate::version_label()).strong());
             ui.separator();
 
             match &self.connection_state {

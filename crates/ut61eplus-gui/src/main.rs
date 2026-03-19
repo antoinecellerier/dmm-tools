@@ -5,6 +5,16 @@ mod recording;
 mod settings;
 mod stats;
 
+pub fn version_label() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    let hash = env!("GIT_HASH");
+    if version.contains("-dev") {
+        format!("UT61E+ v{version} ({hash})")
+    } else {
+        format!("UT61E+ v{version}")
+    }
+}
+
 fn main() -> eframe::Result<()> {
     env_logger::init();
 
