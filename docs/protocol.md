@@ -152,8 +152,8 @@ Verified against real device and reference implementations.
 | 0x01 | AC mV | Yes |
 | 0x02 | DC V | Yes |
 | 0x03 | DC mV | — |
-| 0x04 | Hz (Frequency) | Yes |
-| 0x05 | Duty Cycle % | — |
+| 0x04 | Hz (Frequency) | Yes (V~ and mA via SELECT2) |
+| 0x05 | Duty Cycle % | Yes (mA via SELECT2) |
 | 0x06 | Ω (Resistance) | Yes |
 | 0x07 | Continuity | Yes |
 | 0x08 | Diode | Yes |
@@ -164,16 +164,16 @@ Verified against real device and reference implementations.
 | 0x0D | AC µA | — |
 | 0x0E | DC mA | Yes |
 | 0x0F | AC mA | — |
-| 0x10 | DC A | — |
-| 0x11 | AC A | — |
+| 0x10 | DC A | Yes (A⎓ dial) |
+| 0x11 | AC A | Yes (A⎓ + SELECT) |
 | 0x12 | hFE | Yes |
 | 0x13 | Live | — |
 | 0x14 | NCV | Yes |
-| 0x15 | LoZ V | — |
-| 0x16 | AC+DC A | — |
-| 0x17 | AC+DC/DC A | — |
-| 0x18 | LPF V | — |
-| 0x19 | AC+DC V | — |
+| 0x15 | LoZ V | — (UT61D+ only?) |
+| 0x16 | LoZ V (2) | — (not on UT61E+; vendor SW names it "LozV") |
+| 0x17 | LPF | — (not on UT61E+; vendor SW names it "LPF") |
+| 0x18 | LPF V | Yes (V~ + SELECT; no signal needed) |
+| 0x19 | AC+DC V | Yes (V⎓ + SELECT; no signal needed) |
 | 0x1A | LPF mV | — |
 | 0x1B | AC+DC mV | — |
 | 0x1C | LPF A | — |
@@ -204,9 +204,6 @@ The configured delay adds on top of the ~100ms wire round-trip time.
 - **Timeout vs disconnect:** `HidDevice::read_timeout()` returns 0 on timeout, error on USB disconnect — handle both cases.
 - **Request-response only:** The meter does not stream data — each reading requires sending the `0x5E` request command.
 - **Mode byte reflects active unit, not dial position:** On DC V dial with auto-range, the meter reports mode 0x02 (DCV) even when showing mV-scale values. The range byte determines the actual scale.
-- **NCV shares mode byte with Hz:** Both NCV and Hz report mode 0x04. Distinguish by display content ("EF" = no NCV detection).
-- **hFE shares mode byte with DCV:** Both report mode 0x02. Distinguish by dial position (not available via protocol — application must track).
-- **A mode shares mode byte with ACV:** DC A reports mode 0x00 (same as ACV) with range 0x01. Must use context to distinguish.
 - **AUTO flag has inverted logic:** Flag byte 12 bit 2 clear = auto-range ON.
 - **SELECT2 and Peak commands are context-dependent:** They beep (acknowledged) but only produce visible effects in specific modes (e.g., SELECT2 on AC V for frequency display).
 

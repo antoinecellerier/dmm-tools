@@ -399,9 +399,7 @@ impl DeviceTable for Ut61ePlusTable {
             // Derived modes share tables with their base mode
             Mode::AcDcV | Mode::LpfV | Mode::LozV => self.lookup(&self.dc_v, range),
             Mode::AcDcMv | Mode::LpfMv => self.lookup(&self.dc_mv, range),
-            Mode::AcDcA | Mode::AcDcDcA | Mode::AcDcA2 | Mode::LpfA => {
-                self.lookup(&self.dc_a, range)
-            }
+            Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => self.lookup(&self.dc_a, range),
             // Modes without range tables
             Mode::Ncv | Mode::Hfe | Mode::Live | Mode::Inrush => None,
         }
@@ -632,7 +630,7 @@ mod tests {
     #[test]
     fn derived_amp_modes_use_dca_table() {
         let t = table();
-        for mode in [Mode::AcDcA, Mode::AcDcDcA, Mode::AcDcA2, Mode::LpfA] {
+        for mode in [Mode::LozV2, Mode::Lpf, Mode::AcDcA2, Mode::LpfA] {
             let r = t.range_info(mode, 0).unwrap();
             assert_eq!(r.label, "20A", "{mode:?} should use DCA table");
             assert_eq!(r.unit, "A");

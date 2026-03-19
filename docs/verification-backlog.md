@@ -7,19 +7,24 @@ Items that need real components or specific setups to verify.
 ### Modes not yet tested with real signals
 - **DC mV (0x03):** Needs small DC voltage source. Currently only tested as auto-range from DC V.
 - **AC µA (0x0D):** Needs AC current source.
-- **AC mA (0x0F):** Needs AC current source.
-- **DC A (0x10):** Verified with bench PSU (~100mA). Range byte=0x01 for 20A range.
-- **AC A (0x11):** Needs high-current circuit.
+- **AC mA (0x0F):** Mode byte verified via SELECT on mA dial. Needs AC current source for value verification.
+- **AC A (0x11):** Mode byte verified via SELECT on A⎓ dial. Needs high-current AC for value verification.
 - **Temperature °C (0x0A):** Needs K-type thermocouple.
 - **Temperature °F (0x0B):** Needs K-type thermocouple.
-- **Duty Cycle % (0x05):** Needs PWM signal source.
-- **AC+DC V (0x19):** Needs AC+DC signal. SELECT cycles to it on V⎓ dial.
-- **LPF V (0x18):** Low pass filter mode. Needs AC signal.
-- **LPF mV (0x1A), LPF A (0x1C):** Need appropriate signals.
-- **AC+DC mV (0x1B), AC+DC A (0x16, 0x17, 0x1D):** Need appropriate signals.
+- **Duty Cycle % (0x05):** Mode byte verified via SELECT2 on AC mA. Needs PWM signal for value verification.
+- **LPF mV (0x1A), LPF A (0x1C):** Need appropriate signals and dial positions.
+- **AC+DC mV (0x1B), AC+DC A (0x1D):** Need appropriate signals and dial positions.
 - **Live (0x13):** Unknown purpose.
-- **LoZ V (0x15):** Low impedance ACV (UT61D+ feature, may not apply to E+).
 - **Inrush (0x1E):** Inrush current mode.
+
+### Modes not reachable on UT61E+
+These modes exist in the vendor software but could not be reached on the
+UT61E+ via any dial position + SELECT/SELECT2 combination. They are likely
+UT61D+-only or other-model features. Verified 2026-03-19 by exhaustively
+cycling SELECT and SELECT2 on V~, V=, mA, and A⎓ dial positions.
+- **LoZ V (0x15):** Low impedance ACV (UT61D+ feature).
+- **0x16 (LoZ V 2):** Vendor software names it "LozV". Not reachable on UT61E+.
+- **0x17 (LPF):** Vendor software names it "LPF". Not reachable on UT61E+.
 
 ### CP2110 feature reports (AN434)
 - (none pending)
@@ -34,13 +39,11 @@ Items that need real components or specific setups to verify.
 - Range byte values for each mode need verification against real device at each range.
 - DC mV mode (0x03) ranges not verified — does it share tables with DC V range 0?
 
-### Mode byte collisions
-Three mode byte values are shared between different functions:
-- **0x00:** AC V and DC A — need range byte or context to distinguish.
-- **0x02:** DC V and hFE — no protocol-level distinction known.
-- **0x04:** Hz and NCV — display content ("EF") distinguishes NCV.
-
-These collisions need further investigation. The reference implementations don't address them.
+### Mode byte collisions — RESOLVED
+Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
+were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
+Confirmed by real device captures and independently by vendor software
+decompilation (see `references/protocol-comparison.md`).
 
 ## Completed Verification
 
@@ -58,7 +61,14 @@ These collisions need further investigation. The reference implementations don't
 | DC mA | 0x0E | Verified (bench PSU: 10mA→22mA range, 100mA→220mA range) |
 | DC A | 0x10 | Verified (bench PSU: 100mA, range byte=0x01 for 20A) |
 | hFE | 0x12 | Verified (mode byte capture) |
+| AC mA | 0x0F | Verified (mA + SELECT) |
+| DC A | 0x10 | Verified (A⎓ dial, bench PSU ~100mA, range byte=0x01) |
+| AC A | 0x11 | Verified (A⎓ + SELECT) |
 | NCV | 0x14 | Verified (EF display) |
+| LPF V | 0x18 | Verified (V~ + SELECT, mode byte capture) |
+| AC+DC V | 0x19 | Verified (V⎓ + SELECT, mode byte capture) |
+| Duty Cycle % | 0x05 | Verified (AC mA + SELECT2, mode byte capture) |
+| Mode collisions | — | Disproven: NCV=0x14, hFE=0x12, DCA=0x10 are unique (vendor RE + device) |
 | HOLD flag | bit1 of byte11 | Verified (physical + remote) |
 | REL flag | bit0 of byte11 | Verified (physical + remote) |
 | MIN flag | bit2 of byte11 | Verified (physical) |
