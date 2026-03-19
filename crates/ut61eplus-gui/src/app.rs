@@ -11,6 +11,22 @@ use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use crate::stats::Stats;
 
+/// Map a device family setting value to its user-facing display name.
+fn device_display_name(value: &str) -> &'static str {
+    match value {
+        "ut61eplus" => "UT61E+",
+        "ut61b+" => "UT61B+",
+        "ut61d+" => "UT61D+",
+        "ut161b" => "UT161B",
+        "ut161d" => "UT161D",
+        "ut161e" => "UT161E",
+        "ut8803" => "UT8803",
+        "ut171" => "UT171",
+        "ut181a" => "UT181A",
+        _ => "DMM",
+    }
+}
+
 /// Messages from the background thread to the UI.
 pub enum DmmMessage {
     Measurement(Measurement),
@@ -58,6 +74,8 @@ pub struct App {
     stop_tx: Option<mpsc::Sender<()>>,
     cmd_tx: Option<mpsc::Sender<String>>,
     first_frame: bool,
+    /// Reconnect on next frame (device selection changed while connected).
+    needs_reconnect: bool,
     /// OS default pixels_per_point, captured on first frame.
     os_ppp: Option<f32>,
     /// Last applied theme (to avoid re-setting every frame).
@@ -95,6 +113,7 @@ impl App {
             stop_tx: None,
             cmd_tx: None,
             first_frame: true,
+            needs_reconnect: false,
             os_ppp: None,
             applied_theme: None,
             recording_height: 120.0,
@@ -263,7 +282,8 @@ impl App {
                             ctx_clone.request_repaint();
                             if consecutive_timeouts == 5 {
                                 let _ = msg_tx.send(DmmMessage::Error(
-                                    "No response from meter — is USB mode enabled?".to_string(),
+                                    "No response from meter — check device selection and USB mode"
+                                        .to_string(),
                                 ));
                                 ctx_clone.request_repaint();
                             }
@@ -484,6 +504,11 @@ impl App {
             ui.add_space(4.0);
             let dots = ".".repeat((self.waiting_timeouts as usize % 4) + 1);
             ui.label(RichText::new(format!("Waiting for meter{dots}")).color(warn_color));
+            ui.label(
+                RichText::new("Check that the correct device is selected in Settings (\u{2699})")
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
             return;
         }
 
@@ -522,24 +547,33 @@ impl App {
         } else {
             // Dongle found but meter not responding
             ui.label(RichText::new("No response from meter").color(warn_color));
+            let device_label = device_display_name(&self.settings.device_family);
+            let family = self
+                .settings
+                .device_family
+                .parse::<DeviceFamily>()
+                .unwrap_or(DeviceFamily::Ut61EPlus);
+            let instructions = format!(
+                "The USB adapter is connected but the meter \n\
+                 isn't responding ({device_label} selected).\n\
+                 \n\
+                 If this is the wrong device, change it in Settings (\u{2699}).\n\
+                 Otherwise, enable data transmission:\n\
+                 {}",
+                family.activation_instructions()
+            );
             ui.label(
-                RichText::new(
-                    "The USB adapter is connected but the meter \n\
-                     isn't responding. To enable data transmission:\n\
-                     1. Insert the USB module into the meter\n\
-                     2. Turn the meter on\n\
-                     3. Long press the USB/Hz button\n\
-                     4. The S icon appears on the LCD",
-                )
-                .small()
-                .color(ui.visuals().weak_text_color()),
+                RichText::new(instructions)
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
             );
         }
     }
 
     fn show_top_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new(crate::version_label()).strong());
+            let device_label = device_display_name(&self.settings.device_family);
+            ui.label(RichText::new(device_label).strong());
             ui.separator();
 
             match &self.connection_state {
@@ -616,6 +650,11 @@ impl App {
                 ui.hyperlink_to(
                     "Help / GitHub",
                     "https://github.com/antoinecellerier/dmm-tools",
+                );
+                ui.label(
+                    RichText::new(crate::version_label())
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
                 );
                 // Show toast message (export result, etc.)
                 if let Some((msg, is_error, _)) = &self.toast {
@@ -757,12 +796,11 @@ impl App {
             }
             if changed {
                 self.settings.save();
+                // Auto-reconnect if currently connected
+                if self.connection_state != ConnectionState::Disconnected {
+                    self.needs_reconnect = true;
+                }
             }
-            ui.label(
-                RichText::new("(requires reconnect)")
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
         });
 
         ui.horizontal_wrapped(|ui| {
@@ -1069,6 +1107,12 @@ impl eframe::App for App {
         self.handle_keyboard_zoom(ctx);
         self.drain_messages();
         self.poll_export_result();
+
+        // Auto-reconnect after device selection change
+        if self.needs_reconnect {
+            self.needs_reconnect = false;
+            self.connect(ctx);
+        }
 
         // Expire toast after 4 seconds
         if let Some((_, _, when)) = &self.toast

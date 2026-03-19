@@ -23,10 +23,40 @@ Set `NO_COLOR=1` to disable colored output.
 
 ## Global Options
 
-| Option | Description |
-|---|---|
-| `-h, --help` | Print help |
-| `-V, --version` | Print version |
+| Option | Default | Description |
+|---|---|---|
+| `--device <FAMILY>` | `ut61eplus` | Device family to connect to. See [Device Families](#device-families) below. |
+| `-h, --help` | | Print help |
+| `-V, --version` | | Print version |
+
+### Device Families
+
+The `--device` flag selects which protocol to use. Accepted values and aliases:
+
+| Value | Aliases | Description |
+|---|---|---|
+| `ut61eplus` | `ut61e+`, `ut61e`, `ut61b+`, `ut61bplus`, `ut61d+`, `ut61dplus`, `ut161b`, `ut161d`, `ut161e`, `ut161` | UT61E+, UT61B+, UT61D+, UT161 series (default, verified) |
+| `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
+| `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
+| `ut181a` | `ut181` | UT181A (experimental) |
+
+Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
+from vendor software and have not been verified against real hardware. When connecting to
+an experimental device, the CLI prints a yellow warning. Please report findings at
+https://github.com/antoinecellerier/dmm-tools.
+
+**Examples:**
+
+```bash
+# Default (UT61E+ family)
+ut61eplus read
+
+# Connect as UT8803
+ut61eplus --device ut8803 read
+
+# Connect as UT181A
+ut61eplus --device ut181a info
+```
 
 ## Commands
 

@@ -5,13 +5,14 @@ mod recording;
 mod settings;
 mod stats;
 
+/// Version string for the app (shown in top bar, right side).
 pub fn version_label() -> String {
     let version = env!("CARGO_PKG_VERSION");
     let hash = env!("GIT_HASH");
     if version.contains("-dev") {
-        format!("UT61E+ v{version} ({hash})")
+        format!("v{version} ({hash})")
     } else {
-        format!("UT61E+ v{version}")
+        format!("v{version}")
     }
 }
 
@@ -26,7 +27,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "UT61E+ Multimeter",
+        "dmm-tools",
         options,
         Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
     )

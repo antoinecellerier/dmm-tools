@@ -49,6 +49,39 @@ impl std::fmt::Display for DeviceFamily {
     }
 }
 
+impl DeviceFamily {
+    /// User-facing instructions for enabling data transmission on this device.
+    pub fn activation_instructions(&self) -> &'static str {
+        match self {
+            DeviceFamily::Ut61EPlus => {
+                "\
+1. Insert the USB module into the meter
+2. Turn the meter on
+3. Long press the USB/Hz button
+4. The S icon appears on the LCD"
+            }
+            DeviceFamily::Ut8803 => {
+                "\
+1. Connect the USB cable to the meter
+2. Turn the meter on"
+            }
+            DeviceFamily::Ut171 => {
+                "\
+1. Connect the USB cable to the meter
+2. Turn the meter on
+3. Go to SETUP -> Communication -> ON"
+            }
+            DeviceFamily::Ut181a => {
+                "\
+1. Connect the USB cable to the meter
+2. Turn the meter on
+3. Go to SETUP -> Communication -> ON
+Note: this setting resets on power cycle."
+            }
+        }
+    }
+}
+
 impl std::str::FromStr for DeviceFamily {
     type Err = String;
 

@@ -943,6 +943,7 @@ pub fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
     mut dmm: ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    family: ut61eplus_lib::protocol::DeviceFamily,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());
@@ -963,11 +964,10 @@ pub fn cmd_capture(
                             .yellow()
                             .bold()
                     );
-                    eprintln!("To enable data transmission on the UT61E+:");
-                    eprintln!("  1. Insert the USB module into the meter");
-                    eprintln!("  2. Turn the meter on");
-                    eprintln!("  3. Long press the USB/Hz button");
-                    eprintln!("  4. The S icon appears on the LCD");
+                    eprintln!("To enable data transmission:");
+                    for line in family.activation_instructions().lines() {
+                        eprintln!("  {line}");
+                    }
                     eprintln!();
                     eprintln!("Then run this command again.");
                     return Err("meter not responding".into());

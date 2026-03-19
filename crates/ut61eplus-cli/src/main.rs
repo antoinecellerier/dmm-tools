@@ -27,11 +27,26 @@ fn version_string() -> &'static str {
     name = "ut61eplus",
     version = version_string(),
     about = "UNI-T UT61E+ multimeter tool",
-    after_help = "Set NO_COLOR=1 to disable colored output.\n\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
+    after_help = "Run with --help for the full list of supported devices.\n\nSet NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools",
+    after_long_help = "Set NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Cli {
-    /// Device family to connect to
-    #[arg(long, default_value = "ut61eplus")]
+    /// Device family [ut61eplus, ut8803, ut171, ut181a]
+    #[arg(
+        long,
+        default_value = "ut61eplus",
+        long_help = "\
+Device family to connect to.
+
+Families:
+  ut61eplus  UT61E+, UT61B+, UT61D+, UT161B/D/E (default)
+  ut8803     UT8803, UT8803E (experimental)
+  ut171      UT171A, UT171B, UT171C (experimental)
+  ut181a     UT181A (experimental)
+
+Also accepts model names directly: ut61b+, ut161d, ut171a, etc.
+Quote names with special characters: --device 'ut61e+'"
+    )]
     device: String,
 
     #[command(subcommand)]
@@ -40,7 +55,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// List connected UT61E+ devices
+    /// List connected CP2110 devices
     List,
     /// Connect and print device info
     Info,
@@ -161,7 +176,8 @@ fn main() {
                 capture::list_steps();
                 Ok(())
             } else {
-                open_with_help(family).and_then(|dmm| capture::cmd_capture(output, steps, dmm))
+                open_with_help(family)
+                    .and_then(|dmm| capture::cmd_capture(output, steps, dmm, family))
             }
         }
     };
@@ -192,8 +208,10 @@ fn open_with_help(
                 );
                 eprintln!(
                     "{}",
-                    style("Please report findings at https://github.com/antoinecellerier/dmm-tools/issues")
-                        .yellow()
+                    style(
+                        "Please report findings at https://github.com/antoinecellerier/dmm-tools"
+                    )
+                    .yellow()
                 );
             }
             Ok(dmm)
@@ -227,7 +245,7 @@ fn open_with_help(
 fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     let devices = ut61eplus_lib::list_devices()?;
     if devices.is_empty() {
-        eprintln!("{}", style("No UT61E+ devices found.").yellow());
+        eprintln!("{}", style("No devices found.").yellow());
         eprintln!("Check that the CP2110 USB adapter is plugged in.");
         #[cfg(target_os = "linux")]
         {
@@ -330,9 +348,12 @@ fn cmd_read(
     let mut stats = ReadStats::default();
     let mut i = 0usize;
 
+    let mut consecutive_timeouts: u32 = 0;
+
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match dmm.request_measurement() {
             Ok(m) => {
+                consecutive_timeouts = 0;
                 if let MeasuredValue::Normal(v) = &m.value {
                     stats.push(*v);
                 }
@@ -341,7 +362,16 @@ fn cmd_read(
                 i += 1;
             }
             Err(ut61eplus_lib::error::Error::Timeout) => {
+                consecutive_timeouts += 1;
                 log::warn!("measurement timeout, retrying");
+                if consecutive_timeouts == 5 {
+                    eprintln!(
+                        "{} No response from meter. Check that --device {} is correct and that data transmission is enabled.",
+                        style("Warning:").yellow(),
+                        family,
+                    );
+                    eprintln!("{}", style(family.activation_instructions()).dim());
+                }
             }
             Err(e) => {
                 return Err(e.into());
