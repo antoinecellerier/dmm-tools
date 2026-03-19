@@ -1,5 +1,9 @@
 # dmm-tools
 
+[![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases)
+[![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
+
 Rust tools for communicating with digital multimeters over USB. Currently supports the **UNI-T UT61E+** via its CP2110 HID bridge.
 
 Includes a CLI for reading, recording, and remote-controlling the meter, and a GUI with real-time graphing.
@@ -66,9 +70,16 @@ Pre-built binaries for Linux and Windows are available on the [Releases](https:/
 - **Windows:** [CP2110 driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers) from Silicon Labs
 - UNI-T UT61E+ with USB adapter plugged in
 
-### Build from source
+### Install from source
 
-Requires the Rust toolchain (stable, 2024 edition).
+Requires the Rust toolchain (stable, 2024 edition). On Linux, also requires `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora).
+
+```sh
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-cli
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-gui
+```
+
+Or clone and build the whole workspace:
 
 ```sh
 cargo build --workspace
