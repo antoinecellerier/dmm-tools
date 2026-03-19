@@ -52,13 +52,11 @@ Sent Hold
 
 ## Supported devices
 
-| Model | Status | Notes |
-|-------|--------|-------|
-| **UT61E+** | Tested | 22000-count, full feature support |
-| UT61D+ | Probably works | 6000-count, adds temperature, shares manual/USB module |
-| UT61B+ | Probably works | 6000-count, base model, shares manual/USB module |
+Tested with the **UT61E+**. Should also work with the **UT61B+**, **UT61D+**, **UT161B/D/E**, and **UT60BT** — all use the same CP2110 USB protocol with different mode/range tables.
 
-All three models use the same CP2110 USB adapter and communication protocol. If you have a UT61B+ or UT61D+, please [submit a capture](CONTRIBUTING.md#protocol-captures) so we can confirm support.
+If you have one of these models, please [submit a capture](CONTRIBUTING.md#protocol-captures) so we can confirm support.
+
+See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list, future candidates, and reference implementations.
 
 ## Quick start
 
