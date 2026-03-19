@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - name: Linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: dmm-tools-linux-x86_64
+            ext: tar.gz
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: dmm-tools-windows-x86_64
+            ext: zip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: >
+          sudo apt-get update && sudo apt-get install -y
+          libudev-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev
+          libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+
+      - name: Build
+        run: cargo build --workspace --release --target ${{ matrix.target }}
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p ${{ matrix.artifact }}
+          cp target/${{ matrix.target }}/release/ut61eplus ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/ut61eplus-gui ${{ matrix.artifact }}/
+          cp README.md LICENSE ${{ matrix.artifact }}/
+          cp -r udev ${{ matrix.artifact }}/
+          cp -r docs ${{ matrix.artifact }}/
+          tar czf ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p ${{ matrix.artifact }}
+          cp target/${{ matrix.target }}/release/ut61eplus.exe ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/ut61eplus-gui.exe ${{ matrix.artifact }}/
+          cp README.md LICENSE ${{ matrix.artifact }}/
+          cp -r docs ${{ matrix.artifact }}/
+          7z a ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.${{ matrix.ext }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/dmm-tools-linux-x86_64/*.tar.gz
+            artifacts/dmm-tools-windows-x86_64/*.zip
