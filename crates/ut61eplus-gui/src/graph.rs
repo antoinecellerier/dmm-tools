@@ -355,8 +355,7 @@ impl Graph {
                 let field_width = 50.0;
                 let changed_min = ui
                     .add(
-                        egui::TextEdit::singleline(&mut self.y_min_text)
-                            .desired_width(field_width),
+                        egui::TextEdit::singleline(&mut self.y_min_text).desired_width(field_width),
                     )
                     .changed();
                 ui.label(
@@ -366,8 +365,7 @@ impl Graph {
                 );
                 let changed_max = ui
                     .add(
-                        egui::TextEdit::singleline(&mut self.y_max_text)
-                            .desired_width(field_width),
+                        egui::TextEdit::singleline(&mut self.y_max_text).desired_width(field_width),
                     )
                     .changed();
                 if changed_min && let Ok(v) = self.y_min_text.parse::<f64>() {
@@ -416,9 +414,7 @@ impl Graph {
             }
             if self.show_ref_line {
                 let changed = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.ref_line_text).desired_width(80.0),
-                    )
+                    .add(egui::TextEdit::singleline(&mut self.ref_line_text).desired_width(80.0))
                     .changed();
                 if changed {
                     self.ref_line_values = self
