@@ -66,16 +66,17 @@ them requires a separate protocol implementation.
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
 | **UT8803 / UT8803E** | UNI-T | Bench DMM | `10C4:EA80` | RE complete | 21-byte AB CD frames, streaming after 0x5A trigger |
-| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | Documented | Different wire format: 0xAC header, 8-byte frames |
-| **UT632 / UT632N** | UNI-T | Bench DMM | `1A86:E008` | Documented | Same UCI protocol, different USB chip (QinHeng) |
-| **UT803 / UT803N** | UNI-T | Bench DMM | `1A86:E008` | Documented | Same UCI protocol, different USB chip (QinHeng) |
-| **UT804 / UT804N** | UNI-T | Bench DMM | `1A86:E008` | Documented | Same UCI protocol, different USB chip (QinHeng) |
-| **UT805A / UT805N** | UNI-T | Bench DMM | Serial | Documented | Same UCI protocol, RS232 (9600 8N1) |
+| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | RE complete | 0xAC header, 8-byte BCD frames, no checksum |
+| **UT632 / UT632N** | UNI-T | Bench DMM | `1A86:E008` | Documented | QinHeng HID with auto-detect (0xAC or 0xABCD) |
+| **UT803 / UT803N** | UNI-T | Bench DMM | `1A86:E008` | Documented | QinHeng HID with auto-detect (0xAC or 0xABCD) |
+| **UT804 / UT804N** | UNI-T | Bench DMM | `1A86:E008` | Documented | QinHeng HID with auto-detect, range table in programming manual |
+| **UT805A / UT805N** | UNI-T | Bench DMM | Serial | Documented | Serial (9600, DATA:7 per manual), range table in programming manual |
 
 ### Independent research findings
 
-Our clean-room RE of the UT8803 protocol is documented in
-[docs/research/ut8803/](research/ut8803/):
+Our clean-room RE of the UCI bench family is documented in
+[docs/research/ut8803/](research/ut8803/) and
+[docs/research/uci-bench-family/](research/uci-bench-family/):
 
 - **Programming manual** (official UNI-T document): fully specifies the
   UCI API including DMFRM struct, 64-bit flags word, functional/position
@@ -89,6 +90,10 @@ Our clean-room RE of the UT8803 protocol is documented in
   21-byte frames.
 - **UT632/UT803/UT804**: share the UCI protocol but use QinHeng HID
   (VID 0x1A86, PID 0xE008) instead of CP2110.
+- **Extended UCI family analysis** ([approach](research/uci-bench-family/reverse-engineering-approach.md)):
+  complete UT8802 wire protocol (0xAC 8-byte BCD frames), QinHeng HID
+  init sequences, frame auto-detection, serial transport analysis, and
+  per-model range tables from the programming manual.
 
 ### Cross-correlation with community sources
 
@@ -123,10 +128,37 @@ separate implementation efforts.
 
 | Model | Brand | Type | Protocol | Reference |
 |-------|-------|------|----------|-----------|
-| **UT171A/B/C** | UNI-T | Industrial DMM | 0xABCD header, LE floats, proprietary Unitrend format | [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110), [smartypies.com](http://www.smartypies.com/projects/ut171a-data-reader-on-linux/) |
-| **UT181A** | UNI-T | Logging DMM | Reversed 0xCDAB header, float32 values, complex command structure | [antage/ut181a](https://github.com/antage/ut181a) (Rust, with [protocol docs](https://github.com/antage/ut181a/blob/master/Protocol.md)), [loblab/ut181a](https://github.com/loblab/ut181a) (C++) |
+| **UT171A/B/C** | UNI-T | Industrial DMM | RE complete: 0xABCD header, 1-byte length, LE float32, 26 modes, data logging | [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110), [smartypies.com](http://www.smartypies.com/projects/ut171a-data-reader-on-linux/) |
+| **UT181A** | UNI-T | Logging DMM | 0xABCD header¹, 2-byte LE length, float32 values, 97 modes, recording | [antage/ut181a](https://github.com/antage/ut181a) (Rust, with [protocol docs](https://github.com/antage/ut181a/blob/master/Protocol.md)), [loblab/ut181a](https://github.com/loblab/ut181a) (C++), [sigrok](https://sigrok.org/wiki/UNI-T_UT181A) |
 | **UT612** | UNI-T | LCR meter | ES51919 chipset, TX-only | [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
 | **Voltcraft VC-890** | Voltcraft (UNI-T rebrand) | DMM | ES51997P chipset, own protocol | [sigrok wiki](https://sigrok.org/wiki/Voltcraft_VC-890) |
+
+¹ The UT181A wire bytes are 0xAB, 0xCD -- **same as UT61E+**. Some sources
+describe the header as "0xCDAB" because the UT181A protocol reads these bytes
+as a little-endian uint16 (0xCDAB), while UT61E+ interprets them big-endian
+(0xABCD). The actual difference is in the length field (2 bytes LE vs 1 byte),
+checksum (LE vs BE), and value encoding (float32 vs ASCII).
+
+### Independent research findings
+
+Our research into the UT171 and UT181A protocols is documented in
+[docs/research/ut171/](research/ut171/) and
+[docs/research/ut181/](research/ut181/):
+
+- **UT171**: Clean-room RE from official vendor software
+  ([approach](research/ut171/reverse-engineering-approach.md)). Ghidra
+  decompilation of UT171C.exe (881K lines) and SLABHIDtoUART.dll (13K
+  lines) reveals: 26 mode bytes mapped, complete flag byte decoding
+  (AUTO inverted bit 6, HOLD bit 7), data logging commands
+  (0x01/0x51/0x52/0xFF), range byte is raw 1-based index, mode
+  transition command table, and full CP2110 feature report map (20
+  report IDs). Cross-referenced against
+  [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110).
+- **UT181A**: Fully documented by the community (3 independent
+  implementations agree on every detail). 97 measurement modes, complete
+  recording/data logging protocol, COMP mode. The
+  [antage/ut181a Protocol.md](https://github.com/antage/ut181a/blob/master/Protocol.md)
+  is the definitive reference.
 
 ## USB cables
 
