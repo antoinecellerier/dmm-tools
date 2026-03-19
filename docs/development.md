@@ -1,5 +1,15 @@
 # Development
 
+## Setup
+
+After cloning, install the pre-commit hooks:
+
+```sh
+ln -sf ../../git-hooks/pre-commit .git/hooks/pre-commit
+```
+
+This runs `cargo fmt --check`, `cargo clippy`, and `cargo test` before each commit.
+
 ## Running Tests
 
 ```sh

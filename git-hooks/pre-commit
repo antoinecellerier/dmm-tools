@@ -1,0 +1,12 @@
+#!/bin/sh
+# Pre-commit hook: ensure code passes fmt, clippy, and tests before committing.
+
+set -e
+
+echo "pre-commit: checking formatting..."
+cargo fmt --check
+echo "pre-commit: running clippy..."
+cargo clippy --workspace -- -D warnings
+echo "pre-commit: running tests..."
+cargo test --workspace
+echo "pre-commit: all checks passed."
