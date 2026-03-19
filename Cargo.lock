@@ -3720,7 +3720,7 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "ut61eplus-cli"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "chrono",
  "clap",
@@ -3737,7 +3737,7 @@ dependencies = [
 
 [[package]]
 name = "ut61eplus-gui"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "chrono",
  "csv",
@@ -3754,7 +3754,7 @@ dependencies = [
 
 [[package]]
 name = "ut61eplus-lib"
-version = "0.1.0"
+version = "0.2.0-dev"
 dependencies = [
  "env_logger",
  "hidapi",
