@@ -3,6 +3,8 @@ use egui_plot::{AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, Points, VL
 use std::collections::VecDeque;
 use std::time::Instant;
 
+use crate::theme::ThemeColors;
+
 /// Maximum number of points to keep in the history buffer.
 const MAX_POINTS: usize = 10_000;
 
@@ -315,11 +317,7 @@ impl Graph {
             ui.add_space(6.0);
 
             let live_color = if self.live {
-                if ui.visuals().dark_mode {
-                    egui::Color32::from_rgb(60, 180, 75)
-                } else {
-                    egui::Color32::from_rgb(0, 130, 30)
-                }
+                ThemeColors::new(ui.visuals().dark_mode).live_green()
             } else {
                 ui.visuals().weak_text_color()
             };
@@ -451,11 +449,7 @@ impl Graph {
                         _ => "---".to_string(),
                     };
                     let unit = &self.current_unit;
-                    let delta_color = if dark {
-                        egui::Color32::from_rgb(255, 180, 100)
-                    } else {
-                        egui::Color32::from_rgb(180, 80, 0)
-                    };
+                    let delta_color = ThemeColors::new(dark).graph_cursor_delta();
                     ui.label(
                         egui::RichText::new(format!("ΔT={dt:.2} s  ΔV={dv} {unit}"))
                             .color(delta_color)
@@ -522,49 +516,16 @@ impl Graph {
         let gap_ranges = &self.cached_gaps;
         let (view_min, view_max) = self.view_bounds();
 
-        let dark = ui.visuals().dark_mode;
-
-        // Theme-aware colors — darker on light theme for contrast
-        let line_color = if dark {
-            egui::Color32::from_rgb(220, 120, 120)
-        } else {
-            egui::Color32::from_rgb(180, 40, 40)
-        };
-        let gap_color = if dark {
-            egui::Color32::from_rgb(220, 80, 80)
-        } else {
-            egui::Color32::from_rgba_premultiplied(200, 0, 0, 180)
-        };
-        let mean_color = if dark {
-            egui::Color32::from_rgb(100, 200, 100)
-        } else {
-            egui::Color32::from_rgb(0, 120, 0)
-        };
-        let ref_color = if dark {
-            egui::Color32::from_rgb(200, 200, 100)
-        } else {
-            egui::Color32::from_rgb(140, 100, 0)
-        };
-        let cross_color = if dark {
-            egui::Color32::from_rgb(255, 220, 100)
-        } else {
-            egui::Color32::from_rgb(150, 100, 0)
-        };
-        let cursor_color = if dark {
-            egui::Color32::from_rgb(255, 180, 100)
-        } else {
-            egui::Color32::from_rgb(180, 70, 0)
-        };
-        let cursor_color_dim = if dark {
-            egui::Color32::from_rgba_premultiplied(255, 180, 100, 80)
-        } else {
-            egui::Color32::from_rgb(180, 70, 0)
-        };
-        let env_color = if dark {
-            egui::Color32::from_rgba_premultiplied(100, 150, 200, 80)
-        } else {
-            egui::Color32::from_rgb(0, 60, 160)
-        };
+        // Theme-aware colors from shared palette
+        let tc = ThemeColors::new(ui.visuals().dark_mode);
+        let line_color = tc.graph_line();
+        let gap_color = tc.graph_gap();
+        let mean_color = tc.graph_mean();
+        let ref_color = tc.graph_ref();
+        let cross_color = tc.graph_crossing();
+        let cursor_color = tc.graph_cursor();
+        let cursor_color_dim = tc.graph_cursor_dim();
+        let env_color = tc.graph_envelope();
 
         let can_interact = !self.live;
 
@@ -894,12 +855,8 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        let dark = ui.visuals().dark_mode;
-        let line_color = if dark {
-            egui::Color32::from_rgba_premultiplied(220, 120, 120, 200)
-        } else {
-            egui::Color32::from_rgba_premultiplied(180, 30, 30, 220)
-        };
+        let tc = ThemeColors::new(ui.visuals().dark_mode);
+        let line_color = tc.minimap_line();
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes
         let label_height = 14.0;
@@ -951,11 +908,7 @@ impl Graph {
         // Draw viewport indicator as [ ] bracket markers
         let vp_left = time_to_x(view_min);
         let vp_right = time_to_x(view_max);
-        let vp_color = if dark {
-            egui::Color32::from_rgb(100, 150, 255)
-        } else {
-            egui::Color32::from_rgb(0, 70, 200)
-        };
+        let vp_color = tc.minimap_viewport();
         let vp_stroke = egui::Stroke::new(2.5, vp_color);
         let bracket_w = 4.0_f32; // horizontal arm of the bracket
 

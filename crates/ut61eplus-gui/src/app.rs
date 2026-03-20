@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, RichText, Ui};
+use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::mpsc;
 use std::time::Instant;
@@ -15,6 +15,7 @@ use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
 use crate::stats::Stats;
+use crate::theme::ThemeColors;
 
 /// Messages from the background thread to the UI.
 pub enum DmmMessage {
@@ -508,12 +509,8 @@ impl App {
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
         let has_cmd = |cmd: &str| self.supported_commands.iter().any(|c| c == cmd);
-        let dark = ui.visuals().dark_mode;
-        let active_color = if dark {
-            Color32::from_rgb(100, 180, 255)
-        } else {
-            Color32::from_rgb(0, 100, 200)
-        };
+        let tc = ThemeColors::new(ui.visuals().dark_mode);
+        let active_color = tc.blue_accent();
 
         let font_size = 12.0 * scale;
 
@@ -561,12 +558,7 @@ impl App {
     }
 
     fn show_connection_help(&self, ui: &mut Ui) {
-        let dark = ui.visuals().dark_mode;
-        let warn_color = if dark {
-            Color32::from_rgb(200, 120, 0)
-        } else {
-            Color32::from_rgb(180, 80, 0)
-        };
+        let warn_color = ThemeColors::new(ui.visuals().dark_mode).orange();
 
         // Show waiting indicator before error threshold
         if self.waiting_timeouts > 0 && self.last_error.is_none() {
@@ -672,22 +664,10 @@ impl App {
                 }
             }
 
-            let dark = ui.visuals().dark_mode;
-            let green = if dark {
-                Color32::from_rgb(60, 180, 75)
-            } else {
-                Color32::from_rgb(0, 140, 30)
-            };
-            let orange = if dark {
-                Color32::from_rgb(200, 120, 0)
-            } else {
-                Color32::from_rgb(180, 80, 0)
-            };
-            let gray = if dark {
-                Color32::from_rgb(150, 150, 150)
-            } else {
-                Color32::from_rgb(120, 120, 120)
-            };
+            let tc = ThemeColors::new(ui.visuals().dark_mode);
+            let green = tc.green();
+            let orange = tc.orange();
+            let gray = tc.gray();
 
             let (dot_color, status_text) = match &self.connection_state {
                 ConnectionState::Connected => {
@@ -725,15 +705,7 @@ impl App {
                 );
                 // Show toast message (export result, etc.)
                 if let Some((msg, is_error, _)) = &self.toast {
-                    let color = if *is_error {
-                        if dark {
-                            Color32::from_rgb(220, 60, 60)
-                        } else {
-                            Color32::from_rgb(180, 0, 0)
-                        }
-                    } else {
-                        green
-                    };
+                    let color = if *is_error { tc.red() } else { green };
                     ui.label(RichText::new(msg).small().color(color));
                 }
             });
@@ -1106,12 +1078,7 @@ impl App {
             if self.recording.active {
                 let status = format!("{count} smp | {:.0}s", self.recording.duration_secs());
                 if self.recording.is_full() {
-                    let dark = ui.visuals().dark_mode;
-                    let warn = if dark {
-                        Color32::from_rgb(230, 160, 40)
-                    } else {
-                        Color32::from_rgb(180, 100, 0)
-                    };
+                    let warn = ThemeColors::new(ui.visuals().dark_mode).recording_full_warning();
                     ui.label(RichText::new(format!("{status} (buffer full)")).color(warn));
                 } else {
                     ui.label(status);
