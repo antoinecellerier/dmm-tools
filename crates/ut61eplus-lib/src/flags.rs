@@ -30,7 +30,9 @@ impl StatusFlags {
             max: flag1 & 0x08 != 0,
             hv_warning: flag2 & 0x01 != 0,
             low_battery: flag2 & 0x02 != 0,
-            auto_range: flag2 & 0x04 == 0, // inverted: bit clear = auto ON
+            // Inverted: bit2 of flag2 is the MANUAL range indicator.
+            // When clear (0), the meter is in auto-range mode.
+            auto_range: flag2 & 0x04 == 0,
             dc: flag3 & 0x08 != 0,
             peak_max: flag3 & 0x04 != 0,
             peak_min: flag3 & 0x02 != 0,
