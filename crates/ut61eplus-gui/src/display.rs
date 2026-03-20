@@ -10,6 +10,21 @@ fn format_display_raw(raw: &str) -> String {
     format!("{trimmed:>7}")
 }
 
+/// Format the measurement value as a display string.
+/// Uses the meter's raw 7-char display when available (UT61E+ protocol),
+/// otherwise formats the numeric value for float-based protocols.
+fn format_value_display(m: &Measurement) -> String {
+    if let Some(raw) = &m.display_raw {
+        format_display_raw(raw)
+    } else {
+        match &m.value {
+            MeasuredValue::Normal(v) => format!("{v:>7}"),
+            MeasuredValue::Overload => format!("{:>7}", "OL"),
+            MeasuredValue::NcvLevel(l) => format!("NCV {l}"),
+        }
+    }
+}
+
 /// Render the primary reading display at the given font size.
 fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size: f32) {
     let unit_size = value_size;
@@ -17,29 +32,17 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
 
     match measurement {
         Some(m) => {
-            let display_str = |m: &Measurement| -> String {
-                if let Some(raw) = &m.display_raw {
-                    format_display_raw(raw)
-                } else {
-                    // Float-based protocols: format the numeric value
-                    match &m.value {
-                        MeasuredValue::Normal(v) => format!("{v:>7}"),
-                        MeasuredValue::Overload => format!("{:>7}", "OL"),
-                        MeasuredValue::NcvLevel(l) => format!("NCV {l}"),
-                    }
-                }
-            };
             let (value_text, value_color) = match &m.value {
-                MeasuredValue::Normal(_) => (display_str(m), ui.visuals().text_color()),
+                MeasuredValue::Normal(_) => (format_value_display(m), ui.visuals().text_color()),
                 MeasuredValue::Overload => (
-                    display_str(m),
+                    format_value_display(m),
                     if ui.visuals().dark_mode {
                         Color32::from_rgb(220, 60, 60)
                     } else {
                         Color32::from_rgb(180, 0, 0)
                     },
                 ),
-                MeasuredValue::NcvLevel(l) => (format!("NCV {l}"), ui.visuals().text_color()),
+                MeasuredValue::NcvLevel(_) => (format_value_display(m), ui.visuals().text_color()),
             };
 
             ui.horizontal(|ui| {
@@ -126,20 +129,7 @@ pub fn show_reading_large(
 pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
     match measurement {
         Some(m) => {
-            let value_text = match &m.value {
-                MeasuredValue::Normal(_) | MeasuredValue::Overload => {
-                    if let Some(raw) = &m.display_raw {
-                        format_display_raw(raw)
-                    } else {
-                        match &m.value {
-                            MeasuredValue::Normal(v) => format!("{v:>7}"),
-                            MeasuredValue::Overload => format!("{:>7}", "OL"),
-                            _ => String::new(),
-                        }
-                    }
-                }
-                MeasuredValue::NcvLevel(l) => format!("NCV {l}"),
-            };
+            let value_text = format_value_display(m);
 
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
