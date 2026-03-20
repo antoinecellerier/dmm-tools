@@ -237,6 +237,38 @@ fn build_device_help() -> String {
     help
 }
 
+/// Print platform-specific setup instructions for CP2110 USB adapters.
+fn print_cp2110_setup_help() {
+    eprintln!("Check that the CP2110 USB adapter is plugged in.");
+    #[cfg(target_os = "linux")]
+    {
+        eprintln!("On Linux, ensure the udev rule is installed:");
+        eprintln!(
+            "  {}",
+            style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim()
+        );
+        eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        eprintln!("On Windows, ensure the CP2110 driver is installed.");
+        eprintln!(
+            "Download from: {}",
+            style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
+        );
+    }
+}
+
+/// Set up a Ctrl+C handler that clears the returned flag when triggered.
+fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        r.store(false, Ordering::SeqCst);
+    })?;
+    Ok(running)
+}
+
 /// Open the meter with helpful error messages for common failures.
 fn open_with_help(
     device: &'static SelectableDevice,
@@ -267,24 +299,7 @@ fn open_with_help(
         }
         Err(ut61eplus_lib::error::Error::DeviceNotFound { .. }) => {
             eprintln!("{}", style("USB adapter not found.").yellow().bold());
-            eprintln!("Check that the CP2110 USB adapter is plugged in.");
-            #[cfg(target_os = "linux")]
-            {
-                eprintln!("On Linux, ensure the udev rule is installed:");
-                eprintln!(
-                    "  {}",
-                    style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim()
-                );
-                eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
-            }
-            #[cfg(target_os = "windows")]
-            {
-                eprintln!("On Windows, ensure the CP2110 driver is installed.");
-                eprintln!(
-                    "Download from: {}",
-                    style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
-                );
-            }
+            print_cp2110_setup_help();
             Err("device not found".into())
         }
         Err(e) => Err(e.into()),
@@ -295,24 +310,7 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     let devices = ut61eplus_lib::list_devices()?;
     if devices.is_empty() {
         eprintln!("{}", style("No devices found.").yellow());
-        eprintln!("Check that the CP2110 USB adapter is plugged in.");
-        #[cfg(target_os = "linux")]
-        {
-            eprintln!("On Linux, ensure the udev rule is installed:");
-            eprintln!(
-                "  {}",
-                style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim()
-            );
-            eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
-        }
-        #[cfg(target_os = "windows")]
-        {
-            eprintln!("On Windows, ensure the CP2110 driver is installed.");
-            eprintln!(
-                "Download from: {}",
-                style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
-            );
-        }
+        print_cp2110_setup_help();
         return Ok(());
     }
     for (i, dev) in devices.iter().enumerate() {
@@ -428,11 +426,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
     // When set, timeout warnings include device-specific activation instructions.
     device: Option<&'static SelectableDevice>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
+    let running = setup_ctrlc()?;
 
     let mut writer: Box<dyn Write> = match &output_path {
         Some(path) => Box::new(std::fs::File::create(path).map(std::io::BufWriter::new)?),
@@ -547,11 +541,7 @@ fn cmd_debug(
     count: usize,
     interval_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
+    let running = setup_ctrlc()?;
 
     let mut dmm = open_with_help(device)?;
 
