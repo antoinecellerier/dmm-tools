@@ -25,8 +25,9 @@ pub struct SelectableDevice {
     pub manual_url: Option<&'static str>,
 }
 
-fn new_ut61eplus() -> Box<dyn Protocol> {
-    Box::new(Ut61PlusProtocol::new())
+/// Generic factory for protocols that implement `Default`.
+fn factory<P: Protocol + Default + 'static>() -> Box<dyn Protocol> {
+    Box::new(P::default())
 }
 
 fn new_ut61bplus() -> Box<dyn Protocol> {
@@ -35,22 +36,6 @@ fn new_ut61bplus() -> Box<dyn Protocol> {
 
 fn new_ut61dplus() -> Box<dyn Protocol> {
     Box::new(Ut61PlusProtocol::for_model("ut61d+").unwrap())
-}
-
-fn new_ut8803() -> Box<dyn Protocol> {
-    Box::new(Ut8803Protocol::new())
-}
-
-fn new_ut171() -> Box<dyn Protocol> {
-    Box::new(Ut171Protocol::new())
-}
-
-fn new_ut181a() -> Box<dyn Protocol> {
-    Box::new(Ut181aProtocol::new())
-}
-
-fn new_mock() -> Box<dyn Protocol> {
-    Box::new(MockProtocol::new())
 }
 
 const ACTIVATION_UT61EPLUS: &str = "\
@@ -86,7 +71,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61eplus,
+        new_protocol: factory::<Ut61PlusProtocol>,
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     },
     SelectableDevice {
@@ -136,7 +121,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61eplus,
+        new_protocol: factory::<Ut61PlusProtocol>,
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     // Other families
@@ -147,7 +132,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT8803,
         family: DeviceFamily::Ut8803,
-        new_protocol: new_ut8803,
+        new_protocol: factory::<Ut8803Protocol>,
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
     },
     SelectableDevice {
@@ -157,7 +142,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT171,
         family: DeviceFamily::Ut171,
-        new_protocol: new_ut171,
+        new_protocol: factory::<Ut171Protocol>,
         manual_url: Some("https://meters.uni-trend.com/product/ut171-series/"),
     },
     SelectableDevice {
@@ -167,7 +152,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT181A,
         family: DeviceFamily::Ut181a,
-        new_protocol: new_ut181a,
+        new_protocol: factory::<Ut181aProtocol>,
         manual_url: Some("https://meters.uni-trend.com/product/ut181a/"),
     },
     // Mock
@@ -178,7 +163,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: false,
         activation_instructions: ACTIVATION_MOCK,
         family: DeviceFamily::Mock,
-        new_protocol: new_mock,
+        new_protocol: factory::<MockProtocol>,
         manual_url: None,
     },
 ];
