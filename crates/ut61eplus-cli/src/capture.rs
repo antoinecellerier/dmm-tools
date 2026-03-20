@@ -47,7 +47,6 @@ pub struct SampleData {
     pub raw_hex: String,
     pub mode_byte: String,
     pub mode: String,
-    pub range_byte: String,
     pub display_raw: String,
     pub value: String,
     pub unit: String,
@@ -87,7 +86,6 @@ impl SampleData {
             raw_hex,
             mode_byte: format!("{:#04x}", m.mode_raw),
             mode: m.mode.to_string(),
-            range_byte: String::new(),
             display_raw: m.display_raw.clone().unwrap_or_default(),
             value,
             unit: m.unit.to_string(),
@@ -545,7 +543,7 @@ pub fn run_capture_step(
             style(format!("[{i}]")).dim(),
             s.mode_byte,
             s.mode,
-            s.range_byte,
+            s.range_label,
             s.display_raw
         );
     }
@@ -1175,10 +1173,7 @@ fn run_range_cycle(
         let raw = capture_samples(dmm, 2);
         for m in &raw {
             let s = SampleData::from_measurement(m);
-            eprintln!(
-                "  range_step_{r}: range={} label={}",
-                s.range_byte, s.range_label
-            );
+            eprintln!("  range_step_{r}: range={}", s.range_label);
             range_samples.push(s);
         }
     }
