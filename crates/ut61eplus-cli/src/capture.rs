@@ -914,16 +914,16 @@ pub fn list_steps() {
     );
 }
 
-pub fn cmd_capture(
-    output_override: Option<String>,
-    filter: Option<Vec<String>>,
-    mut dmm: ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
-    device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let step_filter: Option<std::collections::HashSet<String>> =
-        filter.map(|v| v.into_iter().collect());
+/// Returns true if the given step ID is included by the filter (or if there is no filter).
+fn step_included(step_filter: &Option<std::collections::HashSet<String>>, id: &str) -> bool {
+    step_filter.as_ref().is_none_or(|f| f.contains(id))
+}
 
-    // Verify the meter is actually responding before proceeding
+/// Verify that the meter is responding. Returns `(device_name, supported)` on success.
+fn verify_meter(
+    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
+) -> Result<(String, bool), Box<dyn std::error::Error>> {
     eprintln!("{}", style("Checking meter communication...").dim());
     let device_name = match dmm.get_name() {
         Ok(Some(name)) => name,
@@ -967,7 +967,15 @@ pub fn cmd_capture(
     }
     eprintln!();
 
-    // Determine output path: explicit override, or auto-name from device
+    Ok((device_name, supported))
+}
+
+/// Determine the output path and load an existing report (with resume/overwrite prompt)
+/// or create a fresh one. Returns `None` if the user chose to abort.
+fn load_or_create_report(
+    output_override: Option<String>,
+    device_name: &str,
+) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
     let slug = device_name
         .chars()
         .map(|c| {
@@ -981,8 +989,7 @@ pub fn cmd_capture(
     let auto_path = format!("capture-{slug}.yaml");
     let output_path = output_override.unwrap_or(auto_path);
 
-    // Check for existing file — auto-resume or prompt to overwrite
-    let mut report = match std::fs::read_to_string(&output_path) {
+    let report = match std::fs::read_to_string(&output_path) {
         Ok(contents) => match serde_yaml::from_str::<CaptureReport>(&contents) {
             Ok(r) => {
                 let captured = r
@@ -1001,7 +1008,7 @@ pub fn cmd_capture(
                 let ch = prompt_key("r=resume, n=start fresh, q=abort: ")?;
                 if ch == 'q' || ch == 'Q' {
                     eprintln!("Aborted.");
-                    return Ok(());
+                    return Ok(None);
                 }
                 if ch == 'n' || ch == 'N' {
                     let confirm = prompt_key(
@@ -1009,7 +1016,7 @@ pub fn cmd_capture(
                     )?;
                     if confirm != 'y' && confirm != 'Y' {
                         eprintln!("Aborted.");
-                        return Ok(());
+                        return Ok(None);
                     }
                     CaptureReport::default()
                 } else if ch == 'r' || ch == 'R' {
@@ -1017,7 +1024,7 @@ pub fn cmd_capture(
                     r
                 } else {
                     eprintln!("Aborted.");
-                    return Ok(());
+                    return Ok(None);
                 }
             }
             Err(_) => {
@@ -1025,7 +1032,7 @@ pub fn cmd_capture(
                 let ch = prompt_key("Overwrite? y=start fresh, any other key=abort: ")?;
                 if ch != 'y' && ch != 'Y' {
                     eprintln!("Aborted.");
-                    return Ok(());
+                    return Ok(None);
                 }
                 CaptureReport::default()
             }
@@ -1033,8 +1040,16 @@ pub fn cmd_capture(
         Err(_) => CaptureReport::default(),
     };
 
-    eprintln!("Output file: {output_path}\n");
+    Ok(Some((report, output_path)))
+}
 
+/// Populate report metadata (date, version, device info).
+fn populate_report_metadata(
+    report: &mut CaptureReport,
+    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    device_name: String,
+    supported: bool,
+) {
     report.date = chrono::Local::now().to_rfc3339();
     report.tool_version = format!("{} ({})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
     report.device_name = device_name;
@@ -1043,6 +1058,240 @@ pub fn cmd_capture(
         report.cp2110_firmware = Some(ver.device_version);
     }
     report.supported = supported;
+}
+
+/// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
+fn run_mode_steps(
+    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    step_filter: &Option<std::collections::HashSet<String>>,
+    report: &mut CaptureReport,
+    output_path: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let has_mode_steps = MODE_STEP_IDS
+        .iter()
+        .any(|id| step_included(step_filter, id));
+    if !has_mode_steps {
+        return Ok(false);
+    }
+
+    eprintln!(
+        "{}",
+        style("\u{2501}\u{2501}\u{2501} Part 1: Measurement Modes \u{2501}\u{2501}\u{2501}").bold()
+    );
+    eprintln!(
+        "{}",
+        style("any key=capture, s=skip one, q=skip to end and save").dim()
+    );
+
+    let all_steps = all_capture_steps();
+    for step in all_steps.iter().filter(|s| MODE_STEP_IDS.contains(&s.id)) {
+        if !step_included(step_filter, step.id) {
+            continue;
+        }
+        let quit = run_capture_step(dmm, step, report, true)?;
+        save_report(report, output_path)?;
+        if quit {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Part 2: Run flag & remote command capture steps. Returns true if user wants to quit.
+fn run_flag_steps(
+    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    step_filter: &Option<std::collections::HashSet<String>>,
+    report: &mut CaptureReport,
+    output_path: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let has_flag_steps = FLAG_STEP_IDS
+        .iter()
+        .any(|id| step_included(step_filter, id));
+    if !has_flag_steps {
+        return Ok(false);
+    }
+
+    eprintln!(
+        "\n{}",
+        style("\u{2501}\u{2501}\u{2501} Part 2: Flags & Remote Commands \u{2501}\u{2501}\u{2501}")
+            .bold()
+    );
+    eprintln!("Set meter to DC V mode for these tests.");
+    let ch = prompt_key(&format!(
+        "\n{} ",
+        style("Any key when ready on DC V, q=skip to end:").dim()
+    ))?;
+    if ch == 'q' || ch == 'Q' {
+        return Ok(true);
+    }
+
+    let all_steps = all_capture_steps();
+    for step in all_steps.iter().filter(|s| FLAG_STEP_IDS.contains(&s.id)) {
+        if !step_included(step_filter, step.id) {
+            continue;
+        }
+        let quit = run_capture_step(dmm, step, report, true)?;
+        save_report(report, output_path)?;
+        if quit {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Part 3: Cycle through manual ranges on DC V. Returns true if user wants to quit.
+fn run_range_cycle(
+    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    step_filter: &Option<std::collections::HashSet<String>>,
+    report: &mut CaptureReport,
+    output_path: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    if !step_included(step_filter, "range_cycle") {
+        return Ok(false);
+    }
+
+    eprintln!(
+        "\n{}",
+        style("\u{2501}\u{2501}\u{2501} Part 3: Range Values \u{2501}\u{2501}\u{2501}").bold()
+    );
+    eprintln!("We'll cycle through manual ranges on DC V.");
+    let ch = prompt_key(&format!(
+        "\n{} ",
+        style("Any key to start, q=skip to end:").dim()
+    ))?;
+    if ch == 'q' || ch == 'Q' {
+        return Ok(true);
+    }
+
+    let _ = dmm.send_command("auto");
+    std::thread::sleep(Duration::from_millis(200));
+
+    let mut range_samples = Vec::new();
+    for r in 0..6 {
+        let _ = dmm.send_command("range");
+        std::thread::sleep(Duration::from_millis(300));
+        let raw = capture_samples(dmm, 2);
+        for m in &raw {
+            let s = SampleData::from_measurement(m);
+            eprintln!(
+                "  range_step_{r}: range={} label={}",
+                s.range_byte, s.range_label
+            );
+            range_samples.push(s);
+        }
+    }
+    let _ = dmm.send_command("auto");
+    std::thread::sleep(Duration::from_millis(200));
+
+    upsert_step(
+        report,
+        StepResult {
+            id: "range_cycle".to_string(),
+            instruction: "Cycle through manual ranges on DC V".to_string(),
+            status: StepStatus::Captured,
+            samples: range_samples,
+            screen: None,
+            error: None,
+        },
+    );
+    save_report(report, output_path)?;
+
+    Ok(false)
+}
+
+/// Part 4: Freeform additional captures.
+fn run_freeform_captures(
+    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    step_filter: &Option<std::collections::HashSet<String>>,
+    report: &mut CaptureReport,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let is_filtered = step_filter.is_some();
+    if is_filtered && !step_included(step_filter, "extra") {
+        return Ok(());
+    }
+
+    eprintln!(
+        "\n{}",
+        style("\u{2501}\u{2501}\u{2501} Part 4: Additional Captures (optional) \u{2501}\u{2501}\u{2501}")
+            .bold()
+    );
+    eprintln!("Set the meter to any mode/state not covered above.\n");
+
+    let mut extra = 0u32;
+    loop {
+        let desc = prompt(&format!(
+            "[extra_{extra}] Describe what you set the meter to (or 'q' to finish): "
+        ))?;
+        if desc.is_empty() || desc.to_lowercase().starts_with('q') {
+            break;
+        }
+
+        let raw = capture_samples(dmm, 3);
+        let sample_data: Vec<SampleData> = raw.iter().map(SampleData::from_measurement).collect();
+
+        for (i, s) in sample_data.iter().enumerate() {
+            eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
+        }
+
+        let screen = if !sample_data.is_empty() {
+            let summary = sample_data.last().expect("checked non-empty").summary();
+            let input = prompt(&format!(
+                "  We read: {summary}\n  Enter=correct, or type correction: "
+            ))?;
+            if input.is_empty() {
+                Some(format!("confirmed: {summary}"))
+            } else {
+                Some(input)
+            }
+        } else {
+            eprintln!("  No response from meter.");
+            None
+        };
+
+        upsert_step(
+            report,
+            StepResult {
+                id: format!("extra_{extra}"),
+                instruction: desc,
+                status: if sample_data.is_empty() {
+                    StepStatus::Timeout
+                } else {
+                    StepStatus::Captured
+                },
+                samples: sample_data,
+                screen,
+                error: None,
+            },
+        );
+        save_report(report, output_path)?;
+        extra += 1;
+    }
+
+    Ok(())
+}
+
+pub fn cmd_capture(
+    output_override: Option<String>,
+    filter: Option<Vec<String>>,
+    mut dmm: ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let step_filter: Option<std::collections::HashSet<String>> =
+        filter.map(|v| v.into_iter().collect());
+
+    let (device_name, supported) = verify_meter(&mut dmm, device)?;
+
+    let (mut report, output_path) = match load_or_create_report(output_override, &device_name)? {
+        Some(pair) => pair,
+        None => return Ok(()),
+    };
+
+    eprintln!("Output file: {output_path}\n");
+
+    populate_report_metadata(&mut report, &mut dmm, device_name, supported);
 
     // For non-UT61E+ protocols, use protocol-provided capture steps
     let protocol_steps = dmm.capture_steps();
@@ -1056,173 +1305,23 @@ pub fn cmd_capture(
         );
     }
 
-    let all_steps = all_capture_steps();
-    let is_filtered = step_filter.is_some();
-    let include = |id: &str| -> bool { step_filter.as_ref().is_none_or(|f| f.contains(id)) };
+    // --- Parts 1-4: mode steps, flag steps, range cycle, freeform ---
+    let done = run_mode_steps(&mut dmm, &step_filter, &mut report, &output_path)?;
 
-    let mut done = false;
+    let done = if !done {
+        run_flag_steps(&mut dmm, &step_filter, &mut report, &output_path)?
+    } else {
+        done
+    };
 
-    // --- Part 1: Modes ---
-    let has_mode_steps = MODE_STEP_IDS.iter().any(|id| include(id));
-    if has_mode_steps {
-        eprintln!(
-            "{}",
-            style("\u{2501}\u{2501}\u{2501} Part 1: Measurement Modes \u{2501}\u{2501}\u{2501}")
-                .bold()
-        );
-        eprintln!(
-            "{}",
-            style("any key=capture, s=skip one, q=skip to end and save").dim()
-        );
+    let done = if !done {
+        run_range_cycle(&mut dmm, &step_filter, &mut report, &output_path)?
+    } else {
+        done
+    };
 
-        for step in all_steps.iter().filter(|s| MODE_STEP_IDS.contains(&s.id)) {
-            if done {
-                break;
-            }
-            if !include(step.id) {
-                continue;
-            }
-            done = run_capture_step(&mut dmm, step, &mut report, true)?;
-            save_report(&report, &output_path)?;
-        }
-    }
-
-    // --- Part 2: Flags ---
-    let has_flag_steps = FLAG_STEP_IDS.iter().any(|id| include(id));
-    if !done && has_flag_steps {
-        eprintln!(
-            "\n{}",
-            style(
-                "\u{2501}\u{2501}\u{2501} Part 2: Flags & Remote Commands \u{2501}\u{2501}\u{2501}"
-            )
-            .bold()
-        );
-        eprintln!("Set meter to DC V mode for these tests.");
-        let ch = prompt_key(&format!(
-            "\n{} ",
-            style("Any key when ready on DC V, q=skip to end:").dim()
-        ))?;
-        if ch == 'q' || ch == 'Q' {
-            done = true;
-        }
-    }
-    if !done && has_flag_steps {
-        for step in all_steps.iter().filter(|s| FLAG_STEP_IDS.contains(&s.id)) {
-            if done {
-                break;
-            }
-            if !include(step.id) {
-                continue;
-            }
-            done = run_capture_step(&mut dmm, step, &mut report, true)?;
-            save_report(&report, &output_path)?;
-        }
-    }
-
-    // --- Part 3: Range cycle ---
-    if !done && include("range_cycle") {
-        eprintln!(
-            "\n{}",
-            style("\u{2501}\u{2501}\u{2501} Part 3: Range Values \u{2501}\u{2501}\u{2501}").bold()
-        );
-        eprintln!("We'll cycle through manual ranges on DC V.");
-        let ch = prompt_key(&format!(
-            "\n{} ",
-            style("Any key to start, q=skip to end:").dim()
-        ))?;
-        if ch != 'q' && ch != 'Q' {
-            let _ = dmm.send_command("auto");
-            std::thread::sleep(Duration::from_millis(200));
-
-            let mut range_samples = Vec::new();
-            for r in 0..6 {
-                let _ = dmm.send_command("range");
-                std::thread::sleep(Duration::from_millis(300));
-                let raw = capture_samples(&mut dmm, 2);
-                for m in &raw {
-                    let s = SampleData::from_measurement(m);
-                    eprintln!(
-                        "  range_step_{r}: range={} label={}",
-                        s.range_byte, s.range_label
-                    );
-                    range_samples.push(s);
-                }
-            }
-            let _ = dmm.send_command("auto");
-            std::thread::sleep(Duration::from_millis(200));
-
-            upsert_step(
-                &mut report,
-                StepResult {
-                    id: "range_cycle".to_string(),
-                    instruction: "Cycle through manual ranges on DC V".to_string(),
-                    status: StepStatus::Captured,
-                    samples: range_samples,
-                    screen: None,
-                    error: None,
-                },
-            );
-            save_report(&report, &output_path)?;
-        } else {
-            done = true;
-        }
-    }
-
-    // --- Part 4: Freeform (skip if filtered) ---
-    if !done && (!is_filtered || include("extra")) {
-        eprintln!("\n{}", style("\u{2501}\u{2501}\u{2501} Part 4: Additional Captures (optional) \u{2501}\u{2501}\u{2501}").bold());
-        eprintln!("Set the meter to any mode/state not covered above.\n");
-
-        let mut extra = 0u32;
-        loop {
-            let desc = prompt(&format!(
-                "[extra_{extra}] Describe what you set the meter to (or 'q' to finish): "
-            ))?;
-            if desc.is_empty() || desc.to_lowercase().starts_with('q') {
-                break;
-            }
-
-            let raw = capture_samples(&mut dmm, 3);
-            let sample_data: Vec<SampleData> =
-                raw.iter().map(SampleData::from_measurement).collect();
-
-            for (i, s) in sample_data.iter().enumerate() {
-                eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
-            }
-
-            let screen = if !sample_data.is_empty() {
-                let summary = sample_data.last().expect("checked non-empty").summary();
-                let input = prompt(&format!(
-                    "  We read: {summary}\n  Enter=correct, or type correction: "
-                ))?;
-                if input.is_empty() {
-                    Some(format!("confirmed: {summary}"))
-                } else {
-                    Some(input)
-                }
-            } else {
-                eprintln!("  No response from meter.");
-                None
-            };
-
-            upsert_step(
-                &mut report,
-                StepResult {
-                    id: format!("extra_{extra}"),
-                    instruction: desc,
-                    status: if sample_data.is_empty() {
-                        StepStatus::Timeout
-                    } else {
-                        StepStatus::Captured
-                    },
-                    samples: sample_data,
-                    screen,
-                    error: None,
-                },
-            );
-            save_report(&report, &output_path)?;
-            extra += 1;
-        }
+    if !done {
+        run_freeform_captures(&mut dmm, &step_filter, &mut report, &output_path)?;
     }
 
     save_report(&report, &output_path)?;
