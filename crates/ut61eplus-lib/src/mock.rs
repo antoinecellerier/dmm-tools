@@ -4,6 +4,7 @@ use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::{NullTransport, Transport};
+use std::borrow::Cow;
 use std::time::Instant;
 
 const MOCK_COMMANDS: &[&str] = &[
@@ -415,11 +416,11 @@ impl Protocol for MockProtocol {
             value
         };
 
-        let mode = scenario.mode.to_string();
+        let mode: Cow<'static, str> = Cow::Borrowed(scenario.mode);
         let mode_raw = scenario.mode_raw;
         let range_raw = scenario.range_raw;
-        let unit = scenario.unit.to_string();
-        let range_label = scenario.range_label.to_string();
+        let unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
+        let range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
         let range_max = scenario.range_max;
         let samples = scenario.samples;
 

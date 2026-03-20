@@ -21,13 +21,14 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
 use log::debug;
+use std::borrow::Cow;
 use std::time::Instant;
 
 /// Decode a UT181A mode word (uint16 LE) into a human-readable string.
 ///
 /// Nibble encoding: N3 N2 N1 N0
 /// N3 = measurement family, N2 = sub-function, N1 = variant, N0 = 1=std/2=REL
-fn decode_mode_word(mode: u16) -> String {
+fn decode_mode_word(mode: u16) -> Cow<'static, str> {
     let n3 = (mode >> 12) & 0xF;
     let n2 = (mode >> 8) & 0xF;
     let n1 = (mode >> 4) & 0xF;
@@ -41,41 +42,41 @@ fn decode_mode_word(mode: u16) -> String {
             0x1 => "mV DC",
             0x2 => "°C",
             0x3 => "°F",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
         0x5 => match n2 {
             0x1 => "Ω",
             0x2 => "Continuity",
             0x3 => "nS",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
         0x6 => match n2 {
             0x1 => "Diode",
             0x2 => "Capacitance",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
         0x7 => match n2 {
             0x1 => "Hz",
             0x2 => "Duty %",
             0x3 => "Pulse Width",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
         0x8 => match n2 {
             0x1 => "µA DC",
             0x2 => "µA AC",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
         0x9 => match n2 {
             0x1 => "mA DC",
             0x2 => "mA AC",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
         0xA => match n2 {
             0x1 => "A DC",
             0x2 => "A AC",
-            _ => return format!("Unknown({:#06x})", mode),
+            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
         },
-        _ => return format!("Unknown({:#06x})", mode),
+        _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
     };
 
     let variant = match n1 {
@@ -99,7 +100,12 @@ fn decode_mode_word(mode: u16) -> String {
 
     let rel = if n0 == 0x2 { " REL" } else { "" };
 
-    format!("{family}{variant}{rel}")
+    // When no variant or rel suffix, return the static family string directly
+    if variant.is_empty() && rel.is_empty() {
+        Cow::Borrowed(family)
+    } else {
+        Cow::Owned(format!("{family}{variant}{rel}"))
+    }
 }
 
 /// Parse a UT181A unit string from 8 bytes (null-terminated).
@@ -450,8 +456,8 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         mode_raw: mode_word,
         range_raw: 0,
         value,
-        unit,
-        range_label: String::new(),
+        unit: Cow::Owned(unit),
+        range_label: Cow::Borrowed(""),
         progress: None,
         display_raw: None,
         flags,

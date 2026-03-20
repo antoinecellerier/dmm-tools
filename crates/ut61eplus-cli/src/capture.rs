@@ -86,12 +86,12 @@ impl SampleData {
         Self {
             raw_hex,
             mode_byte: format!("{:#04x}", m.mode_raw),
-            mode: m.mode.clone(),
+            mode: m.mode.to_string(),
             range_byte: String::new(),
             display_raw: m.display_raw.clone().unwrap_or_default(),
             value,
-            unit: m.unit.clone(),
-            range_label: m.range_label.clone(),
+            unit: m.unit.to_string(),
+            range_label: m.range_label.to_string(),
             progress: m.progress.unwrap_or(0),
             flags: SampleFlags {
                 hold: m.flags.hold,

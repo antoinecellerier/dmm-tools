@@ -16,6 +16,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
 use log::{debug, warn};
+use std::borrow::Cow;
 use std::time::Instant;
 
 /// UT8803 position coding → (mode_name, acdc, unit_type, unit_mag).
@@ -272,11 +273,11 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let display_bytes = &payload[5..10];
 
     // Parse mode
-    let mode = if (mode_byte as usize) < POSITION_TABLE.len() {
-        POSITION_TABLE[mode_byte as usize].1.to_string()
+    let mode: Cow<'static, str> = if (mode_byte as usize) < POSITION_TABLE.len() {
+        Cow::Borrowed(POSITION_TABLE[mode_byte as usize].1)
     } else {
         warn!("ut8803: unknown mode byte {:#04x}", mode_byte);
-        format!("Unknown({:#04x})", mode_byte)
+        Cow::Owned(format!("Unknown({:#04x})", mode_byte))
     };
 
     // Parse display value: 5 raw bytes → string → f64
@@ -325,7 +326,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let _ = unit_type; // unit determination from mode is more reliable
 
     // Build unit string from mode name heuristics
-    let unit = match mode.as_str() {
+    let unit: &'static str = match &*mode {
         "DC V" | "AC V" => "V",
         "DC µA" | "AC µA" => "µA",
         "DC mA" | "AC mA" => "mA",
@@ -364,8 +365,8 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         mode_raw: mode_byte as u16,
         range_raw,
         value,
-        unit: unit.to_string(),
-        range_label: String::new(), // UT8803 range label would need the full range table
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(""), // UT8803 range label would need the full range table
         progress: None,
         display_raw: Some(display_str),
         flags,

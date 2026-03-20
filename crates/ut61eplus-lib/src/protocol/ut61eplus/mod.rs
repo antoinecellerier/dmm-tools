@@ -11,6 +11,7 @@ use crate::transport::Transport;
 use command::Command;
 use log::debug;
 use mode::Mode;
+use std::borrow::Cow;
 use std::time::Instant;
 use tables::DeviceTable;
 
@@ -413,12 +414,12 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
 
     Ok(Measurement {
         timestamp: Instant::now(),
-        mode: mode.to_string(),
+        mode: Cow::Borrowed(mode.as_static_str()),
         mode_raw: mode_byte as u16,
         range_raw: range_byte,
         value,
-        unit: unit.to_string(),
-        range_label: range_label.to_string(),
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(range_label),
         progress: Some(progress),
         display_raw: Some(display_raw),
         flags,

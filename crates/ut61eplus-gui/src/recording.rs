@@ -24,10 +24,10 @@ impl Sample {
         };
         Self {
             wall_time: Local::now(),
-            mode: m.mode.clone(),
+            mode: m.mode.to_string(),
             value_str,
-            unit: m.unit.clone(),
-            range_label: m.range_label.clone(),
+            unit: m.unit.to_string(),
+            range_label: m.range_label.to_string(),
             flags: m.flags.to_string(),
         }
     }

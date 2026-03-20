@@ -82,9 +82,13 @@ impl Mode {
     }
 }
 
-impl fmt::Display for Mode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
+impl Mode {
+    /// Return the mode name as a static string slice.
+    ///
+    /// Unlike `Display::fmt` / `.to_string()`, this avoids heap allocation
+    /// and can be used directly in `Cow::Borrowed`.
+    pub fn as_static_str(self) -> &'static str {
+        match self {
             Mode::AcV => "AC V",
             Mode::AcMv => "AC mV",
             Mode::DcV => "DC V",
@@ -116,8 +120,13 @@ impl fmt::Display for Mode {
             Mode::LpfA => "LPF A",
             Mode::AcDcA2 => "AC+DC A",
             Mode::Inrush => "Inrush",
-        };
-        write!(f, "{s}")
+        }
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_static_str())
     }
 }
 

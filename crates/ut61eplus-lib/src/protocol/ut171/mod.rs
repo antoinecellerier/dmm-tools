@@ -19,6 +19,7 @@ use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
 use log::{debug, warn};
+use std::borrow::Cow;
 use std::time::Instant;
 
 /// Mode byte → mode name mapping from Ghidra analysis.
@@ -55,14 +56,14 @@ const MODE_TABLE: &[(u8, &str)] = &[
     (0x24, "NCV"),
 ];
 
-fn mode_name(byte: u8) -> String {
+fn mode_name(byte: u8) -> Cow<'static, str> {
     for &(code, name) in MODE_TABLE {
         if code == byte {
-            return name.to_string();
+            return Cow::Borrowed(name);
         }
     }
     warn!("ut171: unknown mode byte {:#04x}", byte);
-    format!("Unknown({:#04x})", byte)
+    Cow::Owned(format!("Unknown({:#04x})", byte))
 }
 
 /// Derive unit from mode name.
@@ -350,8 +351,8 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         mode_raw: mode_byte as u16,
         range_raw: 0,
         value,
-        unit: unit.to_string(),
-        range_label: String::new(),
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(""),
         progress: None,
         display_raw: None,
         flags,

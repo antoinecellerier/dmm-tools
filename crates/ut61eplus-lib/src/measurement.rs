@@ -1,4 +1,5 @@
 use crate::flags::StatusFlags;
+use std::borrow::Cow;
 use std::time::Instant;
 
 /// Represents a parsed measurement value.
@@ -17,20 +18,25 @@ pub enum MeasuredValue {
 /// This is the unified measurement type used by all protocol implementations.
 /// String-based mode/unit fields allow each protocol to produce human-readable
 /// values without sharing a common mode enum.
+///
+/// The `mode`, `unit`, and `range_label` fields use `Cow<'static, str>` to
+/// avoid per-measurement heap allocations. Most values come from static lookup
+/// tables (`Cow::Borrowed`); only fallback paths like `format!("Unknown(0x{:02x})")`
+/// produce owned strings (`Cow::Owned`).
 #[derive(Debug, Clone)]
 pub struct Measurement {
     pub timestamp: Instant,
     /// Human-readable mode string (e.g. "DC V", "AC mV", "Unknown(0x05)").
-    pub mode: String,
+    pub mode: Cow<'static, str>,
     /// Raw protocol-level mode value (for debugging and spec lookup).
     pub mode_raw: u16,
     /// Raw protocol-level range byte (for spec lookup).
     pub range_raw: u8,
     pub value: MeasuredValue,
     /// Unit string (e.g. "V", "mV", "kΩ", "nS").
-    pub unit: String,
+    pub unit: Cow<'static, str>,
     /// Range label (e.g. "22V", "220mV", "" if not applicable).
-    pub range_label: String,
+    pub range_label: Cow<'static, str>,
     /// Bar graph progress value, None if the protocol doesn't provide it.
     pub progress: Option<u16>,
     /// Raw ASCII display value as received, None for float-based meters.
@@ -67,15 +73,19 @@ impl std::fmt::Display for Measurement {
 mod tests {
     use super::*;
 
-    fn make_measurement(value: MeasuredValue, unit: &str, flags: StatusFlags) -> Measurement {
+    fn make_measurement(
+        value: MeasuredValue,
+        unit: &'static str,
+        flags: StatusFlags,
+    ) -> Measurement {
         Measurement {
             timestamp: Instant::now(),
-            mode: "DC V".to_string(),
+            mode: "DC V".into(),
             mode_raw: 0x02,
             range_raw: 1,
             value,
-            unit: unit.to_string(),
-            range_label: "22V".to_string(),
+            unit: unit.into(),
+            range_label: "22V".into(),
             progress: Some(0),
             display_raw: Some("  5.678".to_string()),
             flags,

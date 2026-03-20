@@ -50,7 +50,7 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
                         .color(value_color),
                 );
                 ui.label(
-                    RichText::new(&m.unit)
+                    RichText::new(&*m.unit)
                         .font(FontId::monospace(unit_size))
                         .color(ui.visuals().text_color()),
                 );
@@ -59,13 +59,13 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 ui.label(
-                    RichText::new(&m.mode)
+                    RichText::new(&*m.mode)
                         .font(FontId::proportional(mode_size))
                         .color(ui.visuals().weak_text_color()),
                 );
                 if !m.range_label.is_empty() {
                     ui.label(
-                        RichText::new(&m.range_label)
+                        RichText::new(&*m.range_label)
                             .font(FontId::proportional(mode_size))
                             .color(ui.visuals().weak_text_color()),
                     );
@@ -144,10 +144,10 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.label(RichText::new(&value_text).font(FontId::monospace(28.0)));
-                ui.label(RichText::new(&m.unit).font(FontId::monospace(28.0)));
+                ui.label(RichText::new(&*m.unit).font(FontId::monospace(28.0)));
                 ui.separator();
                 ui.label(
-                    RichText::new(&m.mode)
+                    RichText::new(&*m.mode)
                         .color(ui.visuals().weak_text_color())
                         .small(),
                 );

@@ -902,7 +902,7 @@ impl App {
         let unit = self
             .last_measurement
             .as_ref()
-            .map(|m| m.unit.as_str())
+            .map(|m| &*m.unit)
             .unwrap_or("");
         let main_font = 12.0 * scale;
         let sub_font = 11.0 * scale;
