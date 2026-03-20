@@ -22,69 +22,51 @@ use log::{debug, warn};
 use std::borrow::Cow;
 use std::time::Instant;
 
-/// Mode byte → mode name mapping from Ghidra analysis.
-const MODE_TABLE: &[(u8, &str)] = &[
-    (0x01, "LoZ V~"),
-    (0x02, "V DC"),
-    (0x03, "V AC"),
-    (0x04, "V AC+DC"),
-    (0x05, "mV DC"),
-    (0x06, "mV AC"),
-    (0x07, "mV AC+DC"),
-    (0x08, "Continuity"),
-    (0x09, "Capacitance"),
-    (0x0A, "Ω"),
-    (0x0B, "Diode"),
-    (0x0C, "°C"),
-    (0x0D, "°F"),
-    (0x0E, "nS"),
-    (0x0F, "Hz"),
-    (0x10, "Duty %"),
-    (0x11, "µA DC"),
-    (0x12, "µA AC"),
-    (0x13, "µA AC+DC"),
-    (0x14, "mA DC"),
-    (0x15, "mA AC"),
-    (0x16, "mA AC+DC"),
-    (0x17, "A DC"),
-    (0x18, "A AC"),
-    (0x19, "A AC+DC"),
-    (0x1A, "VFC"),
-    (0x1B, "% 4-20mA"),
-    (0x1C, "600A DC"),
-    (0x1D, "600A AC"),
-    (0x24, "NCV"),
+/// Mode byte → (name, unit) mapping from Ghidra analysis.
+const MODE_TABLE: &[(u8, &str, &str)] = &[
+    (0x01, "LoZ V~", "V"),
+    (0x02, "V DC", "V"),
+    (0x03, "V AC", "V"),
+    (0x04, "V AC+DC", "V"),
+    (0x05, "mV DC", "mV"),
+    (0x06, "mV AC", "mV"),
+    (0x07, "mV AC+DC", "mV"),
+    (0x08, "Continuity", "Ω"),
+    (0x09, "Capacitance", "F"),
+    (0x0A, "Ω", "Ω"),
+    (0x0B, "Diode", "V"),
+    (0x0C, "°C", "°C"),
+    (0x0D, "°F", "°F"),
+    (0x0E, "nS", "nS"),
+    (0x0F, "Hz", "Hz"),
+    (0x10, "Duty %", "%"),
+    (0x11, "µA DC", "µA"),
+    (0x12, "µA AC", "µA"),
+    (0x13, "µA AC+DC", "µA"),
+    (0x14, "mA DC", "mA"),
+    (0x15, "mA AC", "mA"),
+    (0x16, "mA AC+DC", "mA"),
+    (0x17, "A DC", "A"),
+    (0x18, "A AC", "A"),
+    (0x19, "A AC+DC", "A"),
+    (0x1A, "VFC", "V"),
+    (0x1B, "% 4-20mA", "%"),
+    (0x1C, "600A DC", "A"),
+    (0x1D, "600A AC", "A"),
+    (0x24, "NCV", ""),
 ];
 
-fn mode_name(byte: u8) -> Cow<'static, str> {
-    for &(code, name) in MODE_TABLE {
+/// Look up mode name and unit from mode byte.
+/// Returns `(Cow::Borrowed(name), unit)` for known modes,
+/// or `(Cow::Owned("Unknown(0xNN)"), "")` for unknown bytes.
+fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
+    for &(code, name, unit) in MODE_TABLE {
         if code == byte {
-            return Cow::Borrowed(name);
+            return (Cow::Borrowed(name), unit);
         }
     }
     warn!("ut171: unknown mode byte {:#04x}", byte);
-    Cow::Owned(format!("Unknown({:#04x})", byte))
-}
-
-/// Derive unit from mode name.
-fn unit_for_mode(mode: &str) -> &'static str {
-    match mode {
-        "V DC" | "V AC" | "V AC+DC" | "LoZ V~" | "VFC" | "Diode" => "V",
-        "mV DC" | "mV AC" | "mV AC+DC" => "mV",
-        "µA DC" | "µA AC" | "µA AC+DC" => "µA",
-        "mA DC" | "mA AC" | "mA AC+DC" => "mA",
-        "A DC" | "A AC" | "A AC+DC" | "600A DC" | "600A AC" => "A",
-        "Ω" | "Continuity" => "Ω",
-        "Capacitance" => "F",
-        "Hz" => "Hz",
-        "Duty %" => "%",
-        "°C" => "°C",
-        "°F" => "°F",
-        "nS" => "nS",
-        "% 4-20mA" => "%",
-        "NCV" => "",
-        _ => "",
-    }
+    (Cow::Owned(format!("Unknown({:#04x})", byte)), "")
 }
 
 const UT171_COMMANDS: &[&str] = &["connect", "pause"];
@@ -318,8 +300,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let mode_byte = payload[4];
     let _range_byte = payload[5];
 
-    let mode = mode_name(mode_byte);
-    let unit = unit_for_mode(&mode);
+    let (mode, unit) = lookup_mode(mode_byte);
 
     // Parse IEEE 754 float32 LE main value
     let main_bytes: [u8; 4] = [payload[6], payload[7], payload[8], payload[9]];
@@ -470,7 +451,7 @@ mod tests {
 
     #[test]
     fn all_known_modes_parse() {
-        for &(code, _name) in MODE_TABLE {
+        for &(code, _name, _unit) in MODE_TABLE {
             let payload = make_payload(code, 0x01, 1.0, 0x00);
             let m = parse_measurement(&payload).unwrap();
             assert!(
