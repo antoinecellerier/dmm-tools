@@ -95,6 +95,31 @@ pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
     Dmm::new(cp, protocol)
 }
 
+/// Open a device by registry ID (e.g. "ut61eplus", "ut61b+", "ut8803").
+///
+/// Uses the device registry to look up the correct protocol factory,
+/// so model-specific protocols (e.g. UT61B+ vs UT61E+ tables) are selected correctly.
+///
+/// The `mock` device is not supported here — use [`mock::open_mock()`] instead.
+pub fn open_device_by_id(id: &str) -> Result<Dmm<cp2110::Cp2110>> {
+    let entry =
+        protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
+
+    let api = hidapi::HidApi::new().map_err(Error::Hid)?;
+    let device = api
+        .open(cp2110::VID, cp2110::PID)
+        .map_err(|_| Error::DeviceNotFound {
+            vid: cp2110::VID,
+            pid: cp2110::PID,
+        })?;
+
+    let cp = cp2110::Cp2110::new(device);
+    cp.init_uart()?;
+
+    let protocol = (entry.new_protocol)();
+    Dmm::new(cp, protocol)
+}
+
 /// List all connected CP2110 devices.
 pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;

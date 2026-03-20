@@ -39,16 +39,47 @@ To add support for a device family with a different wire protocol:
 
 1. Create `crates/ut61eplus-lib/src/protocol/newfamily/mod.rs`
 2. Implement the `Protocol` trait (`init`, `request_measurement`, `send_command`, `get_name`, `profile`, `capture_steps`)
-3. Add a variant to the `DeviceFamily` enum in `protocol/mod.rs`
-4. Add `Display`, `FromStr`, and `activation_instructions()` for the new variant
-5. Add the match arm in `open_device()` in `lib.rs`
-6. Add the `--device` alias in the CLI's `parse_device_family()` (if needed)
-7. Add the device to the GUI selector in `app.rs` (`device_display_name` and settings panel)
-8. Create research docs in `docs/research/newfamily/` documenting the wire protocol
-9. Set `Stability::Experimental` in the `DeviceProfile` until verified against real hardware
+3. Add a variant to the `DeviceFamily` enum in `protocol/mod.rs` and update `Display`
+4. Add the match arm in `open_device()` in `lib.rs`
+5. Add a `SelectableDevice` entry in `protocol/registry.rs` with a factory function
+6. Create research docs in `docs/research/newfamily/` documenting the wire protocol
+7. Set `Stability::Experimental` in the `DeviceProfile` until verified against real hardware
+
+That's it — the CLI and GUI automatically pick up new devices from the registry.
+No app code changes needed. The `--device` help text, GUI device selector, activation
+instructions, and protocol dispatch all come from the registry entry.
+
+**Example: adding a hypothetical UT99X family**
+
+```rust
+// 1. In protocol/mod.rs — add the variant:
+pub enum DeviceFamily {
+    // ...existing variants...
+    Ut99x,
+}
+
+// 2. In protocol/registry.rs — add factory + entry:
+fn new_ut99x() -> Box<dyn Protocol> {
+    Box::new(Ut99xProtocol::new())
+}
+
+// Add to DEVICES slice:
+SelectableDevice {
+    id: "ut99x",
+    display_name: "UT99X",
+    aliases: &["ut99xa", "ut99xb"],
+    requires_hardware: true,
+    activation_instructions: "1. Connect USB\n2. Turn on meter",
+    family: DeviceFamily::Ut99x,
+    new_protocol: new_ut99x,
+},
+
+// 3. In lib.rs — add the match arm in open_device():
+DeviceFamily::Ut99x => Box::new(Ut99xProtocol::new()),
+```
 
 The `Protocol` trait is object-safe and `Send`, so the new family works automatically
-with `Dmm<T>`, the CLI, and (eventually) the GUI.
+with `Dmm<T>`, the CLI, and the GUI.
 
 ## Golden File Tests
 

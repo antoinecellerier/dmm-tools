@@ -1,4 +1,5 @@
 pub mod framing;
+pub mod registry;
 pub mod ut171;
 pub mod ut181a;
 pub mod ut61eplus;
@@ -52,55 +53,13 @@ impl std::fmt::Display for DeviceFamily {
     }
 }
 
-impl DeviceFamily {
-    /// User-facing instructions for enabling data transmission on this device.
-    pub fn activation_instructions(&self) -> &'static str {
-        match self {
-            DeviceFamily::Ut61EPlus => {
-                "\
-1. Insert the USB module into the meter
-2. Turn the meter on
-3. Long press the USB/Hz button
-4. The S icon appears on the LCD"
-            }
-            DeviceFamily::Ut8803 => {
-                "\
-1. Connect the USB cable to the meter
-2. Turn the meter on"
-            }
-            DeviceFamily::Ut171 => {
-                "\
-1. Connect the USB cable to the meter
-2. Turn the meter on
-3. Go to SETUP -> Communication -> ON"
-            }
-            DeviceFamily::Ut181a => {
-                "\
-1. Connect the USB cable to the meter
-2. Turn the meter on
-3. Go to SETUP -> Communication -> ON
-Note: this setting resets on power cycle."
-            }
-            DeviceFamily::Mock => "No setup required \u{2014} this is a simulated device.",
-        }
-    }
-}
-
 impl std::str::FromStr for DeviceFamily {
     type Err = String;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "ut61eplus" | "ut61e+" | "ut61e" | "ut61bplus" | "ut61b+" | "ut61b" | "ut61dplus"
-            | "ut61d+" | "ut61d" | "ut161b" | "ut161d" | "ut161e" | "ut161" => {
-                Ok(DeviceFamily::Ut61EPlus)
-            }
-            "ut8803" | "ut8803e" => Ok(DeviceFamily::Ut8803),
-            "ut171" | "ut171a" | "ut171b" | "ut171c" => Ok(DeviceFamily::Ut171),
-            "ut181a" | "ut181" => Ok(DeviceFamily::Ut181a),
-            "mock" => Ok(DeviceFamily::Mock),
-            _ => Err(format!("unknown device family: {s}")),
-        }
+        registry::resolve_device(s)
+            .map(|d| d.family)
+            .ok_or_else(|| format!("unknown device family: {s}"))
     }
 }
 

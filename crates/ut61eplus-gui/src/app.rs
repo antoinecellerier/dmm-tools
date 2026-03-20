@@ -4,7 +4,8 @@ use std::sync::mpsc;
 use std::time::Instant;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 use ut61eplus_lib::mock::MockMode;
-use ut61eplus_lib::protocol::{DeviceFamily, Stability};
+use ut61eplus_lib::protocol::Stability;
+use ut61eplus_lib::protocol::registry;
 use ut61eplus_lib::transport::Transport;
 
 use crate::display;
@@ -12,23 +13,6 @@ use crate::graph::Graph;
 use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use crate::stats::Stats;
-
-/// Map a device family setting value to its user-facing display name.
-fn device_display_name(value: &str) -> &'static str {
-    match value {
-        "ut61eplus" => "UT61E+",
-        "ut61b+" => "UT61B+",
-        "ut61d+" => "UT61D+",
-        "ut161b" => "UT161B",
-        "ut161d" => "UT161D",
-        "ut161e" => "UT161E",
-        "ut8803" => "UT8803",
-        "ut171" => "UT171",
-        "ut181a" => "UT181A",
-        "mock" => "Mock",
-        _ => "DMM",
-    }
-}
 
 /// Messages from the background thread to the UI.
 pub enum DmmMessage {
@@ -352,14 +336,11 @@ impl App {
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
         let sample_interval_ms = self.settings.sample_interval_ms;
-        let device_family = self
-            .settings
-            .device_family
-            .parse::<DeviceFamily>()
-            .unwrap_or(DeviceFamily::Ut61EPlus);
+        let device_entry = registry::resolve_device(&self.settings.device_family)
+            .unwrap_or_else(registry::default_device);
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
-        if device_family == DeviceFamily::Mock {
+        if !device_entry.requires_hardware {
             let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
                 None
             } else {
@@ -389,12 +370,13 @@ impl App {
                 }
             });
         } else {
+            let device_id = device_entry.id;
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
                 let panic_ctx = ctx_clone.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
-                        move || ut61eplus_lib::open_device(device_family),
+                        move || ut61eplus_lib::open_device_by_id(device_id),
                         msg_tx,
                         stop_rx,
                         cmd_rx,
@@ -611,20 +593,16 @@ impl App {
         } else {
             // Dongle found but meter not responding
             ui.label(RichText::new("No response from meter").color(warn_color));
-            let device_label = device_display_name(&self.settings.device_family);
-            let family = self
-                .settings
-                .device_family
-                .parse::<DeviceFamily>()
-                .unwrap_or(DeviceFamily::Ut61EPlus);
+            let device_entry = registry::resolve_device(&self.settings.device_family)
+                .unwrap_or_else(registry::default_device);
             let instructions = format!(
                 "The USB adapter is connected but the meter \n\
-                 isn't responding ({device_label} selected).\n\
+                 isn't responding ({} selected).\n\
                  \n\
                  If this is the wrong device, change it in Settings (\u{2699}).\n\
                  Otherwise, enable data transmission:\n\
                  {}",
-                family.activation_instructions()
+                device_entry.display_name, device_entry.activation_instructions
             );
             ui.label(
                 RichText::new(instructions)
@@ -636,7 +614,9 @@ impl App {
 
     fn show_top_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         ui.horizontal(|ui| {
-            let device_label = device_display_name(&self.settings.device_family);
+            let device_label = registry::find_device(&self.settings.device_family)
+                .map(|d| d.display_name)
+                .unwrap_or("DMM");
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
@@ -838,24 +818,15 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.label("Device:");
             let mut changed = false;
-            // List all supported models — each resolves to a DeviceFamily via FromStr
-            for &(value, label) in &[
-                ("ut61eplus", "UT61E+"),
-                ("ut61b+", "UT61B+"),
-                ("ut61d+", "UT61D+"),
-                ("ut161b", "UT161B"),
-                ("ut161d", "UT161D"),
-                ("ut161e", "UT161E"),
-                ("ut8803", "UT8803"),
-                ("ut171", "UT171A/B/C"),
-                ("ut181a", "UT181A"),
-                ("mock", "Mock (simulated)"),
-            ] {
+            for device in registry::DEVICES {
                 if ui
-                    .selectable_label(self.settings.device_family == value, label)
+                    .selectable_label(
+                        self.settings.device_family == device.id,
+                        device.display_name,
+                    )
                     .clicked()
                 {
-                    self.settings.device_family = value.to_string();
+                    self.settings.device_family = device.id.to_string();
                     changed = true;
                 }
             }
@@ -869,7 +840,7 @@ impl App {
         });
 
         // Mock mode selector (only shown when mock device is selected)
-        if self.settings.device_family == "mock" {
+        if registry::find_device(&self.settings.device_family).is_some_and(|d| d.id == "mock") {
             ui.horizontal_wrapped(|ui| {
                 ui.label("Mock mode:");
                 let mut changed = false;

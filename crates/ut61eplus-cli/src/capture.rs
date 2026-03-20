@@ -943,7 +943,7 @@ pub fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
     mut dmm: ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
-    family: ut61eplus_lib::protocol::DeviceFamily,
+    device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());
@@ -965,7 +965,7 @@ pub fn cmd_capture(
                             .bold()
                     );
                     eprintln!("To enable data transmission:");
-                    for line in family.activation_instructions().lines() {
+                    for line in device.activation_instructions.lines() {
                         eprintln!("  {line}");
                     }
                     eprintln!();
@@ -976,7 +976,7 @@ pub fn cmd_capture(
         }
     };
 
-    let supported = device_name.contains("UT61E+");
+    let supported = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Verified;
     eprintln!("Device: {}", style(&device_name).bold());
     if supported {
         eprintln!("Status: {}", style("supported model").green());

@@ -29,13 +29,20 @@ Set `NO_COLOR=1` to disable colored output.
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
-### Device Families
+### Devices
 
-The `--device` flag selects which protocol to use. Accepted values and aliases:
+The `--device` flag selects which device model and protocol to use. Each model has
+its own entry with model-specific protocol tables (e.g., UT61B+ uses different
+mode/range mappings than UT61E+).
 
 | Value | Aliases | Description |
 |---|---|---|
-| `ut61eplus` | `ut61e+`, `ut61e`, `ut61b+`, `ut61bplus`, `ut61d+`, `ut61dplus`, `ut161b`, `ut161d`, `ut161e`, `ut161` | UT61E+, UT61B+, UT61D+, UT161 series (default, verified) |
+| `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (default, verified) |
+| `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (experimental) |
+| `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
+| `ut161b` | | UT161B (experimental, same protocol as UT61B+) |
+| `ut161d` | | UT161D (experimental, same protocol as UT61D+) |
+| `ut161e` | `ut161` | UT161E (same protocol as UT61E+) |
 | `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (experimental) |

@@ -26,6 +26,9 @@ pub enum Error {
 
     #[error("unsupported command: {0}")]
     UnsupportedCommand(String),
+
+    #[error("unknown device: {0}")]
+    UnknownDevice(String),
 }
 
 impl Error {

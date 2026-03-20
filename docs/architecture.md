@@ -21,6 +21,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport.rs` | `Transport` trait abstracting HID I/O; `MockTransport` for tests |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |
+| `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/framing.rs` | Message framing: find `AB CD` header, extract payload, validate checksum |
 | `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `DeviceTable` impls) |
 | `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming protocol with 0x5A trigger |
@@ -34,10 +35,12 @@ The library crate handles all device communication and data parsing. It has no U
 **Data flow:**
 
 ```
-USB HID ──► Cp2110 (Transport) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags, ... }
+CLI/GUI ──► registry::resolve_device() ──► SelectableDevice.new_protocol()
+                                                    │
+USB HID ──► Cp2110 (Transport) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
                                          │
-                              DeviceFamily selects impl:
-                              ├── Ut61PlusProtocol  (polled, AB CD framing, DeviceTable lookup)
+                              Registry factory selects impl:
+                              ├── Ut61PlusProtocol  (polled, AB CD framing, per-model DeviceTable)
                               ├── Ut8803Protocol    (streaming, 0x5A trigger)
                               ├── Ut171Protocol     (streaming, float32 LE)
                               └── Ut181aProtocol    (streaming, device-sent units)
@@ -45,10 +48,15 @@ USB HID ──► Cp2110 (Transport) ──► Box<dyn Protocol> ──► Measu
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
 `request_measurement()`, `send_command()`, `get_name()`, `profile()`, and `capture_steps()`.
-`DeviceFamily` provides `activation_instructions()` for user-facing setup guidance. Each
-family implements its own framing, parsing, and command encoding internally, but all
-produce the same `Measurement` struct. `open_device(family)` constructs the appropriate protocol
-implementation based on the `DeviceFamily` enum.
+Each family implements its own framing, parsing, and command encoding internally, but all
+produce the same `Measurement` struct.
+
+**Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
+devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation
+instructions, and a factory function that creates the correct `Protocol` instance. The CLI
+and GUI resolve user input via `resolve_device()` and use `open_device_by_id()` to connect —
+they never match on `DeviceFamily` variants or instantiate protocol types directly. Adding a
+new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
 
 ### ut61eplus-cli
 
@@ -89,3 +97,4 @@ sample log, persistent settings.
 9. **Graph segment caching** — segments and gap ranges are rebuilt only when history changes, not every render frame.
 10. **Bounded buffers** — graph history (10K points), recording (500K samples), and the background channel prevent unbounded memory growth during sustained use.
 11. **Settings schema evolution** — `#[serde(default)]` on `Settings` allows adding new fields without breaking existing config files.
+12. **Device registry** — all device metadata (display names, aliases, activation instructions, protocol factories) lives in a single `DEVICES` slice in the library. CLI and GUI consume the registry without device-specific knowledge, so adding a new device family requires zero app code changes.

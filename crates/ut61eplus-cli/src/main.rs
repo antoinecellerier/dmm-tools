@@ -1,7 +1,7 @@
 mod capture;
 mod format;
 
-use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
 use log::{error, info};
@@ -10,7 +10,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use ut61eplus_lib::measurement::MeasuredValue;
-use ut61eplus_lib::protocol::{DeviceFamily, Protocol};
+use ut61eplus_lib::protocol::Protocol;
+use ut61eplus_lib::protocol::registry::{self, SelectableDevice};
 
 fn version_string() -> &'static str {
     let version = env!("CARGO_PKG_VERSION");
@@ -31,23 +32,8 @@ fn version_string() -> &'static str {
     after_long_help = "Set NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Cli {
-    /// Device family [ut61eplus, ut8803, ut171, ut181a, mock]
-    #[arg(
-        long,
-        default_value = "ut61eplus",
-        long_help = "\
-Device family to connect to.
-
-Families:
-  ut61eplus  UT61E+, UT61B+, UT61D+, UT161B/D/E (default)
-  ut8803     UT8803, UT8803E (experimental)
-  ut171      UT171A, UT171B, UT171C (experimental)
-  ut181a     UT181A (experimental)
-  mock       Simulated device (no hardware required)
-
-Also accepts model names directly: ut61b+, ut161d, ut171a, etc.
-Quote names with special characters: --device 'ut61e+'"
-    )]
+    /// Device to connect to [ut61eplus, ut8803, ut171, ut181a, mock, ...]
+    #[arg(long, default_value = "ut61eplus")]
     device: String,
 
     #[command(subcommand)]
@@ -136,18 +122,24 @@ pub enum OutputFormat {
     Json,
 }
 
-fn parse_device_family(s: &str) -> Result<DeviceFamily, String> {
-    s.parse::<DeviceFamily>()
-}
-
 fn main() {
     env_logger::init();
-    let cli = Cli::parse();
 
-    let family = match parse_device_family(&cli.device) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("{} {e}", style("Error:").red().bold());
+    // Build CLI with registry-generated --device long_help
+    let mut cmd = Cli::command();
+    let device_help = build_device_help();
+    cmd = cmd.mut_arg("device", |a| a.long_help(device_help));
+    let cli =
+        Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
+
+    let device = match registry::resolve_device(&cli.device) {
+        Some(d) => d,
+        None => {
+            eprintln!(
+                "{} unknown device: {}",
+                style("Error:").red().bold(),
+                cli.device,
+            );
             std::process::exit(1);
         }
     };
@@ -182,29 +174,30 @@ fn main() {
             output,
             count,
             mock_mode,
-        } if family == DeviceFamily::Mock => {
+        } if !device.requires_hardware => {
             cmd_read_mock(interval_ms, format, output, count, mock_mode)
         }
-        Cmd::Command { action } if family == DeviceFamily::Mock => cmd_command_mock(action),
-        Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if family == DeviceFamily::Mock => {
+        Cmd::Command { action } if !device.requires_hardware => cmd_command_mock(action),
+        Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
             eprintln!(
-                "{} This command requires real hardware (not supported with --device mock).",
-                style("Error:").red().bold()
+                "{} This command requires real hardware (not supported with --device {}).",
+                style("Error:").red().bold(),
+                device.id,
             );
             std::process::exit(1);
         }
 
         // Real device
-        Cmd::Info => cmd_info(family),
+        Cmd::Info => cmd_info(device),
         Cmd::Read {
             interval_ms,
             format,
             output,
             count,
             mock_mode: _,
-        } => cmd_read(family, interval_ms, format, output, count),
-        Cmd::Command { action } => cmd_command(family, action),
-        Cmd::Debug { count, interval_ms } => cmd_debug(family, count, interval_ms),
+        } => cmd_read(device, interval_ms, format, output, count),
+        Cmd::Command { action } => cmd_command(device, action),
+        Cmd::Debug { count, interval_ms } => cmd_debug(device, count, interval_ms),
         Cmd::Capture {
             output,
             steps,
@@ -214,8 +207,8 @@ fn main() {
                 capture::list_steps();
                 Ok(())
             } else {
-                open_with_help(family)
-                    .and_then(|dmm| capture::cmd_capture(output, steps, dmm, family))
+                open_with_help(device)
+                    .and_then(|dmm| capture::cmd_capture(output, steps, dmm, device))
             }
         }
     };
@@ -227,11 +220,29 @@ fn main() {
     }
 }
 
+/// Build long help text for --device from the registry.
+fn build_device_help() -> String {
+    let mut help = String::from("Device to connect to.\n\nDevices:\n");
+    for d in registry::DEVICES {
+        let stability = (d.new_protocol)().profile().stability;
+        let tag = if !d.requires_hardware {
+            " (no hardware required)"
+        } else if stability == ut61eplus_lib::protocol::Stability::Experimental {
+            " (experimental)"
+        } else {
+            ""
+        };
+        help.push_str(&format!("  {:<12} {}{}\n", d.id, d.display_name, tag));
+    }
+    help.push_str("\nAlso accepts aliases: ut61e+, ut61b, ut171a, ut181, etc.\nQuote names with special characters: --device 'ut61e+'");
+    help
+}
+
 /// Open the meter with helpful error messages for common failures.
 fn open_with_help(
-    family: DeviceFamily,
+    device: &'static SelectableDevice,
 ) -> Result<ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>, Box<dyn std::error::Error>> {
-    match ut61eplus_lib::open_device(family) {
+    match ut61eplus_lib::open_device_by_id(device.id) {
         Ok(dmm) => {
             let profile = dmm.profile();
             if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
@@ -250,7 +261,7 @@ fn open_with_help(
                 );
                 eprintln!(
                     "{}",
-                    style(format!("  ut61eplus --device {} capture", family)).yellow()
+                    style(format!("  ut61eplus --device {} capture", device.id)).yellow()
                 );
             }
             Ok(dmm)
@@ -311,8 +322,8 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn cmd_info(family: DeviceFamily) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_with_help(family)?;
+fn cmd_info(device: &'static SelectableDevice) -> Result<(), Box<dyn std::error::Error>> {
+    let mut dmm = open_with_help(device)?;
     let name = dmm.get_name()?;
     match name {
         Some(ref n) => println!("Device: {}", style(n).bold()),
@@ -357,13 +368,13 @@ fn cmd_info(family: DeviceFamily) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn cmd_read(
-    family: DeviceFamily,
+    device: &'static SelectableDevice,
     interval_ms: u64,
     format: OutputFormat,
     output_path: Option<String>,
     count: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_with_help(family)?;
+    let mut dmm = open_with_help(device)?;
     let experimental = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Experimental;
     info!("connected, starting measurement loop");
     run_read_loop(
@@ -373,7 +384,7 @@ fn cmd_read(
         output_path,
         count,
         experimental,
-        Some(family),
+        Some(device),
     )
 }
 
@@ -416,7 +427,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
     count: usize,
     experimental: bool,
     // When set, timeout warnings include device-specific activation instructions.
-    family: Option<DeviceFamily>,
+    device: Option<&'static SelectableDevice>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -453,14 +464,14 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
                 consecutive_timeouts += 1;
                 log::warn!("measurement timeout, retrying");
                 if consecutive_timeouts == 5
-                    && let Some(f) = family
+                    && let Some(d) = device
                 {
                     eprintln!(
                         "{} No response from meter. Check that --device {} is correct and that data transmission is enabled.",
                         style("Warning:").yellow(),
-                        f,
+                        d.id,
                     );
-                    eprintln!("{}", style(f.activation_instructions()).dim());
+                    eprintln!("{}", style(d.activation_instructions).dim());
                 }
             }
             Err(e) => {
@@ -534,33 +545,19 @@ impl ReadStats {
 }
 
 fn cmd_command(
-    family: DeviceFamily,
+    device: &'static SelectableDevice,
     action: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match action {
         Some(action) => {
-            let mut dmm = open_with_help(family)?;
+            let mut dmm = open_with_help(device)?;
             dmm.send_command(&action)?;
             println!("{} {action}", style("Sent").green());
             Ok(())
         }
         None => {
-            // List supported commands for this device family without connecting
-            let protocol: Box<dyn ut61eplus_lib::protocol::Protocol> = match family {
-                DeviceFamily::Ut61EPlus => {
-                    Box::new(ut61eplus_lib::protocol::ut61eplus::Ut61PlusProtocol::new())
-                }
-                DeviceFamily::Ut8803 => {
-                    Box::new(ut61eplus_lib::protocol::ut8803::Ut8803Protocol::new())
-                }
-                DeviceFamily::Ut171 => {
-                    Box::new(ut61eplus_lib::protocol::ut171::Ut171Protocol::new())
-                }
-                DeviceFamily::Ut181a => {
-                    Box::new(ut61eplus_lib::protocol::ut181a::Ut181aProtocol::new())
-                }
-                DeviceFamily::Mock => unreachable!("mock handled before cmd_command"),
-            };
+            // List supported commands without connecting — use the registry factory
+            let protocol = (device.new_protocol)();
             let cmds = protocol.profile().supported_commands;
             if cmds.is_empty() {
                 eprintln!(
@@ -583,7 +580,7 @@ fn cmd_command(
 }
 
 fn cmd_debug(
-    family: DeviceFamily,
+    device: &'static SelectableDevice,
     count: usize,
     interval_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -593,7 +590,7 @@ fn cmd_debug(
         r.store(false, Ordering::SeqCst);
     })?;
 
-    let mut dmm = open_with_help(family)?;
+    let mut dmm = open_with_help(device)?;
 
     // Show CP2110 bridge info before entering measurement loop
     if let Ok(ver) = dmm.transport().version_info() {

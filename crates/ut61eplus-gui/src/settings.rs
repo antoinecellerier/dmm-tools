@@ -42,7 +42,9 @@ impl Default for Settings {
             auto_connect: true,
             zoom_pct: 100,
             sample_interval_ms: 0,
-            device_family: "ut61eplus".to_string(),
+            device_family: ut61eplus_lib::protocol::registry::default_device()
+                .id
+                .to_string(),
             mock_mode: String::new(),
         }
     }
