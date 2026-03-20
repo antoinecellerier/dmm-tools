@@ -89,6 +89,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - `docs/ux-design.md` — CLI command interface, output formats, GUI layout and interaction patterns
 - `docs/setup.md` — build prerequisites, udev setup, first-run instructions, troubleshooting common issues
 - `docs/development.md` — how to run tests, add new device models, coding conventions, release process
+- `docs/adding-devices.md` — end-to-end guide: discovery, clean-room RE, implementation, spec data extraction, hardware verification, common pitfalls. **Read this before starting work on any new device.**
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 
