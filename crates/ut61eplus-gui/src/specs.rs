@@ -1,6 +1,42 @@
 use eframe::egui::{self, RichText, Ui};
 use ut61eplus_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
 
+/// Build a compact single-line accuracy string from the spec's accuracy bands.
+/// For a single band: `±(0.1%+5)`. For multiple bands: first band only with its
+/// frequency range appended, e.g. `±(0.1%+5) 45Hz~1kHz`.
+fn compact_accuracy_str(spec: &SpecInfo) -> String {
+    if spec.accuracy.len() == 1 {
+        format!("\u{00B1}({})", spec.accuracy[0].accuracy)
+    } else {
+        let band = &spec.accuracy[0];
+        let freq = band.freq_range.unwrap_or("");
+        format!("\u{00B1}({}) {freq}", band.accuracy)
+    }
+}
+
+/// Build the summary parts vector used by compact and inline layouts.
+///
+/// `res_label` / `acc_label` control the prefix for each field so callers can
+/// choose between short (`"Res:"`) and long (`"Resolution"`) labels.
+fn build_spec_parts(
+    spec: &SpecInfo,
+    mode_spec: Option<&ModeSpecInfo>,
+    res_label: &str,
+    acc_label: &str,
+) -> Vec<String> {
+    let acc_str = compact_accuracy_str(spec);
+    let mut parts = vec![
+        format!("{res_label} {}", spec.resolution),
+        format!("{acc_label} {acc_str}"),
+    ];
+    if let Some(ms) = mode_spec
+        && let Some(z) = ms.input_impedance
+    {
+        parts.push(z.to_string());
+    }
+    parts
+}
+
 /// Full specs panel for the wide (side panel) layout.
 pub fn show_specs(
     ui: &mut Ui,
@@ -28,7 +64,7 @@ pub fn show_specs(
     // Accuracy
     if spec.accuracy.len() == 1 {
         ui.label(
-            RichText::new(format!("Accuracy  \u{00B1}({})", spec.accuracy[0].accuracy))
+            RichText::new(format!("Accuracy  {}", compact_accuracy_str(spec)))
                 .font(egui::FontId::proportional(main_font)),
         );
     } else {
@@ -81,24 +117,7 @@ pub fn show_specs_compact(
     let sub_font = 11.0;
 
     // Build a compact string: "Res: 0.01mV  Acc: ±(0.1%+5)  ~10MΩ"
-    let acc_str = if spec.accuracy.len() == 1 {
-        format!("\u{00B1}({})", spec.accuracy[0].accuracy)
-    } else {
-        // Show first band only in compact mode
-        let band = &spec.accuracy[0];
-        let freq = band.freq_range.unwrap_or("");
-        format!("\u{00B1}({}) {freq}", band.accuracy)
-    };
-
-    let mut parts = vec![
-        format!("Res: {}", spec.resolution),
-        format!("Acc: {acc_str}"),
-    ];
-    if let Some(ms) = mode_spec
-        && let Some(z) = ms.input_impedance
-    {
-        parts.push(z.to_string());
-    }
+    let parts = build_spec_parts(spec, mode_spec, "Res:", "Acc:");
 
     ui.horizontal_wrapped(|ui| {
         ui.label(
@@ -128,23 +147,7 @@ pub fn show_specs_inline(
     let font_size = 12.0 * scale;
     let weak = ui.visuals().weak_text_color();
 
-    let acc_str = if spec.accuracy.len() == 1 {
-        format!("\u{00B1}({})", spec.accuracy[0].accuracy)
-    } else {
-        let band = &spec.accuracy[0];
-        let freq = band.freq_range.unwrap_or("");
-        format!("\u{00B1}({}) {freq}", band.accuracy)
-    };
-
-    let mut parts = vec![
-        format!("Resolution {}", spec.resolution),
-        format!("Accuracy {acc_str}"),
-    ];
-    if let Some(ms) = mode_spec
-        && let Some(z) = ms.input_impedance
-    {
-        parts.push(z.to_string());
-    }
+    let parts = build_spec_parts(spec, mode_spec, "Resolution", "Accuracy");
 
     ui.horizontal_wrapped(|ui| {
         ui.label(
