@@ -224,8 +224,8 @@ pub const FLAG_STEP_IDS: &[&str] = &[
     "auto",
 ];
 
-pub fn all_capture_steps() -> Vec<CaptureStep> {
-    vec![
+pub fn all_capture_steps() -> &'static [CaptureStep] {
+    static STEPS: &[CaptureStep] = &[
         // Part 1: Modes
         CaptureStep {
             id: "dcv",
@@ -385,7 +385,8 @@ pub fn all_capture_steps() -> Vec<CaptureStep> {
             command: None,
             samples: 0,
         },
-    ]
+    ];
+    STEPS
 }
 
 // --- Helpers ---
@@ -753,7 +754,7 @@ mod tests {
     #[test]
     fn mode_and_flag_step_ids_cover_all_steps() {
         let steps = all_capture_steps();
-        for step in &steps {
+        for step in steps {
             let in_modes = MODE_STEP_IDS.contains(&step.id);
             let in_flags = FLAG_STEP_IDS.contains(&step.id);
             let is_range_cycle = step.id == "range_cycle";
@@ -883,14 +884,14 @@ pub fn list_steps() {
     eprintln!("{}", style("Available capture steps:").bold());
     eprintln!();
     eprintln!("{}", style("  Measurement modes:").cyan());
-    for s in &steps {
+    for s in steps {
         if MODE_STEP_IDS.contains(&s.id) {
             eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
         }
     }
     eprintln!();
     eprintln!("{}", style("  Flags & commands:").cyan());
-    for s in &steps {
+    for s in steps {
         if FLAG_STEP_IDS.contains(&s.id) {
             eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
         }
