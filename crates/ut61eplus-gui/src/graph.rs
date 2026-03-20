@@ -1,5 +1,7 @@
 use eframe::egui::{self, Ui, Vec2b};
-use egui_plot::{AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, Points, VLine};
+use egui_plot::{
+    AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points, VLine,
+};
 use std::collections::VecDeque;
 use std::time::Instant;
 
@@ -115,6 +117,25 @@ pub struct Graph {
     cached_gaps: Vec<(f64, f64)>,
     /// Number of history entries when cache was built.
     cache_len: usize,
+}
+
+/// Pre-computed data needed by `paint_overlay_labels` to draw text labels
+/// for mean, reference, and cursor overlays after the plot has been rendered.
+struct OverlayLabelData {
+    show_mean: bool,
+    mean_value: Option<f64>,
+    show_ref: bool,
+    ref_values: Vec<f64>,
+    cursors_active: bool,
+    cursor_a: Option<f64>,
+    cursor_b: Option<f64>,
+    cursor_va: Option<f64>,
+    cursor_vb: Option<f64>,
+    overlay_unit: String,
+    view_max: f64,
+    mean_color: egui::Color32,
+    ref_color: egui::Color32,
+    cursor_color: egui::Color32,
 }
 
 impl Graph {
@@ -530,9 +551,9 @@ impl Graph {
         let can_interact = !self.live;
 
         // Compute Y bounds from visible data
-        let y_bounds = self.y_range_for_view(view_min, view_max);
-
-        let (y_min, y_max) = y_bounds.unwrap_or((-1.0, 1.0));
+        let (y_min, y_max) = self
+            .y_range_for_view(view_min, view_max)
+            .unwrap_or((-1.0, 1.0));
 
         let unit = self.current_unit.clone();
         let y_axis = AxisHints::new_y().formatter(move |mark, _range| {
@@ -585,7 +606,6 @@ impl Graph {
         let cursor_va = cursor_a.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
         let cursor_vb = cursor_b.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
         let mean_value = self.visible_stats().map(|(_, _, avg, _)| avg);
-        let overlay_unit = self.current_unit.clone();
         let visible_stats = self.visible_stats();
 
         let cursor_unit = self.current_unit.clone();
@@ -620,7 +640,6 @@ impl Graph {
 
             // Min/max envelope (drawn first so it's behind the data line)
             if show_envelope && !env_min.is_empty() {
-                // env_color defined above
                 plot_ui.line(
                     Line::new(PlotPoints::new(env_max.clone()))
                         .color(env_color)
@@ -672,7 +691,6 @@ impl Graph {
 
             // Trigger crossing markers (where data crosses reference lines)
             if !crossings.is_empty() {
-                // cross_color defined above
                 plot_ui.points(
                     Points::new(PlotPoints::new(crossings.clone()))
                         .color(cross_color)
@@ -683,7 +701,6 @@ impl Graph {
 
             // Measurement cursors (vertical + horizontal Y-value lines)
             if cursors_active {
-                // cursor_color, cursor_color_dim defined above
                 if let Some(t) = cursor_a {
                     plot_ui.vline(VLine::new(t).color(cursor_color));
                 }
@@ -707,86 +724,114 @@ impl Graph {
             }
         });
 
-        // Draw overlay labels using the painter (unclipped, so labels aren't cut off at edges)
+        let overlay = OverlayLabelData {
+            show_mean,
+            mean_value,
+            show_ref,
+            ref_values,
+            cursors_active,
+            cursor_a,
+            cursor_b,
+            cursor_va,
+            cursor_vb,
+            overlay_unit: self.current_unit.clone(),
+            view_max,
+            mean_color,
+            ref_color,
+            cursor_color,
+        };
+        Self::paint_overlay_labels(ui, &response.response, &response.transform, &overlay);
+        self.handle_interaction(ui, &response.response, &response.transform, can_interact);
+    }
+
+    /// Paint text labels for overlays (mean, reference lines, cursors) using the
+    /// UI painter so they render outside the plot's clip rect.
+    fn paint_overlay_labels(
+        ui: &Ui,
+        plot_response: &egui::Response,
+        transform: &PlotTransform,
+        data: &OverlayLabelData,
+    ) {
         let painter = ui.painter();
         let label_font = egui::FontId::proportional(12.0);
-        let plot_rect = response.response.rect;
+        let plot_rect = plot_response.rect;
 
         // Mean line label — anchored to right edge of plot rect
-        if show_mean && let Some(avg) = mean_value {
-            let y_pos = response
-                .transform
-                .position_from_point(&egui_plot::PlotPoint::new(view_max, avg))
+        if data.show_mean
+            && let Some(avg) = data.mean_value
+        {
+            let y_pos = transform
+                .position_from_point(&egui_plot::PlotPoint::new(data.view_max, avg))
                 .y
                 .clamp(plot_rect.top() + 12.0, plot_rect.bottom() - 2.0);
             painter.text(
                 egui::pos2(plot_rect.right() - 4.0, y_pos - 2.0),
                 egui::Align2::RIGHT_BOTTOM,
-                format!("Mean: {avg:.4} {overlay_unit}"),
+                format!("Mean: {avg:.4} {}", data.overlay_unit),
                 label_font.clone(),
-                mean_color,
+                data.mean_color,
             );
         }
 
         // Reference line labels
-        if show_ref {
-            for &v in &ref_values {
-                let y_pos = response
-                    .transform
-                    .position_from_point(&egui_plot::PlotPoint::new(view_max, v))
+        if data.show_ref {
+            for &v in &data.ref_values {
+                let y_pos = transform
+                    .position_from_point(&egui_plot::PlotPoint::new(data.view_max, v))
                     .y
                     .clamp(plot_rect.top() + 12.0, plot_rect.bottom() - 2.0);
                 painter.text(
                     egui::pos2(plot_rect.right() - 4.0, y_pos - 2.0),
                     egui::Align2::RIGHT_BOTTOM,
-                    format!("{v:.4} {overlay_unit}"),
+                    format!("{v:.4} {}", data.overlay_unit),
                     label_font.clone(),
-                    ref_color,
+                    data.ref_color,
                 );
             }
         }
 
         // Cursor labels
-        if cursors_active {
-            if let Some(t) = cursor_a {
-                let y_val = cursor_va.unwrap_or(0.0);
-                let pos = response
-                    .transform
-                    .position_from_point(&egui_plot::PlotPoint::new(t, y_val));
+        if data.cursors_active {
+            if let Some(t) = data.cursor_a {
+                let y_val = data.cursor_va.unwrap_or(0.0);
+                let pos = transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
                 painter.text(
                     egui::pos2(pos.x + 4.0, pos.y - 2.0),
                     egui::Align2::LEFT_BOTTOM,
-                    format!("A: {t:.2} s / {y_val:.4} {overlay_unit}"),
+                    format!("A: {t:.2} s / {y_val:.4} {}", data.overlay_unit),
                     label_font.clone(),
-                    cursor_color,
+                    data.cursor_color,
                 );
             }
-            if let Some(t) = cursor_b {
-                let y_val = cursor_vb.unwrap_or(0.0);
-                let pos = response
-                    .transform
-                    .position_from_point(&egui_plot::PlotPoint::new(t, y_val));
+            if let Some(t) = data.cursor_b {
+                let y_val = data.cursor_vb.unwrap_or(0.0);
+                let pos = transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
                 painter.text(
                     egui::pos2(pos.x + 4.0, pos.y - 2.0),
                     egui::Align2::LEFT_BOTTOM,
-                    format!("B: {t:.2} s / {y_val:.4} {overlay_unit}"),
+                    format!("B: {t:.2} s / {y_val:.4} {}", data.overlay_unit),
                     label_font.clone(),
-                    cursor_color,
+                    data.cursor_color,
                 );
             }
         }
+    }
 
+    /// Process drag, scroll, zoom, and cursor-click interactions on the plot.
+    fn handle_interaction(
+        &mut self,
+        ui: &Ui,
+        plot_response: &egui::Response,
+        transform: &PlotTransform,
+        can_interact: bool,
+    ) {
         // Handle drag: convert pixel delta to time delta
-        if can_interact && response.response.dragged() {
-            let drag_px = response.response.drag_delta().x;
+        if can_interact && plot_response.dragged() {
+            let drag_px = plot_response.drag_delta().x;
             // Convert pixel drag to time using the transform
-            let left = response
-                .transform
-                .value_from_position(response.response.rect.left_top());
-            let right = response
-                .transform
-                .value_from_position(response.response.rect.right_top());
-            let px_per_sec = response.response.rect.width() as f64 / (right.x - left.x).max(1e-6);
+            let left = transform.value_from_position(plot_response.rect.left_top());
+            let right = transform.value_from_position(plot_response.rect.right_top());
+            let px_per_sec = plot_response.rect.width() as f64 / (right.x - left.x).max(1e-6);
             let time_delta = drag_px as f64 / px_per_sec;
             self.view_center -= time_delta;
         }
@@ -797,8 +842,8 @@ impl Graph {
             if scroll.abs() > 0.1 {
                 let factor = if scroll > 0.0 { 0.9 } else { 1.1 };
                 // Find cursor X position in time coordinates for centered zoom
-                if let Some(hover_pos) = response.response.hover_pos() {
-                    let cursor_t = response.transform.value_from_position(hover_pos).x;
+                if let Some(hover_pos) = plot_response.hover_pos() {
+                    let cursor_t = transform.value_from_position(hover_pos).x;
                     let old_half = self.time_window_secs / 2.0;
                     self.time_window_secs = (self.time_window_secs * factor).clamp(2.0, 3600.0);
                     let new_half = self.time_window_secs / 2.0;
@@ -822,16 +867,16 @@ impl Graph {
         }
 
         // Double-click to return to live mode
-        if response.response.double_clicked() {
+        if plot_response.double_clicked() {
             self.live = true;
         }
 
         // Cursor placement on click — snap to nearest data point
         if self.cursors_active
-            && response.response.clicked()
-            && let Some(pos) = response.response.interact_pointer_pos()
+            && plot_response.clicked()
+            && let Some(pos) = plot_response.interact_pointer_pos()
         {
-            let click_t = response.transform.value_from_position(pos).x;
+            let click_t = transform.value_from_position(pos).x;
             if let Some((snapped_t, _)) = self.nearest_point(click_t) {
                 if self.cursor_next_is_b {
                     self.cursor_b = Some(snapped_t);
