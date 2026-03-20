@@ -124,6 +124,33 @@ struct Scenario {
     value_fn: fn(u64) -> MeasuredValue,
 }
 
+impl Scenario {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        id: MockMode,
+        mode: &'static str,
+        mode_raw: u16,
+        range_raw: u8,
+        unit: &'static str,
+        range_label: &'static str,
+        range_max: f64,
+        samples: u64,
+        value_fn: fn(u64) -> MeasuredValue,
+    ) -> Self {
+        Self {
+            id,
+            mode,
+            mode_raw,
+            range_raw,
+            unit,
+            range_label,
+            range_max,
+            samples,
+            value_fn,
+        }
+    }
+}
+
 fn dcv_value(step: u64) -> MeasuredValue {
     MeasuredValue::Normal(5.0 + 3.0 * (step as f64 / 15.0).sin())
 }
@@ -170,105 +197,102 @@ fn ncv_value(step: u64) -> MeasuredValue {
 
 fn scenarios() -> Vec<Scenario> {
     vec![
-        Scenario {
-            id: MockMode::DcV,
-            mode: "DC V",
-            mode_raw: 0x02,
-            range_raw: 1, // 22V range
-            unit: "V",
-            range_label: "22V",
-            range_max: 22.0,
-            samples: 100,
-            value_fn: dcv_value,
-        },
-        Scenario {
-            id: MockMode::AcV,
-            mode: "AC V",
-            mode_raw: 0x00,
-            range_raw: 2, // 220V range
-            unit: "V",
-            range_label: "220V",
-            range_max: 220.0,
-            samples: 100,
-            value_fn: acv_value,
-        },
-        Scenario {
-            id: MockMode::Ohm,
-            mode: "\u{03A9}",
-            mode_raw: 0x06,
-            range_raw: 2, // 22kΩ range
-            unit: "k\u{03A9}",
-            range_label: "22k\u{03A9}",
-            range_max: 22.0,
-            samples: 100,
-            value_fn: ohm_value,
-        },
-        Scenario {
-            id: MockMode::Capacitance,
-            mode: "Capacitance",
-            mode_raw: 0x09,
-            range_raw: 3, // 22µF range
-            unit: "\u{00B5}F",
-            range_label: "22\u{00B5}F",
-            range_max: 22.0,
-            samples: 100,
-            value_fn: cap_value,
-        },
-        Scenario {
-            id: MockMode::Hz,
-            mode: "Hz",
-            mode_raw: 0x04,
-            range_raw: 1, // 220Hz range
-            unit: "Hz",
-            range_label: "220Hz",
-            range_max: 220.0,
-            samples: 80,
-            value_fn: hz_value,
-        },
-        Scenario {
-            id: MockMode::Temp,
-            mode: "Temp \u{00B0}C",
-            mode_raw: 0x0A,
-            range_raw: 0,
-            unit: "\u{00B0}C",
-            range_label: "",
-            range_max: 400.0,
-            samples: 80,
-            value_fn: temp_value,
-        },
-        Scenario {
-            id: MockMode::DcMa,
-            mode: "DC mA",
-            mode_raw: 0x0E,
-            range_raw: 1, // 220mA range
-            unit: "mA",
-            range_label: "220mA",
-            range_max: 220.0,
-            samples: 80,
-            value_fn: dcma_value,
-        },
-        Scenario {
-            id: MockMode::OhmOl,
-            mode: "\u{03A9}",
-            mode_raw: 0x06,
-            range_raw: 5, // 22MΩ range
-            unit: "M\u{03A9}",
-            range_label: "22M\u{03A9}",
-            range_max: 22.0,
-            samples: 20,
-            value_fn: ohm_ol_value,
-        },
-        Scenario {
-            id: MockMode::Ncv,
-            mode: "NCV",
-            mode_raw: 0x14,
-            range_raw: 0,
-            unit: "",
-            range_label: "",
-            range_max: 4.0,
-            samples: 40,
-            value_fn: ncv_value,
-        },
+        // 22V range
+        Scenario::new(
+            MockMode::DcV,
+            "DC V",
+            0x02,
+            1,
+            "V",
+            "22V",
+            22.0,
+            100,
+            dcv_value,
+        ),
+        // 220V range
+        Scenario::new(
+            MockMode::AcV,
+            "AC V",
+            0x00,
+            2,
+            "V",
+            "220V",
+            220.0,
+            100,
+            acv_value,
+        ),
+        // 22kΩ range
+        Scenario::new(
+            MockMode::Ohm,
+            "\u{03A9}",
+            0x06,
+            2,
+            "k\u{03A9}",
+            "22k\u{03A9}",
+            22.0,
+            100,
+            ohm_value,
+        ),
+        // 22µF range
+        Scenario::new(
+            MockMode::Capacitance,
+            "Capacitance",
+            0x09,
+            3,
+            "\u{00B5}F",
+            "22\u{00B5}F",
+            22.0,
+            100,
+            cap_value,
+        ),
+        // 220Hz range
+        Scenario::new(
+            MockMode::Hz,
+            "Hz",
+            0x04,
+            1,
+            "Hz",
+            "220Hz",
+            220.0,
+            80,
+            hz_value,
+        ),
+        Scenario::new(
+            MockMode::Temp,
+            "Temp \u{00B0}C",
+            0x0A,
+            0,
+            "\u{00B0}C",
+            "",
+            400.0,
+            80,
+            temp_value,
+        ),
+        // 220mA range
+        Scenario::new(
+            MockMode::DcMa,
+            "DC mA",
+            0x0E,
+            1,
+            "mA",
+            "220mA",
+            220.0,
+            80,
+            dcma_value,
+        ),
+        // 22MΩ range
+        Scenario::new(
+            MockMode::OhmOl,
+            "\u{03A9}",
+            0x06,
+            5,
+            "M\u{03A9}",
+            "22M\u{03A9}",
+            22.0,
+            20,
+            ohm_ol_value,
+        ),
+        Scenario::new(MockMode::Ncv, "NCV", 0x14, 0, "", "", 4.0, 40, ncv_value),
     ]
 }
 
