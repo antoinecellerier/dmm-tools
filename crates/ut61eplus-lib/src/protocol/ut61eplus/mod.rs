@@ -438,15 +438,16 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
 /// - `display`: 7-byte ASCII display value (e.g. `b"  5.678"`)
 /// - `progress`: (high, low) progress bytes
 /// - `flags`: (flag1, flag2, flag3) nibbles (0x30 prefix added automatically)
+/// Build a 14-byte UT61E+ protocol payload from parts (for tests).
 #[cfg(any(test, feature = "test-support"))]
-pub fn make_test_measurement(
+fn make_payload(
     mode: u8,
     range: u8,
     display: &[u8; 7],
     progress: (u8, u8),
     flags: (u8, u8, u8),
-) -> Measurement {
-    let payload: Vec<u8> = vec![
+) -> Vec<u8> {
+    vec![
         mode,
         range | 0x30,
         display[0],
@@ -461,8 +462,19 @@ pub fn make_test_measurement(
         flags.0 | 0x30,
         flags.1 | 0x30,
         flags.2 | 0x30,
-    ];
+    ]
+}
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn make_test_measurement(
+    mode: u8,
+    range: u8,
+    display: &[u8; 7],
+    progress: (u8, u8),
+    flags: (u8, u8, u8),
+) -> Measurement {
     let table = tables::ut61e_plus::Ut61ePlusTable::new();
+    let payload = make_payload(mode, range, display, progress, flags);
     parse_measurement(&payload, &table).unwrap()
 }
 
@@ -470,31 +482,6 @@ pub fn make_test_measurement(
 mod tests {
     use super::*;
     use tables::ut61e_plus::Ut61ePlusTable;
-
-    fn make_payload(
-        mode: u8,
-        range: u8,
-        display: &[u8; 7],
-        progress: (u8, u8),
-        flags: (u8, u8, u8),
-    ) -> Vec<u8> {
-        vec![
-            mode,
-            range | 0x30,
-            display[0],
-            display[1],
-            display[2],
-            display[3],
-            display[4],
-            display[5],
-            display[6],
-            progress.0,
-            progress.1,
-            flags.0 | 0x30,
-            flags.1 | 0x30,
-            flags.2 | 0x30,
-        ]
-    }
 
     #[test]
     fn parse_dc_voltage() {
