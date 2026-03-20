@@ -39,11 +39,35 @@ The `--device` flag selects which protocol to use. Accepted values and aliases:
 | `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (experimental) |
+| `mock` | | Simulated device (no hardware required) |
 
 Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
 from vendor software and have not been verified against real hardware. When connecting to
 an experimental device, the CLI prints a yellow warning. Please report findings at
 https://github.com/antoinecellerier/dmm-tools.
+
+The `mock` device generates synthetic measurements cycling through multiple modes
+(DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires
+no USB hardware and is useful for development, demos, and testing output formats.
+Supports `read` and `command` subcommands. The `info`, `debug`, and `capture`
+subcommands require real hardware and will exit with an error when used with `mock`.
+
+#### Mock Modes
+
+By default, the mock device cycles through all modes automatically. Use
+`--mock-mode` with `read` to pin to a specific mode:
+
+| Mode | Description |
+|---|---|
+| `dcv` | DC Voltage (sine wave around 5V) |
+| `acv` | AC Voltage (sine wave around 120V) |
+| `ohm` | Resistance (step 1-10 kΩ) |
+| `cap` | Capacitance (ramp 1-20 µF) |
+| `hz` | Frequency (sine wave around 60Hz) |
+| `temp` | Temperature (ramp 20-30°C) |
+| `dcma` | DC mA (sine wave around 50mA) |
+| `ohm-ol` | Resistance overload (OL) |
+| `ncv` | NCV (cycling levels 0-4) |
 
 **Examples:**
 
@@ -56,6 +80,12 @@ ut61eplus --device ut8803 read
 
 # Connect as UT181A
 ut61eplus --device ut181a info
+
+# Use simulated device (no hardware)
+ut61eplus --device mock read
+
+# Pin mock to DC voltage mode
+ut61eplus --device mock read --mock-mode dcv
 ```
 
 ## Commands
@@ -94,6 +124,7 @@ ut61eplus read [OPTIONS]
 | `--format <FORMAT>` | `text` | Output format: `text`, `csv`, or `json`. |
 | `-o, --output <FILE>` | stdout | Write output to a file instead of stdout. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
+| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
 
 When the session ends, a summary line (sample count, min, max, average) is
 printed to stderr.

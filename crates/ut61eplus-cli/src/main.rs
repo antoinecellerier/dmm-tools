@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use ut61eplus_lib::measurement::MeasuredValue;
-use ut61eplus_lib::protocol::DeviceFamily;
+use ut61eplus_lib::protocol::{DeviceFamily, Protocol};
 
 fn version_string() -> &'static str {
     let version = env!("CARGO_PKG_VERSION");
@@ -31,7 +31,7 @@ fn version_string() -> &'static str {
     after_long_help = "Set NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Cli {
-    /// Device family [ut61eplus, ut8803, ut171, ut181a]
+    /// Device family [ut61eplus, ut8803, ut171, ut181a, mock]
     #[arg(
         long,
         default_value = "ut61eplus",
@@ -43,6 +43,7 @@ Families:
   ut8803     UT8803, UT8803E (experimental)
   ut171      UT171A, UT171B, UT171C (experimental)
   ut181a     UT181A (experimental)
+  mock       Simulated device (no hardware required)
 
 Also accepts model names directly: ut61b+, ut161d, ut171a, etc.
 Quote names with special characters: --device 'ut61e+'"
@@ -73,6 +74,19 @@ enum Cmd {
         /// Number of readings (0 = unlimited, Ctrl+C to stop)
         #[arg(long, default_value = "0")]
         count: usize,
+        /// Pin mock device to a specific mode (only with --device mock).
+        /// Without this, mock cycles through all modes automatically.
+        #[arg(
+            long,
+            long_help = "\
+Pin the mock device to a specific measurement mode instead of \
+auto-cycling. Only effective with --device mock.
+
+Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv
+
+Example: --device mock read --mock-mode dcv"
+        )]
+        mock_mode: Option<String>,
     },
     /// Send a button press command to the meter.
     /// Run with no arguments to list available commands for the selected device.
@@ -138,33 +152,57 @@ fn main() {
         }
     };
 
+    // Device-independent commands — handle before mock/real split
     let result = match cli.command {
         Cmd::List => cmd_list(),
+        Cmd::Completions { shell } => {
+            match shell {
+                Some(shell) => {
+                    clap_complete::generate(
+                        shell,
+                        &mut Cli::command(),
+                        "ut61eplus",
+                        &mut std::io::stdout(),
+                    );
+                }
+                None => {
+                    let _ = Cli::command()
+                        .find_subcommand_mut("completions")
+                        .unwrap()
+                        .print_long_help();
+                }
+            }
+            Ok(())
+        }
+
+        // Mock device
+        Cmd::Read {
+            interval_ms,
+            format,
+            output,
+            count,
+            mock_mode,
+        } if family == DeviceFamily::Mock => {
+            cmd_read_mock(interval_ms, format, output, count, mock_mode)
+        }
+        Cmd::Command { action } if family == DeviceFamily::Mock => cmd_command_mock(action),
+        Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if family == DeviceFamily::Mock => {
+            eprintln!(
+                "{} This command requires real hardware (not supported with --device mock).",
+                style("Error:").red().bold()
+            );
+            std::process::exit(1);
+        }
+
+        // Real device
         Cmd::Info => cmd_info(family),
         Cmd::Read {
             interval_ms,
             format,
             output,
             count,
+            mock_mode: _,
         } => cmd_read(family, interval_ms, format, output, count),
-        Cmd::Completions { shell } => match shell {
-            Some(shell) => {
-                clap_complete::generate(
-                    shell,
-                    &mut Cli::command(),
-                    "ut61eplus",
-                    &mut std::io::stdout(),
-                );
-                Ok(())
-            }
-            None => {
-                let _ = Cli::command()
-                    .find_subcommand_mut("completions")
-                    .unwrap()
-                    .print_long_help();
-                Ok(())
-            }
-        },
         Cmd::Command { action } => cmd_command(family, action),
         Cmd::Debug { count, interval_ms } => cmd_debug(family, count, interval_ms),
         Cmd::Capture {
@@ -325,22 +363,72 @@ fn cmd_read(
     output_path: Option<String>,
     count: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let mut dmm = open_with_help(family)?;
+    let experimental = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Experimental;
+    info!("connected, starting measurement loop");
+    run_read_loop(
+        &mut dmm,
+        interval_ms,
+        &format,
+        output_path,
+        count,
+        experimental,
+        Some(family),
+    )
+}
+
+fn cmd_read_mock(
+    interval_ms: u64,
+    format: OutputFormat,
+    output_path: Option<String>,
+    count: usize,
+    mock_mode: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut dmm = match mock_mode {
+        Some(mode_str) => {
+            let mode: ut61eplus_lib::mock::MockMode = mode_str
+                .parse()
+                .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?;
+            ut61eplus_lib::mock::open_mock_mode(mode)?
+        }
+        None => ut61eplus_lib::mock::open_mock()?,
+    };
+    info!("mock device connected, starting measurement loop");
+    // Mock returns instantly — use 100ms floor to simulate ~10 Hz
+    let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
+    run_read_loop(
+        &mut dmm,
+        interval_ms,
+        &format,
+        output_path,
+        count,
+        false,
+        None,
+    )
+}
+
+/// Shared measurement loop for both real and mock devices.
+fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
+    dmm: &mut ut61eplus_lib::Dmm<T>,
+    interval_ms: u64,
+    format: &OutputFormat,
+    output_path: Option<String>,
+    count: usize,
+    experimental: bool,
+    // When set, timeout warnings include device-specific activation instructions.
+    family: Option<DeviceFamily>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
     })?;
 
-    let mut dmm = open_with_help(family)?;
-    let experimental = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Experimental;
-    info!("connected, starting measurement loop");
-
     let mut writer: Box<dyn Write> = match &output_path {
         Some(path) => Box::new(std::fs::File::create(path).map(std::io::BufWriter::new)?),
         None => Box::new(std::io::stdout().lock()),
     };
 
-    // Write CSV header
     if matches!(format, OutputFormat::Csv) {
         writeln!(writer, "timestamp,mode,value,unit,range,flags")?;
     }
@@ -348,7 +436,6 @@ fn cmd_read(
     let interval = Duration::from_millis(interval_ms);
     let mut stats = ReadStats::default();
     let mut i = 0usize;
-
     let mut consecutive_timeouts: u32 = 0;
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
@@ -358,20 +445,22 @@ fn cmd_read(
                 if let MeasuredValue::Normal(v) = &m.value {
                     stats.push(*v);
                 }
-                format::format_measurement(&mut writer, &m, &format, experimental)?;
+                format::format_measurement(&mut writer, &m, format, experimental)?;
                 writer.flush()?;
                 i += 1;
             }
             Err(ut61eplus_lib::error::Error::Timeout) => {
                 consecutive_timeouts += 1;
                 log::warn!("measurement timeout, retrying");
-                if consecutive_timeouts == 5 {
+                if consecutive_timeouts == 5
+                    && let Some(f) = family
+                {
                     eprintln!(
                         "{} No response from meter. Check that --device {} is correct and that data transmission is enabled.",
                         style("Warning:").yellow(),
-                        family,
+                        f,
                     );
-                    eprintln!("{}", style(family.activation_instructions()).dim());
+                    eprintln!("{}", style(f.activation_instructions()).dim());
                 }
             }
             Err(e) => {
@@ -386,7 +475,6 @@ fn cmd_read(
     info!("shutting down");
     writer.flush()?;
 
-    // Print stats summary to stderr (doesn't interfere with piped output)
     if stats.count > 0 {
         eprintln!(
             "\n{} {} samples | Min: {} | Max: {} | Avg: {}",
@@ -398,6 +486,29 @@ fn cmd_read(
         );
     }
     Ok(())
+}
+
+fn cmd_command_mock(action: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+    match action {
+        Some(action) => {
+            let mut dmm = ut61eplus_lib::mock::open_mock()?;
+            dmm.send_command(&action)?;
+            println!("{} {action}", style("Sent").green());
+            Ok(())
+        }
+        None => {
+            let protocol = ut61eplus_lib::mock::MockProtocol::new();
+            let cmds = protocol.profile().supported_commands;
+            println!(
+                "Available commands for {}:",
+                style(protocol.profile().model_name).bold()
+            );
+            for cmd in cmds {
+                println!("  {cmd}");
+            }
+            Ok(())
+        }
+    }
 }
 
 #[derive(Default)]
@@ -448,6 +559,7 @@ fn cmd_command(
                 DeviceFamily::Ut181a => {
                     Box::new(ut61eplus_lib::protocol::ut181a::Ut181aProtocol::new())
                 }
+                DeviceFamily::Mock => unreachable!("mock handled before cmd_command"),
             };
             let cmds = protocol.profile().supported_commands;
             if cmds.is_empty() {
@@ -588,11 +700,13 @@ mod tests {
                 format,
                 output,
                 count,
+                mock_mode,
             } => {
                 assert_eq!(interval_ms, 0);
                 assert!(matches!(format, OutputFormat::Text));
                 assert!(output.is_none());
                 assert_eq!(count, 0);
+                assert!(mock_mode.is_none());
             }
             _ => panic!("expected Read"),
         }
@@ -619,6 +733,7 @@ mod tests {
                 format,
                 output,
                 count,
+                mock_mode: _,
             } => {
                 assert_eq!(interval_ms, 100);
                 assert!(matches!(format, OutputFormat::Csv));

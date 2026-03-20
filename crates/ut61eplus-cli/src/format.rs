@@ -15,7 +15,11 @@ pub fn format_measurement(
         }
         OutputFormat::Csv => {
             let value_str = match &m.value {
-                MeasuredValue::Normal(v) => v.to_string(),
+                MeasuredValue::Normal(v) => m
+                    .display_raw
+                    .as_deref()
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|| v.to_string()),
                 MeasuredValue::Overload => "OL".to_string(),
                 MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
             };

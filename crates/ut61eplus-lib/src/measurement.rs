@@ -41,7 +41,14 @@ pub struct Measurement {
 impl std::fmt::Display for Measurement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let value_str = match &self.value {
-            MeasuredValue::Normal(v) => format!("{v}"),
+            MeasuredValue::Normal(_) => self
+                .display_raw
+                .as_deref()
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|| match &self.value {
+                    MeasuredValue::Normal(v) => format!("{v}"),
+                    _ => unreachable!(),
+                }),
             MeasuredValue::Overload => "OL".to_string(),
             MeasuredValue::NcvLevel(level) => format!("NCV:{level}"),
         };

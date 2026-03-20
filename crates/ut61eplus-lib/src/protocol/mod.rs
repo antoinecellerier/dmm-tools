@@ -36,6 +36,8 @@ pub enum DeviceFamily {
     Ut171,
     /// UT181A
     Ut181a,
+    /// Simulated device for testing and demos
+    Mock,
 }
 
 impl std::fmt::Display for DeviceFamily {
@@ -45,6 +47,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Ut8803 => write!(f, "ut8803"),
             DeviceFamily::Ut171 => write!(f, "ut171"),
             DeviceFamily::Ut181a => write!(f, "ut181a"),
+            DeviceFamily::Mock => write!(f, "mock"),
         }
     }
 }
@@ -78,6 +81,7 @@ impl DeviceFamily {
 3. Go to SETUP -> Communication -> ON
 Note: this setting resets on power cycle."
             }
+            DeviceFamily::Mock => "No setup required \u{2014} this is a simulated device.",
         }
     }
 }
@@ -94,6 +98,7 @@ impl std::str::FromStr for DeviceFamily {
             "ut8803" | "ut8803e" => Ok(DeviceFamily::Ut8803),
             "ut171" | "ut171a" | "ut171b" | "ut171c" => Ok(DeviceFamily::Ut171),
             "ut181a" | "ut181" => Ok(DeviceFamily::Ut181a),
+            "mock" => Ok(DeviceFamily::Mock),
             _ => Err(format!("unknown device family: {s}")),
         }
     }

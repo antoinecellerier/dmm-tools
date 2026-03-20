@@ -21,9 +21,20 @@ and remote control of the UNI-T UT61E+ multimeter. Built with egui/eframe.
 
 The Settings panel includes a **Device** selector with all supported
 models (UT61E+, UT61B+, UT61D+, UT161B/D/E, UT8803, UT171A/B/C,
-UT181A). The selection persists across sessions and requires a
-reconnect to take effect. When connected to an experimental (unverified)
-protocol, an orange **EXPERIMENTAL** badge appears in the top bar.
+UT181A) and a **Mock (simulated)** option. The selection persists across
+sessions and requires a reconnect to take effect. When connected to an
+experimental (unverified) protocol, an orange **EXPERIMENTAL** badge
+appears in the top bar.
+
+The **Mock (simulated)** device generates synthetic measurements without
+hardware, cycling through DC V, AC V, Ohms, Capacitance, Hz,
+Temperature, DC mA, Overload, and NCV modes. When Mock is selected, a
+**Mock mode** row appears in Settings with choices: **Auto (cycle)**
+(default) or a specific mode (dcv, acv, ohm, cap, hz, temp, dcma,
+ohm-ol, ncv). Selecting a specific mode pins the mock to that
+measurement type indefinitely. Remote control buttons (HOLD, REL,
+RANGE, etc.) respond to toggle flags. The SELECT button advances to
+the next mode regardless of the auto-cycle setting.
 
 ![Wide layout — live measurement with graph, statistics, recording, and minimap](../assets/gui-wide-layout.png)
 
@@ -166,6 +177,8 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 | **Auto-connect** | on | Connect to meter automatically on startup |
 | **Query device name** | on | Ask meter for its name on connect (causes a beep) |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
+| **Device** | UT61E+ | Device family. See the description for supported models and Mock. Requires reconnect. |
+| **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 
 ## Keyboard Shortcuts

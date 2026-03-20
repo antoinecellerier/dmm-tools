@@ -74,6 +74,24 @@ real hardware**. Every aspect needs end-to-end verification.
 - **Exit Peak (0x4E):** Sent but not confirmed — need to first activate peak mode.
 - **Get Name (0x5F):** Verified — returns two frames: ack (FF 00) then ASCII name (e.g. "UT61E+").
 
+### MIN/MAX and Peak measurement reporting
+- **What does the meter send over USB during MIN/MAX mode?** The 14-byte
+  measurement payload has no dedicated min/max value fields. The meter LCD
+  shows min and max values, but the protocol likely still sends the live
+  measurement with the MIN/MAX flags set. Need to verify: capture data with
+  MIN/MAX active and a varying signal, confirm the reported value is the
+  live reading (not the stored min or max).
+- **Do the MIN and MAX flag bits cycle independently?** The meter's LCD
+  cycles through showing MIN, MAX, and AVG when pressing the MIN/MAX button
+  repeatedly. But the protocol might always set both bits together (both
+  are set in existing captures). Verify whether the meter ever reports
+  only-MIN or only-MAX over USB, or if the display cycling is LCD-only.
+- **Same question for Peak mode:** Does the meter report the live value with
+  peak flags, or does it report the captured peak value?
+- The mock currently sends the live waveform with flags set, which matches
+  the assumed protocol behavior. Update the mock if real device shows
+  otherwise.
+
 ### Range tables
 - Range byte values for each mode need verification against real device at each range.
 - DC mV mode (0x03) ranges not verified — does it share tables with DC V range 0?

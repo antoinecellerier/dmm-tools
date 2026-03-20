@@ -3,7 +3,9 @@ use log::{error, info, warn};
 use std::sync::mpsc;
 use std::time::Instant;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
+use ut61eplus_lib::mock::MockMode;
 use ut61eplus_lib::protocol::{DeviceFamily, Stability};
+use ut61eplus_lib::transport::Transport;
 
 use crate::display;
 use crate::graph::Graph;
@@ -23,6 +25,7 @@ fn device_display_name(value: &str) -> &'static str {
         "ut8803" => "UT8803",
         "ut171" => "UT171",
         "ut181a" => "UT181A",
+        "mock" => "Mock",
         _ => "DMM",
     }
 }
@@ -90,6 +93,144 @@ pub struct App {
     meter_content_height: f32,
     /// Last window size used to compute big meter scale (recompute on change).
     meter_last_size: (u32, u32),
+}
+
+/// Run the measurement loop on a background thread, generic over transport type.
+fn run_device_thread<T, F>(
+    open_fn: F,
+    msg_tx: mpsc::Sender<DmmMessage>,
+    stop_rx: mpsc::Receiver<()>,
+    cmd_rx: mpsc::Receiver<String>,
+    ctx: egui::Context,
+    query_name: bool,
+    sample_interval_ms: u32,
+) where
+    T: Transport + Send + 'static,
+    F: Fn() -> ut61eplus_lib::error::Result<ut61eplus_lib::Dmm<T>> + Send + 'static,
+{
+    info!("background thread: connecting to device");
+    let mut dmm = match open_fn() {
+        Ok(mut d) => {
+            let profile = d.profile();
+            let experimental = profile.stability == Stability::Experimental;
+            let cmds: Vec<String> = profile
+                .supported_commands
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            let name = if query_name {
+                d.get_name().ok().flatten().unwrap_or_default()
+            } else {
+                String::new()
+            };
+            let _ = msg_tx.send(DmmMessage::Connected {
+                name,
+                experimental,
+                supported_commands: cmds,
+            });
+            ctx.request_repaint();
+            d
+        }
+        Err(e) => {
+            let _ = msg_tx.send(DmmMessage::Error(e.to_string()));
+            ctx.request_repaint();
+            return;
+        }
+    };
+
+    let mut consecutive_timeouts: u32 = 0;
+    loop {
+        if stop_rx.try_recv().is_ok() {
+            info!("background thread: stop signal received");
+            break;
+        }
+
+        // Process any pending remote commands
+        while let Ok(cmd) = cmd_rx.try_recv() {
+            if let Err(e) = dmm.send_command(&cmd) {
+                warn!("background thread: command failed: {e}");
+            }
+        }
+
+        match dmm.request_measurement() {
+            Ok(m) => {
+                consecutive_timeouts = 0;
+                if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
+                    break;
+                }
+            }
+            Err(ut61eplus_lib::error::Error::Timeout) => {
+                consecutive_timeouts += 1;
+                warn!("background thread: measurement timeout ({consecutive_timeouts})");
+                let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));
+                ctx.request_repaint();
+                if consecutive_timeouts == 5 {
+                    let _ = msg_tx.send(DmmMessage::Error(
+                        "No response from meter \u{2014} check device selection and USB mode"
+                            .to_string(),
+                    ));
+                    ctx.request_repaint();
+                }
+            }
+            Err(e) => {
+                error!("background thread: device error: {e}");
+                let _ = msg_tx.send(DmmMessage::Disconnected(e.to_string()));
+                ctx.request_repaint();
+
+                // Reconnection loop
+                loop {
+                    if stop_rx.try_recv().is_ok() {
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    match open_fn() {
+                        Ok(mut d) => {
+                            let p = d.profile();
+                            let exp = p.stability == Stability::Experimental;
+                            let cmds: Vec<String> =
+                                p.supported_commands.iter().map(|s| s.to_string()).collect();
+                            let name = if query_name {
+                                d.get_name().ok().flatten().unwrap_or_default()
+                            } else {
+                                String::new()
+                            };
+                            dmm = d;
+                            let _ = msg_tx.send(DmmMessage::Connected {
+                                name,
+                                experimental: exp,
+                                supported_commands: cmds,
+                            });
+                            ctx.request_repaint();
+                            break;
+                        }
+                        Err(_) => continue,
+                    }
+                }
+            }
+        }
+
+        ctx.request_repaint();
+        if sample_interval_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(sample_interval_ms as u64));
+        }
+    }
+}
+
+fn handle_thread_panic(
+    panic: Box<dyn std::any::Any + Send>,
+    tx: &mpsc::Sender<DmmMessage>,
+    ctx: &egui::Context,
+) {
+    let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = panic.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "unknown panic".to_string()
+    };
+    error!("background thread panicked: {msg}");
+    let _ = tx.send(DmmMessage::Error(format!("internal error: {msg}")));
+    ctx.request_repaint();
 }
 
 impl App {
@@ -218,137 +359,55 @@ impl App {
             .unwrap_or(DeviceFamily::Ut61EPlus);
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
-        std::thread::spawn(move || {
-            let panic_tx = msg_tx.clone();
-            let panic_ctx = ctx_clone.clone();
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                info!("background thread: connecting to device ({device_family})");
-                let mut dmm = match ut61eplus_lib::open_device(device_family) {
-                    Ok(mut d) => {
-                        let profile = d.profile();
-                        let experimental = profile.stability == Stability::Experimental;
-                        let cmds: Vec<String> = profile
-                            .supported_commands
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect();
-                        let name = if query_name {
-                            d.get_name().ok().flatten().unwrap_or_default()
-                        } else {
-                            String::new()
-                        };
-                        let _ = msg_tx.send(DmmMessage::Connected {
-                            name,
-                            experimental,
-                            supported_commands: cmds,
-                        });
-                        ctx_clone.request_repaint();
-                        d
-                    }
-                    Err(e) => {
-                        let _ = msg_tx.send(DmmMessage::Error(e.to_string()));
-                        ctx_clone.request_repaint();
-                        return;
-                    }
-                };
-
-                let mut consecutive_timeouts: u32 = 0;
-                loop {
-                    if stop_rx.try_recv().is_ok() {
-                        info!("background thread: stop signal received");
-                        break;
-                    }
-
-                    // Process any pending remote commands
-                    while let Ok(cmd) = cmd_rx.try_recv() {
-                        if let Err(e) = dmm.send_command(&cmd) {
-                            warn!("background thread: command failed: {e}");
-                        }
-                    }
-
-                    match dmm.request_measurement() {
-                        Ok(m) => {
-                            consecutive_timeouts = 0;
-                            if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
-                                break;
-                            }
-                        }
-                        Err(ut61eplus_lib::error::Error::Timeout) => {
-                            consecutive_timeouts += 1;
-                            warn!(
-                                "background thread: measurement timeout ({consecutive_timeouts})"
-                            );
-                            let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));
-                            ctx_clone.request_repaint();
-                            if consecutive_timeouts == 5 {
-                                let _ = msg_tx.send(DmmMessage::Error(
-                                    "No response from meter — check device selection and USB mode"
-                                        .to_string(),
-                                ));
-                                ctx_clone.request_repaint();
-                            }
-                        }
-                        Err(e) => {
-                            error!("background thread: device error: {e}");
-                            let _ = msg_tx.send(DmmMessage::Disconnected(e.to_string()));
-                            ctx_clone.request_repaint();
-
-                            // Reconnection loop
-                            loop {
-                                if stop_rx.try_recv().is_ok() {
-                                    return;
-                                }
-                                std::thread::sleep(std::time::Duration::from_secs(2));
-                                match ut61eplus_lib::open_device(device_family) {
-                                    Ok(mut d) => {
-                                        let p = d.profile();
-                                        let exp = p.stability == Stability::Experimental;
-                                        let cmds: Vec<String> = p
-                                            .supported_commands
-                                            .iter()
-                                            .map(|s| s.to_string())
-                                            .collect();
-                                        let name = if query_name {
-                                            d.get_name().ok().flatten().unwrap_or_default()
-                                        } else {
-                                            String::new()
-                                        };
-                                        dmm = d;
-                                        let _ = msg_tx.send(DmmMessage::Connected {
-                                            name,
-                                            experimental: exp,
-                                            supported_commands: cmds,
-                                        });
-                                        ctx_clone.request_repaint();
-                                        break;
-                                    }
-                                    Err(_) => continue,
-                                }
-                            }
-                        }
-                    }
-
-                    ctx_clone.request_repaint();
-                    if sample_interval_ms > 0 {
-                        std::thread::sleep(std::time::Duration::from_millis(
-                            sample_interval_ms as u64,
-                        ));
-                    }
+        if device_family == DeviceFamily::Mock {
+            let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
+                None
+            } else {
+                self.settings.mock_mode.parse().ok()
+            };
+            // Mock returns instantly — enforce a floor to avoid busy-looping
+            let mock_interval = sample_interval_ms.max(100);
+            std::thread::spawn(move || {
+                let panic_tx = msg_tx.clone();
+                let panic_ctx = ctx_clone.clone();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_device_thread(
+                        move || match mock_mode {
+                            Some(mode) => ut61eplus_lib::mock::open_mock_mode(mode),
+                            None => ut61eplus_lib::mock::open_mock(),
+                        },
+                        msg_tx,
+                        stop_rx,
+                        cmd_rx,
+                        ctx_clone,
+                        query_name,
+                        mock_interval,
+                    );
+                }));
+                if let Err(panic) = result {
+                    handle_thread_panic(panic, &panic_tx, &panic_ctx);
                 }
-            })); // end catch_unwind
-            if let Err(panic) = result {
-                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                    s.to_string()
-                } else if let Some(s) = panic.downcast_ref::<String>() {
-                    s.clone()
-                } else {
-                    "unknown panic".to_string()
-                };
-                error!("background thread panicked: {msg}");
-                let _ = panic_tx.send(DmmMessage::Error(format!("internal error: {msg}")));
-                panic_ctx.request_repaint();
-            }
-        });
+            });
+        } else {
+            std::thread::spawn(move || {
+                let panic_tx = msg_tx.clone();
+                let panic_ctx = ctx_clone.clone();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_device_thread(
+                        move || ut61eplus_lib::open_device(device_family),
+                        msg_tx,
+                        stop_rx,
+                        cmd_rx,
+                        ctx_clone,
+                        query_name,
+                        sample_interval_ms,
+                    );
+                }));
+                if let Err(panic) = result {
+                    handle_thread_panic(panic, &panic_tx, &panic_ctx);
+                }
+            });
+        }
     }
 
     fn disconnect(&mut self) {
@@ -463,17 +522,21 @@ impl App {
             let min_max = flags.is_some_and(|f| f.min || f.max);
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
-            for &(label, active, cmd) in &[
-                ("HOLD", hold, "hold"),
-                ("REL", rel, "rel"),
-                ("RANGE", manual_range, "range"),
-                ("AUTO", auto, "auto"),
-                ("MIN/MAX", min_max, "minmax"),
-                ("PEAK", peak, "peak"),
-                ("SELECT", false, "select"),
-                ("LIGHT", false, "light"),
+            // Commands that toggle: label, active flag, enter command, exit command.
+            // Hold/rel are protocol-level toggles (same command enters and exits).
+            // Min/Max and Peak have separate enter/exit wire commands — send the
+            // right one based on current flag state.
+            for &(label, active, enter_cmd, exit_cmd) in &[
+                ("HOLD", hold, "hold", "hold"),
+                ("REL", rel, "rel", "rel"),
+                ("RANGE", manual_range, "range", "range"),
+                ("AUTO", auto, "auto", "auto"),
+                ("MIN/MAX", min_max, "minmax", "exit_minmax"),
+                ("PEAK", peak, "peak", "exit_peak"),
+                ("SELECT", false, "select", "select"),
+                ("LIGHT", false, "light", "light"),
             ] {
-                if !has_cmd(cmd) {
+                if !has_cmd(enter_cmd) {
                     continue;
                 }
                 let text = if active {
@@ -485,6 +548,7 @@ impl App {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
                 if ui.add(egui::Button::new(text)).clicked() {
+                    let cmd = if active { exit_cmd } else { enter_cmd };
                     self.send_command(cmd);
                 }
             }
@@ -785,6 +849,7 @@ impl App {
                 ("ut8803", "UT8803"),
                 ("ut171", "UT171A/B/C"),
                 ("ut181a", "UT181A"),
+                ("mock", "Mock (simulated)"),
             ] {
                 if ui
                     .selectable_label(self.settings.device_family == value, label)
@@ -802,6 +867,39 @@ impl App {
                 }
             }
         });
+
+        // Mock mode selector (only shown when mock device is selected)
+        if self.settings.device_family == "mock" {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Mock mode:");
+                let mut changed = false;
+                // "Auto" = cycle through all modes
+                if ui
+                    .selectable_label(self.settings.mock_mode.is_empty(), "Auto (cycle)")
+                    .clicked()
+                {
+                    self.settings.mock_mode = String::new();
+                    changed = true;
+                }
+                for mode in MockMode::ALL {
+                    let label = mode.label();
+                    if ui
+                        .selectable_label(self.settings.mock_mode == label, label)
+                        .on_hover_text(mode.description())
+                        .clicked()
+                    {
+                        self.settings.mock_mode = label.to_string();
+                        changed = true;
+                    }
+                }
+                if changed {
+                    self.settings.save();
+                    if self.connection_state != ConnectionState::Disconnected {
+                        self.needs_reconnect = true;
+                    }
+                }
+            });
+        }
 
         ui.horizontal_wrapped(|ui| {
             ui.label("Zoom:");

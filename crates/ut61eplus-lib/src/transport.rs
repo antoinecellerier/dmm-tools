@@ -13,6 +13,37 @@ pub trait Transport {
     fn send_feature_report(&self, data: &[u8]) -> Result<()>;
 }
 
+/// A no-op transport for the mock/simulated device.
+pub struct NullTransport;
+
+impl Transport for NullTransport {
+    fn write(&self, _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+        Ok(0)
+    }
+
+    fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn null_transport_all_methods_ok() {
+        let t = NullTransport;
+        assert!(t.write(&[1, 2, 3]).is_ok());
+        let mut buf = [0u8; 64];
+        assert_eq!(t.read_timeout(&mut buf, 1000).unwrap(), 0);
+        assert!(t.send_feature_report(&[0x41, 0x01]).is_ok());
+    }
+}
+
 #[cfg(test)]
 pub mod mock {
     use super::*;

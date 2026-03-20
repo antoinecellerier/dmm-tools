@@ -2,6 +2,7 @@ pub mod cp2110;
 pub mod error;
 pub mod flags;
 pub mod measurement;
+pub mod mock;
 pub mod protocol;
 pub mod transport;
 
@@ -68,6 +69,9 @@ pub fn open() -> Result<Dmm<cp2110::Cp2110>> {
 }
 
 /// Open a device with the specified protocol family.
+///
+/// The `Mock` family is not supported here — use [`mock::open_mock()`] instead.
+/// Passing `DeviceFamily::Mock` will panic; callers must route mock before calling this.
 pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
     let device = api
@@ -85,6 +89,7 @@ pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
         DeviceFamily::Ut8803 => Box::new(protocol::ut8803::Ut8803Protocol::new()),
         DeviceFamily::Ut171 => Box::new(protocol::ut171::Ut171Protocol::new()),
         DeviceFamily::Ut181a => Box::new(protocol::ut181a::Ut181aProtocol::new()),
+        DeviceFamily::Mock => unreachable!("handled above"),
     };
 
     Dmm::new(cp, protocol)

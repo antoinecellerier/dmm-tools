@@ -24,8 +24,11 @@ pub struct Settings {
     pub zoom_pct: u32,
     /// Delay between measurement requests in milliseconds (0 = fastest possible).
     pub sample_interval_ms: u32,
-    /// Device family to connect to (e.g. "ut61eplus", "ut8803", "ut171", "ut181a").
+    /// Device family to connect to (e.g. "ut61eplus", "ut8803", "ut171", "ut181a", "mock").
     pub device_family: String,
+    /// Mock mode to pin to (e.g. "dcv", "acv"). Empty string = auto-cycle.
+    /// Only meaningful when device_family is "mock".
+    pub mock_mode: String,
 }
 
 impl Default for Settings {
@@ -40,6 +43,7 @@ impl Default for Settings {
             zoom_pct: 100,
             sample_interval_ms: 0,
             device_family: "ut61eplus".to_string(),
+            mock_mode: String::new(),
         }
     }
 }
@@ -95,6 +99,7 @@ mod tests {
             zoom_pct: 150,
             sample_interval_ms: 500,
             device_family: "ut8803".to_string(),
+            mock_mode: "dcv".to_string(),
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();
