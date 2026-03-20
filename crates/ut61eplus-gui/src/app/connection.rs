@@ -19,6 +19,34 @@ pub(crate) enum DmmMessage {
     WaitingForMeter(u32),
 }
 
+/// Extract profile info from a newly opened device, optionally query its name,
+/// and send a `Connected` message to the UI.
+fn establish_connection<T: Transport>(
+    dmm: &mut ut61eplus_lib::Dmm<T>,
+    query_name: bool,
+    msg_tx: &mpsc::Sender<DmmMessage>,
+    ctx: &egui::Context,
+) {
+    let profile = dmm.profile();
+    let experimental = profile.stability == Stability::Experimental;
+    let cmds: Vec<String> = profile
+        .supported_commands
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let name = if query_name {
+        dmm.get_name().ok().flatten().unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let _ = msg_tx.send(DmmMessage::Connected {
+        name,
+        experimental,
+        supported_commands: cmds,
+    });
+    ctx.request_repaint();
+}
+
 /// Run the measurement loop on a background thread, generic over transport type.
 pub(super) fn run_device_thread<T, F>(
     open_fn: F,
@@ -35,24 +63,7 @@ pub(super) fn run_device_thread<T, F>(
     info!("background thread: connecting to device");
     let mut dmm = match open_fn() {
         Ok(mut d) => {
-            let profile = d.profile();
-            let experimental = profile.stability == Stability::Experimental;
-            let cmds: Vec<String> = profile
-                .supported_commands
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
-            let name = if query_name {
-                d.get_name().ok().flatten().unwrap_or_default()
-            } else {
-                String::new()
-            };
-            let _ = msg_tx.send(DmmMessage::Connected {
-                name,
-                experimental,
-                supported_commands: cmds,
-            });
-            ctx.request_repaint();
+            establish_connection(&mut d, query_name, &msg_tx, &ctx);
             d
         }
         Err(e) => {
@@ -109,22 +120,8 @@ pub(super) fn run_device_thread<T, F>(
                     std::thread::sleep(std::time::Duration::from_secs(2));
                     match open_fn() {
                         Ok(mut d) => {
-                            let p = d.profile();
-                            let exp = p.stability == Stability::Experimental;
-                            let cmds: Vec<String> =
-                                p.supported_commands.iter().map(|s| s.to_string()).collect();
-                            let name = if query_name {
-                                d.get_name().ok().flatten().unwrap_or_default()
-                            } else {
-                                String::new()
-                            };
+                            establish_connection(&mut d, query_name, &msg_tx, &ctx);
                             dmm = d;
-                            let _ = msg_tx.send(DmmMessage::Connected {
-                                name,
-                                experimental: exp,
-                                supported_commands: cmds,
-                            });
-                            ctx.request_repaint();
                             break;
                         }
                         Err(_) => continue,
