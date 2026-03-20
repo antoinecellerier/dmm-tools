@@ -12,7 +12,7 @@ fn format_display_raw(raw: &str) -> String {
 
 /// Render the primary reading display at the given font size.
 fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size: f32) {
-    let unit_size = value_size * 0.55;
+    let unit_size = value_size;
     let mode_size = (value_size * 0.4).max(12.0);
 
     match measurement {
@@ -104,8 +104,8 @@ pub fn show_reading_large(
     let available_w = ui.available_width();
     let available_h = ui.available_height();
 
-    // Width-based limit: 7 value chars + ~3 unit chars ≈ 5.5 char widths
-    let size_from_w = available_w / 5.5;
+    // Width-based limit: 7 value chars + ~3 unit chars = 10 char widths
+    let size_from_w = available_w / 10.0;
 
     // Height-based limit: total height scales linearly with font size.
     // At base (size=36, scale=1):
@@ -144,7 +144,7 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.label(RichText::new(&value_text).font(FontId::monospace(28.0)));
-                ui.label(RichText::new(&m.unit).font(FontId::monospace(16.0)));
+                ui.label(RichText::new(&m.unit).font(FontId::monospace(28.0)));
                 ui.separator();
                 ui.label(
                     RichText::new(&m.mode)
