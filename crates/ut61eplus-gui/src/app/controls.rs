@@ -7,6 +7,11 @@ use crate::theme::ThemeColors;
 
 use super::App;
 
+/// Show a settings checkbox; returns `true` if the value changed.
+fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str) -> bool {
+    ui.checkbox(value, label).changed()
+}
+
 impl App {
     pub(super) fn show_remote_controls(&mut self, ui: &mut Ui, scale: f32) {
         use super::ConnectionState;
@@ -97,53 +102,23 @@ impl App {
         });
 
         ui.horizontal(|ui| {
-            let mut changed = false;
-            if ui
-                .checkbox(&mut self.settings.show_graph, "Graph")
-                .changed()
-            {
-                changed = true;
-            }
-            if ui
-                .checkbox(&mut self.settings.show_stats, "Statistics")
-                .changed()
-            {
-                changed = true;
-            }
-            if ui
-                .checkbox(&mut self.settings.show_recording, "Recording")
-                .changed()
-            {
-                changed = true;
-            }
-            if ui
-                .checkbox(&mut self.settings.show_specs, "Specifications")
-                .changed()
-            {
-                changed = true;
-            }
+            let changed = setting_checkbox(ui, &mut self.settings.show_graph, "Graph")
+                | setting_checkbox(ui, &mut self.settings.show_stats, "Statistics")
+                | setting_checkbox(ui, &mut self.settings.show_recording, "Recording")
+                | setting_checkbox(ui, &mut self.settings.show_specs, "Specifications");
             if changed {
                 self.settings.save();
             }
         });
 
         ui.horizontal(|ui| {
-            let mut changed = false;
-            if ui
-                .checkbox(&mut self.settings.auto_connect, "Auto-connect on start")
-                .changed()
-            {
-                changed = true;
-            }
-            if ui
-                .checkbox(
-                    &mut self.settings.query_device_name,
-                    "Show device name on connect (beeps)",
-                )
-                .changed()
-            {
-                changed = true;
-            }
+            let changed =
+                setting_checkbox(ui, &mut self.settings.auto_connect, "Auto-connect on start")
+                    | setting_checkbox(
+                        ui,
+                        &mut self.settings.query_device_name,
+                        "Show device name on connect (beeps)",
+                    );
             if changed {
                 self.settings.save();
             }
