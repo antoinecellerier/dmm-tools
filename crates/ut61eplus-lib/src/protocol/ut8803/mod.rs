@@ -47,11 +47,6 @@ const POSITION_TABLE: &[(u8, &str)] = &[
     (0x16, "Duty %"),
 ];
 
-// Unit type and magnitude tables from the programming manual.
-// Kept for reference but mode-based unit lookup is more reliable.
-// const UNIT_TYPE_TABLE: V, A, Ω, Hz, °C, °F, rpm, F, hFE, %
-// const UNIT_MAG_TABLE: n, µ, m, (std), k, M, G
-
 const UT8803_COMMANDS: &[&str] = &[];
 
 /// Protocol implementation for the UT8803/UT8803E bench multimeter.
