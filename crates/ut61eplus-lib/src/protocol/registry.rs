@@ -164,7 +164,9 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_MOCK,
         family: DeviceFamily::Mock,
         new_protocol: factory::<MockProtocol>,
-        manual_url: None,
+        manual_url: Some(
+            "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#mock-modes",
+        ),
     },
 ];
 
