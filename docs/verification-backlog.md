@@ -75,7 +75,6 @@ real hardware**. Every aspect needs end-to-end verification.
 - (none pending)
 
 ### Commands not fully verified
-- **SELECT2 (0x49):** Received by meter (beeps) but no visible effect on DC V mode. Likely needs AC V mode for Hz/duty cycle display.
 - **Get Name (0x5F):** Verified — returns two frames: ack (FF 00) then ASCII name (e.g. "UT61E+").
 
 ### MIN/MAX and Peak measurement reporting — RESOLVED
@@ -152,6 +151,7 @@ decompilation (see `references/protocol-comparison.md`).
 | Remote AUTO | 0x47 | Verified |
 | Remote SELECT | 0x4C | Verified (cycles DC V → AC+DC) |
 | Remote LIGHT | 0x4B | Verified |
+| Remote SELECT2 | 0x49 | Verified (AC mV: cycles AC mV → Hz → Duty Cycle → AC mV) |
 | Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV; context-dependent, no effect on DC V) |
 | Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings) |
 | Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name) |

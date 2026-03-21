@@ -150,7 +150,7 @@ Known commands (from ljakob/unit_ut61eplus, verified against real device):
 | `0x46` | RANGE (manual toggle) | Yes (remote) |
 | `0x47` | AUTO (restore auto-range) | Yes (remote) |
 | `0x48` | REL (relative/delta) | Yes (remote) |
-| `0x49` | SELECT2 (Hz/USB button) | Received (beep, no visible effect on DC V) |
+| `0x49` | SELECT2 (Hz/USB button) | Yes (AC mV: cycles mV → Hz → Duty% → mV; no effect on DC V) |
 | `0x4A` | HOLD | Yes (remote) |
 | `0x4B` | LIGHT (backlight) | Yes (remote) |
 | `0x4C` | SELECT (orange, cycles sub-modes) | Yes (remote, cycles DC→AC+DC) |
