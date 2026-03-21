@@ -40,21 +40,14 @@ impl App {
             let min_max = flags.is_some_and(|f| f.min || f.max);
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
-            // Commands that toggle: label, active flag, enter command, exit command.
-            // Hold/rel are protocol-level toggles (same command enters and exits).
-            // Min/Max and Peak have separate enter/exit wire commands — send the
-            // right one based on current flag state.
-            for &(label, active, enter_cmd, exit_cmd) in &[
-                ("HOLD", hold, "hold", "hold"),
-                ("REL", rel, "rel", "rel"),
-                ("RANGE", manual_range, "range", "range"),
-                ("AUTO", auto, "auto", "auto"),
-                ("MIN/MAX", min_max, "minmax", "exit_minmax"),
-                ("PEAK", peak, "peak", "exit_peak"),
-                ("SELECT", false, "select", "select"),
-                ("LIGHT", false, "light", "light"),
+            // Simple toggle commands: label, active flag, command.
+            for &(label, active, cmd) in &[
+                ("HOLD", hold, "hold"),
+                ("REL", rel, "rel"),
+                ("RANGE", manual_range, "range"),
+                ("AUTO", auto, "auto"),
             ] {
-                if !has_cmd(enter_cmd) {
+                if !has_cmd(cmd) {
                     continue;
                 }
                 let text = if active {
@@ -66,7 +59,53 @@ impl App {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
                 if ui.add(egui::Button::new(text)).clicked() {
-                    let cmd = if active { exit_cmd } else { enter_cmd };
+                    self.send_command(cmd);
+                }
+            }
+
+            // MIN/MAX and Peak: clicking always cycles (never exits), matching
+            // the real device's short-press behavior. A separate "x" button
+            // exits the mode (like the real device's long-press).
+            for &(label, active, cycle_cmd, exit_cmd) in &[
+                ("MIN/MAX", min_max, "minmax", "exit_minmax"),
+                ("PEAK", peak, "peak", "exit_peak"),
+            ] {
+                if !has_cmd(cycle_cmd) {
+                    continue;
+                }
+                let text = if active {
+                    RichText::new(label)
+                        .font(egui::FontId::proportional(font_size))
+                        .color(active_color)
+                        .strong()
+                } else {
+                    RichText::new(label).font(egui::FontId::proportional(font_size))
+                };
+                if ui.add(egui::Button::new(text)).clicked() {
+                    self.send_command(cycle_cmd);
+                }
+                if active && has_cmd(exit_cmd) {
+                    let x_text = RichText::new("x")
+                        .font(egui::FontId::proportional(font_size * 0.8))
+                        .color(active_color);
+                    let x_btn = egui::Button::new(x_text).min_size(egui::Vec2::ZERO);
+                    if ui
+                        .add(x_btn)
+                        .on_hover_text(format!("Exit {label}"))
+                        .clicked()
+                    {
+                        self.send_command(exit_cmd);
+                    }
+                }
+            }
+
+            // Non-toggle commands
+            for &(label, cmd) in &[("SELECT", "select"), ("LIGHT", "light")] {
+                if !has_cmd(cmd) {
+                    continue;
+                }
+                let text = RichText::new(label).font(egui::FontId::proportional(font_size));
+                if ui.add(egui::Button::new(text)).clicked() {
                     self.send_command(cmd);
                 }
             }

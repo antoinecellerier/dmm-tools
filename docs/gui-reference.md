@@ -85,8 +85,8 @@ A row of buttons shown when connected and receiving data (visible in the
 | **REL** | Toggle relative mode |
 | **RANGE** | Cycle manual range |
 | **AUTO** | Return to auto-range |
-| **MIN/MAX** | Enter/exit min/max recording |
-| **PEAK** | Enter/exit peak min/max mode |
+| **MIN/MAX** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. |
+| **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. |
 | **SELECT** | Cycle sub-modes |
 | **LIGHT** | Toggle backlight |
 
