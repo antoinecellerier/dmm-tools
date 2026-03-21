@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn sample_data_from_normal_measurement() {
-        let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x05, 0x0A), (0x00, 0x00, 0x00));
+        let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x09), (0x00, 0x00, 0x00));
         let s = SampleData::from_measurement(&m);
         assert_eq!(s.mode_byte, "0x02");
         assert_eq!(s.mode, "DC V");

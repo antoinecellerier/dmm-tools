@@ -82,8 +82,8 @@ Total: 19 bytes. Length byte = `0x10` (16 = 14 payload + 2 checksum).
 | 0 | Mode | Raw (no masking) |
 | 1 | Range | `& 0x0F` |
 | 2-8 | Display value (7 ASCII chars) | None |
-| 9 | Bar graph high nibble | Raw |
-| 10 | Bar graph low nibble | Raw |
+| 9 | Bar graph tens digit | Raw |
+| 10 | Bar graph ones digit | Raw |
 | 11 | Flag byte 1 | `& 0x0F` |
 | 12 | Flag byte 2 | `& 0x0F` |
 | 13 | Flag byte 3 | `& 0x0F` |
@@ -104,7 +104,14 @@ Total: 19 bytes. Length byte = `0x10` (16 = 14 payload + 2 checksum).
 
 ### Bar Graph
 
-Combined from two nibbles: `(byte9 << 4) | byte10`. Range 0-100.
+Decimal encoding: `byte9 * 10 + byte10`. Represents the number of lit
+segments on the meter's ~46-segment LCD bar graph. The LCD has fixed
+markings at 0, 5, 10, 15, 20; their meaning in real units scales with
+the range (e.g., on 22V range: 0=0V, 5≈5V, 20≈20V; on 2.2V range:
+0=0V, 5≈0.5V, 20≈2V).
+
+Verified on real device (DC V, 22V range): 0V→0, 5V→9, 10V→20, 20V→39.
+On 2.2V range: 1V→20. Consistent with `value / range_max * 46`.
 
 ### Flag Bytes
 

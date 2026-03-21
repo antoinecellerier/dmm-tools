@@ -353,8 +353,8 @@ impl Protocol for Ut61PlusProtocol {
 /// - byte 0:    mode   (raw, no masking — does not have 0x30 prefix)
 /// - byte 1:    range  (& 0x0F — has 0x30 prefix)
 /// - bytes 2-8: display value (7 ASCII chars, no masking needed)
-/// - byte 9:    progress high (raw, no 0x30 prefix)
-/// - byte 10:   progress low  (raw, no 0x30 prefix)
+/// - byte 9:    bar graph tens digit (raw, no 0x30 prefix; value = b9*10+b10)
+/// - byte 10:   bar graph ones digit (raw, no 0x30 prefix)
 /// - byte 11:   flag1  (& 0x0F — has 0x30 prefix)
 /// - byte 12:   flag2  (& 0x0F — has 0x30 prefix)
 /// - byte 13:   flag3  (& 0x0F — has 0x30 prefix)
@@ -374,16 +374,19 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let mode_byte = payload[0];
     let range_byte = payload[1] & 0x0F;
     let display_bytes = &payload[2..9];
-    // Progress bytes are raw (no 0x30 prefix observed on real device)
-    let progress_hi = payload[9] as u16;
-    let progress_lo = payload[10] as u16;
+    // Bar graph bytes are raw (no 0x30 prefix observed on real device).
+    // Encoding is decimal (byte9 * 10 + byte10), NOT nibble shift.
+    // Verified on real device: 5V→9, 10V→20, 20V→39 on 22V range;
+    // 1V→20 on 2.2V range. Maps to ~46 LCD bar segments.
+    let bar_hi = payload[9] as u16;
+    let bar_lo = payload[10] as u16;
     let flag1 = payload[11] & 0x0F;
     let flag2 = payload[12] & 0x0F;
     let flag3 = payload[13] & 0x0F;
 
     let mode = Mode::from_byte(mode_byte)?;
     let display_raw = String::from_utf8_lossy(display_bytes).to_string();
-    let progress = (progress_hi << 4) | progress_lo;
+    let progress = bar_hi * 10 + bar_lo;
     let flags = StatusFlags::parse(flag1, flag2, flag3);
 
     // Look up range info from device table
@@ -436,7 +439,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
 /// - `mode`: mode byte (e.g. 0x02 = DC V)
 /// - `range`: range nibble (0x30 prefix added automatically)
 /// - `display`: 7-byte ASCII display value (e.g. `b"  5.678"`)
-/// - `progress`: (high, low) progress bytes
+/// - `progress`: (tens, ones) bar graph digits — decoded as tens*10+ones
 /// - `flags`: (flag1, flag2, flag3) nibbles (0x30 prefix added automatically)
 /// Build a 14-byte UT61E+ protocol payload from parts (for tests).
 #[cfg(any(test, feature = "test-support"))]
@@ -486,7 +489,7 @@ mod tests {
     #[test]
     fn parse_dc_voltage() {
         let table = Ut61ePlusTable::new();
-        let payload = make_payload(0x02, 0x01, b" 12.345", (0x05, 0x0A), (0x00, 0x00, 0x00));
+        let payload = make_payload(0x02, 0x01, b" 12.345", (0x02, 0x06), (0x00, 0x00, 0x00));
         let m = parse_measurement(&payload, &table).unwrap();
         assert_eq!(m.mode, "DC V");
         assert_eq!(m.mode_raw, 0x02);
