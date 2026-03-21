@@ -113,6 +113,10 @@ the range (e.g., on 22V range: 0=0V, 5≈5V, 20≈20V; on 2.2V range:
 Verified on real device (DC V, 22V range): 0V→0, 5V→9, 10V→20, 20V→39.
 On 2.2V range: 1V→20. Consistent with `value / range_max * 46`.
 
+For negative values, the bar graph holds the magnitude and flag byte 13
+bit 0 (bar_pol) is set. On overload (OL), the bar graph reads 44
+(near full scale).
+
 ### Flag Bytes
 
 Verified against real device and ljakob/unit_ut61eplus (Python).
@@ -132,7 +136,7 @@ Verified against real device and ljakob/unit_ut61eplus (Python).
 - Bit 2: **!AUTO** (inverted: bit clear = auto-range ON) — verified
 
 **Byte 13 (Flag 3):**
-- Bit 0: Bar polarity
+- Bit 0: Bar polarity (set when value is negative) — verified
 - Bit 1: Peak MIN (stored instantaneous minimum peak) — verified
 - Bit 2: Peak MAX (stored instantaneous maximum peak) — verified
 - Bit 3: DC indicator
