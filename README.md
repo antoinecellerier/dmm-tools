@@ -144,6 +144,7 @@ docs/              — architecture, protocol, setup, UX design docs
 - [Protocol details](docs/protocol.md)
 - [UX design](docs/ux-design.md)
 - [Development guide](docs/development.md)
+- [Changelog](CHANGELOG.md)
 
 ## Contributing
 

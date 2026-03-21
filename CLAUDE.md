@@ -92,6 +92,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - `docs/development.md` — how to run tests, add new device models, coding conventions, release process
 - `docs/adding-devices.md` — end-to-end guide: discovery, clean-room RE, implementation, spec data extraction, hardware verification, common pitfalls. **Read this before starting work on any new device.**
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
+- `CHANGELOG.md` — add entries for user-visible changes when preparing a release. Organized by component (GUI, CLI, Library, Bug fixes, Internal, Documentation). The release workflow extracts the entry for the tagged version.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 
 ### Logging

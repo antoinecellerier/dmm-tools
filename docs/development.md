@@ -92,11 +92,14 @@ a new mode/range/flag combination against real hardware.
 
 ## Release Process
 
-1. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.2.0"`
-2. Commit: `git commit -am "Release v0.2.0"`
-3. Tag: `git tag v0.2.0 && git push && git push origin v0.2.0`
-4. The `release.yml` GitHub Actions workflow builds Linux and Windows binaries and creates a GitHub Release automatically
-5. Bump to the next dev version: set `version = "0.3.0-dev"` in `Cargo.toml`, commit, and push
+1. Write the release entry in `CHANGELOG.md` (see existing entries for format)
+2. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
+3. Update `Cargo.lock`: `cargo update --workspace`
+4. Update the README screenshot if the GUI has changed
+5. Commit: `git commit -am "Release v0.3.0"`
+6. Tag and push: `git tag v0.3.0 && git push && git push origin v0.3.0`
+7. The `release.yml` GitHub Actions workflow builds Linux and Windows binaries and creates a GitHub Release with the changelog entry as the body
+8. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, commit, and push
 
 ## Shell Completions
 
