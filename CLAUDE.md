@@ -80,6 +80,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - For serialized structs: do new fields have `#[serde(default)]`? Missing this breaks existing users' config files on upgrade.
 - For file writes: is the write atomic? User data (captures, settings, CSV exports) should use write-to-tmp-then-rename.
 - For user-initiated actions (export, clear, connect): is there visible feedback (toast, status message, log line)? Silent success is a UX bug.
+- For icon-only or custom-painted interactive widgets: does it have an AccessKit label? Use `accesskit_node_builder` to set one. Buttons with descriptive text get this automatically; icon buttons and custom widgets do not.
 
 ### Documentation
 - Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought

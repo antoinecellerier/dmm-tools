@@ -289,6 +289,8 @@ Auto-reconnection retries every 2 seconds after a disconnect.
 
 ## Accessibility
 
+### Visual
+
 - All colors are theme-aware — brighter variants on dark backgrounds, darker
   on light
 - WCAG 2.1 AA contrast ratios: ≥4.5:1 for text, ≥3:1 for graphical elements
@@ -296,6 +298,23 @@ Auto-reconnection retries every 2 seconds after a disconnect.
 - Flags use bold text in addition to color
 - Status dot has a text label alongside the color indicator
 - Graph overlays use distinct line styles (solid, dashed) in addition to color
+
+### Screen Reader Support
+
+The GUI uses [AccessKit](https://accesskit.dev/) (enabled by default in eframe)
+to expose widgets to platform accessibility APIs on Windows and macOS. Linux
+support depends on the AT-SPI integration in AccessKit (test with Orca).
+
+- Standard egui widgets (buttons with text, labels, checkboxes, links) are
+  announced automatically
+- Icon-only buttons (`?`, `\u{2699}`) have explicit AccessKit labels
+  ("Keyboard shortcuts", "Settings") set via `accesskit_node_builder`
+- The graph minimap (custom-painted, interactive) has an AccessKit label
+  describing its purpose and interaction
+- The status dot is decorative (non-focusable) — connection status is
+  conveyed by the adjacent text label
+- All keyboard shortcuts work without mouse interaction (see
+  [Keyboard Shortcuts](#keyboard-shortcuts))
 
 ## See Also
 

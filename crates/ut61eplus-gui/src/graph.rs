@@ -992,6 +992,12 @@ impl Graph {
             egui::vec2(ui.available_width(), total_height),
             egui::Sense::click_and_drag(),
         );
+        // Give the minimap an accessible label so screen readers can
+        // announce it as a navigable element.
+        ui.ctx()
+            .accesskit_node_builder(pointer_response.id, |builder| {
+                builder.set_label("Graph minimap — click or drag to navigate timeline");
+            });
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
             egui::pos2(full_rect.left() + margin, full_rect.top() + margin),

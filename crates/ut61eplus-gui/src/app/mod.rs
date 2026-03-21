@@ -631,6 +631,7 @@ impl App {
                 ConnectionState::Reconnecting => (orange, "Reconnecting...".to_string()),
             };
 
+            // Decorative status dot — not interactive or focusable.
             let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
             ui.painter().circle_filled(rect.center(), 5.0, dot_color);
             ui.label(RichText::new(status_text).small());
@@ -685,15 +686,28 @@ impl App {
             "Help / GitHub",
             "https://github.com/antoinecellerier/dmm-tools",
         );
-        if ui.button("?").on_hover_text("Keyboard shortcuts").clicked() {
+        let shortcuts_btn = ui.button("?").on_hover_text("Keyboard shortcuts");
+        if shortcuts_btn.clicked() {
             self.shortcut_help_open = !self.shortcut_help_open;
         }
-        if ui.button("\u{2699}").on_hover_text("Settings").clicked() {
+        Self::set_accessible_label(ui, shortcuts_btn.id, "Keyboard shortcuts");
+
+        let settings_btn = ui.button("\u{2699}").on_hover_text("Settings");
+        if settings_btn.clicked() {
             self.settings_open = !self.settings_open;
         }
+        Self::set_accessible_label(ui, settings_btn.id, "Settings");
 
         let actual_width = ui.min_rect().right() - before;
         ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
+    }
+
+    /// Override the AccessKit label for a widget whose visible text is not
+    /// descriptive (e.g. icon-only buttons like "⚙" or "?"). This ensures
+    /// screen readers announce a meaningful name instead of the raw symbol.
+    fn set_accessible_label(ui: &Ui, id: egui::Id, label: &str) {
+        ui.ctx()
+            .accesskit_node_builder(id, |builder| builder.set_label(label));
     }
 
     fn show_stats_section(&mut self, ui: &mut Ui, compact: bool, scale: f32) {
