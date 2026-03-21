@@ -220,11 +220,34 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 
 ## Keyboard Shortcuts
 
+Press `?` or click the `?` button in the top bar to open an in-app shortcut reference.
+
+### General
+
 | Shortcut | Action |
 |---|---|
-| `Ctrl` + `+` / `=` | Zoom in |
-| `Ctrl` + `-` | Zoom out |
-| `Ctrl` + `0` | Reset zoom to 100% |
+| `Ctrl+Shift+C` | Connect / Disconnect |
+| `Space` | Pause / Resume (when connected) |
+| `Ctrl+L` | Clear graph & statistics |
+| `Ctrl+R` | Toggle recording |
+| `Ctrl+E` | Export CSV |
+| `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
+| `Ctrl+0` | Reset zoom to 100% |
+| `Ctrl+Q` | Quit |
+| `?` | Toggle keyboard shortcut help |
+| `Esc` / `Ctrl+W` | Close shortcut help overlay |
+
+### Graph Navigation
+
+| Shortcut | Action |
+|---|---|
+| `[` / `]` | Cycle to shorter / longer time window preset |
+| `Left` / `Right` | Scroll view (exits live mode) |
+| `Home` | Jump to start of data |
+| `End` | Jump to live mode |
+
+Graph and `Space` shortcuts are disabled when a text field (e.g. Y-axis
+range, envelope window) has focus.
 
 ## Layout Modes
 

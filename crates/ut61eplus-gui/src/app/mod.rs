@@ -133,6 +133,8 @@ pub struct App {
     meter_content_height: f32,
     /// Last window size used to compute big meter scale (recompute on change).
     meter_last_size: (u32, u32),
+    /// Whether the keyboard shortcut help overlay is open.
+    shortcut_help_open: bool,
 }
 
 impl App {
@@ -167,6 +169,7 @@ impl App {
             export_result_rx: None,
             meter_content_height: DEFAULT_METER_CONTENT_HEIGHT,
             meter_last_size: (0, 0),
+            shortcut_help_open: false,
         }
     }
 
@@ -227,20 +230,88 @@ impl App {
         self.settings.save();
     }
 
-    fn handle_keyboard_zoom(&mut self, ctx: &egui::Context) {
-        let modifiers = ctx.input(|i| i.modifiers);
-        if modifiers.command {
-            // Ctrl+= or Ctrl++ (zoom in)
-            if ctx.input(|i| i.key_pressed(egui::Key::Plus) || i.key_pressed(egui::Key::Equals)) {
-                self.zoom_in();
+    fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, Modifiers};
+
+        // --- Ctrl+Shift shortcuts (most specific first) ---
+
+        // Ctrl+Shift+C: Connect/Disconnect
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::C)) {
+            match self.connection_state {
+                ConnectionState::Disconnected => self.connect(ctx),
+                ConnectionState::Connected => self.disconnect(),
+                ConnectionState::Reconnecting => {}
             }
-            // Ctrl+- (zoom out)
-            if ctx.input(|i| i.key_pressed(egui::Key::Minus)) {
-                self.zoom_out();
+        }
+
+        // --- Ctrl shortcuts ---
+
+        // Ctrl+Q: Quit
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Q)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        // Ctrl+L: Clear graph & statistics
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::L))
+            && self.connection_state == ConnectionState::Connected
+        {
+            self.graph.clear();
+            self.stats.reset();
+            self.last_measurement = None;
+        }
+
+        // Ctrl+R: Toggle recording
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::R))
+            && self.connection_state == ConnectionState::Connected
+        {
+            self.recording.toggle();
+        }
+
+        // Ctrl+E: Export CSV
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::E)) {
+            self.export_csv();
+        }
+
+        // Ctrl+= or Ctrl++: Zoom in
+        if ctx.input_mut(|i| {
+            i.consume_key(Modifiers::COMMAND, Key::Plus)
+                || i.consume_key(Modifiers::COMMAND, Key::Equals)
+        }) {
+            self.zoom_in();
+        }
+
+        // Ctrl+-: Zoom out
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Minus)) {
+            self.zoom_out();
+        }
+
+        // Ctrl+0: Reset zoom
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Num0)) {
+            self.zoom_reset();
+        }
+
+        // Escape / Ctrl+W: Close shortcut help overlay (if open)
+        if self.shortcut_help_open
+            && ctx.input_mut(|i| {
+                i.consume_key(Modifiers::NONE, Key::Escape)
+                    || i.consume_key(Modifiers::COMMAND, Key::W)
+            })
+        {
+            self.shortcut_help_open = false;
+        }
+
+        // --- Bare-key shortcuts (only when no text field has focus) ---
+        if !ctx.wants_keyboard_input() {
+            // Space: Pause/Resume
+            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space))
+                && self.connection_state == ConnectionState::Connected
+            {
+                self.paused = !self.paused;
             }
-            // Ctrl+0 (reset)
-            if ctx.input(|i| i.key_pressed(egui::Key::Num0)) {
-                self.zoom_reset();
+
+            // ?: Toggle shortcut help
+            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Questionmark)) {
+                self.shortcut_help_open = !self.shortcut_help_open;
             }
         }
     }
@@ -487,12 +558,16 @@ impl App {
 
             match &self.connection_state {
                 ConnectionState::Disconnected => {
-                    if ui.button("Connect").clicked() {
+                    if ui.button("Connect").on_hover_text("Ctrl+Shift+C").clicked() {
                         self.connect(ctx);
                     }
                 }
                 ConnectionState::Connected => {
-                    if ui.button("Disconnect").clicked() {
+                    if ui
+                        .button("Disconnect")
+                        .on_hover_text("Ctrl+Shift+C")
+                        .clicked()
+                    {
                         self.disconnect();
                     }
                     let pause_label = if self.paused {
@@ -500,10 +575,10 @@ impl App {
                     } else {
                         "\u{23F8} Pause"
                     };
-                    if ui.button(pause_label).clicked() {
+                    if ui.button(pause_label).on_hover_text("Space").clicked() {
                         self.paused = !self.paused;
                     }
-                    if ui.button("Clear").clicked() {
+                    if ui.button("Clear").on_hover_text("Ctrl+L").clicked() {
                         self.graph.clear();
                         self.stats.reset();
                         self.last_measurement = None;
@@ -541,8 +616,11 @@ impl App {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("\u{2699}").clicked() {
+                if ui.button("\u{2699}").on_hover_text("Settings").clicked() {
                     self.settings_open = !self.settings_open;
+                }
+                if ui.button("?").on_hover_text("Keyboard shortcuts").clicked() {
+                    self.shortcut_help_open = !self.shortcut_help_open;
                 }
                 ui.hyperlink_to(
                     "Help / GitHub",
@@ -719,10 +797,10 @@ impl App {
         };
 
         ui.horizontal(|ui| {
-            if ui.button(btn_label).clicked() {
+            if ui.button(btn_label).on_hover_text("Ctrl+R").clicked() {
                 self.recording.toggle();
             }
-            if ui.button("Export CSV").clicked() {
+            if ui.button("Export CSV").on_hover_text("Ctrl+E").clicked() {
                 self.export_csv();
             }
             let count = self.recording.samples.len();
@@ -863,7 +941,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.apply_theme(ctx);
         self.apply_zoom(ctx);
-        self.handle_keyboard_zoom(ctx);
+        self.handle_keyboard_shortcuts(ctx);
         self.drain_messages();
         self.poll_export_result();
 
@@ -987,8 +1065,77 @@ impl eframe::App for App {
             });
         }
 
+        self.show_shortcut_help(ctx);
+
         if self.connection_state == ConnectionState::Connected {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+    }
+}
+
+impl App {
+    fn show_shortcut_help(&mut self, ctx: &egui::Context) {
+        if !self.shortcut_help_open {
+            return;
+        }
+
+        let mut open = self.shortcut_help_open;
+        egui::Window::new("Keyboard Shortcuts")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                egui::Grid::new("shortcuts_app")
+                    .min_col_width(120.0)
+                    .show(ui, |ui| {
+                        ui.label(RichText::new("General").strong());
+                        ui.end_row();
+                        for (key, action) in [
+                            ("Ctrl+Shift+C", "Connect / Disconnect"),
+                            ("Space", "Pause / Resume"),
+                            ("Ctrl+L", "Clear graph & statistics"),
+                            ("Ctrl+R", "Toggle recording"),
+                            ("Ctrl+E", "Export CSV"),
+                            ("Ctrl+Plus/Minus", "Zoom in / out"),
+                            ("Ctrl+0", "Reset zoom to 100%"),
+                            ("Esc / Ctrl+W", "Close this help"),
+                            ("Ctrl+Q", "Quit"),
+                        ] {
+                            ui.label(RichText::new(key).monospace());
+                            ui.label(action);
+                            ui.end_row();
+                        }
+                    });
+
+                ui.add_space(8.0);
+
+                egui::Grid::new("shortcuts_graph")
+                    .min_col_width(120.0)
+                    .show(ui, |ui| {
+                        ui.label(RichText::new("Graph").strong());
+                        ui.end_row();
+                        for (key, action) in [
+                            ("[ / ]", "Shorter / longer time window"),
+                            ("Left / Right", "Scroll view"),
+                            ("Home", "Jump to start"),
+                            ("End", "Jump to live"),
+                        ] {
+                            ui.label(RichText::new(key).monospace());
+                            ui.label(action);
+                            ui.end_row();
+                        }
+                    });
+
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(
+                        "Graph and Space shortcuts are disabled when a text field has focus.",
+                    )
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+                );
+            });
+        self.shortcut_help_open = open;
     }
 }

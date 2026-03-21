@@ -215,6 +215,77 @@ impl Graph {
         self.invalidate_cache();
     }
 
+    /// Handle keyboard shortcuts for graph navigation.
+    pub fn handle_keyboard(&mut self, ctx: &egui::Context) {
+        if ctx.wants_keyboard_input() {
+            return;
+        }
+
+        use egui::{Key, Modifiers};
+
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::OpenBracket)) {
+            self.cycle_time_window(-1);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::CloseBracket)) {
+            self.cycle_time_window(1);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft)) {
+            self.scroll_view(-0.25);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight)) {
+            self.scroll_view(0.25);
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Home)) {
+            self.jump_to_start();
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::End)) {
+            self.live = true;
+        }
+    }
+
+    /// Cycle through TIME_WINDOWS presets. `direction`: -1 = shorter, +1 = longer.
+    fn cycle_time_window(&mut self, direction: i32) {
+        if direction < 0 {
+            if let Some(&(secs, _)) = TIME_WINDOWS
+                .iter()
+                .rev()
+                .find(|&&(s, _)| s < self.time_window_secs - 0.1)
+            {
+                self.time_window_secs = secs;
+            }
+        } else if let Some(&(secs, _)) = TIME_WINDOWS
+            .iter()
+            .find(|&&(s, _)| s > self.time_window_secs + 0.1)
+        {
+            self.time_window_secs = secs;
+        }
+    }
+
+    /// Scroll the view by a fraction of the current window width.
+    fn scroll_view(&mut self, fraction: f64) {
+        let delta = self.time_window_secs * fraction;
+        let (data_min, data_max) = self.data_time_range();
+        let half = self.time_window_secs / 2.0;
+
+        if self.live {
+            self.view_center = data_max - half;
+            self.live = false;
+        }
+
+        self.view_center = (self.view_center + delta).max(data_min + half);
+
+        if self.view_center + half >= data_max {
+            self.live = true;
+        }
+    }
+
+    /// Jump view to the start of recorded data.
+    fn jump_to_start(&mut self) {
+        let (data_min, _) = self.data_time_range();
+        self.view_center = data_min + self.time_window_secs / 2.0;
+        self.live = false;
+    }
+
     fn invalidate_cache(&mut self) {
         self.cache_len = 0;
         self.cached_segments.clear();
@@ -337,6 +408,7 @@ impl Graph {
             for &(secs, label) in TIME_WINDOWS {
                 if ui
                     .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
+                    .on_hover_text("[ / ] to cycle")
                     .clicked()
                 {
                     self.time_window_secs = secs;
@@ -354,6 +426,7 @@ impl Graph {
                 .add(egui::Button::new(
                     egui::RichText::new("LIVE").color(live_color).small(),
                 ))
+                .on_hover_text("End = jump to live")
                 .clicked()
             {
                 self.live = !self.live;
@@ -1052,6 +1125,7 @@ impl Graph {
 
     /// Combined render: toolbar + main graph + minimap.
     pub fn show(&mut self, ui: &mut Ui) {
+        self.handle_keyboard(ui.ctx());
         self.show_toolbar(ui);
         let minimap_reserve = MINIMAP_HEIGHT + 30.0;
         let main_height = (ui.available_height() - minimap_reserve).max(60.0);
@@ -1309,5 +1383,56 @@ mod tests {
     fn time_window_presets_exist() {
         assert!(TIME_WINDOWS.len() >= 3);
         assert_eq!(TIME_WINDOWS[0].1, "5s");
+    }
+
+    #[test]
+    fn cycle_time_window_shorter() {
+        let mut g = Graph::new();
+        g.time_window_secs = 60.0; // 1m
+        g.cycle_time_window(-1);
+        assert!((g.time_window_secs - 30.0).abs() < 0.1);
+        g.cycle_time_window(-1);
+        assert!((g.time_window_secs - 10.0).abs() < 0.1);
+        g.cycle_time_window(-1);
+        assert!((g.time_window_secs - 5.0).abs() < 0.1);
+        // Already at minimum preset — stays at 5s
+        g.cycle_time_window(-1);
+        assert!((g.time_window_secs - 5.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn cycle_time_window_longer() {
+        let mut g = Graph::new();
+        g.time_window_secs = 60.0; // 1m
+        g.cycle_time_window(1);
+        assert!((g.time_window_secs - 300.0).abs() < 0.1);
+        g.cycle_time_window(1);
+        assert!((g.time_window_secs - 600.0).abs() < 0.1);
+        // Already at maximum preset — stays at 600s
+        g.cycle_time_window(1);
+        assert!((g.time_window_secs - 600.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn scroll_view_does_not_panic() {
+        let mut g = Graph::new();
+        for i in 0..20 {
+            g.push(i as f64, "V DC", "V");
+        }
+        assert!(g.live);
+        // With only ~ms of real elapsed time and a 60s window, the view
+        // stays pinned at the end so live remains true. This test validates
+        // the method doesn't panic on minimal data spans.
+        g.scroll_view(-0.25);
+        g.scroll_view(0.25);
+    }
+
+    #[test]
+    fn jump_to_start_exits_live() {
+        let mut g = Graph::new();
+        g.push(1.0, "V DC", "V");
+        assert!(g.live);
+        g.jump_to_start();
+        assert!(!g.live);
     }
 }
