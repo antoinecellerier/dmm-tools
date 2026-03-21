@@ -557,8 +557,12 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
             && let Some(unit_str) = &integral_unit
             && let Some((disp_unit, divisor)) = ut61eplus_lib::stats::integral_unit_info(unit_str)
         {
+            let dt_str = integrator
+                .elapsed_secs()
+                .map(|s| format!(" ({}s)", style(format!("{s:.1}")).cyan()))
+                .unwrap_or_default();
             eprintln!(
-                "    Integral: {} {disp_unit}",
+                "    Integral: {} {disp_unit}{dt_str}",
                 style(format!("{:.4}", integrator.value() / divisor)).cyan(),
             );
         }
