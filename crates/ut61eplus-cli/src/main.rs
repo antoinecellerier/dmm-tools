@@ -59,6 +59,9 @@ enum Cmd {
         /// Number of readings (0 = unlimited, Ctrl+C to stop)
         #[arg(long, default_value = "0")]
         count: usize,
+        /// Show cumulative time-integral (charge for current modes, V·s for voltage)
+        #[arg(long)]
+        integrate: bool,
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, mock cycles through all modes automatically.
         #[arg(
@@ -172,9 +175,10 @@ fn main() {
             format,
             output,
             count,
+            integrate,
             mock_mode,
         } if !device.requires_hardware => {
-            cmd_read_mock(interval_ms, format, output, count, mock_mode)
+            cmd_read_mock(interval_ms, format, output, count, integrate, mock_mode)
         }
         Cmd::Command { action } if !device.requires_hardware => cmd_command(device, action),
         Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
@@ -193,8 +197,9 @@ fn main() {
             format,
             output,
             count,
+            integrate,
             mock_mode: _,
-        } => cmd_read(device, interval_ms, format, output, count),
+        } => cmd_read(device, interval_ms, format, output, count, integrate),
         Cmd::Command { action } => cmd_command(device, action),
         Cmd::Debug { count, interval_ms } => cmd_debug(device, count, interval_ms),
         Cmd::Capture {
@@ -377,6 +382,7 @@ fn cmd_read(
     format: OutputFormat,
     output_path: Option<String>,
     count: usize,
+    integrate: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut dmm = open_with_help(device)?;
     let experimental = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Experimental;
@@ -389,6 +395,7 @@ fn cmd_read(
         count,
         experimental,
         Some(device),
+        integrate,
     )
 }
 
@@ -397,6 +404,7 @@ fn cmd_read_mock(
     format: OutputFormat,
     output_path: Option<String>,
     count: usize,
+    integrate: bool,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut dmm = match mock_mode {
@@ -419,10 +427,12 @@ fn cmd_read_mock(
         count,
         false,
         None,
+        integrate,
     )
 }
 
 /// Shared measurement loop for both real and mock devices.
+#[allow(clippy::too_many_arguments)]
 fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
     dmm: &mut ut61eplus_lib::Dmm<T>,
     interval_ms: u64,
@@ -432,6 +442,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
     experimental: bool,
     // When set, timeout warnings include device-specific activation instructions.
     device: Option<&'static SelectableDevice>,
+    integrate: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
@@ -441,11 +452,20 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
     };
 
     if matches!(format, OutputFormat::Csv) {
-        writeln!(writer, "timestamp,mode,value,unit,range,flags")?;
+        if integrate {
+            writeln!(
+                writer,
+                "timestamp,mode,value,unit,range,flags,integral,integral_unit"
+            )?;
+        } else {
+            writeln!(writer, "timestamp,mode,value,unit,range,flags")?;
+        }
     }
 
     let interval = Duration::from_millis(interval_ms);
     let mut stats = ut61eplus_lib::stats::RunningStats::default();
+    let mut integrator = ut61eplus_lib::stats::Integrator::new();
+    let mut integral_unit: Option<String> = None;
     let mut i = 0usize;
     let mut consecutive_timeouts: u32 = 0;
 
@@ -456,7 +476,40 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
                 if let MeasuredValue::Normal(v) = &m.value {
                     stats.push(*v);
                 }
-                format::format_measurement(&mut writer, &m, format, experimental)?;
+
+                // Integration tracking
+                let integral_display = if integrate {
+                    let current_unit: &str = &m.unit;
+                    if let Some(prev_unit) = &integral_unit
+                        && prev_unit != current_unit
+                    {
+                        eprintln!(
+                            "{} Unit changed ({prev_unit} \u{2192} {current_unit}), integral reset",
+                            style("Note:").yellow(),
+                        );
+                        integrator.reset();
+                    }
+                    integral_unit = Some(current_unit.to_string());
+
+                    match &m.value {
+                        MeasuredValue::Normal(v) => integrator.push(*v, m.timestamp),
+                        MeasuredValue::Overload => integrator.push_overload(),
+                        _ => {}
+                    }
+
+                    ut61eplus_lib::stats::integral_unit_info(current_unit)
+                        .map(|(disp_unit, divisor)| (integrator.value() / divisor, disp_unit))
+                } else {
+                    None
+                };
+
+                format::format_measurement(
+                    &mut writer,
+                    &m,
+                    format,
+                    experimental,
+                    integral_display,
+                )?;
                 writer.flush()?;
                 i += 1;
             }
@@ -495,6 +548,15 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
             style(format!("{:.4}", stats.max.unwrap())).cyan(),
             style(format!("{:.4}", stats.avg().unwrap())).cyan(),
         );
+        if integrate
+            && let Some(unit_str) = &integral_unit
+            && let Some((disp_unit, divisor)) = ut61eplus_lib::stats::integral_unit_info(unit_str)
+        {
+            eprintln!(
+                "    Integral: {} {disp_unit}",
+                style(format!("{:.4}", integrator.value() / divisor)).cyan(),
+            );
+        }
     }
     Ok(())
 }
@@ -628,12 +690,14 @@ mod tests {
                 format,
                 output,
                 count,
+                integrate,
                 mock_mode,
             } => {
                 assert_eq!(interval_ms, 0);
                 assert!(matches!(format, OutputFormat::Text));
                 assert!(output.is_none());
                 assert_eq!(count, 0);
+                assert!(!integrate);
                 assert!(mock_mode.is_none());
             }
             _ => panic!("expected Read"),
@@ -662,6 +726,7 @@ mod tests {
                 output,
                 count,
                 mock_mode: _,
+                integrate: _,
             } => {
                 assert_eq!(interval_ms, 100);
                 assert!(matches!(format, OutputFormat::Csv));
@@ -716,7 +781,7 @@ mod tests {
     fn format_text_output() {
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Text, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Text, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("5.678"));
         assert!(output.contains("V"));
@@ -726,7 +791,7 @@ mod tests {
     fn format_csv_output() {
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Csv, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Csv, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         let fields: Vec<&str> = output.trim().split(',').collect();
         assert!(fields.len() >= 6);
@@ -741,7 +806,7 @@ mod tests {
         // flag1=0x02 (HOLD), flag2=0x00 (AUTO on, inverted logic)
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x02, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed["mode"], "DC V");
@@ -756,7 +821,7 @@ mod tests {
     fn format_json_experimental_flag() {
         let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Json, true).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Json, true, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed["experimental"], true);
@@ -766,7 +831,7 @@ mod tests {
     fn format_csv_overload() {
         let m = make_test_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Csv, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Csv, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains(",OL,"));
     }
@@ -775,7 +840,7 @@ mod tests {
     fn format_json_overload() {
         let m = make_test_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed["value"], "OL");
@@ -796,7 +861,7 @@ mod tests {
     fn format_csv_ncv() {
         let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Csv, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Csv, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("NCV:3"));
     }
@@ -805,7 +870,7 @@ mod tests {
     fn format_json_ncv() {
         let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed["value"]["ncv_level"], 3);
@@ -816,7 +881,7 @@ mod tests {
     fn format_text_includes_flags() {
         let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x0F, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Text, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Text, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         assert!(output.contains("HOLD"));
         assert!(output.contains("REL"));
@@ -826,7 +891,7 @@ mod tests {
     fn format_json_negative_value() {
         let m = make_test_measurement(0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x00, 0x00));
         let mut buf = Vec::new();
-        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false).unwrap();
+        format::format_measurement(&mut buf, &m, &OutputFormat::Json, false, None).unwrap();
         let output = String::from_utf8(buf).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert!((parsed["value"].as_f64().unwrap() - (-12.345)).abs() < 1e-6);

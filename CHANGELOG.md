@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### GUI
+
+- **Time-integral in cursor readout** — when both cursors are placed on a current or voltage graph, the readout now shows ∫ (integral) alongside ΔT and ΔV. For current modes, this displays charge (mAh/Ah/µAh). For voltage modes, V·s.
+- **Running integral in statistics** — a cumulative integral line ("Int") appears in the statistics panel for current and voltage modes. Resets with the Reset button or Ctrl+L.
+
+### CLI
+
+- **`--integrate` flag** on the `read` command — adds cumulative time-integral columns (`integral`, `integral_unit`) to CSV and JSON output. Text format appends `[∫ value unit]`. The session summary includes the total integral. Useful for battery capacity measurement (coulomb counting).
+
+### Library
+
+- **`Integrator` struct** (`stats.rs`) — trapezoidal-rule time integrator with gap detection (max_dt guard), overload gap handling, and clock-backward safety via `checked_duration_since()`.
+- **`integral_unit_info()`** — maps measurement units to integral display units (A→Ah, mA→mAh, µA→µAh, V→V·s, mV→mV·s).
+
 ## v0.3.0
 
 ### Specifications, Keyboard Shortcuts & Mock Device

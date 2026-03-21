@@ -8,10 +8,15 @@ pub fn format_measurement(
     m: &Measurement,
     format: &OutputFormat,
     experimental: bool,
+    integral: Option<(f64, &str)>,
 ) -> std::io::Result<()> {
     match format {
         OutputFormat::Text => {
-            writeln!(w, "{m}")
+            if let Some((val, unit)) = integral {
+                writeln!(w, "{m} [\u{222b} {val:.4} {unit}]")
+            } else {
+                writeln!(w, "{m}")
+            }
         }
         OutputFormat::Csv => {
             let value_str = match &m.value {
@@ -23,16 +28,30 @@ pub fn format_measurement(
                 MeasuredValue::Overload => "OL".to_string(),
                 MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
             };
-            writeln!(
-                w,
-                "{},{},{},{},{},{}",
-                chrono::Local::now().to_rfc3339(),
-                m.mode,
-                value_str,
-                m.unit,
-                m.range_label,
-                m.flags,
-            )
+            if let Some((val, unit)) = integral {
+                writeln!(
+                    w,
+                    "{},{},{},{},{},{},{:.6},{unit}",
+                    chrono::Local::now().to_rfc3339(),
+                    m.mode,
+                    value_str,
+                    m.unit,
+                    m.range_label,
+                    m.flags,
+                    val,
+                )
+            } else {
+                writeln!(
+                    w,
+                    "{},{},{},{},{},{}",
+                    chrono::Local::now().to_rfc3339(),
+                    m.mode,
+                    value_str,
+                    m.unit,
+                    m.range_label,
+                    m.flags,
+                )
+            }
         }
         OutputFormat::Json => {
             let value = match &m.value {
@@ -40,7 +59,7 @@ pub fn format_measurement(
                 MeasuredValue::Overload => serde_json::json!("OL"),
                 MeasuredValue::NcvLevel(l) => serde_json::json!({"ncv_level": l}),
             };
-            let obj = serde_json::json!({
+            let mut obj = serde_json::json!({
                 "timestamp": chrono::Local::now().to_rfc3339(),
                 "mode": m.mode,
                 "value": value,
@@ -62,6 +81,10 @@ pub fn format_measurement(
                     "peak_max": m.flags.peak_max,
                 }
             });
+            if let Some((val, unit)) = integral {
+                obj["integral"] = serde_json::json!(val);
+                obj["integral_unit"] = serde_json::json!(unit);
+            }
             writeln!(
                 w,
                 "{}",

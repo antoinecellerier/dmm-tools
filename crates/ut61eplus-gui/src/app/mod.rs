@@ -16,7 +16,7 @@ use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
 use crate::theme::ThemeColors;
-use ut61eplus_lib::stats::RunningStats;
+use ut61eplus_lib::stats::{self, Integrator, RunningStats};
 
 /// How long a toast message stays visible (seconds).
 const TOAST_DURATION_SECS: u64 = 4;
@@ -42,6 +42,7 @@ struct FormattedStatsGroup {
     max: String,
     avg: String,
     count: usize,
+    integral: Option<String>,
 }
 
 /// Pre-formatted statistics for the stats section, shared by both layout modes.
@@ -50,28 +51,47 @@ struct FormattedStats {
     max: String,
     avg: String,
     count: u64,
+    /// Formatted integral string (e.g. "   0.2925 mAh"), or None if not integrable.
+    integral: Option<String>,
     /// Visible-window stats, if available.
     visible: Option<FormattedStatsGroup>,
 }
 
 impl FormattedStats {
-    fn new(stats: &RunningStats, visible: Option<(f64, f64, f64, usize)>, unit: &str) -> Self {
+    fn new(
+        stats: &RunningStats,
+        visible: Option<(f64, f64, f64, usize)>,
+        unit: &str,
+        integral: Option<(f64, &str, f64, Option<f64>)>,
+        visible_integral: Option<(f64, &str, f64, Option<f64>)>,
+    ) -> Self {
         let fmt = |v: Option<f64>| -> String {
             match v {
                 Some(val) => format!("{val:>10.4} {unit}"),
                 None => format!("{:>10} {unit}", crate::NO_DATA),
             }
         };
+        let fmt_integral = |info: Option<(f64, &str, f64, Option<f64>)>| -> Option<String> {
+            info.map(|(raw, disp_unit, divisor, dt)| {
+                let val = raw / divisor;
+                match dt {
+                    Some(secs) => format!("{val:>10.4} {disp_unit} ({secs:.0}s)"),
+                    None => format!("{val:>10.4} {disp_unit}"),
+                }
+            })
+        };
         Self {
             min: fmt(stats.min),
             max: fmt(stats.max),
             avg: fmt(stats.avg()),
             count: stats.count,
+            integral: fmt_integral(integral),
             visible: visible.map(|(vmin, vmax, vavg, vcount)| FormattedStatsGroup {
                 min: fmt(Some(vmin)),
                 max: fmt(Some(vmax)),
                 avg: fmt(Some(vavg)),
                 count: vcount,
+                integral: fmt_integral(visible_integral),
             }),
         }
     }
@@ -111,6 +131,7 @@ pub struct App {
 
     graph: Graph,
     stats: RunningStats,
+    integrator: Integrator,
     recording: Recording,
 
     rx: Option<mpsc::Receiver<DmmMessage>>,
@@ -156,6 +177,7 @@ impl App {
             cached_spec_key: (u16::MAX, u8::MAX),
             graph: Graph::new(),
             stats: RunningStats::new(),
+            integrator: Integrator::new(),
             recording: Recording::new(),
             rx: None,
             stop_tx: None,
@@ -257,6 +279,7 @@ impl App {
         {
             self.graph.clear();
             self.stats.reset();
+            self.integrator.reset();
             self.last_measurement = None;
         }
 
@@ -433,9 +456,24 @@ impl App {
                     if self.paused {
                         continue;
                     }
-                    if let MeasuredValue::Normal(v) = &m.value {
-                        self.graph.push(*v, &m.mode, &m.unit);
-                        self.stats.push(*v);
+
+                    // Reset integrator on mode change (units become incompatible).
+                    if let Some(prev) = &self.last_measurement
+                        && prev.mode != m.mode
+                    {
+                        self.integrator.reset();
+                    }
+
+                    match &m.value {
+                        MeasuredValue::Normal(v) => {
+                            self.graph.push(*v, &m.mode, &m.unit);
+                            self.stats.push(*v);
+                            self.integrator.push(*v, m.timestamp);
+                        }
+                        MeasuredValue::Overload => {
+                            self.integrator.push_overload();
+                        }
+                        _ => {}
                     }
 
                     self.recording.push(&m);
@@ -615,6 +653,7 @@ impl App {
                     if ui.button("Clear").on_hover_text("Ctrl+L").clicked() {
                         self.graph.clear();
                         self.stats.reset();
+                        self.integrator.reset();
                         self.last_measurement = None;
                     }
                 }
@@ -716,13 +755,30 @@ impl App {
     }
 
     fn show_stats_section(&mut self, ui: &mut Ui, compact: bool, scale: f32) {
+        let unit = self
+            .last_measurement
+            .as_ref()
+            .map(|m| &*m.unit)
+            .unwrap_or("");
+        let integral_info = stats::integral_unit_info(unit).map(|(disp_unit, divisor)| {
+            (
+                self.integrator.value(),
+                disp_unit,
+                divisor,
+                self.integrator.elapsed_secs(),
+            )
+        });
+        let visible_integral = stats::integral_unit_info(unit).and_then(|(disp_unit, divisor)| {
+            self.graph
+                .visible_integral()
+                .map(|raw| (raw, disp_unit, divisor, self.graph.visible_data_span_secs()))
+        });
         let formatted = FormattedStats::new(
             &self.stats,
             self.graph.visible_stats(),
-            self.last_measurement
-                .as_ref()
-                .map(|m| &*m.unit)
-                .unwrap_or(""),
+            unit,
+            integral_info,
+            visible_integral,
         );
         let main_font = 12.0 * scale;
         let sub_font = 11.0 * scale;
@@ -743,17 +799,32 @@ impl App {
                     .clicked()
                 {
                     self.stats.reset();
+                    self.integrator.reset();
                 }
             });
 
             if let Some(vis) = &formatted.visible {
-                ui.label(
-                    RichText::new(format!(
+                let vis_line = if let Some(vint) = &vis.integral {
+                    format!(
+                        "Visible: Min:{} Max:{} Avg:{} ({})  \u{222b}:{vint}",
+                        vis.min, vis.max, vis.avg, vis.count,
+                    )
+                } else {
+                    format!(
                         "Visible: Min:{} Max:{} Avg:{} ({})",
                         vis.min, vis.max, vis.avg, vis.count,
-                    ))
-                    .font(egui::FontId::monospace(sub_font))
-                    .color(ui.visuals().weak_text_color()),
+                    )
+                };
+                ui.label(
+                    RichText::new(vis_line)
+                        .font(egui::FontId::monospace(sub_font))
+                        .color(ui.visuals().weak_text_color()),
+                );
+            }
+            if let Some(int) = &formatted.integral {
+                ui.label(
+                    RichText::new(format!("\u{222b}:{int}"))
+                        .font(egui::FontId::monospace(main_font)),
                 );
             }
         } else {
@@ -778,6 +849,12 @@ impl App {
                 RichText::new(format!("Count: {}", formatted.count))
                     .font(egui::FontId::proportional(main_font)),
             );
+            if let Some(int) = &formatted.integral {
+                ui.label(
+                    RichText::new(format!("\u{222b}:{int}"))
+                        .font(egui::FontId::monospace(main_font)),
+                );
+            }
             if ui
                 .add(egui::Button::new(
                     RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
@@ -785,6 +862,7 @@ impl App {
                 .clicked()
             {
                 self.stats.reset();
+                self.integrator.reset();
             }
 
             // Windowed stats for visible graph interval
@@ -817,6 +895,13 @@ impl App {
                         .font(egui::FontId::proportional(sub_font))
                         .color(weak),
                 );
+                if let Some(vint) = &vis.integral {
+                    ui.label(
+                        RichText::new(format!("\u{222b}:{vint}"))
+                            .font(egui::FontId::monospace(sub_font))
+                            .color(weak),
+                    );
+                }
             }
         }
     }

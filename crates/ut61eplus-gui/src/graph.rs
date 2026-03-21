@@ -552,10 +552,20 @@ impl Graph {
                     };
                     let unit = &self.current_unit;
                     let delta_color = ThemeColors::new(dark).graph_cursor_delta();
+
+                    let integral_str = ut61eplus_lib::stats::integral_unit_info(unit)
+                        .and_then(|(disp_unit, divisor)| {
+                            self.cursor_integral(ta, tb)
+                                .map(|raw| format!("  \u{222b}={:.4} {disp_unit}", raw / divisor))
+                        })
+                        .unwrap_or_default();
+
                     ui.label(
-                        egui::RichText::new(format!("ΔT={dt:.2} s  ΔV={dv} {unit}"))
-                            .color(delta_color)
-                            .strong(),
+                        egui::RichText::new(format!(
+                            "\u{0394}T={dt:.2} s  \u{0394}={dv} {unit}{integral_str}"
+                        ))
+                        .color(delta_color)
+                        .strong(),
                     );
                 } else {
                     ui.label(
@@ -1142,7 +1152,33 @@ impl Graph {
         self.show_minimap(ui);
     }
 
-    /// Compute min/max/avg/count for data points visible in the current view.
+    /// Compute the time-integral over the visible window, in unit·seconds.
+    pub fn visible_integral(&self) -> Option<f64> {
+        let (x_min, x_max) = self.view_bounds();
+        self.cursor_integral(x_min, x_max)
+    }
+
+    /// Elapsed time (seconds) between the first and last data point in the
+    /// visible window. Returns `None` if fewer than 2 points are visible.
+    pub fn visible_data_span_secs(&self) -> Option<f64> {
+        let (x_min, x_max) = self.view_bounds();
+        let mut first: Option<f64> = None;
+        let mut last: Option<f64> = None;
+        for point in &self.history {
+            let t = self.elapsed_secs(point.time);
+            if t >= x_min && t <= x_max {
+                if first.is_none() {
+                    first = Some(t);
+                }
+                last = Some(t);
+            }
+        }
+        match (first, last) {
+            (Some(f), Some(l)) if l > f => Some(l - f),
+            _ => None,
+        }
+    }
+
     pub fn visible_stats(&self) -> Option<(f64, f64, f64, usize)> {
         let (x_min, x_max) = self.view_bounds();
         let mut min = f64::INFINITY;
@@ -1262,6 +1298,36 @@ impl Graph {
             }
         }
         best.map(|(_, t, v)| (t, v))
+    }
+
+    /// Compute the time-integral between two cursor positions using the trapezoidal
+    /// rule. Returns the raw integral in unit·seconds, or `None` if fewer than 2
+    /// data points exist in the range. Skips intervals exceeding `gap_threshold_secs`.
+    fn cursor_integral(&self, ta: f64, tb: f64) -> Option<f64> {
+        let (t_start, t_end) = if ta <= tb { (ta, tb) } else { (tb, ta) };
+        let mut integral = 0.0;
+        let mut prev: Option<(f64, f64)> = None; // (time, value)
+        let mut has_pair = false;
+
+        for point in &self.history {
+            let t = self.elapsed_secs(point.time);
+            if t < t_start {
+                continue;
+            }
+            if t > t_end {
+                break;
+            }
+            if let Some((pt, pv)) = prev {
+                let dt = t - pt;
+                if dt <= self.gap_threshold_secs {
+                    integral += (pv + point.value) / 2.0 * dt;
+                    has_pair = true;
+                }
+            }
+            prev = Some((t, point.value));
+        }
+
+        has_pair.then_some(integral)
     }
 
     #[cfg(test)]

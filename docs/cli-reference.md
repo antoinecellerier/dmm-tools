@@ -132,9 +132,10 @@ ut61eplus read [OPTIONS]
 | `-o, --output <FILE>` | stdout | Write output to a file instead of stdout. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
+| `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 
 When the session ends, a summary line (sample count, min, max, average) is
-printed to stderr.
+printed to stderr. When `--integrate` is active, the total integral is also shown.
 
 **Examples:**
 
@@ -147,6 +148,9 @@ ut61eplus read --format csv --count 100 -o measurements.csv
 
 # JSON output at 1-second intervals
 ut61eplus read --format json --interval-ms 1000
+
+# Measure battery discharge capacity (coulomb counter)
+ut61eplus read --integrate --format csv -o discharge.csv
 ```
 
 ### ut61eplus command

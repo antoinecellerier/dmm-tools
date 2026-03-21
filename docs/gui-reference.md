@@ -110,7 +110,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
 | **Triggers** | (requires Ref) Diamond markers where data crosses a reference line |
-| **Cursors** | Click to place cursor A, click again for cursor B. Shows ΔT and ΔV. |
+| **Cursors** | Click to place cursor A, click again for cursor B. Shows ΔT, ΔV, and ∫ (integral, for current/voltage modes only). |
 
 ### Main Plot
 
@@ -178,7 +178,10 @@ UT61E+). Other devices show only the Manual link.
 
 - **Min**, **Max**, **Avg** values in monospace with fixed-width formatting
 - **Count** — number of samples
-- **Reset** button — clears statistics
+- **Int** — cumulative time-integral (shown only for current and voltage modes).
+  For current modes, displays charge in Ah/mAh/µAh. For voltage modes, V·s.
+  Uses the trapezoidal rule over the sample stream. Resets with the Reset button.
+- **Reset** button — clears statistics and integral
 - Stats persist across reconnects (use Clear for full reset)
 - In wide layout, a second row shows **visible window stats** — min/max/avg
   computed only over the current graph viewport
