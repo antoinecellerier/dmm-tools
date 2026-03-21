@@ -615,27 +615,38 @@ impl App {
                 ui.label(RichText::new("EXPERIMENTAL").small().strong().color(orange));
             }
 
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("\u{2699}").on_hover_text("Settings").clicked() {
-                    self.settings_open = !self.settings_open;
+            // LTR layout so code/tab order matches visual reading order.
+            // We cache the right-side group width from the previous frame
+            // to compute a spacer that pushes items to the right edge
+            // (pattern from egui Discussion #3468).
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                // Toast on the left (if any)
+                if let Some((msg, is_error, _)) = &self.toast {
+                    let color = if *is_error { tc.red() } else { green };
+                    ui.label(RichText::new(msg).small().color(color));
                 }
-                if ui.button("?").on_hover_text("Keyboard shortcuts").clicked() {
-                    self.shortcut_help_open = !self.shortcut_help_open;
-                }
-                ui.hyperlink_to(
-                    "Help / GitHub",
-                    "https://github.com/antoinecellerier/dmm-tools",
-                );
+                let cache_id = egui::Id::new("top_bar_right_width");
+                let cached_width: f32 = ui.data(|d| d.get_temp(cache_id)).unwrap_or(200.0);
+                let spacer = (ui.available_width() - cached_width).max(0.0);
+                ui.add_space(spacer);
+                let before = ui.cursor().left();
                 ui.label(
                     RichText::new(crate::version_label())
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );
-                // Show toast message (export result, etc.)
-                if let Some((msg, is_error, _)) = &self.toast {
-                    let color = if *is_error { tc.red() } else { green };
-                    ui.label(RichText::new(msg).small().color(color));
+                ui.hyperlink_to(
+                    "Help / GitHub",
+                    "https://github.com/antoinecellerier/dmm-tools",
+                );
+                if ui.button("?").on_hover_text("Keyboard shortcuts").clicked() {
+                    self.shortcut_help_open = !self.shortcut_help_open;
                 }
+                if ui.button("\u{2699}").on_hover_text("Settings").clicked() {
+                    self.settings_open = !self.settings_open;
+                }
+                let actual_width = ui.min_rect().right() - before;
+                ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
             });
         });
     }
