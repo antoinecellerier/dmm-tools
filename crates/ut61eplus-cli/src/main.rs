@@ -527,6 +527,11 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
                     eprintln!("{}", style(d.activation_instructions).dim());
                 }
             }
+            Err(e) if e.is_interrupted() => {
+                // HID read returns EINTR when a signal (Ctrl-C) fires.
+                // Break so the summary prints normally.
+                break;
+            }
             Err(e) => {
                 return Err(e.into());
             }

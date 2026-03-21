@@ -47,6 +47,18 @@ impl Error {
             raw: Vec::new(),
         }
     }
+
+    /// True when the underlying cause is an interrupted system call (EINTR),
+    /// which typically means a signal (e.g. Ctrl-C) arrived mid-read.
+    pub fn is_interrupted(&self) -> bool {
+        match self {
+            Self::Hid(hidapi::HidError::HidApiError { message }) => message.contains("Interrupted"),
+            Self::Hid(hidapi::HidError::IoError { error }) => {
+                error.kind() == std::io::ErrorKind::Interrupted
+            }
+            _ => false,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
