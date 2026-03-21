@@ -5,7 +5,7 @@
 ### GUI
 
 - **Time-integral in cursor readout** — when both cursors are placed on a current or voltage graph, the readout now shows ∫ (integral) alongside ΔT and ΔV. For current modes, this displays charge (mAh/Ah/µAh). For voltage modes, V·s.
-- **Running integral in statistics** — a cumulative integral line ("Int") appears in the statistics panel for current and voltage modes. Resets with the Reset button or Ctrl+L.
+- **Running integral in statistics** — a cumulative integral line ("∫") appears in the statistics panel for current and voltage modes. Resets with the Reset button or Ctrl+L.
 
 ### CLI
 
