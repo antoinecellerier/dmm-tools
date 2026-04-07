@@ -82,20 +82,18 @@ $GHIDRA/support/analyzeHeadless /tmp/ghidra_project project_name \
   > references/<device>/vendor-software/<name>_decompiled.txt 2>&1
 ```
 
-If analysis hangs (100% CPU, never completes), use a prescript to
-disable problematic analyzers. This is a known Ghidra issue
-([#4296](https://github.com/NationalSecurityAgency/ghidra/issues/4296)):
+**If analysis hangs** (100% CPU, never completes): the most likely cause
+is a **symlink loop** under the `-scriptPath` directory. Ghidra's
+`GhidraSourceBundle.findPackageDirs()` recursively walks the script path
+without cycle detection. Wine prefixes under `/tmp` are a common culprit
+(Wine creates `z: -> /` which makes `/tmp` contain a path back to itself).
+
+Diagnosis: run `jstack <java-pid>` while Ghidra is stuck. If the thread
+dump shows `findPackageDirs` in deep recursion, check for symlink loops:
 ```sh
-$GHIDRA/support/analyzeHeadless /tmp/ghidra_project project_name \
-  -import app.dll \
-  -preScript DisableSlowAnalyzers.java \
-  -postScript GhidraDecompile.java \
-  -deleteProject \
-  -scriptPath /tmp \
-  > output.txt 2>&1
+find /tmp -maxdepth 3 -type l -exec test -d {} \; -print
 ```
-See `DisableSlowAnalyzers.java` and `MinimalAnalysis.java` in `/tmp/`
-for prescript examples that disable known-hanging analyzers.
+Fix: remove the loop source, or use a dedicated script directory.
 
 **What to look for in decompiled code:**
 - Baud rate constants (`9600`, `115200`, `0x2580` = 9600 in big-endian)

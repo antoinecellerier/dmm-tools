@@ -31,8 +31,13 @@ impl Ch9329 {
 
     /// Read the CH9329 configuration (128 bytes in 4 chunks).
     ///
-    /// Uses HidD_SetOutputReport/HidD_GetInputReport path (feature reports).
-    /// This may fail if the CH9329 is in a mode that doesn't support config reads.
+    /// The vendor DLL uses HidD_SetOutputReport/HidD_GetInputReport (output reports
+    /// via control pipe), but hidapi only exposes feature reports via
+    /// send_feature_report/get_feature_report. This may not work — the CH9329 might
+    /// only accept config commands on the output report endpoint. If this fails,
+    /// we may need platform-specific code or a different HID library.
+    ///
+    /// This function is not called during normal operation (config init is skipped).
     pub fn read_config(&self) -> Result<[u8; 128]> {
         let mut config = [0u8; 128];
         let offsets: [u8; 4] = [0x00, 0x20, 0x40, 0x60];

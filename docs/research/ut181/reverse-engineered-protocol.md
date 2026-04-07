@@ -137,6 +137,7 @@ The checksum covers the length field and all payload bytes. It does
 | 0x0C | GET_REC_INFO | uint16 LE index (1-based) | Get recording metadata |
 | 0x0D | GET_REC_SAMPLES | uint16 LE index + uint32 LE offset(1-based) | Get recording data |
 | 0x0E | GET_REC_COUNT | (none) | Get count of recordings |
+| 0x0F | DEL_RECORDING | uint16 LE index | Delete recording [VENDOR] — confirmed from UT181A.exe decompilation: called after "Are you sure that you want to delete this record?" dialog, followed by GET_REC_COUNT refresh. Not in community implementations. |
 | 0x12 | HOLD | (none) | Toggle HOLD mode |
 
 ---

@@ -134,11 +134,22 @@ Checked existing project files:
 | 60,000 counts, dual display, TFT LCD | user manual |
 | All measurement modes and ranges | user manual + implementations |
 
-### Nothing Remains Unverified
+### Vendor Software Cross-Reference (April 2026)
 
-The UT181A protocol is fully documented by the community. No
-[UNVERIFIED] items remain. The three independent implementations
-serve as mutual verification.
+Decompilation of UT181A.exe (V1.05, 13,980 functions) confirmed:
+- Frame header 0xAB 0xCD written explicitly in transmit function
+- Checksum algorithm identical (sum bytes[2..end], uint16 LE)
+- Length field = payload + 2 (confirmed via `data_len + 3` pattern)
+- Command codes 0x03, 0x05, 0x07-0x0A, 0x0C, 0x0E all confirmed
+- Response dispatch on types 0x01, 0x02, 0x03, 0x04, 0x05, 0x72 confirmed
+- **New: Command 0x0F** (DEL_RECORDING, uint16 LE index) found in vendor
+  software but not in any community implementation. Confirmed from call
+  site: prompted by "Are you sure that you want to delete this record?",
+  followed by 300ms sleep and GET_REC_COUNT (0x0E) refresh.
+
+The `0xBDE01996` constant found in the Delphi code is an ODBC/MDB
+cursor header, not a protocol constant — the app uses database
+functionality internally.
 
 ## Phase 2: CH9329 Transport Analysis
 
@@ -281,17 +292,24 @@ Headless decompilation of both binaries:
     > references/ut181/vendor-software/UT181A_decompiled.txt 2>&1
 ```
 
-**CH9329DLL.dll:** Ghidra 12.0.4 hangs indefinitely during analysis of
-this specific DLL (100% CPU, never completes). Attempted workarounds:
-`-analysisTimeoutPerFile`, `-noanalysis`, and disabling problematic
-analyzers via prescript — none resolved the hang. This is a known class
-of Ghidra bug ([#4296](https://github.com/NationalSecurityAgency/ghidra/issues/4296)).
-However, the UT61E+ DeviceSelector DLL contains identical CH9329
-transport code and was successfully decompiled (see
-`references/ut61eplus/vendor-software/DeviceSelector_decompiled.txt`).
+**CH9329DLL.dll:** Decompiled successfully (44 functions, 1,936 lines).
+Initially appeared to hang, but the root cause was a Wine symlink loop
+in `/tmp` (`/tmp/ut181-wine/dosdevices/z: -> /`) causing Ghidra's
+`GhidraSourceBundle.findPackageDirs()` to recurse infinitely when
+scanning `-scriptPath /tmp`. Removing the Wine prefix fixed all
+decompilation hangs.
 
-**UT181A.exe:** Decompilation pending (7.6 MB Delphi binary, expected
-to produce ~800K+ lines like the UT171C.exe decompilation).
+**UT181A.exe:** Decompiled successfully (13,980 functions, 518K lines).
+Delphi application with DevExpress GUI framework. Protocol code is
+embedded in compiled virtual method tables, similar to UT171C.exe.
+
+Key findings from UT181A.exe decompilation:
+- Frame header validator at `FUN_006ceec9`: checks for `0xABCD`
+  (measurement frames) and `0xBDE01996` (internal command framing,
+  not wire format — community implementations confirm `0xAB 0xCD`
+  is used in both directions on the wire)
+- `CH9329OpenDevicePath` and `CH9329CloseDevice` calls confirm CH9329
+  DLL integration
 
 ### Cross-Reference: UT61E+ DeviceSelector DLL [VENDOR]
 
