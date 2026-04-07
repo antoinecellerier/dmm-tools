@@ -273,13 +273,15 @@ fn print_transport_setup_help() {
     }
     #[cfg(target_os = "windows")]
     {
-        eprintln!("Open Device Manager and look under 'Other devices' for a device with a");
-        eprintln!("yellow warning icon. If you see one, you need to install a driver:");
+        eprintln!("Open Device Manager with the cable plugged in:");
+        eprintln!("  - 'CP2110 USB to UART Bridge' under HID devices: no action needed.");
+        eprintln!("  - 'USB Input Device' under HID devices: no action needed.");
+        eprintln!("  - Yellow warning icon under 'Other devices': install the driver from");
         eprintln!(
-            "  {}",
+            "    {}",
             style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
         );
-        eprintln!("If no unknown device appears, try a different USB port.");
+        eprintln!("  - Nothing appears: try a different USB port.");
     }
     #[cfg(target_os = "macos")]
     {

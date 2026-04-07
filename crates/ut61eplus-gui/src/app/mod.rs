@@ -560,9 +560,11 @@ impl App {
                  Click \"Connect\" after resolving the issue."
             } else if cfg!(target_os = "windows") {
                 "Check that the USB cable is plugged in and the meter is on.\n\
-                 Open Device Manager — if you see a device with a yellow\n\
-                 warning icon under 'Other devices', install the driver from:\n\
-                 silabs.com/developers/usb-to-uart-bridge-vcp-drivers\n\n\
+                 Open Device Manager:\n\
+                 \u{2022} 'CP2110 USB to UART Bridge' under HID devices: OK\n\
+                 \u{2022} 'USB Input Device' under HID devices: OK\n\
+                 \u{2022} Yellow icon under 'Other devices': install driver from\n\
+                   silabs.com/developers/usb-to-uart-bridge-vcp-drivers\n\n\
                  Click \"Connect\" after resolving the issue."
             } else if cfg!(target_os = "macos") {
                 "Check that the USB cable is plugged in and the meter is on.\n\

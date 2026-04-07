@@ -79,7 +79,7 @@ Pre-built binaries for Linux and Windows are available on the [Releases](https:/
 ### Prerequisites
 
 - **Linux:** `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) — only needed when building from source
-- **Windows:** If Device Manager shows a yellow warning icon when the USB cable is plugged in, install the [Silicon Labs driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Newer cables (UT-D09) may work without a driver.
+- **Windows:** Open Device Manager with the USB cable plugged in. If you see "CP2110 USB to UART Bridge" under HID devices, no action needed. If you see a yellow warning icon under "Other devices", install the [Silicon Labs driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Some UT-D09 cables use a different chip and appear as "USB Input Device" instead — these work without a driver.
 - **macOS:** No driver needed — both cable types are recognized as standard HID devices. Build from source (see below)
 - A [supported UNI-T multimeter](docs/supported-devices.md) with USB adapter plugged in
 
