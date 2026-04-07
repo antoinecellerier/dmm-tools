@@ -2,8 +2,10 @@
 
 <!-- Keep this file updated when adding support for new models. -->
 
-All devices listed here use the Silicon Labs CP2110 HID-to-UART bridge
-(VID `0x10C4`, PID `0xEA80`) for USB communication.
+All devices listed here use a HID-to-UART bridge for USB communication.
+Two bridge chips are supported: Silicon Labs CP2110 (VID `0x10C4`, PID `0xEA80`)
+and WCH CH9329 (VID `0x1A86`, PID `0xE429`). The tool auto-detects which
+bridge is present. CH9329 support is experimental.
 
 ## Supported (same protocol as UT61E+)
 
@@ -223,7 +225,8 @@ Our research into the UT171 and UT181A protocols is documented in
 
 | Cable | Chip | VID:PID | Direction | Notes |
 |-------|------|---------|-----------|-------|
-| **UT-D09** | CP2110 | `10C4:EA80` | Bidirectional | Used by UT61x+, UT161x, UT171x, UT880x |
+| **UT-D09** (CP2110) | CP2110 | `10C4:EA80` | Bidirectional | Used by UT61x+, UT161x, UT171x, UT880x |
+| **UT-D09** (CH9329) | CH9329 | `1A86:E429` | Bidirectional | Sold for UT181A, UT171 series, UT243; experimental support |
 | **UT-D04** | CH9325 / HE2325U | `1A86:E008` | RX only | Used by older UNI-T meters (UT61E original, etc.) |
 | **UT-D02** | RS232 level converter | N/A | Bidirectional | Serial port, no USB |
 

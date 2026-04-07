@@ -7,7 +7,7 @@
 
 **Linux:** `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi.
 
-**Windows:** Install the [CP2110 HID USB-to-UART bridge driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers) from Silicon Labs.
+**Windows:** Install the [CP2110 HID USB-to-UART bridge driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers) from Silicon Labs. The CH9329 adapter is driverless HID on all platforms and needs no separate driver.
 
 ## Build
 
@@ -19,10 +19,10 @@ cargo build --workspace
 
 ### Linux — udev rule
 
-To allow non-root access to the HID device:
+To allow non-root access to the HID device (covers both CP2110 and CH9329 adapters):
 
 ```sh
-sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/
+sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
@@ -53,8 +53,8 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 ### "USB adapter not found"
 
-- Verify the CP2110 USB adapter is plugged in
-- **Linux:** `lsusb | grep 10C4:EA80` — if missing, check the udev rule (see above)
+- Verify the USB adapter is plugged in
+- **Linux:** `lsusb | grep -E '10C4:EA80|1A86:E429'` — look for CP2110 (`10C4:EA80`) or CH9329 (`1A86:E429`). If missing, check the udev rule (see above)
 - **Windows:** check Device Manager for the CP2110 device — if missing or showing an error, reinstall the driver
 - **macOS:** `ioreg -p IOUSB -l | grep CP2110` — if missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
 

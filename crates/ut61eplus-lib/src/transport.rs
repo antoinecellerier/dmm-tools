@@ -1,7 +1,10 @@
 use crate::error::Result;
 
 /// Abstraction over HID transport for testability.
-pub trait Transport {
+///
+/// The `Send` bound enables `Box<dyn Transport>` to be moved across threads
+/// (required by the GUI's background device thread).
+pub trait Transport: Send {
     /// Write data to the device (interrupt OUT report).
     fn write(&self, data: &[u8]) -> Result<()>;
 
@@ -11,6 +14,55 @@ pub trait Transport {
 
     /// Send a HID feature report.
     fn send_feature_report(&self, data: &[u8]) -> Result<()>;
+
+    /// Query transport-specific version/identification info.
+    /// Returns a human-readable string. Default: not supported.
+    fn transport_info(&self) -> Result<String> {
+        Err(crate::error::Error::invalid_response_msg(
+            "not supported by this transport",
+        ))
+    }
+
+    /// Query transport-specific diagnostic status.
+    /// Returns a human-readable string. Default: not supported.
+    fn transport_status(&self) -> Result<String> {
+        Err(crate::error::Error::invalid_response_msg(
+            "not supported by this transport",
+        ))
+    }
+
+    /// Human-readable transport name (e.g. "CP2110", "CH9329").
+    fn transport_name(&self) -> &'static str {
+        "unknown"
+    }
+}
+
+/// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`
+/// works for runtime transport selection (CP2110 vs CH9329).
+impl Transport for Box<dyn Transport> {
+    fn write(&self, data: &[u8]) -> Result<()> {
+        (**self).write(data)
+    }
+
+    fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
+        (**self).read_timeout(buf, timeout_ms)
+    }
+
+    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
+        (**self).send_feature_report(data)
+    }
+
+    fn transport_info(&self) -> Result<String> {
+        (**self).transport_info()
+    }
+
+    fn transport_status(&self) -> Result<String> {
+        (**self).transport_status()
+    }
+
+    fn transport_name(&self) -> &'static str {
+        (**self).transport_name()
+    }
 }
 
 /// A no-op transport for the mock/simulated device.

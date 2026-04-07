@@ -242,29 +242,32 @@ fn build_device_help() -> String {
     help
 }
 
-/// Print platform-specific setup instructions for CP2110 USB adapters.
-fn print_cp2110_setup_help() {
-    eprintln!("Check that the CP2110 USB adapter is plugged in.");
+/// Print platform-specific setup instructions when no USB cable is detected.
+fn print_transport_setup_help() {
+    eprintln!("Check that the USB cable is plugged in and the meter is powered on.");
     #[cfg(target_os = "linux")]
     {
         eprintln!("On Linux, ensure the udev rule is installed:");
         eprintln!(
             "  {}",
-            style("sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/").dim()
+            style("sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/").dim()
         );
         eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
+        eprintln!("Then unplug and replug the cable.");
     }
     #[cfg(target_os = "windows")]
     {
-        eprintln!("On Windows, ensure the CP2110 driver is installed.");
+        eprintln!("Open Device Manager and look under 'Other devices' for a device with a");
+        eprintln!("yellow warning icon. If you see one, you need to install a driver:");
         eprintln!(
-            "Download from: {}",
+            "  {}",
             style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
         );
+        eprintln!("If no unknown device appears, try a different USB port.");
     }
     #[cfg(target_os = "macos")]
     {
-        eprintln!("On macOS, the CP2110 should be recognized automatically (no driver needed).");
+        eprintln!("On macOS, the cable should be recognized automatically (no driver needed).");
         eprintln!(
             "If the device is not found, check System Settings > Privacy & Security > Input Monitoring."
         );
@@ -284,8 +287,11 @@ fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
 /// Open the meter with helpful error messages for common failures.
 fn open_with_help(
     device: &'static SelectableDevice,
-) -> Result<ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>, Box<dyn std::error::Error>> {
-    match ut61eplus_lib::open_device_by_id(device.id) {
+) -> Result<
+    ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    Box<dyn std::error::Error>,
+> {
+    match ut61eplus_lib::open_device_by_id_auto(device.id) {
         Ok(dmm) => {
             let profile = dmm.profile();
             if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
@@ -309,9 +315,10 @@ fn open_with_help(
             }
             Ok(dmm)
         }
-        Err(ut61eplus_lib::error::Error::DeviceNotFound { .. }) => {
-            eprintln!("{}", style("USB adapter not found.").yellow().bold());
-            print_cp2110_setup_help();
+        Err(ut61eplus_lib::error::Error::DeviceNotFound { .. })
+        | Err(ut61eplus_lib::error::Error::NoTransportFound) => {
+            eprintln!("{}", style("USB cable not found.").yellow().bold());
+            print_transport_setup_help();
             Err("device not found".into())
         }
         Err(e) => Err(e.into()),
@@ -322,7 +329,7 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     let devices = ut61eplus_lib::list_devices()?;
     if devices.is_empty() {
         eprintln!("{}", style("No devices found.").yellow());
-        print_cp2110_setup_help();
+        print_transport_setup_help();
         return Ok(());
     }
     for (i, dev) in devices.iter().enumerate() {
@@ -339,38 +346,12 @@ fn cmd_info(device: &'static SelectableDevice) -> Result<(), Box<dyn std::error:
         None => println!("Device: {}", style("(name not supported)").dim()),
     }
 
-    match dmm.transport().version_info() {
-        Ok(ver) => {
-            println!(
-                "CP2110: part={:#04x} firmware={}",
-                ver.part_number, ver.device_version
-            );
-        }
-        Err(e) => {
-            eprintln!(
-                "{} failed to read CP2110 version: {e}",
-                style("Warning:").yellow()
-            );
-        }
+    println!("Transport: {}", dmm.transport().transport_name());
+    if let Ok(info) = dmm.transport().transport_info() {
+        println!("  {info}");
     }
-
-    match dmm.transport().uart_status() {
-        Ok(status) => {
-            if status.parity_error || status.overrun_error {
-                eprintln!(
-                    "{} UART errors: parity={} overrun={}",
-                    style("Warning:").yellow(),
-                    status.parity_error,
-                    status.overrun_error,
-                );
-            }
-        }
-        Err(e) => {
-            eprintln!(
-                "{} failed to read UART status: {e}",
-                style("Warning:").yellow()
-            );
-        }
+    if let Ok(status) = dmm.transport().transport_status() {
+        println!("  Status: {status}");
     }
 
     Ok(())
@@ -623,25 +604,17 @@ fn cmd_debug(
 
     let mut dmm = open_with_help(device)?;
 
-    // Show CP2110 bridge info before entering measurement loop
-    if let Ok(ver) = dmm.transport().version_info() {
-        eprintln!(
-            "{} CP2110 part={:#04x} firmware={}",
-            style("bridge:").dim(),
-            ver.part_number,
-            ver.device_version,
-        );
+    // Show transport info before entering measurement loop
+    eprintln!(
+        "{} {}",
+        style("transport:").dim(),
+        dmm.transport().transport_name()
+    );
+    if let Ok(info) = dmm.transport().transport_info() {
+        eprintln!("{} {info}", style("bridge:").dim());
     }
-    if let Ok(status) = dmm.transport().uart_status() {
-        eprintln!(
-            "{} TX FIFO={} RX FIFO={} errors: parity={} overrun={} break={}",
-            style("uart:").dim(),
-            status.tx_fifo,
-            status.rx_fifo,
-            status.parity_error,
-            status.overrun_error,
-            status.line_break,
-        );
+    if let Ok(status) = dmm.transport().transport_status() {
+        eprintln!("{} {status}", style("status:").dim());
     }
 
     let interval = Duration::from_millis(interval_ms);

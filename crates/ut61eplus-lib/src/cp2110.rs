@@ -259,4 +259,24 @@ impl Transport for Cp2110 {
         self.device.send_feature_report(data).map_err(Error::Hid)?;
         Ok(())
     }
+
+    fn transport_info(&self) -> Result<String> {
+        let ver = self.version_info()?;
+        Ok(format!(
+            "CP2110 part={:#04x} firmware={}",
+            ver.part_number, ver.device_version
+        ))
+    }
+
+    fn transport_status(&self) -> Result<String> {
+        let st = self.uart_status()?;
+        Ok(format!(
+            "TX FIFO: {} bytes, RX FIFO: {} bytes, parity_err={}, overrun_err={}, line_break={}",
+            st.tx_fifo, st.rx_fifo, st.parity_error, st.overrun_error, st.line_break
+        ))
+    }
+
+    fn transport_name(&self) -> &'static str {
+        "CP2110"
+    }
 }

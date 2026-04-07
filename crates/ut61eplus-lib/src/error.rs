@@ -29,6 +29,13 @@ pub enum Error {
 
     #[error("unknown device: {0}")]
     UnknownDevice(String),
+
+    #[error(
+        "no supported USB adapter found (tried CP2110 VID={:#06x} and CH9329 VID={:#06x})",
+        0x10C4,
+        0x1A86
+    )]
+    NoTransportFound,
 }
 
 impl Error {

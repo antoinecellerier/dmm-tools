@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Rust tools for communicating with UNI-T digital multimeters over USB (CP2110 HID bridge). Supports the **UT61E+** family (verified) with experimental support for **UT8803**, **UT171**, and **UT181A**.
+Rust tools for communicating with UNI-T digital multimeters over USB (CP2110 and CH9329 HID bridges). Supports the **UT61E+** family (verified) with experimental support for **UT8803**, **UT171**, and **UT181A**.
 
 Includes a CLI for reading, recording, and remote-controlling the meter, and a GUI with real-time graphing.
 
@@ -100,10 +100,10 @@ cargo build --workspace
 
 ### udev rule (Linux)
 
-Grant non-root access to the CP2110 USB adapter:
+Grant non-root access to the USB adapter (covers both CP2110 and CH9329):
 
 ```sh
-sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/
+sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
@@ -131,7 +131,7 @@ If the meter doesn't respond, make sure USB transmission is active: insert the U
 
 ```
 crates/
-  ut61eplus-lib/   — library: CP2110 transport, protocol, measurement parsing
+  ut61eplus-lib/   — library: USB transport (CP2110, CH9329), protocol, measurement parsing
   ut61eplus-cli/   — CLI binary
   ut61eplus-gui/   — GUI binary (eframe/egui)
 udev/              — udev rules for Linux

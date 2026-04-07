@@ -7,21 +7,26 @@ For other supported device families, see the per-family research docs:
 - [UT171 protocol](research/ut171/reverse-engineered-protocol.md)
 - [UT181A protocol](research/ut181/reverse-engineered-protocol.md)
 
-All families share the same CP2110 HID-to-UART bridge and `AB CD` header framing,
-but differ in message structure, byte ordering, value encoding, and
-polled-vs-streaming behavior. Each family has its own `Protocol` trait
+All families share the same `AB CD` header framing and UART protocol, which is
+transport-agnostic — it runs identically over both the CP2110 and CH9329 USB
+bridges. Only the USB HID report format differs between the two bridges (see
+below). The families differ in message structure, byte ordering, value encoding,
+and polled-vs-streaming behavior. Each family has its own `Protocol` trait
 implementation in `crates/ut61eplus-lib/src/protocol/`.
 
-## CP2110 HID-to-UART Bridge
+## USB HID Transports
 
-The UT61E+ uses a Silicon Labs CP2110 chip as a USB HID-to-UART bridge.
+The UART protocol runs over a HID-to-UART bridge chip. Two bridge chips are
+supported; the tool auto-detects which one is present.
 
-- **VID:** `0x10C4` (Silicon Labs)
-- **PID:** `0xEA80` (CP2110)
+### CP2110 (Silicon Labs)
+
+- **VID:** `0x10C4` — **PID:** `0xEA80`
 - **Baud rate:** 9600 (confirmed; 19200 and 115200 tested — meter does not respond)
 - **Format:** 8N1
+- **HID reports:** 64 bytes. Byte 0 = UART data length, bytes 1-63 = payload.
 
-### Initialization
+#### Initialization
 
 Three HID feature reports must be sent to initialize the UART:
 
@@ -34,12 +39,24 @@ Three HID feature reports must be sent to initialize the UART:
    - Byte 8: `0x00` = short stop bit (1 stop bit)
 3. **Purge RX FIFO:** `[0x43, 0x02]` (0x01=TX only, 0x02=RX only, 0x03=both — we purge RX only since TX is empty at init)
 
-### Interrupt Transfers
+#### Interrupt Transfers
 
 Data is sent/received via HID interrupt reports:
 
 - **OUT (host → device):** First byte is payload length, followed by payload bytes.
 - **IN (device → host):** First byte is payload length, followed by payload bytes.
+
+### CH9329 (WCH) — Experimental
+
+- **VID:** `0x1A86` — **PID:** `0xE429`
+- **Baud rate:** 9600 (configured at the chip level; no host-side baud rate setup needed)
+- **HID reports:** 65 bytes. Byte 0 = report ID (`0x00`), byte 1 = UART data length, bytes 2-64 = payload.
+- **Cable:** UT-D09 (CH9329 variant), sold by UNI-T for UT181A, UT171 series, UT243.
+- **Driver:** None needed — the CH9329 is a standard driverless HID device on all platforms.
+- **Initialization:** No feature reports required. The chip is ready for data transfer as soon as the HID device is opened.
+
+CH9329 support needs real device verification. The UART protocol bytes are
+identical to CP2110 — only the HID report framing differs.
 
 ## Message Format
 

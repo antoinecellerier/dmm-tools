@@ -1,3 +1,4 @@
+pub mod ch9329;
 pub mod cp2110;
 pub mod error;
 pub mod flags;
@@ -65,14 +66,21 @@ impl<T: Transport> Dmm<T> {
 }
 
 /// Open the first UT61E+ device found via hidapi and return an initialized Dmm.
+///
+/// This only tries CP2110. Prefer [`open_device_by_id_auto`] for multi-transport support.
+#[deprecated(note = "use open_device_by_id_auto() for CP2110 + CH9329 auto-detection")]
+#[allow(deprecated)]
 pub fn open() -> Result<Dmm<cp2110::Cp2110>> {
     open_device(DeviceFamily::Ut61EPlus)
 }
 
 /// Open a device with the specified protocol family.
 ///
+/// This only tries CP2110. Prefer [`open_device_by_id_auto`] for multi-transport support.
+///
 /// The `Mock` family is not supported here — use [`mock::open_mock()`] instead.
 /// Passing `DeviceFamily::Mock` will panic; callers must route mock before calling this.
+#[deprecated(note = "use open_device_by_id_auto() for CP2110 + CH9329 auto-detection")]
 pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
     let device = api
@@ -98,10 +106,10 @@ pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
 
 /// Open a device by registry ID (e.g. "ut61eplus", "ut61b+", "ut8803").
 ///
-/// Uses the device registry to look up the correct protocol factory,
-/// so model-specific protocols (e.g. UT61B+ vs UT61E+ tables) are selected correctly.
+/// This only tries CP2110. Prefer [`open_device_by_id_auto`] for multi-transport support.
 ///
 /// The `mock` device is not supported here — use [`mock::open_mock()`] instead.
+#[deprecated(note = "use open_device_by_id_auto() for CP2110 + CH9329 auto-detection")]
 pub fn open_device_by_id(id: &str) -> Result<Dmm<cp2110::Cp2110>> {
     let entry =
         protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
@@ -121,35 +129,85 @@ pub fn open_device_by_id(id: &str) -> Result<Dmm<cp2110::Cp2110>> {
     Dmm::new(cp, protocol)
 }
 
-/// List all connected CP2110 devices.
+/// Open a device by registry ID, automatically selecting the transport.
+///
+/// Tries CP2110 first (most common), then CH9329 (UT-D09 cable).
+/// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
+pub fn open_device_by_id_auto(id: &str) -> Result<Dmm<Box<dyn Transport>>> {
+    let entry =
+        protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
+
+    let api = hidapi::HidApi::new().map_err(Error::Hid)?;
+
+    // Try CP2110 first (most devices ship with this cable)
+    if let Ok(device) = api.open(cp2110::VID, cp2110::PID) {
+        info!(
+            "found CP2110 adapter (VID={:#06x} PID={:#06x})",
+            cp2110::VID,
+            cp2110::PID
+        );
+        let cp = cp2110::Cp2110::new(device);
+        cp.init_uart()?;
+        let transport: Box<dyn Transport> = Box::new(cp);
+        let protocol = (entry.new_protocol)();
+        return Dmm::new(transport, protocol);
+    }
+
+    // Try CH9329 (UT-D09 cable, newer production runs)
+    if let Ok(device) = api.open(ch9329::VID, ch9329::PID) {
+        info!(
+            "found CH9329 adapter (VID={:#06x} PID={:#06x})",
+            ch9329::VID,
+            ch9329::PID
+        );
+        let ch = ch9329::Ch9329::new(device);
+        ch.init()?;
+        let transport: Box<dyn Transport> = Box::new(ch);
+        let protocol = (entry.new_protocol)();
+        return Dmm::new(transport, protocol);
+    }
+
+    Err(Error::NoTransportFound)
+}
+
+/// List all connected USB adapters (CP2110 and CH9329).
 pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
     let mut devices = Vec::new();
 
     for dev in api.device_list() {
-        if dev.vendor_id() == cp2110::VID && dev.product_id() == cp2110::PID {
-            devices.push(DeviceInfo {
-                path: dev.path().to_string_lossy().into_owned(),
-                product: dev.product_string().map(|s| s.to_string()),
-                serial: dev.serial_number().map(|s| s.to_string()),
-            });
-        }
+        let transport = if dev.vendor_id() == cp2110::VID && dev.product_id() == cp2110::PID {
+            "CP2110"
+        } else if dev.vendor_id() == ch9329::VID && dev.product_id() == ch9329::PID {
+            "CH9329"
+        } else {
+            continue;
+        };
+
+        devices.push(DeviceInfo {
+            path: dev.path().to_string_lossy().into_owned(),
+            product: dev.product_string().map(|s| s.to_string()),
+            serial: dev.serial_number().map(|s| s.to_string()),
+            transport,
+        });
     }
 
     Ok(devices)
 }
 
-/// Information about a connected device.
+/// Information about a connected USB adapter.
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
     pub path: String,
     pub product: Option<String>,
     pub serial: Option<String>,
+    /// Transport type: "CP2110" or "CH9329".
+    pub transport: &'static str,
 }
 
 impl std::fmt::Display for DeviceInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.path)?;
+        write!(f, "{} [{}]", self.path, self.transport)?;
         if let Some(ref product) = self.product {
             write!(f, " — {product}")?;
         }
@@ -324,9 +382,11 @@ mod tests {
             path: "/dev/hidraw0".to_string(),
             product: Some("UT61E+".to_string()),
             serial: Some("12345".to_string()),
+            transport: "CP2110",
         };
         let s = info.to_string();
         assert!(s.contains("/dev/hidraw0"));
+        assert!(s.contains("CP2110"));
         assert!(s.contains("UT61E+"));
         assert!(s.contains("12345"));
     }
@@ -337,8 +397,9 @@ mod tests {
             path: "/dev/hidraw0".to_string(),
             product: None,
             serial: None,
+            transport: "CH9329",
         };
-        assert_eq!(info.to_string(), "/dev/hidraw0");
+        assert_eq!(info.to_string(), "/dev/hidraw0 [CH9329]");
     }
 
     #[test]

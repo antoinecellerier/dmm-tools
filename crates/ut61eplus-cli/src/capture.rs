@@ -11,10 +11,18 @@ pub struct CaptureReport {
     pub date: String,
     pub tool_version: String,
     pub device_name: String,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub cp2110_part: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub cp2110_firmware: Option<u8>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        default,
+        alias = "cp2110_part"
+    )]
+    pub transport_name: Option<String>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        default,
+        alias = "cp2110_firmware"
+    )]
+    pub transport_info: Option<String>,
     pub supported: bool,
     pub steps: Vec<StepResult>,
 }
@@ -135,7 +143,7 @@ impl SampleData {
 /// Run a simplified capture using protocol-provided steps.
 /// Used for experimental (non-UT61E+) protocols.
 fn run_protocol_capture(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     protocol_steps: Vec<ut61eplus_lib::protocol::CaptureStep>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
@@ -407,7 +415,7 @@ pub fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> {
 }
 
 pub fn capture_samples(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     n: usize,
 ) -> Vec<Measurement> {
     let mut samples = Vec::new();
@@ -450,7 +458,7 @@ pub fn upsert_step(report: &mut CaptureReport, result: StepResult) {
 
 /// Run one capture step. Returns Ok(true) if user wants to quit.
 pub fn run_capture_step(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     step: &CaptureStep,
     report: &mut CaptureReport,
     interactive: bool,
@@ -773,8 +781,8 @@ mod tests {
             date: "2026-01-01T00:00:00+00:00".to_string(),
             tool_version: "0.2.0-dev (abc1234)".to_string(),
             device_name: "UT61E+".to_string(),
-            cp2110_part: Some("0x0a".to_string()),
-            cp2110_firmware: Some(10),
+            transport_name: Some("CP2110".to_string()),
+            transport_info: Some("CP2110 part=0x0a firmware=10".to_string()),
             supported: true,
             steps: vec![StepResult {
                 id: "dcv".to_string(),
@@ -804,8 +812,8 @@ mod tests {
             date: "2026-01-01".to_string(),
             tool_version: "0.2.0".to_string(),
             device_name: "UT61E+".to_string(),
-            cp2110_part: None,
-            cp2110_firmware: None,
+            transport_name: None,
+            transport_info: None,
             supported: true,
             steps: vec![StepResult {
                 id: "dcv".to_string(),
@@ -819,15 +827,15 @@ mod tests {
 
         let yaml = serde_yaml::to_string(&report).unwrap();
         // Optional None fields should not appear in output
-        assert!(!yaml.contains("cp2110_part"));
-        assert!(!yaml.contains("cp2110_firmware"));
+        assert!(!yaml.contains("transport_name"));
+        assert!(!yaml.contains("transport_info"));
         // Empty samples should not appear
         assert!(!yaml.contains("samples"));
 
         // Parse back
         let parsed: CaptureReport = serde_yaml::from_str(&yaml).unwrap();
-        assert!(parsed.cp2110_part.is_none());
-        assert!(parsed.cp2110_firmware.is_none());
+        assert!(parsed.transport_name.is_none());
+        assert!(parsed.transport_info.is_none());
         assert!(parsed.steps[0].samples.is_empty());
     }
 
@@ -852,8 +860,8 @@ mod tests {
             date: "2026-01-01".to_string(),
             tool_version: "test".to_string(),
             device_name: "UT61E+".to_string(),
-            cp2110_part: None,
-            cp2110_firmware: None,
+            transport_name: None,
+            transport_info: None,
             supported: true,
             steps: vec![],
         };
@@ -919,7 +927,7 @@ fn step_included(step_filter: &Option<std::collections::HashSet<String>>, id: &s
 
 /// Verify that the meter is responding. Returns `(device_name, supported)` on success.
 fn verify_meter(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
 ) -> Result<(String, bool), Box<dyn std::error::Error>> {
     eprintln!("{}", style("Checking meter communication...").dim());
@@ -1044,23 +1052,23 @@ fn load_or_create_report(
 /// Populate report metadata (date, version, device info).
 fn populate_report_metadata(
     report: &mut CaptureReport,
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     device_name: String,
     supported: bool,
 ) {
     report.date = chrono::Local::now().to_rfc3339();
     report.tool_version = format!("{} ({})", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
     report.device_name = device_name;
-    if let Ok(ver) = dmm.transport().version_info() {
-        report.cp2110_part = Some(format!("{:#04x}", ver.part_number));
-        report.cp2110_firmware = Some(ver.device_version);
+    report.transport_name = Some(dmm.transport().transport_name().to_string());
+    if let Ok(info) = dmm.transport().transport_info() {
+        report.transport_info = Some(info);
     }
     report.supported = supported;
 }
 
 /// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
 fn run_mode_steps(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1098,7 +1106,7 @@ fn run_mode_steps(
 
 /// Part 2: Run flag & remote command capture steps. Returns true if user wants to quit.
 fn run_flag_steps(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1141,7 +1149,7 @@ fn run_flag_steps(
 
 /// Part 3: Cycle through manual ranges on DC V. Returns true if user wants to quit.
 fn run_range_cycle(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1198,7 +1206,7 @@ fn run_range_cycle(
 
 /// Part 4: Freeform additional captures.
 fn run_freeform_captures(
-    dmm: &mut ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1271,7 +1279,7 @@ fn run_freeform_captures(
 pub fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
-    mut dmm: ut61eplus_lib::Dmm<ut61eplus_lib::cp2110::Cp2110>,
+    mut dmm: ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =

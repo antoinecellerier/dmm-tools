@@ -1,0 +1,5 @@
+# UNI-T multimeters — CP2110 HID-to-UART bridge (UT61E+, UT8803, UT171, UT181A, etc.)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea80", MODE="0666"
+
+# UNI-T multimeters — WCH CH9329 HID-to-UART bridge (UT-D09 cable for UT181A, UT171, etc.)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e429", MODE="0666"

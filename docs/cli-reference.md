@@ -15,9 +15,9 @@ ut61eplus <COMMAND> [OPTIONS]
 
 ## Description
 
-Communicates with the UNI-T UT61E+ multimeter over USB via its CP2110 HID
-bridge. Supports live measurement reading, button commands, protocol debugging,
-and guided data capture for verification.
+Communicates with the UNI-T UT61E+ multimeter over USB via its HID-to-UART
+bridge (CP2110 or CH9329, auto-detected). Supports live measurement reading,
+button commands, protocol debugging, and guided data capture for verification.
 
 Set `NO_COLOR=1` to disable colored output.
 
@@ -99,19 +99,20 @@ ut61eplus --device mock read --mock-mode dcv
 
 ### ut61eplus list
 
-List connected UT61E+ devices.
+List connected devices (scans for both CP2110 and CH9329 adapters).
 
 ```
 ut61eplus list
 ```
 
-Prints each detected device with an index number. If no devices are found,
-prints troubleshooting hints (udev rules on Linux, driver install on Windows).
+Prints each detected device with an index number and transport type. If no
+devices are found, prints troubleshooting hints (udev rules on Linux, driver
+install on Windows).
 
 ### ut61eplus info
 
-Connect to the meter and print device info: model name, CP2110 bridge firmware
-version, and any UART error flags.
+Connect to the meter and print device info: model name, transport type, and
+transport-specific diagnostics (e.g., CP2110 firmware version and UART error flags).
 
 ```
 ut61eplus info
@@ -212,8 +213,8 @@ ut61eplus --device ut181a command hold
 
 ### ut61eplus debug
 
-Raw hex dump mode for protocol debugging. Prints CP2110 bridge version and UART
-status on startup, then shows decoded fields alongside each parsed measurement.
+Raw hex dump mode for protocol debugging. Prints transport info (bridge type and
+version) on startup, then shows decoded fields alongside each parsed measurement.
 
 ```
 ut61eplus debug [OPTIONS]

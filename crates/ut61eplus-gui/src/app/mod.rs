@@ -391,7 +391,7 @@ impl App {
                 let panic_ctx = ctx_clone.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
-                        move || ut61eplus_lib::open_device_by_id(device_id),
+                        move || ut61eplus_lib::open_device_by_id_auto(device_id),
                         msg_tx,
                         stop_rx,
                         cmd_rx,
@@ -543,25 +543,27 @@ impl App {
 
         if is_device_not_found {
             // HID device not found — dongle issue
-            ui.label(RichText::new("USB adapter not found").color(warn_color));
+            ui.label(RichText::new("USB cable not found").color(warn_color));
             let platform_hint = if cfg!(target_os = "linux") {
-                "Check that the CP2110 USB adapter is plugged in.\n\
+                "Check that the USB cable is plugged in and the meter is on.\n\
                  On Linux, ensure the udev rule is installed:\n\
-                 sudo cp udev/99-cp2110-unit.rules /etc/udev/rules.d/\n\
-                 sudo udevadm control --reload-rules\n\n\
+                 sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/\n\
+                 sudo udevadm control --reload-rules\n\
+                 Then unplug and replug the cable.\n\n\
                  Click \"Connect\" after resolving the issue."
             } else if cfg!(target_os = "windows") {
-                "Check that the CP2110 USB adapter is plugged in.\n\
-                 On Windows, ensure the CP2110 driver is installed.\n\
-                 Download from: silabs.com/developers/usb-to-uart-bridge-vcp-drivers\n\n\
+                "Check that the USB cable is plugged in and the meter is on.\n\
+                 Open Device Manager — if you see a device with a yellow\n\
+                 warning icon under 'Other devices', install the driver from:\n\
+                 silabs.com/developers/usb-to-uart-bridge-vcp-drivers\n\n\
                  Click \"Connect\" after resolving the issue."
             } else if cfg!(target_os = "macos") {
-                "Check that the CP2110 USB adapter is plugged in.\n\
-                 On macOS, the CP2110 should be recognized automatically (no driver needed).\n\
+                "Check that the USB cable is plugged in and the meter is on.\n\
+                 The cable should be recognized automatically (no driver needed).\n\
                  If not found, check System Settings > Privacy & Security > Input Monitoring.\n\n\
                  Click \"Connect\" after resolving the issue."
             } else {
-                "Check that the CP2110 USB adapter is plugged in.\n\n\
+                "Check that the USB cable is plugged in and the meter is on.\n\n\
                  Click \"Connect\" after resolving the issue."
             };
             ui.label(

@@ -19,7 +19,8 @@ The library crate handles all device communication and data parsing. It has no U
 | Module | Responsibility |
 |--------|---------------|
 | `cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
-| `transport.rs` | `Transport` trait abstracting HID I/O; `MockTransport` for tests |
+| `ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports (experimental) |
+| `transport.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/framing.rs` | Message framing: find `AB CD` header, extract payload, validate checksum |
@@ -39,7 +40,7 @@ CLI/GUI ──► registry::resolve_device()
                        │
                        └──► SelectableDevice.new_protocol()
                                            │
-USB HID ──► Cp2110 (Transport) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
+USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
                                            │
                                            ├── Ut61PlusProtocol  (polled, AB CD framing, per-model DeviceTable)
                                            ├── Ut8803Protocol    (streaming, 0x5A trigger)
@@ -56,8 +57,9 @@ produce the same `Measurement` struct.
 devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation
 instructions, and a factory function that creates the correct `Protocol` instance. The CLI
 and GUI resolve user input via `resolve_device()` and use `open_device_by_id()` to connect —
-they never match on `DeviceFamily` variants or instantiate protocol types directly. Adding a
-new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
+they never match on `DeviceFamily` variants or instantiate protocol types directly.
+`open_device_by_id_auto()` tries CP2110 first, then CH9329, returning a `Box<dyn Transport>`.
+Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
 
 ### ut61eplus-cli
 

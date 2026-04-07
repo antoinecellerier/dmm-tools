@@ -71,14 +71,30 @@ strings -el app.exe | grep -i "baud\|uart"  # wide (UTF-16LE) strings
 **Ghidra decompilation** (for deep analysis of Windows/Linux/macOS binaries):
 ```sh
 # Headless decompilation — produces C pseudocode for all functions
-/opt/ghidra/support/analyzeHeadless /tmp GhidraProject \
+# GhidraDecompile.java script source is in
+# docs/research/ut61eplus/reverse-engineering-approach.md
+$GHIDRA/support/analyzeHeadless /tmp/ghidra_project project_name \
   -import app.exe \
-  -postScript /opt/ghidra/Ghidra/Features/Decompiler/ghidra_scripts/ExportAllDecompiled.java \
-  /tmp/app_decompiled.txt
-
-# Store the output alongside the binary
-cp /tmp/app_decompiled.txt references/<device>/vendor-software/<name>_decompiled.txt
+  -postScript GhidraDecompile.java \
+  -deleteProject \
+  -scriptPath /tmp \
+  > references/<device>/vendor-software/<name>_decompiled.txt 2>&1
 ```
+
+If analysis hangs (100% CPU, never completes), use a prescript to
+disable problematic analyzers. This is a known Ghidra issue
+([#4296](https://github.com/NationalSecurityAgency/ghidra/issues/4296)):
+```sh
+$GHIDRA/support/analyzeHeadless /tmp/ghidra_project project_name \
+  -import app.dll \
+  -preScript DisableSlowAnalyzers.java \
+  -postScript GhidraDecompile.java \
+  -deleteProject \
+  -scriptPath /tmp \
+  > output.txt 2>&1
+```
+See `DisableSlowAnalyzers.java` and `MinimalAnalysis.java` in `/tmp/`
+for prescript examples that disable known-hanging analyzers.
 
 **What to look for in decompiled code:**
 - Baud rate constants (`9600`, `115200`, `0x2580` = 9600 in big-endian)

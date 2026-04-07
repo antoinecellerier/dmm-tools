@@ -283,7 +283,8 @@ bench-mount display or for presentations.
 Shown automatically when connection fails:
 
 - **USB adapter not found:** platform-specific instructions (Linux: udev rule
-  install; Windows: CP2110 driver download)
+  install; Windows: CP2110 driver download). Both CP2110 and CH9329 cables are
+  detected automatically.
 - **No response from meter:** animated "Waiting for meter..." indicator
   during initial timeouts, then step-by-step instructions to enable USB mode
   (insert module, turn on, long-press USB/Hz until S icon appears)
