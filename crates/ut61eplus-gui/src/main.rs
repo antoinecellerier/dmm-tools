@@ -118,6 +118,13 @@ fn parse_args() -> CliOverrides {
         }
     });
 
+    // --mock-mode implies --device mock
+    let device = match (device, &args.mock_mode) {
+        (d @ Some(_), _) => d,
+        (None, Some(_)) => Some("mock".to_string()),
+        (None, None) => None,
+    };
+
     CliOverrides {
         device,
         mock_mode: args.mock_mode,
