@@ -38,6 +38,16 @@ jobs:
             target: x86_64-apple-darwin
             artifact: dmm-tools-macos-x86_64
             ext: tar.gz
+          - name: Linux (ARM)
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact: dmm-tools-linux-aarch64
+            ext: tar.gz
+          - name: Windows (ARM)
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact: dmm-tools-windows-aarch64
+            ext: zip
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -124,3 +134,5 @@ jobs:
             artifacts/dmm-tools-windows-x86_64/*.zip
             artifacts/dmm-tools-macos-aarch64/*.tar.gz
             artifacts/dmm-tools-macos-x86_64/*.tar.gz
+            artifacts/dmm-tools-linux-aarch64/*.tar.gz
+            artifacts/dmm-tools-windows-aarch64/*.zip

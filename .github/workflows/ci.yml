@@ -53,10 +53,6 @@ jobs:
             os: macos-latest
             target: aarch64-apple-darwin
             artifact: dmm-tools-macos-aarch64
-          - name: macOS (Intel)
-            os: macos-13
-            target: x86_64-apple-darwin
-            artifact: dmm-tools-macos-x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
