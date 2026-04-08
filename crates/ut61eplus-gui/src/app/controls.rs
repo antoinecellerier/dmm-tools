@@ -170,20 +170,6 @@ impl App {
             }
         });
 
-        ui.horizontal(|ui| {
-            if setting_checkbox(ui, &mut self.settings.always_on_top, "Always on top") {
-                self.apply_always_on_top(ui.ctx());
-                self.settings.save();
-            }
-            if Self::is_wayland() {
-                ui.label(
-                    RichText::new("(on Wayland, use the title bar menu or launch with WAYLAND_DISPLAY= to force X11)")
-                        .small()
-                        .color(ui.visuals().weak_text_color()),
-                );
-            }
-        });
-
         ui.horizontal_wrapped(|ui| {
             ui.label("Sample interval:");
             let mut changed = false;
@@ -298,6 +284,20 @@ impl App {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
+        });
+
+        ui.horizontal(|ui| {
+            if setting_checkbox(ui, &mut self.settings.always_on_top, "Always on top") {
+                self.apply_always_on_top(ui.ctx());
+                self.settings.save();
+            }
+            if Self::is_wayland() {
+                ui.label(
+                    RichText::new("(on Wayland, use the title bar menu or launch with WAYLAND_DISPLAY= to force X11)")
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                );
+            }
         });
 
         ui.separator();

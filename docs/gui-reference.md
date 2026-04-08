@@ -219,8 +219,8 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
 | **Device** | UT61E+ | Device family. See the description for supported models and Mock. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
-| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11 (winit limitation). |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
+| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11 (winit limitation). |
 
 ## Command-Line Options
 
