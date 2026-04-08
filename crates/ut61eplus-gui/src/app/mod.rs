@@ -159,11 +159,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(_cc: &eframe::CreationContext<'_>, device_override: Option<String>) -> Self {
-        let mut settings = Settings::load();
-        if let Some(device) = device_override {
-            settings.device_family = device;
-        }
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        let settings = Settings::load();
         Self {
             settings,
             settings_open: false,

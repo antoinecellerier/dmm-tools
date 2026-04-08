@@ -23,8 +23,6 @@ pub fn version_label() -> String {
 fn main() -> eframe::Result<()> {
     env_logger::init();
 
-    let device_override = parse_device_arg();
-
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([960.0, 640.0])
@@ -35,21 +33,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "dmm-tools",
         options,
-        Box::new(move |cc| Ok(Box::new(app::App::new(cc, device_override)))),
+        Box::new(|cc| Ok(Box::new(app::App::new(cc)))),
     )
-}
-
-/// Parse `--device <id>` or `--device=<id>` from argv without pulling in clap.
-fn parse_device_arg() -> Option<String> {
-    let args: Vec<String> = std::env::args().collect();
-    let mut iter = args.iter().skip(1);
-    while let Some(arg) = iter.next() {
-        if arg == "--device" {
-            return iter.next().cloned();
-        }
-        if let Some(val) = arg.strip_prefix("--device=") {
-            return Some(val.to_string());
-        }
-    }
-    None
 }
