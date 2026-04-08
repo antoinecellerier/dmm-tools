@@ -168,7 +168,7 @@ impl Ut181aProtocol {
 
 impl Protocol for Ut181aProtocol {
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
-        // No trigger — user must enable "Communication ON" on the meter
+        // User must enable "Communication ON" on the meter
         // Send CMD_CONT_DATA (0x05, enable=1) to start the measurement stream.
         // Verified against real UT181A hardware: bytes AB CD 04 00 05 01 0A 00.
         debug!("ut181a: sending start-stream command (CMD_CONT_DATA)");
