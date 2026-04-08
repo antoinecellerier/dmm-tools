@@ -431,13 +431,17 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let unit_bytes = &payload[11..19];
     let unit = parse_unit_string(unit_bytes);
 
-    // Precision byte: bit0 = +OL, bit1 = -OL
+    // Precision byte: bits 0-1 = overload flags, bits 4-7 = decimal places
     let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
+    let decimal_places = (precision >> 4) & 0x0F;
 
-    let value = if is_overload || main_float.is_nan() || main_float.is_infinite() {
-        MeasuredValue::Overload
+    let (value, display_raw) = if is_overload || main_float.is_nan() || main_float.is_infinite() {
+        (MeasuredValue::Overload, None)
     } else {
-        MeasuredValue::Normal(main_float as f64)
+        let v = main_float as f64;
+        let dp = decimal_places as usize;
+        let display = format!("{v:.dp$}");
+        (MeasuredValue::Normal(v), Some(display))
     };
 
     let flags = StatusFlags {
@@ -459,7 +463,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         unit: Cow::Owned(unit),
         range_label: Cow::Borrowed(""),
         progress: None,
-        display_raw: None,
+        display_raw,
         flags,
         raw_payload: payload.to_vec(),
     })
@@ -589,6 +593,31 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode_raw, 0x7211);
         assert_eq!(m.mode, "Duty %");
+    }
+
+    #[test]
+    fn display_raw_uses_precision_decimal_places() {
+        // precision 0x40 => bits 4-7 = 4 decimal places
+        let payload = make_payload(0x3111, 12.345, 0x40, b"VDC\0\0\0\0\0", 0x00, 0x01);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("12.3450"));
+
+        // precision 0x20 => bits 4-7 = 2 decimal places
+        let payload = make_payload(0x1111, 230.5, 0x20, b"VAC\0\0\0\0\0", 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("230.50"));
+
+        // precision 0x00 => 0 decimal places
+        let payload = make_payload(0x5111, 470.0, 0x00, b"~\0\0\0\0\0\0\0", 0x00, 0x01);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("470"));
+    }
+
+    #[test]
+    fn display_raw_none_on_overload() {
+        let payload = make_payload(0x5111, 0.0, 0x01, b"~\0\0\0\0\0\0\0", 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.display_raw.is_none());
     }
 
     #[test]
