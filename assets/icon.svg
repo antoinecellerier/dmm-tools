@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#252530"/>
+      <stop offset="100%" stop-color="#1A1A22"/>
+    </linearGradient>
+    <clipPath id="rounded">
+      <rect x="8" y="8" width="240" height="240" rx="40"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="40" fill="none" stroke="#3A3A44" stroke-width="1.5"/>
+
+  <!-- Display panel -->
+  <rect x="30" y="30" width="196" height="64" rx="10" fill="#14141C"/>
+  <rect x="30" y="30" width="196" height="64" rx="10" fill="none" stroke="#2A2A34" stroke-width="1"/>
+
+  <!-- Reading "12.34 V" — 7-segment digits + stroked V, centered in panel -->
+  <!-- Visual extent: x=16..152 (136px). Panel center=128. Group x = 128 - (16+136/2) = 44 -->
+  <g transform="translate(44, 40)">
+    <!-- Digit "1" -->
+    <g fill="#E0E0E0">
+      <rect x="16" y="1" width="5" height="18" rx="1.5"/>
+      <rect x="16" y="23" width="5" height="18" rx="1.5"/>
+    </g>
+    <!-- Digit "2" -->
+    <g transform="translate(27, 0)" fill="#E0E0E0">
+      <rect x="3" y="0" width="18" height="5" rx="1.5"/>
+      <rect x="16" y="1" width="5" height="18" rx="1.5"/>
+      <rect x="3" y="19" width="18" height="5" rx="1.5"/>
+      <rect x="0" y="23" width="5" height="18" rx="1.5"/>
+      <rect x="3" y="38" width="18" height="5" rx="1.5"/>
+    </g>
+    <!-- Decimal point -->
+    <circle cx="55" cy="40" r="3" fill="#E0E0E0"/>
+    <!-- Digit "3" -->
+    <g transform="translate(62, 0)" fill="#E0E0E0">
+      <rect x="3" y="0" width="18" height="5" rx="1.5"/>
+      <rect x="16" y="1" width="5" height="18" rx="1.5"/>
+      <rect x="3" y="19" width="18" height="5" rx="1.5"/>
+      <rect x="16" y="23" width="5" height="18" rx="1.5"/>
+      <rect x="3" y="38" width="18" height="5" rx="1.5"/>
+    </g>
+    <!-- Digit "4" -->
+    <g transform="translate(89, 0)" fill="#E0E0E0">
+      <rect x="0" y="1" width="5" height="18" rx="1.5"/>
+      <rect x="16" y="1" width="5" height="18" rx="1.5"/>
+      <rect x="3" y="19" width="18" height="5" rx="1.5"/>
+      <rect x="16" y="23" width="5" height="18" rx="1.5"/>
+    </g>
+    <!-- Unit "V" — two stroked lines, consistent 5px width matching digit segments -->
+    <g transform="translate(124, 0)" stroke="#64B4FF" stroke-width="5" stroke-linecap="round" fill="none">
+      <line x1="2.5" y1="1" x2="14" y2="41"/>
+      <line x1="25.5" y1="1" x2="14" y2="41"/>
+    </g>
+  </g>
+
+  <!-- Graph area -->
+  <g clip-path="url(#rounded)">
+    <!-- Subtle grid lines -->
+    <line x1="30" y1="128" x2="226" y2="128" stroke="#222230" stroke-width="1"/>
+    <line x1="30" y1="156" x2="226" y2="156" stroke="#222230" stroke-width="1"/>
+    <line x1="30" y1="184" x2="226" y2="184" stroke="#222230" stroke-width="1"/>
+    <line x1="30" y1="212" x2="226" y2="212" stroke="#222230" stroke-width="1"/>
+
+    <!-- Vertical grid lines -->
+    <line x1="79" y1="110" x2="79" y2="240" stroke="#222230" stroke-width="1"/>
+    <line x1="128" y1="110" x2="128" y2="240" stroke="#222230" stroke-width="1"/>
+    <line x1="177" y1="110" x2="177" y2="240" stroke="#222230" stroke-width="1"/>
+
+    <!-- Mean line -->
+    <line x1="30" y1="170" x2="226" y2="170" stroke="#64C864" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.5"/>
+
+    <!-- Graph trace — realistic measurement with varied noise and a transient -->
+    <polyline points="30,172 36,170 42,174 47,171 53,169 58,172 63,170 68,168 73,171 78,169 83,173 87,168 91,165 94,158 96,142 98,134 100,148 103,160 107,166 112,170 117,168 122,172 126,169 131,166 136,170 140,167 145,164 149,168 153,165 158,162 163,166 167,163 171,160 175,164 179,161 183,158 187,162 191,159 195,156 199,160 203,157 208,154 213,158 218,155 222,152 226,148"
+              fill="none" stroke="#DC7878" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Live dot at the end of the trace -->
+    <circle cx="226" cy="148" r="5.5" fill="#3CB44B"/>
+    <circle cx="226" cy="148" r="9" fill="none" stroke="#3CB44B" stroke-width="1.5" opacity="0.4"/>
+  </g>
+</svg>
