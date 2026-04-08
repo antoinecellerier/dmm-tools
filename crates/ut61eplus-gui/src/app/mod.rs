@@ -157,6 +157,8 @@ pub struct App {
     /// Cache key for big meter scale: (window_w, window_h, mode_raw).
     /// Recalculate when any component changes.
     meter_cache_key: (u32, u32, u16),
+    /// Transient big meter mode toggle (not persisted to settings).
+    big_meter_toggled: bool,
     /// Whether the keyboard shortcut help overlay is open.
     shortcut_help_open: bool,
 }
@@ -207,6 +209,7 @@ impl App {
             meter_content_height: DEFAULT_METER_CONTENT_HEIGHT,
             meter_reading_ratios: display::ReadingRatios::default(),
             meter_cache_key: (0, 0, 0),
+            big_meter_toggled: false,
             shortcut_help_open: false,
         }
     }
@@ -304,6 +307,11 @@ impl App {
             && self.connection_state == ConnectionState::Connected
         {
             self.recording.toggle();
+        }
+
+        // Ctrl+B: Toggle big meter mode
+        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::B)) {
+            self.toggle_big_meter();
         }
 
         // Ctrl+E: Export CSV
@@ -1161,7 +1169,8 @@ impl eframe::App for App {
         // Determine layout mode before panels
         let wide = ctx.screen_rect().width() >= 900.0;
 
-        let meter_only = !self.settings.show_graph && !self.settings.show_recording;
+        let meter_only =
+            self.big_meter_toggled || (!self.settings.show_graph && !self.settings.show_recording);
 
         if meter_only {
             // Big meter mode: compute scale from window size, only recalculate
@@ -1172,6 +1181,7 @@ impl eframe::App for App {
                 let cache_key = (size.width() as u32, size.height() as u32, mode_raw);
                 let needs_recalc = cache_key != self.meter_cache_key;
 
+                let panel_rect = ui.max_rect();
                 ui.centered_and_justified(|ui| {
                     ui.vertical(|ui| {
                         let (scale, measured_ratios) = display::show_reading_large(
@@ -1184,12 +1194,14 @@ impl eframe::App for App {
                         self.show_remote_controls(ui, scale);
                         self.show_connection_help(ui);
 
-                        self.show_specs_section_inline(ui, scale);
+                        if !self.big_meter_toggled {
+                            self.show_specs_section_inline(ui, scale);
 
-                        if self.settings.show_stats {
-                            ui.add_space(12.0 * scale);
-                            ui.separator();
-                            self.show_stats_section(ui, false, scale);
+                            if self.settings.show_stats {
+                                ui.add_space(12.0 * scale);
+                                ui.separator();
+                                self.show_stats_section(ui, false, scale);
+                            }
                         }
 
                         // Update cached dimensions on window resize. Run twice
@@ -1207,6 +1219,13 @@ impl eframe::App for App {
                         }
                     });
                 });
+                // Overlay toggle button in the bottom-right, outside the
+                // measured content so it doesn't affect scaling convergence.
+                let btn_rect = egui::Rect::from_min_size(
+                    egui::pos2(panel_rect.right() - 32.0, panel_rect.bottom() - 32.0),
+                    egui::vec2(28.0, 28.0),
+                );
+                self.show_big_meter_toggle_at(ui, btn_rect);
             });
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
@@ -1216,7 +1235,15 @@ impl eframe::App for App {
                 .resizable(true)
                 .show(ctx, |ui| {
                     display::show_reading(ui, self.last_measurement.as_ref());
+                    let controls_top = ui.cursor().top();
                     self.show_remote_controls(ui, 1.0);
+                    let controls_bottom = ui.cursor().top();
+                    // Overlay toggle on the last controls row, right-aligned.
+                    let toggle_rect = egui::Rect::from_min_max(
+                        egui::pos2(ui.max_rect().left(), controls_top),
+                        egui::pos2(ui.max_rect().right(), controls_bottom),
+                    );
+                    self.show_big_meter_toggle_at(ui, toggle_rect);
                     self.show_connection_help(ui);
                     ui.add_space(8.0);
 
@@ -1239,7 +1266,14 @@ impl eframe::App for App {
             // Narrow: single column
             egui::CentralPanel::default().show(ctx, |ui| {
                 display::show_reading_compact(ui, self.last_measurement.as_ref());
+                let controls_top = ui.cursor().top();
                 self.show_remote_controls(ui, 1.0);
+                let controls_bottom = ui.cursor().top();
+                let toggle_rect = egui::Rect::from_min_max(
+                    egui::pos2(ui.max_rect().left(), controls_top),
+                    egui::pos2(ui.max_rect().right(), controls_bottom),
+                );
+                self.show_big_meter_toggle_at(ui, toggle_rect);
                 self.show_connection_help(ui);
                 self.show_specs_section_compact(ui);
 
@@ -1264,6 +1298,51 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// Paint the big meter toggle button at a given rect (overlay, no layout impact).
+    fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
+        let (icon, tooltip) = if self.is_big_meter_toggled() {
+            ("\u{229F}", "Exit big meter mode (Ctrl+B)") // ⊟
+        } else {
+            ("\u{229E}", "Big meter mode (Ctrl+B)") // ⊞
+        };
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+        child.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+            let color = ui.visuals().weak_text_color();
+            let btn = egui::Button::new(RichText::new(icon).size(14.0).color(color));
+            let response = ui.add(btn).on_hover_text(tooltip);
+            Self::set_accessible_label(ui, response.id, tooltip);
+            if response.clicked() {
+                self.toggle_big_meter();
+            }
+        });
+    }
+
+    fn toggle_big_meter(&mut self) {
+        if self.big_meter_toggled {
+            self.big_meter_toggled = false;
+        } else {
+            let already_big = !self.settings.show_graph
+                && !self.settings.show_recording
+                && !self.settings.show_stats
+                && !self.settings.show_specs;
+            if already_big {
+                // All panels already hidden via settings — restore them all.
+                self.settings.show_graph = true;
+                self.settings.show_recording = true;
+                self.settings.show_stats = true;
+                self.settings.show_specs = true;
+                self.settings.save();
+            } else {
+                self.big_meter_toggled = true;
+            }
+        }
+    }
+
+    /// Whether we're currently in toggle-triggered big meter mode.
+    fn is_big_meter_toggled(&self) -> bool {
+        self.big_meter_toggled
+    }
+
     fn show_shortcut_help(&mut self, ctx: &egui::Context) {
         if !self.shortcut_help_open {
             return;
@@ -1286,6 +1365,7 @@ impl App {
                             ("Space", "Pause / Resume"),
                             ("Ctrl+L", "Clear graph & statistics"),
                             ("Ctrl+R", "Toggle recording"),
+                            ("Ctrl+B", "Toggle big meter mode"),
                             ("Ctrl+E", "Export CSV"),
                             ("Ctrl+Plus/Minus", "Zoom in / out"),
                             ("Ctrl+0", "Reset zoom to 100%"),

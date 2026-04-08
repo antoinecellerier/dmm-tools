@@ -151,6 +151,8 @@ impl App {
                 | setting_checkbox(ui, &mut self.settings.show_recording, "Recording")
                 | setting_checkbox(ui, &mut self.settings.show_specs, "Specifications");
             if changed {
+                // Manual settings change exits big meter toggle.
+                self.big_meter_toggled = false;
                 self.settings.save();
             }
         });

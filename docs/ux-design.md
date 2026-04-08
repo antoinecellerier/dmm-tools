@@ -73,8 +73,9 @@ Threshold at ~900px available width:
 
 **Big meter mode (graph + recording both hidden):** Single centered display.
 - Reading, buttons, specs (inline), and stats scale to fill available space
-- Font size computed from both available width and height
+- Font size computed from both available width and height using cached measured text ratios
 - Buttons and stats scale proportionally with the reading
+- Quick toggle via **⊞** button (near remote controls) or **Ctrl+B** — temporarily hides all panels without changing saved settings
 - Useful as a large bench-meter display or for presentations
 
 ### Reading Display

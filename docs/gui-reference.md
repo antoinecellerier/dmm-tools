@@ -246,6 +246,7 @@ Press `?` or click the `?` button in the top bar to open an in-app shortcut refe
 | `Space` | Pause / Resume (when connected) |
 | `Ctrl+L` | Clear graph & statistics |
 | `Ctrl+R` | Toggle recording |
+| `Ctrl+B` | Toggle big meter mode |
 | `Ctrl+E` | Export CSV |
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
 | `Ctrl+0` | Reset zoom to 100% |
@@ -287,9 +288,17 @@ statistics, graph, recording.
 
 ![Big meter mode — reading and statistics scaled to fill the window](../assets/gui-big-meter.png)
 
-Activated when both graph and recording panels are hidden (via settings).
-The reading display scales to fill the available space — useful as a
-bench-mount display or for presentations.
+Activated when both graph and recording panels are hidden (via settings
+or the toggle). The reading display scales to fill the available space —
+useful as a bench-mount display or for presentations.
+
+Use the **⊞** button (near the remote control buttons) or **Ctrl+B** to
+quickly enter big meter mode — this temporarily hides graph, recording,
+statistics, and specifications without changing your saved settings.
+Click **⊟** or press **Ctrl+B** again to return to your normal layout.
+
+If all panels are already hidden via settings, **⊞** restores all panels
+to their defaults.
 
 ## Connection Help
 
