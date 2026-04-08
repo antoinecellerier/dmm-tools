@@ -72,15 +72,15 @@ See [docs/supported-devices.md](docs/supported-devices.md) for the full compatib
 
 ## Quick start
 
-Pre-built binaries for Linux and Windows are available on the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page.
+Pre-built binaries for Linux, Windows, and macOS are available on the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page.
 
-> **macOS users:** The code should work on macOS but hasn't been tested against real hardware yet. If you have a Mac and a supported meter, please build from source and [let us know how it goes](https://github.com/antoinecellerier/dmm-tools/issues/2) — even "it works" helps.
+> **macOS Intel users:** Pre-built binaries are provided but haven't been tested against real hardware yet. If you have an Intel Mac and a supported meter, please [let us know how it goes](https://github.com/antoinecellerier/dmm-tools/issues/2) — even "it works" helps.
 
 ### Prerequisites
 
 - **Linux:** `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) — only needed when building from source
 - **Windows:** Open Device Manager with the USB cable plugged in. If you see "CP2110 USB to UART Bridge" under HID devices, no action needed. If you see a yellow warning icon under "Other devices", install the [Silicon Labs driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Some UT-D09 cables use a different chip and appear as "USB Input Device" instead — these work without a driver.
-- **macOS:** No driver needed — both cable types are recognized as standard HID devices. Build from source (see below)
+- **macOS:** No driver needed — both cable types are recognized as standard HID devices
 - A [supported UNI-T multimeter](docs/supported-devices.md) with USB adapter plugged in
 
 ### Install from source

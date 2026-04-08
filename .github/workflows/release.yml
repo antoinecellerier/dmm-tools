@@ -28,6 +28,16 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact: dmm-tools-windows-x86_64
             ext: zip
+          - name: macOS (ARM)
+            os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: dmm-tools-macos-aarch64
+            ext: tar.gz
+          - name: macOS (Intel)
+            os: macos-13
+            target: x86_64-apple-darwin
+            artifact: dmm-tools-macos-x86_64
+            ext: tar.gz
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -55,6 +65,16 @@ jobs:
           cp target/${{ matrix.target }}/release/ut61eplus-gui ${{ matrix.artifact }}/
           cp README.md LICENSE ${{ matrix.artifact }}/
           cp -r udev ${{ matrix.artifact }}/
+          cp -r docs ${{ matrix.artifact }}/
+          tar czf ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p ${{ matrix.artifact }}
+          cp target/${{ matrix.target }}/release/ut61eplus ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/ut61eplus-gui ${{ matrix.artifact }}/
+          cp README.md LICENSE ${{ matrix.artifact }}/
           cp -r docs ${{ matrix.artifact }}/
           tar czf ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
 
@@ -102,3 +122,5 @@ jobs:
           files: |
             artifacts/dmm-tools-linux-x86_64/*.tar.gz
             artifacts/dmm-tools-windows-x86_64/*.zip
+            artifacts/dmm-tools-macos-aarch64/*.tar.gz
+            artifacts/dmm-tools-macos-x86_64/*.tar.gz
