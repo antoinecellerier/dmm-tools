@@ -66,7 +66,7 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
             });
 
             ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(6.0);
                 ui.label(
                     RichText::new(&*m.mode)
                         .font(FontId::proportional(mode_size))
@@ -79,7 +79,7 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
                             .color(ui.visuals().weak_text_color()),
                     );
                 }
-                show_flags(ui, m);
+                show_flags(ui, m, mode_size);
             });
         }
         None => {
@@ -151,7 +151,7 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
                         .color(ui.visuals().weak_text_color())
                         .small(),
                 );
-                show_flags(ui, m);
+                show_flags(ui, m, 0.0);
             });
         }
         None => {
@@ -216,9 +216,14 @@ mod tests {
     }
 }
 
-fn show_flags(ui: &mut Ui, m: &Measurement) {
+fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32) {
     let badge = |ui: &mut Ui, label: &str, color: Color32| {
-        let text = RichText::new(label).small().strong().color(color);
+        let mut text = RichText::new(label).strong().color(color);
+        if font_size > 0.0 {
+            text = text.font(FontId::proportional(font_size));
+        } else {
+            text = text.small();
+        }
         ui.label(text);
     };
 
