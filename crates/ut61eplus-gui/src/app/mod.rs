@@ -152,8 +152,11 @@ pub struct App {
     export_result_rx: Option<mpsc::Receiver<(String, bool)>>,
     /// Cached height of non-reading content at scale=1 for big meter mode.
     meter_content_height: f32,
-    /// Last window size used to compute big meter scale (recompute on change).
-    meter_last_size: (u32, u32),
+    /// Cached reading dimension ratios for big meter mode.
+    meter_reading_ratios: display::ReadingRatios,
+    /// Cache key for big meter scale: (window_w, window_h, mode_raw).
+    /// Recalculate when any component changes.
+    meter_cache_key: (u32, u32, u16),
     /// Whether the keyboard shortcut help overlay is open.
     shortcut_help_open: bool,
 }
@@ -202,7 +205,8 @@ impl App {
             toast: None,
             export_result_rx: None,
             meter_content_height: DEFAULT_METER_CONTENT_HEIGHT,
-            meter_last_size: (0, 0),
+            meter_reading_ratios: display::ReadingRatios::default(),
+            meter_cache_key: (0, 0, 0),
             shortcut_help_open: false,
         }
     }
@@ -1164,15 +1168,17 @@ impl eframe::App for App {
             // when the window is resized to avoid frame-to-frame oscillation.
             egui::CentralPanel::default().show(ctx, |ui| {
                 let size = ctx.screen_rect();
-                let current_size = (size.width() as u32, size.height() as u32);
-                let needs_recalc = current_size != self.meter_last_size;
+                let mode_raw = self.last_measurement.as_ref().map_or(0, |m| m.mode_raw);
+                let cache_key = (size.width() as u32, size.height() as u32, mode_raw);
+                let needs_recalc = cache_key != self.meter_cache_key;
 
                 ui.centered_and_justified(|ui| {
                     ui.vertical(|ui| {
-                        let scale = display::show_reading_large(
+                        let (scale, measured_ratios) = display::show_reading_large(
                             ui,
                             self.last_measurement.as_ref(),
                             self.meter_content_height,
+                            &self.meter_reading_ratios,
                         );
                         let after_reading = ui.cursor().top();
                         self.show_remote_controls(ui, scale);
@@ -1186,17 +1192,18 @@ impl eframe::App for App {
                             self.show_stats_section(ui, false, scale);
                         }
 
-                        // Update cached height on window resize. Run twice
+                        // Update cached dimensions on window resize. Run twice
                         // (by not setting meter_last_size the first time) so
-                        // the second pass uses the measured height from the first.
+                        // the second pass uses the measured values from the first.
                         if needs_recalc && scale > 0.0 {
                             let total_below_reading = ui.cursor().top() - after_reading;
                             let measured = total_below_reading / scale;
                             if (self.meter_content_height - measured).abs() < 1.0 {
-                                // Converged — lock in this size
-                                self.meter_last_size = current_size;
+                                // Converged — lock in this key
+                                self.meter_cache_key = cache_key;
                             }
                             self.meter_content_height = measured;
+                            self.meter_reading_ratios = measured_ratios;
                         }
                     });
                 });

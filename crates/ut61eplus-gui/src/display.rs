@@ -98,9 +98,27 @@ pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
     show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE);
 }
 
+/// Cached ratios of rendered reading dimensions to font size.
+/// Used by `show_reading_large` to compute the optimal font size and
+/// updated by the caller only on window resize (to avoid oscillation).
+pub struct ReadingRatios {
+    /// Reading width / font_size.
+    pub w: f32,
+    /// Reading height / font_size.
+    pub h: f32,
+}
+
+impl Default for ReadingRatios {
+    fn default() -> Self {
+        Self { w: 6.5, h: 1.8 }
+    }
+}
+
 /// Render an extra-large reading that scales to fill available space.
 /// Used when graph and recording panels are hidden ("big meter" mode).
-/// Returns a scale factor (1.0 = normal) for other UI elements to match.
+/// Returns `(scale_factor, measured_ratios)`. The caller should only
+/// persist `measured_ratios` into the cached state when recalculating
+/// (e.g. on window resize) to avoid frame-to-frame oscillation.
 ///
 /// `base_content_height`: total height of all content below the reading
 /// (buttons, stats, etc.) rendered at scale=1. The caller measures this
@@ -109,26 +127,36 @@ pub fn show_reading_large(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
     base_content_height: f32,
-) -> f32 {
+    ratios: &ReadingRatios,
+) -> (f32, ReadingRatios) {
     let available_w = ui.available_width();
     let available_h = ui.available_height();
 
-    // Width-based limit: 7 value chars + ~3 unit chars = 10 char widths
-    let size_from_w = available_w / 10.0;
+    let size_from_w = available_w / ratios.w;
 
-    // Height-based limit: total height scales linearly with font size.
-    // At base (size=36, scale=1):
-    //   reading_h ≈ 36 * 1.8 (value line + mode line)
-    //   other_h   = base_content_height (buttons, stats, gaps)
-    // At scale s/36:
-    //   total = s * 1.8 + base_content_height * (s / 36)
-    //         = s * (1.8 + base_content_height / 36)
-    let height_coeff = 1.8 + base_content_height / 36.0;
+    // Height budget: reading + scaled content below.
+    // Content below scales as base_content_height * (size / BASE_READING_FONT_SIZE).
+    let height_coeff = ratios.h + base_content_height / BASE_READING_FONT_SIZE;
     let size_from_h = available_h / height_coeff;
 
     let size = size_from_w.min(size_from_h).max(BASE_READING_FONT_SIZE);
+
+    // Render and measure actual dimensions.
+    let before = ui.cursor().top();
     show_reading_sized(ui, measurement, size);
-    size / BASE_READING_FONT_SIZE
+    let reading_w = ui.min_rect().width();
+    let reading_h = ui.cursor().top() - before;
+
+    let measured = if size > 0.0 {
+        ReadingRatios {
+            w: reading_w / size,
+            h: reading_h / size,
+        }
+    } else {
+        ReadingRatios::default()
+    };
+
+    (size / BASE_READING_FONT_SIZE, measured)
 }
 
 /// Render the reading as a compact single line (for narrow layout).
