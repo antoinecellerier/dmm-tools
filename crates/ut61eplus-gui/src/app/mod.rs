@@ -159,8 +159,20 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let settings = Settings::load();
+    pub fn new(_cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
+        let mut settings = Settings::load();
+        if let Some(device) = cli.device {
+            settings.overrides.device_family = Some(settings.device_family.clone());
+            settings.device_family = device;
+        }
+        if let Some(mock_mode) = cli.mock_mode {
+            settings.overrides.mock_mode = Some(settings.mock_mode.clone());
+            settings.mock_mode = mock_mode;
+        }
+        if let Some(theme) = cli.theme {
+            settings.overrides.theme = Some(settings.theme);
+            settings.theme = theme;
+        }
         Self {
             settings,
             settings_open: false,

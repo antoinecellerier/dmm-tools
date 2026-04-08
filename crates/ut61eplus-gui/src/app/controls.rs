@@ -122,16 +122,21 @@ impl App {
             ui.label("Theme:");
             let mut changed = false;
             for mode in [ThemeMode::Dark, ThemeMode::Light] {
-                let label = match mode {
+                let selected = self.settings.theme == mode;
+                let base = match mode {
                     ThemeMode::Dark => "Dark",
                     ThemeMode::Light => "Light",
                     ThemeMode::System => "System",
                 };
-                if ui
-                    .selectable_label(self.settings.theme == mode, label)
-                    .clicked()
-                {
+                let label = if selected && self.settings.overrides.has_theme() {
+                    format!("{base} (--theme)")
+                } else {
+                    base.to_string()
+                };
+                if ui.selectable_label(selected, label).clicked() {
                     self.settings.theme = mode;
+                    // Clear the override — user explicitly chose a theme
+                    self.settings.overrides.theme = None;
                     changed = true;
                 }
             }
@@ -190,14 +195,16 @@ impl App {
             ui.label("Device:");
             let mut changed = false;
             for device in registry::DEVICES {
-                if ui
-                    .selectable_label(
-                        self.settings.device_family == device.id,
-                        device.display_name,
-                    )
-                    .clicked()
-                {
+                let selected = self.settings.device_family == device.id;
+                let label = if selected && self.settings.overrides.has_device() {
+                    format!("{} (--device)", device.display_name)
+                } else {
+                    device.display_name.to_string()
+                };
+                if ui.selectable_label(selected, label).clicked() {
                     self.settings.device_family = device.id.to_string();
+                    // Clear the override — user explicitly chose a device
+                    self.settings.overrides.device_family = None;
                     changed = true;
                 }
             }
@@ -215,26 +222,38 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 ui.label("Mock mode:");
                 let mut changed = false;
+                let has_override = self.settings.overrides.has_mock_mode();
                 // "Auto" = cycle through all modes
-                if ui
-                    .selectable_label(self.settings.mock_mode.is_empty(), "Auto (cycle)")
-                    .clicked()
-                {
+                let auto_selected = self.settings.mock_mode.is_empty();
+                let auto_label = if auto_selected && has_override {
+                    "Auto (cycle) (--mock-mode)"
+                } else {
+                    "Auto (cycle)"
+                };
+                if ui.selectable_label(auto_selected, auto_label).clicked() {
                     self.settings.mock_mode = String::new();
                     changed = true;
                 }
                 for mode in MockMode::ALL {
-                    let label = mode.label();
+                    let mode_label = mode.label();
+                    let selected = self.settings.mock_mode == mode_label;
+                    let label = if selected && has_override {
+                        format!("{mode_label} (--mock-mode)")
+                    } else {
+                        mode_label.to_string()
+                    };
                     if ui
-                        .selectable_label(self.settings.mock_mode == label, label)
+                        .selectable_label(selected, label)
                         .on_hover_text(mode.description())
                         .clicked()
                     {
-                        self.settings.mock_mode = label.to_string();
+                        self.settings.mock_mode = mode_label.to_string();
                         changed = true;
                     }
                 }
                 if changed {
+                    // Clear the override — user explicitly chose a mock mode
+                    self.settings.overrides.mock_mode = None;
                     self.settings.save();
                     if self.connection_state != super::ConnectionState::Disconnected {
                         self.needs_reconnect = true;

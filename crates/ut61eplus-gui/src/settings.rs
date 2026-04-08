@@ -9,6 +9,33 @@ pub enum ThemeMode {
     System,
 }
 
+/// Tracks which settings fields are overridden by CLI arguments.
+/// Overridden fields are session-only and not persisted to disk.
+#[derive(Debug, Clone, Default)]
+pub struct Overrides {
+    /// Original persisted value for device_family (if overridden).
+    pub device_family: Option<String>,
+    /// Original persisted value for mock_mode (if overridden).
+    pub mock_mode: Option<String>,
+    /// Original persisted value for theme (if overridden).
+    pub theme: Option<ThemeMode>,
+}
+
+impl Overrides {
+    /// Returns true if the given field is CLI-overridden.
+    pub fn has_device(&self) -> bool {
+        self.device_family.is_some()
+    }
+
+    pub fn has_mock_mode(&self) -> bool {
+        self.mock_mode.is_some()
+    }
+
+    pub fn has_theme(&self) -> bool {
+        self.theme.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -30,6 +57,9 @@ pub struct Settings {
     /// Mock mode to pin to (e.g. "dcv", "acv"). Empty string = auto-cycle.
     /// Only meaningful when device_family is "mock".
     pub mock_mode: String,
+    /// CLI overrides (not serialized).
+    #[serde(skip)]
+    pub overrides: Overrides,
 }
 
 impl Default for Settings {
@@ -48,6 +78,7 @@ impl Default for Settings {
                 .id
                 .to_string(),
             mock_mode: String::new(),
+            overrides: Overrides::default(),
         }
     }
 }
@@ -70,7 +101,18 @@ impl Settings {
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            if let Ok(json) = serde_json::to_string_pretty(self) {
+            // Restore original values for CLI-overridden fields before saving.
+            let mut to_save = self.clone();
+            if let Some(ref original) = self.overrides.device_family {
+                to_save.device_family = original.clone();
+            }
+            if let Some(ref original) = self.overrides.mock_mode {
+                to_save.mock_mode = original.clone();
+            }
+            if let Some(original) = self.overrides.theme {
+                to_save.theme = original;
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&to_save) {
                 let _ = std::fs::write(&path, json);
             }
         }
@@ -106,6 +148,7 @@ mod tests {
             sample_interval_ms: 500,
             device_family: "ut8803".to_string(),
             mock_mode: "dcv".to_string(),
+            overrides: Overrides::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
         let deserialized: Settings = serde_json::from_str(&json).unwrap();

@@ -3740,6 +3740,7 @@ name = "ut61eplus-gui"
 version = "0.4.0-dev"
 dependencies = [
  "chrono",
+ "clap",
  "csv",
  "directories",
  "eframe",

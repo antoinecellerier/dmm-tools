@@ -11,7 +11,7 @@
 ## Synopsis
 
 ```
-ut61eplus-gui
+ut61eplus-gui [OPTIONS]
 ```
 
 ## Description
@@ -220,6 +220,19 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 | **Device** | UT61E+ | Device family. See the description for supported models and Mock. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
+
+## Command-Line Options
+
+All options override saved settings for the current session only — they
+do not modify the persisted `settings.json`.
+
+| Option | Description |
+|--------|-------------|
+| `--device <ID>` | Device family to connect to (e.g., `ut61eplus`, `ut181a`, `mock`). Run `--help` for the full list with aliases. |
+| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv. |
+| `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
+| `-V`, `--version` | Print version and exit. |
+| `-h`, `--help` | Print help and exit. |
 
 ## Keyboard Shortcuts
 
