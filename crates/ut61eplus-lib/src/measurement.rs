@@ -13,6 +13,25 @@ pub enum MeasuredValue {
     NcvLevel(u8),
 }
 
+/// An auxiliary value associated with a measurement.
+///
+/// Used by protocols that report multiple related values per reading:
+/// UT181A relative mode (delta/reference/absolute), min/max mode
+/// (current/max/avg/min with timestamps), peak mode (max/min).
+#[derive(Debug, Clone)]
+pub struct AuxValue {
+    /// Human-readable label (e.g. "Reference", "Max", "Peak Min").
+    pub label: Cow<'static, str>,
+    /// The numeric value (or overload).
+    pub value: MeasuredValue,
+    /// Unit string. Empty if same as main measurement unit.
+    pub unit: Cow<'static, str>,
+    /// Formatted display string (like `Measurement::display_raw`).
+    pub display_raw: Option<String>,
+    /// Elapsed seconds from mode start (min/max timestamps).
+    pub elapsed_secs: Option<u32>,
+}
+
 /// A fully parsed measurement from the meter.
 ///
 /// This is the unified measurement type used by all protocol implementations.
@@ -42,6 +61,9 @@ pub struct Measurement {
     /// Raw ASCII display value as received, None for float-based meters.
     pub display_raw: Option<String>,
     pub flags: StatusFlags,
+    /// Auxiliary values (e.g. relative reference/absolute, min/max/avg sub-values).
+    /// Empty for normal single-value measurements.
+    pub aux_values: Vec<AuxValue>,
     /// Raw payload bytes as received (for protocol debugging).
     pub raw_payload: Vec<u8>,
 }
@@ -68,6 +90,7 @@ impl Measurement {
             progress: Some(0),
             display_raw: Some("  5.678".to_string()),
             flags,
+            aux_values: vec![],
             raw_payload: vec![],
         }
     }

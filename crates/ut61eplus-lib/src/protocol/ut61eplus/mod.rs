@@ -427,6 +427,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
         progress: Some(progress),
         display_raw: Some(display_raw),
         flags,
+        aux_values: vec![],
         raw_payload: payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN].to_vec(),
     })
 }

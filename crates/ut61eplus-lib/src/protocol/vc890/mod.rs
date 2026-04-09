@@ -595,6 +595,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         progress: None,
         display_raw: Some(display_str),
         flags,
+        aux_values: vec![],
         raw_payload: payload.to_vec(),
     })
 }

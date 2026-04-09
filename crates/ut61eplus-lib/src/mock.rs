@@ -550,6 +550,7 @@ impl Protocol for MockProtocol {
             progress,
             display_raw,
             flags,
+            aux_values: vec![],
             raw_payload: vec![],
         };
 
