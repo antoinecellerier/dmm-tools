@@ -178,7 +178,7 @@ in Voltsoft, different installer binary, remapped function codes).
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **VC-890** | Voltcraft | Handheld DMM (60000 counts, OLED) | `10C4:EA80` | **Experimental** | Polled, 66-byte frames, remapped function codes from VC-880 |
+| **VC-890** | Voltcraft | Handheld DMM (60000 counts, OLED) | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/14)) | Polled, 66-byte frames, remapped function codes from VC-880 |
 
 See [docs/research/vc890/](research/vc890/).
 
