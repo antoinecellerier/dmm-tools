@@ -168,21 +168,24 @@ manual tables:
 
 | Finding | Confidence | Source |
 |---------|------------|--------|
-| UT632/803/804 use same wire format as UT8802 or UT8803 | **[DEDUCED]** | Same UCI protocol, QinHeng auto-detects both formats |
-| QinHeng feature reports encode baud rate in chip-specific format | **[DEDUCED]** | Bytes don't match standard encoding; CH9325 datasheet needed |
+| UT632/803/804 use same wire format as UT8802 or UT8803 | **[KNOWN]** | Auto-detected at runtime; DLL scans for 0xAC or 0xABCD headers |
+| QinHeng feature reports: primary=2400, fallback=19200 baud | **[KNOWN]** | CH9325 baud = uint16 LE (sigrok wiki + Lukas Schwarz UT61B + HE2325U driver) |
 | UT805A serial likely uses same measurement frame format | **[DEDUCED]** | Same UCI layer; serial parsers in DLL are for older FS9721 meters |
 | Byte 6 in UT8802 frame is bargraph/progress indicator | **[DEDUCED]** | Passed to bitset construction function FUN_1001b9b0 |
 
 ### What Still Requires Device Verification
 
-1. **QinHeng feature report baud rate encoding**: The 10-byte feature
-   reports (`00 60 09 03...` and `00 00 4B 03...`) encode baud rate
-   in a CH9325-specific format. Without the chip datasheet, we cannot
-   confirm the exact baud rates. [UNVERIFIED]
+1. ~~**QinHeng feature report baud rate encoding**~~ — **RESOLVED**
+   2026-04-09: CH9325 uses uint16 LE baud encoding. Primary report
+   `00 60 09 03...` = 2400 baud, fallback `00 00 4B 03...` = 19200 baud.
+   Confirmed via [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325),
+   [Lukas Schwarz UT61B analysis](https://lukasschwarz.de/ut61b), and
+   [HE2325U driver code](https://github.com/thomasf/uni-trend-ut61d).
 
-2. **Which wire format do UT632/803/804 use?** The auto-detect code
-   supports both 0xAC (UT8802-style) and 0xABCD (UT8803-style). We
-   don't know which format each QinHeng model uses. [UNVERIFIED]
+2. ~~**Which wire format do UT632/803/804 use?**~~ — **RESOLVED**
+   2026-04-09: The vendor DLL does not dispatch per model. All QinHeng
+   models use runtime auto-detection: scan incoming data for 0xAC or
+   0xABCD headers (Ghidra FUN_1001eb30). Implementation should auto-detect.
 
 3. **UT805A serial frame format**: The programming manual mentions
    7 data bits, but the DLL defaults to 8. The actual serial framing

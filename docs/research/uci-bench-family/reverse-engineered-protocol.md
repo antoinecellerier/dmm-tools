@@ -305,15 +305,48 @@ with D2-D3 encoding diode/SCR probe direction from byte 5 bits 4-5.
 
 ---
 
-## 4. QinHeng HID Init -- [VENDOR]
+## 4. QinHeng HID Init -- [KNOWN]
 
-### 4.1 Primary Init (FUN_1001d360)
+### 4.1 CH9325 Feature Report Format
+
+Cross-referenced against the [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325),
+[Lukas Schwarz's UT61B analysis](https://lukasschwarz.de/ut61b), and the
+[HE2325U driver](https://github.com/thomasf/uni-trend-ut61d/blob/master/he2325u/he2325u.cpp).
+
+The CH9325 SET_REPORT (feature report) configures UART parameters:
+
+| Byte | Field | Notes |
+|------|-------|-------|
+| 0 | Report ID | Always 0x00 |
+| 1-2 | Baud rate | uint16 LE |
+| 3-4 | Parity/stop bits | Often 0x03/0x00; exact encoding uncertain |
+| 5 | Data bits | 0=5bit, 1=6bit, 2=7bit, 3=8bit |
+| 6-9 | Padding | Zeros |
+
+Supported baud rates: 2400, 4800, 9600, 19200.
+
+### 4.2 CH9325 HID Data Framing
+
+**Different from CP2110 and CH9329.** All HID reports are **8 bytes**.
+
+**RX (device→host)**: first byte = `0xF0 + payload_length`, then up to
+7 payload bytes, zero-padded to 8 bytes total.
+Example: `F2 35 41 00 00 00 00 00` = 2 bytes of UART data (0x35, 0x41).
+
+**TX (host→device)**: first byte = `payload_length`, then up to 7
+payload bytes, padded to 8 bytes total.
+
+**Max 7 UART bytes per HID report** (vs 63 for CP2110/CH9329). This
+means protocol frames span multiple HID reports and must be reassembled.
+
+### 4.3 Primary Init (FUN_1001d360)
 
 Used as the first attempt for QinHeng devices (VID 0x1A86, PID 0xE008):
 
 ```
 1. Send 10-byte feature report via HidD_SetFeature:
    [0x00, 0x60, 0x09, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+   → Baud rate: 0x0960 = 2400 baud, config byte: 0x03
 
 2. Send 0x5A trigger byte via UART write (1000ms timeout)
 
@@ -324,18 +357,17 @@ Used as the first attempt for QinHeng devices (VID 0x1A86, PID 0xE008):
 
 **Feature report encoding**: The 10-byte buffer is constructed from
 `local_20 = 0x3096000` (LE qword) + `local_18 = 0` (16 bits). Byte
-layout: `00 60 09 03 00 00 00 00 00 00`. The exact baud rate encoding
-is CH9325-specific and cannot be decoded without the chip datasheet.
-The bytes `0x09` and `0x03` likely encode 9600 baud in a chip-specific
-format. [UNVERIFIED]
+layout: `00 60 09 03 00 00 00 00 00 00`. Bytes 1-2 = 0x0960 =
+**2400 baud** (confirmed by CH9325 baud encoding: uint16 LE).
 
-### 4.2 Fallback Init (FUN_1001d270)
+### 4.4 Fallback Init (FUN_1001d270)
 
-Used when primary init fails to receive data:
+Used when primary init fails to receive data within 300ms:
 
 ```
 1. Send 10-byte feature report via HidD_SetFeature:
    [0x00, 0x00, 0x4B, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+   → Baud rate: 0x4B00 = 19200 baud, config byte: 0x03
 
 2. No trigger byte sent
 
@@ -345,28 +377,31 @@ Used when primary init fails to receive data:
 ```
 
 **Key differences from primary**:
-- Different feature report payload (byte 2: 0x4B vs 0x09)
+- **19200 baud** instead of 2400 baud
 - No 0x5A trigger byte -- the device may stream automatically at this
-  configuration
+  baud rate
 
-The fallback may configure a different baud rate or serial mode,
-accommodating devices that don't require the 0x5A wake-up command.
-[DEDUCED]
+The vendor DLL probes two baud rates: 2400 first (common for older
+UNI-T meters like UT61B/UT61E), then 19200 as fallback. The UCI bench
+meters (UT632, UT803, UT804) respond at whichever rate they support.
+This differs from the CP2110 path which hard-codes 9600 baud.
 
-### 4.3 QinHeng Chip Identity
+### 4.5 QinHeng Chip Identity
 
-The chip is identified only by VID 0x1A86 (QinHeng/WCH). PID 0xE008
-is their HID-to-UART bridge product. The specific chip model is likely
-CH9325 or HE2325U based on the UT-D04 cable identification in the
-project's cable table. No chip model string was found in the
-decompilation. [DEDUCED]
+The chip is identified by VID 0x1A86 (QinHeng/WCH), PID 0xE008.
+The specific chip model is CH9325 or its predecessor HE2325U (both
+use the same USB VID/PID and compatible HID protocol). Confirmed by
+cross-referencing with the [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325)
+and the UT-D04 cable identification. No chip model string was found
+in the decompilation.
 
-### 4.4 Comparison: CP2110 vs QinHeng Init
+### 4.6 Comparison: CP2110 vs QinHeng Init
 
 | Aspect | CP2110 (UT8802/UT8803) | QinHeng (UT632/803/804) |
 |--------|------------------------|------------------------|
-| Feature reports | 0x41 enable + 0x50 config (AN434 format) | 10-byte chip-specific format |
-| Baud rate encoding | Big-endian 32-bit in report (0x00002580 = 9600) | Chip-specific encoding |
+| Feature reports | 0x41 enable + 0x50 config (AN434 format) | 10-byte: report_id + baud_16LE + config |
+| Baud rate | 9600 (hard-coded) | 2400 (primary), 19200 (fallback) |
+| Data framing | [length, payload...] 64 bytes | [0xF0+len, payload...] 8 bytes, max 7 UART bytes |
 | Trigger | 0x5A byte after UART config | 0x5A byte (primary) or none (fallback) |
 | Purge | Not sent (unlike UT61E+) | Not applicable |
 | Buffer size | 3072 bytes (0xC00) | 512 bytes (0x200) |
@@ -599,9 +634,12 @@ An implementation could:
 | UT8802: position codes 0x01-0x2D | [KNOWN] | Programming manual page 10 |
 | UT8802: position-to-function mapping | [VENDOR] | Ghidra FUN_1001c7b0 matches manual |
 | UT8802: AUTO flag inverted logic | [VENDOR] | Ghidra: `~(byte7>>2)` |
-| QinHeng: primary init with 0x5A trigger | [VENDOR] | Ghidra FUN_1001d360 |
-| QinHeng: fallback init without trigger | [VENDOR] | Ghidra FUN_1001d270 |
+| QinHeng: primary init = 2400 baud + 0x5A trigger | [KNOWN] | Ghidra FUN_1001d360 + sigrok CH9325 baud encoding |
+| QinHeng: fallback init = 19200 baud, no trigger | [KNOWN] | Ghidra FUN_1001d270 + sigrok CH9325 baud encoding |
 | QinHeng: VID 0x1A86, PID 0xE008 | [KNOWN] | Programming manual |
+| CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [KNOWN] | sigrok CH9325 wiki |
+| CH9325 feature report baud encoding: uint16 LE | [KNOWN] | sigrok + Lukas Schwarz UT61B + HE2325U driver |
+| QinHeng wire format: auto-detected, not model-specific | [KNOWN] | Ghidra: no per-model dispatch, FUN_1001eb30 scans headers |
 | Frame auto-detect: 0xAC vs 0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
 | UT804 range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A range coding table | [KNOWN] | Programming manual page 12 |
@@ -616,8 +654,8 @@ An implementation could:
 
 | Finding | Question |
 |---------|----------|
-| QinHeng feature report baud rate encoding | What baud rate do the 10-byte reports configure? Need CH9325 datasheet |
-| Which wire format per QinHeng model | Do UT632/803/804 use 0xAC or 0xABCD frames? |
+| ~~QinHeng feature report baud rate encoding~~ | **RESOLVED**: primary=2400 baud (0x0960 LE), fallback=19200 baud (0x4B00 LE) |
+| ~~Which wire format per QinHeng model~~ | **RESOLVED**: auto-detected at runtime, not model-specific. DLL scans for 0xAC or 0xABCD headers. |
 | UT805A serial frame format | Same binary frames or different protocol? |
 | UT805A 7-bit vs 8-bit data | Manual says 7, DLL defaults to 8 |
 | UT8802 byte 6 purpose | Bargraph? Secondary status? |
