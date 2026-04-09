@@ -16,7 +16,7 @@
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
@@ -473,12 +473,72 @@ fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
 ///
 /// Full value = 13 bytes: float32(4) + precision(1) + unit_string(8)
 /// Short value = 5 bytes: float32(4) + precision(1)
+/// Parse a 13-byte "full value": float32(4) + precision(1) + unit_string(8).
+fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, String)> {
+    if data.len() < 13 {
+        return Err(Error::invalid_response_msg(format!(
+            "ut181a full value too short: {} bytes, need 13",
+            data.len()
+        )));
+    }
+    let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+    let precision = data[4];
+    let unit = parse_unit_string(&data[5..13]);
+    let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
+    let dp = ((precision >> 4) & 0x0F) as usize;
+
+    if is_overload || float.is_nan() || float.is_infinite() {
+        Ok((MeasuredValue::Overload, None, unit))
+    } else {
+        let v = float as f64;
+        Ok((MeasuredValue::Normal(v), Some(format!("{v:.dp$}")), unit))
+    }
+}
+
+/// Parse a 5-byte "short value": float32(4) + precision(1).
+fn parse_short_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>)> {
+    if data.len() < 5 {
+        return Err(Error::invalid_response_msg(format!(
+            "ut181a short value too short: {} bytes, need 5",
+            data.len()
+        )));
+    }
+    let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+    let precision = data[4];
+    let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
+    let dp = ((precision >> 4) & 0x0F) as usize;
+
+    if is_overload || float.is_nan() || float.is_infinite() {
+        Ok((MeasuredValue::Overload, None))
+    } else {
+        let v = float as f64;
+        Ok((MeasuredValue::Normal(v), Some(format!("{v:.dp$}"))))
+    }
+}
+
+/// Build an `AuxValue` from a full value parse result.
+fn make_aux(
+    label: &'static str,
+    value: MeasuredValue,
+    unit: &str,
+    display_raw: Option<String>,
+    elapsed_secs: Option<u32>,
+) -> AuxValue {
+    AuxValue {
+        label: Cow::Borrowed(label),
+        value,
+        unit: Cow::Owned(unit.to_string()),
+        display_raw,
+        elapsed_secs,
+    }
+}
+
 pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < 19 {
-        // Minimum: type(1) + misc(1) + misc2(1) + mode(2) + range(1) + value(13) = 19
+    // Minimum header: type(1) + misc(1) + misc2(1) + mode(2) + range(1) = 6
+    if payload.len() < 6 {
         return Err(Error::invalid_response(
             format!(
-                "ut181a payload too short: {} bytes, expected >= 19",
+                "ut181a payload too short: {} bytes, expected >= 6",
                 payload.len()
             ),
             payload,
@@ -494,46 +554,202 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let hold = misc & 0x80 != 0;
     let auto_range = misc2 & 0x01 != 0;
     let hv_warning = misc2 & 0x02 != 0;
+    let lead_error = misc2 & 0x08 != 0;
+    let comp_active = misc2 & 0x10 != 0;
+    let record = misc2 & 0x20 != 0;
 
     let mode = decode_mode_word(mode_word);
+    let data = &payload[6..]; // format-dependent value section
 
-    // Parse main value (starts at byte 6)
-    if payload.len() < 6 + 13 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut181a payload too short for value: {} bytes",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    let (value, display_raw, unit, mut aux_values) = match format_type {
+        // Normal format (0x00)
+        0x00 => {
+            if data.len() < 13 {
+                return Err(Error::invalid_response(
+                    format!("ut181a normal format too short: {} bytes", payload.len()),
+                    payload,
+                ));
+            }
+            let (val, disp, unit) = parse_full_value(data)?;
+            let mut aux = Vec::new();
+            let mut offset = 13;
 
-    let val_bytes: [u8; 4] = [payload[6], payload[7], payload[8], payload[9]];
-    let main_float = f32::from_le_bytes(val_bytes);
-    let precision = payload[10];
-    let unit_bytes = &payload[11..19];
-    let unit = parse_unit_string(unit_bytes);
+            // Aux1 (optional, misc bit 1)
+            if misc & 0x02 != 0 && data.len() >= offset + 13 {
+                let (av, ad, au) = parse_full_value(&data[offset..])?;
+                aux.push(make_aux("Aux1", av, &au, ad, None));
+                offset += 13;
+            }
+            // Aux2 (optional, misc bit 2)
+            if misc & 0x04 != 0 && data.len() >= offset + 13 {
+                let (av, ad, au) = parse_full_value(&data[offset..])?;
+                aux.push(make_aux("Aux2", av, &au, ad, None));
+                offset += 13;
+            }
+            // Bargraph (optional, misc bit 3) — skip for now, just advance offset
+            if misc & 0x08 != 0 && data.len() >= offset + 12 {
+                offset += 12; // float32(4) + unit(8)
+            }
 
-    // Precision byte: bits 0-1 = overload flags, bits 4-7 = decimal places
-    let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
-    let decimal_places = (precision >> 4) & 0x0F;
+            // COMP extension (when misc2 bit 4 set)
+            if comp_active && data.len() >= offset + 7 {
+                let comp_mode = data[offset];
+                let comp_result = data[offset + 1];
+                let comp_prec = data[offset + 2];
+                let high_float = f32::from_le_bytes([
+                    data[offset + 3],
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                ]);
+                let dp = ((comp_prec >> 4) & 0x0F) as usize;
+                let comp_mode_str = match comp_mode {
+                    0 => "INNER",
+                    1 => "OUTER",
+                    2 => "BELOW",
+                    3 => "ABOVE",
+                    _ => "?",
+                };
+                let result_str = if comp_result == 0 { "PASS" } else { "FAIL" };
+                let high_v = high_float as f64;
+                aux.push(make_aux(
+                    "COMP High",
+                    MeasuredValue::Normal(high_v),
+                    &unit,
+                    Some(format!("{high_v:.dp$}")),
+                    None,
+                ));
 
-    let (value, display_raw) = if is_overload || main_float.is_nan() || main_float.is_infinite() {
-        (MeasuredValue::Overload, None)
-    } else {
-        let v = main_float as f64;
-        let dp = decimal_places as usize;
-        let display = format!("{v:.dp$}");
-        (MeasuredValue::Normal(v), Some(display))
+                // Low limit present for INNER/OUTER modes
+                if (comp_mode == 0 || comp_mode == 1) && data.len() >= offset + 11 {
+                    let low_float = f32::from_le_bytes([
+                        data[offset + 7],
+                        data[offset + 8],
+                        data[offset + 9],
+                        data[offset + 10],
+                    ]);
+                    let low_v = low_float as f64;
+                    aux.push(make_aux(
+                        "COMP Low",
+                        MeasuredValue::Normal(low_v),
+                        &unit,
+                        Some(format!("{low_v:.dp$}")),
+                        None,
+                    ));
+                }
+
+                debug!("ut181a: COMP {comp_mode_str} {result_str} high={high_float}");
+            }
+
+            (val, disp, unit, aux)
+        }
+
+        // Relative format (0x10 >> 4 = 1)
+        0x01 => {
+            // 3 full values: relative (delta), reference, absolute
+            if data.len() < 39 {
+                return Err(Error::invalid_response(
+                    format!(
+                        "ut181a relative format too short: {} bytes, need >= 45",
+                        payload.len()
+                    ),
+                    payload,
+                ));
+            }
+            let (rel_val, rel_disp, rel_unit) = parse_full_value(data)?;
+            let (ref_val, ref_disp, ref_unit) = parse_full_value(&data[13..])?;
+            let (abs_val, abs_disp, abs_unit) = parse_full_value(&data[26..])?;
+
+            let aux = vec![
+                make_aux("Reference", ref_val, &ref_unit, ref_disp, None),
+                make_aux("Absolute", abs_val, &abs_unit, abs_disp, None),
+            ];
+            // Main value = delta (matches meter display)
+            (rel_val, rel_disp, rel_unit, aux)
+        }
+
+        // Min/Max format (0x20 >> 4 = 2)
+        0x02 => {
+            // current(5) + max(5)+ts(4) + avg(5)+ts(4) + min(5)+ts(4) + unit(8) = 40
+            if data.len() < 40 {
+                return Err(Error::invalid_response(
+                    format!(
+                        "ut181a minmax format too short: {} bytes, need >= 46",
+                        payload.len()
+                    ),
+                    payload,
+                ));
+            }
+            let (cur_val, cur_disp) = parse_short_value(data)?;
+
+            let (max_val, max_disp) = parse_short_value(&data[5..])?;
+            let max_ts = u32::from_le_bytes([data[10], data[11], data[12], data[13]]);
+
+            let (avg_val, avg_disp) = parse_short_value(&data[14..])?;
+            let avg_ts = u32::from_le_bytes([data[19], data[20], data[21], data[22]]);
+
+            let (min_val, min_disp) = parse_short_value(&data[23..])?;
+            let min_ts = u32::from_le_bytes([data[28], data[29], data[30], data[31]]);
+
+            let unit = parse_unit_string(&data[32..40]);
+
+            let aux = vec![
+                make_aux("Max", max_val, &unit, max_disp, Some(max_ts)),
+                make_aux("Average", avg_val, &unit, avg_disp, Some(avg_ts)),
+                make_aux("Min", min_val, &unit, min_disp, Some(min_ts)),
+            ];
+            (cur_val, cur_disp, unit, aux)
+        }
+
+        // Peak format (0x40 >> 4 = 4)
+        0x04 => {
+            // 2 full values: peak max, peak min
+            if data.len() < 26 {
+                return Err(Error::invalid_response(
+                    format!(
+                        "ut181a peak format too short: {} bytes, need >= 32",
+                        payload.len()
+                    ),
+                    payload,
+                ));
+            }
+            let (pmax_val, pmax_disp, pmax_unit) = parse_full_value(data)?;
+            let (pmin_val, pmin_disp, pmin_unit) = parse_full_value(&data[13..])?;
+
+            let aux = vec![make_aux("Peak Min", pmin_val, &pmin_unit, pmin_disp, None)];
+            (pmax_val, pmax_disp, pmax_unit, aux)
+        }
+
+        // Unknown format — try to parse as normal
+        _ => {
+            debug!("ut181a: unknown format_type {format_type:#x}, treating as normal");
+            if data.len() < 13 {
+                return Err(Error::invalid_response(
+                    format!("ut181a unknown format too short: {} bytes", payload.len()),
+                    payload,
+                ));
+            }
+            let (val, disp, unit) = parse_full_value(data)?;
+            (val, disp, unit, vec![])
+        }
     };
+
+    // COMP extension can also apply to relative/peak, but only documented for
+    // normal format. Parse it there only; for other formats, just set the flag.
+    let _ = &mut aux_values; // suppress unused_mut if no COMP
 
     let flags = StatusFlags {
         hold,
         auto_range,
         hv_warning,
-        min: format_type == 0x02, // min/max format
+        lead_error,
+        comp: comp_active,
+        record,
+        min: format_type == 0x02,
         max: format_type == 0x02,
-        rel: format_type == 0x01, // relative format
+        rel: format_type == 0x01,
+        peak_max: format_type == 0x04,
+        peak_min: format_type == 0x04,
         ..Default::default()
     };
 
@@ -548,7 +764,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         progress: None,
         display_raw,
         flags,
-        aux_values: vec![],
+        aux_values,
         raw_payload: payload.to_vec(),
     })
 }
@@ -821,5 +1037,261 @@ mod tests {
         // range byte is at payload[5] which make_payload sets to 0x00
         assert_eq!(m.range_raw, 0x00);
         assert_eq!(m.range_label, "Auto");
+    }
+
+    /// Build a full value block (13 bytes): float32 LE + precision + unit(8).
+    fn full_value(val: f32, precision: u8, unit: &[u8; 8]) -> Vec<u8> {
+        let mut v = val.to_le_bytes().to_vec();
+        v.push(precision);
+        v.extend_from_slice(unit);
+        v
+    }
+
+    /// Build a short value block (5 bytes): float32 LE + precision.
+    fn short_value(val: f32, precision: u8) -> Vec<u8> {
+        let mut v = val.to_le_bytes().to_vec();
+        v.push(precision);
+        v
+    }
+
+    /// Build a relative format payload (format 0x10).
+    fn make_relative_payload(mode: u16, delta: f32, reference: f32, absolute: f32) -> Vec<u8> {
+        let mbytes = mode.to_le_bytes();
+        let mut p = vec![
+            0x02, // type
+            0x10, // misc: format_type=1 (relative) in bits 4-6
+            0x01, // misc2: auto_range
+            mbytes[0], mbytes[1], 0x00, // range
+        ];
+        p.extend_from_slice(&full_value(delta, 0x30, b"VDC\0\0\0\0\0"));
+        p.extend_from_slice(&full_value(reference, 0x30, b"VDC\0\0\0\0\0"));
+        p.extend_from_slice(&full_value(absolute, 0x30, b"VDC\0\0\0\0\0"));
+        p
+    }
+
+    #[test]
+    fn parse_relative_format() {
+        let payload = make_relative_payload(0x3112, 2.345, 10.0, 12.345);
+        let m = parse_measurement(&payload).unwrap();
+
+        assert_eq!(m.mode, "V DC REL");
+        assert!(m.flags.rel);
+        // Main value is the delta
+        if let MeasuredValue::Normal(v) = m.value {
+            assert!((v - 2.345).abs() < 0.01);
+        } else {
+            panic!("expected Normal value");
+        }
+        // Two aux values: Reference and Absolute
+        assert_eq!(m.aux_values.len(), 2);
+        assert_eq!(m.aux_values[0].label, "Reference");
+        assert_eq!(m.aux_values[1].label, "Absolute");
+        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
+            assert!((v - 10.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal ref value");
+        }
+        if let MeasuredValue::Normal(v) = m.aux_values[1].value {
+            assert!((v - 12.345).abs() < 0.01);
+        } else {
+            panic!("expected Normal abs value");
+        }
+    }
+
+    #[test]
+    fn parse_relative_too_short() {
+        // 6 header + only 26 bytes of data (need 39)
+        let mut payload = vec![0x02, 0x10, 0x01, 0x11, 0x31, 0x00];
+        payload.extend_from_slice(&full_value(1.0, 0x20, b"VDC\0\0\0\0\0"));
+        payload.extend_from_slice(&full_value(2.0, 0x20, b"VDC\0\0\0\0\0"));
+        // Missing third value
+        assert!(parse_measurement(&payload).is_err());
+    }
+
+    #[test]
+    fn parse_minmax_format() {
+        let mbytes = 0x3111u16.to_le_bytes();
+        let mut payload = vec![
+            0x02, // type
+            0x20, // misc: format_type=2 (minmax)
+            0x01, // misc2: auto_range
+            mbytes[0], mbytes[1], 0x00, // range
+        ];
+        // current: 5.0
+        payload.extend_from_slice(&short_value(5.0, 0x30));
+        // max: 10.0, timestamp 120s
+        payload.extend_from_slice(&short_value(10.0, 0x30));
+        payload.extend_from_slice(&120u32.to_le_bytes());
+        // avg: 7.5, timestamp 60s
+        payload.extend_from_slice(&short_value(7.5, 0x30));
+        payload.extend_from_slice(&60u32.to_le_bytes());
+        // min: 3.0, timestamp 30s
+        payload.extend_from_slice(&short_value(3.0, 0x30));
+        payload.extend_from_slice(&30u32.to_le_bytes());
+        // shared unit
+        payload.extend_from_slice(b"VDC\0\0\0\0\0");
+
+        let m = parse_measurement(&payload).unwrap();
+
+        assert_eq!(m.mode, "V DC");
+        assert!(m.flags.min);
+        assert!(m.flags.max);
+        // Main value = current
+        if let MeasuredValue::Normal(v) = m.value {
+            assert!((v - 5.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal current value");
+        }
+        assert_eq!(m.unit, "VDC");
+
+        // 3 aux values: Max, Average, Min
+        assert_eq!(m.aux_values.len(), 3);
+        assert_eq!(m.aux_values[0].label, "Max");
+        assert_eq!(m.aux_values[0].elapsed_secs, Some(120));
+        assert_eq!(m.aux_values[1].label, "Average");
+        assert_eq!(m.aux_values[1].elapsed_secs, Some(60));
+        assert_eq!(m.aux_values[2].label, "Min");
+        assert_eq!(m.aux_values[2].elapsed_secs, Some(30));
+
+        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
+            assert!((v - 10.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal max value");
+        }
+    }
+
+    #[test]
+    fn parse_minmax_too_short() {
+        let mbytes = 0x3111u16.to_le_bytes();
+        let mut payload = vec![0x02, 0x20, 0x01, mbytes[0], mbytes[1], 0x00];
+        // Only 10 bytes of data (need 40)
+        payload.extend_from_slice(&short_value(5.0, 0x30));
+        payload.extend_from_slice(&short_value(10.0, 0x30));
+        assert!(parse_measurement(&payload).is_err());
+    }
+
+    #[test]
+    fn parse_peak_format() {
+        let mbytes = 0x3131u16.to_le_bytes(); // V DC Peak
+        let mut payload = vec![
+            0x02, // type
+            0x40, // misc: format_type=4 (peak)
+            0x01, // misc2: auto_range
+            mbytes[0], mbytes[1], 0x00, // range
+        ];
+        payload.extend_from_slice(&full_value(15.0, 0x30, b"VDC\0\0\0\0\0"));
+        payload.extend_from_slice(&full_value(-3.0, 0x30, b"VDC\0\0\0\0\0"));
+
+        let m = parse_measurement(&payload).unwrap();
+
+        assert_eq!(m.mode, "V DC Peak");
+        assert!(m.flags.peak_max);
+        assert!(m.flags.peak_min);
+        // Main value = peak max
+        if let MeasuredValue::Normal(v) = m.value {
+            assert!((v - 15.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal peak max value");
+        }
+        // 1 aux: Peak Min
+        assert_eq!(m.aux_values.len(), 1);
+        assert_eq!(m.aux_values[0].label, "Peak Min");
+        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
+            assert!((v + 3.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal peak min value");
+        }
+    }
+
+    #[test]
+    fn parse_peak_too_short() {
+        let mbytes = 0x3131u16.to_le_bytes();
+        let mut payload = vec![0x02, 0x40, 0x01, mbytes[0], mbytes[1], 0x00];
+        // Only one full value (need two)
+        payload.extend_from_slice(&full_value(15.0, 0x30, b"VDC\0\0\0\0\0"));
+        assert!(parse_measurement(&payload).is_err());
+    }
+
+    #[test]
+    fn parse_lead_error_flag() {
+        let payload = make_payload(0x3111, 1.0, 0x00, b"VDC\0\0\0\0\0", 0x00, 0x08);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.lead_error);
+    }
+
+    #[test]
+    fn parse_comp_flag() {
+        let payload = make_payload(0x3111, 1.0, 0x00, b"VDC\0\0\0\0\0", 0x00, 0x10);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.comp);
+    }
+
+    #[test]
+    fn parse_record_flag() {
+        let payload = make_payload(0x3111, 1.0, 0x00, b"VDC\0\0\0\0\0", 0x00, 0x20);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.record);
+    }
+
+    #[test]
+    fn parse_comp_extension() {
+        // Normal format with COMP active
+        let mbytes = 0x3111u16.to_le_bytes();
+        let mut payload = vec![
+            0x02, // type
+            0x00, // misc: normal format
+            0x11, // misc2: auto_range + COMP (bit 4)
+            mbytes[0], mbytes[1], 0x00, // range
+        ];
+        // Main value
+        payload.extend_from_slice(&full_value(5.0, 0x30, b"VDC\0\0\0\0\0"));
+        // COMP extension: INNER mode, PASS, precision 0x30, high=10.0, low=1.0
+        payload.push(0x00); // comp_mode = INNER
+        payload.push(0x00); // result = PASS
+        payload.push(0x30); // precision
+        payload.extend_from_slice(&10.0f32.to_le_bytes()); // high limit
+        payload.extend_from_slice(&1.0f32.to_le_bytes()); // low limit
+
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.comp);
+        // Should have COMP High and COMP Low aux values
+        assert_eq!(m.aux_values.len(), 2);
+        assert_eq!(m.aux_values[0].label, "COMP High");
+        assert_eq!(m.aux_values[1].label, "COMP Low");
+        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
+            assert!((v - 10.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal comp high");
+        }
+        if let MeasuredValue::Normal(v) = m.aux_values[1].value {
+            assert!((v - 1.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal comp low");
+        }
+    }
+
+    #[test]
+    fn parse_normal_with_aux1() {
+        let mbytes = 0x4211u16.to_le_bytes(); // Temp C T1(T2)
+        let mut payload = vec![
+            0x02, // type
+            0x02, // misc: bit 1 = has aux1
+            0x01, // misc2: auto_range
+            mbytes[0], mbytes[1], 0x00, // range
+        ];
+        // Main value: T1
+        payload.extend_from_slice(&full_value(23.5, 0x10, b"\xB0C\0\0\0\0\0\0"));
+        // Aux1: T2
+        payload.extend_from_slice(&full_value(21.0, 0x10, b"\xB0C\0\0\0\0\0\0"));
+
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.mode, "\u{00B0}C");
+        assert_eq!(m.aux_values.len(), 1);
+        assert_eq!(m.aux_values[0].label, "Aux1");
+        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
+            assert!((v - 21.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal aux1 value");
+        }
     }
 }
