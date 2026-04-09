@@ -383,6 +383,83 @@ impl Protocol for Ut181aProtocol {
     }
 }
 
+/// Look up range label from mode word and range byte.
+///
+/// Uses the table from protocol spec Section 7. The family nibble (N3) and
+/// sub-function nibble (N2) together determine which range table applies.
+/// Temperature and A current have fixed ranges (no label).
+fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
+    if range == 0 {
+        return "Auto";
+    }
+    let family = (mode_word >> 12) & 0xF;
+    let sub = (mode_word >> 8) & 0xF;
+
+    match (family, sub, range) {
+        // mV DC (0x4, sub 0x1) and mV AC (0x2, sub 0x1)
+        (0x2 | 0x4, 0x1, 1) => "60mV",
+        (0x2 | 0x4, 0x1, 2) => "600mV",
+
+        // V AC (0x1) and V DC (0x3)
+        (0x1 | 0x3, _, 1) => "6V",
+        (0x1 | 0x3, _, 2) => "60V",
+        (0x1 | 0x3, _, 3) => "600V",
+        (0x1 | 0x3, _, 4) => "1000V",
+
+        // µA DC (0x8, sub 0x1) and µA AC (0x8, sub 0x2)
+        (0x8, _, 1) => "600\u{00B5}A",
+        (0x8, _, 2) => "6000\u{00B5}A",
+
+        // mA DC (0x9, sub 0x1) and mA AC (0x9, sub 0x2)
+        (0x9, _, 1) => "60mA",
+        (0x9, _, 2) => "600mA",
+
+        // A DC/AC (0xA): fixed 10A range, no label needed
+        (0xA, _, _) => "",
+
+        // Resistance (0x5, sub 0x1)
+        (0x5, 0x1, 1) => "600\u{2126}",
+        (0x5, 0x1, 2) => "6k\u{2126}",
+        (0x5, 0x1, 3) => "60k\u{2126}",
+        (0x5, 0x1, 4) => "600k\u{2126}",
+        (0x5, 0x1, 5) => "6M\u{2126}",
+        (0x5, 0x1, 6) => "60M\u{2126}",
+
+        // Continuity (0x5, sub 0x2), Conductance (0x5, sub 0x3): fixed range
+        (0x5, _, _) => "",
+
+        // Diode (0x6, sub 0x1): fixed range
+        (0x6, 0x1, _) => "",
+
+        // Capacitance (0x6, sub 0x2)
+        (0x6, 0x2, 1) => "6nF",
+        (0x6, 0x2, 2) => "60nF",
+        (0x6, 0x2, 3) => "600nF",
+        (0x6, 0x2, 4) => "6\u{00B5}F",
+        (0x6, 0x2, 5) => "60\u{00B5}F",
+        (0x6, 0x2, 6) => "600\u{00B5}F",
+        (0x6, 0x2, 7) => "6mF",
+        (0x6, 0x2, 8) => "60mF",
+
+        // Frequency (0x7, sub 0x1)
+        (0x7, 0x1, 1) => "60Hz",
+        (0x7, 0x1, 2) => "600Hz",
+        (0x7, 0x1, 3) => "6kHz",
+        (0x7, 0x1, 4) => "60kHz",
+        (0x7, 0x1, 5) => "600kHz",
+        (0x7, 0x1, 6) => "6MHz",
+        (0x7, 0x1, 7) => "60MHz",
+
+        // Duty cycle (0x7, sub 0x2), Pulse width (0x7, sub 0x3): fixed range
+        (0x7, _, _) => "",
+
+        // Temperature (0x4, sub 0x2/0x3): fixed range
+        (0x4, _, _) => "",
+
+        _ => "",
+    }
+}
+
 /// Parse a UT181A measurement payload (type 0x02 packet).
 ///
 /// Common header (after type byte):
@@ -411,7 +488,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let misc = payload[1];
     let misc2 = payload[2];
     let mode_word = u16::from_le_bytes([payload[3], payload[4]]);
-    let _range = payload[5];
+    let range = payload[5];
 
     let format_type = (misc >> 4) & 0x07;
     let hold = misc & 0x80 != 0;
@@ -464,10 +541,10 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         timestamp: Instant::now(),
         mode,
         mode_raw: mode_word,
-        range_raw: 0,
+        range_raw: range,
         value,
         unit: Cow::Owned(unit),
-        range_label: Cow::Borrowed(""),
+        range_label: Cow::Borrowed(lookup_range_label(mode_word, range)),
         progress: None,
         display_raw,
         flags,
@@ -673,5 +750,76 @@ mod tests {
             written[0],
             vec![0xAB, 0xCD, 0x04, 0x00, 0x05, 0x01, 0x0A, 0x00]
         );
+    }
+
+    #[test]
+    fn range_label_auto() {
+        assert_eq!(lookup_range_label(0x3111, 0x00), "Auto");
+        assert_eq!(lookup_range_label(0x5111, 0x00), "Auto");
+    }
+
+    #[test]
+    fn range_label_voltage() {
+        assert_eq!(lookup_range_label(0x3111, 1), "6V");
+        assert_eq!(lookup_range_label(0x3111, 2), "60V");
+        assert_eq!(lookup_range_label(0x3111, 3), "600V");
+        assert_eq!(lookup_range_label(0x3111, 4), "1000V");
+        // V AC uses same ranges
+        assert_eq!(lookup_range_label(0x1111, 2), "60V");
+    }
+
+    #[test]
+    fn range_label_millivolt() {
+        assert_eq!(lookup_range_label(0x4111, 1), "60mV");
+        assert_eq!(lookup_range_label(0x4111, 2), "600mV");
+        assert_eq!(lookup_range_label(0x2111, 1), "60mV");
+    }
+
+    #[test]
+    fn range_label_resistance() {
+        assert_eq!(lookup_range_label(0x5111, 1), "600\u{2126}");
+        assert_eq!(lookup_range_label(0x5111, 3), "60k\u{2126}");
+        assert_eq!(lookup_range_label(0x5111, 6), "60M\u{2126}");
+    }
+
+    #[test]
+    fn range_label_capacitance() {
+        assert_eq!(lookup_range_label(0x6211, 1), "6nF");
+        assert_eq!(lookup_range_label(0x6211, 4), "6\u{00B5}F");
+        assert_eq!(lookup_range_label(0x6211, 8), "60mF");
+    }
+
+    #[test]
+    fn range_label_frequency() {
+        assert_eq!(lookup_range_label(0x7111, 1), "60Hz");
+        assert_eq!(lookup_range_label(0x7111, 5), "600kHz");
+        assert_eq!(lookup_range_label(0x7111, 7), "60MHz");
+    }
+
+    #[test]
+    fn range_label_current() {
+        assert_eq!(lookup_range_label(0x8111, 1), "600\u{00B5}A");
+        assert_eq!(lookup_range_label(0x9111, 2), "600mA");
+        // A current: fixed range
+        assert_eq!(lookup_range_label(0xA111, 1), "");
+    }
+
+    #[test]
+    fn range_label_fixed_range_modes() {
+        // Temperature, continuity, conductance, diode: no range label
+        assert_eq!(lookup_range_label(0x4211, 1), ""); // Temp C
+        assert_eq!(lookup_range_label(0x5211, 1), ""); // Continuity
+        assert_eq!(lookup_range_label(0x5311, 1), ""); // Conductance
+        assert_eq!(lookup_range_label(0x6111, 1), ""); // Diode
+        assert_eq!(lookup_range_label(0x7211, 1), ""); // Duty cycle
+    }
+
+    #[test]
+    fn range_raw_populated() {
+        let payload = make_payload(0x3111, 12.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
+        let m = parse_measurement(&payload).unwrap();
+        // range byte is at payload[5] which make_payload sets to 0x00
+        assert_eq!(m.range_raw, 0x00);
+        assert_eq!(m.range_label, "Auto");
     }
 }
