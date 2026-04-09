@@ -842,4 +842,34 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn ut8802_false_header_in_garbage() {
+        // Garbage contains a false 0xAC byte followed by an invalid position code,
+        // then the real frame. The extractor should error on the false header;
+        // read_frame's skip-and-retry should advance past it to the real frame.
+        let false_frame = vec![0xAC, 0x00, 0x12, 0x34, 0x50, 0x01, 0x00, 0x00]; // pos 0x00 = invalid
+        let real_frame = make_ut8802_frame(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+
+        // First: the extractor should error on the false frame
+        assert!(extract_frame_ut8802(&false_frame).is_err());
+
+        // Second: in a combined buffer, after the false frame the real one is found
+        let mut combined = false_frame.clone();
+        combined.extend_from_slice(&real_frame);
+        let mock = MockTransport::new(vec![combined]);
+        let mut rx_buf = Vec::new();
+
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_ut8802,
+            |_| true,
+            FrameErrorRecovery::SkipAndRetry,
+            "test",
+            &UT8802_HEADER,
+        )
+        .unwrap();
+        assert_eq!(result[0], 0x05); // position code of the real frame
+    }
 }

@@ -65,7 +65,7 @@ streaming protocols. Use `--device ut8802` or `--device ut8803`.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** | 0xAC header, 8-byte BCD frames, no checksum, streaming after 0x5A trigger |
+| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/12)) | 0xAC header, 8-byte BCD frames, no checksum, streaming after 0x5A trigger |
 | **UT8803 / UT8803E** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/3)) | 21-byte AB CD frames, streaming after 0x5A trigger |
 
 ## Future candidates (UCI protocol family)
