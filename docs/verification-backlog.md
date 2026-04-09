@@ -117,11 +117,24 @@ real hardware**. Every aspect needs end-to-end verification.
   Precision byte decimal places (bits 4-7) confirmed to produce sane
   display formatting.
 - Mode word decoding (97 nibble-encoded uint16 modes) — only 0x3111
-  (V DC) verified so far
+  (V DC) verified so far. Need at least one mode per family to confirm
+  the nibble decoder works broadly.
 - Device-sent unit string parsing — only "VDC" verified so far
-- Misc byte format variants (normal, relative, min/max, peak)
-- Misc2 flags (auto-range, HV warning, lead error, COMP, record)
-- Measurement packet variants beyond normal format
+- Relative format (0x10) parsing — implemented, needs hardware verification
+  (delta/reference/absolute values parsed into main + aux_values)
+- Min/Max format (0x20) parsing — implemented, needs hardware verification
+  (current/max/avg/min with timestamps parsed into main + aux_values)
+- Peak format (0x40) parsing — implemented, needs hardware verification
+  (peak max/min parsed into main + aux_values)
+- COMP mode extension parsing — implemented, needs hardware verification
+  (comp mode/result/limits parsed into aux_values)
+- Range label lookup table — implemented, needs verification that range
+  byte values match expected labels in manual range mode
+- Misc2 flags: lead_error (bit 3), comp (bit 4), record (bit 5) — now
+  parsed but not yet verified on real hardware
+- **Not implemented**: recording protocol (0x0A-0x0F), saved measurement
+  retrieval (0x07-0x09), SET_MODE/SET_REFERENCE commands, timestamp
+  decoding, response types 0x03/0x04/0x05/0x72
 
 ### CP2110 feature reports (AN434)
 - (none pending)

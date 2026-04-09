@@ -13,6 +13,19 @@
 //! Based on 3 independent community implementations:
 //! antage/ut181a (Rust), loblab/ut181a (C++), sigrok uni-t-ut181a (C).
 //! See docs/research/ut181/reverse-engineered-protocol.md
+//!
+//! ## Not Implemented
+//!
+//! - Recording protocol (commands 0x0A-0x0F): start/stop/retrieve/delete recordings
+//! - Saved measurement retrieval (commands 0x07-0x09): get/delete saved readings
+//! - SET_MODE command (0x01): changing measurement mode remotely
+//! - SET_REFERENCE command (0x03): setting relative reference value
+//! - Saved measurement packet parsing (response type 0x03)
+//! - Recording info/data packet parsing (response types 0x04, 0x05)
+//! - Reply data parsing (response type 0x72)
+//! - Timestamp decoding (packed 32-bit format, protocol spec Section 9)
+//! - Bargraph value extraction (detected but not exposed)
+//! - Aux1/Aux2 display in normal format (parsed but not yet rendered in GUI)
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
@@ -377,6 +390,40 @@ impl Protocol for Ut181aProtocol {
                 id: "auto",
                 instruction: "We will set auto-range.",
                 command: Some("auto"),
+                samples: 3,
+            },
+            // Format variant verification steps
+            CaptureStep {
+                id: "rel",
+                instruction: "V DC mode: long-press REL to enable relative. \
+                              Verify aux_values show Reference and Absolute.",
+                command: None,
+                samples: 5,
+            },
+            CaptureStep {
+                id: "rel_off",
+                instruction: "Long-press REL again to disable relative mode.",
+                command: None,
+                samples: 3,
+            },
+            CaptureStep {
+                id: "peak",
+                instruction: "V AC mode: enable Peak mode (FUNC button). \
+                              Verify aux_values show Peak Min.",
+                command: None,
+                samples: 5,
+            },
+            CaptureStep {
+                id: "peak_off",
+                instruction: "Disable Peak mode.",
+                command: None,
+                samples: 3,
+            },
+            CaptureStep {
+                id: "manual_range",
+                instruction: "V DC mode: press RANGE to switch to manual range. \
+                              Verify range_label shows the selected range (e.g. 60V).",
+                command: None,
                 samples: 3,
             },
         ]
