@@ -102,9 +102,27 @@ Scan incoming HID data for header bytes:
   - Otherwise: unknown (-1)
 ```
 
-This means QinHeng models (UT632, UT803, UT804) could use either
-wire format. The auto-detect handles both transparently.
-[UNVERIFIED: which format each QinHeng model actually uses]
+This auto-detect logic applies to the UCI SDK (uci.dll) only. **The
+actual UT803 and UT804 meters do NOT use 0xAC or 0xABCD format.**
+
+Ghidra decompilation of the standalone UT803.exe and UT804.exe PC
+software (2026-04-10) revealed that both meters use a **14-byte LCD
+segment protocol** (FS9721/FS9922 family). The evidence:
+
+1. Two `CMP EBX, 14` loops in the HID data receive callback
+   (UT803: VA 0x55D0C1/0x55D0F0; UT804: VA 0x560BC1/0x560BF0)
+   — frame assembly counts exactly 14 bytes.
+2. Validation string `"123456789ABCDE"` (UT803: VA 0x55F091;
+   UT804: VA 0x560CC0) — the 14 valid FS9721 byte index nibbles
+   (high nibble 0x1–0xE).
+3. 7-segment lookup table in the display handler that decodes 56
+   LCD segment bits (14 nibbles × 4 bits) into digit values.
+4. The UT803 manual documents RS-232 at 19200/7/Odd — the standard
+   FS9721 serial format.
+
+The UCI SDK's 0xAC/0xABCD auto-detect for QinHeng VID:PID may be
+aspirational, for a different firmware version, or may require a
+mode switch that the standalone apps do not perform. [KNOWN]
 
 ---
 
@@ -639,8 +657,9 @@ An implementation could:
 | QinHeng: VID 0x1A86, PID 0xE008 | [KNOWN] | Programming manual |
 | CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [KNOWN] | sigrok CH9325 wiki |
 | CH9325 feature report baud encoding: uint16 LE | [KNOWN] | sigrok + Lukas Schwarz UT61B + HE2325U driver |
-| QinHeng wire format: auto-detected, not model-specific | [KNOWN] | Ghidra: no per-model dispatch, FUN_1001eb30 scans headers |
-| Frame auto-detect: 0xAC vs 0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
+| QinHeng wire format in UCI SDK: auto-detected 0xAC/0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
+| UT803/UT804 actual wire format: FS9721 14-byte LCD segments | [KNOWN] | Ghidra decompilation of UT803.exe/UT804.exe (2026-04-10) |
+| UT803/UT804 init: 2400 baud via CH9325 feature report | [KNOWN] | Ghidra UT804.exe FUN_00560668 |
 | UT804 range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A: serial port, 9600 baud | [KNOWN] | Programming manual |
@@ -655,10 +674,11 @@ An implementation could:
 | Finding | Question |
 |---------|----------|
 | ~~QinHeng feature report baud rate encoding~~ | **RESOLVED**: primary=2400 baud (0x0960 LE), fallback=19200 baud (0x4B00 LE) |
-| ~~Which wire format per QinHeng model~~ | **RESOLVED**: auto-detected at runtime, not model-specific. DLL scans for 0xAC or 0xABCD headers. |
-| UT805A serial frame format | Same binary frames or different protocol? |
-| UT805A 7-bit vs 8-bit data | Manual says 7, DLL defaults to 8 |
+| ~~Which wire format per QinHeng model~~ | **RESOLVED**: UT803/UT804 use FS9721 14-byte LCD segment protocol (NOT 0xAC/0xABCD). Confirmed by Ghidra decompilation of standalone apps (2026-04-10). UCI SDK's auto-detect is for the SDK only. |
+| UT805A serial frame format | UT805A manual documents ASCII text protocol (10-byte frames + CR/LF, single-letter commands). NOT the same as HID models. |
+| ~~UT805A 7-bit vs 8-bit data~~ | **RESOLVED**: UT805A manual says 9600/8N1. USB is virtual COM port (not HID). |
 | UT8802 byte 6 purpose | Bargraph? Secondary status? |
 | UT8802 byte 7 exact bit assignments | HOLD/REL/MAX/MIN positions within bits 0-6 |
 | UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
-| UT632/UT803 range tables | Need per-model user manuals |
+| UT803/UT804 FS9721 segment-to-mode mapping | Decompiled 7-segment table and flag bit positions need verification against real hardware |
+| UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |

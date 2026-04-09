@@ -66,6 +66,20 @@ real hardware**. Every aspect needs end-to-end verification.
 - PC button activation requirement
 - VC650BT compatibility (same protocol confirmed by installer comparison)
 
+**UT803 / UT804 (QinHeng CH9325, FS9721 protocol)** — NOT YET IMPLEMENTED:
+- These meters use the FS9721/FS9922 14-byte LCD segment protocol, NOT
+  the 0xAC or 0xABCD UCI format (confirmed by Ghidra decompilation of
+  standalone UT803.exe/UT804.exe, 2026-04-10).
+- Transport: QinHeng CH9325 HID at 2400 baud — already implemented.
+- Protocol: Needs new FS9721 protocol family implementation. The FS9721
+  format is well-documented (Fortune Semiconductor datasheets, sigrok wiki).
+- Decompiled data from UT803/UT804 apps provides: 7-segment decode table,
+  mode/function code mapping (15 modes for UT804), flag bit positions,
+  decimal point bit positions. See `references/ut800/` for decompiled output.
+- UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
+  documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
+  transport — separate scope from HID-based meters.
+
 **UT8802 / UT8802N**:
 - Frame extraction (8-byte, 0xAC header, no checksum)
 - 0x5A streaming trigger byte

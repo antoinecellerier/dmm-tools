@@ -5,6 +5,7 @@ pub mod flags;
 pub mod measurement;
 pub mod mock;
 pub mod protocol;
+pub mod qinheng;
 pub mod stats;
 pub mod transport;
 
@@ -170,6 +171,20 @@ pub fn open_device_by_id_auto(id: &str) -> Result<Dmm<Box<dyn Transport>>> {
         return Dmm::new(transport, protocol);
     }
 
+    // Try QinHeng CH9325 (bench meters: UT632, UT803, UT804)
+    if let Ok(device) = api.open(qinheng::VID, qinheng::PID) {
+        info!(
+            "found QinHeng adapter (VID={:#06x} PID={:#06x})",
+            qinheng::VID,
+            qinheng::PID
+        );
+        let qh = qinheng::QinHeng::new(device);
+        qh.init()?;
+        let transport: Box<dyn Transport> = Box::new(qh);
+        let protocol = (entry.new_protocol)();
+        return Dmm::new(transport, protocol);
+    }
+
     Err(Error::NoTransportFound)
 }
 
@@ -183,6 +198,8 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
             "CP2110"
         } else if dev.vendor_id() == ch9329::VID && dev.product_id() == ch9329::PID {
             "CH9329"
+        } else if dev.vendor_id() == qinheng::VID && dev.product_id() == qinheng::PID {
+            "QinHeng"
         } else {
             continue;
         };
@@ -204,7 +221,7 @@ pub struct DeviceInfo {
     pub path: String,
     pub product: Option<String>,
     pub serial: Option<String>,
-    /// Transport type: "CP2110" or "CH9329".
+    /// Transport type: "CP2110", "CH9329", or "QinHeng".
     pub transport: &'static str,
 }
 
