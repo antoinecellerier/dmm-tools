@@ -38,6 +38,21 @@ These protocols are implemented based on reverse engineering (vendor software
 decompilation, community implementations) but have **never been tested against
 real hardware**. Every aspect needs end-to-end verification.
 
+**UT8802 / UT8802N**:
+- Frame extraction (8-byte, 0xAC header, no checksum)
+- 0x5A streaming trigger byte
+- Position code mapping (35 codes, 0x01-0x2D with gaps)
+- BCD display encoding (5 nibbles from bytes 2-4)
+- Decimal point position (byte 5 low nibble, 0-4)
+- AC/DC coupling flags (byte 5 bits 4-5)
+- Sign/polarity (byte 7 bit 7)
+- AUTO flag inverted logic (byte 7 bit 2 clear = auto ON)
+- Byte 7 flag bits: exact HOLD/REL/MAX/MIN positions [UNVERIFIED] —
+  current assignments (bits 6/5/4/3) are best-guess from Ghidra
+- Byte 6 purpose: bargraph or secondary status? [UNVERIFIED]
+- Overload detection (BCD nibble 0x0C)
+- Streaming rate
+
 **UT8803 / UT8803E** ([issue #3](https://github.com/antoinecellerier/dmm-tools/issues/3)):
 - Frame extraction (21-byte, AB CD header, BE checksum)
 - 0x5A streaming trigger byte

@@ -23,8 +23,9 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
-| `protocol/framing.rs` | Message framing: find `AB CD` header, extract payload, validate checksum |
+| `protocol/framing.rs` | Message framing: find `AB CD` or `0xAC` header, extract payload, validate checksum (or position code + BCD for UT8802) |
 | `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `DeviceTable` impls with range info and spec data) |
+| `protocol/ut8802/` | UT8802 family: `Ut8802Protocol` — streaming protocol with 0x5A trigger, 0xAC 8-byte BCD frames |
 | `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming protocol with 0x5A trigger |
 | `protocol/ut171/` | UT171 family: `Ut171Protocol` — streaming protocol, float32 LE values |
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
@@ -43,7 +44,8 @@ CLI/GUI ──► registry::resolve_device()
 USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
                                            │
                                            ├── Ut61PlusProtocol  (polled, AB CD framing, per-model DeviceTable)
-                                           ├── Ut8803Protocol    (streaming, 0x5A trigger)
+                                           ├── Ut8802Protocol    (streaming, 0xAC 8-byte BCD, no checksum)
+                                           ├── Ut8803Protocol    (streaming, AB CD 21-byte, BE checksum)
                                            ├── Ut171Protocol     (streaming, float32 LE)
                                            └── Ut181aProtocol    (streaming, device-sent units)
 ```

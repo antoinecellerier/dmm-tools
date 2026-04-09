@@ -187,6 +187,7 @@ impl Protocol for Ut181aProtocol {
             |p| !p.is_empty() && p[0] == 0x02,
             FrameErrorRecovery::SkipAndRetry,
             "ut181a",
+            &framing::HEADER,
         )?;
         parse_measurement(&payload)
     }

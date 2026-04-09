@@ -43,6 +43,7 @@ mode/range mappings than UT61E+).
 | `ut161b` | | UT161B (experimental, same protocol as UT61B+) |
 | `ut161d` | | UT161D (experimental, same protocol as UT61D+) |
 | `ut161e` | `ut161` | UT161E (same protocol as UT61E+) |
+| `ut8802` | `ut8802n` | UT8802 / UT8802N bench multimeter (experimental) |
 | `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (experimental) |

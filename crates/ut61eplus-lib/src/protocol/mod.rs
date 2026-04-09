@@ -3,6 +3,7 @@ pub mod registry;
 pub mod ut171;
 pub mod ut181a;
 pub mod ut61eplus;
+pub mod ut8802;
 pub mod ut8803;
 
 use crate::error::Result;
@@ -31,6 +32,8 @@ pub struct DeviceProfile {
 pub enum DeviceFamily {
     /// UT61E+, UT61B+, UT61D+, UT161B, UT161D, UT161E
     Ut61EPlus,
+    /// UT8802 / UT8802N bench multimeter
+    Ut8802,
     /// UT8803 / UT8803E bench multimeter
     Ut8803,
     /// UT171A / UT171B / UT171C
@@ -45,6 +48,7 @@ impl std::fmt::Display for DeviceFamily {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DeviceFamily::Ut61EPlus => write!(f, "ut61eplus"),
+            DeviceFamily::Ut8802 => write!(f, "ut8802"),
             DeviceFamily::Ut8803 => write!(f, "ut8803"),
             DeviceFamily::Ut171 => write!(f, "ut171"),
             DeviceFamily::Ut181a => write!(f, "ut181a"),

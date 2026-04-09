@@ -58,20 +58,20 @@ different display value handling. Requires UT61D+ device testing.
 
 If you have any of the untested models, please [submit a capture](../CONTRIBUTING.md#protocol-captures) so we can confirm support and add the correct device tables. See [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7) for UT61D+/UT61B+ specific modes that need verification.
 
-## Experimental: UT8803 (UCI protocol family)
+## Experimental: UT8802 and UT8803 (UCI protocol family)
 
-These bench DMMs use the same CP2110 USB bridge but a different
-streaming protocol. Use `--device ut8803`.
+These bench DMMs use the same CP2110 USB bridge but different
+streaming protocols. Use `--device ut8802` or `--device ut8803`.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
+| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** | 0xAC header, 8-byte BCD frames, no checksum, streaming after 0x5A trigger |
 | **UT8803 / UT8803E** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/3)) | 21-byte AB CD frames, streaming after 0x5A trigger |
 
 ## Future candidates (UCI protocol family)
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | RE complete | 0xAC header, 8-byte BCD frames, no checksum |
 | **UT632 / UT632N** | UNI-T | Bench DMM | `1A86:E008` | Documented | QinHeng HID¹ with auto-detect (0xAC or 0xABCD) |
 | **UT803 / UT803N** | UNI-T | Bench DMM | `1A86:E008` | Documented | QinHeng HID¹ with auto-detect (0xAC or 0xABCD) |
 | **UT804 / UT804N** | UNI-T | Bench DMM | `1A86:E008` | Documented | QinHeng HID¹ with auto-detect, range table in programming manual |

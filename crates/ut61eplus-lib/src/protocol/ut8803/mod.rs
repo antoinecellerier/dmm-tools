@@ -94,6 +94,7 @@ impl Protocol for Ut8803Protocol {
             |_| true,
             FrameErrorRecovery::SkipAndRetry,
             "ut8803",
+            &framing::HEADER,
         )?;
         parse_measurement(&payload)
     }

@@ -117,6 +117,7 @@ impl Protocol for Ut171Protocol {
             |p| p.len() >= 2 && p[1] == 0x02,
             FrameErrorRecovery::SkipAndRetry,
             "ut171",
+            &framing::HEADER,
         )?;
         parse_measurement(&payload)
     }

@@ -1,6 +1,7 @@
 use super::ut61eplus::Ut61PlusProtocol;
 use super::ut171::Ut171Protocol;
 use super::ut181a::Ut181aProtocol;
+use super::ut8802::Ut8802Protocol;
 use super::ut8803::Ut8803Protocol;
 use super::{DeviceFamily, Protocol};
 use crate::mock::MockProtocol;
@@ -125,6 +126,16 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     // Other families
+    SelectableDevice {
+        id: "ut8802",
+        display_name: "UT8802",
+        aliases: &["ut8802n"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT8803, // same setup as UT8803
+        family: DeviceFamily::Ut8802,
+        new_protocol: factory::<Ut8802Protocol>,
+        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8802"),
+    },
     SelectableDevice {
         id: "ut8803",
         display_name: "UT8803",

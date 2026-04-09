@@ -22,8 +22,11 @@ pub(crate) enum FrameErrorRecovery {
 ///   to filter non-measurement frames).
 /// - `recovery`: whether to skip-and-retry on frame errors or propagate them.
 /// - `label`: protocol label for log messages (e.g. `"ut8803"`).
+/// - `skip_header`: byte pattern to scan for when skipping past a bad frame
+///   during error recovery. Typically `&HEADER` (`[0xAB, 0xCD]`) for ABCD
+///   protocols, or `&UT8802_HEADER` (`[0xAC]`) for the UT8802.
 ///
-/// Constants match the values used by all four protocol implementations:
+/// Constants match the values used by all protocol implementations:
 /// `READ_TIMEOUT_MS = 2000`, `MAX_ATTEMPTS = 64`.
 pub(crate) fn read_frame<F, A>(
     rx_buf: &mut Vec<u8>,
@@ -32,6 +35,7 @@ pub(crate) fn read_frame<F, A>(
     accept_fn: A,
     recovery: FrameErrorRecovery,
     label: &str,
+    skip_header: &[u8],
 ) -> Result<Vec<u8>>
 where
     F: Fn(&[u8]) -> Result<Option<(Vec<u8>, usize)>>,
@@ -65,8 +69,11 @@ where
                 FrameErrorRecovery::Propagate => return Err(e),
                 FrameErrorRecovery::SkipAndRetry => {
                     warn!("{label}: frame error: {e}, skipping");
-                    if let Some(pos) = rx_buf.windows(2).position(|w| w == HEADER) {
-                        rx_buf.drain(..pos + 2);
+                    if let Some(pos) = rx_buf
+                        .windows(skip_header.len())
+                        .position(|w| w == skip_header)
+                    {
+                        rx_buf.drain(..pos + skip_header.len());
                     } else {
                         rx_buf.clear();
                     }
@@ -195,6 +202,110 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let consumed = start + FRAME_LEN;
 
     debug!("framing: ut8803 valid frame, consumed={consumed}");
+    Ok(Some((payload, consumed)))
+}
+
+/// Header byte for UT8802 frames.
+pub const UT8802_HEADER: [u8; 1] = [0xAC];
+
+/// Fixed frame length for UT8802: header(1) + position(1) + digits(3) + dp_flags(1) + status(1) + sign(1) = 8.
+const UT8802_FRAME_LEN: usize = 8;
+
+/// Valid BCD nibble values: 0x0-0x9 (digits), 0x0A (treated as zero), 0x0C (overload 'L').
+fn is_valid_bcd_nibble(nibble: u8) -> bool {
+    nibble <= 0x0A || nibble == 0x0C
+}
+
+/// Valid position codes for the UT8802 (from programming manual page 10 + Ghidra FUN_1001c7b0).
+/// Gaps: 0x00, 0x02, 0x07, 0x08, 0x0F, 0x15, 0x17, 0x1E, 0x20, 0x21, 0x26, and anything > 0x2D.
+fn is_valid_ut8802_position(pos: u8) -> bool {
+    matches!(
+        pos,
+        0x01 | 0x03..=0x06
+            | 0x09..=0x0E
+            | 0x10..=0x14
+            | 0x16
+            | 0x18..=0x1D
+            | 0x1F
+            | 0x22..=0x25
+            | 0x27..=0x2D
+    )
+}
+
+/// Extract a frame using UT8802 format: `0xAC` header, fixed 8-byte frame, no checksum.
+///
+/// The UT8802 wire protocol has no checksum field (all 8 bytes are data).
+/// To compensate, we validate the position code and BCD nibbles — this is
+/// stricter than the vendor parser, which only checks the header byte.
+///
+/// Returns `Ok(Some((payload, consumed)))` where payload is bytes 1..8 (7 bytes),
+/// `Ok(None)` if incomplete, `Err` on validation failure (invalid position code
+/// or BCD nibble).
+///
+/// See docs/research/uci-bench-family/reverse-engineered-protocol.md section 3.
+pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
+    let Some(start) = buf.iter().position(|&b| b == UT8802_HEADER[0]) else {
+        return Ok(None);
+    };
+
+    let remaining = &buf[start..];
+    if remaining.len() < UT8802_FRAME_LEN {
+        return Ok(None);
+    }
+
+    let frame = &remaining[..UT8802_FRAME_LEN];
+    trace!("framing: ut8802 raw frame: {:02X?}", frame);
+
+    // Validate position code (byte 1)
+    let position = frame[1];
+    if !is_valid_ut8802_position(position) {
+        debug!(
+            "framing: ut8802 invalid position code {:#04x}, frame={frame:02X?}",
+            position
+        );
+        return Err(Error::invalid_response(
+            format!("ut8802 invalid position code {position:#04x}"),
+            frame,
+        ));
+    }
+
+    // Validate BCD nibbles (5 digits from bytes 2-4)
+    let nibbles = [
+        frame[2] >> 4,   // digit 1
+        frame[2] & 0x0F, // digit 2
+        frame[3] >> 4,   // digit 3
+        frame[3] & 0x0F, // digit 4
+        frame[4] & 0x0F, // digit 5
+    ];
+    for (i, &nibble) in nibbles.iter().enumerate() {
+        if !is_valid_bcd_nibble(nibble) {
+            debug!(
+                "framing: ut8802 invalid BCD nibble {:#04x} at digit {}, frame={frame:02X?}",
+                nibble,
+                i + 1
+            );
+            return Err(Error::invalid_response(
+                format!("ut8802 invalid BCD nibble {nibble:#04x} at digit {}", i + 1),
+                frame,
+            ));
+        }
+    }
+
+    // Validate decimal point position (byte 5 low nibble, must be 0-4)
+    let dp_pos = frame[5] & 0x0F;
+    if dp_pos > 4 {
+        debug!("framing: ut8802 invalid decimal point position {dp_pos}, frame={frame:02X?}");
+        return Err(Error::invalid_response(
+            format!("ut8802 invalid decimal point position {dp_pos}"),
+            frame,
+        ));
+    }
+
+    // Payload = bytes 1..8 (everything after the header)
+    let payload = frame[1..UT8802_FRAME_LEN].to_vec();
+    let consumed = start + UT8802_FRAME_LEN;
+
+    debug!("framing: ut8802 valid frame, position={position:#04x}, consumed={consumed}");
     Ok(Some((payload, consumed)))
 }
 
@@ -457,6 +568,7 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
+            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -480,6 +592,7 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
+            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
@@ -497,6 +610,7 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
+            &HEADER,
         );
         assert!(matches!(result, Err(Error::Timeout)));
     }
@@ -517,6 +631,7 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
+            &HEADER,
         );
         assert!(matches!(result, Err(Error::ChecksumMismatch { .. })));
     }
@@ -544,6 +659,7 @@ mod tests {
             |_| true,
             FrameErrorRecovery::SkipAndRetry,
             "test",
+            &HEADER,
         )
         .unwrap();
         assert_eq!(result, good_payload);
@@ -569,6 +685,7 @@ mod tests {
             |p| !p.is_empty() && p[0] == 0x02,
             FrameErrorRecovery::Propagate,
             "test",
+            &HEADER,
         )
         .unwrap();
         assert_eq!(result, accepted_payload);
@@ -589,9 +706,140 @@ mod tests {
             |_| true,
             FrameErrorRecovery::Propagate,
             "test",
+            &HEADER,
         )
         .unwrap();
         assert_eq!(result, payload);
         assert!(rx_buf.is_empty());
+    }
+
+    // --- UT8802 frame extractor tests ---
+
+    /// Build a valid UT8802 frame from components.
+    /// Frame: [0xAC, position, d1d2, d3d4, d5xx, dp_flags, status, sign]
+    fn make_ut8802_frame(
+        position: u8,
+        digits: [u8; 5],
+        dp_pos: u8,
+        acdc_bits: u8,
+        status: u8,
+        sign_flags: u8,
+    ) -> Vec<u8> {
+        vec![
+            0xAC,
+            position,
+            (digits[0] << 4) | digits[1],
+            (digits[2] << 4) | digits[3],
+            digits[4], // high nibble unused
+            (acdc_bits << 4) | dp_pos,
+            status,
+            sign_flags,
+        ]
+    }
+
+    #[test]
+    fn ut8802_valid_frame() {
+        // DC V 200V range, display "12345", decimal pos 1
+        let frame = make_ut8802_frame(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let (payload, consumed) = extract_frame_ut8802(&frame).unwrap().unwrap();
+        assert_eq!(consumed, 8);
+        assert_eq!(payload.len(), 7); // bytes 1..8
+        assert_eq!(payload[0], 0x05); // position code
+    }
+
+    #[test]
+    fn ut8802_leading_garbage() {
+        let mut buf = vec![0xFF, 0xFE, 0xFD];
+        buf.extend_from_slice(&make_ut8802_frame(
+            0x01,
+            [0, 0, 2, 0, 0],
+            3,
+            0x02,
+            0x00,
+            0x00,
+        ));
+        let (payload, consumed) = extract_frame_ut8802(&buf).unwrap().unwrap();
+        assert_eq!(consumed, 3 + 8); // 3 garbage bytes + 8 frame bytes
+        assert_eq!(payload[0], 0x01);
+    }
+
+    #[test]
+    fn ut8802_incomplete() {
+        // Only 5 bytes after header — need 8 total
+        let buf = vec![0xAC, 0x01, 0x12, 0x34, 0x05];
+        assert!(extract_frame_ut8802(&buf).unwrap().is_none());
+    }
+
+    #[test]
+    fn ut8802_no_header() {
+        let buf = vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07];
+        assert!(extract_frame_ut8802(&buf).unwrap().is_none());
+    }
+
+    #[test]
+    fn ut8802_invalid_position_code() {
+        // 0x02 is a gap in the position code space
+        let frame = make_ut8802_frame(0x02, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+        assert!(extract_frame_ut8802(&frame).is_err());
+    }
+
+    #[test]
+    fn ut8802_invalid_bcd_nibble() {
+        // 0x0F is not a valid BCD nibble
+        let frame = make_ut8802_frame(0x01, [0x0F, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+        assert!(extract_frame_ut8802(&frame).is_err());
+    }
+
+    #[test]
+    fn ut8802_invalid_decimal_position() {
+        // Decimal position 5 is out of range (max 4)
+        let frame = make_ut8802_frame(0x01, [1, 2, 3, 4, 5], 5, 0x00, 0x00, 0x00);
+        assert!(extract_frame_ut8802(&frame).is_err());
+    }
+
+    #[test]
+    fn ut8802_overload_nibble_accepted() {
+        // 0x0C is a valid BCD nibble (overload indicator 'L')
+        let frame = make_ut8802_frame(0x01, [0, 0, 0, 0x0C, 0], 0, 0x00, 0x00, 0x00);
+        let result = extract_frame_ut8802(&frame).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn ut8802_nibble_0a_accepted() {
+        // 0x0A is treated as '0' — should be accepted
+        let frame = make_ut8802_frame(0x01, [0x0A, 0, 0, 0, 0], 0, 0x00, 0x00, 0x00);
+        let result = extract_frame_ut8802(&frame).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn ut8802_all_valid_positions() {
+        let valid_positions: &[u8] = &[
+            0x01, 0x03, 0x04, 0x05, 0x06, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x10, 0x11, 0x12,
+            0x13, 0x14, 0x16, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1F, 0x22, 0x23, 0x24, 0x25,
+            0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D,
+        ];
+        for &pos in valid_positions {
+            let frame = make_ut8802_frame(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+            assert!(
+                extract_frame_ut8802(&frame).unwrap().is_some(),
+                "position {pos:#04x} should be valid"
+            );
+        }
+    }
+
+    #[test]
+    fn ut8802_invalid_positions() {
+        let invalid_positions: &[u8] = &[
+            0x00, 0x02, 0x07, 0x08, 0x0F, 0x15, 0x17, 0x1E, 0x20, 0x21, 0x26, 0x2E, 0xFF,
+        ];
+        for &pos in invalid_positions {
+            let frame = make_ut8802_frame(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+            assert!(
+                extract_frame_ut8802(&frame).is_err(),
+                "position {pos:#04x} should be invalid"
+            );
+        }
     }
 }
