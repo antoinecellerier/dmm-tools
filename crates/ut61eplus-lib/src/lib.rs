@@ -99,6 +99,7 @@ pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
         DeviceFamily::Ut8803 => Box::new(protocol::ut8803::Ut8803Protocol::new()),
         DeviceFamily::Ut171 => Box::new(protocol::ut171::Ut171Protocol::new()),
         DeviceFamily::Ut181a => Box::new(protocol::ut181a::Ut181aProtocol::new()),
+        DeviceFamily::Vc880 => Box::new(protocol::vc880::Vc880Protocol::new()),
         DeviceFamily::Mock => unreachable!("handled above"),
     };
 

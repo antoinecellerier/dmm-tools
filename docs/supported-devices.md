@@ -140,6 +140,35 @@ ON" in the meter's SETUP menu.
 | **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/4)) | 1-byte length, LE float32, 26 modes |
 | **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/5)) | 2-byte LE length, float32 + unit strings, 97 modes |
 
+## Experimental: Voltcraft VC-880 / VC650BT
+
+Use `--device vc880` or `--device vc650bt`. Requires pressing the PC
+button on the meter to enable USB communication.
+
+| Model | Brand | Type | VID:PID | Status | Notes |
+|-------|-------|------|---------|--------|-------|
+| **VC-880** | Voltcraft | Handheld DMM (40000 counts) | `10C4:EA80` | **Experimental** | AB CD framing (same as UT61E+), streaming, 19 modes, 7 status bytes |
+| **VC650BT** | Voltcraft | Bench DMM (40000 counts) | `10C4:EA80` | **Experimental** | Same protocol as VC-880 (byte-identical Voltsoft installer) |
+
+### Independent research findings
+
+Clean-room reverse engineering from Voltsoft `DMSShare.dll` (ILSpy
+decompilation of .NET assembly, 26,600 lines). The VC-880 and VC650BT
+installers are byte-identical (MD5: `4b955a1e8a51e7c89338c0c852e1c469`),
+confirming shared protocol. Cross-referenced against pylablib (MIT).
+See [docs/research/vc880/](research/vc880/).
+
+### Cross-correlation with community sources
+
+| Finding | Our RE (Voltsoft) | [pylablib](https://github.com/AlexShkarin/pyLabLib) | Agreement |
+|---------|-------------------|---------------------|:---------:|
+| AB CD header + BE16 checksum | Yes | Yes | ✓ |
+| 19 function codes (0x00-0x12) | Yes (vendor switch) | Yes | ✓ |
+| Range byte 0x30-based | Yes | Yes | ✓ |
+| Status byte 1 flags (Rel/Avg/Min/Max) | Yes (all 28 flags named) | Yes (4 flags) | ✓ |
+| Streaming (no trigger) | Yes | Yes | ✓ |
+| Commands (auto/manual range) | Yes (28 commands total) | Yes (2 commands) | Our RE richer |
+
 ## Other CP2110 meters (not yet implemented)
 
 ### UNI-T
@@ -150,45 +179,13 @@ ON" in the meter's SETUP menu.
 
 ### Non-UNI-T (Voltcraft / Conrad Electronics)
 
-These devices use the CP2110 bridge for USB but have **different protocols**
-from the UT61E+ family — they are driven by their own chipsets and require
-independent protocol implementations. The CP2110 transport layer code is
-reusable, but everything above it (framing, parsing, mode/range tables)
-is device-specific.
-
 | Model | Brand | Type | Counts | Chipset | VID:PID | Protocol Status | Reference |
 |-------|-------|------|--------|---------|---------|-----------------|-----------|
 | **VC-890** | Voltcraft | Handheld DMM | 60000 | ES51997P + EFM32 MCU | `10C4:EA80` | Undocumented; sigrok planned | [sigrok wiki](https://sigrok.org/wiki/Voltcraft_VC-890) |
-| **VC-880** | Voltcraft | Handheld DMM | 40000 | Unknown (likely ES51966 family) | `10C4:EA80` (likely) | Undocumented; [pylablib](https://pylablib.readthedocs.io/en/latest/devices/Voltcraft.html) has basic driver | — |
-| **VC650BT** | Voltcraft | Bench DMM | 40000 | ES51966A + MSP430F5418 | `10C4:EA80` | Published: "Protocol Rev2" by Conrad | [EEVBlog thread](https://www.eevblog.com/forum/testgear/voltcraft-vc650bt-multimeter/) |
 
-**Key findings from research:**
-
-- **VC-890**: Confirmed UNI-T OEM (EEVBlog forum identifies UNI-T as
-  the manufacturer). Uses OLED display. The ES51997P is a Cyrustek
-  analog front-end; the EFM32 (Silicon Labs) handles display and
-  communication. Protocol documentation exists as a Conrad PDF but has
-  not been reverse-engineered publicly. The sigrok project lists it as
-  "planned" with `conn=hid/cp2110`.
-- **VC-880**: Lower-spec sibling of the VC-890 (LCD instead of OLED,
-  40k vs 60k counts). Shows up as a standard HID device. pylablib
-  groups VC880 and VC650BT together under the same protocol driver,
-  suggesting they share a wire format. Requires pressing the "PC"
-  button on the front panel to activate USB communication.
-- **VC650BT**: Bench DMM with Bluetooth. Designed by Conrad in-house
-  (not a simple UNI-T rebadge), though EEVBlog users note similarity
-  to UNI-T UT8xxx series. Conrad published a protocol specification
-  document ("Protocol Rev2 VC650BT DESKTOP DMM"). Uses a different
-  chipset family (ES51966A) from both the VC-890 and the UT61E+.
-
-**Why these are hard to support:**
-
-Unlike the UT61+/UT161 family (which shares one protocol with per-model
-tables), each Voltcraft model has its own Cyrustek chipset dictating a
-unique frame format. Supporting them would require:
-1. Reverse-engineering each chipset's serial protocol independently
-2. Building separate parsers for each frame format
-3. Obtaining devices or captures for verification
+Note: The VC-890 uses a different protocol from the VC-880/VC650BT
+(confirmed by comparing Voltsoft installer binaries — separate
+`VC890Reading` class in DMSShare.dll).
 
 The only shared component is the CP2110 transport — our existing
 `Cp2110Transport` code works unmodified for the USB layer.

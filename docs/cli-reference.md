@@ -47,6 +47,8 @@ mode/range mappings than UT61E+).
 | `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (experimental) |
+| `vc880` | `vc-880` | Voltcraft VC-880 handheld DMM (experimental) |
+| `vc650bt` | `vc-650bt` | Voltcraft VC650BT bench DMM (experimental, same protocol as VC-880) |
 | `mock` | | Simulated device (no hardware required) |
 
 Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered

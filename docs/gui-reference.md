@@ -21,7 +21,8 @@ and remote control of the UNI-T UT61E+ multimeter. Built with egui/eframe.
 
 The Settings panel includes a **Device** selector populated from the
 device registry with all supported models (UT61E+, UT61B+, UT61D+,
-UT161B/D/E, UT8802, UT8803, UT171A/B/C, UT181A) and a **Mock (simulated)**
+UT161B/D/E, UT8802, UT8803, UT171A/B/C, UT181A, Voltcraft VC-880,
+Voltcraft VC650BT) and a **Mock (simulated)**
 option. Each model selects the correct protocol tables (e.g., UT61B+
 uses different mode/range mappings than UT61E+). The selection persists
 across sessions and requires a reconnect to take effect. When connected

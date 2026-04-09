@@ -38,6 +38,21 @@ These protocols are implemented based on reverse engineering (vendor software
 decompilation, community implementations) but have **never been tested against
 real hardware**. Every aspect needs end-to-end verification.
 
+**Voltcraft VC-880 / VC650BT**:
+- Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
+- Streaming model (no trigger, auto-starts after PC button press)
+- Function code mapping (19 codes, 0x00-0x12) — do mode labels match LCD?
+- Range byte (0x30-based ASCII) — correct range values per function?
+- Main display (7 ASCII bytes) — values match LCD?
+- Sub-displays (sub1, sub2, bar) — format and content
+- Status flag bytes (7 bytes, 28 named flags) — all bit positions correct?
+- Overload detection (OL1 flag + "OL" in display string)
+- Commands: hold (0x4A), rel (0x48), range_auto (0x47), range_manual (0x46),
+  max_min_avg (0x49), light (0x4B), select (0x4C)
+- Streaming rate (manual says 2-3 Hz)
+- PC button activation requirement
+- VC650BT compatibility (same protocol confirmed by installer comparison)
+
 **UT8802 / UT8802N**:
 - Frame extraction (8-byte, 0xAC header, no checksum)
 - 0x5A streaming trigger byte

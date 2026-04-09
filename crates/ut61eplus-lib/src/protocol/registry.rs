@@ -3,6 +3,7 @@ use super::ut171::Ut171Protocol;
 use super::ut181a::Ut181aProtocol;
 use super::ut8802::Ut8802Protocol;
 use super::ut8803::Ut8803Protocol;
+use super::vc880::Vc880Protocol;
 use super::{DeviceFamily, Protocol};
 use crate::mock::MockProtocol;
 
@@ -59,6 +60,11 @@ const ACTIVATION_UT181A: &str = "\
 2. Turn the meter on
 3. Go to SETUP -> Communication -> ON
 Note: this setting resets on power cycle.";
+
+const ACTIVATION_VC880: &str = "\
+1. Connect the USB cable to the meter
+2. Turn the meter on
+3. Press the PC button on the meter";
 
 const ACTIVATION_MOCK: &str = "No setup required \u{2014} this is a simulated device.";
 
@@ -165,6 +171,31 @@ pub static DEVICES: &[SelectableDevice] = &[
         family: DeviceFamily::Ut181a,
         new_protocol: factory::<Ut181aProtocol>,
         manual_url: Some("https://meters.uni-trend.com/product/ut181a/"),
+    },
+    // Voltcraft
+    SelectableDevice {
+        id: "vc880",
+        display_name: "Voltcraft VC-880",
+        aliases: &["vc-880"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_VC880,
+        family: DeviceFamily::Vc880,
+        new_protocol: factory::<Vc880Protocol>,
+        manual_url: Some(
+            "https://www.conrad.com/p/voltcraft-vc880-handheld-multimeter-digital-calibrated-to-manufacturers-standards-no-certificate-data-logger-cat-iii-124609",
+        ),
+    },
+    SelectableDevice {
+        id: "vc650bt",
+        display_name: "Voltcraft VC650BT",
+        aliases: &["vc-650bt"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_VC880, // same protocol as VC-880
+        family: DeviceFamily::Vc880,
+        new_protocol: factory::<Vc880Protocol>,
+        manual_url: Some(
+            "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
+        ),
     },
     // Mock
     SelectableDevice {

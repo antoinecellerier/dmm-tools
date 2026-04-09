@@ -5,6 +5,7 @@ pub mod ut181a;
 pub mod ut61eplus;
 pub mod ut8802;
 pub mod ut8803;
+pub mod vc880;
 
 use crate::error::Result;
 use crate::measurement::Measurement;
@@ -40,6 +41,8 @@ pub enum DeviceFamily {
     Ut171,
     /// UT181A
     Ut181a,
+    /// Voltcraft VC-880 / VC650BT
+    Vc880,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -52,6 +55,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Ut8803 => write!(f, "ut8803"),
             DeviceFamily::Ut171 => write!(f, "ut171"),
             DeviceFamily::Ut181a => write!(f, "ut181a"),
+            DeviceFamily::Vc880 => write!(f, "vc880"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }
