@@ -327,11 +327,38 @@ impl Protocol for Vc880Protocol {
     fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>> {
         // Send GetDeviceID command (0x00)
         let frame = Self::build_command(0x00);
+        debug!("vc880: sending GetDeviceID command");
         transport.write(&frame)?;
-        // The response comes as a DeviceID message (type 0x00).
-        // For now, return None — parsing device ID responses requires
-        // reading a non-live-data frame which needs additional logic.
-        Ok(None)
+
+        // Read response: DeviceID message has type 0x00, payload[1..21] = 20 ASCII bytes.
+        // Use a dedicated read_frame call that accepts type 0x00 instead of 0x01.
+        match framing::read_frame(
+            &mut self.rx_buf,
+            transport,
+            framing::extract_frame_abcd_be16,
+            |p| !p.is_empty() && p[0] == 0x00, // DeviceID type
+            FrameErrorRecovery::SkipAndRetry,
+            "vc880-id",
+            &framing::HEADER,
+        ) {
+            Ok(payload) if payload.len() >= 21 => {
+                let name = String::from_utf8_lossy(&payload[1..21]).trim().to_string();
+                debug!("vc880: device name: {name}");
+                if name.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(name))
+                }
+            }
+            Ok(_) => {
+                debug!("vc880: DeviceID response too short");
+                Ok(None)
+            }
+            Err(e) => {
+                debug!("vc880: failed to read DeviceID: {e}");
+                Ok(None)
+            }
+        }
     }
 
     fn profile(&self) -> &DeviceProfile {

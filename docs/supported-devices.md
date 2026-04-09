@@ -147,8 +147,8 @@ button on the meter to enable USB communication.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **VC-880** | Voltcraft | Handheld DMM (40000 counts) | `10C4:EA80` | **Experimental** | AB CD framing (same as UT61E+), streaming, 19 modes, 7 status bytes |
-| **VC650BT** | Voltcraft | Bench DMM (40000 counts) | `10C4:EA80` | **Experimental** | Same protocol as VC-880 (byte-identical Voltsoft installer) |
+| **VC-880** | Voltcraft | Handheld DMM (40000 counts) | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/13)) | AB CD framing (same as UT61E+), streaming, 19 modes, 7 status bytes |
+| **VC650BT** | Voltcraft | Bench DMM (40000 counts) | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/13)) | Same protocol as VC-880 (byte-identical Voltsoft installer) |
 
 ### Independent research findings
 
