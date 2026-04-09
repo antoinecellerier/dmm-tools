@@ -38,6 +38,19 @@ These protocols are implemented based on reverse engineering (vendor software
 decompilation, community implementations) but have **never been tested against
 real hardware**. Every aspect needs end-to-end verification.
 
+**Voltcraft VC-890**:
+- Polled communication model (0x5E request → live data response)
+- Frame extraction (66-byte, AB CD header, BE16 checksum)
+- Function code mapping (19 codes, 0x00-0x12, remapped from VC-880!)
+- 60,000 count range values (6/60/600 vs 4/40/400)
+- 7 display value fields (main + 6 sub-displays) — format and content
+- Status flag bytes (8 bytes at msg[56..63]) — all bit positions correct?
+- Battery level nibble (msg[62]) — what do the values mean?
+- Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err
+- Ack protocol (0xFF+\[0x00\] after responses) — is it required or optional?
+- Commands: same as VC-880 plus 0x5D (Set Time) and 0x5E (Get Measurement)
+- PC button activation requirement
+
 **Voltcraft VC-880 / VC650BT**:
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
 - Streaming model (no trigger, auto-starts after PC button press)

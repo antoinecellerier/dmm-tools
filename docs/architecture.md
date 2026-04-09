@@ -30,6 +30,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut171/` | UT171 family: `Ut171Protocol` — streaming protocol, float32 LE values |
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
 | `protocol/vc880/` | VC-880/VC650BT: `Vc880Protocol` — streaming, AB CD framing (reuses UT61E+ extractor), ASCII display values |
+| `protocol/vc890/` | VC-890: `Vc890Protocol` — polled (0x5E request), AB CD framing, 60K counts, 66-byte frames |
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic) |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
@@ -49,7 +50,8 @@ USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protoc
                                            ├── Ut8803Protocol    (streaming, AB CD 21-byte, BE checksum)
                                            ├── Ut171Protocol     (streaming, float32 LE)
                                            ├── Ut181aProtocol    (streaming, device-sent units)
-                                           └── Vc880Protocol     (streaming, AB CD framing, ASCII values)
+                                           ├── Vc880Protocol     (streaming, AB CD framing, ASCII values)
+                                           └── Vc890Protocol     (polled, AB CD framing, 60K counts)
 ```
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,

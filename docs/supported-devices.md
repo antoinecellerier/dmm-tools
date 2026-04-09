@@ -169,6 +169,19 @@ See [docs/research/vc880/](research/vc880/).
 | Streaming (no trigger) | Yes | Yes | ✓ |
 | Commands (auto/manual range) | Yes (28 commands total) | Yes (2 commands) | Our RE richer |
 
+## Experimental: Voltcraft VC-890
+
+Use `--device vc890`. 60,000-count OLED handheld DMM with ES51997P + EFM32
+chipset. Polled protocol (request/response, like UT61E+) with 66-byte frames.
+Confirmed as a separate protocol from VC-880 (different `VC890Reading` class
+in Voltsoft, different installer binary, remapped function codes).
+
+| Model | Brand | Type | VID:PID | Status | Notes |
+|-------|-------|------|---------|--------|-------|
+| **VC-890** | Voltcraft | Handheld DMM (60000 counts, OLED) | `10C4:EA80` | **Experimental** | Polled, 66-byte frames, remapped function codes from VC-880 |
+
+See [docs/research/vc890/](research/vc890/).
+
 ## Other CP2110 meters (not yet implemented)
 
 ### UNI-T
@@ -179,13 +192,8 @@ See [docs/research/vc880/](research/vc880/).
 
 ### Non-UNI-T (Voltcraft / Conrad Electronics)
 
-| Model | Brand | Type | Counts | Chipset | VID:PID | Protocol Status | Reference |
-|-------|-------|------|--------|---------|---------|-----------------|-----------|
-| **VC-890** | Voltcraft | Handheld DMM | 60000 | ES51997P + EFM32 MCU | `10C4:EA80` | Undocumented; sigrok planned | [sigrok wiki](https://sigrok.org/wiki/Voltcraft_VC-890) |
-
-Note: The VC-890 uses a different protocol from the VC-880/VC650BT
-(confirmed by comparing Voltsoft installer binaries — separate
-`VC890Reading` class in DMSShare.dll).
+No unimplemented Voltcraft CP2110 meters remain — VC-880, VC650BT,
+and VC-890 are all now experimentally supported.
 
 The only shared component is the CP2110 transport — our existing
 `Cp2110Transport` code works unmodified for the USB layer.

@@ -4,6 +4,7 @@ use super::ut181a::Ut181aProtocol;
 use super::ut8802::Ut8802Protocol;
 use super::ut8803::Ut8803Protocol;
 use super::vc880::Vc880Protocol;
+use super::vc890::Vc890Protocol;
 use super::{DeviceFamily, Protocol};
 use crate::mock::MockProtocol;
 
@@ -195,6 +196,18 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: factory::<Vc880Protocol>,
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
+        ),
+    },
+    SelectableDevice {
+        id: "vc890",
+        display_name: "Voltcraft VC-890",
+        aliases: &["vc-890"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_VC880, // same activation as VC-880
+        family: DeviceFamily::Vc890,
+        new_protocol: factory::<Vc890Protocol>,
+        manual_url: Some(
+            "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
         ),
     },
     // Mock
