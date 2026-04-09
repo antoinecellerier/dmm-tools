@@ -31,7 +31,7 @@ pub enum Error {
     UnknownDevice(String),
 
     #[error(
-        "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, QinHeng {:#06x}:{:#06x})",
+        "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x})",
         0x10C4,
         0xEA80,
         0x1A86,

@@ -1,3 +1,4 @@
+pub mod ch9325;
 pub mod ch9329;
 pub mod cp2110;
 pub mod error;
@@ -5,7 +6,6 @@ pub mod flags;
 pub mod measurement;
 pub mod mock;
 pub mod protocol;
-pub mod qinheng;
 pub mod stats;
 pub mod transport;
 
@@ -171,16 +171,16 @@ pub fn open_device_by_id_auto(id: &str) -> Result<Dmm<Box<dyn Transport>>> {
         return Dmm::new(transport, protocol);
     }
 
-    // Try QinHeng CH9325 (bench meters: UT632, UT803, UT804)
-    if let Ok(device) = api.open(qinheng::VID, qinheng::PID) {
+    // Try CH9325 (bench meters: UT803, UT804)
+    if let Ok(device) = api.open(ch9325::VID, ch9325::PID) {
         info!(
-            "found QinHeng adapter (VID={:#06x} PID={:#06x})",
-            qinheng::VID,
-            qinheng::PID
+            "found CH9325 adapter (VID={:#06x} PID={:#06x})",
+            ch9325::VID,
+            ch9325::PID
         );
-        let qh = qinheng::QinHeng::new(device);
-        qh.init()?;
-        let transport: Box<dyn Transport> = Box::new(qh);
+        let ch = ch9325::Ch9325::new(device);
+        ch.init()?;
+        let transport: Box<dyn Transport> = Box::new(ch);
         let protocol = (entry.new_protocol)();
         return Dmm::new(transport, protocol);
     }
@@ -198,8 +198,8 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
             "CP2110"
         } else if dev.vendor_id() == ch9329::VID && dev.product_id() == ch9329::PID {
             "CH9329"
-        } else if dev.vendor_id() == qinheng::VID && dev.product_id() == qinheng::PID {
-            "QinHeng"
+        } else if dev.vendor_id() == ch9325::VID && dev.product_id() == ch9325::PID {
+            "CH9325"
         } else {
             continue;
         };
@@ -221,7 +221,7 @@ pub struct DeviceInfo {
     pub path: String,
     pub product: Option<String>,
     pub serial: Option<String>,
-    /// Transport type: "CP2110", "CH9329", or "QinHeng".
+    /// Transport type: "CP2110", "CH9329", or "CH9325".
     pub transport: &'static str,
 }
 

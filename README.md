@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Rust tools for communicating with digital multimeters over USB (CP2110, CH9329, and QinHeng HID bridges). Supports the **UT61E+** family (verified) with experimental support for **UT8802**, **UT8803**, **UT171**, **UT181A**, **Voltcraft VC-880/VC650BT**, and **VC-890**.
+Rust tools for communicating with digital multimeters over USB (CP2110, CH9329, and CH9325 HID bridges). Supports the **UT61E+** family (verified) with experimental support for **UT8802**, **UT8803**, **UT171**, **UT181A**, **Voltcraft VC-880/VC650BT**, and **VC-890**.
 
 Includes a CLI for reading, recording, and remote-controlling the meter, and a GUI with real-time graphing.
 

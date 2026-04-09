@@ -1,4 +1,4 @@
-//! QinHeng CH9325 HID-to-UART transport.
+//! WCH CH9325 HID-to-UART transport.
 //!
 //! The CH9325 (or its predecessor HE2325U) is found in bench meters like the
 //! UT632, UT803, and UT804. It uses 8-byte HID reports with a different framing
@@ -18,7 +18,7 @@ use crate::transport::Transport;
 use hidapi::HidDevice;
 use log::{debug, trace, warn};
 
-/// QinHeng/WCH VID (shared with CH9329).
+/// WCH VID (shared with CH9329).
 pub const VID: u16 = 0x1A86;
 /// CH9325 PID (HID-to-UART bridge, used in UT-D04 cable and bench meters).
 pub const PID: u16 = 0xE008;
@@ -43,12 +43,12 @@ const PRIMARY_FEATURE_REPORT: [u8; 10] =
 const FALLBACK_FEATURE_REPORT: [u8; 10] =
     [0x00, 0x00, 0x4B, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
-/// QinHeng CH9325 HID transport wrapping a `HidDevice`.
-pub struct QinHeng {
+/// CH9325 HID transport wrapping a `HidDevice`.
+pub struct Ch9325 {
     device: HidDevice,
 }
 
-impl QinHeng {
+impl Ch9325 {
     /// Wrap an already-opened HID device.
     pub fn new(device: HidDevice) -> Self {
         Self { device }
@@ -62,10 +62,10 @@ impl QinHeng {
     ///
     /// Reference: §4.3–4.4
     pub fn init(&self) -> Result<()> {
-        debug!("QinHeng: opening device (VID={VID:#06x} PID={PID:#06x})");
+        debug!("CH9325: opening device (VID={VID:#06x} PID={PID:#06x})");
 
         // Primary init: 2400 baud + 0x5A trigger (§4.3)
-        debug!("QinHeng: trying primary init (2400 baud + trigger)");
+        debug!("CH9325: trying primary init (2400 baud + trigger)");
         self.device
             .send_feature_report(&PRIMARY_FEATURE_REPORT)
             .map_err(Error::Hid)?;
@@ -84,12 +84,12 @@ impl QinHeng {
         let mut probe_buf = [0u8; HID_REPORT_DATA_SIZE + 1];
         let n = self.device.read_timeout(&mut probe_buf, 300)?;
         if n > 0 {
-            debug!("QinHeng: primary init succeeded ({n} bytes received)");
+            debug!("CH9325: primary init succeeded ({n} bytes received)");
             return Ok(());
         }
 
         // Fallback init: 19200 baud, no trigger (§4.4)
-        debug!("QinHeng: primary init failed, trying fallback (19200 baud)");
+        debug!("CH9325: primary init failed, trying fallback (19200 baud)");
         self.device
             .send_feature_report(&FALLBACK_FEATURE_REPORT)
             .map_err(Error::Hid)?;
@@ -98,16 +98,16 @@ impl QinHeng {
         // Probe again
         let n = self.device.read_timeout(&mut probe_buf, 300)?;
         if n > 0 {
-            debug!("QinHeng: fallback init succeeded ({n} bytes received)");
+            debug!("CH9325: fallback init succeeded ({n} bytes received)");
         } else {
-            warn!("QinHeng: no data received after init — device may need manual activation");
+            warn!("CH9325: no data received after init — device may need manual activation");
         }
 
         Ok(())
     }
 }
 
-impl Transport for QinHeng {
+impl Transport for Ch9325 {
     fn write(&self, data: &[u8]) -> Result<()> {
         // Split UART data across multiple 8-byte HID reports if needed.
         // Each report: [report_id=0x00, length, data..., zero-padded to 8 data bytes]
@@ -116,7 +116,7 @@ impl Transport for QinHeng {
             report[0] = 0x00; // report ID for hidapi
             report[1] = chunk.len() as u8; // UART payload length
             report[2..2 + chunk.len()].copy_from_slice(chunk);
-            trace!("QinHeng TX: {:02X?}", &report[..2 + chunk.len()]);
+            trace!("CH9325 TX: {:02X?}", &report[..2 + chunk.len()]);
             self.device.write(&report).map_err(Error::Hid)?;
         }
         Ok(())
@@ -146,7 +146,7 @@ impl Transport for QinHeng {
         } else {
             // Unexpected framing — log and return empty
             trace!(
-                "QinHeng RX: unexpected framing, raw[0]={:#04x}, n={n}, skipping",
+                "Ch9325 RX: unexpected framing, raw[0]={:#04x}, n={n}, skipping",
                 raw[0]
             );
             return Ok(0);
@@ -160,22 +160,22 @@ impl Transport for QinHeng {
         let available = n.saturating_sub(payload_start);
         let actual = payload_len.min(available).min(buf.len());
         buf[..actual].copy_from_slice(&raw[payload_start..payload_start + actual]);
-        trace!("QinHeng RX ({actual} bytes): {:02X?}", &buf[..actual]);
+        trace!("CH9325 RX ({actual} bytes): {:02X?}", &buf[..actual]);
         Ok(actual)
     }
 
     fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        trace!("QinHeng feature report: {:02X?}", data);
+        trace!("CH9325 feature report: {:02X?}", data);
         self.device.send_feature_report(data).map_err(Error::Hid)?;
         Ok(())
     }
 
     fn transport_info(&self) -> Result<String> {
-        Ok("QinHeng CH9325 HID-to-UART bridge (WCH)".to_string())
+        Ok("CH9325 HID-to-UART bridge (WCH)".to_string())
     }
 
     fn transport_name(&self) -> &'static str {
-        "QinHeng"
+        "CH9325"
     }
 }
 

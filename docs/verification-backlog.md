@@ -66,11 +66,11 @@ real hardware**. Every aspect needs end-to-end verification.
 - PC button activation requirement
 - VC650BT compatibility (same protocol confirmed by installer comparison)
 
-**UT803 / UT804 (QinHeng CH9325, FS9721 protocol)** — NOT YET IMPLEMENTED:
+**UT803 / UT804 (CH9325 HID, FS9721 protocol)** — NOT YET IMPLEMENTED:
 - These meters use the FS9721/FS9922 14-byte LCD segment protocol, NOT
   the 0xAC or 0xABCD UCI format (confirmed by Ghidra decompilation of
   standalone UT803.exe/UT804.exe, 2026-04-10).
-- Transport: QinHeng CH9325 HID at 2400 baud — already implemented.
+- Transport: CH9325 HID at 2400 baud — already implemented.
 - Protocol: Needs new FS9721 protocol family implementation. The FS9721
   format is well-documented (Fortune Semiconductor datasheets, sigrok wiki).
 - Decompiled data from UT803/UT804 apps provides: 7-segment decode table,
