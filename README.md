@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Rust tools for communicating with UNI-T digital multimeters over USB (CP2110 and CH9329 HID bridges). Supports the **UT61E+** family (verified) with experimental support for **UT8803**, **UT171**, and **UT181A**.
+Rust tools for communicating with digital multimeters over USB (CP2110 and CH9329 HID bridges). Supports the **UT61E+** family (verified) with experimental support for **UT8802**, **UT8803**, **UT171**, **UT181A**, **Voltcraft VC-880/VC650BT**, and **VC-890**.
 
 Includes a CLI for reading, recording, and remote-controlling the meter, and a GUI with real-time graphing.
 
@@ -62,11 +62,14 @@ WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware)
 | Family | Models | Protocol | Status |
 |--------|--------|----------|--------|
 | UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | Polled, ASCII values | **Verified** (UT61E+) |
+| UT8802 | UT8802, UT8802N | Streaming, 8-byte BCD frames | Experimental |
 | UT8803 | UT8803, UT8803E | Streaming, 21-byte frames | Experimental |
 | UT171 | UT171A/B/C | Streaming, float32 values | Experimental |
 | UT181A | UT181A | Streaming, float32 + unit strings | Experimental |
+| VC-880/VC650BT | Voltcraft VC-880, VC650BT | Streaming, ASCII values | Experimental |
+| VC-890 | Voltcraft VC-890 | Polled, 60K counts, OLED | Experimental |
 
-**Experimental** means the protocol was reverse-engineered from vendor software but has not been tested against real hardware. If you have one of these meters, we'd love your help verifying: [UT8803](https://github.com/antoinecellerier/dmm-tools/issues/3), [UT171](https://github.com/antoinecellerier/dmm-tools/issues/4), [UT181A](https://github.com/antoinecellerier/dmm-tools/issues/5). For UT61B+/UT61D+ owners: [help verify model-specific modes](https://github.com/antoinecellerier/dmm-tools/issues/7).
+**Experimental** means the protocol was reverse-engineered from vendor software but has not been tested against real hardware. If you have one of these meters, we'd love your help verifying: [UT8802](https://github.com/antoinecellerier/dmm-tools/issues/12), [UT8803](https://github.com/antoinecellerier/dmm-tools/issues/3), [UT171](https://github.com/antoinecellerier/dmm-tools/issues/4), [UT181A](https://github.com/antoinecellerier/dmm-tools/issues/5), [VC-880/VC650BT](https://github.com/antoinecellerier/dmm-tools/issues/13), [VC-890](https://github.com/antoinecellerier/dmm-tools/issues/14). For UT61B+/UT61D+ owners: [help verify model-specific modes](https://github.com/antoinecellerier/dmm-tools/issues/7).
 
 See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list and reference implementations.
 
@@ -81,7 +84,7 @@ Pre-built binaries for Linux, Windows, and macOS (x86_64 and ARM) are available 
 - **Linux:** `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) — only needed when building from source
 - **Windows:** Open Device Manager with the USB cable plugged in. If you see "CP2110 USB to UART Bridge" under HID devices, no action needed. If you see a yellow warning icon under "Other devices", install the [Silicon Labs driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Some UT-D09 cables use a different chip and appear as "USB Input Device" instead — these work without a driver.
 - **macOS:** No driver needed — both cable types are recognized as standard HID devices
-- A [supported UNI-T multimeter](docs/supported-devices.md) with USB adapter plugged in
+- A [supported multimeter](docs/supported-devices.md) with USB adapter plugged in
 
 ### Install from source
 
