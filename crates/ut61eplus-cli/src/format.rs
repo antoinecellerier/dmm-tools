@@ -79,6 +79,9 @@ pub fn format_measurement(
                     "dc": m.flags.dc,
                     "peak_min": m.flags.peak_min,
                     "peak_max": m.flags.peak_max,
+                    "lead_error": m.flags.lead_error,
+                    "comp": m.flags.comp,
+                    "record": m.flags.record,
                 }
             });
             if let Some((val, unit)) = integral {

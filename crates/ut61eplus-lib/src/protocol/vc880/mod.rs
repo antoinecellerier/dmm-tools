@@ -566,6 +566,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         dc: false,
         peak_max: false,
         peak_min: false,
+        ..Default::default()
     };
 
     // Parse numeric value

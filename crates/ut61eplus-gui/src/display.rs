@@ -365,4 +365,13 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32) {
     if m.flags.low_battery {
         badge(ui, "LOW BAT", warning);
     }
+    if m.flags.lead_error {
+        badge(ui, "LEAD ERR", warning);
+    }
+    if m.flags.comp {
+        badge(ui, "COMP", accent);
+    }
+    if m.flags.record {
+        badge(ui, "REC", accent);
+    }
 }

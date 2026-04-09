@@ -29,6 +29,12 @@ struct ExpectedFlags {
     dc: bool,
     peak_min: bool,
     peak_max: bool,
+    #[serde(default)]
+    lead_error: bool,
+    #[serde(default)]
+    comp: bool,
+    #[serde(default)]
+    record: bool,
 }
 
 /// A golden test case in capture-compatible YAML format.

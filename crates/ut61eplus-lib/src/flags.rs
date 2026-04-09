@@ -14,6 +14,9 @@ pub struct StatusFlags {
     pub dc: bool,
     pub peak_max: bool,
     pub peak_min: bool,
+    pub lead_error: bool,
+    pub comp: bool,
+    pub record: bool,
 }
 
 impl StatusFlags {
@@ -36,6 +39,7 @@ impl StatusFlags {
             dc: flag3 & 0x08 != 0,
             peak_max: flag3 & 0x04 != 0,
             peak_min: flag3 & 0x02 != 0,
+            ..Default::default()
         }
     }
 }
@@ -69,6 +73,15 @@ impl std::fmt::Display for StatusFlags {
         }
         if self.peak_min {
             parts.push("P-MIN");
+        }
+        if self.lead_error {
+            parts.push("LEAD ERR");
+        }
+        if self.comp {
+            parts.push("COMP");
+        }
+        if self.record {
+            parts.push("REC");
         }
         write!(f, "{}", parts.join(" "))
     }
@@ -161,5 +174,34 @@ mod tests {
         // AUTO alone shouldn't clutter display when it's the default
         let flags = StatusFlags::parse(0x00, 0x00, 0x00);
         assert_eq!(flags.to_string(), "AUTO");
+    }
+
+    #[test]
+    fn new_flags_default_false() {
+        let flags = StatusFlags::default();
+        assert!(!flags.lead_error);
+        assert!(!flags.comp);
+        assert!(!flags.record);
+    }
+
+    #[test]
+    fn display_lead_error() {
+        let flags = StatusFlags {
+            lead_error: true,
+            ..Default::default()
+        };
+        assert!(flags.to_string().contains("LEAD ERR"));
+    }
+
+    #[test]
+    fn display_comp_and_record() {
+        let flags = StatusFlags {
+            comp: true,
+            record: true,
+            ..Default::default()
+        };
+        let s = flags.to_string();
+        assert!(s.contains("COMP"));
+        assert!(s.contains("REC"));
     }
 }
