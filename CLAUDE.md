@@ -22,6 +22,11 @@ Rust workspace for communicating with digital multimeters via USB (CP2110 and CH
 
 ### Specification data
 - **Never fabricate specification data** (accuracy, resolution, frequency response). If a value cannot be directly read from the source document, mark it as unknown/missing rather than guessing. Wrong data is worse than missing data.
+- When transcribing specification data from PDF manuals, always verify against the actual PDF rendering (not text-extracted versions). PDF-to-text conversion corrupts multi-column and merged-cell tables: values shift to wrong rows, and interleaved columns produce garbage. Visual verification of every value against the PDF is required.
+
+### Simplicity
+- Default to the simplest approach that meets the requirement. Don't add complexity speculatively — no "just in case" abstractions, configurability, or generalization beyond what's asked.
+- When told "keep it simple" or "don't over-engineer", take it seriously — revert anything that adds complexity without clear value.
 
 ### Scope and clarification
 - When a request is ambiguous about scope (e.g., "add zoom"), clarify before implementing. A quick "Do you mean X or Y?" is cheaper than implementing the wrong thing.
@@ -31,6 +36,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110 and CH
 - Prefer Read/Grep/Glob/Write/Edit tools over Bash commands wherever possible to reduce permission prompts.
 - When Bash is necessary, prefer commands already in the allow-list. Avoid command substitution when a simpler form exists.
 - Run git commands directly — cwd is already the repo. Don't use `git -C`.
+- When using the Edit tool with `replace_all`, verify the pattern doesn't match unintended locations. `replace_all` replaces EVERY occurrence in the file — if the pattern appears in multiple functions or contexts, it can break brace structure or rename unrelated identifiers (e.g., replacing `AcDcA` also catches `AcDcA2`). Prefer targeted single replacements.
 
 ## Engineering standards
 
@@ -44,6 +50,8 @@ Rust workspace for communicating with digital multimeters via USB (CP2110 and CH
 - Prefer `&'static str` over `String` when values come from static lookup tables — avoids per-call heap allocation in hot paths like measurement parsing.
 - Prefer enums over string-typed status/state values — lets the compiler catch typos and missing match arms.
 - Add `#[serde(default)]` on all optional/new fields in serialized structs (settings, config). Forgetting this breaks deserialization of existing user config files.
+- Deduplicate user-facing error/help strings — extract shared messages into helper functions rather than duplicating string literals across code paths. Duplicated strings drift over time.
+- Avoid `unsafe` blocks unless absolutely necessary. Never use `unsafe { std::mem::zeroed() }` as a shortcut — find a safe alternative.
 
 ### Robustness
 - Use `checked_duration_since()` instead of `duration_since()` — the latter panics if the system clock goes backward (VM suspend, NTP correction).
@@ -59,6 +67,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110 and CH
 - Our protocol understanding comes from reverse engineering — not official documentation. See `docs/verification-backlog.md` for what's been verified and what still needs testing.
 - Per-family protocol specs live in `docs/research/`: `ut61-family/`, `ut8803/`, `uci-bench-family/`, `ut171/`, `ut181/`, `vc880/`, `vc890/`. The UT61E+ also has a legacy `docs/protocol.md`.
 - Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete for UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880). Cross-check against these when in doubt.
+- Mock/test implementations must match real device behavior as closely as practical. Document any simplifications. Mocks that set impossible flag combinations (e.g., MIN+MAX simultaneously) or return incorrect data types (live values instead of stored values) create false confidence in tests.
 
 ### Commit discipline
 - **Every commit must include tests for new code** — write tests before or alongside the code, never defer them
@@ -66,6 +75,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110 and CH
 - Each commit should compile and pass tests (`cargo build && cargo test`)
 - Write concise commit messages: imperative mood, explain the "why" not just the "what"
 - Don't bundle unrelated changes in the same commit
+- Never commit files from `references/` — this directory is gitignored and contains vendor software, decompilations, and manuals that must not be in the repository
 
 ### Review checklist (apply *while writing code*, not just after)
 This checklist exists to prevent issues, not to find them after the fact. Mentally walk through each item for the code you just wrote before committing.
@@ -82,6 +92,8 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - For file writes: is the write atomic? User data (captures, settings, CSV exports) should use write-to-tmp-then-rename.
 - For user-initiated actions (export, clear, connect): is there visible feedback (toast, status message, log line)? Silent success is a UX bug.
 - For icon-only or custom-painted interactive widgets: does it have an AccessKit label? Use `accesskit_node_builder` to set one. Buttons with descriptive text get this automatically; icon buttons and custom widgets do not.
+- For Edit tool `replace_all` operations: did the replacement match only the intended locations? Check the full file for unintended side effects.
+- For specification data: was every value verified against the actual PDF manual (not a text-extracted version)?
 - For new device support: update `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Create a GitHub verification issue (match the pattern of existing issues #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
 
 ### Documentation
@@ -98,6 +110,10 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
 - `CHANGELOG.md` — add entries for user-visible changes when preparing a release. Organized by component (GUI, CLI, Library, Bug fixes, Internal, Documentation). The release workflow extracts the entry for the tagged version.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
+
+### Clean-room reverse engineering
+- When performing clean-room RE, only consume sources the user has explicitly approved (typically: official manuals, vendor software, public component datasheets). Do not read external implementations or community code until the clean-room analysis is complete and the user approves cross-referencing.
+- Document which sources were used and which were avoided, so the clean-room boundary is auditable.
 
 ### Logging
 - Use the `log` crate with structured levels: `TRACE` for raw HID byte dumps, `DEBUG` for protocol events (request/response/checksum), `INFO` for connection state, `WARN` for recoverable issues (timeouts, retries), `ERROR` for failures
@@ -118,6 +134,8 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
   - `set_plot_bounds()` overrides both axes — if you only want to constrain X, compute Y range manually from visible data with padding.
   - `allow_drag(false)` also suppresses pointer position events; use `plot.reset()` per frame instead to pin the view while keeping events.
   - After mode changes or data clears, call `plot.reset()` to prevent stale bounds from the previous state.
+  - `set_pixels_per_point()` and `set_visuals()` called every frame reset egui's internal panel state (resize positions, scroll offsets). Only call these when the value actually changes.
+  - egui API naming is inconsistent — verify method names against docs before using them (e.g., `fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
 
 ### Dependencies
 - Keep dependencies minimal and well-maintained
