@@ -1,10 +1,10 @@
-# UT61E+ Multimeter Tool
+# dmm-tools
 
-Rust workspace for communicating with UNI-T multimeters via USB (CP2110 and CH9329 HID bridges).
+Rust workspace for communicating with digital multimeters via USB (CP2110 and CH9329 HID bridges). Supports UNI-T and Voltcraft meters.
 
 ## Project structure
 
-- `crates/ut61eplus-lib/` — library: CP2110 and CH9329 transports, protocol framing, measurement parsing, device tables. `protocol` module is `pub(crate)` — consumers use `Dmm` API, not raw frame extraction.
+- `crates/ut61eplus-lib/` — library: CP2110 and CH9329 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut171`, `ut181a`, `vc880`, `vc890`. `protocol` module is `pub(crate)` — consumers use `Dmm` API, not raw frame extraction.
 - `crates/ut61eplus-cli/` — CLI binary (`main.rs` for commands, `capture.rs` for guided capture tool, `format.rs` for output formatting)
 - `crates/ut61eplus-gui/` — GUI binary: real-time display and plotting (eframe/egui)
 
@@ -53,11 +53,12 @@ Rust workspace for communicating with UNI-T multimeters via USB (CP2110 and CH93
 
 ### Protocol correctness
 - Protocol code is byte-level — off-by-one errors are easy to introduce. Always validate checksums on received data.
-- Document byte offsets and masking operations with comments referencing `docs/protocol.md`.
+- Document byte offsets and masking operations with comments referencing the relevant protocol spec in `docs/research/<family>/reverse-engineered-protocol.md`.
 - Test parsing with known-good byte sequences captured from real device traces.
-- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=ut61eplus_lib=trace cargo run --bin ut61eplus -- debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
-- Our protocol understanding comes from reverse engineering — not official documentation. See `docs/verification-backlog.md` for what's been verified and what still needs testing. See `docs/protocol.md` for byte-level format details, masking rules, and mode/range/flag tables.
-- Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go). Cross-check against these when in doubt.
+- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=ut61eplus_lib=trace cargo run --bin ut61eplus -- --device <id> debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
+- Our protocol understanding comes from reverse engineering — not official documentation. See `docs/verification-backlog.md` for what's been verified and what still needs testing.
+- Per-family protocol specs live in `docs/research/`: `ut61-family/`, `ut8803/`, `uci-bench-family/`, `ut171/`, `ut181/`, `vc880/`, `vc890/`. The UT61E+ also has a legacy `docs/protocol.md`.
+- Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete for UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880). Cross-check against these when in doubt.
 
 ### Commit discipline
 - **Every commit must include tests for new code** — write tests before or alongside the code, never defer them
@@ -73,7 +74,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - Are new public types/functions documented?
 - For CLI changes: is `docs/cli-reference.md` updated to reflect new/changed/removed commands and options?
 - For GUI changes: is `docs/gui-reference.md` updated to reflect new/changed/removed features, panels, or controls?
-- For protocol code: are byte offsets and masks correct? Cross-check against `docs/protocol.md`.
+- For protocol code: are byte offsets and masks correct? Cross-check against the relevant `docs/research/<family>/reverse-engineered-protocol.md`.
 - For unsafe or HID code: are buffer sizes correct? Can a malformed response cause a panic?
 - For GUI render paths: avoid per-frame allocations in hot loops. Use cached data with dirty flags where possible. Graph segments and gap ranges are cached — invalidate via `invalidate_cache()` when data changes.
 - For new buffers: ensure bounded growth. Graph history caps at 10K points, recording at 500K samples.
@@ -81,6 +82,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - For file writes: is the write atomic? User data (captures, settings, CSV exports) should use write-to-tmp-then-rename.
 - For user-initiated actions (export, clear, connect): is there visible feedback (toast, status message, log line)? Silent success is a UX bug.
 - For icon-only or custom-painted interactive widgets: does it have an AccessKit label? Use `accesskit_node_builder` to set one. Buttons with descriptive text get this automatically; icon buttons and custom widgets do not.
+- For new device support: update `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Create a GitHub verification issue (match the pattern of existing issues #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
 
 ### Documentation
 - Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought
@@ -91,6 +93,8 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - `docs/setup.md` — build prerequisites, udev setup, first-run instructions, troubleshooting common issues
 - `docs/development.md` — how to run tests, add new device models, coding conventions, release process
 - `docs/adding-devices.md` — end-to-end guide: discovery, clean-room RE, implementation, spec data extraction, hardware verification, common pitfalls. **Read this before starting work on any new device.**
+- `docs/research/<family>/reverse-engineering-approach.md` — per-family RE methodology, sources, confidence tags
+- `docs/research/<family>/reverse-engineered-protocol.md` — per-family wire protocol specification (authoritative reference for implementation)
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
 - `CHANGELOG.md` — add entries for user-visible changes when preparing a release. Organized by component (GUI, CLI, Library, Bug fixes, Internal, Documentation). The release workflow extracts the entry for the tagged version.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
