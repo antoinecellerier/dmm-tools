@@ -1,3 +1,4 @@
+use super::fs9721::Fs9721Protocol;
 use super::ut61eplus::Ut61PlusProtocol;
 use super::ut171::Ut171Protocol;
 use super::ut181a::Ut181aProtocol;
@@ -61,6 +62,10 @@ const ACTIVATION_UT181A: &str = "\
 2. Turn the meter on
 3. Go to SETUP -> Communication -> ON
 Note: this setting resets on power cycle.";
+
+const ACTIVATION_UT803: &str = "\
+1. Connect the USB cable to the meter
+2. Turn the meter on";
 
 const ACTIVATION_VC880: &str = "\
 1. Connect the USB cable to the meter
@@ -152,6 +157,26 @@ pub static DEVICES: &[SelectableDevice] = &[
         family: DeviceFamily::Ut8803,
         new_protocol: factory::<Ut8803Protocol>,
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
+    },
+    SelectableDevice {
+        id: "ut803",
+        display_name: "UT803",
+        aliases: &[],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT803,
+        family: DeviceFamily::Fs9721,
+        new_protocol: || Box::new(Fs9721Protocol::new_ut803()),
+        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
+    },
+    SelectableDevice {
+        id: "ut804",
+        display_name: "UT804",
+        aliases: &[],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT803,
+        family: DeviceFamily::Fs9721,
+        new_protocol: || Box::new(Fs9721Protocol::new_ut804()),
+        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
     },
     SelectableDevice {
         id: "ut171",

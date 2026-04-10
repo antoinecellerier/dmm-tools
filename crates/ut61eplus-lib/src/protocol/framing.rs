@@ -412,6 +412,65 @@ pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usiz
     Ok(Some((payload, consumed)))
 }
 
+/// FS9721-style frame length: 14 bytes, each carrying a 4-bit index + 4-bit data.
+pub(crate) const FS9721_FRAME_LEN: usize = 14;
+
+/// Dummy header for FS9721 — not used for real scanning (the extractor
+/// handles false starts internally), but needed by `read_frame`'s API.
+pub const FS9721_HEADER: [u8; 1] = [0x10];
+
+/// Extract a frame using FS9721-style format: 14 bytes where byte N has
+/// index N (1-14) in bits\[7:4\] and data in bits\[3:0\].
+///
+/// Frame synchronization is achieved by validating that 14 consecutive bytes
+/// have sequential indices 1 through 14 in their high nibbles. There is no
+/// checksum.
+///
+/// False starts (a byte with high nibble 0x1 that doesn't lead to a valid
+/// 14-byte sequence) are skipped internally — the extractor scans forward
+/// until it finds a valid frame or runs out of data.
+///
+/// Returns `Ok(Some((payload, consumed)))` where payload is the 14 data
+/// nibbles (one byte each, values 0x0-0xF), or `Ok(None)` if no valid
+/// frame is found in the buffer.
+///
+/// See docs/research/ut803/reverse-engineered-protocol.md
+pub fn extract_frame_fs9721(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
+    let mut search_start = 0;
+
+    loop {
+        // Scan for a byte with high nibble = 0x1 (index 1, frame start)
+        let Some(pos) = buf[search_start..].iter().position(|&b| b & 0xF0 == 0x10) else {
+            return Ok(None);
+        };
+        let start = search_start + pos;
+
+        let remaining = &buf[start..];
+        if remaining.len() < FS9721_FRAME_LEN {
+            return Ok(None);
+        }
+
+        // Check if all 14 bytes have the correct sequential index nibbles
+        let valid = remaining[..FS9721_FRAME_LEN]
+            .iter()
+            .enumerate()
+            .all(|(i, &b)| (b >> 4) == (i + 1) as u8);
+
+        if valid {
+            let frame = &remaining[..FS9721_FRAME_LEN];
+            trace!("framing: fs9721 raw frame: {:02X?}", frame);
+            let payload: Vec<u8> = frame.iter().map(|&b| b & 0x0F).collect();
+            let consumed = start + FS9721_FRAME_LEN;
+            debug!("framing: fs9721 valid frame, consumed={consumed}");
+            return Ok(Some((payload, consumed)));
+        }
+
+        // Not a valid frame — skip past this false start
+        debug!("framing: fs9721 false start at offset {start}, skipping");
+        search_start = start + 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -871,5 +930,108 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result[0], 0x05); // position code of the real frame
+    }
+
+    // --- FS9721 frame extractor tests ---
+
+    /// Build a valid FS9721 frame from 14 data nibbles.
+    fn make_fs9721_frame(nibbles: &[u8; 14]) -> Vec<u8> {
+        nibbles
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| (((i + 1) as u8) << 4) | (n & 0x0F))
+            .collect()
+    }
+
+    #[test]
+    fn fs9721_valid_frame() {
+        let nibbles = [
+            0x0A, 0x01, 0x02, 0x03, 0x04, 0x02, 0x01, 0x00, 0x01, 0x0D, 0x0A, 0x00, 0x00, 0x00,
+        ];
+        let frame = make_fs9721_frame(&nibbles);
+        let (payload, consumed) = extract_frame_fs9721(&frame).unwrap().unwrap();
+        assert_eq!(consumed, 14);
+        assert_eq!(payload.len(), 14);
+        assert_eq!(payload, nibbles.to_vec());
+    }
+
+    #[test]
+    fn fs9721_leading_garbage() {
+        let nibbles = [0x00; 14];
+        let frame = make_fs9721_frame(&nibbles);
+        let mut buf = vec![0xFF, 0xFE, 0xFD];
+        buf.extend_from_slice(&frame);
+        let (payload, consumed) = extract_frame_fs9721(&buf).unwrap().unwrap();
+        assert_eq!(consumed, 3 + 14);
+        assert_eq!(payload, nibbles.to_vec());
+    }
+
+    #[test]
+    fn fs9721_incomplete() {
+        // Only 10 bytes — need 14
+        let nibbles = [0x00; 14];
+        let frame = make_fs9721_frame(&nibbles);
+        let buf = frame[..10].to_vec();
+        assert!(extract_frame_fs9721(&buf).unwrap().is_none());
+    }
+
+    #[test]
+    fn fs9721_no_start_byte() {
+        // No byte with high nibble 0x1
+        let buf = vec![
+            0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0,
+        ];
+        assert!(extract_frame_fs9721(&buf).unwrap().is_none());
+    }
+
+    #[test]
+    fn fs9721_index_mismatch_skips_false_start() {
+        let mut frame = make_fs9721_frame(&[0; 14]);
+        // Corrupt byte 5 to have wrong index (put index 7 instead of 5)
+        frame[4] = 0x70;
+        // No valid frame after the corruption → returns None (not Err)
+        assert!(extract_frame_fs9721(&frame).unwrap().is_none());
+    }
+
+    #[test]
+    fn fs9721_extracts_data_nibbles() {
+        let nibbles = [
+            0x0F, 0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02,
+        ];
+        let frame = make_fs9721_frame(&nibbles);
+        let (payload, _) = extract_frame_fs9721(&frame).unwrap().unwrap();
+        assert_eq!(payload, nibbles.to_vec());
+    }
+
+    #[test]
+    fn fs9721_bad_then_good_in_buffer() {
+        // First "frame" has corrupted index, second is valid.
+        // The extractor skips the false start internally.
+        let mut bad_frame = make_fs9721_frame(&[0; 14]);
+        bad_frame[6] = 0x90; // index 9 at position 7 → mismatch
+
+        let good_nibbles = [
+            0x0A, 0x01, 0x02, 0x03, 0x04, 0x02, 0x01, 0x00, 0x01, 0x0D, 0x0A, 0x00, 0x00, 0x00,
+        ];
+        let good_frame = make_fs9721_frame(&good_nibbles);
+
+        let mut combined = bad_frame;
+        combined.extend_from_slice(&good_frame);
+
+        let (payload, _) = extract_frame_fs9721(&combined).unwrap().unwrap();
+        assert_eq!(payload, good_nibbles.to_vec());
+    }
+
+    #[test]
+    fn fs9721_false_start_in_garbage() {
+        // Garbage containing 0x1X byte (false start), then real frame
+        let mut buf = vec![0x12, 0xFF, 0xFF]; // false start at index 0
+        let good_nibbles = [0x00; 14];
+        buf.extend_from_slice(&make_fs9721_frame(&good_nibbles));
+
+        // Extractor skips the false start internally and finds the real frame
+        let (payload, consumed) = extract_frame_fs9721(&buf).unwrap().unwrap();
+        assert_eq!(payload, good_nibbles.to_vec());
+        assert_eq!(consumed, 3 + 14); // 3 garbage bytes + 14 frame bytes
     }
 }

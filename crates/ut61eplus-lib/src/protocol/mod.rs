@@ -1,4 +1,5 @@
 pub mod framing;
+pub mod fs9721;
 pub mod registry;
 pub mod ut171;
 pub mod ut181a;
@@ -38,6 +39,8 @@ pub enum DeviceFamily {
     Ut8802,
     /// UT8803 / UT8803E bench multimeter
     Ut8803,
+    /// UT803 / UT804 bench multimeter (FS9721-style framing)
+    Fs9721,
     /// UT171A / UT171B / UT171C
     Ut171,
     /// UT181A
@@ -56,6 +59,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Ut61EPlus => write!(f, "ut61eplus"),
             DeviceFamily::Ut8802 => write!(f, "ut8802"),
             DeviceFamily::Ut8803 => write!(f, "ut8803"),
+            DeviceFamily::Fs9721 => write!(f, "fs9721"),
             DeviceFamily::Ut171 => write!(f, "ut171"),
             DeviceFamily::Ut181a => write!(f, "ut181a"),
             DeviceFamily::Vc880 => write!(f, "vc880"),
