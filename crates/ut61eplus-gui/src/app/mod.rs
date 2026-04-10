@@ -1223,7 +1223,14 @@ impl App {
                 match result {
                     Ok(()) => {
                         info!("exported {} samples to {}", samples.len(), path.display());
-                        let _ = tx.send((format!("Exported {} samples", samples.len()), false));
+                        let file_name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.display().to_string());
+                        let _ = tx.send((
+                            format!("Exported {} samples to {file_name}", samples.len()),
+                            false,
+                        ));
                     }
                     Err(e) => {
                         error!("CSV export failed: {e}");
