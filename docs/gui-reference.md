@@ -196,7 +196,8 @@ UT61E+). Other devices show only the Manual link.
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, mode,
   range, and flags
-- Buffer holds up to 500K samples (~14 hours at 10 Hz)
+- Buffer holds up to 500K samples (~14 hours at 10 Hz). Recording
+  auto-stops when the buffer is full and shows a toast notification.
 
 **CSV format:**
 

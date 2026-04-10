@@ -551,7 +551,13 @@ impl App {
                         _ => {}
                     }
 
-                    self.recording.push(&m);
+                    if self.recording.push(&m) {
+                        self.toast = Some((
+                            "Recording stopped \u{2014} buffer full (500K samples)".to_string(),
+                            true,
+                            Instant::now(),
+                        ));
+                    }
 
                     // Update spec cache if mode/range changed
                     let new_key = (m.mode_raw, m.range_raw);

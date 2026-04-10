@@ -62,10 +62,16 @@ impl Recording {
         }
     }
 
-    pub fn push(&mut self, m: &Measurement) {
+    /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
+    pub fn push(&mut self, m: &Measurement) -> bool {
         if self.active && self.samples.len() < MAX_RECORDING_SAMPLES {
             self.samples.push(Sample::from_measurement(m));
+            if self.samples.len() >= MAX_RECORDING_SAMPLES {
+                self.active = false;
+                return true;
+            }
         }
+        false
     }
 
     pub fn is_full(&self) -> bool {
@@ -143,6 +149,37 @@ mod tests {
         r.toggle(); // stop
         r.toggle(); // start again — should clear
         assert!(r.samples.is_empty());
+    }
+
+    #[test]
+    fn recording_auto_stops_when_full() {
+        let mut r = Recording::new();
+        r.toggle();
+        let m = make_measurement(b"  1.234");
+        // Fill to one below capacity
+        for _ in 0..MAX_RECORDING_SAMPLES - 1 {
+            assert!(!r.push(&m));
+            assert!(r.active);
+        }
+        // The push that hits capacity should auto-stop and return true
+        assert!(r.push(&m));
+        assert!(!r.active);
+        assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
+        assert!(r.is_full());
+    }
+
+    #[test]
+    fn recording_push_after_auto_stop_is_noop() {
+        let mut r = Recording::new();
+        r.toggle();
+        let m = make_measurement(b"  1.234");
+        for _ in 0..MAX_RECORDING_SAMPLES {
+            r.push(&m);
+        }
+        assert!(!r.active);
+        // Further pushes should be no-ops
+        assert!(!r.push(&m));
+        assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
     }
 
     #[test]
