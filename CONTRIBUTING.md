@@ -18,7 +18,10 @@ The protocol was reverse-engineered, not documented by UNI-T. Captures from real
 The built-in capture wizard walks you through each measurement mode and flag:
 
 ```sh
-cargo run --bin ut61eplus -- capture
+ut61eplus capture
+
+# For non-UT61E+ meters, specify the device family
+ut61eplus --device ut8803 capture
 ```
 
 It will:
@@ -31,10 +34,10 @@ You can run a partial capture if you only want specific steps:
 
 ```sh
 # List available steps
-cargo run --bin ut61eplus -- capture --list-steps
+ut61eplus capture --list-steps
 
 # Run only specific steps
-cargo run --bin ut61eplus -- capture --steps dcmv,temp,duty
+ut61eplus capture --steps dcmv,temp,duty
 ```
 
 Captures auto-save after each step, so you can interrupt and resume later.
@@ -45,7 +48,7 @@ Attach the YAML file to your GitHub issue. If your meter is an unsupported model
 
 ### Other models
 
-If you have a UNI-T meter that uses the same CP2110 USB adapter (e.g. UT61B+, UT61D+), we'd love captures from it. The capture wizard will note that it's an unknown model and prompt you to complete as many steps as possible. See also [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7) for UT61D+/UT61B+ specific modes that need verification.
+If you have any of the [supported meters](docs/supported-devices.md), we'd love captures — especially for experimental (unverified) devices. Use `--device <family>` to select your meter model, e.g. `ut61eplus --device ut171 capture`. See the [supported devices table](README.md#supported-devices) for verification issue links.
 
 ## Unconfirmed platform testing
 
@@ -66,7 +69,7 @@ Even "it works" is valuable. If something doesn't work, the output of `RUST_LOG=
 ## Code changes
 
 1. Fork and create a feature branch
-2. Make sure `cargo clippy --workspace -- -D warnings` and `cargo test --workspace` pass
+2. Make sure `cargo fmt --check`, `cargo clippy --workspace -- -D warnings`, and `cargo test --workspace` pass (the pre-commit hook runs all three — see [development guide](docs/development.md))
 3. Include tests for new functionality
-4. For protocol changes: verify against a real device (`RUST_LOG=ut61eplus_lib=trace cargo run --bin ut61eplus -- debug`)
+4. For protocol changes: verify against a real device (`RUST_LOG=ut61eplus_lib=trace ut61eplus debug`)
 5. Open a pull request with a description of what and why
