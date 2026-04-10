@@ -45,6 +45,11 @@ pub struct ModeSpecInfo {
     pub notes: &'static [&'static str],
 }
 
+/// Look up a range entry by index. Shared by all device table implementations.
+fn lookup_range(table: &[RangeInfo], range: u8) -> Option<&RangeInfo> {
+    table.get(range as usize)
+}
+
 /// Trait for device-specific range/unit lookup tables.
 pub trait DeviceTable: Send {
     fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo>;

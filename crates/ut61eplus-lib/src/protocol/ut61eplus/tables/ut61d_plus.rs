@@ -1,6 +1,6 @@
 use super::specs_ut61b_plus as specs_b;
 use super::specs_ut61d_plus as specs;
-use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo};
+use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_range};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61D+ (and UT161D).
@@ -397,10 +397,6 @@ impl Ut61dPlusTable {
             ],
         }
     }
-
-    fn lookup<'a>(&self, table: &'a [RangeInfo], range: u8) -> Option<&'a RangeInfo> {
-        table.get(range as usize)
-    }
 }
 
 impl Default for Ut61dPlusTable {
@@ -412,26 +408,26 @@ impl Default for Ut61dPlusTable {
 impl DeviceTable for Ut61dPlusTable {
     fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo> {
         match mode {
-            Mode::DcV => self.lookup(&self.dc_v, range),
-            Mode::AcV => self.lookup(&self.ac_v, range),
-            Mode::DcMv => self.lookup(&self.dc_mv, range),
-            Mode::AcMv => self.lookup(&self.ac_mv, range),
-            Mode::Ohm => self.lookup(&self.ohm, range),
-            Mode::Capacitance => self.lookup(&self.capacitance, range),
-            Mode::Hz => self.lookup(&self.hz, range),
-            Mode::DutyCycle => self.lookup(&self.duty_cycle, range),
-            Mode::TempC => self.lookup(&self.temp_c, range),
-            Mode::TempF => self.lookup(&self.temp_f, range),
-            Mode::Diode => self.lookup(&self.diode, range),
-            Mode::Continuity => self.lookup(&self.continuity, range),
-            Mode::DcUa => self.lookup(&self.dc_ua, range),
-            Mode::AcUa => self.lookup(&self.ac_ua, range),
-            Mode::DcMa => self.lookup(&self.dc_ma, range),
-            Mode::AcMa => self.lookup(&self.ac_ma, range),
-            Mode::DcA => self.lookup(&self.dc_a, range),
-            Mode::AcA => self.lookup(&self.ac_a, range),
+            Mode::DcV => lookup_range(&self.dc_v, range),
+            Mode::AcV => lookup_range(&self.ac_v, range),
+            Mode::DcMv => lookup_range(&self.dc_mv, range),
+            Mode::AcMv => lookup_range(&self.ac_mv, range),
+            Mode::Ohm => lookup_range(&self.ohm, range),
+            Mode::Capacitance => lookup_range(&self.capacitance, range),
+            Mode::Hz => lookup_range(&self.hz, range),
+            Mode::DutyCycle => lookup_range(&self.duty_cycle, range),
+            Mode::TempC => lookup_range(&self.temp_c, range),
+            Mode::TempF => lookup_range(&self.temp_f, range),
+            Mode::Diode => lookup_range(&self.diode, range),
+            Mode::Continuity => lookup_range(&self.continuity, range),
+            Mode::DcUa => lookup_range(&self.dc_ua, range),
+            Mode::AcUa => lookup_range(&self.ac_ua, range),
+            Mode::DcMa => lookup_range(&self.dc_ma, range),
+            Mode::AcMa => lookup_range(&self.ac_ma, range),
+            Mode::DcA => lookup_range(&self.dc_a, range),
+            Mode::AcA => lookup_range(&self.ac_a, range),
             // UT61D+ has LoZ V mode
-            Mode::LozV | Mode::LozV2 => self.lookup(&self.loz_v, range),
+            Mode::LozV | Mode::LozV2 => lookup_range(&self.loz_v, range),
             // UT61D+ has no hFE, no LPF, no AC+DC, no Inrush
             Mode::Hfe
             | Mode::Live
