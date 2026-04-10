@@ -381,10 +381,27 @@ fn open_with_help(
                 "{} adapter not found: {detail}",
                 style("Error:").red().bold()
             );
-            eprintln!(
-                "{}",
-                style("Run 'ut61eplus list' to see connected devices.").yellow()
-            );
+            match ut61eplus_lib::list_devices() {
+                Ok(devices) if devices.is_empty() => {
+                    eprintln!("{}", style("No devices currently connected.").yellow());
+                }
+                Ok(devices) => {
+                    eprintln!("\n{}:", style("Connected devices").yellow());
+                    for (i, dev) in devices.iter().enumerate() {
+                        eprintln!("  {} {dev}", style(format!("[{i}]")).cyan());
+                    }
+                    eprintln!(
+                        "\n{}",
+                        style("Use --adapter <serial-or-path> to select one.").dim()
+                    );
+                }
+                Err(_) => {
+                    eprintln!(
+                        "{}",
+                        style("Run 'ut61eplus list' to see connected devices.").yellow()
+                    );
+                }
+            }
             Err("adapter not found".into())
         }
         Err(e) => Err(e.into()),

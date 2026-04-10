@@ -681,14 +681,29 @@ impl App {
             // --adapter specified but no matching device
             ui.label(RichText::new("Adapter not found").color(warn_color));
             let detail = error.strip_prefix("adapter not found: ").unwrap_or(&error);
+            let mut msg = format!("No device matched --adapter '{detail}'.");
+            match ut61eplus_lib::list_devices() {
+                Ok(devices) if devices.is_empty() => {
+                    msg.push_str("\n\nNo devices currently connected.");
+                }
+                Ok(devices) => {
+                    msg.push_str("\n\nConnected devices:");
+                    for (i, dev) in devices.iter().enumerate() {
+                        msg.push_str(&format!("\n  [{i}] {dev}"));
+                    }
+                    msg.push_str("\n\nRestart with the correct --adapter value.");
+                }
+                Err(_) => {
+                    msg.push_str(
+                        "\n\nRun 'ut61eplus list' to see connected devices,\n\
+                         then restart with the correct --adapter value.",
+                    );
+                }
+            }
             ui.label(
-                RichText::new(format!(
-                    "No device matched --adapter '{detail}'.\n\n\
-                     Run 'ut61eplus list' to see connected devices,\n\
-                     then restart with the correct --adapter value."
-                ))
-                .small()
-                .color(ui.visuals().weak_text_color()),
+                RichText::new(msg)
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
             );
         } else {
             // Dongle found but meter not responding
