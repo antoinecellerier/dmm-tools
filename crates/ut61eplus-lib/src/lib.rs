@@ -11,7 +11,7 @@ pub mod transport;
 
 use error::{Error, Result};
 use log::{info, warn};
-use protocol::{DeviceFamily, Protocol};
+use protocol::Protocol;
 use std::ffi::CString;
 use transport::Transport;
 
@@ -65,74 +65,6 @@ impl<T: Transport> Dmm<T> {
     pub fn capture_steps(&self) -> Vec<protocol::CaptureStep> {
         self.protocol.capture_steps()
     }
-}
-
-/// Open the first UT61E+ device found via hidapi and return an initialized Dmm.
-///
-/// This only tries CP2110. Prefer [`open_device_by_id_auto`] for multi-transport support.
-#[deprecated(note = "use open_device_by_id_auto() for CP2110 + CH9329 auto-detection")]
-#[allow(deprecated)]
-pub fn open() -> Result<Dmm<cp2110::Cp2110>> {
-    open_device(DeviceFamily::Ut61EPlus)
-}
-
-/// Open a device with the specified protocol family.
-///
-/// This only tries CP2110. Prefer [`open_device_by_id_auto`] for multi-transport support.
-///
-/// The `Mock` family is not supported here — use [`mock::open_mock()`] instead.
-/// Passing `DeviceFamily::Mock` will panic; callers must route mock before calling this.
-#[deprecated(note = "use open_device_by_id_auto() for CP2110 + CH9329 auto-detection")]
-pub fn open_device(family: DeviceFamily) -> Result<Dmm<cp2110::Cp2110>> {
-    let api = hidapi::HidApi::new().map_err(Error::Hid)?;
-    let device = api
-        .open(cp2110::VID, cp2110::PID)
-        .map_err(|_| Error::DeviceNotFound {
-            vid: cp2110::VID,
-            pid: cp2110::PID,
-        })?;
-
-    let cp = cp2110::Cp2110::new(device);
-    cp.init_uart()?;
-
-    let protocol: Box<dyn Protocol> = match family {
-        DeviceFamily::Ut61EPlus => Box::new(protocol::ut61eplus::Ut61PlusProtocol::new()),
-        DeviceFamily::Ut8802 => Box::new(protocol::ut8802::Ut8802Protocol::new()),
-        DeviceFamily::Ut8803 => Box::new(protocol::ut8803::Ut8803Protocol::new()),
-        DeviceFamily::Ut171 => Box::new(protocol::ut171::Ut171Protocol::new()),
-        DeviceFamily::Ut181a => Box::new(protocol::ut181a::Ut181aProtocol::new()),
-        DeviceFamily::Vc880 => Box::new(protocol::vc880::Vc880Protocol::new()),
-        DeviceFamily::Vc890 => Box::new(protocol::vc890::Vc890Protocol::new()),
-        DeviceFamily::Fs9721 => Box::new(protocol::fs9721::Fs9721Protocol::new_ut804()),
-        DeviceFamily::Mock => unreachable!("handled above"),
-    };
-
-    Dmm::new(cp, protocol)
-}
-
-/// Open a device by registry ID (e.g. "ut61eplus", "ut61b+", "ut8803").
-///
-/// This only tries CP2110. Prefer [`open_device_by_id_auto`] for multi-transport support.
-///
-/// The `mock` device is not supported here — use [`mock::open_mock()`] instead.
-#[deprecated(note = "use open_device_by_id_auto() for CP2110 + CH9329 auto-detection")]
-pub fn open_device_by_id(id: &str) -> Result<Dmm<cp2110::Cp2110>> {
-    let entry =
-        protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
-
-    let api = hidapi::HidApi::new().map_err(Error::Hid)?;
-    let device = api
-        .open(cp2110::VID, cp2110::PID)
-        .map_err(|_| Error::DeviceNotFound {
-            vid: cp2110::VID,
-            pid: cp2110::PID,
-        })?;
-
-    let cp = cp2110::Cp2110::new(device);
-    cp.init_uart()?;
-
-    let protocol = (entry.new_protocol)();
-    Dmm::new(cp, protocol)
 }
 
 /// Descriptor for a known USB-HID transport bridge.
