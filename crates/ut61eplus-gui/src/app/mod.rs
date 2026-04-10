@@ -631,7 +631,9 @@ impl App {
                  On Linux, ensure the udev rule is installed:\n\
                  sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/\n\
                  sudo udevadm control --reload-rules\n\
-                 Then unplug and replug the cable.\n\n\
+                 Your user must be in the plugdev group:\n\
+                 sudo usermod -aG plugdev $USER\n\
+                 Then log out/in and replug the cable.\n\n\
                  Click \"Connect\" after resolving the issue."
             } else if cfg!(target_os = "windows") {
                 "Check that the USB cable is plugged in and the meter is on.\n\

@@ -1,3 +1,0 @@
-# UNI-T multimeters — CP2110 HID-to-UART bridge (UT61E+, UT8803, UT171, UT181A, etc.)
-# Install: sudo cp 99-cp2110-unit.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea80", MODE="0666"

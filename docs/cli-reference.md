@@ -114,8 +114,8 @@ ut61eplus list
 ```
 
 Prints each detected device with an index number and transport type. If no
-devices are found, prints troubleshooting hints (udev rules on Linux, driver
-install on Windows).
+devices are found, prints troubleshooting hints (udev rules and `plugdev`
+group membership on Linux, driver install on Windows).
 
 When multiple devices are connected, use `--adapter` with a serial number or
 HID path from the `list` output to select a specific device:

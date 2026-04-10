@@ -284,7 +284,11 @@ fn print_transport_setup_help() {
             style("sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/").dim()
         );
         eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
-        eprintln!("Then unplug and replug the cable.");
+        eprintln!(
+            "Your user must be in the plugdev group: {}",
+            style("sudo usermod -aG plugdev $USER").dim()
+        );
+        eprintln!("Then log out/in and replug the cable.");
     }
     #[cfg(target_os = "windows")]
     {
