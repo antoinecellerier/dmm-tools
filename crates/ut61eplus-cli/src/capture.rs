@@ -149,8 +149,6 @@ fn run_protocol_capture(
     report: &mut CaptureReport,
     output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let include = |id: &str| -> bool { step_filter.as_ref().is_none_or(|f| f.contains(id)) };
-
     // Convert protocol steps to CLI steps
     let steps: Vec<CaptureStep> = protocol_steps
         .iter()
@@ -172,7 +170,7 @@ fn run_protocol_capture(
     );
 
     for step in &steps {
-        if !include(step.id) {
+        if !step_included(step_filter, step.id) {
             continue;
         }
         let done = run_capture_step(dmm, step, report, true)?;
