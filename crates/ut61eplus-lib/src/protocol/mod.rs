@@ -8,6 +8,7 @@ pub mod ut8802;
 pub mod ut8803;
 pub mod vc880;
 pub mod vc890;
+mod vc8x0_common;
 
 use crate::error::Result;
 use crate::measurement::Measurement;

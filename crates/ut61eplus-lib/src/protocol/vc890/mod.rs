@@ -271,15 +271,6 @@ impl Vc890Protocol {
             },
         }
     }
-
-    /// Build a simple command frame (no data): [0xAB, 0xCD, 0x03, cmd, chk_hi, chk_lo].
-    fn build_command(cmd: u8) -> Vec<u8> {
-        let mut frame = vec![0xAB, 0xCD, 0x03, cmd];
-        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-        frame.push((sum >> 8) as u8);
-        frame.push((sum & 0xFF) as u8);
-        frame
-    }
 }
 
 impl Protocol for Vc890Protocol {
@@ -292,7 +283,7 @@ impl Protocol for Vc890Protocol {
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // Send measurement request (0x5E) — same command as UT61E+
-        let request = Self::build_command(CMD_GET_MEASUREMENT);
+        let request = super::vc8x0_common::build_command(CMD_GET_MEASUREMENT);
         transport.write(&request)?;
 
         // Read response
@@ -309,53 +300,16 @@ impl Protocol for Vc890Protocol {
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
-        // Command bytes are the same as VC-880
-        let cmd_byte = match command {
-            "hold" => 0x4A,
-            "rel" => 0x48,
-            "max_min_avg" => 0x49,
-            "exit_max_min_avg" => 0x43,
-            "range_auto" => 0x47,
-            "range_manual" => 0x46,
-            "light" => 0x4B,
-            "select" => 0x4C,
-            _ => return Err(Error::UnsupportedCommand(command.to_string())),
-        };
-        let frame = Self::build_command(cmd_byte);
+        use super::vc8x0_common;
+        let cmd_byte = vc8x0_common::command_byte(command)?;
+        let frame = vc8x0_common::build_command(cmd_byte);
         debug!("vc890: sending command {command} ({cmd_byte:#04x})");
         transport.write(&frame)?;
         Ok(())
     }
 
     fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>> {
-        let frame = Self::build_command(0x00);
-        debug!("vc890: sending GetDeviceID command");
-        transport.write(&frame)?;
-
-        match framing::read_frame(
-            &mut self.rx_buf,
-            transport,
-            framing::extract_frame_abcd_be16,
-            |p| !p.is_empty() && p[0] == 0x00,
-            FrameErrorRecovery::SkipAndRetry,
-            "vc890-id",
-            &framing::HEADER,
-        ) {
-            Ok(payload) if payload.len() >= 21 => {
-                let name = String::from_utf8_lossy(&payload[1..21]).trim().to_string();
-                debug!("vc890: device name: {name}");
-                if name.is_empty() {
-                    Ok(None)
-                } else {
-                    Ok(Some(name))
-                }
-            }
-            Ok(_) => Ok(None),
-            Err(e) => {
-                debug!("vc890: failed to read DeviceID: {e}");
-                Ok(None)
-            }
-        }
+        super::vc8x0_common::read_device_name(&mut self.rx_buf, transport, "vc890")
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -751,7 +705,7 @@ mod tests {
 
     #[test]
     fn send_command_builds_correct_frame() {
-        let frame = Vc890Protocol::build_command(CMD_GET_MEASUREMENT);
+        let frame = super::super::vc8x0_common::build_command(CMD_GET_MEASUREMENT);
         assert_eq!(frame[0], 0xAB);
         assert_eq!(frame[1], 0xCD);
         assert_eq!(frame[2], 0x03);
