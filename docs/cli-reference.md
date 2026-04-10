@@ -154,6 +154,10 @@ ut61eplus read [OPTIONS]
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 
+CSV output begins with a `# device:` comment line identifying the meter model,
+followed by the column header. JSON output begins with a `_metadata` line
+containing the device model, followed by one measurement object per line.
+
 When the session ends, a summary line (sample count, min, max, average) is
 printed to stderr. When `--integrate` is active, the total integral is also shown.
 

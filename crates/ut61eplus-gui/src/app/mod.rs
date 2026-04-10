@@ -3,6 +3,7 @@ mod controls;
 
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info};
+use std::io::Write;
 use std::sync::mpsc;
 use std::time::Instant;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
@@ -1218,6 +1219,7 @@ impl App {
         // Clone samples so the file dialog + write runs on a separate thread
         // without blocking the UI.
         let samples = self.recording.samples.clone();
+        let device_model = self.selected_device().display_name;
         let (tx, rx) = std::sync::mpsc::channel::<(String, bool)>();
         std::thread::spawn(move || {
             if let Some(path) = rfd::FileDialog::new()
@@ -1226,7 +1228,9 @@ impl App {
                 .save_file()
             {
                 let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-                    let mut wtr = csv::Writer::from_path(&path)?;
+                    let mut file = std::fs::File::create(&path)?;
+                    writeln!(file, "# device: {device_model}")?;
+                    let mut wtr = csv::Writer::from_writer(file);
                     wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
                     for s in &samples {
                         wtr.write_record([

@@ -525,15 +525,28 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
         None => Box::new(std::io::stdout().lock()),
     };
 
-    if matches!(format, OutputFormat::Csv) {
-        if integrate {
+    let model_name = dmm.profile().model_name;
+    match format {
+        OutputFormat::Csv => {
+            writeln!(writer, "# device: {model_name}")?;
+            if integrate {
+                writeln!(
+                    writer,
+                    "timestamp,mode,value,unit,range,flags,integral,integral_unit"
+                )?;
+            } else {
+                writeln!(writer, "timestamp,mode,value,unit,range,flags")?;
+            }
+        }
+        OutputFormat::Json => {
             writeln!(
                 writer,
-                "timestamp,mode,value,unit,range,flags,integral,integral_unit"
+                "{}",
+                serde_json::to_string(&serde_json::json!({"_metadata":{"device": model_name}}))
+                    .map_err(std::io::Error::other)?
             )?;
-        } else {
-            writeln!(writer, "timestamp,mode,value,unit,range,flags")?;
         }
+        OutputFormat::Text => {}
     }
 
     let interval = Duration::from_millis(interval_ms);

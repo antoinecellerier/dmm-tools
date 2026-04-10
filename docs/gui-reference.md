@@ -202,6 +202,7 @@ UT61E+). Other devices show only the Manual link.
 **CSV format:**
 
 ```
+# device: UT61E+
 timestamp,mode,value,unit,range,flags
 2026-03-19T10:15:30.123+01:00,DC V,3.3042,V,22V,AUTO
 ```
