@@ -68,20 +68,31 @@ streaming protocols. Use `--device ut8802` or `--device ut8803`.
 | **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/12)) | 0xAC header, 8-byte BCD frames, no checksum, streaming after 0x5A trigger |
 | **UT8803 / UT8803E** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/3)) | 21-byte AB CD frames, streaming after 0x5A trigger |
 
-## Future candidates (UCI protocol family)
+## Experimental: UT803 and UT804
+
+These bench DMMs use the CH9325 USB HID bridge with a proprietary data
+format carried over FS9721-style 14-byte framing. Use `--device ut803`
+or `--device ut804`.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **UT803 / UT803N** | UNI-T | Bench DMM (6000 counts) | `1A86:E008` | Documented | CH9325 HID, FS9721 14-byte LCD segment protocol (not 0xAC/0xABCD) |
-| **UT804 / UT804N** | UNI-T | Bench DMM (40000 counts) | `1A86:E008` | Documented | CH9325 HID, FS9721 14-byte LCD segment protocol (not 0xAC/0xABCD) |
+| **UT803** | UNI-T | Bench DMM (6000 counts) | `1A86:E008` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/15)) | CH9325 HID, proprietary structured data in FS9721 framing |
+| **UT804** | UNI-T | Bench DMM (4000 counts) | `1A86:E008` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/16)) | CH9325 HID, proprietary structured data in FS9721 framing, 15 modes |
+
+**Protocol correction (2026-04-10):** Initial analysis suggested standard
+FS9721 LCD segment encoding. Binary constant extraction from UT803.exe and
+UT804.exe confirmed the data nibbles carry **proprietary structured data**
+(mode codes, range codes, digit values) rather than raw LCD segments.
+See [research/ut803/reverse-engineered-protocol.md](research/ut803/reverse-engineered-protocol.md).
+
+## Future candidates
+
+| Model | Brand | Type | VID:PID | Status | Notes |
+|-------|-------|------|---------|--------|-------|
 | **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | Documented | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional) |
 
-**CH9325 HID (VID `0x1A86`, PID `0xE008`)** transport is implemented in
-`ch9325.rs`. The UT803/UT804 protocol (FS9721 14-byte LCD
-segments) is not yet implemented — Ghidra decompilation of the standalone
-UT803.exe/UT804.exe apps confirmed they use FS9721, not the 0xAC/0xABCD
-UCI format that the uci.dll SDK auto-detects. The UT805A uses a serial
-COM port (not HID) and needs a separate serial transport layer.
+The UT805A uses a serial COM port (not HID) and needs a separate serial
+transport layer.
 
 ### Independent research findings
 

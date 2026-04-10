@@ -658,7 +658,7 @@ An implementation could:
 | CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [KNOWN] | sigrok CH9325 wiki |
 | CH9325 feature report baud encoding: uint16 LE | [KNOWN] | sigrok + Lukas Schwarz UT61B + HE2325U driver |
 | QinHeng wire format in UCI SDK: auto-detected 0xAC/0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
-| UT803/UT804 actual wire format: FS9721 14-byte LCD segments | [KNOWN] | Ghidra decompilation of UT803.exe/UT804.exe (2026-04-10) |
+| UT803/UT804 actual wire format: FS9721 framing with proprietary structured data (NOT LCD segments) | [KNOWN] | Ghidra decompilation + binary constant extraction from UT803.exe/UT804.exe (2026-04-10) |
 | UT803/UT804 init: 2400 baud via CH9325 feature report | [KNOWN] | Ghidra UT804.exe FUN_00560668 |
 | UT804 range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A range coding table | [KNOWN] | Programming manual page 12 |
@@ -674,11 +674,11 @@ An implementation could:
 | Finding | Question |
 |---------|----------|
 | ~~QinHeng feature report baud rate encoding~~ | **RESOLVED**: primary=2400 baud (0x0960 LE), fallback=19200 baud (0x4B00 LE) |
-| ~~Which wire format per QinHeng model~~ | **RESOLVED**: UT803/UT804 use FS9721 14-byte LCD segment protocol (NOT 0xAC/0xABCD). Confirmed by Ghidra decompilation of standalone apps (2026-04-10). UCI SDK's auto-detect is for the SDK only. |
+| ~~Which wire format per QinHeng model~~ | **RESOLVED**: UT803/UT804 use FS9721 14-byte framing with proprietary structured data (NOT LCD segments, NOT 0xAC/0xABCD). Confirmed by binary constant extraction (2026-04-10). UCI SDK's auto-detect is for the SDK only. |
 | UT805A serial frame format | UT805A manual documents ASCII text protocol (10-byte frames + CR/LF, single-letter commands). NOT the same as HID models. |
 | ~~UT805A 7-bit vs 8-bit data~~ | **RESOLVED**: UT805A manual says 9600/8N1. USB is virtual COM port (not HID). |
 | UT8802 byte 6 purpose | Bargraph? Secondary status? |
 | UT8802 byte 7 exact bit assignments | HOLD/REL/MAX/MIN positions within bits 0-6 |
 | UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
-| UT803/UT804 FS9721 segment-to-mode mapping | Decompiled 7-segment table and flag bit positions need verification against real hardware |
+| UT803/UT804 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding, nibbles 12-14 — all need verification against real hardware. See `docs/research/ut803/reverse-engineered-protocol.md` |
 | UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |

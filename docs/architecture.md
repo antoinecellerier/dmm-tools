@@ -24,10 +24,11 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
-| `protocol/framing.rs` | Message framing: find `AB CD` or `0xAC` header, extract payload, validate checksum (or position code + BCD for UT8802) |
+| `protocol/framing.rs` | Message framing: find `AB CD`, `0xAC`, or FS9721 index-nibble header, extract payload, validate checksum (or position/index validation) |
 | `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `DeviceTable` impls with range info and spec data) |
 | `protocol/ut8802/` | UT8802 family: `Ut8802Protocol` — streaming protocol with 0x5A trigger, 0xAC 8-byte BCD frames |
 | `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming protocol with 0x5A trigger |
+| `protocol/fs9721/` | UT803/UT804: `Fs9721Protocol` — streaming, proprietary structured data in FS9721 14-byte framing (CH9325 HID) |
 | `protocol/ut171/` | UT171 family: `Ut171Protocol` — streaming protocol, float32 LE values |
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
 | `protocol/vc880/` | VC-880/VC650BT: `Vc880Protocol` — streaming, AB CD framing (reuses UT61E+ extractor), ASCII display values |

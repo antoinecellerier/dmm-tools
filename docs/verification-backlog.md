@@ -66,16 +66,25 @@ real hardware**. Every aspect needs end-to-end verification.
 - PC button activation requirement
 - VC650BT compatibility (same protocol confirmed by installer comparison)
 
-**UT803 / UT804 (CH9325 HID, FS9721 protocol)** — NOT YET IMPLEMENTED:
-- These meters use the FS9721/FS9922 14-byte LCD segment protocol, NOT
-  the 0xAC or 0xABCD UCI format (confirmed by Ghidra decompilation of
-  standalone UT803.exe/UT804.exe, 2026-04-10).
-- Transport: CH9325 HID at 2400 baud — already implemented.
-- Protocol: Needs new FS9721 protocol family implementation. The FS9721
-  format is well-documented (Fortune Semiconductor datasheets, sigrok wiki).
-- Decompiled data from UT803/UT804 apps provides: 7-segment decode table,
-  mode/function code mapping (15 modes for UT804), flag bit positions,
-  decimal point bit positions. See `references/ut800/` for decompiled output.
+**UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
+- **Correction (2026-04-10):** These meters use FS9721-style 14-byte framing
+  but with **proprietary structured data**, NOT raw LCD segment encoding.
+  Nibble 7 = mode code (1-15), nibble 6 = range, nibbles 1-5 = digits,
+  nibbles 10-11 = format markers (0x0D, 0x0A). Confirmed by binary constant
+  extraction from UT803.exe V1.01 and UT804.exe V2.00.
+- Transport: CH9325 HID at 2400 baud — implemented.
+- Protocol: `fs9721` family — implemented with mode/range/unit tables,
+  AC/DC detection, HOLD/AUTO flags.
+- **Needs hardware verification:**
+  - Negative value encoding (sign bit location unknown)
+  - Exact range-to-decimal-point tables for all modes
+  - UT803 exact mode list (fewer than UT804's 15)
+  - Status flags beyond HOLD/AUTO (MIN, MAX, REL, Low Battery)
+  - Nibbles 12-14 purpose
+  - Whether 0x5A trigger byte helps/hurts
+  - Streaming rate and connection stability
+  - Overload representation in digit nibbles
+- See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
   transport — separate scope from HID-based meters.

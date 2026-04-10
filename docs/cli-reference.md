@@ -45,6 +45,8 @@ mode/range mappings than UT61E+).
 | `ut161e` | `ut161` | UT161E (same protocol as UT61E+) |
 | `ut8802` | `ut8802n` | UT8802 / UT8802N bench multimeter (experimental) |
 | `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
+| `ut803` | | UT803 bench multimeter, 6000 counts (experimental) |
+| `ut804` | | UT804 bench multimeter, 4000 counts (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (experimental) |
 | `vc880` | `vc-880` | Voltcraft VC-880 handheld DMM (experimental) |
