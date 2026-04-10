@@ -1,6 +1,8 @@
 use eframe::egui::{Color32, FontId, RichText, Ui};
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
+use crate::theme::ThemeColors;
+
 /// Base font size for the primary reading in the wide (side panel) layout.
 pub(crate) const BASE_READING_FONT_SIZE: f32 = 36.0;
 
@@ -41,11 +43,7 @@ fn value_display(ui: &Ui, m: &Measurement) -> (String, Color32) {
         MeasuredValue::Normal(_) => (format_value_display(m), ui.visuals().text_color()),
         MeasuredValue::Overload => (
             format_value_display(m),
-            if ui.visuals().dark_mode {
-                Color32::from_rgb(220, 60, 60)
-            } else {
-                Color32::from_rgb(180, 0, 0)
-            },
+            ThemeColors::new(ui.visuals().dark_mode).red(),
         ),
         MeasuredValue::NcvLevel(_) => (format_value_display(m), ui.visuals().text_color()),
     }
@@ -335,17 +333,9 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32) {
         ui.label(text);
     };
 
-    let dark = ui.visuals().dark_mode;
-    let accent = if dark {
-        Color32::from_rgb(100, 180, 255)
-    } else {
-        Color32::from_rgb(0, 100, 200)
-    };
-    let warning = if dark {
-        Color32::from_rgb(230, 160, 40)
-    } else {
-        Color32::from_rgb(180, 100, 0)
-    };
+    let tc = ThemeColors::new(ui.visuals().dark_mode);
+    let accent = tc.blue_accent();
+    let warning = tc.recording_full_warning();
 
     if m.flags.auto_range {
         badge(ui, "AUTO", accent);
