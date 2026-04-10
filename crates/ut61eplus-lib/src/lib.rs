@@ -10,8 +10,9 @@ pub mod stats;
 pub mod transport;
 
 use error::{Error, Result};
-use log::info;
+use log::{info, warn};
 use protocol::{DeviceFamily, Protocol};
+use std::ffi::CString;
 use transport::Transport;
 
 /// Top-level handle for communicating with the multimeter.
@@ -181,21 +182,93 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
 ///
 /// Tries transports in order (CP2110, CH9329, CH9325).
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
-pub fn open_device_by_id_auto(id: &str) -> Result<Dmm<Box<dyn Transport>>> {
+///
+/// When `adapter` is `Some`, selects a specific USB adapter by serial number
+/// or HID device path (as shown by [`list_devices`]). When `None`, picks the
+/// first matching adapter (and logs a warning if multiple are found).
+pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box<dyn Transport>>> {
     let entry =
         protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
 
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
 
+    match adapter {
+        Some(adapter) => open_with_adapter(&api, adapter),
+        None => open_first_match(&api),
+    }
+    .map(|(device, kt)| {
+        info!(
+            "found {} adapter (VID={:#06x} PID={:#06x})",
+            kt.name, kt.vid, kt.pid
+        );
+        ((kt.init)(device), (entry.new_protocol)())
+    })
+    .and_then(|(transport, protocol)| Dmm::new(transport?, protocol))
+}
+
+/// Open a specific adapter identified by serial number or HID path.
+///
+/// Tries serial number matching first (most common), then falls back to
+/// HID path matching. This avoids needing to guess the format — path
+/// formats vary across platforms (Linux `/dev/hidrawN`, Windows `\\?\HID#...`,
+/// macOS `IOService:...`).
+fn open_with_adapter(
+    api: &hidapi::HidApi,
+    adapter: &str,
+) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
+    // Try serial number first — fast, no enumeration needed.
+    for kt in KNOWN_TRANSPORTS {
+        if let Ok(device) = api.open_serial(kt.vid, kt.pid, adapter) {
+            return Ok((device, kt));
+        }
+    }
+
+    // Fall back to HID path — enumerate to determine which transport.
+    let dev_info = api
+        .device_list()
+        .find(|dev| dev.path().to_string_lossy() == adapter);
+
+    if let Some(dev_info) = dev_info {
+        let kt = KNOWN_TRANSPORTS
+            .iter()
+            .find(|kt| dev_info.vendor_id() == kt.vid && dev_info.product_id() == kt.pid)
+            .ok_or_else(|| {
+                Error::AdapterNotFound(format!(
+                    "{adapter} (device exists but is not a supported USB adapter)"
+                ))
+            })?;
+
+        let path =
+            CString::new(adapter).map_err(|_| Error::AdapterNotFound(adapter.to_string()))?;
+        let device = api.open_path(&path).map_err(Error::Hid)?;
+        Ok((device, kt))
+    } else {
+        Err(Error::AdapterNotFound(adapter.to_string()))
+    }
+}
+
+/// Open the first matching adapter across all known transports.
+/// Warns if multiple adapters are found.
+fn open_first_match(api: &hidapi::HidApi) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
+    let match_count: usize = api
+        .device_list()
+        .filter(|dev| {
+            KNOWN_TRANSPORTS
+                .iter()
+                .any(|kt| dev.vendor_id() == kt.vid && dev.product_id() == kt.pid)
+        })
+        .count();
+
+    if match_count > 1 {
+        warn!(
+            "Multiple USB adapters found ({match_count} devices). \
+             Using first match. Specify an adapter to select a specific device."
+        );
+    }
+
     for kt in KNOWN_TRANSPORTS {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
-            info!(
-                "found {} adapter (VID={:#06x} PID={:#06x})",
-                kt.name, kt.vid, kt.pid
-            );
-            let transport = (kt.init)(device)?;
-            let protocol = (entry.new_protocol)();
-            return Dmm::new(transport, protocol);
+            return Ok((device, kt));
         }
     }
 
@@ -216,7 +289,10 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
         devices.push(DeviceInfo {
             path: dev.path().to_string_lossy().into_owned(),
             product: dev.product_string().map(|s| s.to_string()),
-            serial: dev.serial_number().map(|s| s.to_string()),
+            serial: dev
+                .serial_number()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
             transport: kt.name,
         });
     }

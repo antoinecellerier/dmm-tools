@@ -35,6 +35,11 @@ struct Cli {
     #[arg(long, default_value = "ut61eplus")]
     device: String,
 
+    /// Select a specific USB adapter when multiple are connected.
+    /// Use serial number or HID device path from 'ut61eplus list' output.
+    #[arg(long, value_name = "SERIAL_OR_PATH")]
+    adapter: Option<String>,
+
     #[command(subcommand)]
     command: Cmd,
 }
@@ -146,6 +151,8 @@ fn main() {
         }
     };
 
+    let adapter = cli.adapter.as_deref();
+
     // Device-independent commands — handle before mock/real split
     let result = match cli.command {
         Cmd::List => cmd_list(),
@@ -180,7 +187,7 @@ fn main() {
         } if !device.requires_hardware => {
             cmd_read_mock(interval_ms, format, output, count, integrate, mock_mode)
         }
-        Cmd::Command { action } if !device.requires_hardware => cmd_command(device, action),
+        Cmd::Command { action } if !device.requires_hardware => cmd_command(device, None, action),
         Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
             eprintln!(
                 "{} This command requires real hardware (not supported with --device {}).",
@@ -191,7 +198,7 @@ fn main() {
         }
 
         // Real device
-        Cmd::Info => cmd_info(device),
+        Cmd::Info => cmd_info(device, adapter),
         Cmd::Read {
             interval_ms,
             format,
@@ -199,9 +206,17 @@ fn main() {
             count,
             integrate,
             mock_mode: _,
-        } => cmd_read(device, interval_ms, format, output, count, integrate),
-        Cmd::Command { action } => cmd_command(device, action),
-        Cmd::Debug { count, interval_ms } => cmd_debug(device, count, interval_ms),
+        } => cmd_read(
+            device,
+            adapter,
+            interval_ms,
+            format,
+            output,
+            count,
+            integrate,
+        ),
+        Cmd::Command { action } => cmd_command(device, adapter, action),
+        Cmd::Debug { count, interval_ms } => cmd_debug(device, adapter, count, interval_ms),
         Cmd::Capture {
             output,
             steps,
@@ -211,7 +226,7 @@ fn main() {
                 capture::list_steps();
                 Ok(())
             } else {
-                open_with_help(device)
+                open_with_help(device, adapter)
                     .and_then(|dmm| capture::cmd_capture(output, steps, dmm, device))
             }
         }
@@ -305,11 +320,12 @@ fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
 /// Open the meter with helpful error messages for common failures.
 fn open_with_help(
     device: &'static SelectableDevice,
+    adapter: Option<&str>,
 ) -> Result<
     ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
     Box<dyn std::error::Error>,
 > {
-    match ut61eplus_lib::open_device_by_id_auto(device.id) {
+    match ut61eplus_lib::open_device_by_id_auto(device.id, adapter) {
         Ok(dmm) => {
             let profile = dmm.profile();
             if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
@@ -356,6 +372,17 @@ fn open_with_help(
             }
             Err("device not found".into())
         }
+        Err(ut61eplus_lib::error::Error::AdapterNotFound(ref detail)) => {
+            eprintln!(
+                "{} adapter not found: {detail}",
+                style("Error:").red().bold()
+            );
+            eprintln!(
+                "{}",
+                style("Run 'ut61eplus list' to see connected devices.").yellow()
+            );
+            Err("adapter not found".into())
+        }
         Err(e) => Err(e.into()),
     }
 }
@@ -370,11 +397,20 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     for (i, dev) in devices.iter().enumerate() {
         println!("{} {dev}", style(format!("[{i}]")).cyan());
     }
+    if devices.len() > 1 {
+        eprintln!(
+            "\n{}",
+            style("Tip: use --adapter <serial-or-path> to select a specific device").dim()
+        );
+    }
     Ok(())
 }
 
-fn cmd_info(device: &'static SelectableDevice) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_with_help(device)?;
+fn cmd_info(
+    device: &'static SelectableDevice,
+    adapter: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut dmm = open_with_help(device, adapter)?;
     let name = dmm.get_name()?;
     match name {
         Some(ref n) => println!("Device: {}", style(n).bold()),
@@ -394,13 +430,14 @@ fn cmd_info(device: &'static SelectableDevice) -> Result<(), Box<dyn std::error:
 
 fn cmd_read(
     device: &'static SelectableDevice,
+    adapter: Option<&str>,
     interval_ms: u64,
     format: OutputFormat,
     output_path: Option<String>,
     count: usize,
     integrate: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_with_help(device)?;
+    let mut dmm = open_with_help(device, adapter)?;
     let experimental = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Experimental;
     info!("connected, starting measurement loop");
     run_read_loop(
@@ -583,6 +620,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
 
 fn cmd_command(
     device: &'static SelectableDevice,
+    adapter: Option<&str>,
     action: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let action = match action {
@@ -591,7 +629,7 @@ fn cmd_command(
     };
 
     if device.requires_hardware {
-        let mut dmm = open_with_help(device)?;
+        let mut dmm = open_with_help(device, adapter)?;
         dmm.send_command(&action)?;
     } else {
         let mut dmm = ut61eplus_lib::mock::open_mock()?;
@@ -627,12 +665,13 @@ fn print_available_commands(
 
 fn cmd_debug(
     device: &'static SelectableDevice,
+    adapter: Option<&str>,
     count: usize,
     interval_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
-    let mut dmm = open_with_help(device)?;
+    let mut dmm = open_with_help(device, adapter)?;
 
     // Show transport info before entering measurement loop
     eprintln!(

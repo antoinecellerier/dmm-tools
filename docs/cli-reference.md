@@ -27,6 +27,7 @@ Set `NO_COLOR=1` to disable colored output.
 | Option | Default | Description |
 |---|---|---|
 | `--device <FAMILY>` | `ut61eplus` | Device family to connect to. See [Device Families](#device-families) below. |
+| `--adapter <SERIAL_OR_PATH>` | | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `list` output. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
@@ -115,6 +116,17 @@ ut61eplus list
 Prints each detected device with an index number and transport type. If no
 devices are found, prints troubleshooting hints (udev rules on Linux, driver
 install on Windows).
+
+When multiple devices are connected, use `--adapter` with a serial number or
+HID path from the `list` output to select a specific device:
+
+```
+ut61eplus list
+# [0] /dev/hidraw3 [CP2110] — CP2110 HID UART Bridge (S/N: 00C5B27A)
+# [1] /dev/hidraw5 [CP2110] — CP2110 HID UART Bridge (S/N: 00D8F132)
+
+ut61eplus --adapter 00C5B27A read
+```
 
 ### ut61eplus info
 

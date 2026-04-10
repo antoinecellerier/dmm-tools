@@ -192,6 +192,7 @@ impl App {
             settings.overrides.theme = Some(settings.theme);
             settings.theme = theme;
         }
+        settings.overrides.adapter = cli.adapter;
         Self {
             settings,
             settings_open: false,
@@ -454,12 +455,15 @@ impl App {
             });
         } else {
             let device_id = device_entry.id;
+            let adapter = self.settings.overrides.adapter.clone();
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
                 let panic_ctx = ctx_clone.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
-                        move || ut61eplus_lib::open_device_by_id_auto(device_id),
+                        move || {
+                            ut61eplus_lib::open_device_by_id_auto(device_id, adapter.as_deref())
+                        },
                         msg_tx,
                         stop_rx,
                         cmd_rx,
@@ -665,6 +669,19 @@ impl App {
                     profile.feedback_url(),
                 );
             }
+        } else if error.contains("adapter not found") {
+            // --adapter specified but no matching device
+            ui.label(RichText::new("Adapter not found").color(warn_color));
+            let detail = error.strip_prefix("adapter not found: ").unwrap_or(&error);
+            ui.label(
+                RichText::new(format!(
+                    "No device matched --adapter '{detail}'.\n\n\
+                     Run 'ut61eplus list' to see connected devices,\n\
+                     then restart with the correct --adapter value."
+                ))
+                .small()
+                .color(ui.visuals().weak_text_color()),
+            );
         } else {
             // Dongle found but meter not responding
             ui.label(RichText::new("No response from meter").color(warn_color));

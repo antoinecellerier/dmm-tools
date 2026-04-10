@@ -30,6 +30,9 @@ pub enum Error {
     #[error("unknown device: {0}")]
     UnknownDevice(String),
 
+    #[error("adapter not found: {0}")]
+    AdapterNotFound(String),
+
     #[error(
         "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x})",
         0x10C4,

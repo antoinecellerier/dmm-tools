@@ -19,6 +19,8 @@ pub struct Overrides {
     pub mock_mode: Option<String>,
     /// Original persisted value for theme (if overridden).
     pub theme: Option<ThemeMode>,
+    /// CLI-specified adapter (serial number or HID path).
+    pub adapter: Option<String>,
 }
 
 impl Overrides {

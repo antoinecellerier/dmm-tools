@@ -56,6 +56,11 @@ struct Args {
     /// Graphics renderer [wgpu, glow]
     #[arg(long)]
     renderer: Option<String>,
+
+    /// Select a specific USB adapter when multiple are connected.
+    /// Use serial number or HID device path from 'ut61eplus list' output.
+    #[arg(long, value_name = "SERIAL_OR_PATH")]
+    adapter: Option<String>,
 }
 
 /// Build long help text for --device from the registry.
@@ -87,6 +92,7 @@ pub struct CliOverrides {
     pub mock_mode: Option<String>,
     pub theme: Option<settings::ThemeMode>,
     pub renderer: Option<eframe::Renderer>,
+    pub adapter: Option<String>,
 }
 
 fn parse_args() -> CliOverrides {
@@ -168,6 +174,7 @@ fn parse_args() -> CliOverrides {
         mock_mode: args.mock_mode,
         theme,
         renderer,
+        adapter: args.adapter,
     }
 }
 
