@@ -151,6 +151,12 @@ fn golden_ut61eplus() {
         assert_eq!(f.dc, ef.dc, "golden {stem}: flags.dc");
         assert_eq!(f.peak_min, ef.peak_min, "golden {stem}: flags.peak_min");
         assert_eq!(f.peak_max, ef.peak_max, "golden {stem}: flags.peak_max");
+        assert_eq!(
+            f.lead_error, ef.lead_error,
+            "golden {stem}: flags.lead_error"
+        );
+        assert_eq!(f.comp, ef.comp, "golden {stem}: flags.comp");
+        assert_eq!(f.record, ef.record, "golden {stem}: flags.record");
 
         passed += 1;
     }
