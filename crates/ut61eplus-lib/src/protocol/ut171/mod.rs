@@ -94,6 +94,7 @@ impl Ut171Protocol {
                 model_name: "UNI-T UT171",
                 stability: Stability::Experimental,
                 supported_commands: UT171_COMMANDS,
+                verification_issue: Some(4),
             },
         }
     }

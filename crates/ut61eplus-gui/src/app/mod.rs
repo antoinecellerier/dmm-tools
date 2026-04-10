@@ -124,6 +124,8 @@ pub struct App {
     pub(super) device_name: Option<String>,
     /// Whether the connected protocol is experimental (unverified).
     pub(super) experimental: bool,
+    /// URL for reporting feedback on experimental protocols.
+    pub(super) feedback_url: String,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
     /// When true, incoming measurements are ignored (connection stays alive).
@@ -196,6 +198,7 @@ impl App {
             connection_state: ConnectionState::Disconnected,
             device_name: None,
             experimental: false,
+            feedback_url: String::new(),
             supported_commands: Vec::new(),
             paused: false,
             last_error: None,
@@ -482,6 +485,7 @@ impl App {
         self.connection_state = ConnectionState::Disconnected;
         self.device_name = None;
         self.experimental = false;
+        self.feedback_url.clear();
         self.supported_commands.clear();
         self.paused = false;
     }
@@ -500,10 +504,12 @@ impl App {
                 DmmMessage::Connected {
                     name,
                     experimental: exp,
+                    feedback_url,
                     supported_commands: cmds,
                 } => {
                     self.connection_state = ConnectionState::Connected;
                     self.experimental = exp;
+                    self.feedback_url = feedback_url;
                     self.supported_commands = cmds;
                     self.device_name = if name.is_empty() {
                         None
@@ -646,6 +652,21 @@ impl App {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
+            let device_entry = registry::resolve_device(&self.settings.device_family)
+                .unwrap_or_else(registry::default_device);
+            let proto = (device_entry.new_protocol)();
+            let profile = proto.profile();
+            if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
+                ui.hyperlink_to(
+                    RichText::new(format!(
+                        "{} support is experimental \u{2014} report feedback",
+                        profile.model_name
+                    ))
+                    .small()
+                    .color(warn_color),
+                    profile.feedback_url(),
+                );
+            }
         } else {
             // Dongle found but meter not responding
             ui.label(RichText::new("No response from meter").color(warn_color));
@@ -757,8 +778,32 @@ impl App {
             ui.painter().circle_filled(rect.center(), 5.0, dot_color);
             ui.label(RichText::new(status_text).small());
 
-            if self.experimental && self.connection_state == ConnectionState::Connected {
-                ui.label(RichText::new("EXPERIMENTAL").small().strong().color(orange));
+            // Show EXPERIMENTAL badge based on connected state or selected device.
+            let device_entry = registry::resolve_device(&self.settings.device_family)
+                .unwrap_or_else(registry::default_device);
+            let proto = (device_entry.new_protocol)();
+            let profile = proto.profile();
+            let is_experimental = if self.connection_state == ConnectionState::Connected {
+                self.experimental
+            } else {
+                profile.stability == ut61eplus_lib::protocol::Stability::Experimental
+            };
+            if is_experimental {
+                let url = if self.connection_state == ConnectionState::Connected
+                    && !self.feedback_url.is_empty()
+                {
+                    self.feedback_url.clone()
+                } else {
+                    profile.feedback_url()
+                };
+                ui.hyperlink_to(
+                    RichText::new("EXPERIMENTAL").small().strong().color(orange),
+                    url,
+                )
+                .on_hover_text(format!(
+                    "{} support is experimental \u{2014} click to report feedback",
+                    profile.model_name
+                ));
             }
 
             // Toast inline on this row

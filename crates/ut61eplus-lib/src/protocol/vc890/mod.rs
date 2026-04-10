@@ -267,6 +267,7 @@ impl Vc890Protocol {
                 model_name: "Voltcraft VC-890",
                 stability: Stability::Experimental,
                 supported_commands: VC890_COMMANDS,
+                verification_issue: Some(14),
             },
         }
     }

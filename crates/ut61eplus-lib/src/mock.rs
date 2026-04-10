@@ -364,6 +364,7 @@ impl MockProtocol {
                 // mock behavior is deterministic and needs no hardware validation.
                 stability: Stability::Verified,
                 supported_commands: MOCK_COMMANDS,
+                verification_issue: None,
             },
         }
     }

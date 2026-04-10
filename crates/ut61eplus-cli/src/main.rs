@@ -330,6 +330,10 @@ fn open_with_help(
                     "{}",
                     style(format!("  ut61eplus --device {} capture", device.id)).yellow()
                 );
+                eprintln!(
+                    "{}",
+                    style(format!("Report feedback: {}", profile.feedback_url())).yellow()
+                );
             }
             Ok(dmm)
         }
@@ -337,6 +341,19 @@ fn open_with_help(
         | Err(ut61eplus_lib::error::Error::NoTransportFound) => {
             eprintln!("{}", style("USB cable not found.").yellow().bold());
             print_transport_setup_help();
+            let proto = (device.new_protocol)();
+            let profile = proto.profile();
+            if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
+                eprintln!(
+                    "{}",
+                    style(format!(
+                        "{} support is experimental — report feedback: {}",
+                        profile.model_name,
+                        profile.feedback_url()
+                    ))
+                    .yellow()
+                );
+            }
             Err("device not found".into())
         }
         Err(e) => Err(e.into()),

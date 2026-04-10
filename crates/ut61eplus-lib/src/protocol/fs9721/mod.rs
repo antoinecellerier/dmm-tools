@@ -354,6 +354,7 @@ impl Fs9721Protocol {
                 model_name: "UNI-T UT803",
                 stability: Stability::Experimental,
                 supported_commands: FS9721_COMMANDS,
+                verification_issue: Some(15),
             },
         }
     }
@@ -366,6 +367,7 @@ impl Fs9721Protocol {
                 model_name: "UNI-T UT804",
                 stability: Stability::Experimental,
                 supported_commands: FS9721_COMMANDS,
+                verification_issue: Some(16),
             },
         }
     }

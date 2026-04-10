@@ -69,10 +69,10 @@ impl Ut61PlusProtocol {
         let model_name = table.model_name();
         // UT61E+ is the only model verified against real hardware.
         // B+ and D+ tables are based on RE of vendor software + manual specs.
-        let stability = if model_name == "UNI-T UT61E+" {
-            Stability::Verified
+        let (stability, verification_issue) = if model_name == "UNI-T UT61E+" {
+            (Stability::Verified, None)
         } else {
-            Stability::Experimental
+            (Stability::Experimental, Some(7))
         };
         Self {
             table,
@@ -82,6 +82,7 @@ impl Ut61PlusProtocol {
                 model_name,
                 stability,
                 supported_commands: UT61EPLUS_COMMANDS,
+                verification_issue,
             },
         }
     }

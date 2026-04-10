@@ -11,6 +11,8 @@ pub(crate) enum DmmMessage {
     Connected {
         name: String,
         experimental: bool,
+        /// URL for reporting feedback on experimental protocols.
+        feedback_url: String,
         supported_commands: Vec<String>,
     },
     Disconnected(String),
@@ -31,6 +33,7 @@ fn establish_connection<T: Transport>(
 ) {
     let profile = dmm.profile();
     let experimental = profile.stability == Stability::Experimental;
+    let feedback_url = profile.feedback_url();
     let cmds: Vec<String> = profile
         .supported_commands
         .iter()
@@ -44,6 +47,7 @@ fn establish_connection<T: Transport>(
     let _ = msg_tx.send(DmmMessage::Connected {
         name,
         experimental,
+        feedback_url,
         supported_commands: cmds,
     });
     ctx.request_repaint();

@@ -98,6 +98,7 @@ impl Ut8802Protocol {
                 model_name: "UNI-T UT8802",
                 stability: Stability::Experimental,
                 supported_commands: UT8802_COMMANDS,
+                verification_issue: Some(12),
             },
         }
     }

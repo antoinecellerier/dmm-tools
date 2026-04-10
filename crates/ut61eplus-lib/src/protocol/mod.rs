@@ -28,6 +28,21 @@ pub struct DeviceProfile {
     pub model_name: &'static str,
     pub stability: Stability,
     pub supported_commands: &'static [&'static str],
+    /// GitHub issue number for verification tracking (e.g. `Some(3)` → issue #3).
+    pub verification_issue: Option<u16>,
+}
+
+const REPO_ISSUES_URL: &str = "https://github.com/antoinecellerier/dmm-tools/issues";
+
+impl DeviceProfile {
+    /// URL for verification feedback — links to the device-specific issue if available,
+    /// otherwise the general issues page.
+    pub fn feedback_url(&self) -> String {
+        match self.verification_issue {
+            Some(n) => format!("{REPO_ISSUES_URL}/{n}"),
+            None => REPO_ISSUES_URL.to_string(),
+        }
+    }
 }
 
 /// Device family selector for opening a connection.

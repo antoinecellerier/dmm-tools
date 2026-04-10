@@ -270,6 +270,7 @@ impl Vc880Protocol {
                 model_name: "Voltcraft VC-880",
                 stability: Stability::Experimental,
                 supported_commands: VC880_COMMANDS,
+                verification_issue: Some(13),
             },
         }
     }

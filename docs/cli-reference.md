@@ -57,8 +57,8 @@ mode/range mappings than UT61E+).
 
 Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
 from vendor software and have not been verified against real hardware. When connecting to
-an experimental device, the CLI prints a yellow warning. Please report findings at
-https://github.com/antoinecellerier/dmm-tools.
+an experimental device, the CLI prints a yellow warning with a link to the device's
+verification issue on GitHub. Please report findings there.
 
 The `mock` device generates synthetic measurements cycling through multiple modes
 (DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires

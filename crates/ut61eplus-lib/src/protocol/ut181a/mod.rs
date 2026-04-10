@@ -174,6 +174,7 @@ impl Ut181aProtocol {
                 model_name: "UNI-T UT181A",
                 stability: Stability::Experimental,
                 supported_commands: UT181A_COMMANDS,
+                verification_issue: Some(5),
             },
         }
     }
