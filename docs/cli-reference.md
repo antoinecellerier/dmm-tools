@@ -5,7 +5,7 @@
 
 ## Name
 
-**ut61eplus** — command-line tool for the UNI-T UT61E+ multimeter
+**ut61eplus** — command-line tool for UNI-T and Voltcraft multimeters
 
 ## Synopsis
 
@@ -15,9 +15,10 @@ ut61eplus <COMMAND> [OPTIONS]
 
 ## Description
 
-Communicates with the UNI-T UT61E+ multimeter over USB via its HID-to-UART
-bridge (CP2110, CH9329, or CH9325, auto-detected). Supports live measurement reading,
-button commands, protocol debugging, and guided data capture for verification.
+Communicates with UNI-T and Voltcraft multimeters over USB. Supports live
+measurement reading, button commands, protocol debugging, and guided data
+capture for verification. See [supported devices](supported-devices.md) for
+the full compatibility list.
 
 Set `NO_COLOR=1` to disable colored output.
 
@@ -105,7 +106,7 @@ ut61eplus --device mock read --mock-mode dcv
 
 ### ut61eplus list
 
-List connected devices (scans for CP2110, CH9329, and CH9325 adapters).
+List connected USB adapters.
 
 ```
 ut61eplus list

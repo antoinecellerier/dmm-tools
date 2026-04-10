@@ -6,7 +6,7 @@
 
 ## Name
 
-**ut61eplus-gui** — real-time graphing multimeter display for the UNI-T UT61E+
+**ut61eplus-gui** — real-time graphing multimeter display for UNI-T and Voltcraft meters
 
 ## Synopsis
 
@@ -17,7 +17,7 @@ ut61eplus-gui [OPTIONS]
 ## Description
 
 A desktop GUI for live measurement display, time-series graphing, recording,
-and remote control of the UNI-T UT61E+ multimeter. Built with egui/eframe.
+and remote control of UNI-T and Voltcraft multimeters.
 
 The Settings panel includes a **Device** selector populated from the
 device registry with all supported models (UT61E+, UT61B+, UT61D+,
@@ -221,7 +221,7 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 | **Device** | UT61E+ | Device family. See the description for supported models and Mock. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
-| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11 (winit limitation). |
+| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
 
 ## Command-Line Options
@@ -325,32 +325,10 @@ Auto-reconnection retries every 2 seconds after a disconnect.
 
 ## Accessibility
 
-### Visual
-
-- All colors are theme-aware — brighter variants on dark backgrounds, darker
-  on light
-- WCAG 2.1 AA contrast ratios: ≥4.5:1 for text, ≥3:1 for graphical elements
-- Minimum font size 11pt throughout
-- Flags use bold text in addition to color
-- Status dot has a text label alongside the color indicator
-- Graph overlays use distinct line styles (solid, dashed) in addition to color
-
-### Screen Reader Support
-
-The GUI uses [AccessKit](https://accesskit.dev/) (enabled by default in eframe)
-to expose widgets to platform accessibility APIs on Windows and macOS. Linux
-support depends on the AT-SPI integration in AccessKit (test with Orca).
-
-- Standard egui widgets (buttons with text, labels, checkboxes, links) are
-  announced automatically
-- Icon-only buttons (`?`, `\u{2699}`) have explicit AccessKit labels
-  ("Keyboard shortcuts", "Settings") set via `accesskit_node_builder`
-- The graph minimap (custom-painted, interactive) has an AccessKit label
-  describing its purpose and interaction
-- The status dot is decorative (non-focusable) — connection status is
-  conveyed by the adjacent text label
-- All keyboard shortcuts work without mouse interaction (see
-  [Keyboard Shortcuts](#keyboard-shortcuts))
+- Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements)
+- Minimum 11pt font; flags use bold text in addition to color
+- [AccessKit](https://accesskit.dev/) screen reader support (Windows, macOS; Linux via AT-SPI). Icon-only buttons and custom widgets have explicit labels.
+- All features are keyboard-accessible (see [Keyboard Shortcuts](#keyboard-shortcuts))
 
 ## See Also
 

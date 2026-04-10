@@ -4,9 +4,9 @@
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Rust tools for communicating with digital multimeters over USB (CP2110, CH9329, and CH9325 HID bridges). Supports the **UT61E+** family (verified) with experimental support for **UT8802**, **UT8803**, **UT171**, **UT181A**, **Voltcraft VC-880/VC650BT**, and **VC-890**.
+Read, record, and remote-control digital multimeters over USB. Supports UNI-T and Voltcraft meters — see [supported devices](#supported-devices).
 
-Includes a CLI for reading, recording, and remote-controlling the meter, and a GUI with real-time graphing.
+Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 
 ![GUI screenshot — live DC mA measurement with graph, statistics, reference line triggers, and recording](assets/gui-screenshot.png)
 
@@ -59,88 +59,36 @@ WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware)
 
 ## Supported devices
 
-| Family | Models | Protocol | Status |
-|--------|--------|----------|--------|
-| UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | Polled, ASCII values | **Verified** (UT61E+) |
-| UT8802 | UT8802, UT8802N | Streaming, 8-byte BCD frames | Experimental |
-| UT8803 | UT8803, UT8803E | Streaming, 21-byte frames | Experimental |
-| UT803/UT804 | UT803, UT804 | Streaming, proprietary FS9721 framing | Experimental |
-| UT171 | UT171A/B/C | Streaming, float32 values | Experimental |
-| UT181A | UT181A | Streaming, float32 + unit strings | Experimental |
-| VC-880/VC650BT | Voltcraft VC-880, VC650BT | Streaming, ASCII values | Experimental |
-| VC-890 | Voltcraft VC-890 | Polled, 66-byte frames | Experimental |
+| Family | Models | Status |
+|--------|--------|--------|
+| UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
+| UT8802 | UT8802, UT8802N | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/12) |
+| UT8803 | UT8803, UT8803E | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/3) |
+| UT803/UT804 | UT803, UT804 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
+| UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
+| UT181A | UT181A | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/5) |
+| VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
+| VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 
-**Experimental** means the protocol was reverse-engineered from vendor software but has not been tested against real hardware. If you have one of these meters, we'd love your help verifying: [UT8802](https://github.com/antoinecellerier/dmm-tools/issues/12), [UT8803](https://github.com/antoinecellerier/dmm-tools/issues/3), [UT803](https://github.com/antoinecellerier/dmm-tools/issues/15), [UT804](https://github.com/antoinecellerier/dmm-tools/issues/16), [UT171](https://github.com/antoinecellerier/dmm-tools/issues/4), [UT181A](https://github.com/antoinecellerier/dmm-tools/issues/5), [VC-880/VC650BT](https://github.com/antoinecellerier/dmm-tools/issues/13), [VC-890](https://github.com/antoinecellerier/dmm-tools/issues/14). For UT61B+/UT61D+ owners: [help verify model-specific modes](https://github.com/antoinecellerier/dmm-tools/issues/7).
+🧪 = reverse-engineered from vendor software, not yet tested on real hardware — click to help verify.
 
 See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list and reference implementations.
 
 ## Quick start
 
-Pre-built binaries for Linux, Windows, and macOS (x86_64 and ARM) are available on the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page.
-
-> **Unconfirmed platforms:** [macOS Intel](https://github.com/antoinecellerier/dmm-tools/issues/2) and [Windows ARM](https://github.com/antoinecellerier/dmm-tools/issues/11) builds are provided but haven't been tested against real hardware yet. If you're on one of these platforms, please let us know how it goes — even "it works" helps.
-
-### Prerequisites
-
-- **Linux:** `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) — only needed when building from source
-- **Windows:** Open Device Manager with the USB cable plugged in. If you see "CP2110 USB to UART Bridge" under HID devices, no action needed. If you see a yellow warning icon under "Other devices", install the [Silicon Labs driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). Some UT-D09 cables use a different chip and appear as "USB Input Device" instead — these work without a driver.
-- **macOS:** No driver needed — both cable types are recognized as standard HID devices
-- A [supported multimeter](docs/supported-devices.md) with USB adapter plugged in
-
-### Install from source
-
-Requires the Rust toolchain (stable, 2024 edition). On Linux, also requires `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora).
+Pre-built binaries for Linux, Windows, and macOS are available on the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page. Or install from source:
 
 ```sh
 cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-cli
 cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-gui
 ```
 
-Or clone and build the whole workspace:
-
 ```sh
-cargo build --workspace
+ut61eplus read          # stream measurements
+ut61eplus-gui           # launch the GUI
 ```
 
-### udev rule (Linux)
-
-Grant non-root access to the USB adapter (covers both CP2110 and CH9329):
-
-```sh
-sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
-
-Your user must be in the `plugdev` group (`sudo usermod -aG plugdev $USER`, then log out/in).
-
-### Run
-
-```sh
-# List connected devices
-ut61eplus list
-
-# Stream measurements (UT61E+ default)
-ut61eplus read
-
-# Use a different device family
-ut61eplus --device ut8803 read
-
-# Launch the GUI
-ut61eplus-gui
-```
-
-If the meter doesn't respond, make sure USB transmission is active: insert the USB module, turn the meter on, and long-press the **USB/Hz** button until the **S** icon appears on the LCD. For UT171/UT181A, enable "Communication ON" in the meter's SETUP menu.
-
-## Project structure
-
-```
-crates/
-  ut61eplus-lib/   — library: USB transport (CP2110, CH9329), protocol, measurement parsing
-  ut61eplus-cli/   — CLI binary
-  ut61eplus-gui/   — GUI binary (eframe/egui)
-udev/              — udev rules for Linux
-docs/              — architecture, protocol, setup, UX design docs
-```
+See [setup & troubleshooting](docs/setup.md) for driver installation, udev rules, and platform-specific instructions.
 
 ## Documentation
 
