@@ -1,25 +1,33 @@
 # Setup
 
-## Prerequisites
+You need a [supported multimeter](supported-devices.md) (UNI-T UT61+/UT161, UT8802, UT8803, UT803/UT804, UT171, UT181A, or Voltcraft VC-880/VC650BT/VC-890) connected via USB.
 
-- Rust toolchain (stable, 2024 edition)
-- A supported UNI-T multimeter connected via USB (see [supported devices](supported-devices.md) for the full list: UT61E+, UT61B+, UT61D+, UT161 series, UT8803, UT171, UT181A)
+## Install from pre-built binaries
 
-**Linux:** `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi.
+Download the latest release for your platform from the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page. Extract and run — no build tools needed.
 
-**Windows:** Install the [CP2110 HID USB-to-UART bridge driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers) from Silicon Labs. The CH9329 adapter is driverless HID on all platforms and needs no separate driver.
+## Build from source
 
-## Build
+Requires the [Rust toolchain](https://rustup.rs/) (stable, 2024 edition).
+
+**Linux** also needs `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi.
 
 ```sh
 cargo build --workspace
+```
+
+Or install directly:
+
+```sh
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-cli
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-gui
 ```
 
 ## Platform setup
 
 ### Linux — udev rule
 
-To allow non-root access to the HID device (covers both CP2110 and CH9329 adapters):
+To allow non-root access to the HID device (covers CP2110, CH9329, and CH9325 adapters):
 
 ```sh
 sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/
@@ -39,11 +47,13 @@ Log out and back in for the group change to take effect.
 
 ### Windows — driver
 
-Install the CP2110 driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). After installation, verify the device appears in Device Manager under "Human Interface Devices" or "USB Devices".
+The CP2110 adapter may require a driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). After installation, verify the device appears in Device Manager under "Human Interface Devices" or "USB Devices". The CH9329 and CH9325 adapters are standard HID devices and need no driver.
+
+> **Windows ARM:** Builds are provided but haven't been tested against real hardware yet. If you're on this platform, please [report your experience](https://github.com/antoinecellerier/dmm-tools/issues/11).
 
 ### macOS — no driver needed
 
-macOS recognizes the CP2110 as a standard HID device via IOKit — no driver installation is required. Plug in the USB adapter and it should appear automatically.
+macOS recognizes all three USB adapters (CP2110, CH9329, CH9325) as standard HID devices via IOKit — no driver installation is required. Plug in the USB adapter and it should appear automatically.
 
 If the device is not detected, check **System Settings > Privacy & Security > Input Monitoring** and ensure your terminal app (or the GUI binary) has permission to access input devices.
 
@@ -54,7 +64,7 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 ### "USB adapter not found"
 
 - Verify the USB adapter is plugged in
-- **Linux:** `lsusb | grep -E '10C4:EA80|1A86:E429'` — look for CP2110 (`10C4:EA80`) or CH9329 (`1A86:E429`). If missing, check the udev rule (see above)
+- **Linux:** `lsusb | grep -E '10C4:EA80|1A86:E429|1A86:E008'` — look for CP2110 (`10C4:EA80`), CH9329 (`1A86:E429`), or CH9325 (`1A86:E008`). If missing, check the udev rule (see above)
 - **Windows:** check Device Manager for the CP2110 device — if missing or showing an error, reinstall the driver
 - **macOS:** `ioreg -p IOUSB -l | grep CP2110` — if missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
 
@@ -77,7 +87,7 @@ ut61eplus-gui --renderer glow
 
 ### GUI won't start (Linux, Wayland/X11)
 
-The GUI uses eframe/egui which supports both Wayland and X11. If you encounter display issues, try forcing X11:
+If you encounter display issues on Wayland, try forcing X11:
 
 ```sh
 WINIT_UNIX_BACKEND=x11 ut61eplus-gui
