@@ -197,6 +197,20 @@ pub struct CaptureStep {
     pub samples: usize,
 }
 
+impl CaptureStep {
+    /// Create a StepResult with no samples or screen capture.
+    fn empty_result(&self, status: StepStatus, error: Option<String>) -> StepResult {
+        StepResult {
+            id: self.id.to_string(),
+            instruction: self.instruction.to_string(),
+            status,
+            samples: vec![],
+            screen: None,
+            error,
+        }
+    }
+}
+
 /// IDs for part 1 (modes) vs part 2 (flags) grouping.
 pub const MODE_STEP_IDS: &[&str] = &[
     "dcv",
@@ -483,31 +497,11 @@ pub fn run_capture_step(
             style("any key=capture, s=skip, q=finish:").dim()
         ))?;
         if ch == 'q' || ch == 'Q' {
-            upsert_step(
-                report,
-                StepResult {
-                    id: step.id.to_string(),
-                    instruction: step.instruction.to_string(),
-                    status: StepStatus::Skipped,
-                    samples: vec![],
-                    screen: None,
-                    error: None,
-                },
-            );
+            upsert_step(report, step.empty_result(StepStatus::Skipped, None));
             return Ok(true);
         }
         if ch == 's' || ch == 'S' {
-            upsert_step(
-                report,
-                StepResult {
-                    id: step.id.to_string(),
-                    instruction: step.instruction.to_string(),
-                    status: StepStatus::Skipped,
-                    samples: vec![],
-                    screen: None,
-                    error: None,
-                },
-            );
+            upsert_step(report, step.empty_result(StepStatus::Skipped, None));
             return Ok(false);
         }
     } else {
@@ -523,14 +517,7 @@ pub fn run_capture_step(
             eprintln!("  {}", style(format!("Command failed: {e}")).red());
             upsert_step(
                 report,
-                StepResult {
-                    id: step.id.to_string(),
-                    instruction: step.instruction.to_string(),
-                    status: StepStatus::Error,
-                    samples: vec![],
-                    screen: None,
-                    error: Some(e.to_string()),
-                },
+                step.empty_result(StepStatus::Error, Some(e.to_string())),
             );
             return Ok(false);
         }
