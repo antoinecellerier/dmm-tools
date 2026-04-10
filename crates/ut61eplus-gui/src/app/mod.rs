@@ -420,8 +420,7 @@ impl App {
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
         let sample_interval_ms = self.settings.sample_interval_ms;
-        let device_entry = registry::resolve_device(&self.settings.device_family)
-            .unwrap_or_else(registry::default_device);
+        let device_entry = self.selected_device();
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
         if !device_entry.requires_hardware {
@@ -652,8 +651,7 @@ impl App {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
-            let device_entry = registry::resolve_device(&self.settings.device_family)
-                .unwrap_or_else(registry::default_device);
+            let device_entry = self.selected_device();
             let proto = (device_entry.new_protocol)();
             let profile = proto.profile();
             if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
@@ -670,8 +668,7 @@ impl App {
         } else {
             // Dongle found but meter not responding
             ui.label(RichText::new("No response from meter").color(warn_color));
-            let device_entry = registry::resolve_device(&self.settings.device_family)
-                .unwrap_or_else(registry::default_device);
+            let device_entry = self.selected_device();
             let instructions = format!(
                 "The USB adapter is connected but the meter \n\
                  isn't responding ({} selected).\n\
@@ -779,8 +776,7 @@ impl App {
             ui.label(RichText::new(status_text).small());
 
             // Show EXPERIMENTAL badge based on connected state or selected device.
-            let device_entry = registry::resolve_device(&self.settings.device_family)
-                .unwrap_or_else(registry::default_device);
+            let device_entry = self.selected_device();
             let proto = (device_entry.new_protocol)();
             let profile = proto.profile();
             let is_experimental = if self.connection_state == ConnectionState::Connected {
@@ -1031,6 +1027,11 @@ impl App {
                 }
             }
         }
+    }
+
+    fn selected_device(&self) -> &'static registry::SelectableDevice {
+        registry::resolve_device(&self.settings.device_family)
+            .unwrap_or_else(registry::default_device)
     }
 
     fn manual_url(&self) -> Option<&'static str> {
