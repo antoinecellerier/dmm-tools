@@ -134,9 +134,52 @@ pub fn open_device_by_id(id: &str) -> Result<Dmm<cp2110::Cp2110>> {
     Dmm::new(cp, protocol)
 }
 
+/// Descriptor for a known USB-HID transport bridge.
+struct KnownTransport {
+    vid: u16,
+    pid: u16,
+    name: &'static str,
+    /// Open the HID device, initialise the bridge, return a boxed Transport.
+    init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
+}
+
+/// Transports are tried in order — most common first.
+const KNOWN_TRANSPORTS: &[KnownTransport] = &[
+    KnownTransport {
+        vid: cp2110::VID,
+        pid: cp2110::PID,
+        name: "CP2110",
+        init: |dev| {
+            let cp = cp2110::Cp2110::new(dev);
+            cp.init_uart()?;
+            Ok(Box::new(cp))
+        },
+    },
+    KnownTransport {
+        vid: ch9329::VID,
+        pid: ch9329::PID,
+        name: "CH9329",
+        init: |dev| {
+            let ch = ch9329::Ch9329::new(dev);
+            ch.init()?;
+            Ok(Box::new(ch))
+        },
+    },
+    KnownTransport {
+        vid: ch9325::VID,
+        pid: ch9325::PID,
+        name: "CH9325",
+        init: |dev| {
+            let ch = ch9325::Ch9325::new(dev);
+            ch.init()?;
+            Ok(Box::new(ch))
+        },
+    },
+];
+
 /// Open a device by registry ID, automatically selecting the transport.
 ///
-/// Tries CP2110 first (most common), then CH9329 (UT-D09 cable).
+/// Tries transports in order (CP2110, CH9329, CH9325).
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
 pub fn open_device_by_id_auto(id: &str) -> Result<Dmm<Box<dyn Transport>>> {
     let entry =
@@ -144,72 +187,37 @@ pub fn open_device_by_id_auto(id: &str) -> Result<Dmm<Box<dyn Transport>>> {
 
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
 
-    // Try CP2110 first (most devices ship with this cable)
-    if let Ok(device) = api.open(cp2110::VID, cp2110::PID) {
-        info!(
-            "found CP2110 adapter (VID={:#06x} PID={:#06x})",
-            cp2110::VID,
-            cp2110::PID
-        );
-        let cp = cp2110::Cp2110::new(device);
-        cp.init_uart()?;
-        let transport: Box<dyn Transport> = Box::new(cp);
-        let protocol = (entry.new_protocol)();
-        return Dmm::new(transport, protocol);
-    }
-
-    // Try CH9329 (UT-D09 cable, newer production runs)
-    if let Ok(device) = api.open(ch9329::VID, ch9329::PID) {
-        info!(
-            "found CH9329 adapter (VID={:#06x} PID={:#06x})",
-            ch9329::VID,
-            ch9329::PID
-        );
-        let ch = ch9329::Ch9329::new(device);
-        ch.init()?;
-        let transport: Box<dyn Transport> = Box::new(ch);
-        let protocol = (entry.new_protocol)();
-        return Dmm::new(transport, protocol);
-    }
-
-    // Try CH9325 (bench meters: UT803, UT804)
-    if let Ok(device) = api.open(ch9325::VID, ch9325::PID) {
-        info!(
-            "found CH9325 adapter (VID={:#06x} PID={:#06x})",
-            ch9325::VID,
-            ch9325::PID
-        );
-        let ch = ch9325::Ch9325::new(device);
-        ch.init()?;
-        let transport: Box<dyn Transport> = Box::new(ch);
-        let protocol = (entry.new_protocol)();
-        return Dmm::new(transport, protocol);
+    for kt in KNOWN_TRANSPORTS {
+        if let Ok(device) = api.open(kt.vid, kt.pid) {
+            info!(
+                "found {} adapter (VID={:#06x} PID={:#06x})",
+                kt.name, kt.vid, kt.pid
+            );
+            let transport = (kt.init)(device)?;
+            let protocol = (entry.new_protocol)();
+            return Dmm::new(transport, protocol);
+        }
     }
 
     Err(Error::NoTransportFound)
 }
 
-/// List all connected USB adapters (CP2110 and CH9329).
+/// List all connected USB adapters (CP2110, CH9329, CH9325).
 pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
     let mut devices = Vec::new();
 
     for dev in api.device_list() {
-        let transport = if dev.vendor_id() == cp2110::VID && dev.product_id() == cp2110::PID {
-            "CP2110"
-        } else if dev.vendor_id() == ch9329::VID && dev.product_id() == ch9329::PID {
-            "CH9329"
-        } else if dev.vendor_id() == ch9325::VID && dev.product_id() == ch9325::PID {
-            "CH9325"
-        } else {
-            continue;
-        };
+        let transport = KNOWN_TRANSPORTS
+            .iter()
+            .find(|kt| dev.vendor_id() == kt.vid && dev.product_id() == kt.pid);
+        let Some(kt) = transport else { continue };
 
         devices.push(DeviceInfo {
             path: dev.path().to_string_lossy().into_owned(),
             product: dev.product_string().map(|s| s.to_string()),
             serial: dev.serial_number().map(|s| s.to_string()),
-            transport,
+            transport: kt.name,
         });
     }
 
