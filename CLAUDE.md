@@ -1,6 +1,6 @@
 # dmm-tools
 
-Rust workspace for communicating with digital multimeters via USB (CP2110 and CH9329 HID bridges). Supports UNI-T and Voltcraft meters.
+Rust workspace for communicating with digital multimeters via USB (CP2110, CH9329, and CH9325 HID bridges). Supports UNI-T and Voltcraft meters.
 
 ## Project structure
 

@@ -46,7 +46,7 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 4. Add match arm in `open_device()` in `lib.rs`
 5. Add `SelectableDevice` entry in `protocol/registry.rs`
 6. Create research docs in `docs/research/newfamily/`
-7. Set `Stability::Experimental` until verified against real hardware
+7. Mark as experimental until verified against real hardware (the CLI prints a warning for non-UT61E+ families)
 
 The CLI and GUI automatically pick up new devices from the registry — no app code changes needed.
 
@@ -111,3 +111,31 @@ ut61eplus completions zsh > ~/.zfunc/_ut61eplus
 ut61eplus completions fish > ~/.config/fish/completions/ut61eplus.fish
 ut61eplus completions powershell >> $PROFILE
 ```
+
+## AI-Assisted Development
+
+This project uses a `CLAUDE.md` file in the repo root to provide persistent
+context and guidelines to AI coding assistants (Claude Code, Cursor, etc.).
+It covers:
+
+- Project structure and module responsibilities
+- Build, test, and lint commands
+- Engineering standards (error handling, logging, protocol correctness,
+  commit discipline, GUI design, review checklist)
+- Clean-room reverse engineering rules
+- Documentation expectations
+
+When using an AI assistant on this codebase, it will automatically pick up
+these guidelines. Key points the assistant should follow:
+
+- **Protocol changes must be verified against real hardware** — unit tests
+  alone are not sufficient
+- **Never fabricate specification data** — mark unknown values as missing
+- **Physical device interaction requires user confirmation** — the assistant
+  should describe the required setup and wait, not drive through steps
+- Run `cargo clippy --workspace -- -D warnings` and `cargo test --workspace`
+  before committing
+
+The `docs/research/` directories contain per-family reverse engineering notes
+that provide essential context for protocol work. The assistant should read
+the relevant `reverse-engineered-protocol.md` before modifying protocol code.
