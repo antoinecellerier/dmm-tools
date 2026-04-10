@@ -1037,43 +1037,44 @@ impl App {
         registry::find_device(&self.settings.device_family).and_then(|d| d.manual_url)
     }
 
-    /// Render specs for the wide (side panel) layout.
-    fn show_specs_section(&self, ui: &mut Ui, scale: f32) {
+    /// Render a specs section, calling `render_fn` when spec data is available,
+    /// or showing a manual-only link as fallback.
+    fn show_specs_with(
+        &self,
+        ui: &mut Ui,
+        scale: f32,
+        render_fn: fn(
+            &mut Ui,
+            &'static SpecInfo,
+            Option<&'static ModeSpecInfo>,
+            Option<&'static str>,
+            f32,
+        ),
+    ) {
         if !self.settings.show_specs {
             return;
         }
         let manual_url = self.manual_url();
         if let Some(spec) = self.cached_spec {
-            specs::show_specs(ui, spec, self.cached_mode_spec, manual_url, scale);
+            render_fn(ui, spec, self.cached_mode_spec, manual_url, scale);
         } else if let Some(url) = manual_url {
             specs::show_manual_only(ui, url, scale);
         }
     }
 
-    /// Render specs for the narrow (compact single-line) layout.
-    fn show_specs_section_compact(&self, ui: &mut Ui) {
-        if !self.settings.show_specs {
-            return;
-        }
-        let manual_url = self.manual_url();
-        if let Some(spec) = self.cached_spec {
-            specs::show_specs_compact(ui, spec, self.cached_mode_spec, manual_url);
-        } else if let Some(url) = manual_url {
-            specs::show_manual_only(ui, url, 1.0);
-        }
+    /// Render specs for the wide (side panel) layout.
+    fn show_specs_section(&self, ui: &mut Ui, scale: f32) {
+        self.show_specs_with(ui, scale, specs::show_specs);
     }
 
     /// Render specs for big meter mode (pipe-separated inline).
     fn show_specs_section_inline(&self, ui: &mut Ui, scale: f32) {
-        if !self.settings.show_specs {
-            return;
-        }
-        let manual_url = self.manual_url();
-        if let Some(spec) = self.cached_spec {
-            specs::show_specs_inline(ui, spec, self.cached_mode_spec, manual_url, scale);
-        } else if let Some(url) = manual_url {
-            specs::show_manual_only(ui, url, scale);
-        }
+        self.show_specs_with(ui, scale, specs::show_specs_inline);
+    }
+
+    /// Render specs for the narrow (compact single-line) layout.
+    fn show_specs_section_compact(&self, ui: &mut Ui) {
+        self.show_specs_with(ui, 1.0, specs::show_specs_compact_scaled);
     }
 
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {

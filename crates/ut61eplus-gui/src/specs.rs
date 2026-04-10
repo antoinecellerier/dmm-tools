@@ -136,6 +136,17 @@ pub fn show_specs_compact(
     });
 }
 
+/// Compact specs with a scale parameter (ignored) for uniform callback signature.
+pub fn show_specs_compact_scaled(
+    ui: &mut Ui,
+    spec: &SpecInfo,
+    mode_spec: Option<&ModeSpecInfo>,
+    manual_url: Option<&str>,
+    _scale: f32,
+) {
+    show_specs_compact(ui, spec, mode_spec, manual_url);
+}
+
 /// Inline pipe-separated specs for big meter mode.
 pub fn show_specs_inline(
     ui: &mut Ui,
