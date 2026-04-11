@@ -67,6 +67,16 @@ fn format_time_label(secs: f64) -> String {
     }
 }
 
+/// Tracks which part of the minimap the user is dragging.
+#[derive(Default, Clone, Copy, PartialEq)]
+enum MinimapDrag {
+    #[default]
+    None,
+    Pan,
+    ResizeLeft,
+    ResizeRight,
+}
+
 /// Real-time scrolling graph with minimap navigation.
 pub struct Graph {
     history: VecDeque<DataPoint>,
@@ -122,6 +132,8 @@ pub struct Graph {
     color_preset: ColorPreset,
     /// Per-theme color overrides for graph rendering.
     color_overrides: ColorOverrides,
+    /// Current minimap drag state.
+    minimap_drag: MinimapDrag,
 }
 
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
@@ -177,6 +189,7 @@ impl Graph {
             cache_len: 0,
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
+            minimap_drag: MinimapDrag::None,
         }
     }
 
@@ -236,6 +249,7 @@ impl Graph {
         self.cursor_a = None;
         self.cursor_b = None;
         self.cursor_next_is_b = false;
+        self.minimap_drag = MinimapDrag::None;
         self.invalidate_cache();
     }
 
@@ -1031,7 +1045,7 @@ impl Graph {
         // announce it as a navigable element.
         ui.ctx()
             .accesskit_node_builder(pointer_response.id, |builder| {
-                builder.set_label("Graph minimap — click or drag to navigate timeline");
+                builder.set_label("Graph minimap — click or drag to navigate timeline, drag bracket edges to resize");
             });
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
@@ -1150,17 +1164,100 @@ impl Graph {
             t += nice_interval;
         }
 
-        // Handle click/drag navigation
-        if let Some(pos) = pointer_response.interact_pointer_pos() {
-            let clicked_t = data_min
-                + ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64 * data_span;
-            let half = self.time_window_secs / 2.0;
-            if clicked_t + half >= data_max {
-                self.live = true;
-            } else {
-                self.view_center = clicked_t;
-                self.live = false;
+        // Handle click/drag navigation with bracket resize handles
+        let handle_half = 8.0_f32; // half-width of the resize hit zone in pixels
+
+        // Cursor feedback: force resize icon during active resize drag,
+        // otherwise show it on hover near bracket edges.
+        if matches!(
+            self.minimap_drag,
+            MinimapDrag::ResizeLeft | MinimapDrag::ResizeRight
+        ) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        } else if let Some(hover_pos) = pointer_response.hover_pos() {
+            let dl = (hover_pos.x - vp_left).abs();
+            let dr = (hover_pos.x - vp_right).abs();
+            if dl <= handle_half || dr <= handle_half {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
             }
+        }
+
+        // Lock in drag mode on the mouse-down frame — bracket positions and click
+        // position are from the same frame, so the hit-test is consistent even if
+        // brackets shift later (live data arriving, resize in progress).
+        if self.minimap_drag == MinimapDrag::None
+            && pointer_response.is_pointer_button_down_on()
+            && let Some(origin) = ui.input(|i| i.pointer.press_origin())
+        {
+            let dl = (origin.x - vp_left).abs();
+            let dr = (origin.x - vp_right).abs();
+            // When brackets are close, pick the nearest edge
+            if dl <= handle_half && dl <= dr {
+                self.minimap_drag = MinimapDrag::ResizeLeft;
+            } else if dr <= handle_half {
+                self.minimap_drag = MinimapDrag::ResizeRight;
+            } else {
+                self.minimap_drag = MinimapDrag::Pan;
+            }
+        }
+
+        // Apply drag — resize uses per-frame delta, pan uses absolute position.
+        // When the window is wider than the data, the brackets are clamped to
+        // the data edges. On the first resize drag frame we snap the window to
+        // the visible (clamped) span so the drag feels 1:1 with what's on screen.
+        let time_per_px = data_span / rect.width() as f64;
+        match self.minimap_drag {
+            MinimapDrag::ResizeLeft => {
+                let drag_px = pointer_response.drag_delta().x;
+                if drag_px.abs() > 0.1 {
+                    // Snap to visible span if window extends before data start
+                    if self.time_window_secs > data_span + 0.1 {
+                        self.time_window_secs = data_span;
+                        self.view_center = data_min + data_span / 2.0;
+                        self.live = false;
+                    }
+                    let dt = drag_px as f64 * time_per_px;
+                    let right_edge = self.view_center + self.time_window_secs / 2.0;
+                    self.time_window_secs = (self.time_window_secs - dt).clamp(2.0, 3600.0);
+                    self.view_center = right_edge - self.time_window_secs / 2.0;
+                    self.live = false;
+                }
+            }
+            MinimapDrag::ResizeRight => {
+                let drag_px = pointer_response.drag_delta().x;
+                if drag_px.abs() > 0.1 {
+                    // Snap to visible span if window extends past data end
+                    if self.time_window_secs > data_span + 0.1 {
+                        self.time_window_secs = data_span;
+                        self.view_center = data_min + data_span / 2.0;
+                        self.live = false;
+                    }
+                    let dt = drag_px as f64 * time_per_px;
+                    let left_edge = (self.view_center - self.time_window_secs / 2.0).max(0.0);
+                    self.time_window_secs = (self.time_window_secs + dt).clamp(2.0, 3600.0);
+                    self.view_center = left_edge + self.time_window_secs / 2.0;
+                    self.live = self.view_center + self.time_window_secs / 2.0 >= data_max;
+                }
+            }
+            MinimapDrag::Pan => {
+                if let Some(pos) = pointer_response.interact_pointer_pos() {
+                    let pos_t = data_min
+                        + ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64 * data_span;
+                    let half = self.time_window_secs / 2.0;
+                    if pos_t + half >= data_max {
+                        self.live = true;
+                    } else {
+                        self.view_center = pos_t;
+                        self.live = false;
+                    }
+                }
+            }
+            MinimapDrag::None => {}
+        }
+
+        // Reset drag state when pointer is released
+        if !pointer_response.is_pointer_button_down_on() {
+            self.minimap_drag = MinimapDrag::None;
         }
     }
 
