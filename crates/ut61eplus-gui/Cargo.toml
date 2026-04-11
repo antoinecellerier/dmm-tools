@@ -7,12 +7,12 @@ description = "GUI application for the UNI-T UT61E+ multimeter"
 
 [dependencies]
 ut61eplus-lib = { path = "../ut61eplus-lib" }
-eframe = { version = "0.31", features = ["glow", "wgpu"] }
-egui_commonmark = "0.20"
-egui_plot = "0.31"
+eframe = { version = "0.34", features = ["glow", "wgpu"] }
+egui_commonmark = "0.23"
+egui_plot = "0.35"
 chrono = "0.4"
 csv = "1"
-rfd = "0.15"
+rfd = "0.17"
 clap = { version = "4", features = ["derive"] }
 env_logger = "0.11"
 log = "0.4"

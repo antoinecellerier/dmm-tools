@@ -111,7 +111,7 @@ fn golden_ut61eplus() {
         let stem = path.file_stem().unwrap().to_string_lossy();
         let yaml_str = std::fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-        let case: GoldenTestCase = serde_yaml::from_str(&yaml_str)
+        let case: GoldenTestCase = serde_yaml_ng::from_str(&yaml_str)
             .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()));
 
         let payload = decode_hex(&case.raw_hex);

@@ -448,7 +448,7 @@ pub fn capture_samples(
 
 pub fn save_report(report: &CaptureReport, path: &str) -> Result<(), Box<dyn std::error::Error>> {
     use std::io::Write;
-    let yaml = serde_yaml::to_string(report)?;
+    let yaml = serde_yaml_ng::to_string(report)?;
     // Atomic write: write to temp file then rename, so a crash mid-write
     // doesn't corrupt the existing report.
     let tmp_path = format!("{path}.tmp");
@@ -779,8 +779,8 @@ mod tests {
             }],
         };
 
-        let yaml = serde_yaml::to_string(&report).unwrap();
-        let parsed: CaptureReport = serde_yaml::from_str(&yaml).unwrap();
+        let yaml = serde_yaml_ng::to_string(&report).unwrap();
+        let parsed: CaptureReport = serde_yaml_ng::from_str(&yaml).unwrap();
 
         assert_eq!(parsed.date, report.date);
         assert_eq!(parsed.device_name, report.device_name);
@@ -810,7 +810,7 @@ mod tests {
             }],
         };
 
-        let yaml = serde_yaml::to_string(&report).unwrap();
+        let yaml = serde_yaml_ng::to_string(&report).unwrap();
         // Optional None fields should not appear in output
         assert!(!yaml.contains("transport_name"));
         assert!(!yaml.contains("transport_info"));
@@ -818,7 +818,7 @@ mod tests {
         assert!(!yaml.contains("samples"));
 
         // Parse back
-        let parsed: CaptureReport = serde_yaml::from_str(&yaml).unwrap();
+        let parsed: CaptureReport = serde_yaml_ng::from_str(&yaml).unwrap();
         assert!(parsed.transport_name.is_none());
         assert!(parsed.transport_info.is_none());
         assert!(parsed.steps[0].samples.is_empty());
@@ -826,16 +826,16 @@ mod tests {
 
     #[test]
     fn step_status_serde() {
-        let yaml = serde_yaml::to_string(&StepStatus::Captured).unwrap();
+        let yaml = serde_yaml_ng::to_string(&StepStatus::Captured).unwrap();
         assert!(yaml.contains("captured"));
 
-        let yaml = serde_yaml::to_string(&StepStatus::Skipped).unwrap();
+        let yaml = serde_yaml_ng::to_string(&StepStatus::Skipped).unwrap();
         assert!(yaml.contains("skipped"));
 
-        let yaml = serde_yaml::to_string(&StepStatus::Timeout).unwrap();
+        let yaml = serde_yaml_ng::to_string(&StepStatus::Timeout).unwrap();
         assert!(yaml.contains("timeout"));
 
-        let yaml = serde_yaml::to_string(&StepStatus::Error).unwrap();
+        let yaml = serde_yaml_ng::to_string(&StepStatus::Error).unwrap();
         assert!(yaml.contains("error"));
     }
 
@@ -860,7 +860,7 @@ mod tests {
         save_report(&report, &path).unwrap();
 
         let contents = std::fs::read_to_string(&path).unwrap();
-        let parsed: CaptureReport = serde_yaml::from_str(&contents).unwrap();
+        let parsed: CaptureReport = serde_yaml_ng::from_str(&contents).unwrap();
         assert_eq!(parsed.device_name, "UT61E+");
 
         // Cleanup
@@ -981,7 +981,7 @@ fn load_or_create_report(
     let output_path = output_override.unwrap_or(auto_path);
 
     let report = match std::fs::read_to_string(&output_path) {
-        Ok(contents) => match serde_yaml::from_str::<CaptureReport>(&contents) {
+        Ok(contents) => match serde_yaml_ng::from_str::<CaptureReport>(&contents) {
             Ok(r) => {
                 let captured = r
                     .steps

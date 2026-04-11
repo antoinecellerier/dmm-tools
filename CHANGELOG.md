@@ -67,6 +67,7 @@
 
 ### Internal
 
+- **Dependency updates** — eframe/egui 0.31→0.34 (new Panel API, font hinting, viewport improvements), egui_plot 0.31→0.35 (per-axis bounds, filled areas, grid styling), egui_commonmark 0.20→0.23, rfd 0.15→0.17, console 0.15→0.16. Replaced deprecated `serde_yaml` with `serde_yaml_ng` (drop-in, addresses RUSTSEC-2025-0068).
 - Consolidate transport VID/PID definitions into `KNOWN_TRANSPORTS` array.
 - Extract shared VC-880/VC-890 protocol code into `vc8x0_common` module.
 - `ThemeColors::pick()` helper to reduce dark/light branching boilerplate.

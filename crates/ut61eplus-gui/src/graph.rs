@@ -241,7 +241,7 @@ impl Graph {
 
     /// Handle keyboard shortcuts for graph navigation.
     pub fn handle_keyboard(&mut self, ctx: &egui::Context) {
-        if ctx.wants_keyboard_input() {
+        if ctx.egui_wants_keyboard_input() {
             return;
         }
 
@@ -757,29 +757,29 @@ impl Graph {
             // Min/max envelope (drawn first so it's behind the data line)
             if show_envelope && !env_min.is_empty() {
                 plot_ui.line(
-                    Line::new(PlotPoints::new(env_max.clone()))
+                    Line::new("env_max", PlotPoints::new(env_max.clone()))
                         .color(env_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
                 plot_ui.line(
-                    Line::new(PlotPoints::new(env_min.clone()))
+                    Line::new("env_min", PlotPoints::new(env_min.clone()))
                         .color(env_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
             }
 
             for seg in raw_segments {
-                plot_ui.line(Line::new(PlotPoints::new(seg.clone())).color(line_color));
+                plot_ui.line(Line::new("data", PlotPoints::new(seg.clone())).color(line_color));
             }
 
             for &(gap_start, gap_end) in gap_ranges {
                 plot_ui.vline(
-                    VLine::new(gap_start)
+                    VLine::new("gap_start", gap_start)
                         .color(gap_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
                 plot_ui.vline(
-                    VLine::new(gap_end)
+                    VLine::new("gap_end", gap_end)
                         .color(gap_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
@@ -788,7 +788,7 @@ impl Graph {
             // Mean line overlay
             if show_mean && let Some((_, _, avg, _)) = visible_stats {
                 plot_ui.hline(
-                    HLine::new(avg)
+                    HLine::new("mean", avg)
                         .color(mean_color)
                         .style(egui_plot::LineStyle::dashed_loose()),
                 );
@@ -798,7 +798,7 @@ impl Graph {
             if show_ref {
                 for &v in &ref_values {
                     plot_ui.hline(
-                        HLine::new(v)
+                        HLine::new("ref", v)
                             .color(ref_color)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );
@@ -808,7 +808,7 @@ impl Graph {
             // Trigger crossing markers (where data crosses reference lines)
             if !crossings.is_empty() {
                 plot_ui.points(
-                    Points::new(PlotPoints::new(crossings.clone()))
+                    Points::new("crossings", PlotPoints::new(crossings.clone()))
                         .color(cross_color)
                         .radius(4.0)
                         .shape(egui_plot::MarkerShape::Diamond),
@@ -818,21 +818,21 @@ impl Graph {
             // Measurement cursors (vertical + horizontal Y-value lines)
             if cursors_active {
                 if let Some(t) = cursor_a {
-                    plot_ui.vline(VLine::new(t).color(cursor_color));
+                    plot_ui.vline(VLine::new("cursor_a", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_va {
                     plot_ui.hline(
-                        HLine::new(v)
+                        HLine::new("cursor_va", v)
                             .color(cursor_color_dim)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );
                 }
                 if let Some(t) = cursor_b {
-                    plot_ui.vline(VLine::new(t).color(cursor_color));
+                    plot_ui.vline(VLine::new("cursor_b", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_vb {
                     plot_ui.hline(
-                        HLine::new(v)
+                        HLine::new("cursor_vb", v)
                             .color(cursor_color_dim)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );

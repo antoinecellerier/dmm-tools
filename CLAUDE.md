@@ -132,7 +132,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - **Think through boundary conditions before writing code:** extreme window sizes (very wide, very narrow, maximized, quarter-screen), high zoom levels, empty/no-data state, and mode transitions. Don't ship the happy path and iterate.
 - Start with the simplest visual approach. Prefer minimal rendering (lines, text labels) over complex shapes (filled polygons, gradients). Offer to enhance later if the user wants more.
 - egui pitfalls learned the hard way:
-  - `set_plot_bounds()` overrides both axes — if you only want to constrain X, compute Y range manually from visible data with padding.
+  - `set_plot_bounds()` overrides both axes — use `set_plot_bounds_x()`/`set_plot_bounds_y()` (added in egui_plot 0.33) to constrain a single axis.
   - `allow_drag(false)` also suppresses pointer position events; use `plot.reset()` per frame instead to pin the view while keeping events.
   - After mode changes or data clears, call `plot.reset()` to prevent stale bounds from the previous state.
   - `set_pixels_per_point()` and `set_visuals()` called every frame reset egui's internal panel state (resize positions, scroll offsets). Only call these when the value actually changes.
