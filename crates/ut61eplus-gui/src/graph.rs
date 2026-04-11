@@ -5,6 +5,7 @@ use egui_plot::{
 use std::collections::VecDeque;
 use std::time::Instant;
 
+use crate::settings::{ColorOverrides, ColorPreset};
 use crate::theme::ThemeColors;
 
 /// Maximum number of points to keep in the history buffer.
@@ -117,6 +118,10 @@ pub struct Graph {
     cached_gaps: Vec<(f64, f64)>,
     /// Number of history entries when cache was built.
     cache_len: usize,
+    /// Color preset for graph rendering.
+    color_preset: ColorPreset,
+    /// Per-theme color overrides for graph rendering.
+    color_overrides: ColorOverrides,
 }
 
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
@@ -170,7 +175,20 @@ impl Graph {
             cached_segments: Vec::new(),
             cached_gaps: Vec::new(),
             cache_len: 0,
+            color_preset: ColorPreset::Default,
+            color_overrides: ColorOverrides::default(),
         }
+    }
+
+    /// Update color configuration from settings.
+    pub fn set_color_config(&mut self, preset: ColorPreset, overrides: ColorOverrides) {
+        self.color_preset = preset;
+        self.color_overrides = overrides;
+    }
+
+    /// Build a ThemeColors instance using this graph's color config.
+    fn theme_colors(&self, dark: bool) -> ThemeColors {
+        ThemeColors::new(dark, self.color_preset, self.color_overrides.for_mode(dark))
     }
 
     /// Update gap detection threshold based on sample interval.
@@ -424,7 +442,7 @@ impl Graph {
             ui.add_space(6.0);
 
             let live_color = if self.live {
-                ThemeColors::new(ui.visuals().dark_mode).live_green()
+                self.theme_colors(ui.visuals().dark_mode).live_green()
             } else {
                 ui.visuals().weak_text_color()
             };
@@ -557,7 +575,7 @@ impl Graph {
                         _ => crate::NO_DATA.to_string(),
                     };
                     let unit = &self.current_unit;
-                    let delta_color = ThemeColors::new(dark).graph_cursor_delta();
+                    let delta_color = self.theme_colors(dark).graph_cursor_delta();
 
                     let integral_str = ut61eplus_lib::stats::integral_unit_info(unit)
                         .and_then(|(disp_unit, divisor)| {
@@ -635,7 +653,7 @@ impl Graph {
         let (view_min, view_max) = self.view_bounds();
 
         // Theme-aware colors from shared palette
-        let tc = ThemeColors::new(ui.visuals().dark_mode);
+        let tc = self.theme_colors(ui.visuals().dark_mode);
         let line_color = tc.graph_line();
         let gap_color = tc.graph_gap();
         let mean_color = tc.graph_mean();
@@ -716,6 +734,7 @@ impl Graph {
             .custom_x_axes(vec![x_axis])
             .custom_y_axes(vec![y_axis])
             .y_axis_min_width(60.0)
+            .cursor_color(tc.graph_crosshair())
             .label_formatter(move |_name, point| {
                 let t = point.x;
                 let time_label = if t < 60.0 {
@@ -997,7 +1016,7 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        let tc = ThemeColors::new(ui.visuals().dark_mode);
+        let tc = self.theme_colors(ui.visuals().dark_mode);
         let line_color = tc.minimap_line();
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes

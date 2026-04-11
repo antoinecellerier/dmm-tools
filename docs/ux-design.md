@@ -38,6 +38,15 @@ the full options table.
 - Disconnected/error: grey indicator dot
 - Reconnecting: orange indicator dot
 
+### Color Palette
+
+- Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
+- All 18 base colors customizable per-theme via UI color pickers or JSON overrides
+- Colors are split: UI chrome (3), graph (9), status indicators (5), minimap (1)
+- Derived colors auto-track their base (cursor dim/delta, minimap line, live indicator, recording warning, button hover/active)
+- UI chrome colors (background, text, button) modify egui Visuals — plot grid and axis labels follow automatically
+- Preset selection and per-color overrides persist to `settings.json`
+
 ### Top Bar
 
 Compact toolbar row: app title, Connect/Disconnect button, Pause/Resume button (freezes capture without disconnecting — pauses >gap threshold show gap markers), Clear button (resets graph/stats), connection status with device name and colored dot, settings gear icon (right-aligned).
@@ -47,6 +56,7 @@ Compact toolbar row: app title, Connect/Disconnect button, Pause/Resume button (
 Toggled by the gear icon. Contains:
 
 - **Theme:** Dark / Light
+- **Colors:** Default / High Contrast / Colorblind preset selector. Collapsible "Customize colors" section with per-color edit buttons.
 - **Panels:** Show/hide Graph, Statistics, Recording, Specifications
 - **Auto-connect on start:** default on
 - **Show device name on connect (beeps):** default on — queries device name via protocol, which causes the meter to beep

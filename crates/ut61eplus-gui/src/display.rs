@@ -1,6 +1,7 @@
 use eframe::egui::{Color32, FontId, RichText, Ui};
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
+use crate::settings::{ColorPreset, PaletteOverrides};
 use crate::theme::ThemeColors;
 
 /// Base font size for the primary reading in the wide (side panel) layout.
@@ -38,25 +39,27 @@ fn format_value_display(m: &Measurement) -> String {
 }
 
 /// Prepare the value text and color from a measurement.
-fn value_display(ui: &Ui, m: &Measurement) -> (String, Color32) {
+fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32) {
     match &m.value {
         MeasuredValue::Normal(_) => (format_value_display(m), ui.visuals().text_color()),
-        MeasuredValue::Overload => (
-            format_value_display(m),
-            ThemeColors::new(ui.visuals().dark_mode).red(),
-        ),
+        MeasuredValue::Overload => (format_value_display(m), tc.status_error()),
         MeasuredValue::NcvLevel(_) => (format_value_display(m), ui.visuals().text_color()),
     }
 }
 
 /// Render the primary reading display at the given font size (two-line layout).
-fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size: f32) {
+fn show_reading_sized(
+    ui: &mut Ui,
+    measurement: Option<&Measurement>,
+    value_size: f32,
+    tc: &ThemeColors,
+) {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
 
     match measurement {
         Some(m) => {
-            let (value_text, value_color) = value_display(ui, m);
+            let (value_text, value_color) = value_display(ui, m, tc);
 
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -86,7 +89,7 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
                             .color(ui.visuals().weak_text_color()),
                     );
                 }
-                show_flags(ui, m, mode_size);
+                show_flags(ui, m, mode_size, tc);
             });
         }
         None => {
@@ -101,13 +104,18 @@ fn show_reading_sized(ui: &mut Ui, measurement: Option<&Measurement>, value_size
 }
 
 /// Render the reading with value and mode on a single line (inline layout).
-fn show_reading_inline(ui: &mut Ui, measurement: Option<&Measurement>, value_size: f32) {
+fn show_reading_inline(
+    ui: &mut Ui,
+    measurement: Option<&Measurement>,
+    value_size: f32,
+    tc: &ThemeColors,
+) {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
 
     match measurement {
         Some(m) => {
-            let (value_text, value_color) = value_display(ui, m);
+            let (value_text, value_color) = value_display(ui, m, tc);
 
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -128,7 +136,7 @@ fn show_reading_inline(ui: &mut Ui, measurement: Option<&Measurement>, value_siz
                         .font(FontId::proportional(mode_size))
                         .color(ui.visuals().weak_text_color()),
                 );
-                show_flags(ui, m, mode_size);
+                show_flags(ui, m, mode_size, tc);
             });
         }
         None => {
@@ -142,8 +150,14 @@ fn show_reading_inline(ui: &mut Ui, measurement: Option<&Measurement>, value_siz
 }
 
 /// Render the large primary reading display.
-pub fn show_reading(ui: &mut Ui, measurement: Option<&Measurement>) {
-    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE);
+pub fn show_reading(
+    ui: &mut Ui,
+    measurement: Option<&Measurement>,
+    preset: ColorPreset,
+    overrides: &PaletteOverrides,
+) {
+    let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
+    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, &tc);
 }
 
 /// Cached ratios of rendered reading dimensions to font size.
@@ -186,6 +200,8 @@ pub fn show_reading_large(
     measurement: Option<&Measurement>,
     base_content_height: f32,
     ratios: &ReadingRatios,
+    preset: ColorPreset,
+    overrides: &PaletteOverrides,
 ) -> (f32, ReadingRatios) {
     let available_w = ui.available_width();
     let available_h = ui.available_height();
@@ -214,11 +230,12 @@ pub fn show_reading_large(
     .max(MIN_BIG_METER_FONT_SIZE);
 
     // Render and measure actual dimensions.
+    let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
     let before = ui.cursor().top();
     if use_inline {
-        show_reading_inline(ui, measurement, size);
+        show_reading_inline(ui, measurement, size, &tc);
     } else {
-        show_reading_sized(ui, measurement, size);
+        show_reading_sized(ui, measurement, size, &tc);
     }
     let reading_w = ui.min_rect().width();
     let reading_h = ui.cursor().top() - before;
@@ -238,10 +255,16 @@ pub fn show_reading_large(
 }
 
 /// Render the reading as a compact single line (for narrow layout).
-pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
+pub fn show_reading_compact(
+    ui: &mut Ui,
+    measurement: Option<&Measurement>,
+    preset: ColorPreset,
+    overrides: &PaletteOverrides,
+) {
     match measurement {
         Some(m) => {
             let value_text = format_value_display(m);
+            let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
 
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -257,7 +280,7 @@ pub fn show_reading_compact(ui: &mut Ui, measurement: Option<&Measurement>) {
                         .color(ui.visuals().weak_text_color())
                         .small(),
                 );
-                show_flags(ui, m, 0.0);
+                show_flags(ui, m, 0.0, &tc);
             });
         }
         None => {
@@ -322,7 +345,7 @@ mod tests {
     }
 }
 
-fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32) {
+fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) {
     let badge = |ui: &mut Ui, label: &str, color: Color32| {
         let mut text = RichText::new(label).strong().color(color);
         if font_size > 0.0 {
@@ -333,8 +356,7 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32) {
         ui.label(text);
     };
 
-    let tc = ThemeColors::new(ui.visuals().dark_mode);
-    let accent = tc.blue_accent();
+    let accent = tc.accent();
     let warning = tc.recording_full_warning();
 
     if m.flags.auto_range {

@@ -214,6 +214,7 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 | Setting | Default | Description |
 |---|---|---|
 | **Theme** | Dark | Dark or Light mode |
+| **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
 | **Show Graph** | on | Toggle graph panel visibility |
 | **Show Statistics** | on | Toggle statistics panel visibility |
 | **Show Recording** | on | Toggle recording panel visibility |
@@ -226,6 +227,46 @@ Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
+
+### Color Customization
+
+Three color presets are available:
+
+- **Default** — warm palette (red/pink graph line, green mean, orange cursor)
+- **High Contrast** — bolder, higher-saturation colors for maximum visibility
+- **Colorblind** — deuteranopia/protanopia safe palette (blue/orange/purple, avoids red-green)
+
+Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
+
+**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 18 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
+
+**JSON overrides:** Colors can also be edited directly in `settings.json` using hex strings:
+
+```json
+{
+  "color_preset": "Default",
+  "color_overrides": {
+    "dark": {
+      "background": "#1B1B1B",
+      "graph_line": "#64C8FF"
+    },
+    "light": {
+      "graph_line": "#0050A0"
+    }
+  }
+}
+```
+
+Available color fields:
+
+- **UI chrome:** `background`, `text`, `button`
+- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `plot_background`, `graph_crosshair`
+- **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`, `accent`
+- **Minimap:** `minimap_viewport`
+
+Format: `#RRGGBB` or `#RRGGBBAA`.
+
+Derived colors auto-track their base: cursor dim/delta derive from cursor, minimap line from graph line, live indicator from status_ok, recording warning from status_warning. Button hover/active states derive from button. Plot grid and axis labels follow the UI chrome text color.
 
 ## Command-Line Options
 

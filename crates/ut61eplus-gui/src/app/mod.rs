@@ -1,7 +1,7 @@
 mod connection;
 mod controls;
 
-use eframe::egui::{self, RichText, Ui};
+use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info};
 use std::io::Write;
 use std::sync::mpsc;
@@ -158,6 +158,8 @@ pub struct App {
     os_ppp: Option<f32>,
     /// Last applied theme (to avoid re-setting every frame).
     applied_theme: Option<ThemeMode>,
+    /// Last applied UI chrome colors (bg, text, button, plot_bg) to avoid per-frame Visuals mutation.
+    applied_ui_colors: Option<(Color32, Color32, Color32, Color32)>,
     /// User-resizable recording panel height.
     recording_height: f32,
     /// Transient status toast (message, is_error, timestamp).
@@ -194,6 +196,8 @@ impl App {
             settings.theme = theme;
         }
         settings.overrides.adapter = cli.adapter;
+        let mut graph = Graph::new();
+        graph.set_color_config(settings.color_preset, settings.color_overrides.clone());
         Self {
             settings,
             settings_open: false,
@@ -209,7 +213,7 @@ impl App {
             cached_spec: None,
             cached_mode_spec: None,
             cached_spec_key: (u16::MAX, u8::MAX),
-            graph: Graph::new(),
+            graph,
             stats: RunningStats::new(),
             integrator: Integrator::new(),
             recording: Recording::new(),
@@ -220,6 +224,7 @@ impl App {
             needs_reconnect: false,
             os_ppp: None,
             applied_theme: None,
+            applied_ui_colors: None,
             recording_height: DEFAULT_RECORDING_HEIGHT,
             toast: None,
             export_result_rx: None,
@@ -230,6 +235,15 @@ impl App {
             big_meter_mode: BigMeterMode::Off,
             shortcut_help_open: false,
         }
+    }
+
+    /// Build a ThemeColors instance from current settings and dark mode state.
+    fn theme_colors(&self, dark: bool) -> ThemeColors {
+        ThemeColors::new(
+            dark,
+            self.settings.color_preset,
+            self.settings.color_overrides.for_mode(dark),
+        )
     }
 
     fn apply_theme(&mut self, ctx: &egui::Context) {
@@ -243,7 +257,41 @@ impl App {
                 ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
             }
             self.applied_theme = Some(target);
+            self.applied_ui_colors = None; // force reapply on top of new base
         }
+    }
+
+    /// Apply background, text, and button color overrides to egui Visuals.
+    fn apply_color_overrides(&mut self, ctx: &egui::Context) {
+        let dark = matches!(self.settings.theme, ThemeMode::Dark | ThemeMode::System);
+        let tc = self.theme_colors(dark);
+        let bg = tc.background();
+        let text = tc.text();
+        let button = tc.button();
+        let plot_bg = tc.plot_background();
+        let key = (bg, text, button, plot_bg);
+
+        if self.applied_ui_colors == Some(key) {
+            return;
+        }
+        self.applied_ui_colors = Some(key);
+
+        let (hover, active) = tc.button_hover_active();
+        ctx.style_mut(|style| {
+            let v = &mut style.visuals;
+            v.panel_fill = bg;
+            v.window_fill = bg;
+            // Plot background and minimap background use extreme_bg_color.
+            v.extreme_bg_color = plot_bg;
+            v.widgets.noninteractive.fg_stroke =
+                egui::Stroke::new(v.widgets.noninteractive.fg_stroke.width, text);
+            v.widgets.inactive.bg_fill = button;
+            v.widgets.inactive.weak_bg_fill = button;
+            v.widgets.hovered.bg_fill = hover;
+            v.widgets.hovered.weak_bg_fill = hover;
+            v.widgets.active.bg_fill = active;
+            v.widgets.active.weak_bg_fill = active;
+        });
     }
 
     pub(super) const ZOOM_LEVELS: &[u32] = &[
@@ -606,7 +654,7 @@ impl App {
     }
 
     fn show_connection_help(&self, ui: &mut Ui) {
-        let warn_color = ThemeColors::new(ui.visuals().dark_mode).orange();
+        let warn_color = self.theme_colors(ui.visuals().dark_mode).status_warning();
 
         // Show waiting indicator before error threshold
         if self.waiting_timeouts > 0 && self.last_error.is_none() {
@@ -740,10 +788,10 @@ impl App {
     /// order so that Tab key navigation follows visual reading order
     /// (Help → ? → ⚙) rather than the reverse.
     fn show_top_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
-        let tc = ThemeColors::new(ui.visuals().dark_mode);
-        let green = tc.green();
-        let orange = tc.orange();
-        let gray = tc.gray();
+        let tc = self.theme_colors(ui.visuals().dark_mode);
+        let green = tc.status_ok();
+        let orange = tc.status_warning();
+        let gray = tc.status_inactive();
 
         // Cache left/right group widths from the previous frame to decide
         // whether both fit on one row.
@@ -845,7 +893,7 @@ impl App {
 
             // Toast inline on this row
             if let Some((msg, is_error, _)) = &self.toast {
-                let color = if *is_error { tc.red() } else { green };
+                let color = if *is_error { tc.status_error() } else { green };
                 ui.label(RichText::new(msg).small().color(color));
             }
 
@@ -1137,7 +1185,9 @@ impl App {
             if self.recording.active {
                 let status = format!("{count} smp | {:.0}s", self.recording.duration_secs());
                 if self.recording.is_full() {
-                    let warn = ThemeColors::new(ui.visuals().dark_mode).recording_full_warning();
+                    let warn = self
+                        .theme_colors(ui.visuals().dark_mode)
+                        .recording_full_warning();
                     ui.label(RichText::new(format!("{status} (buffer full)")).color(warn));
                 } else {
                     ui.label(status);
@@ -1280,6 +1330,7 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.apply_theme(ctx);
+        self.apply_color_overrides(ctx);
         self.apply_zoom(ctx);
         self.handle_keyboard_shortcuts(ctx);
         self.drain_messages();
@@ -1401,11 +1452,14 @@ impl eframe::App for App {
                         } else {
                             self.meter_content_height
                         };
+                        let dark = ui.visuals().dark_mode;
                         let (scale, measured_ratios) = display::show_reading_large(
                             ui,
                             self.last_measurement.as_ref(),
                             content_h,
                             &self.meter_reading_ratios,
+                            self.settings.color_preset,
+                            self.settings.color_overrides.for_mode(dark),
                         );
                         let after_reading = ui.cursor().top();
 
@@ -1470,7 +1524,13 @@ impl eframe::App for App {
                 .width_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
                 .show(ctx, |ui| {
-                    display::show_reading(ui, self.last_measurement.as_ref());
+                    let dark = ui.visuals().dark_mode;
+                    display::show_reading(
+                        ui,
+                        self.last_measurement.as_ref(),
+                        self.settings.color_preset,
+                        self.settings.color_overrides.for_mode(dark),
+                    );
                     let controls_top = ui.cursor().top();
                     self.show_remote_controls(ui, 1.0);
                     let controls_bottom = ui.cursor().top();
@@ -1501,7 +1561,13 @@ impl eframe::App for App {
         } else {
             // Narrow: single column
             egui::CentralPanel::default().show(ctx, |ui| {
-                display::show_reading_compact(ui, self.last_measurement.as_ref());
+                let dark = ui.visuals().dark_mode;
+                display::show_reading_compact(
+                    ui,
+                    self.last_measurement.as_ref(),
+                    self.settings.color_preset,
+                    self.settings.color_overrides.for_mode(dark),
+                );
                 let controls_top = ui.cursor().top();
                 self.show_remote_controls(ui, 1.0);
                 let controls_bottom = ui.cursor().top();
