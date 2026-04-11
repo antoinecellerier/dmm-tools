@@ -2,12 +2,14 @@
 
 <!-- Keep this file updated when adding support for new models. -->
 
-All devices listed here use a HID-to-UART bridge for USB communication.
-Two bridge chips are supported: Silicon Labs CP2110 (VID `0x10C4`, PID `0xEA80`)
-and WCH CH9329 (VID `0x1A86`, PID `0xE429`). The tool auto-detects which
-bridge is present. CH9329 support is experimental.
+Currently supported and experimental devices all use USB HID-to-UART
+bridges. Three bridge chips are supported: Silicon Labs CP2110
+(VID `0x10C4`, PID `0xEA80`), WCH CH9329 (VID `0x1A86`, PID `0xE429`),
+and WCH CH9325 (VID `0x1A86`, PID `0xE008`). The tool auto-detects
+which bridge is present. CH9329 and CH9325 support is experimental.
+Future candidates include devices using Bluetooth LE and USB serial.
 
-## Supported (same protocol as UT61E+)
+## ✅ Supported (same protocol as UT61E+)
 
 These meters share the same 0xABCD-framed request/response protocol and
 differ only in their mode/range/unit tables. Adding support requires
@@ -15,7 +17,7 @@ implementing a `DeviceTable` with the correct tables — no protocol changes.
 
 | Model | Brand | Counts | Status | Notes |
 |-------|-------|--------|--------|-------|
-| **UT61E+** | UNI-T | 22000 | Tested | Reference device |
+| **UT61E+** | UNI-T | 22000 | ✅ Tested | Reference device |
 | **UT61D+** | UNI-T | 6000 | Untested | Adds temperature and LoZ ACV |
 | **UT61B+** | UNI-T | 6000 | Untested | Base model, 10A max current |
 | **UT161E** | UNI-T | 22000 | Untested | Same as UT61E+ |
@@ -58,41 +60,15 @@ different display value handling. Requires UT61D+ device testing.
 
 If you have any of the untested models, please [submit a capture](../CONTRIBUTING.md#protocol-captures) so we can confirm support and add the correct device tables. See [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7) for UT61D+/UT61B+ specific modes that need verification.
 
-## Experimental: UT8802 and UT8803 (UCI protocol family)
+## 🧪 Experimental: UT8802 and UT8803 (UCI protocol family)
 
 These bench DMMs use the same CP2110 USB bridge but different
 streaming protocols. Use `--device ut8802` or `--device ut8803`.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/12)) | 0xAC header, 8-byte BCD frames, no checksum, streaming after 0x5A trigger |
-| **UT8803 / UT8803E** | UNI-T | Bench DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/3)) | 21-byte AB CD frames, streaming after 0x5A trigger |
-
-## Experimental: UT803 and UT804
-
-These bench DMMs use the CH9325 USB HID bridge with a proprietary data
-format carried over FS9721-style 14-byte framing. Use `--device ut803`
-or `--device ut804`.
-
-| Model | Brand | Type | VID:PID | Status | Notes |
-|-------|-------|------|---------|--------|-------|
-| **UT803** | UNI-T | Bench DMM (6000 counts) | `1A86:E008` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/15)) | CH9325 HID, proprietary structured data in FS9721 framing |
-| **UT804** | UNI-T | Bench DMM (4000 counts) | `1A86:E008` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/16)) | CH9325 HID, proprietary structured data in FS9721 framing, 15 modes |
-
-**Protocol correction (2026-04-10):** Initial analysis suggested standard
-FS9721 LCD segment encoding. Binary constant extraction from UT803.exe and
-UT804.exe confirmed the data nibbles carry **proprietary structured data**
-(mode codes, range codes, digit values) rather than raw LCD segments.
-See [research/ut803/reverse-engineered-protocol.md](research/ut803/reverse-engineered-protocol.md).
-
-## Future candidates
-
-| Model | Brand | Type | VID:PID | Status | Notes |
-|-------|-------|------|---------|--------|-------|
-| **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | Documented | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional) |
-
-The UT805A uses a serial COM port (not HID) and needs a separate serial
-transport layer.
+| **UT8802 / UT8802N** | UNI-T | Bench DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/12) | 0xAC header, 8-byte BCD frames, no checksum, streaming after 0x5A trigger |
+| **UT8803 / UT8803E** | UNI-T | Bench DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/3) | 21-byte AB CD frames, streaming after 0x5A trigger |
 
 ### Independent research findings
 
@@ -148,85 +124,32 @@ Our clean-room RE of the UCI bench family is documented in
 - [philpagel/ut8803e](https://github.com/philpagel/ut8803e) — Python, UT8803/UT8803E, detailed protocol docs
 - [hskim7639/UNI-T](https://github.com/hskim7639/UNI-T) — Python (Windows), UT8803E
 
-## Experimental: UT171 and UT181A
+## 🧪 Experimental: UT803 and UT804
+
+These bench DMMs use the CH9325 USB HID bridge with a proprietary data
+format carried over FS9721-style 14-byte framing. Use `--device ut803`
+or `--device ut804`.
+
+| Model | Brand | Type | VID:PID | Status | Notes |
+|-------|-------|------|---------|--------|-------|
+| **UT803** | UNI-T | Bench DMM (6000 counts) | `1A86:E008` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/15) | CH9325 HID, proprietary structured data in FS9721 framing |
+| **UT804** | UNI-T | Bench DMM (4000 counts) | `1A86:E008` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/16) | CH9325 HID, proprietary structured data in FS9721 framing, 15 modes |
+
+**Protocol correction (2026-04-10):** Initial analysis suggested standard
+FS9721 LCD segment encoding. Binary constant extraction from UT803.exe and
+UT804.exe confirmed the data nibbles carry **proprietary structured data**
+(mode codes, range codes, digit values) rather than raw LCD segments.
+See [research/ut803/reverse-engineered-protocol.md](research/ut803/reverse-engineered-protocol.md).
+
+## 🧪 Experimental: UT171 and UT181A
 
 Use `--device ut171` or `--device ut181a`. Requires manual "Communication
 ON" in the meter's SETUP menu.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/4)) | 1-byte length, LE float32, 26 modes |
-| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/5)) | 2-byte LE length, float32 + unit strings, 97 modes |
-
-## Experimental: Voltcraft VC-880 / VC650BT
-
-Use `--device vc880` or `--device vc650bt`. Requires pressing the PC
-button on the meter to enable USB communication.
-
-| Model | Brand | Type | VID:PID | Status | Notes |
-|-------|-------|------|---------|--------|-------|
-| **VC-880** | Voltcraft | Handheld DMM (40000 counts) | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/13)) | AB CD framing (same as UT61E+), streaming, 19 modes, 7 status bytes |
-| **VC650BT** | Voltcraft | Bench DMM (40000 counts) | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/13)) | Same protocol as VC-880 (byte-identical Voltsoft installer) |
-
-### Independent research findings
-
-Clean-room reverse engineering from Voltsoft `DMSShare.dll` (ILSpy
-decompilation of .NET assembly, 26,600 lines). The VC-880 and VC650BT
-installers are byte-identical (MD5: `4b955a1e8a51e7c89338c0c852e1c469`),
-confirming shared protocol. Cross-referenced against pylablib (MIT).
-See [docs/research/vc880/](research/vc880/).
-
-### Cross-correlation with community sources
-
-| Finding | Our RE (Voltsoft) | [pylablib](https://github.com/AlexShkarin/pyLabLib) | Agreement |
-|---------|-------------------|---------------------|:---------:|
-| AB CD header + BE16 checksum | Yes | Yes | ✓ |
-| 19 function codes (0x00-0x12) | Yes (vendor switch) | Yes | ✓ |
-| Range byte 0x30-based | Yes | Yes | ✓ |
-| Status byte 1 flags (Rel/Avg/Min/Max) | Yes (all 28 flags named) | Yes (4 flags) | ✓ |
-| Streaming (no trigger) | Yes | Yes | ✓ |
-| Commands (auto/manual range) | Yes (28 commands total) | Yes (2 commands) | Our RE richer |
-
-## Experimental: Voltcraft VC-890
-
-Use `--device vc890`. 60,000-count OLED handheld DMM with ES51997P + EFM32
-chipset. Polled protocol (request/response, like UT61E+) with 66-byte frames.
-Confirmed as a separate protocol from VC-880 (different `VC890Reading` class
-in Voltsoft, different installer binary, remapped function codes).
-
-| Model | Brand | Type | VID:PID | Status | Notes |
-|-------|-------|------|---------|--------|-------|
-| **VC-890** | Voltcraft | Handheld DMM (60000 counts, OLED) | `10C4:EA80` | **Experimental** ([help verify](https://github.com/antoinecellerier/dmm-tools/issues/14)) | Polled, 66-byte frames, remapped function codes from VC-880 |
-
-See [docs/research/vc890/](research/vc890/).
-
-## Other CP2110 meters (not yet implemented)
-
-### UNI-T
-
-| Model | Brand | Type | Protocol | Reference |
-|-------|-------|------|----------|-----------|
-| **UT612** | UNI-T | LCR meter | ES51919 chipset, TX-only | [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
-
-### Non-UNI-T (Voltcraft / Conrad Electronics)
-
-No unimplemented Voltcraft CP2110 meters remain — VC-880, VC650BT,
-and VC-890 are all now experimentally supported.
-
-The only shared component is the CP2110 transport — our existing
-`Cp2110Transport` code works unmodified for the USB layer.
-
-### Devices investigated but NOT using CP2110
-
-These brands were evaluated during research and found to use different
-USB bridge chips:
-
-| Model | Brand | Bridge Chip | Notes |
-|-------|-------|-------------|-------|
-| **VC-870** | Voltcraft | CH9325 (UT-D04 cable) | ES51966A chipset, 40k counts, RS232/USB |
-| **72-7730 / 72-7732** | Tenma | CH9325 / HE2325U (UT-D04) | UNI-T UT71 rebrands, HID but not CP2110 |
-| **BM859 / BM869** | Brymen | IR-to-USB (BC-86X cable) | Infrared link, proprietary segment protocol |
-| **70C / 86C** | Victor | Unmarked SO-20 | FS9922 14-byte HID report protocol |
+| **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/4) | 1-byte length, LE float32, 26 modes |
+| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 97 modes |
 
 ### Independent research findings
 
@@ -248,6 +171,144 @@ Our research into the UT171 and UT181A protocols is documented in
   recording/data logging protocol, COMP mode. The
   [antage/ut181a Protocol.md](https://github.com/antage/ut181a/blob/master/Protocol.md)
   is the definitive reference.
+
+## 🧪 Experimental: Voltcraft VC-880 / VC650BT
+
+Use `--device vc880` or `--device vc650bt`. Requires pressing the PC
+button on the meter to enable USB communication.
+
+| Model | Brand | Type | VID:PID | Status | Notes |
+|-------|-------|------|---------|--------|-------|
+| **VC-880** | Voltcraft | Handheld DMM (40000 counts) | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/13) | AB CD framing (same as UT61E+), streaming, 19 modes, 7 status bytes |
+| **VC650BT** | Voltcraft | Bench DMM (40000 counts) | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/13) | Same protocol as VC-880 (byte-identical Voltsoft installer) |
+
+### Independent research findings
+
+Clean-room reverse engineering from Voltsoft `DMSShare.dll` (ILSpy
+decompilation of .NET assembly, 26,600 lines). The VC-880 and VC650BT
+installers are byte-identical (MD5: `4b955a1e8a51e7c89338c0c852e1c469`),
+confirming shared protocol. Cross-referenced against pylablib (MIT).
+See [docs/research/vc880/](research/vc880/).
+
+### Cross-correlation with community sources
+
+| Finding | Our RE (Voltsoft) | [pylablib](https://github.com/AlexShkarin/pyLabLib) | Agreement |
+|---------|-------------------|---------------------|:---------:|
+| AB CD header + BE16 checksum | Yes | Yes | ✓ |
+| 19 function codes (0x00-0x12) | Yes (vendor switch) | Yes | ✓ |
+| Range byte 0x30-based | Yes | Yes | ✓ |
+| Status byte 1 flags (Rel/Avg/Min/Max) | Yes (all 28 flags named) | Yes (4 flags) | ✓ |
+| Streaming (no trigger) | Yes | Yes | ✓ |
+| Commands (auto/manual range) | Yes (28 commands total) | Yes (2 commands) | Our RE richer |
+
+## 🧪 Experimental: Voltcraft VC-890
+
+Use `--device vc890`. 60,000-count OLED handheld DMM with ES51997P + EFM32
+chipset. Polled protocol (request/response, like UT61E+) with 66-byte frames.
+Confirmed as a separate protocol from VC-880 (different `VC890Reading` class
+in Voltsoft, different installer binary, remapped function codes).
+
+| Model | Brand | Type | VID:PID | Status | Notes |
+|-------|-------|------|---------|--------|-------|
+| **VC-890** | Voltcraft | Handheld DMM (60000 counts, OLED) | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/14) | Polled, 66-byte frames, remapped function codes from VC-880 |
+
+See [docs/research/vc890/](research/vc890/).
+
+## 📋 Future candidates
+
+For detailed research, software gap analysis, and community evidence,
+see [research/new-device-candidates.md](research/new-device-candidates.md).
+
+| Model | Brand | Type | Transport | Status | Notes |
+|-------|-------|------|-----------|--------|-------|
+| **BM525s / BM527s** | Brymen | Handheld DMM (50000 counts) | USB HID (`0820:0001`) | 📋 Under consideration | BU-86X optical IR cable, LCD segment bitmap protocol |
+| **BM821s / BM829s** | Brymen | Handheld DMM (40000 counts) | USB HID (`0820:0001`) | 📋 Under consideration | Same protocol as BM86x family |
+| **BM867s / BM869s** | Brymen | Handheld DMM (60000 counts) | USB HID (`0820:0001`) | 📋 Under consideration | Same protocol as BM86x family |
+| **Victor 70C** | Victor | Handheld DMM | USB HID (unknown) | 📋 Under consideration | Built-in USB HID, obfuscated FS9922-DMM4 14-byte protocol |
+| **Victor 86C** | Victor | Handheld DMM | USB HID (unknown) | 📋 Under consideration | Same protocol as 70C, USB HID via cable |
+| **UNI-T UT-D07B** | UNI-T | BLE adapter | BLE | 📋 Under consideration | Transparent BLE-to-UART bridge for UT61+/UT161/UT171/UT181A — same protocol, wireless |
+| **EEVBlog 121GW** | EEVBlog | Handheld DMM | BLE | 📋 Under consideration | 19-byte binary packets, well reverse-engineered, huge community (292-page EEVBlog thread) |
+| **OWON B35T+ / B41T+** | OWON | Handheld DMM | BLE | 📋 Under consideration | 14-byte BLE GATT packets, no cross-platform GUI, official PC software requires proprietary dongle |
+| **Fluke 287 / 289** | Fluke | Handheld DMM | Serial (IR) | 📋 Under consideration | Officially documented ASCII protocol via IR189USB cable, official software is $200 Windows-only |
+| **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | 📋 Not investigated | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
+| **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | 📋 Not investigated | CH9325 (UT-D04 cable), ES51966A chipset |
+| **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | 📋 Not investigated | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04) |
+| **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | 📋 Documented | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional) |
+
+### Brymen BM52x / BM82x / BM86x
+
+The Brymen meters use the **BU-86X** optical IR cable (~$40) with a
+Cypress CY7C63743 enCoRe USB controller (`0820:0001`). The cable reads the
+meter's IR output and presents 72-byte LCD segment bitmaps as 3x24-byte
+HID reports, triggered by a `\x00\x00\x86\x66` command. Protocol is
+officially documented by Brymen. Sigrok supports these via the
+`brymen-bm86x` driver.
+
+The BM869s has strong community demand (17+ page EEVBlog threads, 6+
+GitHub projects) and **no native cross-platform GUI tool exists** — the
+official Brymen software is Windows-only, dated (2012), and widely
+criticized. See [research/new-device-candidates.md](research/new-device-candidates.md)
+for the full gap analysis.
+
+Implementation requires: new `Transport` for the Cypress HID chip (raw
+HID, not a UART bridge), LCD segment decoder (new parsing paradigm),
+and per-model device tables.
+
+### Victor 70C / 86C
+
+The Victor 70C has USB HID built into the meter (unknown SO-20 chip). The
+protocol is 14-byte FS9922-DMM4 data, obfuscated with a character
+subtraction + byte shuffle + bit reversal scheme (documented on
+[sigrok wiki](https://sigrok.org/wiki/Victor_protocol)). Sigrok supports
+these via the `victor-dmm` driver. Lower community demand than Brymen.
+See [research/new-device-candidates.md](research/new-device-candidates.md).
+
+### UNI-T UT-D07B BLE Adapter
+
+The UT-D07B (~$30) is a transparent BLE-to-UART bridge (ISSC BL79 BLETR
+chip) that plugs into a meter's IR port. Compatible with UT61+/UT161/UT171/UT181A.
+Since it bridges the same UART protocol over BLE, adding BLE transport to
+dmm-tools would unlock wireless operation with **zero protocol changes**
+— all existing device tables and parsers work unmodified.
+
+The UT60BT was the #1 recommendation in the 2024 EEVBlog logging
+multimeter thread. Official UNI-T BLE apps are phone-only — no desktop
+tool exists. See [research/new-device-candidates.md](research/new-device-candidates.md).
+
+### EEVBlog 121GW
+
+The 121GW uses BLE 4.0 via a BLE122 module, sending 19-byte binary
+packets. Protocol is partially documented (official spec spreadsheet +
+[tpwrules/121gw-re](https://github.com/tpwrules/121gw-re), 60 stars).
+The main EEVBlog Issues thread spans 292 pages. An official cross-platform
+app exists (Xamarin, open source) but has limited logging; sigrok BLE
+is Linux-only and flaky. See [research/new-device-candidates.md](research/new-device-candidates.md).
+
+### OWON B35T+ / B41T+
+
+Popular budget BLE logging meters. 14-byte BLE GATT packets, well
+reverse-engineered by multiple community projects
+([DeanCording/owonb35](https://github.com/DeanCording/owonb35), 34 stars).
+Official PC software requires a **proprietary OWON USB BLE dongle** — no
+standard BLE adapter support. No cross-platform GUI exists; Linux tools
+use fragile Gattlib. [Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows)
+(47 stars) is Windows-only and abandoned.
+See [research/new-device-candidates.md](research/new-device-candidates.md).
+
+### Fluke 287 / 289 (IR-optical to serial)
+
+The Fluke 287/289 (also 187/189, 87-IV/89-IV) use IR-optical communication
+via the IR189USB cable (~$87, FTDI FT232RL). The protocol is **officially
+documented** by Fluke — simple ASCII commands (QM returns e.g.
+`9.323E0,VDC,NORMAL,NONE`). FlukeView Forms is $200, Windows-only, rated
+2.4/5 on Fluke's own site. Fluke Connect is subscription-based and
+unreliable. Requires serial transport (not HID).
+See [research/new-device-candidates.md](research/new-device-candidates.md).
+
+### UT805A / UT805N
+
+The UT805A uses a serial COM port (not HID) and needs a separate serial
+transport layer.
 
 ## USB cables
 
