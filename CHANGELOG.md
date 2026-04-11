@@ -2,29 +2,82 @@
 
 ## Unreleased
 
+### New device support
+
+| Family | Models | Transport | Status |
+|--------|--------|-----------|--------|
+| **UT8802** | UT8802 | CP2110 | Experimental |
+| **UT803/UT804** | UT803, UT804 | CH9325 | Experimental — FS9721 LCD protocol |
+| **VC-880** | VC-880, VC650BT | CP2110 | Experimental |
+| **VC-890** | VC-890 | CP2110 | Experimental |
+
 ### GUI
 
+- **Configurable color theme** — presets (Default, Colorblind, High Contrast, Monochrome) and per-color overrides in settings.
+- **Big meter mode** — `Ctrl+B` cycles off / full / minimal. Minimal mode inlines mode/flags on the same line as the value. Dynamic font scaling and responsive layout at small window sizes.
+- **CLI arguments** — `--device`, `--theme`, `--mock-mode` flags for the GUI binary. `--mock-mode` implies `--device mock`.
+- **Always-on-top setting** — keeps the GUI window above other windows.
+- **Hide window decorations setting** — removes title bar and window borders.
+- **`--renderer` flag** — select wgpu or glow backend; automatic fallback from wgpu to glow on GPU errors.
+- **`--adapter` flag** — select USB adapter when multiple are connected. Shows connected devices inline when the adapter doesn't match.
+- **App icon and desktop integration** — `.desktop` file and icon for Linux, GNOME `app_id` for alt-tab identification.
 - **Time-integral in cursor readout** — when both cursors are placed on a current or voltage graph, the readout now shows ∫ (integral) alongside ΔT and ΔV. For current modes, this displays charge (mAh/Ah/µAh). For voltage modes, V·s.
 - **Running integral in statistics** — a cumulative integral line ("∫") appears in the statistics panel for current and voltage modes. Resets with the Reset button or Ctrl+L.
-- **MIN/MAX and Peak buttons now cycle without exiting** — clicking cycles MAX ↔ MIN (or P-MAX ↔ P-MIN), matching the real device's short-press behavior. A separate "x" button exits the mode. This preserves stored values while browsing between states.
+- **MIN/MAX and Peak buttons now cycle without exiting** — clicking cycles MAX ↔ MIN (or P-MAX ↔ P-MIN), matching the real device's short-press behavior. A separate "x" button exits the mode.
+- Auto-stop recording when buffer is full instead of silently dropping samples.
+- Show filename in CSV export toast.
+- Clear cursors on graph reset and mode change.
 
 ### CLI
 
-- **`--integrate` flag** on the `read` command — adds cumulative time-integral columns (`integral`, `integral_unit`) to CSV and JSON output. Text format appends `[∫ value unit]`. The session summary includes the total integral. Useful for battery capacity measurement (coulomb counting).
+- **`--adapter` flag** — select USB adapter when multiple are connected.
+- **`--integrate` flag** on the `read` command — adds cumulative time-integral columns (`integral`, `integral_unit`) to CSV and JSON output. Text format appends `[∫ value unit]`. The session summary includes the total integral and elapsed time. Useful for battery capacity measurement (coulomb counting).
+- Device model metadata (`device_model`, `device_serial`) in CSV and JSON exports.
+- Show activation instructions on timeout errors.
+- Handle EINTR in read loop so Ctrl-C prints the session summary cleanly.
 
 ### Library
 
+- **CH9329 transport** — support for the UT-D09 USB cable (used by UT171, UT181A, and other models).
+- **CH9325 transport** — HID bridge for UT803/UT804 family.
+- **FS9721 frame extractor** — LCD segment protocol decoder for UT803/UT804.
+- **`AuxValue` type** and `aux_values` field on `Measurement` for secondary readings.
+- **`StatusFlags` additions** — `lead_error`, `comp`, `record` fields.
 - **`Integrator` struct** (`stats.rs`) — trapezoidal-rule time integrator with gap detection (max_dt guard), overload gap handling, and clock-backward safety via `checked_duration_since()`.
 - **`integral_unit_info()`** — maps measurement units to integral display units (A→Ah, mA→mAh, µA→µAh, V→V·s, mV→mV·s).
-- **Mock MIN/MAX and Peak behavior updated** — mock now matches real device: independent flag cycling (MAX only / MIN only, never both), returns stored min/max/peak values instead of live readings, and clears AUTO during MIN/MAX mode.
+- UT181A: range labels, precision-byte display formatting, capture steps for format verification.
+- Mock MIN/MAX and Peak behavior updated to match real device.
+- Renamed QinHeng transport to CH9325 for consistency with CP2110/CH9329.
+- Removed deprecated CP2110-only open functions.
 
 ### Bug fixes
 
+- Fix bar graph byte decoding: use decimal division, not nibble shift.
+- Fix GUI error detection for missing USB cable.
+- Fix big meter scaling: hash-based cache key, wrap oscillation fix.
+- Fix UT181A measurement format parsing for all variants.
 - Fix GUI MIN/MAX and Peak buttons immediately exiting instead of cycling through states.
+
+### Build
+
+- macOS builds (ARM + Intel) in CI and release workflows.
+- Linux ARM and Windows ARM release builds.
+- Treat compiler warnings as errors across all builds.
+
+### Internal
+
+- Consolidate transport VID/PID definitions into `KNOWN_TRANSPORTS` array.
+- Extract shared VC-880/VC-890 protocol code into `vc8x0_common` module.
+- `ThemeColors::pick()` helper to reduce dark/light branching boilerplate.
+- Various deduplication: specs rendering, `lookup_range()`, `CaptureStep::empty_result()`.
 
 ### Documentation
 
-- Verified MIN/MAX, Peak, and SELECT2 protocol behavior against real UT61E+ hardware. Updated `docs/protocol.md` and `docs/verification-backlog.md` with findings: flag bits cycle independently, meter sends stored values (not live), Peak is context-dependent (AC modes only), SELECT2 cycles mV → Hz → Duty% on AC mV.
+- Verified MIN/MAX, Peak, and SELECT2 protocol behavior against real UT61E+ hardware. Updated `docs/protocol.md` and `docs/verification-backlog.md`.
+- Verified HV flag, DC V range table, and DC mV mode.
+- Transport landscape documentation (QinHeng HID, UCI SDK).
+- Experimental macOS support docs and platform hints.
+- UT803/UT804 protocol findings and reverse engineering approach.
 
 ## v0.3.0
 

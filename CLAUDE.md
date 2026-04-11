@@ -95,6 +95,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - For Edit tool `replace_all` operations: did the replacement match only the intended locations? Check the full file for unintended side effects.
 - For specification data: was every value verified against the actual PDF manual (not a text-extracted version)?
 - For new device support: update `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Create a GitHub verification issue (match the pattern of existing issues #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
+- For user-visible changes: is there a `CHANGELOG.md` entry in the `## Unreleased` section? New features, bug fixes, new device support, and breaking changes all need entries. Internal refactors and doc-only changes do not.
 
 ### Documentation
 - Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought
@@ -108,7 +109,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - `docs/research/<family>/reverse-engineering-approach.md` — per-family RE methodology, sources, confidence tags
 - `docs/research/<family>/reverse-engineered-protocol.md` — per-family wire protocol specification (authoritative reference for implementation)
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
-- `CHANGELOG.md` — add entries for user-visible changes when preparing a release. Organized by component (GUI, CLI, Library, Bug fixes, Internal, Documentation). The release workflow extracts the entry for the tagged version.
+- `CHANGELOG.md` — add entries to the `## Unreleased` section **in the same commit** as user-visible changes. Don't defer to release time — that's how entries get lost. Organized by component (GUI, CLI, Library, Bug fixes, Internal, Documentation). The release workflow extracts the entry for the tagged version. Internal refactors, doc-only changes, and CI tweaks don't need entries unless they affect users.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 
 ### Clean-room reverse engineering
