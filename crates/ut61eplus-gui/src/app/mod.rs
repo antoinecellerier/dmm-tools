@@ -4,7 +4,9 @@ mod controls;
 use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info};
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 use ut61eplus_lib::mock::MockMode;
@@ -178,6 +180,12 @@ pub struct App {
     big_meter_mode: BigMeterMode,
     /// Whether the keyboard shortcut help overlay is open.
     shortcut_help_open: bool,
+    /// Whether the "What's New" changelog window is open.
+    whats_new_open: bool,
+    /// Set by the viewport callback when the user closes the changelog window.
+    whats_new_closed: Arc<AtomicBool>,
+    /// Shared commonmark cache for the changelog viewport.
+    whats_new_cache: Arc<Mutex<egui_commonmark::CommonMarkCache>>,
 }
 
 impl App {
@@ -234,6 +242,9 @@ impl App {
             meter_recalc_passes: 0,
             big_meter_mode: BigMeterMode::Off,
             shortcut_help_open: false,
+            whats_new_open: false,
+            whats_new_closed: Arc::new(AtomicBool::new(false)),
+            whats_new_cache: Arc::new(Mutex::new(egui_commonmark::CommonMarkCache::default())),
         }
     }
 
@@ -432,7 +443,9 @@ impl App {
             self.zoom_reset();
         }
 
-        // Escape / Ctrl+W: Close shortcut help overlay (if open)
+        // Escape / Ctrl+W: Close shortcut help overlay (if open).
+        // Note: the What's New window is a separate OS viewport and handles
+        // its own close via the window's X button.
         if self.shortcut_help_open
             && ctx.input_mut(|i| {
                 i.consume_key(Modifiers::NONE, Key::Escape)
@@ -928,11 +941,24 @@ impl App {
         ui.add_space(spacer);
         let before = ui.cursor().left();
 
-        ui.label(
-            RichText::new(crate::version_label())
-                .small()
-                .color(ui.visuals().weak_text_color()),
+        let version_resp = ui.add(
+            egui::Label::new(
+                RichText::new(crate::version_label())
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            )
+            .sense(egui::Sense::click()),
         );
+        if version_resp.clicked() {
+            if self.whats_new_open {
+                self.whats_new_open = false;
+            } else {
+                self.open_whats_new();
+            }
+        }
+        version_resp
+            .on_hover_text("What's New")
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
         ui.hyperlink_to(
             "Help / GitHub",
             "https://github.com/antoinecellerier/dmm-tools",
@@ -1361,6 +1387,15 @@ impl eframe::App for App {
             if self.settings.auto_connect {
                 self.connect(ctx);
             }
+            // Show "What's New" on first launch after a release upgrade.
+            // Dev builds (-dev suffix) never auto-open to avoid annoyance.
+            let current_version = env!("CARGO_PKG_VERSION");
+            if !current_version.contains("-dev")
+                && self.settings.last_seen_version.as_deref() != Some(current_version)
+                && crate::changelog::has_version_section(current_version)
+            {
+                self.open_whats_new();
+            }
         }
 
         let minimal = self.big_meter_mode == BigMeterMode::Minimal;
@@ -1592,6 +1627,7 @@ impl eframe::App for App {
         }
 
         self.show_shortcut_help(ctx);
+        self.show_whats_new(ctx);
 
         if self.connection_state == ConnectionState::Connected {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -1717,5 +1753,54 @@ impl App {
                 );
             });
         self.shortcut_help_open = open;
+    }
+
+    fn open_whats_new(&mut self) {
+        self.whats_new_open = true;
+        self.settings.last_seen_version = Some(env!("CARGO_PKG_VERSION").to_string());
+        self.settings.save();
+    }
+
+    fn show_whats_new(&mut self, ctx: &egui::Context) {
+        // The viewport callback signals close via an AtomicBool.
+        if self.whats_new_closed.swap(false, Ordering::Relaxed) {
+            self.whats_new_open = false;
+        }
+
+        if !self.whats_new_open {
+            return;
+        }
+
+        let version = env!("CARGO_PKG_VERSION");
+        let title = if version.contains("-dev") {
+            "What's New (Unreleased)".to_string()
+        } else {
+            format!("What's New in v{version}")
+        };
+
+        let closed = Arc::clone(&self.whats_new_closed);
+        let cache = Arc::clone(&self.whats_new_cache);
+        let viewport_id = egui::ViewportId::from_hash_of("whats_new");
+        let viewport_builder = egui::ViewportBuilder::default()
+            .with_title(title)
+            .with_inner_size([520.0, 480.0]);
+
+        ctx.show_viewport_deferred(viewport_id, viewport_builder, move |ctx, _class| {
+            use egui::{Key, Modifiers};
+            let close_requested = ctx.input(|i| i.viewport().close_requested())
+                || ctx.input_mut(|i| {
+                    i.consume_key(Modifiers::NONE, Key::Escape)
+                        || i.consume_key(Modifiers::COMMAND, Key::W)
+                });
+            if close_requested {
+                closed.store(true, Ordering::Relaxed);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+            egui::CentralPanel::default().show(ctx, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    crate::changelog::show_changelog(ui, &mut cache.lock().unwrap());
+                });
+            });
+        });
     }
 }

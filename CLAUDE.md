@@ -139,7 +139,6 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
   - egui API naming is inconsistent — verify method names against docs before using them (e.g., `fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
 
 ### Dependencies
-- Keep dependencies minimal and well-maintained
-- Library crate: only `hidapi`, `thiserror`, `log`
-- CLI crate: adds `clap`, `serde`, `serde_json`, `chrono`, `env_logger`, `ctrlc`, `console`, `serde_yaml`
-- Avoid pulling in large frameworks for small tasks
+- Library crate (`ut61eplus-lib`): keep self-contained — only `hidapi`, `thiserror`, `log`. Protocol parsing and transport code must not pull in external utility crates; this is the core that talks to hardware and must stay minimal.
+- CLI and GUI crates: prefer well-maintained community crates over reimplementing functionality (markdown rendering, UI widgets, date handling, etc.). A good dependency is better than a worse hand-rolled version.
+- Evaluate new dependencies on: maintenance health, transitive dependency footprint, and whether they solve a real problem vs. something achievable in a few lines.

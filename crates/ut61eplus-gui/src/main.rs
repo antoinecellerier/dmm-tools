@@ -1,4 +1,5 @@
 mod app;
+mod changelog;
 mod display;
 mod graph;
 mod recording;

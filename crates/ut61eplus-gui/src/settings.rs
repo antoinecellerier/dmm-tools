@@ -196,6 +196,10 @@ pub struct Settings {
     /// Per-color overrides (dark and light themes independently).
     #[serde(default)]
     pub color_overrides: ColorOverrides,
+    /// Last version the user has seen the "What's New" dialog for.
+    /// `None` means the user has never dismissed it (new install or pre-feature upgrade).
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
     /// CLI overrides (not serialized).
     #[serde(skip)]
     pub overrides: Overrides,
@@ -221,6 +225,7 @@ impl Default for Settings {
             mock_mode: String::new(),
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
+            last_seen_version: None,
             overrides: Overrides::default(),
         }
     }
@@ -295,6 +300,7 @@ mod tests {
             mock_mode: "dcv".to_string(),
             color_preset: ColorPreset::HighContrast,
             color_overrides: ColorOverrides::default(),
+            last_seen_version: Some("0.3.0".to_string()),
             overrides: Overrides::default(),
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -325,6 +331,8 @@ mod tests {
         // Color fields default correctly
         assert_eq!(s.color_preset, ColorPreset::Default);
         assert_eq!(s.color_overrides, ColorOverrides::default());
+        // New optional fields default to None
+        assert!(s.last_seen_version.is_none());
     }
 
     #[test]

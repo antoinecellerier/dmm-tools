@@ -46,7 +46,9 @@ the next mode regardless of the auto-cycle setting.
 
 The top bar contains:
 
-- **App name and version**
+- **App name and version** — click the version label to open the "What's
+  New" changelog popup. On release upgrades, this popup opens automatically
+  on first launch.
 - **Connect / Disconnect** button
 - **Pause / Resume** button — freezes data capture without disconnecting.
   Pauses longer than the gap threshold produce gap markers on the graph.

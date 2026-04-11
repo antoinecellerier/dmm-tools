@@ -27,6 +27,7 @@
 - Auto-stop recording when buffer is full instead of silently dropping samples.
 - Show filename in CSV export toast.
 - Clear cursors on graph reset and mode change.
+- **"What's New" changelog popup** — shown automatically on first launch after a release upgrade. Click the version label in the top bar to re-open. Full changelog rendered with proper markdown formatting.
 
 ### CLI
 
