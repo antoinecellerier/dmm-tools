@@ -1,16 +1,16 @@
 [package]
-name = "ut61eplus-cli"
+name = "dmm-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "CLI tool for the UNI-T UT61E+ multimeter"
+description = "CLI tool for UNI-T and Voltcraft digital multimeters"
 
 [[bin]]
-name = "ut61eplus"
+name = "dmm-cli"
 path = "src/main.rs"
 
 [dependencies]
-ut61eplus-lib = { path = "../ut61eplus-lib" }
+dmm-lib = { path = "../dmm-lib" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }
@@ -23,4 +23,4 @@ console = "0.16"
 serde_yaml_ng = "0.10"
 
 [dev-dependencies]
-ut61eplus-lib = { path = "../ut61eplus-lib", features = ["test-support"] }
+dmm-lib = { path = "../dmm-lib", features = ["test-support"] }

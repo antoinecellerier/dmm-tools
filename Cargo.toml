@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "crates/ut61eplus-lib",
-    "crates/ut61eplus-cli",
-    "crates/ut61eplus-gui",
+    "crates/dmm-lib",
+    "crates/dmm-cli",
+    "crates/dmm-gui",
 ]
 resolver = "2"
 

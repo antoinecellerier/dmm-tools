@@ -83,9 +83,7 @@ impl Ch9329 {
     pub fn init(&self) -> Result<()> {
         debug!("CH9329: opening device (VID={VID:#06x} PID={PID:#06x})");
         debug!("CH9329: skipping config init (assumed pre-configured at 9600 baud)");
-        debug!(
-            "CH9329: if data doesn't flow, try RUST_LOG=ut61eplus_lib=trace to see raw HID reports"
-        );
+        debug!("CH9329: if data doesn't flow, try RUST_LOG=dmm_lib=trace to see raw HID reports");
         Ok(())
     }
 }

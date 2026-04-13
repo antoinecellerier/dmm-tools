@@ -72,8 +72,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p ${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/ut61eplus ${{ matrix.artifact }}/
-          cp target/${{ matrix.target }}/release/ut61eplus-gui ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/dmm-cli ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/dmm-gui ${{ matrix.artifact }}/
           cp README.md LICENSE ${{ matrix.artifact }}/
           cp -r udev ${{ matrix.artifact }}/
           cp -r docs ${{ matrix.artifact }}/
@@ -83,8 +83,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           mkdir -p ${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/ut61eplus ${{ matrix.artifact }}/
-          cp target/${{ matrix.target }}/release/ut61eplus-gui ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/dmm-cli ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/dmm-gui ${{ matrix.artifact }}/
           cp README.md LICENSE ${{ matrix.artifact }}/
           cp -r docs ${{ matrix.artifact }}/
           tar czf ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
@@ -94,8 +94,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p ${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/ut61eplus.exe ${{ matrix.artifact }}/
-          cp target/${{ matrix.target }}/release/ut61eplus-gui.exe ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/dmm-cli.exe ${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/dmm-gui.exe ${{ matrix.artifact }}/
           cp README.md LICENSE ${{ matrix.artifact }}/
           cp -r docs ${{ matrix.artifact }}/
           7z a ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/

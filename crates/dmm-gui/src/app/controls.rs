@@ -1,6 +1,6 @@
+use dmm_lib::mock::MockMode;
+use dmm_lib::protocol::registry;
 use eframe::egui::{self, RichText, Ui};
-use ut61eplus_lib::mock::MockMode;
-use ut61eplus_lib::protocol::registry;
 
 use crate::settings::{ColorOverrides, ColorPreset, HexColor, ThemeMode};
 use crate::theme::ThemeColors;

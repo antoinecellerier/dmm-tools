@@ -1,12 +1,12 @@
 [package]
-name = "ut61eplus-gui"
+name = "dmm-gui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "GUI application for the UNI-T UT61E+ multimeter"
+description = "GUI application for UNI-T and Voltcraft digital multimeters"
 
 [dependencies]
-ut61eplus-lib = { path = "../ut61eplus-lib" }
+dmm-lib = { path = "../dmm-lib" }
 eframe = { version = "0.34", features = ["glow", "wgpu"] }
 egui_commonmark = "0.23"
 egui_plot = "0.35"

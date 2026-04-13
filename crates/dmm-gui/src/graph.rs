@@ -591,7 +591,7 @@ impl Graph {
                     let unit = &self.current_unit;
                     let delta_color = self.theme_colors(dark).graph_cursor_delta();
 
-                    let integral_str = ut61eplus_lib::stats::integral_unit_info(unit)
+                    let integral_str = dmm_lib::stats::integral_unit_info(unit)
                         .and_then(|(disp_unit, divisor)| {
                             self.cursor_integral(ta, tb)
                                 .map(|raw| format!("  \u{222b}={:.4} {disp_unit}", raw / divisor))

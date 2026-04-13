@@ -1,9 +1,9 @@
+use dmm_lib::measurement::Measurement;
+use dmm_lib::protocol::Stability;
+use dmm_lib::transport::Transport;
 use eframe::egui;
 use log::{error, info, warn};
 use std::sync::mpsc;
-use ut61eplus_lib::measurement::Measurement;
-use ut61eplus_lib::protocol::Stability;
-use ut61eplus_lib::transport::Transport;
 
 /// Messages from the background thread to the UI.
 pub(crate) enum DmmMessage {
@@ -26,7 +26,7 @@ pub(crate) enum DmmMessage {
 /// Extract profile info from a newly opened device, optionally query its name,
 /// and send a `Connected` message to the UI.
 fn establish_connection<T: Transport>(
-    dmm: &mut ut61eplus_lib::Dmm<T>,
+    dmm: &mut dmm_lib::Dmm<T>,
     query_name: bool,
     msg_tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
@@ -64,7 +64,7 @@ pub(super) fn run_device_thread<T, F>(
     sample_interval_ms: u32,
 ) where
     T: Transport + Send + 'static,
-    F: Fn() -> ut61eplus_lib::error::Result<ut61eplus_lib::Dmm<T>> + Send + 'static,
+    F: Fn() -> dmm_lib::error::Result<dmm_lib::Dmm<T>> + Send + 'static,
 {
     info!("background thread: connecting to device");
     let mut dmm = match open_fn() {
@@ -105,7 +105,7 @@ pub(super) fn run_device_thread<T, F>(
                     break;
                 }
             }
-            Err(ut61eplus_lib::error::Error::Timeout) => {
+            Err(dmm_lib::error::Error::Timeout) => {
                 consecutive_timeouts += 1;
                 warn!("background thread: measurement timeout ({consecutive_timeouts})");
                 let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));

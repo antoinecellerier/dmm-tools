@@ -3,7 +3,7 @@
 fn main() {
     env_logger::init();
 
-    match ut61eplus_lib::list_devices() {
+    match dmm_lib::list_devices() {
         Ok(devices) => {
             if devices.is_empty() {
                 eprintln!("No devices found.");

@@ -10,11 +10,11 @@
 //! - Overload: `"OL"`
 //! - NCV: `"NCV:3"`
 
+use dmm_lib::measurement::MeasuredValue;
+use dmm_lib::protocol::ut61eplus::parse_measurement;
+use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use serde::Deserialize;
 use std::path::Path;
-use ut61eplus_lib::measurement::MeasuredValue;
-use ut61eplus_lib::protocol::ut61eplus::parse_measurement;
-use ut61eplus_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 
 /// Expected flag state (same field names as capture SampleFlags).
 #[derive(Debug, Deserialize)]

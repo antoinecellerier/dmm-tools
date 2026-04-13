@@ -1,5 +1,5 @@
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 use std::io::Write;
-use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
 use crate::OutputFormat;
 

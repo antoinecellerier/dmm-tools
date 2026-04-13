@@ -4,13 +4,13 @@ mod format;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
+use dmm_lib::measurement::MeasuredValue;
+use dmm_lib::protocol::registry::{self, SelectableDevice};
 use log::{error, info};
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use ut61eplus_lib::measurement::MeasuredValue;
-use ut61eplus_lib::protocol::registry::{self, SelectableDevice};
 
 fn version_string() -> &'static str {
     let version = env!("CARGO_PKG_VERSION");
@@ -24,9 +24,9 @@ fn version_string() -> &'static str {
 
 #[derive(Parser)]
 #[command(
-    name = "ut61eplus",
+    name = "dmm-cli",
     version = version_string(),
-    about = "UNI-T UT61E+ multimeter tool",
+    about = "CLI tool for UNI-T and Voltcraft digital multimeters",
     after_help = "Run with --help for the full list of supported devices.\n\nSet NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools",
     after_long_help = "Set NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
@@ -36,7 +36,7 @@ struct Cli {
     device: String,
 
     /// Select a specific USB adapter when multiple are connected.
-    /// Use serial number or HID device path from 'ut61eplus list' output.
+    /// Use serial number or HID device path from 'dmm-cli list' output.
     #[arg(long, value_name = "SERIAL_OR_PATH")]
     adapter: Option<String>,
 
@@ -99,10 +99,10 @@ Example: --device mock read --mock-mode dcv"
     /// Generate shell completions
     #[command(after_help = "\
 Install completions for your shell:
-  bash:  ut61eplus completions bash > ~/.local/share/bash-completion/completions/ut61eplus
-  zsh:   ut61eplus completions zsh > ~/.zfunc/_ut61eplus
-  fish:  ut61eplus completions fish > ~/.config/fish/completions/ut61eplus.fish
-  pwsh:  ut61eplus completions powershell >> $PROFILE")]
+  bash:  dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
+  zsh:   dmm-cli completions zsh > ~/.zfunc/_dmm-cli
+  fish:  dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
+  pwsh:  dmm-cli completions powershell >> $PROFILE")]
     Completions {
         /// Shell to generate completions for
         #[arg(value_enum)]
@@ -162,7 +162,7 @@ fn main() {
                     clap_complete::generate(
                         shell,
                         &mut Cli::command(),
-                        "ut61eplus",
+                        "dmm-cli",
                         &mut std::io::stdout(),
                     );
                 }
@@ -251,7 +251,7 @@ fn build_device_help() -> String {
         let stability = (d.new_protocol)().profile().stability;
         let tag = if !d.requires_hardware {
             " (no hardware required)"
-        } else if stability == ut61eplus_lib::protocol::Stability::Experimental {
+        } else if stability == dmm_lib::protocol::Stability::Experimental {
             " (experimental)"
         } else {
             ""
@@ -325,14 +325,11 @@ fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
 fn open_with_help(
     device: &'static SelectableDevice,
     adapter: Option<&str>,
-) -> Result<
-    ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
-    Box<dyn std::error::Error>,
-> {
-    match ut61eplus_lib::open_device_by_id_auto(device.id, adapter) {
+) -> Result<dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>, Box<dyn std::error::Error>> {
+    match dmm_lib::open_device_by_id_auto(device.id, adapter) {
         Ok(dmm) => {
             let profile = dmm.profile();
-            if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
+            if profile.stability == dmm_lib::protocol::Stability::Experimental {
                 eprintln!(
                     "{}",
                     style(format!(
@@ -348,7 +345,7 @@ fn open_with_help(
                 );
                 eprintln!(
                     "{}",
-                    style(format!("  ut61eplus --device {} capture", device.id)).yellow()
+                    style(format!("  dmm-cli --device {} capture", device.id)).yellow()
                 );
                 eprintln!(
                     "{}",
@@ -357,13 +354,13 @@ fn open_with_help(
             }
             Ok(dmm)
         }
-        Err(ut61eplus_lib::error::Error::DeviceNotFound { .. })
-        | Err(ut61eplus_lib::error::Error::NoTransportFound) => {
+        Err(dmm_lib::error::Error::DeviceNotFound { .. })
+        | Err(dmm_lib::error::Error::NoTransportFound) => {
             eprintln!("{}", style("USB cable not found.").yellow().bold());
             print_transport_setup_help();
             let proto = (device.new_protocol)();
             let profile = proto.profile();
-            if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
+            if profile.stability == dmm_lib::protocol::Stability::Experimental {
                 eprintln!(
                     "{}",
                     style(format!(
@@ -376,12 +373,12 @@ fn open_with_help(
             }
             Err("device not found".into())
         }
-        Err(ut61eplus_lib::error::Error::AdapterNotFound(ref detail)) => {
+        Err(dmm_lib::error::Error::AdapterNotFound(ref detail)) => {
             eprintln!(
                 "{} adapter not found: {detail}",
                 style("Error:").red().bold()
             );
-            match ut61eplus_lib::list_devices() {
+            match dmm_lib::list_devices() {
                 Ok(devices) if devices.is_empty() => {
                     eprintln!("{}", style("No devices currently connected.").yellow());
                 }
@@ -398,7 +395,7 @@ fn open_with_help(
                 Err(_) => {
                     eprintln!(
                         "{}",
-                        style("Run 'ut61eplus list' to see connected devices.").yellow()
+                        style("Run 'dmm-cli list' to see connected devices.").yellow()
                     );
                 }
             }
@@ -409,7 +406,7 @@ fn open_with_help(
 }
 
 fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
-    let devices = ut61eplus_lib::list_devices()?;
+    let devices = dmm_lib::list_devices()?;
     if devices.is_empty() {
         eprintln!("{}", style("No devices found.").yellow());
         print_transport_setup_help();
@@ -459,7 +456,7 @@ fn cmd_read(
     integrate: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut dmm = open_with_help(device, adapter)?;
-    let experimental = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Experimental;
+    let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
     info!("connected, starting measurement loop");
     run_read_loop(
         &mut dmm,
@@ -483,12 +480,12 @@ fn cmd_read_mock(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut dmm = match mock_mode {
         Some(mode_str) => {
-            let mode: ut61eplus_lib::mock::MockMode = mode_str
+            let mode: dmm_lib::mock::MockMode = mode_str
                 .parse()
                 .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?;
-            ut61eplus_lib::mock::open_mock_mode(mode)?
+            dmm_lib::mock::open_mock_mode(mode)?
         }
-        None => ut61eplus_lib::mock::open_mock()?,
+        None => dmm_lib::mock::open_mock()?,
     };
     info!("mock device connected, starting measurement loop");
     // Mock returns instantly — use 100ms floor to simulate ~10 Hz
@@ -507,8 +504,8 @@ fn cmd_read_mock(
 
 /// Shared measurement loop for both real and mock devices.
 #[allow(clippy::too_many_arguments)]
-fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
-    dmm: &mut ut61eplus_lib::Dmm<T>,
+fn run_read_loop<T: dmm_lib::transport::Transport>(
+    dmm: &mut dmm_lib::Dmm<T>,
     interval_ms: u64,
     format: &OutputFormat,
     output_path: Option<String>,
@@ -550,8 +547,8 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
     }
 
     let interval = Duration::from_millis(interval_ms);
-    let mut stats = ut61eplus_lib::stats::RunningStats::default();
-    let mut integrator = ut61eplus_lib::stats::Integrator::new();
+    let mut stats = dmm_lib::stats::RunningStats::default();
+    let mut integrator = dmm_lib::stats::Integrator::new();
     let mut integral_unit: Option<String> = None;
     let mut i = 0usize;
     let mut consecutive_timeouts: u32 = 0;
@@ -584,7 +581,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
                         _ => {}
                     }
 
-                    ut61eplus_lib::stats::integral_unit_info(current_unit)
+                    dmm_lib::stats::integral_unit_info(current_unit)
                         .map(|(disp_unit, divisor)| (integrator.value() / divisor, disp_unit))
                 } else {
                     None
@@ -600,7 +597,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
                 writer.flush()?;
                 i += 1;
             }
-            Err(ut61eplus_lib::error::Error::Timeout) => {
+            Err(dmm_lib::error::Error::Timeout) => {
                 consecutive_timeouts += 1;
                 log::warn!("measurement timeout, retrying");
                 if consecutive_timeouts == 5
@@ -637,7 +634,7 @@ fn run_read_loop<T: ut61eplus_lib::transport::Transport>(
         );
         if integrate
             && let Some(unit_str) = &integral_unit
-            && let Some((disp_unit, divisor)) = ut61eplus_lib::stats::integral_unit_info(unit_str)
+            && let Some((disp_unit, divisor)) = dmm_lib::stats::integral_unit_info(unit_str)
         {
             let dt_str = integrator
                 .elapsed_secs()
@@ -666,7 +663,7 @@ fn cmd_command(
         let mut dmm = open_with_help(device, adapter)?;
         dmm.send_command(&action)?;
     } else {
-        let mut dmm = ut61eplus_lib::mock::open_mock()?;
+        let mut dmm = dmm_lib::mock::open_mock()?;
         dmm.send_command(&action)?;
     }
     println!("{} {action}", style("Sent").green());
@@ -758,17 +755,17 @@ fn cmd_debug(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ut61eplus_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::ut61eplus::make_test_measurement;
 
     #[test]
     fn clap_parse_list() {
-        let cli = Cli::try_parse_from(["ut61eplus", "list"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "list"]).unwrap();
         assert!(matches!(cli.command, Cmd::List));
     }
 
     #[test]
     fn clap_parse_read_defaults() {
-        let cli = Cli::try_parse_from(["ut61eplus", "read"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "read"]).unwrap();
         match cli.command {
             Cmd::Read {
                 interval_ms,
@@ -792,7 +789,7 @@ mod tests {
     #[test]
     fn clap_parse_read_with_args() {
         let cli = Cli::try_parse_from([
-            "ut61eplus",
+            "dmm-cli",
             "read",
             "--interval-ms",
             "100",
@@ -824,7 +821,7 @@ mod tests {
 
     #[test]
     fn clap_parse_command() {
-        let cli = Cli::try_parse_from(["ut61eplus", "command", "hold"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "command", "hold"]).unwrap();
         match cli.command {
             Cmd::Command { action } => {
                 assert_eq!(action.as_deref(), Some("hold"));
@@ -835,7 +832,7 @@ mod tests {
 
     #[test]
     fn clap_parse_command_no_action_lists_commands() {
-        let cli = Cli::try_parse_from(["ut61eplus", "command"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "command"]).unwrap();
         match cli.command {
             Cmd::Command { action } => {
                 assert!(action.is_none());
@@ -846,7 +843,7 @@ mod tests {
 
     #[test]
     fn clap_parse_debug() {
-        let cli = Cli::try_parse_from(["ut61eplus", "debug", "--count", "5"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "debug", "--count", "5"]).unwrap();
         match cli.command {
             Cmd::Debug { count, interval_ms } => {
                 assert_eq!(count, 5);
@@ -858,7 +855,7 @@ mod tests {
 
     #[test]
     fn clap_parse_device_flag() {
-        let cli = Cli::try_parse_from(["ut61eplus", "--device", "ut8803", "list"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "--device", "ut8803", "list"]).unwrap();
         assert_eq!(cli.device, "ut8803");
     }
 
@@ -933,7 +930,7 @@ mod tests {
 
     #[test]
     fn clap_parse_completions() {
-        let cli = Cli::try_parse_from(["ut61eplus", "completions", "bash"]).unwrap();
+        let cli = Cli::try_parse_from(["dmm-cli", "completions", "bash"]).unwrap();
         assert!(matches!(
             cli.command,
             Cmd::Completions {

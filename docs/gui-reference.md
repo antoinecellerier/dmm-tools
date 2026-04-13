@@ -1,4 +1,4 @@
-# ut61eplus-gui — GUI Reference
+# dmm-gui — GUI Reference
 
 <!-- Keep this file in sync with the GUI. If you add, remove, or change
      features, panels, or controls, update the relevant section here in the
@@ -6,12 +6,12 @@
 
 ## Name
 
-**ut61eplus-gui** — real-time graphing multimeter display for UNI-T and Voltcraft meters
+**dmm-gui** — real-time graphing multimeter display for UNI-T and Voltcraft meters
 
 ## Synopsis
 
 ```
-ut61eplus-gui [OPTIONS]
+dmm-gui [OPTIONS]
 ```
 
 ## Description
@@ -212,7 +212,7 @@ timestamp,mode,value,unit,range,flags
 
 ## Settings
 
-Opened via the gear icon. Persisted to `~/.config/ut61eplus/settings.json`.
+Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Linux (XDG config dir under the `dmm-tools` project name; macOS and Windows use the equivalent platform-specific location).
 
 | Setting | Default | Description |
 |---|---|---|
@@ -279,7 +279,7 @@ do not modify the persisted `settings.json`.
 | Option | Description |
 |--------|-------------|
 | `--device <ID>` | Device family to connect to (e.g., `ut61eplus`, `ut181a`, `mock`). Run `--help` for the full list with aliases. |
-| `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `ut61eplus list` output. |
+| `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |

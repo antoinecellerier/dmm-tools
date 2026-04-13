@@ -71,7 +71,7 @@ test -w /dev/hidrawN && echo "writable" || echo "NOT writable"
 ## Step 3: Run `list` to verify adapter detection
 
 ```sh
-./target/release/ut61eplus list
+./target/release/dmm-cli list
 ```
 
 **Expected:** The CH9329 adapter appears with `[CH9329]` label:
@@ -89,7 +89,7 @@ correct HID interface (the custom HID one, not keyboard/mouse).
 ## Step 4: Attempt basic communication (the critical test)
 
 ```sh
-RUST_LOG=ut61eplus_lib=trace ./target/release/ut61eplus --device ut181a debug --count 5
+RUST_LOG=dmm_lib=trace ./target/release/dmm-cli --device ut181a debug --count 5
 ```
 
 ### Outcome A: Data flows
@@ -166,7 +166,7 @@ The `raw[0]` value tells us whether the report ID byte is included
 ## Step 5: Full measurement validation (if Step 4 succeeded)
 
 ```sh
-./target/release/ut61eplus --device ut181a read --count 10
+./target/release/dmm-cli --device ut181a read --count 10
 ```
 
 Compare each value shown against the meter's LCD display. They should
@@ -180,7 +180,7 @@ match within the displayed precision.
 ## Step 6: Remote commands (if Step 5 works)
 
 ```sh
-./target/release/ut61eplus --device ut181a command hold
+./target/release/dmm-cli --device ut181a command hold
 ```
 
 **Expected:** The meter toggles HOLD mode. This confirms bidirectional
@@ -189,7 +189,7 @@ communication.
 ## Step 7: Capture wizard (comprehensive validation)
 
 ```sh
-./target/release/ut61eplus --device ut181a capture
+./target/release/dmm-cli --device ut181a capture
 ```
 
 This walks through each measurement mode and records raw data for

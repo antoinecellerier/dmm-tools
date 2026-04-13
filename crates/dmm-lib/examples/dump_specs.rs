@@ -5,12 +5,12 @@
 //! Compare side-by-side with the PDF manuals in `references/`.
 //!
 //! Usage:
-//!   cargo run -p ut61eplus-lib --example dump_specs
-//!   cargo run -p ut61eplus-lib --example dump_specs -- ut61b+
-//!   cargo run -p ut61eplus-lib --example dump_specs -- ut61eplus ut61d+
+//!   cargo run -p dmm-lib --example dump_specs
+//!   cargo run -p dmm-lib --example dump_specs -- ut61b+
+//!   cargo run -p dmm-lib --example dump_specs -- ut61eplus ut61d+
 
-use ut61eplus_lib::protocol::ut61eplus::mode::Mode;
-use ut61eplus_lib::protocol::ut61eplus::tables::{
+use dmm_lib::protocol::ut61eplus::mode::Mode;
+use dmm_lib::protocol::ut61eplus::tables::{
     AccuracyBand, DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_mode_spec, lookup_spec,
 };
 
@@ -274,10 +274,10 @@ fn get_range_label(
     mode_byte: u8,
     range: u8,
 ) -> Option<(&'static RangeInfo, &'static str)> {
-    use std::sync::LazyLock;
-    use ut61eplus_lib::protocol::ut61eplus::tables::{
+    use dmm_lib::protocol::ut61eplus::tables::{
         ut61b_plus::Ut61bPlusTable, ut61d_plus::Ut61dPlusTable, ut61e_plus::Ut61ePlusTable,
     };
+    use std::sync::LazyLock;
 
     static UT61E: LazyLock<Ut61ePlusTable> = LazyLock::new(Ut61ePlusTable::new);
     static UT61B: LazyLock<Ut61bPlusTable> = LazyLock::new(Ut61bPlusTable::new);

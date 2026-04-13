@@ -3,7 +3,7 @@
 fn main() {
     env_logger::init();
 
-    let mut dmm = match ut61eplus_lib::open_device_by_id_auto("ut61eplus", None) {
+    let mut dmm = match dmm_lib::open_device_by_id_auto("ut61eplus", None) {
         Ok(dmm) => dmm,
         Err(e) => {
             eprintln!("Error opening device: {e}");

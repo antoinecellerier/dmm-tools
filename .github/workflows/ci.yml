@@ -76,8 +76,8 @@ jobs:
         if: runner.os != 'Windows' && inputs.upload_artifacts
         run: |
           mkdir -p staging
-          cp target/${{ matrix.target }}/release/ut61eplus staging/
-          cp target/${{ matrix.target }}/release/ut61eplus-gui staging/
+          cp target/${{ matrix.target }}/release/dmm-cli staging/
+          cp target/${{ matrix.target }}/release/dmm-gui staging/
           cp README.md LICENSE staging/
           cp -r udev staging/ || true
 
@@ -86,8 +86,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p staging
-          cp target/${{ matrix.target }}/release/ut61eplus.exe staging/
-          cp target/${{ matrix.target }}/release/ut61eplus-gui.exe staging/
+          cp target/${{ matrix.target }}/release/dmm-cli.exe staging/
+          cp target/${{ matrix.target }}/release/dmm-gui.exe staging/
           cp README.md LICENSE staging/
 
       - name: Upload artifact

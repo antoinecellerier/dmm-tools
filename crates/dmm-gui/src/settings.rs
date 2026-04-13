@@ -219,9 +219,7 @@ impl Default for Settings {
             hide_decorations: false,
             zoom_pct: 100,
             sample_interval_ms: 0,
-            device_family: ut61eplus_lib::protocol::registry::default_device()
-                .id
-                .to_string(),
+            device_family: dmm_lib::protocol::registry::default_device().id.to_string(),
             mock_mode: String::new(),
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
@@ -233,7 +231,7 @@ impl Default for Settings {
 
 impl Settings {
     fn config_path() -> Option<PathBuf> {
-        directories::ProjectDirs::from("", "", "ut61eplus")
+        directories::ProjectDirs::from("", "", "dmm-tools")
             .map(|dirs| dirs.config_dir().join("settings.json"))
     }
 

@@ -18,7 +18,7 @@ Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 - Guided protocol capture wizard for bug reports
 
 ```
-$ ut61eplus read --count 5
+$ dmm-cli read --count 5
 9.090 MΩ [AUTO]
 8.902 MΩ [AUTO]
 10.182 MΩ [AUTO]
@@ -31,21 +31,21 @@ $ ut61eplus read --count 5
 Output as JSON for scripting:
 
 ```
-$ ut61eplus read --format json --count 1
+$ dmm-cli read --format json --count 1
 {"display_raw":"  3.369","flags":{"auto_range":true,"dc":false,"hold":false,...},"mode":"DC V","range":"22V","unit":"V","value":3.369}
 ```
 
 Send remote commands:
 
 ```
-$ ut61eplus command hold
+$ dmm-cli command hold
 Sent hold
 ```
 
 Connect to other device families with `--device`:
 
 ```
-$ ut61eplus --device ut8803 capture
+$ dmm-cli --device ut8803 capture
 WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware).
 ```
 
@@ -79,13 +79,13 @@ See [docs/supported-devices.md](docs/supported-devices.md) for the full compatib
 Pre-built binaries for Linux, Windows, and macOS are available on the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page. Or install from source:
 
 ```sh
-cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-cli
-cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-gui
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-cli
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-gui
 ```
 
 ```sh
-ut61eplus read          # stream measurements
-ut61eplus-gui           # launch the GUI
+dmm-cli read            # stream measurements
+dmm-gui                 # launch the GUI
 ```
 
 See [setup & troubleshooting](docs/setup.md) for driver installation, udev rules, and platform-specific instructions.

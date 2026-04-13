@@ -1,16 +1,16 @@
-# ut61eplus(1) — CLI Reference
+# dmm-cli(1) — CLI Reference
 
 <!-- Keep this file in sync with the CLI. If you add, remove, or change
      commands or options, update the relevant section here in the same commit. -->
 
 ## Name
 
-**ut61eplus** — command-line tool for UNI-T and Voltcraft multimeters
+**dmm-cli** — command-line tool for UNI-T and Voltcraft multimeters
 
 ## Synopsis
 
 ```
-ut61eplus <COMMAND> [OPTIONS]
+dmm-cli <COMMAND> [OPTIONS]
 ```
 
 ## Description
@@ -88,29 +88,29 @@ By default, the mock device cycles through all modes automatically. Use
 
 ```bash
 # Default (UT61E+ family)
-ut61eplus read
+dmm-cli read
 
 # Connect as UT8803
-ut61eplus --device ut8803 read
+dmm-cli --device ut8803 read
 
 # Connect as UT181A
-ut61eplus --device ut181a info
+dmm-cli --device ut181a info
 
 # Use simulated device (no hardware)
-ut61eplus --device mock read
+dmm-cli --device mock read
 
 # Pin mock to DC voltage mode
-ut61eplus --device mock read --mock-mode dcv
+dmm-cli --device mock read --mock-mode dcv
 ```
 
 ## Commands
 
-### ut61eplus list
+### dmm-cli list
 
 List connected USB adapters.
 
 ```
-ut61eplus list
+dmm-cli list
 ```
 
 Prints each detected device with an index number and transport type. If no
@@ -121,28 +121,28 @@ When multiple devices are connected, use `--adapter` with a serial number or
 HID path from the `list` output to select a specific device:
 
 ```
-ut61eplus list
+dmm-cli list
 # [0] /dev/hidraw3 [CP2110] — CP2110 HID UART Bridge (S/N: 00C5B27A)
 # [1] /dev/hidraw5 [CP2110] — CP2110 HID UART Bridge (S/N: 00D8F132)
 
-ut61eplus --adapter 00C5B27A read
+dmm-cli --adapter 00C5B27A read
 ```
 
-### ut61eplus info
+### dmm-cli info
 
 Connect to the meter and print device info: model name, transport type, and
 transport-specific diagnostics (e.g., CP2110 firmware version and UART error flags).
 
 ```
-ut61eplus info
+dmm-cli info
 ```
 
-### ut61eplus read
+### dmm-cli read
 
 Continuously read measurements from the meter.
 
 ```
-ut61eplus read [OPTIONS]
+dmm-cli read [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -165,27 +165,27 @@ printed to stderr. When `--integrate` is active, the total integral is also show
 
 ```bash
 # Stream readings to the terminal
-ut61eplus read
+dmm-cli read
 
 # Record 100 CSV samples to a file
-ut61eplus read --format csv --count 100 -o measurements.csv
+dmm-cli read --format csv --count 100 -o measurements.csv
 
 # JSON output at 1-second intervals
-ut61eplus read --format json --interval-ms 1000
+dmm-cli read --format json --interval-ms 1000
 
 # Measure battery discharge capacity (coulomb counter)
-ut61eplus read --integrate --format csv -o discharge.csv
+dmm-cli read --integrate --format csv -o discharge.csv
 ```
 
-### ut61eplus command
+### dmm-cli command
 
 Send a remote command to the meter. Available commands depend on the
 device family. Run with no arguments to list available commands:
 
 ```
-ut61eplus command              # list commands for default device
-ut61eplus --device ut181a command  # list commands for UT181A
-ut61eplus command <ACTION>     # send a command
+dmm-cli command              # list commands for default device
+dmm-cli --device ut181a command  # list commands for UT181A
+dmm-cli command <ACTION>     # send a command
 ```
 
 #### UT61E+ commands
@@ -230,17 +230,17 @@ No remote commands — the meter streams continuously after connection.
 **Example:**
 
 ```bash
-ut61eplus command hold
-ut61eplus --device ut181a command hold
+dmm-cli command hold
+dmm-cli --device ut181a command hold
 ```
 
-### ut61eplus debug
+### dmm-cli debug
 
 Raw hex dump mode for protocol debugging. Prints transport info (bridge type and
 version) on startup, then shows decoded fields alongside each parsed measurement.
 
 ```
-ut61eplus debug [OPTIONS]
+dmm-cli debug [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -251,15 +251,15 @@ ut61eplus debug [OPTIONS]
 For full wire-level tracing, combine with the `RUST_LOG` environment variable:
 
 ```bash
-RUST_LOG=ut61eplus_lib=trace ut61eplus debug --count 0
+RUST_LOG=dmm_lib=trace dmm-cli debug --count 0
 ```
 
-### ut61eplus completions
+### dmm-cli completions
 
 Generate shell completion scripts.
 
 ```
-ut61eplus completions [SHELL]
+dmm-cli completions [SHELL]
 ```
 
 Supported shells: `bash`, `elvish`, `fish`, `powershell`, `zsh`.
@@ -270,25 +270,25 @@ Running without a shell argument prints install instructions.
 
 ```bash
 # Bash
-ut61eplus completions bash > ~/.local/share/bash-completion/completions/ut61eplus
+dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
 
 # Zsh (ensure ~/.zfunc is in fpath and compinit is called)
-ut61eplus completions zsh > ~/.zfunc/_ut61eplus
+dmm-cli completions zsh > ~/.zfunc/_dmm-cli
 
 # Fish
-ut61eplus completions fish > ~/.config/fish/completions/ut61eplus.fish
+dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
 
 # PowerShell
-ut61eplus completions powershell >> $PROFILE
+dmm-cli completions powershell >> $PROFILE
 ```
 
-### ut61eplus capture
+### dmm-cli capture
 
 Guided protocol capture tool for bug reports and verification. Walks you
 through measuring known values in each mode and records the raw protocol data.
 
 ```
-ut61eplus capture [OPTIONS]
+dmm-cli capture [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -301,20 +301,20 @@ ut61eplus capture [OPTIONS]
 
 ```bash
 # Run all capture steps
-ut61eplus capture
+dmm-cli capture
 
 # Run only DC millivolt and temperature steps
-ut61eplus capture --steps dcmv,temp
+dmm-cli capture --steps dcmv,temp
 
 # List available steps
-ut61eplus capture --list-steps
+dmm-cli capture --list-steps
 ```
 
 ## Environment Variables
 
 | Variable | Description |
 |---|---|
-| `RUST_LOG` | Controls log verbosity. Use `ut61eplus_lib=trace` for wire-level debugging. |
+| `RUST_LOG` | Controls log verbosity. Use `dmm_lib=trace` for wire-level debugging. |
 | `NO_COLOR` | Set to `1` to disable colored terminal output. |
 
 ## See Also

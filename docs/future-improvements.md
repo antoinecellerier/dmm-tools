@@ -78,7 +78,7 @@ Use cases: precision measurement, oscillator characterization, sensor evaluation
 
 **Complexity:** Medium-high
 
-Expose live measurements over TCP as newline-delimited JSON (e.g., `ut61eplus serve --port 5025`). Clients connect and receive a stream of measurement objects.
+Expose live measurements over TCP as newline-delimited JSON (e.g., `dmm-cli serve --port 5025`). Clients connect and receive a stream of measurement objects.
 
 Use cases: LabVIEW/Python script integration, Grafana dashboards, headless Raspberry Pi monitoring setups, custom test automation.
 
@@ -101,7 +101,7 @@ Use cases: Home Assistant, Node-RED, InfluxDB/Grafana pipelines, multi-meter agg
 Load a previously recorded CSV file back into the GUI for analysis — graph, statistics, cursors, all working on historical data without a connected meter.
 
 - GUI: `--replay capture.csv` flag
-- CLI: `ut61eplus analyze capture.csv --stats`
+- CLI: `dmm-cli analyze capture.csv --stats`
 
 Use cases: post-hoc analysis, sharing captures with colleagues, comparing measurements from different sessions.
 

@@ -1,9 +1,9 @@
 [package]
-name = "ut61eplus-lib"
+name = "dmm-lib"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Library for communicating with UNI-T UT61E+ multimeter via CP2110 HID bridge"
+description = "Library for communicating with UNI-T and Voltcraft digital multimeters via CP2110, CH9329, and CH9325 HID bridges"
 
 [dependencies]
 thiserror = "2"

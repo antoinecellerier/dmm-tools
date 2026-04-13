@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Breaking changes
+
+- **Renamed crates and binaries** to remove the UT61E+-specific naming now that the project supports seven device families. The CLI binary is now `dmm-cli` (was `ut61eplus`), the GUI binary is now `dmm-gui` (was `ut61eplus-gui`), and the library crate is now `dmm-lib` (was `ut61eplus-lib`). Workspace directories moved to `crates/dmm-{lib,cli,gui}/`. Update any scripts, install commands, or `RUST_LOG` filters accordingly:
+
+  ```sh
+  cargo install --git <url> dmm-cli dmm-gui       # was: ut61eplus-cli / ut61eplus-gui
+  RUST_LOG=dmm_lib=trace dmm-cli debug             # was: ut61eplus_lib / ut61eplus
+  ```
+
+  The GUI settings file also moves, from `~/.config/ut61eplus/settings.json` to `~/.config/dmm-tools/settings.json` (and equivalent on other platforms). **Existing settings will not be migrated automatically** — copy the old file manually or re-configure from scratch. Device IDs (`--device ut61eplus`) and protocol module names (`dmm_lib::protocol::ut61eplus::*`) are unchanged — they refer to the UT61-plus device protocol family, not the tool.
+
 ### New device support
 
 | Family | Models | Transport | Status |

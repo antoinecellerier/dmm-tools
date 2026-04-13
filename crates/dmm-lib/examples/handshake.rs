@@ -3,7 +3,7 @@
 fn main() {
     env_logger::init();
 
-    match ut61eplus_lib::open_device_by_id_auto("ut61eplus", None) {
+    match dmm_lib::open_device_by_id_auto("ut61eplus", None) {
         Ok(dmm) => {
             println!("Connected to device.");
             // The Dmm struct doesn't expose product_string directly,

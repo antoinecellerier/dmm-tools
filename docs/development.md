@@ -33,14 +33,14 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 
 **New device model (same protocol family):**
 
-1. Create `crates/ut61eplus-lib/src/protocol/<family>/tables/new_model.rs`
+1. Create `crates/dmm-lib/src/protocol/<family>/tables/new_model.rs`
 2. Implement the `DeviceTable` trait with mode/range tables
 3. Register in the family's `tables/mod.rs`
 4. Add `SelectableDevice` entry in `protocol/registry.rs`
 
 **New protocol family:**
 
-1. Create `crates/ut61eplus-lib/src/protocol/newfamily/mod.rs`
+1. Create `crates/dmm-lib/src/protocol/newfamily/mod.rs`
 2. Implement the `Protocol` trait (`init`, `request_measurement`, `send_command`, `get_name`, `profile`, `capture_steps`)
 3. Add variant to `DeviceFamily` enum in `protocol/mod.rs`
 4. Add match arm in `open_device()` in `lib.rs`
@@ -58,13 +58,13 @@ comparison with the PDF manuals in `references/`.
 
 ```sh
 # Dump all devices
-cargo run -p ut61eplus-lib --example dump_specs
+cargo run -p dmm-lib --example dump_specs
 
 # Dump a specific device
-cargo run -p ut61eplus-lib --example dump_specs -- ut61b+
+cargo run -p dmm-lib --example dump_specs -- ut61b+
 
 # Multiple devices
-cargo run -p ut61eplus-lib --example dump_specs -- ut61eplus ut61d+
+cargo run -p dmm-lib --example dump_specs -- ut61eplus ut61d+
 ```
 
 Pipe to `less` or redirect to a file for easier comparison. The output
@@ -74,14 +74,14 @@ GUI specifications panel will display.
 ## Golden File Tests
 
 Golden file tests verify measurement parsing against known-good byte sequences.
-Each `.yaml` file in `crates/ut61eplus-lib/tests/golden/{family}/` uses the same
+Each `.yaml` file in `crates/dmm-lib/tests/golden/{family}/` uses the same
 format as capture YAML samples (`raw_hex`, `mode`, `value`, `unit`, `range_label`,
 `flags`). This means you can copy a sample directly from a capture report into a
 golden file.
 
 To add a golden test:
 
-1. Run `ut61eplus --device <family> capture` and complete the steps
+1. Run `dmm-cli --device <family> capture` and complete the steps
 2. Open the capture YAML and find a sample with known-good values
 3. Copy the sample fields into a new `.yaml` file in `tests/golden/{family}/`
 4. Run `cargo test --workspace` to verify
@@ -106,10 +106,10 @@ a new mode/range/flag combination against real hardware.
 Generate completions for your shell:
 
 ```sh
-ut61eplus completions bash > ~/.local/share/bash-completion/completions/ut61eplus
-ut61eplus completions zsh > ~/.zfunc/_ut61eplus
-ut61eplus completions fish > ~/.config/fish/completions/ut61eplus.fish
-ut61eplus completions powershell >> $PROFILE
+dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
+dmm-cli completions zsh > ~/.zfunc/_dmm-cli
+dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
+dmm-cli completions powershell >> $PROFILE
 ```
 
 ## AI-Assisted Development

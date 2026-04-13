@@ -140,8 +140,8 @@ Pre-exhaust pattern: drain all pending messages from read queue before sending c
 
 | File | Description |
 |------|-------------|
-| `crates/ut61eplus-lib/src/protocol/vc650bt/mod.rs` | Protocol implementation (follow UT8803 pattern) |
-| `crates/ut61eplus-lib/src/protocol/vc650bt/tables/mod.rs` | Mode/range/unit position tables |
+| `crates/dmm-lib/src/protocol/vc650bt/mod.rs` | Protocol implementation (follow UT8803 pattern) |
+| `crates/dmm-lib/src/protocol/vc650bt/tables/mod.rs` | Mode/range/unit position tables |
 | `docs/research/vc880/reverse-engineering-approach.md` | RE methodology documentation |
 | `docs/research/vc880/reverse-engineered-protocol.md` | Protocol specification (distilled from this plan) |
 
@@ -149,9 +149,9 @@ Pre-exhaust pattern: drain all pending messages from read queue before sending c
 
 | File | Change |
 |------|--------|
-| `crates/ut61eplus-lib/src/protocol/mod.rs` | Add `mod vc650bt;` and `DeviceFamily::Vc650bt` variant |
-| `crates/ut61eplus-lib/src/protocol/registry.rs` | Add `SelectableDevice` entries for VC-880 and VC650BT |
-| `crates/ut61eplus-lib/src/lib.rs` | Add match arm in `open_device()` |
+| `crates/dmm-lib/src/protocol/mod.rs` | Add `mod vc650bt;` and `DeviceFamily::Vc650bt` variant |
+| `crates/dmm-lib/src/protocol/registry.rs` | Add `SelectableDevice` entries for VC-880 and VC650BT |
+| `crates/dmm-lib/src/lib.rs` | Add match arm in `open_device()` |
 | `docs/supported-devices.md` | Add VC880/VC650BT entries |
 | `docs/verification-backlog.md` | Add VC880/VC650BT verification items |
 | `docs/architecture.md` | Add VC650BT protocol family to diagram |
@@ -164,14 +164,14 @@ Pre-exhaust pattern: drain all pending messages from read queue before sending c
 - `docs/research/vc880/reverse-engineered-protocol.md`
 
 ### Commit 2: Protocol implementation
-- `crates/ut61eplus-lib/src/protocol/vc650bt/mod.rs` — `Vc650btProtocol` implementing `Protocol` trait
-- `crates/ut61eplus-lib/src/protocol/vc650bt/tables/mod.rs` — Mode/range position tables
+- `crates/dmm-lib/src/protocol/vc650bt/mod.rs` — `Vc650btProtocol` implementing `Protocol` trait
+- `crates/dmm-lib/src/protocol/vc650bt/tables/mod.rs` — Mode/range position tables
 - Unit tests using `MockTransport` with synthetic byte sequences matching the documented payload format
 
 ### Commit 3: Registry integration
-- `crates/ut61eplus-lib/src/protocol/mod.rs` — `DeviceFamily::Vc650bt`
-- `crates/ut61eplus-lib/src/protocol/registry.rs` — Two `SelectableDevice` entries (VC-880, VC650BT)
-- `crates/ut61eplus-lib/src/lib.rs` — `open_device()` match arm
+- `crates/dmm-lib/src/protocol/mod.rs` — `DeviceFamily::Vc650bt`
+- `crates/dmm-lib/src/protocol/registry.rs` — Two `SelectableDevice` entries (VC-880, VC650BT)
+- `crates/dmm-lib/src/lib.rs` — `open_device()` match arm
 - `Stability::Experimental` — no physical device for verification
 
 ### Commit 4: Documentation

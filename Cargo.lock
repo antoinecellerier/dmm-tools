@@ -940,6 +940,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "dmm-cli"
+version = "0.4.0-dev"
+dependencies = [
+ "chrono",
+ "clap",
+ "clap_complete",
+ "console",
+ "ctrlc",
+ "dmm-lib",
+ "env_logger",
+ "log",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+]
+
+[[package]]
+name = "dmm-gui"
+version = "0.4.0-dev"
+dependencies = [
+ "chrono",
+ "clap",
+ "csv",
+ "directories",
+ "dmm-lib",
+ "eframe",
+ "egui_commonmark",
+ "egui_plot",
+ "env_logger",
+ "log",
+ "rfd",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "dmm-lib"
+version = "0.4.0-dev"
+dependencies = [
+ "env_logger",
+ "hidapi",
+ "log",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "document-features"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3748,55 +3797,6 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
-]
-
-[[package]]
-name = "ut61eplus-cli"
-version = "0.4.0-dev"
-dependencies = [
- "chrono",
- "clap",
- "clap_complete",
- "console",
- "ctrlc",
- "env_logger",
- "log",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "ut61eplus-lib",
-]
-
-[[package]]
-name = "ut61eplus-gui"
-version = "0.4.0-dev"
-dependencies = [
- "chrono",
- "clap",
- "csv",
- "directories",
- "eframe",
- "egui_commonmark",
- "egui_plot",
- "env_logger",
- "log",
- "rfd",
- "serde",
- "serde_json",
- "ut61eplus-lib",
-]
-
-[[package]]
-name = "ut61eplus-lib"
-version = "0.4.0-dev"
-dependencies = [
- "env_logger",
- "hidapi",
- "log",
- "serde",
- "serde_json",
- "serde_yaml_ng",
- "thiserror 2.0.18",
 ]
 
 [[package]]

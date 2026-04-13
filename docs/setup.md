@@ -19,8 +19,8 @@ cargo build --workspace
 Or install directly:
 
 ```sh
-cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-cli
-cargo install --git https://github.com/antoinecellerier/dmm-tools.git ut61eplus-gui
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-cli
+cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-gui
 ```
 
 ## Platform setup
@@ -82,7 +82,7 @@ The USB adapter is detected but the meter isn't transmitting data:
 On devices with older GPUs (e.g. Raspberry Pi 3B+, OpenGL 2.1), the default wgpu renderer may fail. The GUI automatically falls back to the glow (OpenGL) renderer, but you can also force it explicitly:
 
 ```sh
-ut61eplus-gui --renderer glow
+dmm-gui --renderer glow
 ```
 
 ### GUI won't start (Linux, Wayland/X11)
@@ -90,5 +90,5 @@ ut61eplus-gui --renderer glow
 If you encounter display issues on Wayland, try forcing X11:
 
 ```sh
-WINIT_UNIX_BACKEND=x11 ut61eplus-gui
+WINIT_UNIX_BACKEND=x11 dmm-gui
 ```

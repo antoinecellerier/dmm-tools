@@ -1,6 +1,10 @@
 mod connection;
 mod controls;
 
+use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::mock::MockMode;
+use dmm_lib::protocol::registry;
+use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info};
 use std::io::Write;
@@ -8,10 +12,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
-use ut61eplus_lib::mock::MockMode;
-use ut61eplus_lib::protocol::registry;
-use ut61eplus_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
 
 use crate::display;
 use crate::graph::Graph;
@@ -19,7 +19,7 @@ use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
 use crate::theme::ThemeColors;
-use ut61eplus_lib::stats::{self, Integrator, RunningStats};
+use dmm_lib::stats::{self, Integrator, RunningStats};
 
 /// How long a toast message stays visible (seconds).
 const TOAST_DURATION_SECS: u64 = 4;
@@ -500,8 +500,8 @@ impl App {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
                         move || match mock_mode {
-                            Some(mode) => ut61eplus_lib::mock::open_mock_mode(mode),
-                            None => ut61eplus_lib::mock::open_mock(),
+                            Some(mode) => dmm_lib::mock::open_mock_mode(mode),
+                            None => dmm_lib::mock::open_mock(),
                         },
                         msg_tx,
                         stop_rx,
@@ -523,9 +523,7 @@ impl App {
                 let panic_ctx = ctx_clone.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
-                        move || {
-                            ut61eplus_lib::open_device_by_id_auto(device_id, adapter.as_deref())
-                        },
+                        move || dmm_lib::open_device_by_id_auto(device_id, adapter.as_deref()),
                         msg_tx,
                         stop_rx,
                         cmd_rx,
@@ -625,7 +623,7 @@ impl App {
                     let new_key = (m.mode_raw, m.range_raw);
                     if new_key != self.cached_spec_key {
                         self.cached_spec_key = new_key;
-                        use ut61eplus_lib::protocol::ut61eplus::tables;
+                        use dmm_lib::protocol::ut61eplus::tables;
                         let device_id = &self.settings.device_family;
                         self.cached_spec = tables::lookup_spec(device_id, m.mode_raw, m.range_raw);
                         self.cached_mode_spec = tables::lookup_mode_spec(device_id, m.mode_raw);
@@ -728,7 +726,7 @@ impl App {
             let device_entry = self.selected_device();
             let proto = (device_entry.new_protocol)();
             let profile = proto.profile();
-            if profile.stability == ut61eplus_lib::protocol::Stability::Experimental {
+            if profile.stability == dmm_lib::protocol::Stability::Experimental {
                 ui.hyperlink_to(
                     RichText::new(format!(
                         "{} support is experimental \u{2014} report feedback",
@@ -744,7 +742,7 @@ impl App {
             ui.label(RichText::new("Adapter not found").color(warn_color));
             let detail = error.strip_prefix("adapter not found: ").unwrap_or(&error);
             let mut msg = format!("No device matched --adapter '{detail}'.");
-            match ut61eplus_lib::list_devices() {
+            match dmm_lib::list_devices() {
                 Ok(devices) if devices.is_empty() => {
                     msg.push_str("\n\nNo devices currently connected.");
                 }
@@ -757,7 +755,7 @@ impl App {
                 }
                 Err(_) => {
                     msg.push_str(
-                        "\n\nRun 'ut61eplus list' to see connected devices,\n\
+                        "\n\nRun 'dmm-cli list' to see connected devices,\n\
                          then restart with the correct --adapter value.",
                     );
                 }
@@ -884,7 +882,7 @@ impl App {
             let is_experimental = if self.connection_state == ConnectionState::Connected {
                 self.experimental
             } else {
-                profile.stability == ut61eplus_lib::protocol::Stability::Experimental
+                profile.stability == dmm_lib::protocol::Stability::Experimental
             };
             if is_experimental {
                 let url = if self.connection_state == ConnectionState::Connected

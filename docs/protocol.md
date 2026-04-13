@@ -12,7 +12,7 @@ transport-agnostic — it runs identically over both the CP2110 and CH9329 USB
 bridges. Only the USB HID report format differs between the two bridges (see
 below). The families differ in message structure, byte ordering, value encoding,
 and polled-vs-streaming behavior. Each family has its own `Protocol` trait
-implementation in `crates/ut61eplus-lib/src/protocol/`.
+implementation in `crates/dmm-lib/src/protocol/`.
 
 ## USB HID Transports
 

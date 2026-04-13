@@ -12,12 +12,12 @@
 
 ### Subcommands
 
-- `ut61eplus list` — enumerate connected devices
-- `ut61eplus info` — connect and print device name (queried from meter)
-- `ut61eplus read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`
-- `ut61eplus command` — send button presses: hold, min-max, exit-min-max, rel, range, auto, select, select2, light, peak-min-max, exit-peak
-- `ut61eplus debug` — raw hex dump mode for protocol development
-- `ut61eplus capture` — guided protocol capture wizard for bug reports. YAML output with raw bytes, structured flags, user screen confirmations. Supports `--steps` filter, auto-resume, and freeform captures.
+- `dmm-cli list` — enumerate connected devices
+- `dmm-cli info` — connect and print device name (queried from meter)
+- `dmm-cli read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`
+- `dmm-cli command` — send button presses: hold, min-max, exit-min-max, rel, range, auto, select, select2, light, peak-min-max, exit-peak
+- `dmm-cli debug` — raw hex dump mode for protocol development
+- `dmm-cli capture` — guided protocol capture wizard for bug reports. YAML output with raw bytes, structured flags, user screen confirmations. Supports `--steps` filter, auto-resume, and freeform captures.
 
 ### GUI Command-Line Options
 

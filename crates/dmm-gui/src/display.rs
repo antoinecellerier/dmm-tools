@@ -1,5 +1,5 @@
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 use eframe::egui::{Color32, FontId, RichText, Ui};
-use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
 use crate::settings::{ColorPreset, PaletteOverrides};
 use crate::theme::ThemeColors;

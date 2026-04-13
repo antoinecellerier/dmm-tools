@@ -3,14 +3,14 @@
 ## Crate Layout
 
 ```
-ut61eplus/
+dmm-tools/
 ├── crates/
-│   ├── ut61eplus-lib/     # Core library
-│   ├── ut61eplus-cli/     # CLI binary
-│   └── ut61eplus-gui/     # GUI binary
+│   ├── dmm-lib/     # Core library
+│   ├── dmm-cli/     # CLI binary
+│   └── dmm-gui/     # GUI binary
 ```
 
-### ut61eplus-lib
+### dmm-lib
 
 The library crate handles all device communication and data parsing. It has no UI dependencies.
 
@@ -69,7 +69,7 @@ they never match on `DeviceFamily` variants or instantiate protocol types direct
 `open_device_by_id_auto()` tries CP2110, then CH9329, then CH9325, returning a `Box<dyn Transport>`.
 Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
 
-### ut61eplus-cli
+### dmm-cli
 
 CLI binary using `clap`. Split into three modules:
 
@@ -84,7 +84,7 @@ interactive wizard for protocol verification, outputting YAML reports with raw b
 Uses `console` crate for colored output and single-key input, `serde_yaml` for report format.
 Capture reports are written atomically (temp file + rename) for crash safety.
 
-### ut61eplus-gui
+### dmm-gui
 
 `eframe`/`egui` application. Runs a background `std::thread` for device I/O,
 communicates with the UI via `mpsc` channels. Main graph via `egui_plot`,
@@ -111,4 +111,4 @@ sample log, persistent settings.
 10. **Bounded buffers** — graph history (10K points), recording (500K samples), and the background channel prevent unbounded memory growth during sustained use.
 11. **Settings schema evolution** — `#[serde(default)]` on `Settings` allows adding new fields without breaking existing config files.
 12. **Device registry** — all device metadata (display names, aliases, activation instructions, protocol factories, manual URLs) lives in a single `DEVICES` slice in the library. CLI and GUI consume the registry without device-specific knowledge, so adding a new device family requires zero app code changes.
-13. **Static spec data** — per-range specifications (resolution, accuracy bands) and per-mode metadata (input impedance, notes) are `&'static` arrays in `tables/specs_*.rs` files, transcribed from device manuals. The GUI caches spec lookups keyed on `(mode_raw, range_raw)` and re-looks up only on mode/range changes — zero per-frame allocations. Use `cargo run -p ut61eplus-lib --example dump_specs` to verify spec data against manuals.
+13. **Static spec data** — per-range specifications (resolution, accuracy bands) and per-mode metadata (input impedance, notes) are `&'static` arrays in `tables/specs_*.rs` files, transcribed from device manuals. The GUI caches spec lookups keyed on `(mode_raw, range_raw)` and re-looks up only on mode/range changes — zero per-frame allocations. Use `cargo run -p dmm-lib --example dump_specs` to verify spec data against manuals.

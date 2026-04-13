@@ -170,7 +170,7 @@ If the device manual includes accuracy/resolution tables per mode and range:
    - **LPF modes** — separate accuracy specs when Low Pass Filter is enabled
    - **Footnotes** — temperature coefficients, overrange conditions
    - **Model variants** — same manual covering multiple models with small spec differences (e.g., AC current frequency response differs between UT61B+ and UT61D+)
-4. Verify with `cargo run -p ut61eplus-lib --example dump_specs -- <device>` and compare side-by-side with the PDF manual
+4. Verify with `cargo run -p dmm-lib --example dump_specs -- <device>` and compare side-by-side with the PDF manual
 
 ## Phase 5: Testing Without Hardware
 
@@ -187,13 +187,13 @@ If the device manual includes accuracy/resolution tables per mode and range:
 
 ### Preparation
 - Update `docs/verification-backlog.md` with items to verify for this device
-- Ensure `RUST_LOG=ut61eplus_lib=trace` logging captures raw bytes
+- Ensure `RUST_LOG=dmm_lib=trace` logging captures raw bytes
 
 ### Testing protocol (requires user with physical device)
 1. **Always describe the required physical setup** before each step and wait for confirmation
-2. **Start with basic connectivity:** `cargo run --bin ut61eplus -- --device <id> debug` to confirm frames are received and parseable
-3. **Use the guided capture tool:** `cargo run --bin ut61eplus -- --device <id> capture` walks the user through each mode, flag, and command step-by-step, recording raw bytes and parsed results. Use `--steps` to filter to specific items. This is the primary verification workflow — it produces a YAML report that documents exactly what was tested and can be shared in bug reports.
-4. **Test remote commands** (if supported): the capture tool covers these, but ad-hoc testing via `cargo run --bin ut61eplus -- --device <id> command <cmd>` is useful for debugging
+2. **Start with basic connectivity:** `cargo run --bin dmm-cli -- --device <id> debug` to confirm frames are received and parseable
+3. **Use the guided capture tool:** `cargo run --bin dmm-cli -- --device <id> capture` walks the user through each mode, flag, and command step-by-step, recording raw bytes and parsed results. Use `--steps` to filter to specific items. This is the primary verification workflow — it produces a YAML report that documents exactly what was tested and can be shared in bug reports.
+4. **Test remote commands** (if supported): the capture tool covers these, but ad-hoc testing via `cargo run --bin dmm-cli -- --device <id> command <cmd>` is useful for debugging
 5. **Capture golden test data:** copy verified samples from the capture YAML into `tests/golden/<family>/` for regression testing
 
 ### Common issues found during hardware verification
@@ -228,10 +228,10 @@ Update these files in the same commit as the code:
 |------|-------|
 | Reference materials (manuals, binaries) | `references/<device>/` |
 | RE methodology and findings | `docs/research/<family>/` |
-| Protocol implementation | `crates/ut61eplus-lib/src/protocol/<family>/` |
-| Device tables (mode/range) | `crates/ut61eplus-lib/src/protocol/<family>/tables/` |
-| Spec data (accuracy/resolution) | `crates/ut61eplus-lib/src/protocol/<family>/tables/specs_*.rs` |
-| Device registry entry | `crates/ut61eplus-lib/src/protocol/registry.rs` |
-| Golden test files | `crates/ut61eplus-lib/tests/golden/<family>/` |
+| Protocol implementation | `crates/dmm-lib/src/protocol/<family>/` |
+| Device tables (mode/range) | `crates/dmm-lib/src/protocol/<family>/tables/` |
+| Spec data (accuracy/resolution) | `crates/dmm-lib/src/protocol/<family>/tables/specs_*.rs` |
+| Device registry entry | `crates/dmm-lib/src/protocol/registry.rs` |
+| Golden test files | `crates/dmm-lib/tests/golden/<family>/` |
 | Verification status | `docs/verification-backlog.md` |
 | Device catalog | `docs/supported-devices.md` |

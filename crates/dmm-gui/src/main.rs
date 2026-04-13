@@ -8,7 +8,7 @@ mod specs;
 mod theme;
 
 use clap::{CommandFactory, FromArgMatches, Parser};
-use ut61eplus_lib::protocol::registry;
+use dmm_lib::protocol::registry;
 
 /// Placeholder string for missing/unavailable data values in the UI.
 pub(crate) const NO_DATA: &str = "---";
@@ -36,9 +36,9 @@ pub fn version_label() -> String {
 
 #[derive(Parser)]
 #[command(
-    name = "ut61eplus-gui",
+    name = "dmm-gui",
     version = version_string(),
-    about = "UNI-T multimeter GUI",
+    about = "GUI application for UNI-T and Voltcraft digital multimeters",
     after_long_help = "Help / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Args {
@@ -59,7 +59,7 @@ struct Args {
     renderer: Option<String>,
 
     /// Select a specific USB adapter when multiple are connected.
-    /// Use serial number or HID device path from 'ut61eplus list' output.
+    /// Use serial number or HID device path from 'dmm-cli list' output.
     #[arg(long, value_name = "SERIAL_OR_PATH")]
     adapter: Option<String>,
 }
@@ -73,7 +73,7 @@ fn build_device_help() -> String {
         let stability = (d.new_protocol)().profile().stability;
         let tag = if !d.requires_hardware {
             " (no hardware required)"
-        } else if stability == ut61eplus_lib::protocol::Stability::Experimental {
+        } else if stability == dmm_lib::protocol::Stability::Experimental {
             " (experimental)"
         } else {
             ""
@@ -132,9 +132,9 @@ fn parse_args() -> CliOverrides {
 
     // Validate --mock-mode if provided
     if let Some(ref mode) = args.mock_mode
-        && mode.parse::<ut61eplus_lib::mock::MockMode>().is_err()
+        && mode.parse::<dmm_lib::mock::MockMode>().is_err()
     {
-        let valid: Vec<&str> = ut61eplus_lib::mock::MockMode::ALL
+        let valid: Vec<&str> = dmm_lib::mock::MockMode::ALL
             .iter()
             .map(|m| m.label())
             .collect();

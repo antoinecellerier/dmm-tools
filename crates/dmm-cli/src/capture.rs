@@ -1,8 +1,8 @@
 use console::style;
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::time::Duration;
-use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
 
 // --- Data types ---
 
@@ -143,8 +143,8 @@ impl SampleData {
 /// Run a simplified capture using protocol-provided steps.
 /// Used for experimental (non-UT61E+) protocols.
 fn run_protocol_capture(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
-    protocol_steps: Vec<ut61eplus_lib::protocol::CaptureStep>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    protocol_steps: Vec<dmm_lib::protocol::CaptureStep>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -427,7 +427,7 @@ pub fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> {
 }
 
 pub fn capture_samples(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     n: usize,
 ) -> Vec<Measurement> {
     let mut samples = Vec::new();
@@ -435,7 +435,7 @@ pub fn capture_samples(
     while samples.len() < n && attempts < n * 5 {
         match dmm.request_measurement() {
             Ok(m) => samples.push(m),
-            Err(ut61eplus_lib::error::Error::Timeout) => {}
+            Err(dmm_lib::error::Error::Timeout) => {}
             Err(e) => {
                 eprintln!("  error: {e}");
                 break;
@@ -470,7 +470,7 @@ pub fn upsert_step(report: &mut CaptureReport, result: StepResult) {
 
 /// Run one capture step. Returns Ok(true) if user wants to quit.
 pub fn run_capture_step(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step: &CaptureStep,
     report: &mut CaptureReport,
     interactive: bool,
@@ -590,7 +590,7 @@ pub fn run_capture_step(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ut61eplus_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::ut61eplus::make_test_measurement;
 
     #[test]
     fn sample_data_from_normal_measurement() {
@@ -853,7 +853,7 @@ mod tests {
 
         let dir = std::env::temp_dir();
         let path = dir
-            .join("ut61eplus-test-capture.yaml")
+            .join("dmm-cli-test-capture.yaml")
             .to_string_lossy()
             .to_string();
 
@@ -900,7 +900,7 @@ pub fn list_steps() {
     eprintln!();
     eprintln!(
         "Usage: {} {}",
-        style("ut61eplus capture --steps").dim(),
+        style("dmm-cli capture --steps").dim(),
         style("dcmv,temp,duty").dim()
     );
 }
@@ -912,8 +912,8 @@ fn step_included(step_filter: &Option<std::collections::HashSet<String>>, id: &s
 
 /// Verify that the meter is responding. Returns `(device_name, supported)` on success.
 fn verify_meter(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
-    device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(String, bool), Box<dyn std::error::Error>> {
     eprintln!("{}", style("Checking meter communication...").dim());
     let device_name = match dmm.get_name() {
@@ -942,7 +942,7 @@ fn verify_meter(
         }
     };
 
-    let supported = dmm.profile().stability == ut61eplus_lib::protocol::Stability::Verified;
+    let supported = dmm.profile().stability == dmm_lib::protocol::Stability::Verified;
     eprintln!("Device: {}", style(&device_name).bold());
     if supported {
         eprintln!("Status: {}", style("supported model").green());
@@ -1037,7 +1037,7 @@ fn load_or_create_report(
 /// Populate report metadata (date, version, device info).
 fn populate_report_metadata(
     report: &mut CaptureReport,
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     device_name: String,
     supported: bool,
 ) {
@@ -1053,7 +1053,7 @@ fn populate_report_metadata(
 
 /// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
 fn run_mode_steps(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1091,7 +1091,7 @@ fn run_mode_steps(
 
 /// Part 2: Run flag & remote command capture steps. Returns true if user wants to quit.
 fn run_flag_steps(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1134,7 +1134,7 @@ fn run_flag_steps(
 
 /// Part 3: Cycle through manual ranges on DC V. Returns true if user wants to quit.
 fn run_range_cycle(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1191,7 +1191,7 @@ fn run_range_cycle(
 
 /// Part 4: Freeform additional captures.
 fn run_freeform_captures(
-    dmm: &mut ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1264,8 +1264,8 @@ fn run_freeform_captures(
 pub fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
-    mut dmm: ut61eplus_lib::Dmm<Box<dyn ut61eplus_lib::transport::Transport>>,
-    device: &'static ut61eplus_lib::protocol::registry::SelectableDevice,
+    mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());

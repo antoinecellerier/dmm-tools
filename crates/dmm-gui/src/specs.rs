@@ -1,5 +1,5 @@
+use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, RichText, Ui};
-use ut61eplus_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
 
 /// Build a compact single-line accuracy string from the spec's accuracy bands.
 /// For a single band: `±(0.1%+5)`. For multiple bands: first band only with its

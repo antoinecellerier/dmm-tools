@@ -21,10 +21,10 @@ sudo udevadm control --reload-rules
 # (unplug and replug the cable)
 
 # Verify detection
-./target/release/ut61eplus list
+./target/release/dmm-cli list
 
 # Try reading measurements (with full debug logging)
-RUST_LOG=ut61eplus_lib=trace ./target/release/ut61eplus --device ut181a debug --count 5
+RUST_LOG=dmm_lib=trace ./target/release/dmm-cli --device ut181a debug --count 5
 ```
 
 There's a detailed test plan with troubleshooting for different failure modes in [`docs/research/ut181/ch9329-test-plan.md`](https://github.com/antoinecellerier/dmm-tools/blob/main/docs/research/ut181/ch9329-test-plan.md).

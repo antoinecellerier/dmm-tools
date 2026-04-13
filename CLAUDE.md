@@ -4,9 +4,9 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 
 ## Project structure
 
-- `crates/ut61eplus-lib/` — library: CP2110 and CH9329 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut171`, `ut181a`, `vc880`, `vc890`. `protocol` module is `pub(crate)` — consumers use `Dmm` API, not raw frame extraction.
-- `crates/ut61eplus-cli/` — CLI binary (`main.rs` for commands, `capture.rs` for guided capture tool, `format.rs` for output formatting)
-- `crates/ut61eplus-gui/` — GUI binary: real-time display and plotting (eframe/egui)
+- `crates/dmm-lib/` — library: CP2110 and CH9329 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut171`, `ut181a`, `vc880`, `vc890`. `protocol` module is `pub(crate)` — consumers use `Dmm` API, not raw frame extraction.
+- `crates/dmm-cli/` — CLI binary `dmm-cli` (`main.rs` for commands, `capture.rs` for guided capture tool, `format.rs` for output formatting)
+- `crates/dmm-gui/` — GUI binary `dmm-gui`: real-time display and plotting (eframe/egui)
 
 ## Build & test
 
@@ -63,7 +63,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 - Protocol code is byte-level — off-by-one errors are easy to introduce. Always validate checksums on received data.
 - Document byte offsets and masking operations with comments referencing the relevant protocol spec in `docs/research/<family>/reverse-engineered-protocol.md`.
 - Test parsing with known-good byte sequences captured from real device traces.
-- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=ut61eplus_lib=trace cargo run --bin ut61eplus -- --device <id> debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
+- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=dmm_lib=trace cargo run --bin dmm-cli -- --device <id> debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
 - Our protocol understanding comes from reverse engineering — not official documentation. See `docs/verification-backlog.md` for what's been verified and what still needs testing.
 - Per-family protocol specs live in `docs/research/`: `ut61-family/`, `ut8803/`, `uci-bench-family/`, `ut171/`, `ut181/`, `vc880/`, `vc890/`. The UT61E+ also has a legacy `docs/protocol.md`.
 - Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete for UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880). Cross-check against these when in doubt.
@@ -118,7 +118,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 
 ### Logging
 - Use the `log` crate with structured levels: `TRACE` for raw HID byte dumps, `DEBUG` for protocol events (request/response/checksum), `INFO` for connection state, `WARN` for recoverable issues (timeouts, retries), `ERROR` for failures
-- `RUST_LOG=ut61eplus_lib=trace` should give complete wire-level debugging
+- `RUST_LOG=dmm_lib=trace` should give complete wire-level debugging
 - Never log at `INFO` or above in hot paths (measurement loop)
 
 ### GUI design
@@ -139,6 +139,6 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
   - egui API naming is inconsistent — verify method names against docs before using them (e.g., `fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
 
 ### Dependencies
-- Library crate (`ut61eplus-lib`): keep self-contained — only `hidapi`, `thiserror`, `log`. Protocol parsing and transport code must not pull in external utility crates; this is the core that talks to hardware and must stay minimal.
+- Library crate (`dmm-lib`): keep self-contained — only `hidapi`, `thiserror`, `log`. Protocol parsing and transport code must not pull in external utility crates; this is the core that talks to hardware and must stay minimal.
 - CLI and GUI crates: prefer well-maintained community crates over reimplementing functionality (markdown rendering, UI widgets, date handling, etc.). A good dependency is better than a worse hand-rolled version.
 - Evaluate new dependencies on: maintenance health, transitive dependency footprint, and whether they solve a real problem vs. something achievable in a few lines.

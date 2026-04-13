@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use ut61eplus_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 
 /// Maximum recording samples (~14 hours at 10Hz, ~22MB memory).
 const MAX_RECORDING_SAMPLES: usize = 500_000;
@@ -94,7 +94,7 @@ impl Default for Recording {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ut61eplus_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
+    use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 
     fn make_measurement(display: &[u8; 7]) -> Measurement {
         let payload: Vec<u8> = vec![
@@ -105,7 +105,7 @@ mod tests {
             0x30, 0x30, 0x30, // flags (with 0x30 prefix, all zero = AUTO on)
         ];
         let table = Ut61ePlusTable::new();
-        ut61eplus_lib::protocol::ut61eplus::parse_measurement(&payload, &table).unwrap()
+        dmm_lib::protocol::ut61eplus::parse_measurement(&payload, &table).unwrap()
     }
 
     #[test]
