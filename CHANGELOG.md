@@ -15,16 +15,12 @@
 
 - **CLI `--device` default changed.** The CLI no longer silently defaults to `ut61eplus`. New resolution order: explicit `--device` flag → `device_family` in the shared `settings.json` (written by `dmm-gui`) → registry default (currently `ut61eplus`). When the final fallback is used, the CLI prints a dim one-line notice on stderr suggesting the user either pass `--device` or set it in the GUI settings. Scripts that relied on the implicit default still work but will print the notice; add `--device ut61eplus` to silence it.
 
-### Internal
-
-- **New `dmm-settings` crate** owns the config-file schema that both the CLI and GUI agree on (currently just `device_family`). The GUI's full `Settings` struct flattens `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON shape is unchanged, but the contract between the two binaries is now compile-enforced by a single Rust type rather than a string literal in two places. GUI-only settings (color overrides, panel visibility, theme, zoom) stay in `dmm-gui`.
-
 ### New device support
 
 | Family | Models | Transport | Status |
 |--------|--------|-----------|--------|
 | **UT8802** | UT8802 | CP2110 | Experimental |
-| **UT803/UT804** | UT803, UT804 | CH9325 | Experimental — FS9721 LCD protocol |
+| **UT803/UT804** | UT803, UT804 | CH9325 | Experimental |
 | **VC-880** | VC-880, VC650BT | CP2110 | Experimental |
 | **VC-890** | VC-890 | CP2110 | Experimental |
 
@@ -71,10 +67,11 @@
 
 ### Bug fixes
 
+- Fix UT181A device init commands. Thanks to alexander-magon, PR #8.
+- Fix UT181A measurement format parsing for all variants.
 - Fix bar graph byte decoding: use decimal division, not nibble shift.
 - Fix GUI error detection for missing USB cable.
 - Fix big meter scaling: hash-based cache key, wrap oscillation fix.
-- Fix UT181A measurement format parsing for all variants.
 - Fix GUI MIN/MAX and Peak buttons immediately exiting instead of cycling through states.
 
 ### Build
@@ -86,19 +83,12 @@
 ### Internal
 
 - **Dependency updates** — eframe/egui 0.31→0.34 (new Panel API, font hinting, viewport improvements), egui_plot 0.31→0.35 (per-axis bounds, filled areas, grid styling), egui_commonmark 0.20→0.23, rfd 0.15→0.17, console 0.15→0.16. Replaced deprecated `serde_yaml` with `serde_yaml_ng` (drop-in, addresses RUSTSEC-2025-0068).
-- Consolidate transport VID/PID definitions into `KNOWN_TRANSPORTS` array.
-- Extract shared VC-880/VC-890 protocol code into `vc8x0_common` module.
-- `ThemeColors::pick()` helper to reduce dark/light branching boilerplate.
-- Various deduplication: specs rendering, `lookup_range()`, `CaptureStep::empty_result()`.
+- **New `dmm-settings` crate** owns the config-file schema that both the CLI and GUI agree on (currently just `device_family`). The GUI's full `Settings` struct flattens `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON shape is unchanged, but the contract between the two binaries is now compile-enforced by a single Rust type rather than a string literal in two places. GUI-only settings (color overrides, panel visibility, theme, zoom) stay in `dmm-gui`.
 
 ### Documentation
 
-- **Protocol doc consolidation** — `docs/protocol.md` is now a short index that points at each per-family `docs/research/<family>/reverse-engineered-protocol.md`. Hardware-verified UT61E+ findings (bar graph encoding, flag-bit verifications, MIN/MAX and Peak cycle behavior, command table, sampling rate, CP2110 diagnostic reports, CH9329 HID framing, implementation quirks) have been folded into `docs/research/ut61eplus/reverse-engineered-protocol.md` so each topic has a single authoritative source.
-- Verified MIN/MAX, Peak, and SELECT2 protocol behavior against real UT61E+ hardware. Updated `docs/protocol.md` and `docs/verification-backlog.md`.
+- Verified MIN/MAX, Peak, and SELECT2 protocol behavior against real UT61E+ hardware.
 - Verified HV flag, DC V range table, and DC mV mode.
-- Transport landscape documentation (QinHeng HID, UCI SDK).
-- Experimental macOS support docs and platform hints.
-- UT803/UT804 protocol findings and reverse engineering approach.
 
 ## v0.3.0
 
