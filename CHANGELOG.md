@@ -26,53 +26,50 @@
 
 ### GUI
 
-- **Configurable color theme** — presets (Default, Colorblind, High Contrast, Monochrome) and per-color overrides in settings.
-- **Big meter mode** — `Ctrl+B` cycles off / full / minimal. Minimal mode inlines mode/flags on the same line as the value. Dynamic font scaling and responsive layout at small window sizes.
-- **CLI arguments** — `--device`, `--theme`, `--mock-mode` flags for the GUI binary. `--mock-mode` implies `--device mock`.
-- **Always-on-top setting** — keeps the GUI window above other windows.
-- **Hide window decorations setting** — removes title bar and window borders.
-- **`--renderer` flag** — select wgpu or glow backend; automatic fallback from wgpu to glow on GPU errors.
-- **`--adapter` flag** — select USB adapter when multiple are connected. Shows connected devices inline when the adapter doesn't match.
-- **App icon and desktop integration** — `.desktop` file and icon for Linux, GNOME `app_id` for alt-tab identification.
-- **Time-integral in cursor readout** — when both cursors are placed on a current or voltage graph, the readout now shows ∫ (integral) alongside ΔT and ΔV. For current modes, this displays charge (mAh/Ah/µAh). For voltage modes, V·s.
-- **Running integral in statistics** — a cumulative integral line ("∫") appears in the statistics panel for current and voltage modes. Resets with the Reset button or Ctrl+L.
-- **MIN/MAX and Peak buttons now cycle without exiting** — clicking cycles MAX ↔ MIN (or P-MAX ↔ P-MIN), matching the real device's short-press behavior. A separate "x" button exits the mode.
-- Auto-stop recording when buffer is full instead of silently dropping samples.
-- Show filename in CSV export toast.
-- Clear cursors on graph reset and mode change.
-- **Minimap bracket resize handles** — drag the bracket edges to resize the viewport to an arbitrary time width. The opposite edge stays anchored. Cursor changes to a resize icon on hover.
-- **"What's New" changelog popup** — shown automatically on first launch after a release upgrade. Click the version label in the top bar to re-open. Full changelog rendered with proper markdown formatting.
+- **Configurable color theme** — presets (Default, Colorblind, High Contrast, Monochrome) and per-color overrides in the settings panel. All choices respect light/dark mode.
+- **Big meter mode** — `Ctrl+B` cycles off / full / minimal, with a matching toolbar toggle button. Minimal mode inlines mode and flags on the same line as the value. Font scaling and layout adapt to small window sizes.
+- **Time-integral cursor readout** — when both cursors are placed on a current or voltage graph, the readout adds ∫ alongside ΔT and the value delta. Current modes display charge (Ah/mAh/µAh); voltage modes display V·s / mV·s.
+- **Running integral in statistics** — cumulative ∫ row in the statistics panel for current and voltage modes. Resets with the Reset button or `Ctrl+L`.
+- **MIN/MAX and Peak buttons now cycle without exiting** — clicking cycles MAX ↔ MIN (or P-MAX ↔ P-MIN), matching the meter's short-press behavior. A separate "x" button exits the mode.
+- **Minimap bracket resize handles** — drag a bracket edge to resize the viewport to an arbitrary time width. The opposite edge stays anchored; the cursor changes to a resize icon on hover.
+- **"What's New" changelog popup** — shown automatically on first launch after a release upgrade, and reopenable by clicking the version label in the top bar. Renders the embedded `CHANGELOG.md` with full markdown formatting.
+- **Experimental device feedback links** — the EXPERIMENTAL badge is now a clickable link to the per-device GitHub verification issue, with a model-specific tooltip. The cable-not-found help panel includes the same link.
+- **GUI command-line arguments** — the GUI binary now accepts `--device`, `--theme`, `--mock-mode`, `--renderer`, and `--adapter`. Overrides are session-only and don't overwrite saved settings; `--mock-mode` implies `--device mock`.
+- **`--renderer` flag** — select `wgpu` or `glow` backend. Defaults to `wgpu` with automatic fallback to `glow` if GPU init fails (e.g. OpenGL 2.1-only GPUs like the Raspberry Pi 3).
+- **`--adapter` flag** — select a specific USB adapter (by serial number or HID device path) when multiple are connected. Available on both the GUI and CLI; mismatch errors enumerate connected adapters inline.
+- **Always-on-top and hide-decorations settings** — pin the window above others or remove the title bar and window borders.
+- **App icon and Linux desktop integration** — embedded SVG/PNG icon used as the window icon on all platforms, plus auto-installed `.desktop` entry and GNOME `app_id` so Wayland compositors and alt-tab show the correct app name and icon.
+- Auto-stop recording when the buffer is full (500K samples) instead of silently dropping new samples — a toast announces the stop.
+- Show the saved filename in the CSV export toast.
+- Clear cursors on graph reset and on mode change.
 
 ### CLI
 
-- **`--adapter` flag** — select USB adapter when multiple are connected.
-- **`--integrate` flag** on the `read` command — adds cumulative time-integral columns (`integral`, `integral_unit`) to CSV and JSON output. Text format appends `[∫ value unit]`. The session summary includes the total integral and elapsed time. Useful for battery capacity measurement (coulomb counting).
-- Device model metadata (`device_model`, `device_serial`) in CSV and JSON exports.
-- Show activation instructions on timeout errors.
-- Handle EINTR in read loop so Ctrl-C prints the session summary cleanly.
+- **`--integrate` flag** on the `read` command — adds cumulative time-integral columns (`integral`, `integral_unit`) to CSV and JSON output, appends `[∫ value unit]` in text format, and prints the total integral and elapsed time in the session summary. Useful for coulomb counting (e.g. battery capacity).
+- **`--adapter` flag** — select a specific USB adapter when multiple are connected. See the GUI section above for details (same flag, same precedence).
+- **Device model metadata** in exports — `device_model` and `device_serial` columns/fields in CSV and JSON output.
+- Show device-specific activation instructions after repeated timeouts.
+- Handle `EINTR` in the read loop so Ctrl-C prints the session summary cleanly.
 
 ### Library
 
-- **CH9329 transport** — support for the UT-D09 USB cable (used by UT171, UT181A, and other models).
-- **CH9325 transport** — HID bridge for UT803/UT804 family.
-- **FS9721 frame extractor** — LCD segment protocol decoder for UT803/UT804.
-- **`AuxValue` type** and `aux_values` field on `Measurement` for secondary readings.
-- **`StatusFlags` additions** — `lead_error`, `comp`, `record` fields.
-- **`Integrator` struct** (`stats.rs`) — trapezoidal-rule time integrator with gap detection (max_dt guard), overload gap handling, and clock-backward safety via `checked_duration_since()`.
-- **`integral_unit_info()`** — maps measurement units to integral display units (A→Ah, mA→mAh, µA→µAh, V→V·s, mV→mV·s).
-- UT181A: range labels, precision-byte display formatting, capture steps for format verification.
-- Mock MIN/MAX and Peak behavior updated to match real device.
-- Renamed QinHeng transport to CH9325 for consistency with CP2110/CH9329.
-- Removed deprecated CP2110-only open functions.
+- **CH9329 transport** — UT-D09 USB cable support (used by UT171, UT181A, and others).
+- **CH9325 transport** — WCH/QinHeng HID bridge used by the UT803/UT804.
+- **FS9721 frame extractor** — LCD-segment protocol decoder used by the UT803/UT804.
+- **`Measurement::aux_values`** with new `AuxValue` type, for secondary readings (e.g. UT181A's frequency/duty alongside primary value).
+- **`StatusFlags`** gains `lead_error`, `comp`, and `record` fields.
+- **`Integrator`** in `stats.rs` — trapezoidal-rule time integrator with gap detection, overload handling, and clock-backward safety via `checked_duration_since()`. Powers both the GUI and CLI integral features.
+- **`integral_unit_info()`** maps measurement units to display units for integrals (A→Ah, mA→mAh, µA→µAh, V→V·s, mV→mV·s).
+- UT181A: range labels, precision-byte display formatting, and capture steps for format verification.
+- Mock MIN/MAX and Peak behavior updated to match the real device.
 
 ### Bug fixes
 
-- Fix UT181A device init commands. Thanks to alexander-magon, PR #8.
+- Fix UT181A device init commands (thanks to [@alexander-magon](https://github.com/alexander-magon), [PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8)).
 - Fix UT181A measurement format parsing for all variants.
-- Fix bar graph byte decoding: use decimal division, not nibble shift.
-- Fix GUI error detection for missing USB cable.
-- Fix big meter scaling: hash-based cache key, wrap oscillation fix.
-- Fix GUI MIN/MAX and Peak buttons immediately exiting instead of cycling through states.
+- Fix UT61E+ bar graph byte decoding — bytes 9–10 are decimal digits (`tens*10 + ones`), not a nibble shift.
+- Fix GUI cable-not-found detection so the help panel actually appears.
+- Fix big meter scaling: hash-based cache key, no more wrap oscillation at threshold widths.
 
 ### Build
 
