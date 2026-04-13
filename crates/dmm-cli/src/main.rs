@@ -27,8 +27,13 @@ fn version_string() -> &'static str {
     name = "dmm-cli",
     version = version_string(),
     about = "CLI tool for UNI-T and Voltcraft digital multimeters",
-    after_help = "Run with --help for the full list of supported devices.\n\nSet NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools",
-    after_long_help = "Set NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
+    after_help = "Run with --help for the full list of supported devices and the \
+                  shared-settings file path.\n\n\
+                  Set NO_COLOR=1 to disable colored output.\n\
+                  Help / GitHub: https://github.com/antoinecellerier/dmm-tools",
+    // after_long_help is set dynamically in main() so the actual per-platform
+    // settings file path appears in the output.
+    after_long_help = ""
 )]
 struct Cli {
     /// Device to connect to [ut61eplus, ut8803, ut171, ut181a, mock, ...].
@@ -165,10 +170,12 @@ fn resolve_device_family(cli_device: Option<&str>) -> (String, DeviceSource) {
 fn main() {
     env_logger::init();
 
-    // Build CLI with registry-generated --device long_help
+    // Build CLI with registry-generated --device long_help and a dynamic
+    // after_long_help that resolves the actual per-platform settings path.
     let mut cmd = Cli::command();
     let device_help = build_device_help();
     cmd = cmd.mut_arg("device", |a| a.long_help(device_help));
+    cmd = cmd.after_long_help(build_after_long_help());
     let cli =
         Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
 
@@ -307,8 +314,48 @@ fn build_device_help() -> String {
         };
         help.push_str(&format!("  {:<12} {}{}\n", d.id, d.display_name, tag));
     }
-    help.push_str("\nAlso accepts aliases: ut61e+, ut61b, ut171a, ut181, etc.\nQuote names with special characters: --device 'ut61e+'");
+    help.push_str(
+        "\nAlso accepts aliases: ut61e+, ut61b, ut171a, ut181, etc.\n\
+         Quote names with special characters: --device 'ut61e+'",
+    );
     help
+}
+
+/// Resolve the shared settings file path for display in help text.
+/// Returns the platform-specific location via `dmm-settings`, or a
+/// sensible placeholder if the platform config dir is unavailable.
+fn resolved_config_path_display() -> String {
+    dmm_settings::config_path()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "~/.config/dmm-tools/settings.json".to_string())
+}
+
+/// Build the `after_long_help` text shown by `dmm-cli --help` (long form).
+/// Dynamic so the actual resolved settings path appears per-platform.
+///
+/// Each line is a standalone item rather than wrapped prose — clap doesn't
+/// re-wrap `after_long_help` text, so hardcoded mid-sentence line breaks
+/// read poorly. A table-style layout with short, self-contained lines
+/// avoids the issue on any terminal width.
+fn build_after_long_help() -> String {
+    format!(
+        "CONFIGURATION:\n\
+         \x20 Settings file (shared with dmm-gui):\n\
+         \x20   {path}\n\
+         \n\
+         \x20 --device precedence:\n\
+         \x20   1. Command-line flag\n\
+         \x20   2. device_family from the settings file above\n\
+         \x20   3. Registry default ({default})\n\
+         \n\
+         ENVIRONMENT:\n\
+         \x20 RUST_LOG    Log filter. Use `dmm_lib=trace` for wire-level debugging.\n\
+         \x20 NO_COLOR    Set to 1 to disable colored terminal output.\n\
+         \n\
+         Help / GitHub: https://github.com/antoinecellerier/dmm-tools",
+        path = resolved_config_path_display(),
+        default = registry::default_device().id,
+    )
 }
 
 /// Print a "no response" warning with device-specific activation instructions.
