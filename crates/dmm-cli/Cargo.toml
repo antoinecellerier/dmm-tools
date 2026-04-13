@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
+dmm-settings = { path = "../dmm-settings" }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 serde = { version = "1", features = ["derive"] }

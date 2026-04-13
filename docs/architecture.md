@@ -5,9 +5,10 @@
 ```
 dmm-tools/
 ├── crates/
-│   ├── dmm-lib/     # Core library
-│   ├── dmm-cli/     # CLI binary
-│   └── dmm-gui/     # GUI binary
+│   ├── dmm-lib/       # Core library
+│   ├── dmm-settings/  # Shared config schema (CLI ↔ GUI)
+│   ├── dmm-cli/       # CLI binary
+│   └── dmm-gui/       # GUI binary
 ```
 
 ### dmm-lib
@@ -68,6 +69,12 @@ and GUI resolve user input via `resolve_device()` and use `open_device_by_id()` 
 they never match on `DeviceFamily` variants or instantiate protocol types directly.
 `open_device_by_id_auto()` tries CP2110, then CH9329, then CH9325, returning a `Box<dyn Transport>`.
 Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
+
+### dmm-settings
+
+Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` only; no UI, no device, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location) and `SharedSettings::load_if_exists()` for reading the file.
+
+The GUI's full `Settings` struct includes `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON stays flat (`device_family` at the top level alongside `theme`, `show_graph`, etc.). The CLI deserializes the same file directly into `SharedSettings`, silently ignoring any GUI-only fields. Because both sides reference exactly one Rust type for the shared fields, renaming or retyping `device_family` breaks both compilations simultaneously — the contract is compile-enforced.
 
 ### dmm-cli
 

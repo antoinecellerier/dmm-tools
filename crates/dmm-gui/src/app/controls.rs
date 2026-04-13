@@ -247,14 +247,14 @@ impl App {
             ui.label("Device:");
             let mut changed = false;
             for device in registry::DEVICES {
-                let selected = self.settings.device_family == device.id;
+                let selected = self.settings.shared.device_family == device.id;
                 let label = if selected && self.settings.overrides.has_device() {
                     format!("{} (--device)", device.display_name)
                 } else {
                     device.display_name.to_string()
                 };
                 if ui.selectable_label(selected, label).clicked() {
-                    self.settings.device_family = device.id.to_string();
+                    self.settings.shared.device_family = device.id.to_string();
                     // Clear the override — user explicitly chose a device
                     self.settings.overrides.device_family = None;
                     changed = true;
@@ -270,7 +270,9 @@ impl App {
         });
 
         // Mock mode selector (only shown when mock device is selected)
-        if registry::find_device(&self.settings.device_family).is_some_and(|d| d.id == "mock") {
+        if registry::find_device(&self.settings.shared.device_family)
+            .is_some_and(|d| d.id == "mock")
+        {
             ui.horizontal_wrapped(|ui| {
                 ui.label("Mock mode:");
                 let mut changed = false;

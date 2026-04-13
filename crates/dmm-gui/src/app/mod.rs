@@ -192,8 +192,8 @@ impl App {
     pub fn new(_cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
         let mut settings = Settings::load();
         if let Some(device) = cli.device {
-            settings.overrides.device_family = Some(settings.device_family.clone());
-            settings.device_family = device;
+            settings.overrides.device_family = Some(settings.shared.device_family.clone());
+            settings.shared.device_family = device;
         }
         if let Some(mock_mode) = cli.mock_mode {
             settings.overrides.mock_mode = Some(settings.mock_mode.clone());
@@ -624,7 +624,7 @@ impl App {
                     if new_key != self.cached_spec_key {
                         self.cached_spec_key = new_key;
                         use dmm_lib::protocol::ut61eplus::tables;
-                        let device_id = &self.settings.device_family;
+                        let device_id = &self.settings.shared.device_family;
                         self.cached_spec = tables::lookup_spec(device_id, m.mode_raw, m.range_raw);
                         self.cached_mode_spec = tables::lookup_mode_spec(device_id, m.mode_raw);
                     }
@@ -817,7 +817,7 @@ impl App {
         ui.horizontal(|ui| {
             let left_start = ui.cursor().left();
 
-            let device_label = registry::find_device(&self.settings.device_family)
+            let device_label = registry::find_device(&self.settings.shared.device_family)
                 .map(|d| d.display_name)
                 .unwrap_or("DMM");
             ui.label(RichText::new(device_label).strong());
@@ -1143,12 +1143,12 @@ impl App {
     }
 
     fn selected_device(&self) -> &'static registry::SelectableDevice {
-        registry::resolve_device(&self.settings.device_family)
+        registry::resolve_device(&self.settings.shared.device_family)
             .unwrap_or_else(registry::default_device)
     }
 
     fn manual_url(&self) -> Option<&'static str> {
-        registry::find_device(&self.settings.device_family).and_then(|d| d.manual_url)
+        registry::find_device(&self.settings.shared.device_family).and_then(|d| d.manual_url)
     }
 
     /// Render a specs section, calling `render_fn` when spec data is available,

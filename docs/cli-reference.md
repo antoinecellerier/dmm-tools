@@ -26,7 +26,7 @@ Set `NO_COLOR=1` to disable colored output.
 
 | Option | Default | Description |
 |---|---|---|
-| `--device <FAMILY>` | `ut61eplus` | Device family to connect to. See [Device Families](#device-families) below. |
+| `--device <FAMILY>` | see below | Device family to connect to. See [Device Families](#device-families) below. |
 | `--adapter <SERIAL_OR_PATH>` | | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `list` output. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
@@ -36,6 +36,14 @@ Set `NO_COLOR=1` to disable colored output.
 The `--device` flag selects which device model and protocol to use. Each model has
 its own entry with model-specific protocol tables (e.g., UT61B+ uses different
 mode/range mappings than UT61E+).
+
+**Device resolution precedence** (highest to lowest):
+
+1. `--device <FAMILY>` on the command line
+2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device in its settings panel — the CLI reads it but never writes to it)
+3. `ut61eplus` as a final fallback
+
+When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so silent use of the wrong protocol is less likely. The notice is suppressed for commands that don't open a device (`list`, `completions`).
 
 | Value | Aliases | Description |
 |---|---|---|

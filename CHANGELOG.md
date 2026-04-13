@@ -13,6 +13,12 @@
 
   The GUI settings file also moves, from `~/.config/ut61eplus/settings.json` to `~/.config/dmm-tools/settings.json` (and equivalent on other platforms). **Existing settings will not be migrated automatically** — copy the old file manually or re-configure from scratch. Device IDs (`--device ut61eplus`) and protocol module names (`dmm_lib::protocol::ut61eplus::*`) are unchanged — they refer to the UT61-plus device protocol family, not the tool.
 
+- **CLI `--device` default changed.** The CLI no longer silently defaults to `ut61eplus`. New resolution order: explicit `--device` flag → `device_family` in the shared `settings.json` (written by `dmm-gui`) → registry default (currently `ut61eplus`). When the final fallback is used, the CLI prints a dim one-line notice on stderr suggesting the user either pass `--device` or set it in the GUI settings. Scripts that relied on the implicit default still work but will print the notice; add `--device ut61eplus` to silence it.
+
+### Internal
+
+- **New `dmm-settings` crate** owns the config-file schema that both the CLI and GUI agree on (currently just `device_family`). The GUI's full `Settings` struct flattens `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON shape is unchanged, but the contract between the two binaries is now compile-enforced by a single Rust type rather than a string literal in two places. GUI-only settings (color overrides, panel visibility, theme, zoom) stay in `dmm-gui`.
+
 ### New device support
 
 | Family | Models | Transport | Status |

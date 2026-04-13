@@ -1,3 +1,4 @@
+use dmm_settings::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -167,6 +168,11 @@ impl Overrides {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Schema shared with `dmm-cli` via the `dmm-settings` crate.
+    /// Flattened so fields (currently just `device_family`) appear at the
+    /// top level of the JSON file, preserving the existing on-disk shape.
+    #[serde(flatten)]
+    pub shared: SharedSettings,
     pub theme: ThemeMode,
     pub show_graph: bool,
     pub show_stats: bool,
@@ -185,8 +191,6 @@ pub struct Settings {
     pub zoom_pct: u32,
     /// Delay between measurement requests in milliseconds (0 = fastest possible).
     pub sample_interval_ms: u32,
-    /// Device family to connect to (e.g. "ut61eplus", "ut8803", "ut171", "ut181a", "mock").
-    pub device_family: String,
     /// Mock mode to pin to (e.g. "dcv", "acv"). Empty string = auto-cycle.
     /// Only meaningful when device_family is "mock".
     pub mock_mode: String,
@@ -208,6 +212,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            shared: SharedSettings {
+                device_family: dmm_lib::protocol::registry::default_device().id.to_string(),
+            },
             theme: ThemeMode::Dark,
             show_graph: true,
             show_stats: true,
@@ -219,7 +226,6 @@ impl Default for Settings {
             hide_decorations: false,
             zoom_pct: 100,
             sample_interval_ms: 0,
-            device_family: dmm_lib::protocol::registry::default_device().id.to_string(),
             mock_mode: String::new(),
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
@@ -231,15 +237,21 @@ impl Default for Settings {
 
 impl Settings {
     fn config_path() -> Option<PathBuf> {
-        directories::ProjectDirs::from("", "", "dmm-tools")
-            .map(|dirs| dirs.config_dir().join("settings.json"))
+        dmm_settings::config_path()
     }
 
     pub fn load() -> Self {
-        Self::config_path()
+        let mut s: Settings = Self::config_path()
             .and_then(|path| std::fs::read_to_string(&path).ok())
             .and_then(|contents| serde_json::from_str(&contents).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        // If the loaded file had no device_family (older config, or fresh
+        // install before the user picked one), fall back to the registry
+        // default so the GUI always has a concrete device to display.
+        if s.shared.device_family.is_empty() {
+            s.shared.device_family = dmm_lib::protocol::registry::default_device().id.to_string();
+        }
+        s
     }
 
     pub fn save(&self) {
@@ -250,7 +262,7 @@ impl Settings {
             // Restore original values for CLI-overridden fields before saving.
             let mut to_save = self.clone();
             if let Some(ref original) = self.overrides.device_family {
-                to_save.device_family = original.clone();
+                to_save.shared.device_family = original.clone();
             }
             if let Some(ref original) = self.overrides.mock_mode {
                 to_save.mock_mode = original.clone();
@@ -281,8 +293,46 @@ mod tests {
     }
 
     #[test]
+    fn shared_field_serializes_at_top_level() {
+        // Guardrail against accidental #[serde(flatten)] removal: the
+        // on-disk JSON must keep `device_family` as a top-level field so
+        // dmm-cli's SharedSettings deserialize continues to work.
+        let s = Settings::default();
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(
+            json.contains("\"device_family\":"),
+            "device_family must be a top-level field, got: {json}"
+        );
+        assert!(
+            !json.contains("\"shared\":"),
+            "shared substruct should be flattened away, got: {json}"
+        );
+    }
+
+    #[test]
+    fn shared_settings_crate_can_read_gui_written_json() {
+        // The core of the shared-schema contract: a JSON blob written by
+        // the GUI must deserialize cleanly into dmm_settings::SharedSettings
+        // with the correct device_family. If the contract drifts, this test
+        // fails loudly instead of the CLI silently falling through to the
+        // default device.
+        let s = Settings {
+            shared: SharedSettings {
+                device_family: "vc880".to_string(),
+            },
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let shared: dmm_settings::SharedSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(shared.device_family, "vc880");
+    }
+
+    #[test]
     fn settings_roundtrip() {
         let s = Settings {
+            shared: SharedSettings {
+                device_family: "ut8803".to_string(),
+            },
             theme: ThemeMode::Light,
             show_graph: false,
             show_stats: true,
@@ -294,7 +344,6 @@ mod tests {
             hide_decorations: true,
             zoom_pct: 150,
             sample_interval_ms: 500,
-            device_family: "ut8803".to_string(),
             mock_mode: "dcv".to_string(),
             color_preset: ColorPreset::HighContrast,
             color_overrides: ColorOverrides::default(),
@@ -313,6 +362,7 @@ mod tests {
         assert_eq!(deserialized.zoom_pct, 150);
         assert_eq!(deserialized.sample_interval_ms, 500);
         assert_eq!(deserialized.color_preset, ColorPreset::HighContrast);
+        assert_eq!(deserialized.shared.device_family, "ut8803");
     }
 
     #[test]

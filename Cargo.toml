@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/dmm-lib",
+    "crates/dmm-settings",
     "crates/dmm-cli",
     "crates/dmm-gui",
 ]

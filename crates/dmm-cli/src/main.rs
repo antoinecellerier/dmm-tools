@@ -31,9 +31,11 @@ fn version_string() -> &'static str {
     after_long_help = "Set NO_COLOR=1 to disable colored output.\nHelp / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Cli {
-    /// Device to connect to [ut61eplus, ut8803, ut171, ut181a, mock, ...]
-    #[arg(long, default_value = "ut61eplus")]
-    device: String,
+    /// Device to connect to [ut61eplus, ut8803, ut171, ut181a, mock, ...].
+    /// If omitted, falls back to `device_family` in ~/.config/dmm-tools/settings.json
+    /// (written by dmm-gui), then to `ut61eplus` as a last resort.
+    #[arg(long)]
+    device: Option<String>,
 
     /// Select a specific USB adapter when multiple are connected.
     /// Use serial number or HID device path from 'dmm-cli list' output.
@@ -129,6 +131,37 @@ pub enum OutputFormat {
     Json,
 }
 
+/// Where the effective `--device` value came from. Drives the dim fallback
+/// notice: we only warn when the user picked neither on the CLI nor in the
+/// shared settings file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DeviceSource {
+    Cli,
+    Settings,
+    Fallback,
+}
+
+/// Resolve `--device` precedence: explicit CLI flag → `device_family` in the
+/// shared settings file (written by `dmm-gui`) → registry default.
+///
+/// The final fallback goes through `registry::default_device()` so the CLI
+/// and the registry stay in sync — there's one source of truth for "which
+/// device is the default when nothing is specified".
+fn resolve_device_family(cli_device: Option<&str>) -> (String, DeviceSource) {
+    if let Some(d) = cli_device {
+        return (d.to_string(), DeviceSource::Cli);
+    }
+    if let Some(s) = dmm_settings::SharedSettings::load_if_exists()
+        && !s.device_family.is_empty()
+    {
+        return (s.device_family, DeviceSource::Settings);
+    }
+    (
+        registry::default_device().id.to_string(),
+        DeviceSource::Fallback,
+    )
+}
+
 fn main() {
     env_logger::init();
 
@@ -139,17 +172,33 @@ fn main() {
     let cli =
         Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
 
-    let device = match registry::resolve_device(&cli.device) {
+    let (device_id, device_source) = resolve_device_family(cli.device.as_deref());
+    let device = match registry::resolve_device(&device_id) {
         Some(d) => d,
         None => {
             eprintln!(
                 "{} unknown device: {}",
                 style("Error:").red().bold(),
-                cli.device,
+                device_id,
             );
             std::process::exit(1);
         }
     };
+
+    // Dim one-line notice when the user picked neither on the CLI nor in
+    // settings — nudges toward an explicit choice without blocking. Skipped
+    // for commands that don't open a device.
+    let opens_device = !matches!(cli.command, Cmd::List | Cmd::Completions { .. });
+    if opens_device && device_source == DeviceSource::Fallback {
+        eprintln!(
+            "{}",
+            style(format!(
+                "Using default device: {} (pass --device or set device_family in dmm-gui settings to change)",
+                device.id
+            ))
+            .dim()
+        );
+    }
 
     let adapter = cli.adapter.as_deref();
 
@@ -856,7 +905,36 @@ mod tests {
     #[test]
     fn clap_parse_device_flag() {
         let cli = Cli::try_parse_from(["dmm-cli", "--device", "ut8803", "list"]).unwrap();
-        assert_eq!(cli.device, "ut8803");
+        assert_eq!(cli.device.as_deref(), Some("ut8803"));
+    }
+
+    #[test]
+    fn clap_parse_device_flag_omitted() {
+        let cli = Cli::try_parse_from(["dmm-cli", "list"]).unwrap();
+        assert_eq!(cli.device, None);
+    }
+
+    #[test]
+    fn resolve_device_cli_takes_precedence() {
+        let (id, src) = resolve_device_family(Some("ut8803"));
+        assert_eq!(id, "ut8803");
+        assert_eq!(src, DeviceSource::Cli);
+    }
+
+    #[test]
+    fn resolve_device_fallback_when_nothing_set() {
+        // Note: this test is environment-sensitive — if the test machine has
+        // a real ~/.config/dmm-tools/settings.json with device_family set,
+        // the resolver will return DeviceSource::Settings instead. That's
+        // still a valid path; what matters is that the CLI arg is absent.
+        let (id, src) = resolve_device_family(None);
+        assert!(matches!(
+            src,
+            DeviceSource::Settings | DeviceSource::Fallback
+        ));
+        if src == DeviceSource::Fallback {
+            assert_eq!(id, registry::default_device().id);
+        }
     }
 
     #[test]
