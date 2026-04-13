@@ -66,7 +66,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 - Test parsing with known-good byte sequences captured from real device traces.
 - **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=dmm_lib=trace cargo run --bin dmm-cli -- --device <id> debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
 - Our protocol understanding comes from reverse engineering — not official documentation. See `docs/verification-backlog.md` for what's been verified and what still needs testing.
-- Per-family protocol specs live in `docs/research/`: `ut61-family/`, `ut8803/`, `uci-bench-family/`, `ut171/`, `ut181/`, `vc880/`, `vc890/`. The UT61E+ also has a legacy `docs/protocol.md`.
+- Per-family protocol specs live in `docs/research/`: `ut61-family/`, `ut8803/`, `uci-bench-family/`, `ut171/`, `ut181/`, `vc880/`, `vc890/`. `docs/protocol.md` is a short index that points at each per-family spec — it holds no protocol content of its own.
 - Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete for UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880). Cross-check against these when in doubt.
 - Mock/test implementations must match real device behavior as closely as practical. Document any simplifications. Mocks that set impossible flag combinations (e.g., MIN+MAX simultaneously) or return incorrect data types (live values instead of stored values) create false confidence in tests.
 
@@ -102,7 +102,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought
 - After completing a feature or fix, proactively update all affected documentation in the same commit. Don't wait to be asked "are docs up to date?"
 - `docs/architecture.md` — crate layout, module responsibilities, data flow diagrams, key design decisions and rationale
-- `docs/protocol.md` — CP2110 transport details, message formats, mode/range/unit tables, checksum algorithm, known quirks. Update this whenever real device behavior reveals new information.
+- `docs/protocol.md` — short index of per-family protocol references. Authoritative wire-level details live in `docs/research/<family>/reverse-engineered-protocol.md`; update those when real device behavior reveals new information.
 - `docs/ux-design.md` — CLI command interface, output formats, GUI layout and interaction patterns
 - `docs/setup.md` — build prerequisites, udev setup, first-run instructions, troubleshooting common issues
 - `docs/development.md` — how to run tests, add new device models, coding conventions, release process

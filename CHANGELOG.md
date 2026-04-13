@@ -93,6 +93,7 @@
 
 ### Documentation
 
+- **Protocol doc consolidation** — `docs/protocol.md` is now a short index that points at each per-family `docs/research/<family>/reverse-engineered-protocol.md`. Hardware-verified UT61E+ findings (bar graph encoding, flag-bit verifications, MIN/MAX and Peak cycle behavior, command table, sampling rate, CP2110 diagnostic reports, CH9329 HID framing, implementation quirks) have been folded into `docs/research/ut61eplus/reverse-engineered-protocol.md` so each topic has a single authoritative source.
 - Verified MIN/MAX, Peak, and SELECT2 protocol behavior against real UT61E+ hardware. Updated `docs/protocol.md` and `docs/verification-backlog.md`.
 - Verified HV flag, DC V range table, and DC mV mode.
 - Transport landscape documentation (QinHeng HID, UCI SDK).
