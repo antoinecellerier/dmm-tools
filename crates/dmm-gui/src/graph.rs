@@ -257,8 +257,8 @@ impl Graph {
         self.gap_threshold_secs = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
     }
 
-    pub fn push(&mut self, value: f64, mode: &str, unit: &str) {
-        let now = Instant::now();
+    pub fn push(&mut self, value: f64, timestamp: Instant, mode: &str, unit: &str) {
+        let now = timestamp;
 
         if self.origin.is_none() {
             self.origin = Some(now);
@@ -1671,7 +1671,6 @@ impl Default for Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread::sleep;
     use std::time::Duration;
 
     #[test]
@@ -1685,7 +1684,7 @@ mod tests {
     #[test]
     fn push_adds_point() {
         let mut g = Graph::new();
-        g.push(5.0, "DC V", "V");
+        g.push(5.0, Instant::now(), "DC V", "V");
         assert_eq!(g.len(), 1);
         assert!(!g.is_empty());
         assert!(g.origin.is_some());
@@ -1694,10 +1693,10 @@ mod tests {
     #[test]
     fn mode_change_clears_history() {
         let mut g = Graph::new();
-        g.push(5.0, "DC V", "V");
-        g.push(5.1, "DC V", "V");
+        g.push(5.0, Instant::now(), "DC V", "V");
+        g.push(5.1, Instant::now(), "DC V", "V");
         assert_eq!(g.len(), 2);
-        g.push(100.0, "Ohm", "Ω");
+        g.push(100.0, Instant::now(), "Ohm", "Ω");
         assert_eq!(g.len(), 1);
     }
 
@@ -1705,7 +1704,7 @@ mod tests {
     fn max_points_evicts_oldest() {
         let mut g = Graph::new();
         for i in 0..MAX_POINTS + 100 {
-            g.push(i as f64, "DC V", "V");
+            g.push(i as f64, Instant::now(), "DC V", "V");
         }
         assert_eq!(g.len(), MAX_POINTS);
     }
@@ -1713,7 +1712,7 @@ mod tests {
     #[test]
     fn clear_resets_everything() {
         let mut g = Graph::new();
-        g.push(5.0, "DC V", "V");
+        g.push(5.0, Instant::now(), "DC V", "V");
         g.live = false;
         g.clear();
         assert!(g.is_empty());
@@ -1725,9 +1724,9 @@ mod tests {
     #[test]
     fn segments_without_gaps() {
         let mut g = Graph::new();
-        g.push(1.0, "DC V", "V");
-        g.push(2.0, "DC V", "V");
-        g.push(3.0, "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V");
+        g.push(2.0, Instant::now(), "DC V", "V");
+        g.push(3.0, Instant::now(), "DC V", "V");
         let segments = g.build_raw_segments();
         assert_eq!(segments.len(), 1);
     }
@@ -1735,8 +1734,8 @@ mod tests {
     #[test]
     fn gap_detection() {
         let mut g = Graph::new();
-        g.push(1.0, "DC V", "V");
-        g.push(2.0, "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V");
+        g.push(2.0, Instant::now(), "DC V", "V");
         let gaps = g.find_gap_ranges();
         assert!(gaps.is_empty());
     }
@@ -1744,18 +1743,18 @@ mod tests {
     #[test]
     fn elapsed_secs_relative_to_origin() {
         let mut g = Graph::new();
-        g.push(1.0, "DC V", "V");
-        sleep(Duration::from_millis(50));
-        g.push(2.0, "DC V", "V");
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V");
+        g.push(2.0, t0 + Duration::from_millis(50), "DC V", "V");
         let t = g.elapsed_secs(g.history.back().unwrap().time);
-        assert!(t >= 0.04);
+        assert!((t - 0.05).abs() < 1e-9);
     }
 
     #[test]
     fn live_view_bounds_follow_latest() {
         let mut g = Graph::new();
         g.time_window_secs = 10.0;
-        g.push(1.0, "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V");
         let (vmin, vmax) = g.view_bounds();
         assert!(vmin >= 0.0);
         assert!(vmax >= vmin);
@@ -1810,7 +1809,7 @@ mod tests {
     fn scroll_view_does_not_panic() {
         let mut g = Graph::new();
         for i in 0..20 {
-            g.push(i as f64, "V DC", "V");
+            g.push(i as f64, Instant::now(), "V DC", "V");
         }
         assert!(g.live);
         // With only ~ms of real elapsed time and a 60s window, the view
@@ -1823,7 +1822,7 @@ mod tests {
     #[test]
     fn jump_to_start_exits_live() {
         let mut g = Graph::new();
-        g.push(1.0, "V DC", "V");
+        g.push(1.0, Instant::now(), "V DC", "V");
         assert!(g.live);
         g.jump_to_start();
         assert!(!g.live);
@@ -1914,7 +1913,7 @@ mod tests {
     fn apply_pan_in_live_mode_drops_out_of_live() {
         let mut g = Graph::new();
         g.time_window_secs = 10.0;
-        g.push(1.0, "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V");
         assert!(g.live);
         // Any non-zero drag while live flips us to browse mode.
         g.apply_pan(2.0);
@@ -1925,7 +1924,7 @@ mod tests {
     fn apply_pan_in_live_mode_snaps_view_center_to_end() {
         let mut g = Graph::new();
         g.time_window_secs = 10.0;
-        g.push(1.0, "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V");
         // Zero-delta pan while live still snaps view_center to the end of
         // data — so the view doesn't visibly jump on drag start.
         g.apply_pan(0.0);

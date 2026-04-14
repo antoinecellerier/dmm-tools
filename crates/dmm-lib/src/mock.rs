@@ -5,7 +5,7 @@ use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const MOCK_COMMANDS: &[&str] = &[
     "hold",
@@ -112,6 +112,10 @@ impl std::fmt::Display for MockMode {
 }
 
 /// A scenario defines a measurement mode with a time-varying value pattern.
+///
+/// Values are a pure function of elapsed seconds since the scenario started,
+/// so displayed waveforms trace smooth curves regardless of read cadence or
+/// scheduling jitter.
 struct Scenario {
     id: MockMode,
     mode: &'static str,
@@ -120,8 +124,8 @@ struct Scenario {
     unit: &'static str,
     range_label: &'static str,
     range_max: f64,
-    samples: u64,
-    value_fn: fn(u64) -> MeasuredValue,
+    duration_secs: f64,
+    value_fn: fn(f64) -> MeasuredValue,
 }
 
 impl Scenario {
@@ -134,8 +138,8 @@ impl Scenario {
         unit: &'static str,
         range_label: &'static str,
         range_max: f64,
-        samples: u64,
-        value_fn: fn(u64) -> MeasuredValue,
+        duration_secs: f64,
+        value_fn: fn(f64) -> MeasuredValue,
     ) -> Self {
         Self {
             id,
@@ -145,53 +149,61 @@ impl Scenario {
             unit,
             range_label,
             range_max,
-            samples,
+            duration_secs,
             value_fn,
         }
     }
 }
 
-fn dcv_value(step: u64) -> MeasuredValue {
-    MeasuredValue::Normal(5.0 + 3.0 * (step as f64 / 15.0).sin())
+fn dcv_value(t: f64) -> MeasuredValue {
+    // Period ≈ 9.42 s (matches the original 15-read-per-radian waveform at
+    // 100 ms/read: step/15 → t*10/15 → t*2/3).
+    MeasuredValue::Normal(5.0 + 3.0 * (t * 2.0 / 3.0).sin())
 }
 
-fn acv_value(step: u64) -> MeasuredValue {
-    MeasuredValue::Normal(120.0 + 2.0 * (step as f64 / 10.0).sin())
+fn acv_value(t: f64) -> MeasuredValue {
+    // Period ≈ 6.28 s (step/10 at 100 ms → t).
+    MeasuredValue::Normal(120.0 + 2.0 * t.sin())
 }
 
-fn ohm_value(step: u64) -> MeasuredValue {
-    let half = 50;
-    let v = if step < half {
-        1.0 + (step as f64 / half as f64) * 9.0
+fn ohm_value(t: f64) -> MeasuredValue {
+    // Triangle 1..10 with a 10-second period.
+    let phase = (t / 10.0).rem_euclid(1.0);
+    let v = if phase < 0.5 {
+        1.0 + phase * 2.0 * 9.0
     } else {
-        10.0 - ((step - half) as f64 / half as f64) * 9.0
+        10.0 - (phase - 0.5) * 2.0 * 9.0
     };
     MeasuredValue::Normal(v)
 }
 
-fn cap_value(step: u64) -> MeasuredValue {
-    MeasuredValue::Normal(1.0 + (step as f64 / 100.0) * 19.0)
+fn cap_value(t: f64) -> MeasuredValue {
+    // Sawtooth ramp 1..20 with a 10-second period.
+    MeasuredValue::Normal(1.0 + (t / 10.0).rem_euclid(1.0) * 19.0)
 }
 
-fn hz_value(step: u64) -> MeasuredValue {
-    MeasuredValue::Normal(60.0 + 0.5 * (step as f64 / 20.0).sin())
+fn hz_value(t: f64) -> MeasuredValue {
+    // Period ≈ 12.57 s (step/20 at 100 ms → t/2).
+    MeasuredValue::Normal(60.0 + 0.5 * (t / 2.0).sin())
 }
 
-fn temp_value(step: u64) -> MeasuredValue {
-    MeasuredValue::Normal(20.0 + (step as f64 / 80.0) * 10.0)
+fn temp_value(t: f64) -> MeasuredValue {
+    // Sawtooth ramp 20..30 with an 8-second period.
+    MeasuredValue::Normal(20.0 + (t / 8.0).rem_euclid(1.0) * 10.0)
 }
 
-fn dcma_value(step: u64) -> MeasuredValue {
-    MeasuredValue::Normal(50.0 + 5.0 * (step as f64 / 8.0).sin())
+fn dcma_value(t: f64) -> MeasuredValue {
+    // Period ≈ 5.03 s (step/8 at 100 ms → t*1.25).
+    MeasuredValue::Normal(50.0 + 5.0 * (t * 1.25).sin())
 }
 
-fn ohm_ol_value(_step: u64) -> MeasuredValue {
+fn ohm_ol_value(_t: f64) -> MeasuredValue {
     MeasuredValue::Overload
 }
 
-fn ncv_value(step: u64) -> MeasuredValue {
+fn ncv_value(t: f64) -> MeasuredValue {
     const LEVELS: [u8; 8] = [0, 1, 2, 3, 4, 3, 2, 1];
-    let idx = (step as usize / 5) % LEVELS.len();
+    let idx = ((t / 0.5).floor().rem_euclid(LEVELS.len() as f64)) as usize;
     MeasuredValue::NcvLevel(LEVELS[idx])
 }
 
@@ -206,7 +218,7 @@ fn scenarios() -> Vec<Scenario> {
             "V",
             "22V",
             22.0,
-            100,
+            10.0,
             dcv_value,
         ),
         // 220V range
@@ -218,7 +230,7 @@ fn scenarios() -> Vec<Scenario> {
             "V",
             "220V",
             220.0,
-            100,
+            10.0,
             acv_value,
         ),
         // 22kΩ range
@@ -230,7 +242,7 @@ fn scenarios() -> Vec<Scenario> {
             "k\u{03A9}",
             "22k\u{03A9}",
             22.0,
-            100,
+            10.0,
             ohm_value,
         ),
         // 22µF range
@@ -242,7 +254,7 @@ fn scenarios() -> Vec<Scenario> {
             "\u{00B5}F",
             "22\u{00B5}F",
             22.0,
-            100,
+            10.0,
             cap_value,
         ),
         // 220Hz range
@@ -254,7 +266,7 @@ fn scenarios() -> Vec<Scenario> {
             "Hz",
             "220Hz",
             220.0,
-            80,
+            8.0,
             hz_value,
         ),
         Scenario::new(
@@ -265,7 +277,7 @@ fn scenarios() -> Vec<Scenario> {
             "\u{00B0}C",
             "",
             400.0,
-            80,
+            8.0,
             temp_value,
         ),
         // 220mA range
@@ -277,7 +289,7 @@ fn scenarios() -> Vec<Scenario> {
             "mA",
             "220mA",
             220.0,
-            80,
+            8.0,
             dcma_value,
         ),
         // 22MΩ range
@@ -289,10 +301,10 @@ fn scenarios() -> Vec<Scenario> {
             "M\u{03A9}",
             "22M\u{03A9}",
             22.0,
-            20,
+            2.0,
             ohm_ol_value,
         ),
-        Scenario::new(MockMode::Ncv, "NCV", 0x14, 0, "", "", 4.0, 40, ncv_value),
+        Scenario::new(MockMode::Ncv, "NCV", 0x14, 0, "", "", 4.0, 4.0, ncv_value),
     ]
 }
 
@@ -318,8 +330,11 @@ enum PeakState {
 pub struct MockProtocol {
     scenarios: Vec<Scenario>,
     current_scenario: usize,
-    step: u64,
-    /// When false, stays on the current scenario indefinitely (step counter still resets).
+    /// Wall-clock instant the current scenario started. Values are evaluated at
+    /// `now - scenario_started`, so the waveform is a smooth function of time
+    /// regardless of read cadence. On scenario advance, this is reset to `now`.
+    pub(crate) scenario_started: Instant,
+    /// When false, stays on the current scenario indefinitely.
     auto_cycle: bool,
     hold: bool,
     held_value: Option<MeasuredValue>,
@@ -343,7 +358,7 @@ impl MockProtocol {
         Self {
             scenarios: scenarios(),
             current_scenario: 0,
-            step: 0,
+            scenario_started: Instant::now(),
             auto_cycle: true,
             hold: false,
             held_value: None,
@@ -394,7 +409,17 @@ impl MockProtocol {
 
     fn advance_scenario(&mut self) {
         self.current_scenario = (self.current_scenario + 1) % self.scenarios.len();
-        self.step = 0;
+        self.scenario_started = Instant::now();
+    }
+
+    /// Elapsed seconds since the current scenario started. Uses
+    /// `checked_duration_since` so a backward clock jump returns 0 instead of
+    /// panicking.
+    fn elapsed_secs(&self) -> f64 {
+        Instant::now()
+            .checked_duration_since(self.scenario_started)
+            .unwrap_or(Duration::ZERO)
+            .as_secs_f64()
     }
 
     /// Format a value as a 7-char right-justified display string matching real meter format.
@@ -446,15 +471,16 @@ impl Protocol for MockProtocol {
 
     fn request_measurement(&mut self, _transport: &dyn Transport) -> Result<Measurement> {
         // Extract scenario data up front to avoid borrow conflict with &mut self.
+        let elapsed = self.elapsed_secs();
         let scenario = &self.scenarios[self.current_scenario];
-        let raw_value = (scenario.value_fn)(self.step);
+        let raw_value = (scenario.value_fn)(elapsed);
         let mode: Cow<'static, str> = Cow::Borrowed(scenario.mode);
         let mode_raw = scenario.mode_raw;
         let range_raw = scenario.range_raw;
         let unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
         let range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
         let range_max = scenario.range_max;
-        let samples = scenario.samples;
+        let duration_secs = scenario.duration_secs;
 
         // Apply hold: freeze the value
         let live_value = if self.hold {
@@ -555,12 +581,12 @@ impl Protocol for MockProtocol {
             raw_payload: vec![],
         };
 
-        self.step += 1;
-        if self.step >= samples {
+        if elapsed >= duration_secs {
             if self.auto_cycle {
                 self.advance_scenario();
             } else {
-                self.step = 0; // loop the pattern without changing mode
+                // Loop the pattern without changing mode.
+                self.scenario_started = Instant::now();
             }
         }
 
@@ -572,8 +598,9 @@ impl Protocol for MockProtocol {
             "hold" => {
                 self.hold = !self.hold;
                 if self.hold {
+                    let elapsed = self.elapsed_secs();
                     let scenario = self.current_scenario();
-                    self.held_value = Some((scenario.value_fn)(self.step));
+                    self.held_value = Some((scenario.value_fn)(elapsed));
                 } else {
                     self.held_value = None;
                 }
@@ -581,8 +608,9 @@ impl Protocol for MockProtocol {
             "rel" => {
                 self.rel = !self.rel;
                 if self.rel {
+                    let elapsed = self.elapsed_secs();
                     let scenario = self.current_scenario();
-                    if let MeasuredValue::Normal(v) = (scenario.value_fn)(self.step) {
+                    if let MeasuredValue::Normal(v) = (scenario.value_fn)(elapsed) {
                         self.rel_base = Some(v);
                     }
                 } else {
@@ -677,14 +705,22 @@ mod tests {
 
     #[test]
     fn test_mode_cycling() {
-        let mut dmm = open_mock().unwrap();
-        let first_mode = dmm.request_measurement().unwrap().mode.clone();
-        // Run through enough samples to change scenario (first scenario = 100 samples)
-        for _ in 0..100 {
-            let _ = dmm.request_measurement().unwrap();
-        }
-        let new_mode = dmm.request_measurement().unwrap().mode;
-        assert_ne!(first_mode, new_mode);
+        // Values are a function of elapsed time, so triggering auto-advance
+        // requires rewinding the scenario origin past its duration rather than
+        // counting reads. Drive the protocol directly to access private state.
+        let mut proto = MockProtocol::new();
+        let transport = NullTransport;
+        let first_mode = proto
+            .request_measurement(&transport)
+            .unwrap()
+            .mode
+            .into_owned();
+        // Rewind past the current scenario's duration and take a reading,
+        // which triggers auto-advance.
+        proto.scenario_started -= Duration::from_secs(60);
+        let _ = proto.request_measurement(&transport).unwrap();
+        let new_mode = proto.request_measurement(&transport).unwrap().mode;
+        assert_ne!(first_mode, new_mode.as_ref());
     }
 
     #[test]
@@ -828,25 +864,30 @@ mod tests {
 
     #[test]
     fn test_minmax_reports_stored_values() {
-        let mut dmm = open_mock_mode(MockMode::DcV).unwrap();
+        // Drive the protocol directly so we can rewind the scenario origin
+        // between reads, giving the MIN/MAX tracker actual variation to follow.
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        let transport = NullTransport;
 
-        // Collect a few live readings first to advance the waveform
+        // Advance the waveform a few times before enabling MIN/MAX so the
+        // initial stored values are non-zero.
         for _ in 0..5 {
-            let _ = dmm.request_measurement().unwrap();
+            proto.scenario_started -= Duration::from_millis(100);
+            let _ = proto.request_measurement(&transport).unwrap();
         }
 
-        // Activate MIN/MAX and collect several readings
-        dmm.send_command("minmax").unwrap();
+        proto.send_command(&transport, "minmax").unwrap();
         let mut max_values = Vec::new();
         for _ in 0..10 {
-            let m = dmm.request_measurement().unwrap();
+            proto.scenario_started -= Duration::from_millis(100);
+            let m = proto.request_measurement(&transport).unwrap();
             if let MeasuredValue::Normal(v) = &m.value {
                 max_values.push(*v);
             }
         }
 
-        // In MAX state, the reported value should be the running maximum —
-        // it should be non-decreasing (can only go up as new maxima are found).
+        // In MAX state, the reported value is the running maximum —
+        // non-decreasing regardless of the underlying waveform.
         for window in max_values.windows(2) {
             assert!(
                 window[1] >= window[0] - 1e-10,
@@ -856,18 +897,18 @@ mod tests {
             );
         }
 
-        // Switch to MIN state
-        dmm.send_command("minmax").unwrap();
+        proto.send_command(&transport, "minmax").unwrap();
         let mut min_values = Vec::new();
         for _ in 0..10 {
-            let m = dmm.request_measurement().unwrap();
+            proto.scenario_started -= Duration::from_millis(100);
+            let m = proto.request_measurement(&transport).unwrap();
             if let MeasuredValue::Normal(v) = &m.value {
                 min_values.push(*v);
             }
         }
 
-        // In MIN state, the reported value should be the running minimum —
-        // it should be non-increasing.
+        // In MIN state, the reported value is the running minimum —
+        // non-increasing regardless of the underlying waveform.
         for window in min_values.windows(2) {
             assert!(
                 window[1] <= window[0] + 1e-10,
@@ -877,20 +918,22 @@ mod tests {
             );
         }
 
-        dmm.send_command("exit_minmax").unwrap();
+        proto.send_command(&transport, "exit_minmax").unwrap();
     }
 
     #[test]
     fn test_with_mode_pins_scenario() {
-        let mut dmm = open_mock_mode(MockMode::Hz).unwrap();
-        // Should start in Hz mode
-        let m1 = dmm.request_measurement().unwrap();
+        let mut proto = MockProtocol::with_mode(MockMode::Hz);
+        let transport = NullTransport;
+        let m1 = proto.request_measurement(&transport).unwrap();
         assert_eq!(m1.mode, "Hz");
-        // After many readings, should still be Hz (no auto-cycle)
-        for _ in 0..100 {
-            let _ = dmm.request_measurement().unwrap();
+        // Rewind several times past the scenario duration — auto_cycle is off
+        // so we should stay in Hz no matter how much time passes.
+        for _ in 0..5 {
+            proto.scenario_started -= Duration::from_secs(30);
+            let _ = proto.request_measurement(&transport).unwrap();
         }
-        let m2 = dmm.request_measurement().unwrap();
+        let m2 = proto.request_measurement(&transport).unwrap();
         assert_eq!(m2.mode, "Hz");
     }
 
@@ -963,6 +1006,44 @@ mod tests {
         let m = dmm.request_measurement().unwrap();
         assert!(!m.flags.peak_min);
         assert!(!m.flags.peak_max);
+    }
+
+    #[test]
+    fn test_dcv_is_smooth_function_of_time() {
+        // dcv_value is `5 + 3 * sin(2t/3)`, angular period 3π seconds, so
+        // samples one period apart must match exactly and samples a quarter
+        // period apart must be symmetric about the centre value. This is what
+        // makes the displayed waveform jitter-free — the value depends only on
+        // the sample time, not on the read cadence.
+        let period = 3.0 * std::f64::consts::PI;
+        let a = match dcv_value(0.0) {
+            MeasuredValue::Normal(v) => v,
+            _ => panic!("expected Normal"),
+        };
+        let b = match dcv_value(period) {
+            MeasuredValue::Normal(v) => v,
+            _ => panic!("expected Normal"),
+        };
+        let c = match dcv_value(2.0 * period) {
+            MeasuredValue::Normal(v) => v,
+            _ => panic!("expected Normal"),
+        };
+        assert!((a - b).abs() < 1e-9, "period mismatch: {a} vs {b}");
+        assert!((b - c).abs() < 1e-9, "period mismatch: {b} vs {c}");
+
+        // Half-period (sin is odd about zero): values symmetric about 5.0.
+        let left = match dcv_value(period / 4.0) {
+            MeasuredValue::Normal(v) => v,
+            _ => panic!("expected Normal"),
+        };
+        let right = match dcv_value(3.0 * period / 4.0) {
+            MeasuredValue::Normal(v) => v,
+            _ => panic!("expected Normal"),
+        };
+        assert!(
+            ((left - 5.0) + (right - 5.0)).abs() < 1e-9,
+            "half-period samples should be symmetric about 5.0: {left}, {right}"
+        );
     }
 
     #[test]

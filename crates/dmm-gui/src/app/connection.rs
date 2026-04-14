@@ -4,6 +4,7 @@ use dmm_lib::transport::Transport;
 use eframe::egui;
 use log::{error, info, warn};
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 /// Messages from the background thread to the UI.
 pub(crate) enum DmmMessage {
@@ -84,6 +85,8 @@ pub(super) fn run_device_thread<T, F>(
         }
     };
 
+    let tick = Duration::from_millis(sample_interval_ms as u64);
+    let mut next_tick = Instant::now() + tick;
     let mut consecutive_timeouts: u32 = 0;
     loop {
         if stop_rx.try_recv().is_ok() {
@@ -142,8 +145,20 @@ pub(super) fn run_device_thread<T, F>(
         }
 
         ctx.request_repaint();
-        if sample_interval_ms > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(sample_interval_ms as u64));
+        if tick > Duration::ZERO {
+            // Absolute-tick pacing: sleep until `next_tick`, then advance. This
+            // keeps the sample period equal to `tick` regardless of how long
+            // `request_measurement` took, and catches up cleanly after long
+            // stalls (reconnect, suspend).
+            let now = Instant::now();
+            if let Some(wait) = next_tick.checked_duration_since(now) {
+                std::thread::sleep(wait);
+            }
+            next_tick += tick;
+            let now = Instant::now();
+            if next_tick < now {
+                next_tick = now + tick;
+            }
         }
     }
 }

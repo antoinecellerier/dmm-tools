@@ -11,6 +11,12 @@
 
 - **Graph drag-to-pan now works in live mode.** Previously the click-drag pan gesture was silently inert whenever the graph was following live data — only worked once the view was already on a non-live segment. Starting a drag in live mode now snaps the view to the current end of data and drops out of live, mirroring the scroll-wheel-in-live-mode behaviour.
 - **Graph X-axis labels gain sub-second precision when zoomed in.** Previously a tight zoom (e.g. a 0.5 s span) produced duplicate labels like "9 s" / "9 s" because the formatter was hardcoded to integer seconds. Labels now read the grid step size and add decimal seconds when it's sub-second — e.g. "9.1 s", "9.25 s", "1m 30.5s".
+- **Graph points now use the measurement's acquisition timestamp.** Previously each point was re-timestamped at UI message-drain time, so UI work (drag, zoom, toasts) or CPU load visibly warped the graph's X axis. Points now carry the timestamp captured at `request_measurement`, so the X axis reflects when the sample was taken, not when the UI processed it.
+- **Measurement pacing uses absolute-tick scheduling.** Both the GUI background thread and the CLI `read`/`debug` loops now sleep until the next tick boundary instead of sleeping for a fixed interval after each read, eliminating cumulative drift when `request_measurement` varies in duration or the thread is delayed.
+
+### Internal
+
+- **Mock device waveforms are now a function of elapsed time**, not a per-read step counter. Displayed mock curves stay on the ideal smooth shape regardless of read cadence or scheduling jitter — the root cause of apparent "jitter" in mock-mode graph rendering.
 
 ## v0.4.0
 

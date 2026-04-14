@@ -10,7 +10,7 @@ use log::{error, info};
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn version_string() -> &'static str {
     let version = env!("CARGO_PKG_VERSION");
@@ -642,7 +642,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         OutputFormat::Text => {}
     }
 
-    let interval = Duration::from_millis(interval_ms);
+    let tick = Duration::from_millis(interval_ms);
+    let mut next_tick = Instant::now() + tick;
     let mut stats = dmm_lib::stats::RunningStats::default();
     let mut integrator = dmm_lib::stats::Integrator::new();
     let mut integral_unit: Option<String> = None;
@@ -711,8 +712,17 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 return Err(e.into());
             }
         }
-        if interval_ms > 0 && (count == 0 || i < count) {
-            std::thread::sleep(interval);
+        if tick > Duration::ZERO && (count == 0 || i < count) {
+            // Absolute-tick pacing: sleep until `next_tick`, then advance.
+            let now = Instant::now();
+            if let Some(wait) = next_tick.checked_duration_since(now) {
+                std::thread::sleep(wait);
+            }
+            next_tick += tick;
+            let now = Instant::now();
+            if next_tick < now {
+                next_tick = now + tick;
+            }
         }
     }
 
@@ -813,7 +823,8 @@ fn cmd_debug(
         eprintln!("{} {status}", style("status:").dim());
     }
 
-    let interval = Duration::from_millis(interval_ms);
+    let tick = Duration::from_millis(interval_ms);
+    let mut next_tick = Instant::now() + tick;
     let mut i = 0;
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
@@ -840,8 +851,16 @@ fn cmd_debug(
             }
         }
         i += 1;
-        if count == 0 || i < count {
-            std::thread::sleep(interval);
+        if tick > Duration::ZERO && (count == 0 || i < count) {
+            let now = Instant::now();
+            if let Some(wait) = next_tick.checked_duration_since(now) {
+                std::thread::sleep(wait);
+            }
+            next_tick += tick;
+            let now = Instant::now();
+            if next_tick < now {
+                next_tick = now + tick;
+            }
         }
     }
 
