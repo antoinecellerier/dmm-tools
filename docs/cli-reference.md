@@ -58,16 +58,18 @@ When the CLI falls through to the final fallback (you passed no `--device` and h
 | `ut803` | | UT803 bench multimeter, 6000 counts (experimental) |
 | `ut804` | | UT804 bench multimeter, 4000 counts (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
-| `ut181a` | `ut181` | UT181A (experimental) |
+| `ut181a` | `ut181` | UT181A (experimental, partial hardware verification) |
 | `vc880` | `vc-880` | Voltcraft VC-880 handheld DMM (experimental) |
 | `vc650bt` | `vc-650bt` | Voltcraft VC650BT bench DMM (experimental, same protocol as VC-880) |
 | `vc890` | `vc-890` | Voltcraft VC-890 handheld DMM, 60K counts, OLED (experimental) |
 | `mock` | | Simulated device (no hardware required) |
 
 Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
-from vendor software and have not been verified against real hardware. When connecting to
-an experimental device, the CLI prints a yellow warning with a link to the device's
-verification issue on GitHub. Please report findings there.
+from vendor software, and most have not yet been verified against real hardware. UT181A is
+the exception: init, framing, and VDC parsing have been confirmed on real hardware, but
+other modes and format variants still need testing. When connecting to an experimental
+device, the CLI prints a yellow warning with a link to the device's verification issue on
+GitHub. Please report findings there.
 
 The `mock` device generates synthetic measurements cycling through multiple modes
 (DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires

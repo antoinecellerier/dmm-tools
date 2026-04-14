@@ -149,7 +149,7 @@ ON" in the meter's SETUP menu.
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
 | **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/4) | 1-byte length, LE float32, 26 modes |
-| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 97 modes |
+| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | 🧪 [partial hardware verification](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 97 modes. Init, framing, and VDC parsing confirmed on real hardware ([details](verification-backlog.md)); other modes pending. |
 
 ### Independent research findings
 

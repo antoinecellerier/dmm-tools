@@ -66,11 +66,11 @@ WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware)
 | UT8803 | UT8803, UT8803E | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/3) |
 | UT803/UT804 | UT803, UT804 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
-| UT181A | UT181A | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/5) |
+| UT181A | UT181A | [🧪 Experimental — partial hardware verification](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 
-🧪 = reverse-engineered from vendor software, not yet tested on real hardware — click to help verify.
+🧪 = reverse-engineered from vendor software; most have not yet been tested on real hardware — click to help verify. UT181A has been partially verified on real hardware (init, framing, and VDC parsing); other modes still need testing.
 
 See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list and reference implementations.
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0
 
 ### Breaking changes
 
@@ -23,6 +23,8 @@
 | **UT803/UT804** | UT803, UT804 | CH9325 | Experimental |
 | **VC-880** | VC-880, VC650BT | CP2110 | Experimental |
 | **VC-890** | VC-890 | CP2110 | Experimental |
+
+**UT181A**: now **partially verified on real hardware** — init handshake, frame extraction, and VDC float32 parsing confirmed on a real UT181A (CH9329 cable) by [@alexander-magon](https://github.com/alexander-magon) ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5), [PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8)). Other modes, format variants (Relative, Min/Max, Peak, COMP), and recording features still need testing.
 
 ### GUI
 
@@ -86,6 +88,8 @@
 
 - Verified MIN/MAX, Peak, and SELECT2 protocol behavior against real UT61E+ hardware.
 - Verified HV flag, DC V range table, and DC mV mode.
+
+**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.3.0...v0.4.0
 
 ## v0.3.0
 

@@ -44,6 +44,6 @@ mod tests {
     #[test]
     fn changelog_is_embedded() {
         assert!(CHANGELOG.starts_with("# Changelog"));
-        assert!(CHANGELOG.contains("## Unreleased"));
+        assert!(CHANGELOG.contains("## v0.1.0"));
     }
 }
