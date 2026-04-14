@@ -961,11 +961,17 @@ impl App {
             "Help / GitHub",
             "https://github.com/antoinecellerier/dmm-tools",
         );
-        let shortcuts_btn = ui.button("?").on_hover_text("Keyboard shortcuts");
+        let shortcuts_btn = ui
+            .button("?")
+            .on_hover_text("Keyboard shortcuts & mouse gestures");
         if shortcuts_btn.clicked() {
             self.shortcut_help_open = !self.shortcut_help_open;
         }
-        Self::set_accessible_label(ui, shortcuts_btn.id, "Keyboard shortcuts");
+        Self::set_accessible_label(
+            ui,
+            shortcuts_btn.id,
+            "Keyboard shortcuts and mouse gestures",
+        );
 
         let settings_btn = ui.button("\u{2699}").on_hover_text("Settings");
         if settings_btn.clicked() {
@@ -1695,7 +1701,7 @@ impl App {
         }
 
         let mut open = self.shortcut_help_open;
-        egui::Window::new("Keyboard Shortcuts")
+        egui::Window::new("Keyboard & Mouse")
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
@@ -1731,7 +1737,7 @@ impl App {
                 egui::Grid::new("shortcuts_graph")
                     .min_col_width(120.0)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("Graph").strong());
+                        ui.label(RichText::new("Graph (keys)").strong());
                         ui.end_row();
                         for (key, action) in [
                             ("[ / ]", "Shorter / longer time window"),
@@ -1740,6 +1746,27 @@ impl App {
                             ("End", "Jump to live"),
                         ] {
                             ui.label(RichText::new(key).monospace());
+                            ui.label(action);
+                            ui.end_row();
+                        }
+                    });
+
+                ui.add_space(8.0);
+
+                egui::Grid::new("gestures_graph")
+                    .min_col_width(120.0)
+                    .show(ui, |ui| {
+                        ui.label(RichText::new("Graph (mouse)").strong());
+                        ui.end_row();
+                        for (gesture, action) in [
+                            ("Drag", "Pan left / right through history"),
+                            ("Shift + drag", "Zoom to bounding box (time & value)"),
+                            ("Scroll wheel", "Zoom X axis centered on cursor"),
+                            ("Double-click", "Reset to live follow + auto Y"),
+                            ("Click (cursors on)", "Place cursor A / B at nearest point"),
+                            ("Minimap drag", "Jump to time / resize viewport"),
+                        ] {
+                            ui.label(RichText::new(gesture).monospace());
                             ui.label(action);
                             ui.end_row();
                         }

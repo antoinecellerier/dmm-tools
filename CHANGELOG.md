@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### GUI
+
+- **Graph bounding-box zoom** — hold Shift and drag on the graph to draw a rectangle; on release the view zooms to the selected time and value range. Press Escape to cancel mid-drag. A new **Reset Zoom** toolbar button (also bound to double-click on the plot) returns the graph to live follow with auto Y.
+- **Help overlay now covers mouse gestures** — the `?` popup (renamed "Keyboard & Mouse") gains a Graph (mouse) section documenting drag, shift-drag zoom, scroll-wheel zoom, double-click reset, cursor placement, and minimap drag.
+
 ## v0.4.0
 
 ### Breaking changes

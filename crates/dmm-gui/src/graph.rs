@@ -134,6 +134,12 @@ pub struct Graph {
     color_overrides: ColorOverrides,
     /// Current minimap drag state.
     minimap_drag: MinimapDrag,
+    /// Press origin (screen pixels) when a Shift+drag bbox-zoom is in progress.
+    bbox_zoom_start_px: Option<egui::Pos2>,
+    /// Latest pointer position during an in-progress bbox-zoom drag. Tracked
+    /// separately so the release frame still has a valid endpoint even when
+    /// hover_pos()/interact_pos() momentarily return None.
+    bbox_zoom_current_px: Option<egui::Pos2>,
 }
 
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
@@ -190,6 +196,8 @@ impl Graph {
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
             minimap_drag: MinimapDrag::None,
+            bbox_zoom_start_px: None,
+            bbox_zoom_current_px: None,
         }
     }
 
@@ -226,6 +234,8 @@ impl Graph {
             self.cursor_a = None;
             self.cursor_b = None;
             self.cursor_next_is_b = false;
+            self.bbox_zoom_start_px = None;
+            self.bbox_zoom_current_px = None;
             self.invalidate_cache();
         }
         self.current_unit = unit.to_string();
@@ -250,6 +260,8 @@ impl Graph {
         self.cursor_b = None;
         self.cursor_next_is_b = false;
         self.minimap_drag = MinimapDrag::None;
+        self.bbox_zoom_start_px = None;
+        self.bbox_zoom_current_px = None;
         self.invalidate_cache();
     }
 
@@ -515,6 +527,17 @@ impl Graph {
                     self.y_user_set = true;
                 }
             }
+
+            ui.add_space(6.0);
+
+            let zoomed = self.is_view_zoomed();
+            if ui
+                .add_enabled(zoomed, egui::Button::new("Reset Zoom"))
+                .on_hover_text("Return to live follow and auto Y (double-click graph)")
+                .clicked()
+            {
+                self.reset_view();
+            }
         });
 
         // Row 2: overlay toggles
@@ -678,6 +701,12 @@ impl Graph {
         let env_color = tc.graph_envelope();
 
         let can_interact = !self.live;
+        let shift_held = ui.input(|i| i.modifiers.shift);
+        let bbox_active = self.bbox_zoom_start_px.is_some();
+        // Suppress the plot's built-in X-axis pan/zoom whenever a bbox-zoom
+        // gesture is being composed, so the drag doesn't fight with panning.
+        let allow_plot_x_drag = can_interact && !shift_held && !bbox_active;
+        let allow_plot_x_zoom = can_interact && !bbox_active;
 
         // Compute Y bounds from visible data
         let (y_min, y_max) = self
@@ -740,8 +769,8 @@ impl Graph {
         let cursor_unit = self.current_unit.clone();
         let plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
-            .allow_drag(Vec2b::new(can_interact, false))
-            .allow_zoom(Vec2b::new(can_interact, false))
+            .allow_drag(Vec2b::new(allow_plot_x_drag, false))
+            .allow_zoom(Vec2b::new(allow_plot_x_zoom, false))
             .allow_scroll(Vec2b::new(false, false))
             .allow_double_click_reset(false)
             .reset()
@@ -947,6 +976,52 @@ impl Graph {
         }
     }
 
+    /// Return to live follow with auto Y. Shared by the double-click handler
+    /// and the explicit "Reset Zoom" toolbar button.
+    pub fn reset_view(&mut self) {
+        self.live = true;
+        self.view_center = 0.0;
+        self.y_axis_fixed = false;
+        self.y_user_set = false;
+    }
+
+    /// True when the view has been zoomed or panned away from the default
+    /// live + auto-Y state. Used to enable/disable the Reset Zoom button.
+    pub fn is_view_zoomed(&self) -> bool {
+        !self.live || self.y_axis_fixed
+    }
+
+    /// Pure helper: given the two corners of a bbox-zoom rectangle in data
+    /// coordinates, return the (view_center, time_window, y_min, y_max) that
+    /// zooms the view to that region. Handles reversed drags by normalising
+    /// min/max on each axis.
+    fn bbox_to_view(p0: (f64, f64), p1: (f64, f64)) -> (f64, f64, f64, f64) {
+        let x_min = p0.0.min(p1.0);
+        let x_max = p0.0.max(p1.0);
+        let y_min = p0.1.min(p1.1);
+        let y_max = p0.1.max(p1.1);
+        let view_center = (x_min + x_max) * 0.5;
+        let time_window = x_max - x_min;
+        (view_center, time_window, y_min, y_max)
+    }
+
+    /// Apply a bbox zoom to the current view state. Clamps time window to a
+    /// sane minimum and mirrors the zoomed Y range into the toolbar text
+    /// buffers so the numbers stay in sync.
+    fn apply_bbox_zoom(&mut self, p0: (f64, f64), p1: (f64, f64)) {
+        const MIN_TIME_WINDOW_SECS: f64 = 0.1;
+        let (view_center, time_window, y_min, y_max) = Self::bbox_to_view(p0, p1);
+        self.live = false;
+        self.view_center = view_center;
+        self.time_window_secs = time_window.max(MIN_TIME_WINDOW_SECS);
+        self.y_axis_fixed = true;
+        self.y_fixed_min = y_min;
+        self.y_fixed_max = y_max;
+        self.y_min_text = format!("{y_min:.4}");
+        self.y_max_text = format!("{y_max:.4}");
+        self.y_user_set = true;
+    }
+
     /// Process drag, scroll, zoom, and cursor-click interactions on the plot.
     fn handle_interaction(
         &mut self,
@@ -955,6 +1030,74 @@ impl Graph {
         transform: &PlotTransform,
         can_interact: bool,
     ) {
+        // Bounding-box zoom (Shift + left-drag). Runs before the pan/scroll
+        // branches so it can claim the gesture and short-circuit them.
+        let shift_held = ui.input(|i| i.modifiers.shift);
+        let (primary_pressed, primary_down) =
+            ui.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down()));
+        let escape_pressed = ui.input(|i| i.key_pressed(egui::Key::Escape));
+
+        if self.bbox_zoom_start_px.is_some() && escape_pressed {
+            self.bbox_zoom_start_px = None;
+            self.bbox_zoom_current_px = None;
+        }
+
+        // Start: Shift held and primary just went down over the plot. We
+        // intentionally do NOT gate on can_interact here — shift-drag should
+        // also work from live mode, and we drop out of live on release.
+        if shift_held
+            && primary_pressed
+            && self.bbox_zoom_start_px.is_none()
+            && let Some(pos) = plot_response.hover_pos()
+        {
+            self.bbox_zoom_start_px = Some(pos);
+            self.bbox_zoom_current_px = Some(pos);
+        }
+
+        // Track the pointer each frame while the drag is live. Fall back to
+        // the global interact_pos when the cursor leaves the plot hover area.
+        if self.bbox_zoom_start_px.is_some()
+            && let Some(pos) = plot_response
+                .hover_pos()
+                .or_else(|| ui.input(|i| i.pointer.interact_pos()))
+        {
+            self.bbox_zoom_current_px = Some(pos);
+        }
+
+        // Finish: primary released while a bbox-zoom drag was active.
+        if self.bbox_zoom_start_px.is_some() && !primary_down {
+            if let (Some(start), Some(end)) = (self.bbox_zoom_start_px, self.bbox_zoom_current_px) {
+                // Clamp to the plot rect so dragging outside the axes still
+                // produces a zoom bounded by what's visible.
+                let plot_rect = plot_response.rect;
+                let start_c = plot_rect.clamp(start);
+                let end_c = plot_rect.clamp(end);
+                let rect_px = egui::Rect::from_two_pos(start_c, end_c);
+                const MIN_DRAG_PX: f32 = 5.0;
+                if rect_px.width() >= MIN_DRAG_PX && rect_px.height() >= MIN_DRAG_PX {
+                    let p0 = transform.value_from_position(rect_px.left_top());
+                    let p1 = transform.value_from_position(rect_px.right_bottom());
+                    self.apply_bbox_zoom((p0.x, p0.y), (p1.x, p1.y));
+                }
+            }
+            self.bbox_zoom_start_px = None;
+            self.bbox_zoom_current_px = None;
+            return;
+        }
+
+        // Draw the rubber-band rectangle while the drag is in progress.
+        if let (Some(start), Some(current)) = (self.bbox_zoom_start_px, self.bbox_zoom_current_px) {
+            let rect = egui::Rect::from_two_pos(start, current);
+            let visuals = ui.visuals();
+            let fill = visuals.selection.bg_fill.linear_multiply(0.25);
+            let stroke = egui::Stroke::new(1.0, visuals.selection.stroke.color);
+            ui.painter().rect_filled(rect, 0.0, fill);
+            ui.painter()
+                .rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            return;
+        }
+
         // Handle drag: convert pixel delta to time delta
         if can_interact && plot_response.dragged() {
             let drag_px = plot_response.drag_delta().x;
@@ -996,9 +1139,9 @@ impl Graph {
             }
         }
 
-        // Double-click to return to live mode
+        // Double-click to return to live mode + auto Y
         if plot_response.double_clicked() {
-            self.live = true;
+            self.reset_view();
         }
 
         // Cursor placement on click — snap to nearest data point
@@ -1628,5 +1771,87 @@ mod tests {
         assert!(g.live);
         g.jump_to_start();
         assert!(!g.live);
+    }
+
+    #[test]
+    fn bbox_to_view_normal_drag() {
+        // Top-left (t=10, v=5) to bottom-right (t=20, v=2).
+        let (center, window, y_min, y_max) = Graph::bbox_to_view((10.0, 5.0), (20.0, 2.0));
+        assert!((center - 15.0).abs() < 1e-9);
+        assert!((window - 10.0).abs() < 1e-9);
+        assert!((y_min - 2.0).abs() < 1e-9);
+        assert!((y_max - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn bbox_to_view_reversed_drag() {
+        // Bottom-right to top-left should normalise to the same bounds.
+        let (center, window, y_min, y_max) = Graph::bbox_to_view((20.0, 2.0), (10.0, 5.0));
+        assert!((center - 15.0).abs() < 1e-9);
+        assert!((window - 10.0).abs() < 1e-9);
+        assert!((y_min - 2.0).abs() < 1e-9);
+        assert!((y_max - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn bbox_to_view_degenerate_does_not_panic() {
+        // Zero-area rectangle. Helper must not produce NaN — caller gates on
+        // a minimum pixel size, so a zero window reaching this helper is a
+        // theoretical edge case but we still want sane arithmetic.
+        let (center, window, y_min, y_max) = Graph::bbox_to_view((5.0, 3.0), (5.0, 3.0));
+        assert!((center - 5.0).abs() < 1e-9);
+        assert!(window.abs() < 1e-9);
+        assert!((y_min - 3.0).abs() < 1e-9);
+        assert!((y_max - 3.0).abs() < 1e-9);
+        assert!(window.is_finite());
+    }
+
+    #[test]
+    fn apply_bbox_zoom_sets_state() {
+        let mut g = Graph::new();
+        assert!(g.live);
+        assert!(!g.y_axis_fixed);
+        g.apply_bbox_zoom((10.0, 5.0), (20.0, 2.0));
+        assert!(!g.live);
+        assert!(g.y_axis_fixed);
+        assert!(g.y_user_set);
+        assert!((g.view_center - 15.0).abs() < 1e-9);
+        assert!((g.time_window_secs - 10.0).abs() < 1e-9);
+        assert!((g.y_fixed_min - 2.0).abs() < 1e-9);
+        assert!((g.y_fixed_max - 5.0).abs() < 1e-9);
+        assert_eq!(g.y_min_text, "2.0000");
+        assert_eq!(g.y_max_text, "5.0000");
+    }
+
+    #[test]
+    fn apply_bbox_zoom_clamps_time_window_minimum() {
+        // A very narrow drag must not produce a zero-width time window.
+        let mut g = Graph::new();
+        g.apply_bbox_zoom((10.0, 0.0), (10.0, 1.0));
+        assert!(g.time_window_secs >= 0.1);
+    }
+
+    #[test]
+    fn reset_view_restores_live_and_auto_y() {
+        let mut g = Graph::new();
+        g.apply_bbox_zoom((10.0, 5.0), (20.0, 2.0));
+        assert!(!g.live);
+        assert!(g.y_axis_fixed);
+        g.reset_view();
+        assert!(g.live);
+        assert!(!g.y_axis_fixed);
+        assert!(!g.y_user_set);
+        assert_eq!(g.view_center, 0.0);
+    }
+
+    #[test]
+    fn is_view_zoomed_reflects_state() {
+        let mut g = Graph::new();
+        assert!(!g.is_view_zoomed());
+        g.live = false;
+        assert!(g.is_view_zoomed());
+        g.live = true;
+        g.y_axis_fixed = true;
+        assert!(g.is_view_zoomed());
     }
 }

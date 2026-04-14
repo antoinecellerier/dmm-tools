@@ -110,6 +110,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
 | **LIVE** | Auto-scroll to latest data (green when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
+| **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
@@ -133,7 +134,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **Scroll wheel** (browse mode) | Zoom X axis centered on cursor (2s–3600s range) |
 | **Scroll wheel** (live mode) | Exit live mode, jump to scrolled position |
 | **Click & drag** | Pan left/right through history |
-| **Double-click** | Return to live mode |
+| **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region. Release to apply; press Escape to cancel. |
+| **Double-click** | Return to live mode with auto Y |
 | **Click** (cursors active) | Place cursor A or B, snapping to nearest data point |
 
 ### Minimap
@@ -288,7 +290,7 @@ do not modify the persisted `settings.json`.
 
 ## Keyboard Shortcuts
 
-Press `?` or click the `?` button in the top bar to open an in-app shortcut reference.
+Press `?` or click the `?` button in the top bar to open an in-app reference of keyboard shortcuts and mouse gestures.
 
 ### General
 
@@ -305,8 +307,8 @@ Press `?` or click the `?` button in the top bar to open an in-app shortcut refe
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
 | `Ctrl+0` | Reset zoom to 100% |
 | `Ctrl+Q` | Quit |
-| `?` | Toggle keyboard shortcut help |
-| `Esc` / `Ctrl+W` | Close shortcut help overlay |
+| `?` | Toggle keyboard & mouse help overlay |
+| `Esc` / `Ctrl+W` | Close help overlay |
 
 ### Graph Navigation
 
