@@ -37,8 +37,8 @@ mod tests {
 
     #[test]
     fn no_section_for_dev_version() {
-        // Dev versions use "## Unreleased", not "## v0.4.0-dev".
-        assert!(!has_version_section("0.4.0-dev"));
+        // Dev versions use "## Unreleased", not "## v0.5.0-dev".
+        assert!(!has_version_section("0.5.0-dev"));
     }
 
     #[test]
