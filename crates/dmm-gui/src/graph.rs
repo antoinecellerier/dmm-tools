@@ -703,9 +703,11 @@ impl Graph {
         let can_interact = !self.live;
         let shift_held = ui.input(|i| i.modifiers.shift);
         let bbox_active = self.bbox_zoom_start_px.is_some();
-        // Suppress the plot's built-in X-axis pan/zoom whenever a bbox-zoom
-        // gesture is being composed, so the drag doesn't fight with panning.
-        let allow_plot_x_drag = can_interact && !shift_held && !bbox_active;
+        // Plain drag-to-pan is allowed even in live mode — starting a drag
+        // drops out of live (see handle_interaction). Scroll-zoom stays gated
+        // on !live: the first scroll exits live without zooming, the second
+        // zooms. Bbox and shift-drag always suppress the built-in pan.
+        let allow_plot_x_drag = !shift_held && !bbox_active;
         let allow_plot_x_zoom = can_interact && !bbox_active;
 
         // Compute Y bounds from visible data
@@ -991,6 +993,36 @@ impl Graph {
         !self.live || self.y_axis_fixed
     }
 
+    /// Shift the view by `time_delta` seconds. The sign convention matches
+    /// egui's `drag_delta().x`: positive = mouse moved right, which in the
+    /// pan model reveals older data (view_center decreases).
+    ///
+    /// If currently live, first snaps view_center to the end of data and
+    /// drops out of live so drag-to-pan works from live mode without a
+    /// visible jump (the snapped bounds equal the live bounds on that frame).
+    ///
+    /// If the drag is moving toward newer data (mouse left → `time_delta < 0`)
+    /// and would push the view's right edge to or past the latest sample,
+    /// snap back to live instead of letting the view drift into empty
+    /// future-space.
+    fn apply_pan(&mut self, time_delta: f64) {
+        if self.live {
+            let (_, data_max) = self.data_time_range();
+            self.view_center = data_max - self.time_window_secs / 2.0;
+            self.live = false;
+        }
+        self.view_center -= time_delta;
+
+        if time_delta < 0.0 {
+            let (_, data_max) = self.data_time_range();
+            let half = self.time_window_secs / 2.0;
+            if self.view_center + half >= data_max {
+                self.view_center = data_max - half;
+                self.live = true;
+            }
+        }
+    }
+
     /// Pure helper: given the two corners of a bbox-zoom rectangle in data
     /// coordinates, return the (view_center, time_window, y_min, y_max) that
     /// zooms the view to that region. Handles reversed drags by normalising
@@ -1098,15 +1130,16 @@ impl Graph {
             return;
         }
 
-        // Handle drag: convert pixel delta to time delta
-        if can_interact && plot_response.dragged() {
+        // Handle drag: convert pixel delta to time delta. Works in live mode
+        // too — apply_pan() snaps view_center to the current end of data and
+        // drops out of live on the first drag frame so the pan has effect.
+        if plot_response.dragged() {
             let drag_px = plot_response.drag_delta().x;
-            // Convert pixel drag to time using the transform
             let left = transform.value_from_position(plot_response.rect.left_top());
             let right = transform.value_from_position(plot_response.rect.right_top());
             let px_per_sec = plot_response.rect.width() as f64 / (right.x - left.x).max(1e-6);
             let time_delta = drag_px as f64 / px_per_sec;
-            self.view_center -= time_delta;
+            self.apply_pan(time_delta);
         }
 
         // Handle scroll wheel zoom on X axis — zoom centered on cursor position
@@ -1842,6 +1875,86 @@ mod tests {
         assert!(!g.y_axis_fixed);
         assert!(!g.y_user_set);
         assert_eq!(g.view_center, 0.0);
+    }
+
+    #[test]
+    fn apply_pan_in_browse_mode_shifts_view_center() {
+        let mut g = Graph::new();
+        g.live = false;
+        g.view_center = 100.0;
+        g.apply_pan(5.0);
+        assert!((g.view_center - 95.0).abs() < 1e-9);
+        assert!(!g.live);
+    }
+
+    #[test]
+    fn apply_pan_in_live_mode_drops_out_of_live() {
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.push(1.0, "DC V", "V");
+        assert!(g.live);
+        // Any non-zero drag while live flips us to browse mode.
+        g.apply_pan(2.0);
+        assert!(!g.live);
+    }
+
+    #[test]
+    fn apply_pan_in_live_mode_snaps_view_center_to_end() {
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.push(1.0, "DC V", "V");
+        // Zero-delta pan while live still snaps view_center to the end of
+        // data — so the view doesn't visibly jump on drag start.
+        g.apply_pan(0.0);
+        let (_, data_max) = g.data_time_range();
+        let expected = data_max - g.time_window_secs / 2.0;
+        assert!((g.view_center - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn apply_pan_toward_newer_at_live_edge_returns_to_live() {
+        // Browse mode, view right-edge exactly at data_max. A drag toward
+        // newer data (time_delta < 0) must snap back to live instead of
+        // drifting into empty future-space.
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.live = false;
+        g.view_center = 50.0;
+        // Fake a data_max of 55 by priming origin and history.
+        g.origin = Some(Instant::now());
+        // Push a point; then override the elapsed calc is hard, so use a
+        // simpler setup: set view_center so right edge = 0 and data_max = 0.
+        g.view_center = -5.0; // right edge = 0 = data_max (no data → data_max=0)
+        g.apply_pan(-1.0); // mouse left = newer; would push right edge past 0
+        assert!(g.live);
+        // view_center snaps to data_max - half = 0 - 5 = -5.
+        assert!((g.view_center - -5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn apply_pan_toward_older_never_triggers_live_snap() {
+        // Dragging back into history (time_delta > 0) must never flip live
+        // on, even if the starting state is at the live edge.
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.live = false;
+        g.view_center = -5.0; // right edge at 0 (data_max = 0 with empty history)
+        g.apply_pan(3.0);
+        assert!(!g.live);
+        assert!((g.view_center - -8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn apply_pan_toward_newer_below_live_edge_does_not_snap() {
+        // Drag toward newer but still short of the live edge — just moves
+        // view_center, does not re-enter live.
+        let mut g = Graph::new();
+        g.time_window_secs = 10.0;
+        g.live = false;
+        g.view_center = -50.0; // right edge at -45, well below data_max=0
+        g.apply_pan(-2.0);
+        assert!(!g.live);
+        assert!((g.view_center - -48.0).abs() < 1e-9);
     }
 
     #[test]
