@@ -10,6 +10,7 @@
 ### Bug fixes
 
 - **Graph drag-to-pan now works in live mode.** Previously the click-drag pan gesture was silently inert whenever the graph was following live data — only worked once the view was already on a non-live segment. Starting a drag in live mode now snaps the view to the current end of data and drops out of live, mirroring the scroll-wheel-in-live-mode behaviour.
+- **Graph X-axis labels gain sub-second precision when zoomed in.** Previously a tight zoom (e.g. a 0.5 s span) produced duplicate labels like "9 s" / "9 s" because the formatter was hardcoded to integer seconds. Labels now read the grid step size and add decimal seconds when it's sub-second — e.g. "9.1 s", "9.25 s", "1m 30.5s".
 
 ## v0.4.0
 

@@ -67,6 +67,45 @@ fn format_time_label(secs: f64) -> String {
     }
 }
 
+/// Format a grid-mark value for the main graph's X axis, adding decimals to
+/// the seconds field when the grid step is sub-second. Without this, a tight
+/// zoom (e.g. a 0.5 s span) produces duplicate labels like "9 s" / "9 s"
+/// because integer seconds can't distinguish adjacent gridlines.
+fn format_time_axis_label(value: f64, step_size: f64) -> String {
+    // When step is a sub-second power of 10 (egui_plot default log-10
+    // spacer), show enough decimals to resolve adjacent marks. clamp to 1
+    // so a rounding step like 0.5 (non-power-of-10) still gets at least
+    // one decimal of precision.
+    let sec_decimals: usize = if step_size > 0.0 && step_size < 1.0 {
+        ((-step_size.log10()).round() as i64).clamp(1, 6) as usize
+    } else {
+        0
+    };
+
+    let s = value;
+    if s < 60.0 {
+        format!("{s:.sec_decimals$} s")
+    } else if s < 3600.0 {
+        let m = (s / 60.0).floor();
+        let sec = s - m * 60.0;
+        if sec_decimals == 0 && sec.abs() < 0.5 {
+            format!("{m:.0} m")
+        } else {
+            format!("{m:.0}m {sec:.sec_decimals$}s")
+        }
+    } else {
+        let h = (s / 3600.0).floor();
+        let rem = s - h * 3600.0;
+        let m = (rem / 60.0).floor();
+        let sec = rem - m * 60.0;
+        if sec_decimals > 0 {
+            format!("{h:.0}h {m:.0}m {sec:.sec_decimals$}s")
+        } else {
+            format!("{h:.0}h {m:.0}m")
+        }
+    }
+}
+
 /// Tracks which part of the minimap the user is dragging.
 #[derive(Default, Clone, Copy, PartialEq)]
 enum MinimapDrag {
@@ -726,24 +765,8 @@ impl Graph {
             }
         });
 
-        let x_axis = AxisHints::new_x().formatter(|mark, _range| {
-            let s = mark.value;
-            if s < 60.0 {
-                format!("{s:.0} s")
-            } else if s < 3600.0 {
-                let m = (s / 60.0).floor();
-                let sec = s % 60.0;
-                if sec.abs() < 0.5 {
-                    format!("{m:.0} m")
-                } else {
-                    format!("{m:.0}m {sec:.0}s")
-                }
-            } else {
-                let h = (s / 3600.0).floor();
-                let m = ((s % 3600.0) / 60.0).floor();
-                format!("{h:.0}h {m:.0}m")
-            }
-        });
+        let x_axis = AxisHints::new_x()
+            .formatter(|mark, _range| format_time_axis_label(mark.value, mark.step_size));
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
@@ -1955,6 +1978,55 @@ mod tests {
         g.apply_pan(-2.0);
         assert!(!g.live);
         assert!((g.view_center - -48.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn time_axis_label_integer_seconds() {
+        // Existing behaviour preserved when step ≥ 1s.
+        assert_eq!(format_time_axis_label(9.0, 1.0), "9 s");
+        assert_eq!(format_time_axis_label(45.0, 5.0), "45 s");
+    }
+
+    #[test]
+    fn time_axis_label_subsecond_step_adds_decimals() {
+        // step=0.1 → 1 decimal; step=0.01 → 2 decimals.
+        assert_eq!(format_time_axis_label(9.1, 0.1), "9.1 s");
+        assert_eq!(format_time_axis_label(9.25, 0.01), "9.25 s");
+        assert_eq!(format_time_axis_label(9.123, 0.001), "9.123 s");
+    }
+
+    #[test]
+    fn time_axis_label_integer_value_with_subsecond_step_pads_decimals() {
+        // A grid mark at an integer second still gets padded when the step
+        // is sub-second, so all visible labels line up at the same precision.
+        assert_eq!(format_time_axis_label(9.0, 0.1), "9.0 s");
+        assert_eq!(format_time_axis_label(10.0, 0.01), "10.00 s");
+    }
+
+    #[test]
+    fn time_axis_label_minutes_with_subsecond_step() {
+        // Zooming into a span past 1 minute while sub-second still shows
+        // the decimal seconds portion.
+        assert_eq!(format_time_axis_label(90.5, 0.1), "1m 30.5s");
+    }
+
+    #[test]
+    fn time_axis_label_whole_minute_with_integer_step() {
+        // Step ≥ 1s, exact minute → shorthand "N m".
+        assert_eq!(format_time_axis_label(120.0, 1.0), "2 m");
+    }
+
+    #[test]
+    fn time_axis_label_hour_integer_step() {
+        assert_eq!(format_time_axis_label(3720.0, 60.0), "1h 2m");
+    }
+
+    #[test]
+    fn time_axis_label_hour_subsecond_step() {
+        // Unlikely in practice but the formatter should not drop the
+        // seconds field when hours are involved and step is sub-second.
+        let out = format_time_axis_label(3725.5, 0.1);
+        assert_eq!(out, "1h 2m 5.5s");
     }
 
     #[test]
