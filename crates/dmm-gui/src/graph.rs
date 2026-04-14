@@ -495,9 +495,10 @@ impl Graph {
             ui.spacing_mut().item_spacing.x = 2.0;
 
             for &(secs, label) in TIME_WINDOWS {
+                let tooltip = format!("Show the last {label} of samples ([ / ] to cycle)");
                 if ui
                     .selectable_label((self.time_window_secs - secs).abs() < 0.1, label)
-                    .on_hover_text("[ / ] to cycle")
+                    .on_hover_text(tooltip)
                     .clicked()
                 {
                     self.time_window_secs = secs;
@@ -515,7 +516,9 @@ impl Graph {
                 .add(egui::Button::new(
                     egui::RichText::new("LIVE").color(live_color).small(),
                 ))
-                .on_hover_text("End = jump to live")
+                .on_hover_text(
+                    "Auto-follow the newest samples — off while panning (End to jump back)",
+                )
                 .clicked()
             {
                 self.live = !self.live;
@@ -523,12 +526,22 @@ impl Graph {
 
             ui.add_space(6.0);
 
-            let y_label = if self.y_axis_fixed {
-                "Y:Fixed"
+            let (y_label, y_tooltip) = if self.y_axis_fixed {
+                (
+                    "Y:Fixed",
+                    "Using fixed Y-axis bounds — click to auto-scale to visible data",
+                )
             } else {
-                "Y:Auto"
+                (
+                    "Y:Auto",
+                    "Auto-scaling Y to visible data — click to enter fixed bounds",
+                )
             };
-            if ui.selectable_label(self.y_axis_fixed, y_label).clicked() {
+            if ui
+                .selectable_label(self.y_axis_fixed, y_label)
+                .on_hover_text(y_tooltip)
+                .clicked()
+            {
                 if !self.y_axis_fixed && !self.y_user_set {
                     let (view_min, view_max) = self.view_bounds();
                     if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max) {
@@ -546,6 +559,7 @@ impl Graph {
                     .add(
                         egui::TextEdit::singleline(&mut self.y_min_text).desired_width(field_width),
                     )
+                    .on_hover_text("Lower bound of the fixed Y axis")
                     .changed();
                 ui.label(
                     egui::RichText::new("..")
@@ -556,6 +570,7 @@ impl Graph {
                     .add(
                         egui::TextEdit::singleline(&mut self.y_max_text).desired_width(field_width),
                     )
+                    .on_hover_text("Upper bound of the fixed Y axis")
                     .changed();
                 if changed_min && let Ok(v) = self.y_min_text.parse::<f64>() {
                     self.y_fixed_min = v;
@@ -573,6 +588,7 @@ impl Graph {
             if ui
                 .add_enabled(zoomed, egui::Button::new("Reset Zoom"))
                 .on_hover_text("Return to live follow and auto Y (double-click graph)")
+                .on_disabled_hover_text("Already at the default live + auto-Y view")
                 .clicked()
             {
                 self.reset_view();
@@ -584,10 +600,18 @@ impl Graph {
             ui.spacing_mut().item_spacing.x = 2.0;
             let dark = ui.visuals().dark_mode;
 
-            if ui.selectable_label(self.show_mean, "Mean").clicked() {
+            if ui
+                .selectable_label(self.show_mean, "Mean")
+                .on_hover_text("Draw a horizontal line at the mean of visible samples")
+                .clicked()
+            {
                 self.show_mean = !self.show_mean;
             }
-            if ui.selectable_label(self.show_envelope, "Min/Max").clicked() {
+            if ui
+                .selectable_label(self.show_envelope, "Min/Max")
+                .on_hover_text("Draw a shaded band between the rolling min and max")
+                .clicked()
+            {
                 self.show_envelope = !self.show_envelope;
             }
             if self.show_envelope {
@@ -596,6 +620,7 @@ impl Graph {
                         egui::TextEdit::singleline(&mut self.envelope_window_text)
                             .desired_width(30.0),
                     )
+                    .on_hover_text("Window size (seconds) used to compute the Min/Max envelope")
                     .changed();
                 if changed
                     && let Ok(v) = self.envelope_window_text.parse::<f64>()
@@ -609,12 +634,19 @@ impl Graph {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
-            if ui.selectable_label(self.show_ref_line, "Ref").clicked() {
+            if ui
+                .selectable_label(self.show_ref_line, "Ref")
+                .on_hover_text("Draw horizontal reference lines at the values in the next field")
+                .clicked()
+            {
                 self.show_ref_line = !self.show_ref_line;
             }
             if self.show_ref_line {
                 let changed = ui
                     .add(egui::TextEdit::singleline(&mut self.ref_line_text).desired_width(80.0))
+                    .on_hover_text(
+                        "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
+                    )
                     .changed();
                 if changed {
                     self.ref_line_values = self
@@ -625,6 +657,7 @@ impl Graph {
                 }
                 if ui
                     .selectable_label(self.show_crossings, "Triggers")
+                    .on_hover_text("Mark the points where the signal crosses a reference line")
                     .clicked()
                 {
                     self.show_crossings = !self.show_crossings;
@@ -632,6 +665,7 @@ impl Graph {
             }
             if ui
                 .selectable_label(self.cursors_active, "Cursors")
+                .on_hover_text("Click the graph to place two cursors and read Δt / Δv / integral")
                 .clicked()
             {
                 self.cursors_active = !self.cursors_active;
@@ -1239,6 +1273,9 @@ impl Graph {
         let (full_rect, pointer_response) = ui.allocate_exact_size(
             egui::vec2(ui.available_width(), total_height),
             egui::Sense::click_and_drag(),
+        );
+        let pointer_response = pointer_response.on_hover_text(
+            "Minimap — click or drag to pan, drag the bracket edges to resize the view",
         );
         // Give the minimap an accessible label so screen readers can
         // announce it as a navigable element.

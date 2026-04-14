@@ -741,6 +741,9 @@ impl App {
                     .small()
                     .color(warn_color),
                     profile.feedback_url(),
+                )
+                .on_hover_text(
+                    "Opens the GitHub issue tracker to report experimental-support feedback",
                 );
             }
         } else if error.contains("adapter not found") {
@@ -831,27 +834,42 @@ impl App {
 
             match &self.connection_state {
                 ConnectionState::Disconnected => {
-                    if ui.button("Connect").on_hover_text("Ctrl+Shift+C").clicked() {
+                    if ui
+                        .button("Connect")
+                        .on_hover_text("Open USB connection to the selected meter (Ctrl+Shift+C)")
+                        .clicked()
+                    {
                         self.connect(ctx);
                     }
                 }
                 ConnectionState::Connected => {
                     if ui
                         .button("Disconnect")
-                        .on_hover_text("Ctrl+Shift+C")
+                        .on_hover_text("Close the active meter connection (Ctrl+Shift+C)")
                         .clicked()
                     {
                         self.disconnect();
                     }
-                    let pause_label = if self.paused {
-                        "\u{25B6} Resume"
+                    let (pause_label, pause_tooltip) = if self.paused {
+                        ("\u{25B6} Resume", "Resume acquisition (Space)")
                     } else {
-                        "\u{23F8} Pause"
+                        (
+                            "\u{23F8} Pause",
+                            "Halt acquisition — stops recording and graph updates (Space)",
+                        )
                     };
-                    if ui.button(pause_label).on_hover_text("Space").clicked() {
+                    if ui
+                        .button(pause_label)
+                        .on_hover_text(pause_tooltip)
+                        .clicked()
+                    {
                         self.paused = !self.paused;
                     }
-                    if ui.button("Clear").on_hover_text("Ctrl+L").clicked() {
+                    if ui
+                        .button("Clear")
+                        .on_hover_text("Clear graph history and statistics (Ctrl+L)")
+                        .clicked()
+                    {
                         self.graph.clear();
                         self.stats.reset();
                         self.integrator.reset();
@@ -859,7 +877,10 @@ impl App {
                     }
                 }
                 ConnectionState::Reconnecting => {
-                    ui.add_enabled(false, egui::Button::new("Reconnecting..."));
+                    ui.add_enabled(false, egui::Button::new("Reconnecting..."))
+                        .on_disabled_hover_text(
+                            "Retrying the connection automatically — click Disconnect to stop",
+                        );
                 }
             }
 
@@ -961,15 +982,16 @@ impl App {
             }
         }
         version_resp
-            .on_hover_text("What's New")
+            .on_hover_text("Show What's New — release notes for this version")
             .on_hover_cursor(egui::CursorIcon::PointingHand);
         ui.hyperlink_to(
             "Help / GitHub",
             "https://github.com/antoinecellerier/dmm-tools",
-        );
+        )
+        .on_hover_text("Open the dmm-tools project page on GitHub");
         let shortcuts_btn = ui
             .button("?")
-            .on_hover_text("Keyboard shortcuts & mouse gestures");
+            .on_hover_text("Show keyboard shortcuts and mouse gestures (?)");
         if shortcuts_btn.clicked() {
             self.shortcut_help_open = !self.shortcut_help_open;
         }
@@ -979,7 +1001,9 @@ impl App {
             "Keyboard shortcuts and mouse gestures",
         );
 
-        let settings_btn = ui.button("\u{2699}").on_hover_text("Settings");
+        let settings_btn = ui
+            .button("\u{2699}")
+            .on_hover_text("Show or hide the settings panel");
         if settings_btn.clicked() {
             self.settings_open = !self.settings_open;
         }
@@ -1044,6 +1068,7 @@ impl App {
                     .add(egui::Button::new(
                         RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
                     ))
+                    .on_hover_text("Reset Min / Max / Avg / integral counters")
                     .clicked()
                 {
                     self.stats.reset();
@@ -1135,6 +1160,7 @@ impl App {
                 .add(egui::Button::new(
                     RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
                 ))
+                .on_hover_text("Reset Min / Max / Avg / integral counters")
                 .clicked()
             {
                 self.stats.reset();
@@ -1232,17 +1258,24 @@ impl App {
     }
 
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
-        let btn_label = if self.recording.active {
-            "\u{25A0} Stop"
+        let (btn_label, btn_tooltip) = if self.recording.active {
+            ("\u{25A0} Stop", "Stop recording (Ctrl+R)")
         } else {
-            "\u{25CF} Record"
+            (
+                "\u{25CF} Record",
+                "Start writing live samples to the recording buffer (Ctrl+R)",
+            )
         };
 
         ui.horizontal(|ui| {
-            if ui.button(btn_label).on_hover_text("Ctrl+R").clicked() {
+            if ui.button(btn_label).on_hover_text(btn_tooltip).clicked() {
                 self.recording.toggle();
             }
-            if ui.button("Export CSV").on_hover_text("Ctrl+E").clicked() {
+            if ui
+                .button("Export CSV")
+                .on_hover_text("Save the recording buffer to a CSV file (Ctrl+E)")
+                .clicked()
+            {
                 self.export_csv();
             }
             let count = self.recording.samples.len();
@@ -1681,8 +1714,14 @@ impl App {
     /// Paint the big meter toggle button at a given rect (overlay, no layout impact).
     fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
         let (icon, tooltip) = match self.big_meter_mode {
-            BigMeterMode::Off => ("\u{229E}", "Big meter mode (Ctrl+B)"),
-            BigMeterMode::Full | BigMeterMode::Minimal => ("\u{229F}", "Exit big meter (Ctrl+B)"),
+            BigMeterMode::Off => (
+                "\u{229E}",
+                "Hide side panels and show the meter reading full-screen (Ctrl+B)",
+            ),
+            BigMeterMode::Full | BigMeterMode::Minimal => (
+                "\u{229F}",
+                "Return to the normal multi-panel layout (Ctrl+B)",
+            ),
         };
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         child.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {

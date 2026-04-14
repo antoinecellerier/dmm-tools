@@ -1,5 +1,18 @@
 use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
-use eframe::egui::{self, RichText, Ui};
+use eframe::egui::{self, Color32, RichText, Ui};
+
+const MANUAL_TOOLTIP: &str = "Open the manufacturer's manual in your browser";
+
+/// Render a "Manual ↗" hyperlink with a consistent hover tooltip.
+fn manual_link(ui: &mut Ui, url: &str, font_size: f32, color: Color32) {
+    ui.hyperlink_to(
+        RichText::new("Manual \u{2197}")
+            .font(egui::FontId::proportional(font_size))
+            .color(color),
+        url,
+    )
+    .on_hover_text(MANUAL_TOOLTIP);
+}
 
 /// Build a compact single-line accuracy string from the spec's accuracy bands.
 /// For a single band: `±(0.1%+5)`. For multiple bands: first band only with its
@@ -97,12 +110,7 @@ pub fn show_specs(
 
     // Manual link
     if let Some(url) = manual_url {
-        ui.hyperlink_to(
-            RichText::new("Manual \u{2197}")
-                .font(egui::FontId::proportional(sub_font))
-                .color(weak),
-            url,
-        );
+        manual_link(ui, url, sub_font, weak);
     }
 }
 
@@ -126,12 +134,7 @@ pub fn show_specs_compact(
                 .color(weak),
         );
         if let Some(url) = manual_url {
-            ui.hyperlink_to(
-                RichText::new("Manual \u{2197}")
-                    .font(egui::FontId::proportional(sub_font))
-                    .color(weak),
-                url,
-            );
+            manual_link(ui, url, sub_font, weak);
         }
     });
 }
@@ -167,12 +170,7 @@ pub fn show_specs_inline(
                 .color(weak),
         );
         if let Some(url) = manual_url {
-            ui.hyperlink_to(
-                RichText::new("Manual \u{2197}")
-                    .font(egui::FontId::proportional(font_size))
-                    .color(weak),
-                url,
-            );
+            manual_link(ui, url, font_size, weak);
         }
     });
 }
@@ -181,10 +179,5 @@ pub fn show_specs_inline(
 pub fn show_manual_only(ui: &mut Ui, url: &str, scale: f32) {
     let font_size = 11.0 * scale;
     let weak = ui.visuals().weak_text_color();
-    ui.hyperlink_to(
-        RichText::new("Manual \u{2197}")
-            .font(egui::FontId::proportional(font_size))
-            .color(weak),
-        url,
-    );
+    manual_link(ui, url, font_size, weak);
 }

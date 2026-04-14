@@ -378,6 +378,7 @@ Auto-reconnection retries every 2 seconds after a disconnect.
 - Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements)
 - Minimum 11pt font; flags use bold text in addition to color
 - [AccessKit](https://accesskit.dev/) screen reader support (Windows, macOS; Linux via AT-SPI). Icon-only buttons and custom widgets have explicit labels.
+- Every button, link, toggle, and setting has a hover tooltip explaining what it does (and the keyboard shortcut, where one exists) — hover any control to learn it without leaving the GUI.
 - All features are keyboard-accessible (see [Keyboard Shortcuts](#keyboard-shortcuts))
 
 ## See Also

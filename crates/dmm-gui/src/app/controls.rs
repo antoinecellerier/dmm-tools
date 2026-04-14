@@ -7,9 +7,21 @@ use crate::theme::ThemeColors;
 
 use super::{App, BigMeterMode};
 
-/// Show a settings checkbox; returns `true` if the value changed.
-fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str) -> bool {
-    ui.checkbox(value, label).changed()
+/// Show a settings checkbox with a hover tooltip; returns `true` if the value changed.
+fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str, tooltip: &str) -> bool {
+    ui.checkbox(value, label).on_hover_text(tooltip).changed()
+}
+
+/// Show a selectable_label with a hover tooltip; returns `true` if clicked.
+fn setting_selectable(
+    ui: &mut Ui,
+    selected: bool,
+    label: impl Into<egui::WidgetText>,
+    tooltip: &str,
+) -> bool {
+    ui.selectable_label(selected, label)
+        .on_hover_text(tooltip)
+        .clicked()
 }
 
 impl App {
@@ -45,12 +57,24 @@ impl App {
             let min_max = flags.is_some_and(|f| f.min || f.max);
             let peak = flags.is_some_and(|f| f.peak_min || f.peak_max);
 
-            // Simple toggle commands: label, active flag, command.
-            for &(label, active, cmd) in &[
-                ("HOLD", hold, "hold"),
-                ("REL", rel, "rel"),
-                ("RANGE", manual_range, "range"),
-                ("AUTO", auto, "auto"),
+            // Simple toggle commands: label, active flag, command, tooltip.
+            // Tooltips are phrased to be device-agnostic — they describe
+            // the generic DMM behavior, not model-specific details.
+            for &(label, active, cmd, tooltip) in &[
+                ("HOLD", hold, "hold", "Freeze the current reading"),
+                (
+                    "REL",
+                    rel,
+                    "rel",
+                    "Show readings relative to the current value",
+                ),
+                (
+                    "RANGE",
+                    manual_range,
+                    "range",
+                    "Step to the next manual range",
+                ),
+                ("AUTO", auto, "auto", "Return the meter to auto-range"),
             ] {
                 if !has_cmd(cmd) {
                     continue;
@@ -63,7 +87,11 @@ impl App {
                 } else {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
-                if ui.add(egui::Button::new(text)).clicked() {
+                if ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
                     self.send_command(cmd);
                 }
             }
@@ -71,9 +99,21 @@ impl App {
             // MIN/MAX and Peak: clicking always cycles (never exits), matching
             // the real device's short-press behavior. A separate "x" button
             // exits the mode (like the real device's long-press).
-            for &(label, active, cycle_cmd, exit_cmd) in &[
-                ("MIN/MAX", min_max, "minmax", "exit_minmax"),
-                ("PEAK", peak, "peak", "exit_peak"),
+            for &(label, active, cycle_cmd, exit_cmd, tooltip) in &[
+                (
+                    "MIN/MAX",
+                    min_max,
+                    "minmax",
+                    "exit_minmax",
+                    "Record minimum, maximum, and average readings — click to cycle, × to exit",
+                ),
+                (
+                    "PEAK",
+                    peak,
+                    "peak",
+                    "exit_peak",
+                    "Capture peak minimum and maximum — click to cycle, × to exit",
+                ),
             ] {
                 if !has_cmd(cycle_cmd) {
                     continue;
@@ -86,7 +126,11 @@ impl App {
                 } else {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
-                if ui.add(egui::Button::new(text)).clicked() {
+                if ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
                     self.send_command(cycle_cmd);
                 }
                 if active && has_cmd(exit_cmd) {
@@ -96,7 +140,7 @@ impl App {
                     let x_btn = egui::Button::new(x_text).min_size(egui::Vec2::ZERO);
                     if ui
                         .add(x_btn)
-                        .on_hover_text(format!("Exit {label}"))
+                        .on_hover_text(format!("Exit {label} mode"))
                         .clicked()
                     {
                         self.send_command(exit_cmd);
@@ -105,12 +149,23 @@ impl App {
             }
 
             // Non-toggle commands
-            for &(label, cmd) in &[("SELECT", "select"), ("LIGHT", "light")] {
+            for &(label, cmd, tooltip) in &[
+                (
+                    "SELECT",
+                    "select",
+                    "Cycle through the secondary functions of the current dial position",
+                ),
+                ("LIGHT", "light", "Toggle the meter's backlight"),
+            ] {
                 if !has_cmd(cmd) {
                     continue;
                 }
                 let text = RichText::new(label).font(egui::FontId::proportional(font_size));
-                if ui.add(egui::Button::new(text)).clicked() {
+                if ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(tooltip)
+                    .clicked()
+                {
                     self.send_command(cmd);
                 }
             }
@@ -138,7 +193,8 @@ impl App {
                 } else {
                     base.to_string()
                 };
-                if ui.selectable_label(selected, label).clicked() {
+                let tooltip = format!("Use {base} mode for the whole GUI");
+                if setting_selectable(ui, selected, label, &tooltip) {
                     self.settings.theme = mode;
                     // Clear the override — user explicitly chose a theme
                     self.settings.overrides.theme = None;
@@ -171,7 +227,16 @@ impl App {
                 } else {
                     base.to_string()
                 };
-                if ui.selectable_label(selected, &label).clicked() {
+                let tooltip = match preset {
+                    ColorPreset::Default => "Balanced palette tuned for everyday use",
+                    ColorPreset::HighContrast => {
+                        "Maximum-contrast palette for bright lighting or projectors"
+                    }
+                    ColorPreset::ColorblindSafe => {
+                        "Palette that stays distinguishable for protan/deutan vision"
+                    }
+                };
+                if setting_selectable(ui, selected, &label, tooltip) {
                     self.settings.color_preset = preset;
                     // Clear all overrides when switching presets.
                     self.settings.color_overrides = ColorOverrides::default();
@@ -196,10 +261,27 @@ impl App {
         self.show_color_customization(ui);
 
         ui.horizontal(|ui| {
-            let changed = setting_checkbox(ui, &mut self.settings.show_graph, "Graph")
-                | setting_checkbox(ui, &mut self.settings.show_stats, "Statistics")
-                | setting_checkbox(ui, &mut self.settings.show_recording, "Recording")
-                | setting_checkbox(ui, &mut self.settings.show_specs, "Specifications");
+            let changed = setting_checkbox(
+                ui,
+                &mut self.settings.show_graph,
+                "Graph",
+                "Show the rolling time-series plot",
+            ) | setting_checkbox(
+                ui,
+                &mut self.settings.show_stats,
+                "Statistics",
+                "Show Min / Max / Avg / integral for the live session",
+            ) | setting_checkbox(
+                ui,
+                &mut self.settings.show_recording,
+                "Recording",
+                "Show the recording controls and sample log",
+            ) | setting_checkbox(
+                ui,
+                &mut self.settings.show_specs,
+                "Specifications",
+                "Show accuracy and resolution for the current mode",
+            );
             if changed {
                 // Manual settings change exits big meter toggle.
                 self.big_meter_mode = BigMeterMode::Off;
@@ -208,13 +290,17 @@ impl App {
         });
 
         ui.horizontal(|ui| {
-            let changed =
-                setting_checkbox(ui, &mut self.settings.auto_connect, "Auto-connect on start")
-                    | setting_checkbox(
-                        ui,
-                        &mut self.settings.query_device_name,
-                        "Show device name on connect (beeps)",
-                    );
+            let changed = setting_checkbox(
+                ui,
+                &mut self.settings.auto_connect,
+                "Auto-connect on start",
+                "Open the USB connection automatically when the app launches",
+            ) | setting_checkbox(
+                ui,
+                &mut self.settings.query_device_name,
+                "Show device name on connect (beeps)",
+                "Query the meter's name after connecting — the meter will beep once",
+            );
             if changed {
                 self.settings.save();
             }
@@ -225,10 +311,13 @@ impl App {
             let mut changed = false;
             for &ms in &[0u32, 100, 200, 300, 500, 1000, 2000] {
                 let label = format!("{ms}ms");
-                if ui
-                    .selectable_label(self.settings.sample_interval_ms == ms, label)
-                    .clicked()
-                {
+                let tooltip = if ms == 0 {
+                    "No rate limit — read as fast as the meter reports (requires reconnect)"
+                        .to_string()
+                } else {
+                    format!("Wait {ms} ms between samples (requires reconnect)")
+                };
+                if setting_selectable(ui, self.settings.sample_interval_ms == ms, label, &tooltip) {
                     self.settings.sample_interval_ms = ms;
                     changed = true;
                 }
@@ -253,7 +342,8 @@ impl App {
                 } else {
                     device.display_name.to_string()
                 };
-                if ui.selectable_label(selected, label).clicked() {
+                let tooltip = format!("Talk to a {} over USB", device.display_name);
+                if setting_selectable(ui, selected, label, &tooltip) {
                     self.settings.shared.device_family = device.id.to_string();
                     // Clear the override — user explicitly chose a device
                     self.settings.overrides.device_family = None;
@@ -284,7 +374,12 @@ impl App {
                 } else {
                     "Auto (cycle)"
                 };
-                if ui.selectable_label(auto_selected, auto_label).clicked() {
+                if setting_selectable(
+                    ui,
+                    auto_selected,
+                    auto_label,
+                    "Cycle through all synthetic modes to exercise the GUI",
+                ) {
                     self.settings.mock_mode = String::new();
                     changed = true;
                 }
@@ -320,10 +415,17 @@ impl App {
             ui.label("Zoom:");
             let mut changed = false;
             for &level in Self::ZOOM_LEVELS {
-                if ui
-                    .selectable_label(self.settings.zoom_pct == level, format!("{level}%"))
-                    .clicked()
-                {
+                let tooltip = if level == 100 {
+                    "Scale the GUI to 100% (Ctrl+0, or Ctrl+/- to step)".to_string()
+                } else {
+                    format!("Scale the GUI to {level}% (Ctrl+/- to step)")
+                };
+                if setting_selectable(
+                    ui,
+                    self.settings.zoom_pct == level,
+                    format!("{level}%"),
+                    &tooltip,
+                ) {
                     self.settings.zoom_pct = level;
                     changed = true;
                 }
@@ -339,7 +441,12 @@ impl App {
         });
 
         ui.horizontal(|ui| {
-            if setting_checkbox(ui, &mut self.settings.always_on_top, "Always on top") {
+            if setting_checkbox(
+                ui,
+                &mut self.settings.always_on_top,
+                "Always on top",
+                "Keep the window above other desktop windows (Ctrl+T)",
+            ) {
                 self.apply_always_on_top(ui.ctx());
                 self.settings.save();
             }
@@ -357,6 +464,7 @@ impl App {
                 ui,
                 &mut self.settings.hide_decorations,
                 "Hide window decorations",
+                "Borderless window — use Ctrl+D to toggle back",
             ) {
                 self.apply_decorations(ui.ctx());
                 self.settings.save();
@@ -383,7 +491,7 @@ impl App {
     fn show_color_customization(&mut self, ui: &mut Ui) {
         let dark = ui.visuals().dark_mode;
 
-        egui::CollapsingHeader::new("Customize colors")
+        let collapsing = egui::CollapsingHeader::new("Customize colors")
             .default_open(false)
             .show(ui, |ui| {
                 let theme_label = if dark { "dark" } else { "light" };
@@ -544,7 +652,13 @@ impl App {
 
                 // Reset button
                 ui.horizontal(|ui| {
-                    if ui.button("Reset all to preset").clicked() {
+                    if ui
+                        .button("Reset all to preset")
+                        .on_hover_text(
+                            "Discard color customizations and return to the selected preset",
+                        )
+                        .clicked()
+                    {
                         self.settings.color_overrides = ColorOverrides::default();
                         changed = true;
                     }
@@ -556,6 +670,9 @@ impl App {
                     self.settings.save();
                 }
             });
+        collapsing
+            .header_response
+            .on_hover_text("Per-color overrides on top of the selected preset");
     }
 }
 
@@ -586,11 +703,36 @@ fn color_edit(
         btn
     });
 
-    let btn_response = response.inner;
+    let btn_response = response.inner.on_hover_text(color_edit_tooltip(field));
     if btn_response.changed() {
         *override_color = Some(HexColor(color));
         return true;
     }
 
     false
+}
+
+/// Hover text for a color override button, keyed on the internal field name.
+fn color_edit_tooltip(field: &str) -> &'static str {
+    match field {
+        "background" => "Panel background color",
+        "text" => "Primary text color",
+        "button" => "Button background color",
+        "graph_line" => "Data line color on the graph",
+        "graph_gap" => "Color used to mark gaps in recorded data",
+        "graph_mean" => "Mean overlay line color",
+        "graph_ref" => "Reference line color",
+        "graph_crossing" => "Trigger-crossing marker color",
+        "graph_cursor" => "Measurement cursor color",
+        "graph_envelope" => "Min/Max envelope fill color",
+        "plot_background" => "Graph plot area background color",
+        "graph_crosshair" => "Hover crosshair color on the graph",
+        "status_ok" => "\"Connected\" status color",
+        "status_warning" => "Warning status color",
+        "status_error" => "Error status color",
+        "status_inactive" => "Inactive / disconnected status color",
+        "accent" => "Accent color used by active toggles and highlights",
+        "minimap_viewport" => "Minimap viewport rectangle color",
+        _ => "Color override",
+    }
 }
