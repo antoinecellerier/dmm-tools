@@ -149,6 +149,11 @@ pub struct App {
     stats: RunningStats,
     integrator: Integrator,
     recording: Recording,
+    /// Session-long `(Instant, SystemTime)` origin pair used to map
+    /// `m.timestamp` (monotonic) onto wall-clock timestamps for recording and
+    /// export. Captured once at construction so every sample across the
+    /// session is translated against the same origin.
+    wall_clock: dmm_lib::WallClock,
 
     rx: Option<mpsc::Receiver<DmmMessage>>,
     stop_tx: Option<mpsc::Sender<()>>,
@@ -225,6 +230,7 @@ impl App {
             stats: RunningStats::new(),
             integrator: Integrator::new(),
             recording: Recording::new(),
+            wall_clock: dmm_lib::WallClock::new(),
             rx: None,
             stop_tx: None,
             cmd_tx: None,
@@ -611,7 +617,7 @@ impl App {
                         _ => {}
                     }
 
-                    if self.recording.push(&m) {
+                    if self.recording.push(&m, &self.wall_clock) {
                         self.toast = Some((
                             "Recording stopped \u{2014} buffer full (500K samples)".to_string(),
                             true,
@@ -1068,6 +1074,20 @@ impl App {
                     RichText::new(format!("\u{222b}:{int}"))
                         .font(egui::FontId::monospace(main_font)),
                 );
+                if self.integrator.skipped_intervals > 0 {
+                    ui.label(
+                        RichText::new(format!(
+                            "\u{26A0} {} gaps >2s skipped",
+                            self.integrator.skipped_intervals
+                        ))
+                        .font(egui::FontId::proportional(sub_font))
+                        .color(ui.visuals().warn_fg_color),
+                    )
+                    .on_hover_text(
+                        "Intervals between samples longer than 2 s are not integrated. \
+                         Lower the sample interval or expect a partial integral.",
+                    );
+                }
             }
         } else {
             ui.label(
@@ -1096,6 +1116,20 @@ impl App {
                     RichText::new(format!("\u{222b}:{int}"))
                         .font(egui::FontId::monospace(main_font)),
                 );
+                if self.integrator.skipped_intervals > 0 {
+                    ui.label(
+                        RichText::new(format!(
+                            "\u{26A0} {} gaps >2s skipped",
+                            self.integrator.skipped_intervals
+                        ))
+                        .font(egui::FontId::proportional(sub_font))
+                        .color(ui.visuals().warn_fg_color),
+                    )
+                    .on_hover_text(
+                        "Intervals between samples longer than 2 s are not integrated. \
+                         Lower the sample interval or expect a partial integral.",
+                    );
+                }
             }
             if ui
                 .add(egui::Button::new(

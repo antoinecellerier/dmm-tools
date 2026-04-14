@@ -8,6 +8,9 @@ pub mod mock;
 pub mod protocol;
 pub mod stats;
 pub mod transport;
+pub mod wall_clock;
+
+pub use wall_clock::WallClock;
 
 use error::{Error, Result};
 use log::{info, warn};

@@ -13,10 +13,13 @@
 - **Graph X-axis labels gain sub-second precision when zoomed in.** Previously a tight zoom (e.g. a 0.5 s span) produced duplicate labels like "9 s" / "9 s" because the formatter was hardcoded to integer seconds. Labels now read the grid step size and add decimal seconds when it's sub-second — e.g. "9.1 s", "9.25 s", "1m 30.5s".
 - **Graph points now use the measurement's acquisition timestamp.** Previously each point was re-timestamped at UI message-drain time, so UI work (drag, zoom, toasts) or CPU load visibly warped the graph's X axis. Points now carry the timestamp captured at `request_measurement`, so the X axis reflects when the sample was taken, not when the UI processed it.
 - **Measurement pacing uses absolute-tick scheduling.** Both the GUI background thread and the CLI `read`/`debug` loops now sleep until the next tick boundary instead of sleeping for a fixed interval after each read, eliminating cumulative drift when `request_measurement` varies in duration or the thread is delayed.
+- **Recorded and exported timestamps now reflect acquisition time.** Recording samples and CLI CSV/JSON output previously timestamped rows with `Local::now()` at the moment of formatting, so UI drain latency or buffering offset the column from the real sample time. Both paths now translate the measurement's monotonic `Instant` through a session-long `WallClock` origin pair, so exported timestamps line up with when the device produced each reading.
+- **Integrator surfaces silently skipped intervals.** Samples spaced further apart than the 2 s integration limit are still skipped (to avoid spikes after disconnects), but the CLI `read --integrate` summary and the GUI stats panel now flag how many intervals were skipped instead of silently returning `0`. A warning is also logged on the first skip.
 
 ### Internal
 
 - **Mock device waveforms are now a function of elapsed time**, not a per-read step counter. Displayed mock curves stay on the ideal smooth shape regardless of read cadence or scheduling jitter — the root cause of apparent "jitter" in mock-mode graph rendering.
+- **`dmm_lib::WallClock`** — small `(Instant, SystemTime)` origin helper used by the GUI recording and CLI formatter to derive wall-clock timestamps from monotonic `Instant`s.
 
 ## v0.4.0
 

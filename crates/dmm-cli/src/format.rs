@@ -1,11 +1,24 @@
+use chrono::{DateTime, Local};
+use dmm_lib::WallClock;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use std::io::Write;
 
 use crate::OutputFormat;
 
+/// Derive a wall-clock RFC3339 string from the measurement's monotonic
+/// timestamp using the session's `WallClock` origin. Keeps exported
+/// timestamps aligned with when the device produced the reading rather than
+/// when the formatter ran.
+fn timestamp_rfc3339(m: &Measurement, wall_clock: &WallClock) -> String {
+    let sys_time = wall_clock.wall_time_for(m.timestamp);
+    let dt: DateTime<Local> = sys_time.into();
+    dt.to_rfc3339()
+}
+
 pub fn format_measurement(
     w: &mut dyn Write,
     m: &Measurement,
+    wall_clock: &WallClock,
     format: &OutputFormat,
     experimental: bool,
     integral: Option<(f64, &str)>,
@@ -28,28 +41,18 @@ pub fn format_measurement(
                 MeasuredValue::Overload => "OL".to_string(),
                 MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
             };
+            let ts = timestamp_rfc3339(m, wall_clock);
             if let Some((val, unit)) = integral {
                 writeln!(
                     w,
                     "{},{},{},{},{},{},{:.6},{unit}",
-                    chrono::Local::now().to_rfc3339(),
-                    m.mode,
-                    value_str,
-                    m.unit,
-                    m.range_label,
-                    m.flags,
-                    val,
+                    ts, m.mode, value_str, m.unit, m.range_label, m.flags, val,
                 )
             } else {
                 writeln!(
                     w,
                     "{},{},{},{},{},{}",
-                    chrono::Local::now().to_rfc3339(),
-                    m.mode,
-                    value_str,
-                    m.unit,
-                    m.range_label,
-                    m.flags,
+                    ts, m.mode, value_str, m.unit, m.range_label, m.flags,
                 )
             }
         }
@@ -60,7 +63,7 @@ pub fn format_measurement(
                 MeasuredValue::NcvLevel(l) => serde_json::json!({"ncv_level": l}),
             };
             let mut obj = serde_json::json!({
-                "timestamp": chrono::Local::now().to_rfc3339(),
+                "timestamp": timestamp_rfc3339(m, wall_clock),
                 "mode": m.mode,
                 "value": value,
                 "unit": m.unit,

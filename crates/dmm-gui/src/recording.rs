@@ -1,4 +1,5 @@
 use chrono::{DateTime, Local};
+use dmm_lib::WallClock;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 
 /// Maximum recording samples (~14 hours at 10Hz, ~22MB memory).
@@ -16,7 +17,7 @@ pub struct Sample {
 }
 
 impl Sample {
-    pub fn from_measurement(m: &Measurement) -> Self {
+    pub fn from_measurement(m: &Measurement, wall_clock: &WallClock) -> Self {
         let value_str = if let Some(raw) = &m.display_raw {
             raw.trim().to_string()
         } else {
@@ -27,7 +28,7 @@ impl Sample {
             }
         };
         Self {
-            wall_time: Local::now(),
+            wall_time: wall_clock.wall_time_for(m.timestamp).into(),
             mode: m.mode.to_string(),
             value_str,
             unit: m.unit.to_string(),
@@ -63,9 +64,9 @@ impl Recording {
     }
 
     /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
-    pub fn push(&mut self, m: &Measurement) -> bool {
+    pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock) -> bool {
         if self.active && self.samples.len() < MAX_RECORDING_SAMPLES {
-            self.samples.push(Sample::from_measurement(m));
+            self.samples.push(Sample::from_measurement(m, wall_clock));
             if self.samples.len() >= MAX_RECORDING_SAMPLES {
                 self.active = false;
                 return true;
@@ -128,22 +129,24 @@ mod tests {
     #[test]
     fn recording_only_captures_when_active() {
         let mut r = Recording::new();
+        let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
-        r.push(&m);
+        r.push(&m, &wc);
         assert!(r.samples.is_empty());
 
         r.toggle(); // start
-        r.push(&m);
+        r.push(&m, &wc);
         assert_eq!(r.samples.len(), 1);
     }
 
     #[test]
     fn recording_toggle_clears_previous() {
         let mut r = Recording::new();
+        let wc = WallClock::new();
         r.toggle();
         let m = make_measurement(b"  1.234");
-        r.push(&m);
-        r.push(&m);
+        r.push(&m, &wc);
+        r.push(&m, &wc);
         assert_eq!(r.samples.len(), 2);
 
         r.toggle(); // stop
@@ -154,15 +157,16 @@ mod tests {
     #[test]
     fn recording_auto_stops_when_full() {
         let mut r = Recording::new();
+        let wc = WallClock::new();
         r.toggle();
         let m = make_measurement(b"  1.234");
         // Fill to one below capacity
         for _ in 0..MAX_RECORDING_SAMPLES - 1 {
-            assert!(!r.push(&m));
+            assert!(!r.push(&m, &wc));
             assert!(r.active);
         }
         // The push that hits capacity should auto-stop and return true
-        assert!(r.push(&m));
+        assert!(r.push(&m, &wc));
         assert!(!r.active);
         assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
         assert!(r.is_full());
@@ -171,23 +175,46 @@ mod tests {
     #[test]
     fn recording_push_after_auto_stop_is_noop() {
         let mut r = Recording::new();
+        let wc = WallClock::new();
         r.toggle();
         let m = make_measurement(b"  1.234");
         for _ in 0..MAX_RECORDING_SAMPLES {
-            r.push(&m);
+            r.push(&m, &wc);
         }
         assert!(!r.active);
         // Further pushes should be no-ops
-        assert!(!r.push(&m));
+        assert!(!r.push(&m, &wc));
         assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
     }
 
     #[test]
     fn sample_from_measurement() {
         let m = make_measurement(b"  5.678");
-        let s = Sample::from_measurement(&m);
+        let wc = WallClock::new();
+        let s = Sample::from_measurement(&m, &wc);
         assert_eq!(s.mode, "DC V");
         assert_eq!(s.value_str, "5.678");
         assert_eq!(s.unit, "V");
+    }
+
+    #[test]
+    fn sample_wall_time_derived_from_measurement_timestamp() {
+        use std::time::Duration;
+        // Build a WallClock whose origin is "now", then construct two
+        // measurements with Instants 500ms apart. The first Sample's wall_time
+        // should equal the WallClock's system origin; the second should be
+        // exactly 500ms later, regardless of when `from_measurement` is
+        // actually called.
+        let wc = WallClock::new();
+        let mut m1 = make_measurement(b"  1.000");
+        let mut m2 = make_measurement(b"  2.000");
+        m1.timestamp = std::time::Instant::now();
+        m2.timestamp = m1.timestamp + Duration::from_millis(500);
+
+        let s1 = Sample::from_measurement(&m1, &wc);
+        let s2 = Sample::from_measurement(&m2, &wc);
+
+        let delta = s2.wall_time.signed_duration_since(s1.wall_time);
+        assert_eq!(delta.num_milliseconds(), 500);
     }
 }

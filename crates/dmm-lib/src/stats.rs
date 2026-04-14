@@ -1,3 +1,4 @@
+use log::warn;
 use std::time::Instant;
 
 /// Tracks min/max/avg statistics for a series of measurements.
@@ -70,6 +71,11 @@ pub struct Integrator {
     prev: Option<(f64, Instant)>,
     pub count: u64,
     pub overload_gaps: u64,
+    /// Intervals skipped because `dt_secs > max_dt_secs`. Incremented every
+    /// time a sample arrives too far after the previous one to contribute a
+    /// sensible trapezoid — typical when the user has a low sample rate
+    /// (longer than `max_dt_secs`) or after a pause/disconnect.
+    pub skipped_intervals: u64,
     max_dt_secs: f64,
     first_time: Option<Instant>,
     last_time: Option<Instant>,
@@ -82,6 +88,7 @@ impl Integrator {
             prev: None,
             count: 0,
             overload_gaps: 0,
+            skipped_intervals: 0,
             max_dt_secs: DEFAULT_MAX_DT_SECS,
             first_time: None,
             last_time: None,
@@ -105,6 +112,15 @@ impl Integrator {
             let dt_secs = dt.as_secs_f64();
             if dt_secs <= self.max_dt_secs {
                 self.integral += (prev_val + value) / 2.0 * dt_secs;
+            } else {
+                if self.skipped_intervals == 0 {
+                    warn!(
+                        "integrator: skipping {dt_secs:.2}s interval (max {:.2}s); \
+                         further skips will be counted in skipped_intervals",
+                        self.max_dt_secs
+                    );
+                }
+                self.skipped_intervals += 1;
             }
         }
         if self.first_time.is_none() {
@@ -291,6 +307,7 @@ mod tests {
         assert_eq!(i.value(), 0.0);
         assert_eq!(i.count, 0);
         assert_eq!(i.overload_gaps, 0);
+        assert_eq!(i.skipped_intervals, 0);
         // max_dt_secs should be preserved
         assert_eq!(i.max_dt_secs, 5.0);
     }
@@ -326,11 +343,25 @@ mod tests {
         // Gap of 5 seconds > max_dt of 1 second → skipped
         i.push(10.0, t0 + Duration::from_secs(5));
         assert_eq!(i.value(), 0.0);
+        assert_eq!(i.skipped_intervals, 1);
 
         // Normal interval within max_dt
         i.push(10.0, t0 + Duration::from_millis(5500));
         // (10 + 10) / 2 * 0.5 = 5.0
         assert!((i.value() - 5.0).abs() < 1e-9);
+        assert_eq!(i.skipped_intervals, 1);
+    }
+
+    #[test]
+    fn integrator_skipped_intervals_counts_every_oversize_gap() {
+        let mut i = Integrator::with_max_dt(1.0);
+        let t0 = Instant::now();
+        i.push(10.0, t0);
+        i.push(10.0, t0 + Duration::from_secs(5));
+        i.push(10.0, t0 + Duration::from_secs(10));
+        i.push(10.0, t0 + Duration::from_secs(15));
+        assert_eq!(i.skipped_intervals, 3);
+        assert_eq!(i.value(), 0.0);
     }
 
     #[test]
