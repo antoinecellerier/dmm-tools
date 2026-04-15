@@ -211,6 +211,50 @@ were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
 Confirmed by real device captures and independently by vendor software
 decompilation (see `references/protocol-comparison.md`).
 
+### GUI accessibility — screen reader walk-through
+
+The GUI accessibility pass wired up AccessKit labels, toggle-state
+announcements, focus rings on custom widgets, modal focus trapping, a
+text summary on the plot, a polite live region on the primary reading,
+and landmark roles (Toolbar / Main / Status).
+
+**Keyboard accessibility — verified.** Manual keyboard-only walk-through
+confirmed:
+
+- Tab order is sensible across every panel (top bar, graph toolbar,
+  plot, stats, recording, remote controls, settings including the
+  expanded Customize colors section).
+- Visible focus rings appear on every Tab stop, including the color-
+  picker swatches, the graph minimap, the recording-panel resize
+  divider, and the left-panel resize handle.
+- Arrow-key behaviour: Left/Right pans the minimap when focused;
+  arrow keys adjust the saturation/value 2D area and the hue 1D
+  gradient inside the color-picker popup; Up/Down resizes the
+  recording-panel divider; Left/Right resizes the left panel handle.
+- Modal focus trapping: opening the `?` shortcut help moves focus
+  inside the modal, Tab cycles within it, and closing (via Esc, the
+  × button activated with Space, or clicking outside) restores focus
+  to the `?` button that opened it. The version-label → What's New
+  viewport follows the same pattern.
+
+**Screen reader walk-through — still pending.** What needs manual
+verification:
+
+- **Orca on Linux** (AT-SPI): Tab through every interactive widget and
+  confirm each announces a sensible name. Toggle HOLD/REL/RANGE/AUTO/
+  MIN-MAX/PEAK/LIVE and confirm "pressed"/"not pressed" is spoken.
+  Check that the plot's state summary is read when focused and that
+  the main reading updates are announced politely (not continuously).
+  Confirm Orca's landmark-nav shortcut (Orca+Ctrl+Shift+L) lists
+  Toolbar, Main, Status.
+- **NVDA or JAWS on Windows** (UI Automation): same checks, since
+  AccessKit's Windows backend is separate from AT-SPI.
+- **VoiceOver on macOS** (NSAccessibility): same checks on the third
+  backend.
+
+Report findings by opening a GitHub issue; the docs should be updated
+to reflect what is actually confirmed working and what still needs fixes.
+
 ## Completed Verification
 
 | Mode/Feature | Mode byte | Status |

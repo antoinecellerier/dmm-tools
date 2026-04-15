@@ -375,11 +375,33 @@ Auto-reconnection retries every 2 seconds after a disconnect.
 
 ## Accessibility
 
-- Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements)
-- Minimum 11pt font; flags use bold text in addition to color
-- [AccessKit](https://accesskit.dev/) screen reader support (Windows, macOS; Linux via AT-SPI). Icon-only buttons and custom widgets have explicit labels.
-- Every button, link, toggle, and setting has a hover tooltip explaining what it does (and the keyboard shortcut, where one exists) — hover any control to learn it without leaving the GUI.
-- All features are keyboard-accessible (see [Keyboard Shortcuts](#keyboard-shortcuts))
+### Visual
+
+- Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements). Minimum 11 pt font; status flags use bold text in addition to color so they don't rely on color alone.
+- Every button, link, toggle, and setting has a hover tooltip explaining what it does — hover any control to learn it without leaving the GUI.
+
+### Keyboard
+
+- Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
+- Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the graph minimap, and the recording-panel resize divider.
+- The `?` keyboard-shortcut help overlay and the "What's New" window both trap focus inside while open. Press Esc or Ctrl+W to close, and focus returns to the button you used to open them.
+
+### Screen reader
+
+Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md). Reports of what does and doesn't come through as expected are welcome.
+
+- Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color.
+- Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, and the graph's LIVE button announce whether they are currently on or off — you don't have to rely on the color change.
+- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you.
+- The graph announces a one-line summary of what it's showing: time window, Y-axis range, number of samples, whether it's following live, and the most recent reading. The summary updates whenever any of those change.
+- Orca's landmark navigation jumps between the top bar (Toolbar), the main content area (Main), and the connection status region (Status).
+
+### Known limitations
+
+- There is no per-sample keyboard navigation inside the graph — you can't step from one data point to the next and hear each value spoken. Use the Statistics panel for min/max/average and the Recording panel's sample list for point-level readings; the sample list is a scrollable text log that screen readers read row by row.
+- Graph measurement cursors (A/B) can only be placed by clicking on the plot.
+- In the **Customize colors** popup, the RGBA drag-value fields use egui's default drag-value behaviour: press Enter to enter edit mode, then Up/Down to change the value. The 2D saturation/value and 1D hue gradient sliders accept arrow keys when Tab-focused (2 % step, horizontal for saturation/hue, vertical for value), but mouse drag remains the fastest way to pick a color.
+- The graph plot's X and Y axes are separate Tab stops that don't show a focus ring — egui_plot allocates focusable drag responses for each axis that can't be customised from outside the crate.
 
 ## See Also
 
