@@ -179,6 +179,12 @@ pub struct Graph {
     /// separately so the release frame still has a valid endpoint even when
     /// hover_pos()/interact_pos() momentarily return None.
     bbox_zoom_current_px: Option<egui::Pos2>,
+    /// Last-rendered minimap widget id, captured in `show_minimap` so that
+    /// `handle_keyboard` (which runs at the top of each frame, before
+    /// `show_minimap`) can detect whether keyboard focus is currently on
+    /// the minimap and suppress egui's directional focus navigation after
+    /// consuming a pan arrow key.
+    last_minimap_id: Option<egui::Id>,
 }
 
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
@@ -237,6 +243,7 @@ impl Graph {
             minimap_drag: MinimapDrag::None,
             bbox_zoom_start_px: None,
             bbox_zoom_current_px: None,
+            last_minimap_id: None,
         }
     }
 
@@ -306,11 +313,39 @@ impl Graph {
 
     /// Handle keyboard shortcuts for graph navigation.
     pub fn handle_keyboard(&mut self, ctx: &egui::Context) {
+        use egui::{Key, Modifiers};
+
+        // Minimap pan: runs even when a widget is focused, because the whole
+        // point is that the minimap IS the focused widget. The
+        // `egui_wants_keyboard_input` gate below returns true for any
+        // focused widget (not just text inputs), so we have to handle this
+        // case before the early return.
+        //
+        // After consuming the arrow key, reset `focus_direction` via
+        // `move_focus(None)` so egui's `end_pass` doesn't Tab-jump off the
+        // minimap via `find_widget_in_direction` — otherwise the pan works
+        // but focus also steals away to the spatially nearest widget on
+        // every key press.
+        let minimap_focused = self
+            .last_minimap_id
+            .is_some_and(|id| ctx.memory(|m| m.focused()) == Some(id));
+        if minimap_focused {
+            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft)) {
+                self.scroll_view(-0.25);
+                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
+            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight)) {
+                self.scroll_view(0.25);
+                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
+        }
+
+        // Everything else: only when no widget has focus (preserves the
+        // existing behaviour that Tab-navigating to a button doesn't steal
+        // arrow/Home/End keys from the graph's pan/jump bindings).
         if ctx.egui_wants_keyboard_input() {
             return;
         }
-
-        use egui::{Key, Modifiers};
 
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::OpenBracket)) {
             self.cycle_time_window(-1);
@@ -512,15 +547,15 @@ impl Graph {
             } else {
                 ui.visuals().weak_text_color()
             };
-            if ui
+            let live_resp = ui
                 .add(egui::Button::new(
                     egui::RichText::new("LIVE").color(live_color).small(),
                 ))
                 .on_hover_text(
                     "Auto-follow the newest samples — off while panning (End to jump back)",
-                )
-                .clicked()
-            {
+                );
+            crate::a11y::set_toggled(ui, live_resp.id, self.live);
+            if live_resp.clicked() {
                 self.live = !self.live;
             }
 
@@ -557,7 +592,9 @@ impl Graph {
                 let field_width = 50.0;
                 let changed_min = ui
                     .add(
-                        egui::TextEdit::singleline(&mut self.y_min_text).desired_width(field_width),
+                        egui::TextEdit::singleline(&mut self.y_min_text)
+                            .desired_width(field_width)
+                            .hint_text("Y axis minimum"),
                     )
                     .on_hover_text("Lower bound of the fixed Y axis")
                     .changed();
@@ -568,7 +605,9 @@ impl Graph {
                 );
                 let changed_max = ui
                     .add(
-                        egui::TextEdit::singleline(&mut self.y_max_text).desired_width(field_width),
+                        egui::TextEdit::singleline(&mut self.y_max_text)
+                            .desired_width(field_width)
+                            .hint_text("Y axis maximum"),
                     )
                     .on_hover_text("Upper bound of the fixed Y axis")
                     .changed();
@@ -618,7 +657,8 @@ impl Graph {
                 let changed = ui
                     .add(
                         egui::TextEdit::singleline(&mut self.envelope_window_text)
-                            .desired_width(30.0),
+                            .desired_width(30.0)
+                            .hint_text("Min/Max window, seconds"),
                     )
                     .on_hover_text("Window size (seconds) used to compute the Min/Max envelope")
                     .changed();
@@ -643,7 +683,11 @@ impl Graph {
             }
             if self.show_ref_line {
                 let changed = ui
-                    .add(egui::TextEdit::singleline(&mut self.ref_line_text).desired_width(80.0))
+                    .add(
+                        egui::TextEdit::singleline(&mut self.ref_line_text)
+                            .desired_width(80.0)
+                            .hint_text("Reference values"),
+                    )
                     .on_hover_text(
                         "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
                     )
@@ -960,6 +1004,11 @@ impl Graph {
         };
         Self::paint_overlay_labels(ui, &response.response, &response.transform, &overlay);
         self.handle_interaction(ui, &response.response, &response.transform, can_interact);
+        // Draw a focus ring on the main plot body when it's keyboard-focused.
+        // Note: egui_plot also allocates separate focusable responses for the
+        // X and Y axes — those receive Tab but don't draw a focus indicator.
+        // Making those invisible to Tab would require patching egui_plot.
+        crate::a11y::paint_focus_ring(ui, &response.response);
     }
 
     /// Paint text labels for overlays (mean, reference lines, cursors) using the
@@ -1274,15 +1323,20 @@ impl Graph {
             egui::vec2(ui.available_width(), total_height),
             egui::Sense::click_and_drag(),
         );
+        // Record the minimap's id so `handle_keyboard` (which runs earlier
+        // in the frame) can detect when the minimap has keyboard focus and
+        // reset `focus_direction` after consuming pan arrow keys.
+        self.last_minimap_id = Some(pointer_response.id);
         let pointer_response = pointer_response.on_hover_text(
             "Minimap — click or drag to pan, drag the bracket edges to resize the view",
         );
         // Give the minimap an accessible label so screen readers can
         // announce it as a navigable element.
-        ui.ctx()
-            .accesskit_node_builder(pointer_response.id, |builder| {
-                builder.set_label("Graph minimap — click or drag to navigate timeline, drag bracket edges to resize");
-            });
+        crate::a11y::set_accessible_label(
+            ui,
+            pointer_response.id,
+            "Graph minimap — click or drag to navigate timeline (Left/Right to pan), drag bracket edges to resize",
+        );
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
             egui::pos2(full_rect.left() + margin, full_rect.top() + margin),
@@ -1495,6 +1549,10 @@ impl Graph {
         if !pointer_response.is_pointer_button_down_on() {
             self.minimap_drag = MinimapDrag::None;
         }
+
+        // Paint focus ring last so it sits on top of the minimap content
+        // (background, brackets, time labels) rather than being overdrawn.
+        crate::a11y::paint_focus_ring(ui, &pointer_response);
     }
 
     /// Combined render: toolbar + main graph + minimap.

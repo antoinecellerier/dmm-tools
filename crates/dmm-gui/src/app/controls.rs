@@ -87,11 +87,9 @@ impl App {
                 } else {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
-                if ui
-                    .add(egui::Button::new(text))
-                    .on_hover_text(tooltip)
-                    .clicked()
-                {
+                let resp = ui.add(egui::Button::new(text)).on_hover_text(tooltip);
+                crate::a11y::set_toggled(ui, resp.id, active);
+                if resp.clicked() {
                     self.send_command(cmd);
                 }
             }
@@ -126,11 +124,9 @@ impl App {
                 } else {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
-                if ui
-                    .add(egui::Button::new(text))
-                    .on_hover_text(tooltip)
-                    .clicked()
-                {
+                let resp = ui.add(egui::Button::new(text)).on_hover_text(tooltip);
+                crate::a11y::set_toggled(ui, resp.id, active);
+                if resp.clicked() {
                     self.send_command(cycle_cmd);
                 }
                 if active && has_cmd(exit_cmd) {
@@ -138,11 +134,10 @@ impl App {
                         .font(egui::FontId::proportional(font_size * 0.8))
                         .color(active_color);
                     let x_btn = egui::Button::new(x_text).min_size(egui::Vec2::ZERO);
-                    if ui
-                        .add(x_btn)
-                        .on_hover_text(format!("Exit {label} mode"))
-                        .clicked()
-                    {
+                    let exit_label = format!("Exit {label} mode");
+                    let x_resp = ui.add(x_btn).on_hover_text(exit_label.clone());
+                    crate::a11y::set_accessible_label(ui, x_resp.id, &exit_label);
+                    if x_resp.clicked() {
                         self.send_command(exit_cmd);
                     }
                 }
@@ -670,6 +665,10 @@ impl App {
                     self.settings.save();
                 }
             });
+        // Paint an explicit focus ring on the header when Tab-focused —
+        // egui's CollapsingHeader shows only a subtle highlight otherwise,
+        // which is easy to miss.
+        crate::a11y::paint_focus_ring(ui, &collapsing.header_response);
         collapsing
             .header_response
             .on_hover_text("Per-color overrides on top of the selected preset");

@@ -1,3 +1,4 @@
+mod a11y;
 mod app;
 mod changelog;
 mod display;

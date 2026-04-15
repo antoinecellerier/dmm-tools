@@ -966,13 +966,20 @@ impl App {
         ui.add_space(spacer);
         let before = ui.cursor().left();
 
+        // A Button (not Label) so the AccessKit role is Button, not Label.
+        // For Role::Label, egui maps the text to AccessKit's `value` field —
+        // `set_label` overrides via `accesskit_node_builder` are ignored, and
+        // screen readers read out the literal version string instead of
+        // "Show release notes". `frame_when_inactive(false)` keeps the
+        // resting visual identical to a label while still painting hover and
+        // focus backgrounds when the user mouses over or Tab-focuses it.
         let version_resp = ui.add(
-            egui::Label::new(
+            egui::Button::new(
                 RichText::new(crate::version_label())
                     .small()
                     .color(ui.visuals().weak_text_color()),
             )
-            .sense(egui::Sense::click()),
+            .frame_when_inactive(false),
         );
         if version_resp.clicked() {
             if self.whats_new_open {
@@ -981,6 +988,7 @@ impl App {
                 self.open_whats_new();
             }
         }
+        crate::a11y::set_accessible_label(ui, version_resp.id, "Show release notes");
         version_resp
             .on_hover_text("Show What's New — release notes for this version")
             .on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -995,7 +1003,7 @@ impl App {
         if shortcuts_btn.clicked() {
             self.shortcut_help_open = !self.shortcut_help_open;
         }
-        Self::set_accessible_label(
+        crate::a11y::set_accessible_label(
             ui,
             shortcuts_btn.id,
             "Keyboard shortcuts and mouse gestures",
@@ -1007,7 +1015,7 @@ impl App {
         if settings_btn.clicked() {
             self.settings_open = !self.settings_open;
         }
-        Self::set_accessible_label(ui, settings_btn.id, "Settings");
+        crate::a11y::set_accessible_label(ui, settings_btn.id, "Settings");
 
         let actual_width = ui.min_rect().right() - before;
         ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
@@ -1016,14 +1024,6 @@ impl App {
     /// Returns true if the app is running on a native Wayland session.
     fn is_wayland() -> bool {
         std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
-    }
-
-    /// Override the AccessKit label for a widget whose visible text is not
-    /// descriptive (e.g. icon-only buttons like "⚙" or "?"). This ensures
-    /// screen readers announce a meaningful name instead of the raw symbol.
-    fn set_accessible_label(ui: &Ui, id: egui::Id, label: &str) {
-        ui.ctx()
-            .accesskit_node_builder(id, |builder| builder.set_label(label));
     }
 
     fn show_stats_section(&mut self, ui: &mut Ui, compact: bool, scale: f32) {
@@ -1343,10 +1343,45 @@ impl App {
                 sep_id,
                 egui::Sense::drag(),
             );
+            crate::a11y::set_accessible_label(
+                ui,
+                sep_response.id,
+                "Resize recording panel (Up/Down to adjust)",
+            );
             if sep_response.dragged() {
                 self.recording_height = (self.recording_height - sep_response.drag_delta().y)
                     .clamp(40.0, (total - 80.0).max(40.0));
             }
+            // Keyboard resize when focused: Up moves the divider up
+            // (grows the recording panel, shrinks the graph); Down moves
+            // it down. Matches the mouse-drag direction. We also reset
+            // `focus_direction` after consuming the arrow key, because
+            // `Focus::begin_pass` already observed the event and set
+            // `focus_direction = Up/Down`; without the reset, `end_pass`
+            // would call `find_widget_in_direction` and Tab-jump off the
+            // divider on every key press.
+            if sep_response.has_focus() {
+                let mut delta = 0.0;
+                if ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp))
+                {
+                    delta += 20.0;
+                }
+                if ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown))
+                {
+                    delta -= 20.0;
+                }
+                if delta != 0.0 {
+                    self.recording_height =
+                        (self.recording_height + delta).clamp(40.0, (total - 80.0).max(40.0));
+                    ui.ctx()
+                        .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+                }
+            }
+            crate::a11y::paint_focus_ring(ui, &sep_response);
             if sep_response.hovered() || sep_response.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
             }
@@ -1629,7 +1664,7 @@ impl eframe::App for App {
                 });
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
-            egui::Panel::left("reading_panel")
+            let reading_panel = egui::Panel::left("reading_panel")
                 .default_size(SIDE_PANEL_DEFAULT_WIDTH)
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
@@ -1663,6 +1698,53 @@ impl eframe::App for App {
                         self.show_stats_section(ui, false, 1.0);
                     }
                 });
+            // egui's `Panel::left(..).resizable(true)` allocates a
+            // drag-sense resize handle at its right edge, which is focusable
+            // but has no visible focus indicator of its own and no keyboard
+            // action. Paint a focus indicator and wire up Left/Right arrow
+            // keys to resize the panel, consistent with the recording-panel
+            // divider. The handle id is derived from the panel id — see
+            // `panel.rs:847` in egui 0.34 for the `__resize` salt.
+            let reading_panel_id = egui::Id::new("reading_panel");
+            let reading_panel_resize_id = reading_panel_id.with("__resize");
+            crate::a11y::set_accessible_label(
+                ui,
+                reading_panel_resize_id,
+                "Resize reading panel (Left/Right to adjust)",
+            );
+            if ctx.memory(|m| m.focused()) == Some(reading_panel_resize_id) {
+                let mut delta = 0.0;
+                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft)) {
+                    delta -= 20.0;
+                }
+                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight)) {
+                    delta += 20.0;
+                }
+                if delta != 0.0 {
+                    if let Some(mut state) = egui::PanelState::load(&ctx, reading_panel_id) {
+                        let new_width = (state.rect.width() + delta)
+                            .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
+                        state.rect.max.x = state.rect.min.x + new_width;
+                        ctx.data_mut(|d| d.insert_persisted(reading_panel_id, state));
+                    }
+                    // Same fix as the recording-panel divider:
+                    // `Focus::begin_pass` observes arrow events and sets
+                    // `focus_direction` before my code runs. Without this
+                    // reset, `end_pass` would Tab-jump off the handle via
+                    // `find_widget_in_direction`.
+                    ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+                }
+                // Paint a 3px focus indicator on the panel's right edge —
+                // the standard focus ring is invisible on the thin vline
+                // egui uses to draw the panel boundary.
+                let panel_rect = reading_panel.response.rect;
+                let stroke_color = ui.visuals().selection.stroke.color;
+                ui.painter().vline(
+                    panel_rect.right(),
+                    panel_rect.y_range(),
+                    egui::Stroke::new(3.0, stroke_color),
+                );
+            }
 
             // Wide: center panel for graph + recording
             egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -1728,7 +1810,7 @@ impl App {
             let color = ui.visuals().weak_text_color();
             let btn = egui::Button::new(RichText::new(icon).size(14.0).color(color));
             let response = ui.add(btn).on_hover_text(tooltip);
-            Self::set_accessible_label(ui, response.id, tooltip);
+            crate::a11y::set_accessible_label(ui, response.id, tooltip);
             if response.clicked() {
                 if self.big_meter_mode == BigMeterMode::Off {
                     // Enter big meter — use cycle_big_meter() to handle
