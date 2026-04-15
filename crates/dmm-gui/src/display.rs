@@ -1,3 +1,4 @@
+use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use eframe::egui::{Color32, FontId, RichText, Ui};
 
@@ -50,7 +51,7 @@ fn live_region_label(measurement: Option<&Measurement>) -> String {
                 MeasuredValue::NcvLevel(l) => format!("NCV level {l}"),
                 MeasuredValue::Normal(_) => format_value_display(m).trim().to_string(),
             };
-            let mut parts = String::with_capacity(64);
+            let mut parts = String::with_capacity(96);
             parts.push_str(&value);
             if !m.unit.is_empty() {
                 parts.push(' ');
@@ -60,10 +61,77 @@ fn live_region_label(measurement: Option<&Measurement>) -> String {
                 parts.push_str(", ");
                 parts.push_str(&m.mode);
             }
+            // Speak the same status flags that the visible badge row shows.
+            // Without this, a screen reader user toggling HOLD/REL/MIN/MAX/
+            // AUTO via the on-device buttons hears the value change but no
+            // confirmation that the mode actually flipped.
+            append_flags_phrase(&mut parts, &m.flags);
             parts
         }
         None => "No reading".to_string(),
     }
+}
+
+/// Append a phrase listing the active status flags, in the same order as
+/// `show_flags` paints them. Each flag is prefixed with ", " so it reads
+/// naturally after the mode field. No-op if all flags are inactive.
+fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
+    let push = |label: &str, out: &mut String| {
+        out.push_str(", ");
+        out.push_str(label);
+    };
+    if flags.auto_range {
+        push("auto range", out);
+    }
+    if flags.hold {
+        push("hold", out);
+    }
+    if flags.rel {
+        push("relative", out);
+    }
+    if flags.min {
+        push("minimum", out);
+    }
+    if flags.max {
+        push("maximum", out);
+    }
+    if flags.peak_min {
+        push("peak minimum", out);
+    }
+    if flags.peak_max {
+        push("peak maximum", out);
+    }
+    if flags.low_battery {
+        push("low battery", out);
+    }
+    if flags.lead_error {
+        push("lead error", out);
+    }
+    if flags.comp {
+        push("compare", out);
+    }
+    if flags.record {
+        push("recording", out);
+    }
+}
+
+/// Pack a `StatusFlags` into a u16 bitfield for fingerprint hashing. Stable
+/// across runs because we list each flag explicitly rather than relying on
+/// struct field order.
+fn flags_bits(flags: &StatusFlags) -> u16 {
+    (flags.hold as u16)
+        | ((flags.rel as u16) << 1)
+        | ((flags.min as u16) << 2)
+        | ((flags.max as u16) << 3)
+        | ((flags.auto_range as u16) << 4)
+        | ((flags.low_battery as u16) << 5)
+        | ((flags.hv_warning as u16) << 6)
+        | ((flags.dc as u16) << 7)
+        | ((flags.peak_max as u16) << 8)
+        | ((flags.peak_min as u16) << 9)
+        | ((flags.lead_error as u16) << 10)
+        | ((flags.comp as u16) << 11)
+        | ((flags.record as u16) << 12)
 }
 
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
@@ -93,6 +161,7 @@ fn live_region_fingerprint(measurement: Option<&Measurement>) -> u64 {
             }
             m.unit.hash(&mut h);
             m.mode.hash(&mut h);
+            flags_bits(&m.flags).hash(&mut h);
         }
     }
     h.finish()
@@ -159,18 +228,25 @@ fn show_reading_sized(
             });
         }
         None => {
-            let placeholder = ui.label(
-                RichText::new(crate::NO_DATA)
-                    .font(FontId::monospace(value_size))
-                    .color(ui.visuals().weak_text_color()),
-            );
+            // Wrap the placeholder + caption in a horizontal scope so the
+            // live-region label is attached to the scope id rather than to
+            // the inner ui.label() Response. egui maps Role::Label
+            // overrides to set_value, not set_label, so attaching directly
+            // to the label would silently drop the live-region label.
+            let row = ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(crate::NO_DATA)
+                        .font(FontId::monospace(value_size))
+                        .color(ui.visuals().weak_text_color()),
+                );
+                ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
+            });
             crate::a11y::set_live_region_cached(
                 ui,
-                placeholder.id,
+                row.response.id,
                 live_region_fingerprint(None),
                 || live_region_label(None),
             );
-            ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
         }
     }
 }
@@ -218,14 +294,19 @@ fn show_reading_inline(
             );
         }
         None => {
-            let placeholder = ui.label(
-                RichText::new(format!("{} No reading", crate::NO_DATA))
-                    .font(FontId::monospace(value_size))
-                    .color(ui.visuals().weak_text_color()),
-            );
+            // See `show_reading_sized` for why the placeholder is wrapped
+            // in a horizontal scope: egui Role::Label silently swallows
+            // accesskit set_label overrides.
+            let row = ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("{} No reading", crate::NO_DATA))
+                        .font(FontId::monospace(value_size))
+                        .color(ui.visuals().weak_text_color()),
+                );
+            });
             crate::a11y::set_live_region_cached(
                 ui,
-                placeholder.id,
+                row.response.id,
                 live_region_fingerprint(None),
                 || live_region_label(None),
             );
@@ -374,14 +455,19 @@ pub fn show_reading_compact(
             );
         }
         None => {
-            let placeholder = ui.label(
-                RichText::new(format!("{} No reading", crate::NO_DATA))
-                    .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
-                    .color(ui.visuals().weak_text_color()),
-            );
+            // See `show_reading_sized` for why the placeholder is wrapped
+            // in a horizontal scope: egui Role::Label silently swallows
+            // accesskit set_label overrides.
+            let row = ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!("{} No reading", crate::NO_DATA))
+                        .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
+                        .color(ui.visuals().weak_text_color()),
+                );
+            });
             crate::a11y::set_live_region_cached(
                 ui,
-                placeholder.id,
+                row.response.id,
                 live_region_fingerprint(None),
                 || live_region_label(None),
             );
@@ -425,6 +511,158 @@ mod tests {
     #[test]
     fn format_display_raw_empty() {
         assert_eq!(format_display_raw(""), "       ");
+    }
+
+    #[test]
+    fn live_region_label_includes_active_flags() {
+        let m = Measurement::test_fixture(
+            MeasuredValue::Normal(1.234),
+            "V",
+            StatusFlags {
+                hold: true,
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        let label = live_region_label(Some(&m));
+        assert!(label.contains("V"), "got {label:?}");
+        assert!(label.contains("DC V"), "got {label:?}");
+        assert!(label.contains("auto range"), "got {label:?}");
+        assert!(label.contains("hold"), "got {label:?}");
+    }
+
+    #[test]
+    fn live_region_label_no_flags_when_inactive() {
+        let m = Measurement::test_fixture(MeasuredValue::Normal(0.0), "V", StatusFlags::default());
+        let label = live_region_label(Some(&m));
+        // StatusFlags::default() is all-false, so no flag phrases should
+        // appear in the spoken label.
+        assert!(!label.contains("hold"), "got {label:?}");
+        assert!(!label.contains("relative"), "got {label:?}");
+        assert!(!label.contains("auto range"), "got {label:?}");
+    }
+
+    #[test]
+    fn live_region_fingerprint_changes_on_flag_toggle() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        let fp1 = live_region_fingerprint(Some(&m));
+        m.flags.hold = true;
+        let fp2 = live_region_fingerprint(Some(&m));
+        assert_ne!(fp1, fp2, "toggling HOLD must change the fingerprint");
+        m.flags.hold = false;
+        m.flags.rel = true;
+        let fp3 = live_region_fingerprint(Some(&m));
+        assert_ne!(fp1, fp3, "toggling REL must change the fingerprint");
+        assert_ne!(fp2, fp3, "REL and HOLD must produce distinct fingerprints");
+    }
+
+    #[test]
+    fn flags_bits_distinct_per_flag() {
+        // Each flag must occupy a distinct bit so toggling any one of them
+        // changes the packed u16. Catches accidental bit collisions.
+        let names = [
+            (
+                "hold",
+                StatusFlags {
+                    hold: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "rel",
+                StatusFlags {
+                    rel: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "min",
+                StatusFlags {
+                    min: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "max",
+                StatusFlags {
+                    max: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "auto_range",
+                StatusFlags {
+                    auto_range: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "low_battery",
+                StatusFlags {
+                    low_battery: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "hv_warning",
+                StatusFlags {
+                    hv_warning: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "dc",
+                StatusFlags {
+                    dc: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "peak_max",
+                StatusFlags {
+                    peak_max: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "peak_min",
+                StatusFlags {
+                    peak_min: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "lead_error",
+                StatusFlags {
+                    lead_error: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "comp",
+                StatusFlags {
+                    comp: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "record",
+                StatusFlags {
+                    record: true,
+                    ..Default::default()
+                },
+            ),
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for (name, flags) in &names {
+            let bits = flags_bits(flags);
+            assert!(
+                bits.count_ones() == 1,
+                "{name} should set exactly one bit, got {bits:#b}"
+            );
+            assert!(seen.insert(bits), "{name} collides with another flag bit");
+        }
     }
 
     #[test]
