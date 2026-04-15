@@ -179,6 +179,10 @@ pub struct Graph {
     /// separately so the release frame still has a valid endpoint even when
     /// hover_pos()/interact_pos() momentarily return None.
     bbox_zoom_current_px: Option<egui::Pos2>,
+    /// Cached AccessKit label for the plot — rebuilt only when state changes.
+    a11y_label: String,
+    /// Signature of the state used to build `a11y_label`, for change detection.
+    a11y_label_sig: u64,
     /// Last-rendered minimap widget id, captured in `show_minimap` so that
     /// `handle_keyboard` (which runs at the top of each frame, before
     /// `show_minimap`) can detect whether keyboard focus is currently on
@@ -243,6 +247,8 @@ impl Graph {
             minimap_drag: MinimapDrag::None,
             bbox_zoom_start_px: None,
             bbox_zoom_current_px: None,
+            a11y_label: String::new(),
+            a11y_label_sig: 0,
             last_minimap_id: None,
         }
     }
@@ -1004,11 +1010,54 @@ impl Graph {
         };
         Self::paint_overlay_labels(ui, &response.response, &response.transform, &overlay);
         self.handle_interaction(ui, &response.response, &response.transform, can_interact);
+        self.update_plot_a11y_label(ui, response.response.id, y_min, y_max);
         // Draw a focus ring on the main plot body when it's keyboard-focused.
         // Note: egui_plot also allocates separate focusable responses for the
         // X and Y axes — those receive Tab but don't draw a focus indicator.
         // Making those invisible to Tab would require patching egui_plot.
         crate::a11y::paint_focus_ring(ui, &response.response);
+    }
+
+    /// Set an AccessKit label on the plot that summarizes current state so
+    /// screen readers have a text alternative to the pixels. Throttled: the
+    /// label is only re-formatted when the underlying state changes.
+    fn update_plot_a11y_label(&mut self, ui: &Ui, plot_id: egui::Id, y_min: f64, y_max: f64) {
+        use std::hash::{Hash, Hasher};
+        let last_value = self.history.back().map(|p| p.value);
+        let sig = {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            self.time_window_secs.to_bits().hash(&mut h);
+            y_min.to_bits().hash(&mut h);
+            y_max.to_bits().hash(&mut h);
+            self.history.len().hash(&mut h);
+            self.live.hash(&mut h);
+            last_value.map(f64::to_bits).hash(&mut h);
+            self.current_unit.hash(&mut h);
+            h.finish()
+        };
+        if sig != self.a11y_label_sig {
+            self.a11y_label_sig = sig;
+            let unit = if self.current_unit.is_empty() {
+                ""
+            } else {
+                &self.current_unit
+            };
+            let state = if self.live { "live" } else { "paused" };
+            let reading = match last_value {
+                Some(v) => format!("last reading {v:.4} {unit}"),
+                None => "no data".to_string(),
+            };
+            self.a11y_label = format!(
+                "Measurement plot. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples. {}. {}.",
+                self.time_window_secs,
+                y_min,
+                y_max,
+                self.history.len(),
+                state,
+                reading,
+            );
+        }
+        crate::a11y::set_accessible_label(ui, plot_id, &self.a11y_label);
     }
 
     /// Paint text labels for overlays (mean, reference lines, cursors) using the

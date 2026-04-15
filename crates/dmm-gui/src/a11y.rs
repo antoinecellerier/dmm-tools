@@ -43,3 +43,39 @@ pub(crate) fn paint_focus_ring(ui: &Ui, response: &Response) {
         );
     }
 }
+
+/// Mark `id` as a polite ARIA-style live region. Screen readers announce
+/// updates to polite live regions at the next pause rather than interrupting
+/// the user. Intended for streaming readouts (e.g. the primary measurement
+/// value).
+///
+/// `make_label` is only called when `fingerprint` has changed since the last
+/// frame, so the caller doesn't pay for `format!`/`String` allocation on
+/// frames where the underlying value is the same. The resulting label is
+/// cached in `ctx.data` and re-applied every frame — egui rebuilds the
+/// AccessKit tree from scratch each frame, so the label has to be set on
+/// every pass even when it hasn't changed.
+pub(crate) fn set_live_region_cached(
+    ui: &Ui,
+    id: egui::Id,
+    fingerprint: u64,
+    make_label: impl FnOnce() -> String,
+) {
+    let fp_key = id.with("a11y_live_fingerprint");
+    let label_key = id.with("a11y_live_label");
+    let prev_fp: Option<u64> = ui.ctx().data(|d| d.get_temp(fp_key));
+    if prev_fp != Some(fingerprint) {
+        let new_label = make_label();
+        ui.ctx().data_mut(|d| {
+            d.insert_temp(fp_key, fingerprint);
+            d.insert_temp(label_key, new_label);
+        });
+    }
+    let label: Option<String> = ui.ctx().data(|d| d.get_temp(label_key));
+    ui.ctx().accesskit_node_builder(id, |builder| {
+        if let Some(label) = label {
+            builder.set_label(label);
+        }
+        builder.set_live(egui::accesskit::Live::Polite);
+    });
+}

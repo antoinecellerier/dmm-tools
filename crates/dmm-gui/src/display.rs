@@ -38,6 +38,66 @@ fn format_value_display(m: &Measurement) -> String {
     }
 }
 
+/// Format a measurement as a spoken-friendly one-line description for screen
+/// readers. Used as the live-region label on the primary reading. Uses the
+/// same value formatting as the visible display so AT users hear exactly
+/// what sighted users see.
+fn live_region_label(measurement: Option<&Measurement>) -> String {
+    match measurement {
+        Some(m) => {
+            let value = match &m.value {
+                MeasuredValue::Overload => "overload".to_string(),
+                MeasuredValue::NcvLevel(l) => format!("NCV level {l}"),
+                MeasuredValue::Normal(_) => format_value_display(m).trim().to_string(),
+            };
+            let mut parts = String::with_capacity(64);
+            parts.push_str(&value);
+            if !m.unit.is_empty() {
+                parts.push(' ');
+                parts.push_str(&m.unit);
+            }
+            if !m.mode.is_empty() {
+                parts.push_str(", ");
+                parts.push_str(&m.mode);
+            }
+            parts
+        }
+        None => "No reading".to_string(),
+    }
+}
+
+/// Build a u64 fingerprint that changes whenever `live_region_label` would
+/// produce different output. Lets `set_live_region_cached` skip per-frame
+/// `format!`/`String` allocation when the measurement is unchanged.
+fn live_region_fingerprint(measurement: Option<&Measurement>) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    match measurement {
+        None => 0u8.hash(&mut h),
+        Some(m) => {
+            1u8.hash(&mut h);
+            match &m.value {
+                MeasuredValue::Normal(v) => {
+                    0u8.hash(&mut h);
+                    v.to_bits().hash(&mut h);
+                    // display_raw is what we actually format for Normal values,
+                    // so include it so the fingerprint catches stable-string
+                    // changes that don't show up in the f64 bits.
+                    m.display_raw.as_deref().unwrap_or("").hash(&mut h);
+                }
+                MeasuredValue::Overload => 1u8.hash(&mut h),
+                MeasuredValue::NcvLevel(l) => {
+                    2u8.hash(&mut h);
+                    l.hash(&mut h);
+                }
+            }
+            m.unit.hash(&mut h);
+            m.mode.hash(&mut h);
+        }
+    }
+    h.finish()
+}
+
 /// Prepare the value text and color from a measurement.
 fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32) {
     match &m.value {
@@ -61,7 +121,7 @@ fn show_reading_sized(
         Some(m) => {
             let (value_text, value_color) = value_display(ui, m, tc);
 
-            ui.horizontal(|ui| {
+            let value_row = ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.label(
                     RichText::new(&value_text)
@@ -74,6 +134,12 @@ fn show_reading_sized(
                         .color(ui.visuals().text_color()),
                 );
             });
+            crate::a11y::set_live_region_cached(
+                ui,
+                value_row.response.id,
+                live_region_fingerprint(Some(m)),
+                || live_region_label(Some(m)),
+            );
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
@@ -93,10 +159,16 @@ fn show_reading_sized(
             });
         }
         None => {
-            ui.label(
+            let placeholder = ui.label(
                 RichText::new(crate::NO_DATA)
                     .font(FontId::monospace(value_size))
                     .color(ui.visuals().weak_text_color()),
+            );
+            crate::a11y::set_live_region_cached(
+                ui,
+                placeholder.id,
+                live_region_fingerprint(None),
+                || live_region_label(None),
             );
             ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
         }
@@ -117,7 +189,7 @@ fn show_reading_inline(
         Some(m) => {
             let (value_text, value_color) = value_display(ui, m, tc);
 
-            ui.horizontal(|ui| {
+            let row = ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.label(
                     RichText::new(&value_text)
@@ -138,12 +210,24 @@ fn show_reading_inline(
                 );
                 show_flags(ui, m, mode_size, tc);
             });
+            crate::a11y::set_live_region_cached(
+                ui,
+                row.response.id,
+                live_region_fingerprint(Some(m)),
+                || live_region_label(Some(m)),
+            );
         }
         None => {
-            ui.label(
+            let placeholder = ui.label(
                 RichText::new(format!("{} No reading", crate::NO_DATA))
                     .font(FontId::monospace(value_size))
                     .color(ui.visuals().weak_text_color()),
+            );
+            crate::a11y::set_live_region_cached(
+                ui,
+                placeholder.id,
+                live_region_fingerprint(None),
+                || live_region_label(None),
             );
         }
     }
@@ -266,7 +350,7 @@ pub fn show_reading_compact(
             let value_text = format_value_display(m);
             let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
 
-            ui.horizontal(|ui| {
+            let row = ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.label(
                     RichText::new(&value_text).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
@@ -282,12 +366,24 @@ pub fn show_reading_compact(
                 );
                 show_flags(ui, m, 0.0, &tc);
             });
+            crate::a11y::set_live_region_cached(
+                ui,
+                row.response.id,
+                live_region_fingerprint(Some(m)),
+                || live_region_label(Some(m)),
+            );
         }
         None => {
-            ui.label(
+            let placeholder = ui.label(
                 RichText::new(format!("{} No reading", crate::NO_DATA))
                     .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
                     .color(ui.visuals().weak_text_color()),
+            );
+            crate::a11y::set_live_region_cached(
+                ui,
+                placeholder.id,
+                live_region_fingerprint(None),
+                || live_region_label(None),
             );
         }
     }
