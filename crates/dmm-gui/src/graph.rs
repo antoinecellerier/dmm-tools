@@ -890,8 +890,8 @@ impl Graph {
         let cursor_b = self.cursor_b;
         let cursor_va = cursor_a.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
         let cursor_vb = cursor_b.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
-        let mean_value = self.visible_stats().map(|(_, _, avg, _)| avg);
         let visible_stats = self.visible_stats();
+        let mean_value = visible_stats.map(|(_, _, avg, _)| avg);
 
         let cursor_unit = self.current_unit.clone();
         let plot = Plot::new("main_plot")
@@ -1428,20 +1428,26 @@ impl Graph {
         // Background
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
 
-        // Draw data lines
+        // Draw data lines.
+        //
+        // The Y range is identical for every point in every segment because it
+        // covers the whole history (`data_min..data_max`). Compute it once
+        // before the loop — pulling this call inside the per-point closure
+        // turned the minimap into an O(n²) hot spot, which dominated frame
+        // time once the history filled.
+        let y_map = self.y_range_for_view(data_min, data_max).map(|(lo, hi)| {
+            let range = (hi - lo).max(1e-10);
+            (lo, range)
+        });
         for seg in raw_segments {
             let points: Vec<egui::Pos2> = seg
                 .iter()
                 .map(|&[t, v]| {
                     let x = time_to_x(t);
-                    // Simple Y mapping: find Y range from all data
-                    let y_frac =
-                        if let Some((y_lo, y_hi)) = self.y_range_for_view(data_min, data_max) {
-                            let range = (y_hi - y_lo).max(1e-10);
-                            ((v - y_lo) / range) as f32
-                        } else {
-                            0.5
-                        };
+                    let y_frac = match y_map {
+                        Some((y_lo, range)) => ((v - y_lo) / range) as f32,
+                        None => 0.5,
+                    };
                     let y = rect.bottom() - y_frac * rect.height();
                     egui::pos2(x, y)
                 })
@@ -1731,11 +1737,14 @@ impl Graph {
         }
     }
 
-    /// Build min/max envelope using a sliding window centered on each data point.
-    /// Returns (min_points, max_points) as Vec<[f64; 2]>.
     /// Build min/max envelope using a trailing sliding window.
     /// At each data point time `t`, computes min/max of all points in `[t - window, t]`.
     /// This answers "what was the range over the last N seconds?" with no look-ahead.
+    ///
+    /// Sliding-window min/max via two monotonic deques (front holds the
+    /// current extremum). Each index is pushed and popped at most once, so
+    /// the whole pass is O(n) instead of the previous O(n²) which re-scanned
+    /// the window for every point.
     fn build_envelope(
         &self,
         x_min: f64,
@@ -1759,30 +1768,42 @@ impl Graph {
         let n = points.len();
         let mut min_pts = Vec::with_capacity(n);
         let mut max_pts = Vec::with_capacity(n);
-        let mut lo = 0;
+        // Deques hold indices into `points`, with values monotonically
+        // increasing (min) or decreasing (max). The front is always the
+        // extremum of the current window.
+        let mut min_deque: VecDeque<usize> = VecDeque::new();
+        let mut max_deque: VecDeque<usize> = VecDeque::new();
 
-        for i in 0..n {
-            let (t, _) = points[i];
-            // Only emit envelope points within the visible range
+        for (i, &(t, v)) in points.iter().enumerate() {
+            // Maintain the monotonic invariant by popping any back entries
+            // that the new value supersedes.
+            while min_deque.back().is_some_and(|&b| points[b].1 >= v) {
+                min_deque.pop_back();
+            }
+            min_deque.push_back(i);
+            while max_deque.back().is_some_and(|&b| points[b].1 <= v) {
+                max_deque.pop_back();
+            }
+            max_deque.push_back(i);
+
+            // Drop fronts that have fallen out of the trailing window.
+            let win_start = t - window;
+            while min_deque.front().is_some_and(|&f| points[f].0 < win_start) {
+                min_deque.pop_front();
+            }
+            while max_deque.front().is_some_and(|&f| points[f].0 < win_start) {
+                max_deque.pop_front();
+            }
+
+            // Only emit envelope points within the visible range. Points
+            // before `x_min` still feed the deques so the first visible
+            // sample sees the correct trailing window.
             if t < x_min {
                 continue;
             }
 
-            let win_start = t - window;
-
-            // Advance lo pointer past points before the window
-            while lo < n && points[lo].0 < win_start {
-                lo += 1;
-            }
-
-            // Scan [lo..] for points in [t - window, t]
-            let mut vmin = f64::INFINITY;
-            let mut vmax = f64::NEG_INFINITY;
-            for p in points.iter().take(i + 1).skip(lo) {
-                vmin = vmin.min(p.1);
-                vmax = vmax.max(p.1);
-            }
-
+            let vmin = points[*min_deque.front().expect("min deque non-empty after push")].1;
+            let vmax = points[*max_deque.front().expect("max deque non-empty after push")].1;
             min_pts.push([t, vmin]);
             max_pts.push([t, vmax]);
         }
@@ -2137,6 +2158,48 @@ mod tests {
         assert!(!g.y_axis_fixed);
         assert!(!g.y_user_set);
         assert_eq!(g.view_center, 0.0);
+    }
+
+    #[test]
+    fn build_envelope_sliding_window_extrema() {
+        // Place points one second apart so each subsequent sample is one
+        // window step. With window=2.5s, the trailing window at each point
+        // covers itself plus the previous two samples (gap of 2s ≤ 2.5s).
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        let values = [3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
+        for (i, &v) in values.iter().enumerate() {
+            g.push(v, t0 + Duration::from_secs(i as u64), "DC V", "V", None);
+        }
+
+        let (min_pts, max_pts) = g.build_envelope(0.0, 7.0, 2.5);
+        assert_eq!(min_pts.len(), values.len());
+        assert_eq!(max_pts.len(), values.len());
+
+        // Reference: brute-force the trailing window for every point.
+        for i in 0..values.len() {
+            let t = i as f64;
+            let win_start = t - 2.5;
+            let mut bf_min = f64::INFINITY;
+            let mut bf_max = f64::NEG_INFINITY;
+            for (j, &v) in values.iter().enumerate() {
+                let tj = j as f64;
+                if tj >= win_start && tj <= t {
+                    bf_min = bf_min.min(v);
+                    bf_max = bf_max.max(v);
+                }
+            }
+            assert!(
+                (min_pts[i][1] - bf_min).abs() < 1e-12,
+                "min[{i}]={} expected {bf_min}",
+                min_pts[i][1]
+            );
+            assert!(
+                (max_pts[i][1] - bf_max).abs() < 1e-12,
+                "max[{i}]={} expected {bf_max}",
+                max_pts[i][1]
+            );
+        }
     }
 
     #[test]
