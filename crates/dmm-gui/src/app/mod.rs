@@ -188,6 +188,12 @@ pub struct App {
     /// Widget id that opened the shortcut help window — focus is restored to
     /// this widget when the window closes so keyboard users don't lose place.
     shortcut_help_opener: Option<egui::Id>,
+    /// Pending focus target to restore after the shortcut help modal closes.
+    /// The restore is deferred until `top_modal_layer` has actually cleared —
+    /// otherwise egui's `create_widget` calls `surrender_focus` on widgets
+    /// below the modal layer (still committed from the close frame) and
+    /// wipes any focus we set in the close path.
+    shortcut_help_restore_focus: Option<egui::Id>,
     /// Set on the frame the shortcut help window is opened so the next frame
     /// can focus the first widget inside it (one-shot trigger).
     shortcut_help_focus_pending: bool,
@@ -258,6 +264,7 @@ impl App {
             big_meter_mode: BigMeterMode::Off,
             shortcut_help_open: false,
             shortcut_help_opener: None,
+            shortcut_help_restore_focus: None,
             shortcut_help_focus_pending: false,
             whats_new_open: false,
             whats_new_opener: None,
@@ -467,12 +474,9 @@ impl App {
         // OS viewport and handles its own close.
         if self.shortcut_help_open && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::W)) {
             self.shortcut_help_open = false;
-            // Restore focus immediately — `show_shortcut_help` early-returns
-            // this frame because the modal is now closed, so it won't run the
-            // restore-focus path itself.
-            if let Some(opener) = self.shortcut_help_opener.take() {
-                ctx.memory_mut(|m| m.request_focus(opener));
-            }
+            // Defer focus restoration until after top_modal_layer clears —
+            // same reason as the in-modal close path in `show_shortcut_help`.
+            self.shortcut_help_restore_focus = self.shortcut_help_opener.take();
         }
 
         // --- Bare-key shortcuts (only when no text field has focus) ---
@@ -489,9 +493,14 @@ impl App {
                 let will_open = !self.shortcut_help_open;
                 self.shortcut_help_open = will_open;
                 if will_open {
-                    // No opener id when triggered from the keyboard — focus
-                    // won't be restored to a specific button, but egui will
-                    // retain whichever widget was focused before.
+                    // Capture whatever widget currently has focus so we can
+                    // restore to it when the modal closes. Can't rely on
+                    // "egui will retain focus" — Focus::begin_pass clears
+                    // focused_widget unconditionally when it sees Escape, so
+                    // without an explicit opener the next Tab lands on the
+                    // first widget in the top bar instead of the one the
+                    // user was on.
+                    self.shortcut_help_opener = ctx.memory(|m| m.focused());
                     self.shortcut_help_focus_pending = true;
                 }
             }
@@ -1500,6 +1509,17 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        // Deferred focus restoration after the shortcut help modal closes.
+        // We only run this once `top_modal_layer` has actually cleared —
+        // otherwise egui's `create_widget` would `surrender_focus` the
+        // target widget while rendering the top bar, because it's below
+        // the still-committed modal layer.
+        if let Some(target) = self.shortcut_help_restore_focus
+            && ctx.memory(|m| m.top_modal_layer()).is_none()
+        {
+            ctx.memory_mut(|m| m.request_focus(target));
+            self.shortcut_help_restore_focus = None;
+        }
         self.apply_theme(&ctx);
         self.apply_color_overrides(&ctx);
         self.apply_zoom(&ctx);
@@ -2005,11 +2025,14 @@ impl App {
         // handle_keyboard_shortcuts so it works while focus is in the modal).
         if close_clicked || modal_response.should_close() {
             self.shortcut_help_open = false;
-            // Restore focus to the widget that opened the modal so keyboard
-            // users don't get teleported to the top of the Tab order.
-            if let Some(opener) = self.shortcut_help_opener.take() {
-                ctx.memory_mut(|m| m.request_focus(opener));
-            }
+            // Defer focus restoration. On this frame `top_modal_layer` is
+            // still set, and egui's `create_widget` will call
+            // `surrender_focus` on every top-bar widget below the modal
+            // layer on the *next* frame — including the `?` button — which
+            // silently wipes any focus we set here. The deferred restore
+            // fires once `top_modal_layer` has actually cleared, so the
+            // target widget can keep the focus it's given.
+            self.shortcut_help_restore_focus = self.shortcut_help_opener.take();
         }
     }
 
