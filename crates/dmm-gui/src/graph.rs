@@ -366,22 +366,25 @@ impl Graph {
         // focused widget (not just text inputs), so we have to handle this
         // case before the early return.
         //
-        // After consuming the arrow key, reset `focus_direction` via
-        // `move_focus(None)` so egui's `end_pass` doesn't Tab-jump off the
-        // minimap via `find_widget_in_direction` — otherwise the pan works
-        // but focus also steals away to the spatially nearest widget on
-        // every key press.
+        // While the minimap is focused, unconditionally clear
+        // `focus_direction` *every frame*. egui's `Focus::begin_pass`
+        // snapshots arrow events into `focus_direction` before any widget
+        // code runs, and `end_pass` commits a directional Tab move from
+        // it without checking whether the event was consumed. If we only
+        // reset on the axis we *handled* (Left/Right), an Up/Down press
+        // would still steal focus to the spatially nearest widget. The
+        // unconditional reset closes that hole and is cheap (one memory
+        // write per frame the minimap is focused).
         let minimap_focused = self
             .last_minimap_id
             .is_some_and(|id| ctx.memory(|m| m.focused()) == Some(id));
         if minimap_focused {
+            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft)) {
                 self.scroll_view(-0.25);
-                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
             }
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight)) {
                 self.scroll_view(0.25);
-                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
             }
         }
 

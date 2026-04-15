@@ -844,7 +844,13 @@ impl App {
     /// order so that Tab key navigation follows visual reading order
     /// (Help → ? → ⚙) rather than the reverse.
     fn show_top_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
-        let scope = ui.scope(|ui| self.show_top_bar_inner(ui, ctx));
+        // Explicit id_salt so the Toolbar landmark stays stable across
+        // frames. egui's default scope id is derived from a running
+        // `next_auto_id_salt` counter; if any sibling above ever changes
+        // shape, the salt shifts and AT loses track of the landmark.
+        let scope = ui.scope_builder(egui::UiBuilder::new().id_salt("top_bar_landmark"), |ui| {
+            self.show_top_bar_inner(ui, ctx)
+        });
         crate::a11y::set_role(ui, scope.response.id, egui::accesskit::Role::Toolbar);
     }
 
@@ -940,46 +946,53 @@ impl App {
 
             // Group status indicators (dot, label, experimental badge, toast)
             // so the whole region exposes a Role::Status landmark to AT.
-            let status_scope = ui.scope(|ui| {
-                // Decorative status dot — not interactive or focusable.
-                let (rect, _) =
-                    ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                ui.painter().circle_filled(rect.center(), 5.0, dot_color);
-                ui.label(RichText::new(&status_text).small());
+            //
+            // Explicit id_salt: this scope sits inside a horizontal whose
+            // sibling layout changes whenever the connection state flips
+            // (Connect button vs. Disconnect+Pause+Clear). Without an
+            // explicit salt, the auto-derived scope id flips on every
+            // state transition and AT loses the Status landmark.
+            let status_scope =
+                ui.scope_builder(egui::UiBuilder::new().id_salt("status_landmark"), |ui| {
+                    // Decorative status dot — not interactive or focusable.
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                    ui.painter().circle_filled(rect.center(), 5.0, dot_color);
+                    ui.label(RichText::new(&status_text).small());
 
-                // Show EXPERIMENTAL badge based on connected state or selected device.
-                let device_entry = self.selected_device();
-                let proto = (device_entry.new_protocol)();
-                let profile = proto.profile();
-                let is_experimental = if self.connection_state == ConnectionState::Connected {
-                    self.experimental
-                } else {
-                    profile.stability == dmm_lib::protocol::Stability::Experimental
-                };
-                if is_experimental {
-                    let url = if self.connection_state == ConnectionState::Connected
-                        && !self.feedback_url.is_empty()
-                    {
-                        self.feedback_url.clone()
+                    // Show EXPERIMENTAL badge based on connected state or selected device.
+                    let device_entry = self.selected_device();
+                    let proto = (device_entry.new_protocol)();
+                    let profile = proto.profile();
+                    let is_experimental = if self.connection_state == ConnectionState::Connected {
+                        self.experimental
                     } else {
-                        profile.feedback_url()
+                        profile.stability == dmm_lib::protocol::Stability::Experimental
                     };
-                    ui.hyperlink_to(
-                        RichText::new("EXPERIMENTAL").small().strong().color(orange),
-                        url,
-                    )
-                    .on_hover_text(format!(
-                        "{} support is experimental \u{2014} click to report feedback",
-                        profile.model_name
-                    ));
-                }
+                    if is_experimental {
+                        let url = if self.connection_state == ConnectionState::Connected
+                            && !self.feedback_url.is_empty()
+                        {
+                            self.feedback_url.clone()
+                        } else {
+                            profile.feedback_url()
+                        };
+                        ui.hyperlink_to(
+                            RichText::new("EXPERIMENTAL").small().strong().color(orange),
+                            url,
+                        )
+                        .on_hover_text(format!(
+                            "{} support is experimental \u{2014} click to report feedback",
+                            profile.model_name
+                        ));
+                    }
 
-                // Toast inline on this row
-                if let Some((msg, is_error, _)) = &self.toast {
-                    let color = if *is_error { tc.status_error() } else { green };
-                    ui.label(RichText::new(msg).small().color(color));
-                }
-            });
+                    // Toast inline on this row
+                    if let Some((msg, is_error, _)) = &self.toast {
+                        let color = if *is_error { tc.status_error() } else { green };
+                        ui.label(RichText::new(msg).small().color(color));
+                    }
+                });
             crate::a11y::set_role(ui, status_scope.response.id, egui::accesskit::Role::Status);
 
             let left_width = ui.min_rect().right() - left_start;
@@ -1414,6 +1427,13 @@ impl App {
             // `find_widget_in_direction` and Tab-jump off the divider on
             // every key press.
             if sep_response.has_focus() {
+                // Unconditional reset every frame the divider is focused —
+                // even on Left/Right which we don't handle. egui's
+                // begin_pass snapshots ALL arrow events into
+                // focus_direction before our code runs, and end_pass would
+                // Tab-jump off via find_widget_in_direction otherwise.
+                ui.ctx()
+                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
                 let mut delta = 0.0;
                 if ui
                     .ctx()
@@ -1430,8 +1450,6 @@ impl App {
                 if delta != 0.0 {
                     self.recording_height =
                         (self.recording_height + delta).clamp(40.0, (total - 80.0).max(40.0));
-                    ui.ctx()
-                        .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
                 }
             }
             crate::a11y::paint_focus_ring(ui, &sep_response);
@@ -1778,6 +1796,13 @@ impl eframe::App for App {
                 "Resize reading panel (Left/Right to adjust)",
             );
             if ctx.memory(|m| m.focused()) == Some(reading_panel_resize_id) {
+                // Unconditional reset every frame the handle is focused —
+                // even on Up/Down which we don't handle. egui's
+                // `Focus::begin_pass` snapshots ALL arrow events into
+                // `focus_direction` before my code runs, and `end_pass`
+                // would Tab-jump off the handle via
+                // `find_widget_in_direction` on the unhandled axis.
+                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
                 let mut delta = 0.0;
                 if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft)) {
                     delta -= 20.0;
@@ -1785,19 +1810,13 @@ impl eframe::App for App {
                 if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight)) {
                     delta += 20.0;
                 }
-                if delta != 0.0 {
-                    if let Some(mut state) = egui::PanelState::load(&ctx, reading_panel_id) {
-                        let new_width = (state.rect.width() + delta)
-                            .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
-                        state.rect.max.x = state.rect.min.x + new_width;
-                        ctx.data_mut(|d| d.insert_persisted(reading_panel_id, state));
-                    }
-                    // Same fix as the recording-panel divider:
-                    // `Focus::begin_pass` observes arrow events and sets
-                    // `focus_direction` before my code runs. Without this
-                    // reset, `end_pass` would Tab-jump off the handle via
-                    // `find_widget_in_direction`.
-                    ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+                if delta != 0.0
+                    && let Some(mut state) = egui::PanelState::load(&ctx, reading_panel_id)
+                {
+                    let new_width = (state.rect.width() + delta)
+                        .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
+                    state.rect.max.x = state.rect.min.x + new_width;
+                    ctx.data_mut(|d| d.insert_persisted(reading_panel_id, state));
                 }
                 // Paint a 3px focus indicator on the panel's right edge —
                 // the standard focus ring is invisible on the thin vline
