@@ -29,6 +29,13 @@ pub(crate) fn set_toggled(ui: &Ui, id: egui::Id, selected: bool) {
     });
 }
 
+/// Tag `id` with an AccessKit semantic role so assistive tech can expose it
+/// as a landmark (Toolbar, Main, Status, etc.) for flat-review navigation.
+pub(crate) fn set_role(ui: &Ui, id: egui::Id, role: egui::accesskit::Role) {
+    ui.ctx()
+        .accesskit_node_builder(id, |builder| builder.set_role(role));
+}
+
 /// Paint a high-contrast focus ring around `response` when it has keyboard
 /// focus. Use for custom-painted widgets (color swatches, minimap, split
 /// dividers) whose own paint overdraws the default focus rectangle.

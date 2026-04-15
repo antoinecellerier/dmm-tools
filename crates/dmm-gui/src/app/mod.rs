@@ -185,8 +185,17 @@ pub struct App {
     big_meter_mode: BigMeterMode,
     /// Whether the keyboard shortcut help overlay is open.
     shortcut_help_open: bool,
+    /// Widget id that opened the shortcut help window — focus is restored to
+    /// this widget when the window closes so keyboard users don't lose place.
+    shortcut_help_opener: Option<egui::Id>,
+    /// Set on the frame the shortcut help window is opened so the next frame
+    /// can focus the first widget inside it (one-shot trigger).
+    shortcut_help_focus_pending: bool,
     /// Whether the "What's New" changelog window is open.
     whats_new_open: bool,
+    /// Widget id that opened the What's New viewport — focus is restored to
+    /// this widget when the viewport closes.
+    whats_new_opener: Option<egui::Id>,
     /// Set by the viewport callback when the user closes the changelog window.
     whats_new_closed: Arc<AtomicBool>,
     /// Shared commonmark cache for the changelog viewport.
@@ -248,7 +257,10 @@ impl App {
             meter_recalc_passes: 0,
             big_meter_mode: BigMeterMode::Off,
             shortcut_help_open: false,
+            shortcut_help_opener: None,
+            shortcut_help_focus_pending: false,
             whats_new_open: false,
+            whats_new_opener: None,
             whats_new_closed: Arc::new(AtomicBool::new(false)),
             whats_new_cache: Arc::new(Mutex::new(egui_commonmark::CommonMarkCache::default())),
         }
@@ -449,16 +461,18 @@ impl App {
             self.zoom_reset();
         }
 
-        // Escape / Ctrl+W: Close shortcut help overlay (if open).
-        // Note: the What's New window is a separate OS viewport and handles
-        // its own close via the window's X button.
-        if self.shortcut_help_open
-            && ctx.input_mut(|i| {
-                i.consume_key(Modifiers::NONE, Key::Escape)
-                    || i.consume_key(Modifiers::COMMAND, Key::W)
-            })
-        {
+        // Ctrl+W: Close shortcut help overlay (if open). Escape is handled
+        // natively by `egui::Modal::should_close()` inside `show_shortcut_help`,
+        // so we only consume Ctrl+W here. The What's New window is a separate
+        // OS viewport and handles its own close.
+        if self.shortcut_help_open && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::W)) {
             self.shortcut_help_open = false;
+            // Restore focus immediately — `show_shortcut_help` early-returns
+            // this frame because the modal is now closed, so it won't run the
+            // restore-focus path itself.
+            if let Some(opener) = self.shortcut_help_opener.take() {
+                ctx.memory_mut(|m| m.request_focus(opener));
+            }
         }
 
         // --- Bare-key shortcuts (only when no text field has focus) ---
@@ -472,7 +486,14 @@ impl App {
 
             // ?: Toggle shortcut help
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Questionmark)) {
-                self.shortcut_help_open = !self.shortcut_help_open;
+                let will_open = !self.shortcut_help_open;
+                self.shortcut_help_open = will_open;
+                if will_open {
+                    // No opener id when triggered from the keyboard — focus
+                    // won't be restored to a specific button, but egui will
+                    // retain whichever widget was focused before.
+                    self.shortcut_help_focus_pending = true;
+                }
             }
         }
     }
@@ -808,6 +829,11 @@ impl App {
     /// order so that Tab key navigation follows visual reading order
     /// (Help → ? → ⚙) rather than the reverse.
     fn show_top_bar(&mut self, ui: &mut Ui, ctx: &egui::Context) {
+        let scope = ui.scope(|ui| self.show_top_bar_inner(ui, ctx));
+        crate::a11y::set_role(ui, scope.response.id, egui::accesskit::Role::Toolbar);
+    }
+
+    fn show_top_bar_inner(&mut self, ui: &mut Ui, ctx: &egui::Context) {
         let tc = self.theme_colors(ui.visuals().dark_mode);
         let green = tc.status_ok();
         let orange = tc.status_warning();
@@ -897,43 +923,49 @@ impl App {
                 ConnectionState::Reconnecting => (orange, "Reconnecting...".to_string()),
             };
 
-            // Decorative status dot — not interactive or focusable.
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-            ui.painter().circle_filled(rect.center(), 5.0, dot_color);
-            ui.label(RichText::new(status_text).small());
+            // Group status indicators (dot, label, experimental badge, toast)
+            // so the whole region exposes a Role::Status landmark to AT.
+            let status_scope = ui.scope(|ui| {
+                // Decorative status dot — not interactive or focusable.
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                ui.painter().circle_filled(rect.center(), 5.0, dot_color);
+                ui.label(RichText::new(&status_text).small());
 
-            // Show EXPERIMENTAL badge based on connected state or selected device.
-            let device_entry = self.selected_device();
-            let proto = (device_entry.new_protocol)();
-            let profile = proto.profile();
-            let is_experimental = if self.connection_state == ConnectionState::Connected {
-                self.experimental
-            } else {
-                profile.stability == dmm_lib::protocol::Stability::Experimental
-            };
-            if is_experimental {
-                let url = if self.connection_state == ConnectionState::Connected
-                    && !self.feedback_url.is_empty()
-                {
-                    self.feedback_url.clone()
+                // Show EXPERIMENTAL badge based on connected state or selected device.
+                let device_entry = self.selected_device();
+                let proto = (device_entry.new_protocol)();
+                let profile = proto.profile();
+                let is_experimental = if self.connection_state == ConnectionState::Connected {
+                    self.experimental
                 } else {
-                    profile.feedback_url()
+                    profile.stability == dmm_lib::protocol::Stability::Experimental
                 };
-                ui.hyperlink_to(
-                    RichText::new("EXPERIMENTAL").small().strong().color(orange),
-                    url,
-                )
-                .on_hover_text(format!(
-                    "{} support is experimental \u{2014} click to report feedback",
-                    profile.model_name
-                ));
-            }
+                if is_experimental {
+                    let url = if self.connection_state == ConnectionState::Connected
+                        && !self.feedback_url.is_empty()
+                    {
+                        self.feedback_url.clone()
+                    } else {
+                        profile.feedback_url()
+                    };
+                    ui.hyperlink_to(
+                        RichText::new("EXPERIMENTAL").small().strong().color(orange),
+                        url,
+                    )
+                    .on_hover_text(format!(
+                        "{} support is experimental \u{2014} click to report feedback",
+                        profile.model_name
+                    ));
+                }
 
-            // Toast inline on this row
-            if let Some((msg, is_error, _)) = &self.toast {
-                let color = if *is_error { tc.status_error() } else { green };
-                ui.label(RichText::new(msg).small().color(color));
-            }
+                // Toast inline on this row
+                if let Some((msg, is_error, _)) = &self.toast {
+                    let color = if *is_error { tc.status_error() } else { green };
+                    ui.label(RichText::new(msg).small().color(color));
+                }
+            });
+            crate::a11y::set_role(ui, status_scope.response.id, egui::accesskit::Role::Status);
 
             let left_width = ui.min_rect().right() - left_start;
             ui.data_mut(|d| d.insert_temp(left_id, left_width));
@@ -985,6 +1017,7 @@ impl App {
             if self.whats_new_open {
                 self.whats_new_open = false;
             } else {
+                self.whats_new_opener = Some(version_resp.id);
                 self.open_whats_new();
             }
         }
@@ -1001,7 +1034,12 @@ impl App {
             .button("?")
             .on_hover_text("Show keyboard shortcuts and mouse gestures (?)");
         if shortcuts_btn.clicked() {
-            self.shortcut_help_open = !self.shortcut_help_open;
+            let will_open = !self.shortcut_help_open;
+            self.shortcut_help_open = will_open;
+            if will_open {
+                self.shortcut_help_opener = Some(shortcuts_btn.id);
+                self.shortcut_help_focus_pending = true;
+            }
         }
         crate::a11y::set_accessible_label(
             ui,
@@ -1353,13 +1391,13 @@ impl App {
                     .clamp(40.0, (total - 80.0).max(40.0));
             }
             // Keyboard resize when focused: Up moves the divider up
-            // (grows the recording panel, shrinks the graph); Down moves
-            // it down. Matches the mouse-drag direction. We also reset
-            // `focus_direction` after consuming the arrow key, because
-            // `Focus::begin_pass` already observed the event and set
-            // `focus_direction = Up/Down`; without the reset, `end_pass`
-            // would call `find_widget_in_direction` and Tab-jump off the
-            // divider on every key press.
+            // (grows the recording panel), Down moves it down. Matches
+            // mouse-drag direction. We also reset `focus_direction` after
+            // consuming the arrow key — `Focus::begin_pass` already
+            // observed the event and set `focus_direction = Up/Down`, and
+            // without the reset `end_pass` would call
+            // `find_widget_in_direction` and Tab-jump off the divider on
+            // every key press.
             if sep_response.has_focus() {
                 let mut delta = 0.0;
                 if ui
@@ -1566,7 +1604,7 @@ impl eframe::App for App {
             let default_margin = ctx.global_style().spacing.window_margin;
             let frame = egui::Frame::central_panel(ctx.global_style().as_ref())
                 .inner_margin(default_margin * margin_scale);
-            egui::CentralPanel::default()
+            let main = egui::CentralPanel::default()
                 .frame(frame)
                 .show_inside(ui, |ui| {
                     let size = ctx.content_rect();
@@ -1662,6 +1700,7 @@ impl eframe::App for App {
                         self.show_big_meter_toggle_at(ui, btn_rect);
                     }
                 });
+            crate::a11y::set_role(ui, main.response.id, egui::accesskit::Role::Main);
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
             let reading_panel = egui::Panel::left("reading_panel")
@@ -1701,8 +1740,8 @@ impl eframe::App for App {
             // egui's `Panel::left(..).resizable(true)` allocates a
             // drag-sense resize handle at its right edge, which is focusable
             // but has no visible focus indicator of its own and no keyboard
-            // action. Paint a focus indicator and wire up Left/Right arrow
-            // keys to resize the panel, consistent with the recording-panel
+            // action. Paint a focus ring and wire up Left/Right arrow keys
+            // to resize the panel, consistent with the recording-panel
             // divider. The handle id is derived from the panel id — see
             // `panel.rs:847` in egui 0.34 for the `__resize` salt.
             let reading_panel_id = egui::Id::new("reading_panel");
@@ -1747,12 +1786,13 @@ impl eframe::App for App {
             }
 
             // Wide: center panel for graph + recording
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            let main = egui::CentralPanel::default().show_inside(ui, |ui| {
                 self.show_graph_recording_split(ui, false);
             });
+            crate::a11y::set_role(ui, main.response.id, egui::accesskit::Role::Main);
         } else {
             // Narrow: single column
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            let main = egui::CentralPanel::default().show_inside(ui, |ui| {
                 let dark = ui.visuals().dark_mode;
                 display::show_reading_compact(
                     ui,
@@ -1781,6 +1821,7 @@ impl eframe::App for App {
                     self.show_graph_recording_split(ui, true);
                 }
             });
+            crate::a11y::set_role(ui, main.response.id, egui::accesskit::Role::Main);
         }
 
         self.show_shortcut_help(&ctx);
@@ -1855,13 +1896,35 @@ impl App {
             return;
         }
 
-        let mut open = self.shortcut_help_open;
-        egui::Window::new("Keyboard & Mouse")
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
+        let focus_pending = std::mem::take(&mut self.shortcut_help_focus_pending);
+        let mut close_clicked = false;
+        // egui::Modal (vs. egui::Window) calls `set_modal_layer`, which makes
+        // Tab navigation skip widgets in the layers below — i.e. it actually
+        // traps keyboard focus inside the dialog. Window does not do this.
+        let modal_response =
+            egui::Modal::new(egui::Id::new("shortcut_help_modal")).show(ctx, |ui| {
+                ui.set_max_width(520.0);
+                ui.horizontal(|ui| {
+                    ui.heading("Keyboard & Mouse");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let close_btn = ui.button("\u{2715}");
+                        crate::a11y::set_accessible_label(
+                            ui,
+                            close_btn.id,
+                            "Close keyboard shortcuts",
+                        );
+                        // First focus stop: the close button. Tab/Shift+Tab
+                        // walks from here through the (non-interactive) grid
+                        // labels.
+                        if focus_pending {
+                            close_btn.request_focus();
+                        }
+                        if close_btn.clicked() {
+                            close_clicked = true;
+                        }
+                    });
+                });
+                ui.separator();
                 egui::Grid::new("shortcuts_app")
                     .min_col_width(120.0)
                     .show(ui, |ui| {
@@ -1936,7 +1999,18 @@ impl App {
                     .color(ui.visuals().weak_text_color()),
                 );
             });
-        self.shortcut_help_open = open;
+
+        // Close on: (a) close button click, (b) Esc / backdrop click via
+        // Modal::should_close, or (c) Ctrl+W (still consumed in
+        // handle_keyboard_shortcuts so it works while focus is in the modal).
+        if close_clicked || modal_response.should_close() {
+            self.shortcut_help_open = false;
+            // Restore focus to the widget that opened the modal so keyboard
+            // users don't get teleported to the top of the Tab order.
+            if let Some(opener) = self.shortcut_help_opener.take() {
+                ctx.memory_mut(|m| m.request_focus(opener));
+            }
+        }
     }
 
     fn open_whats_new(&mut self) {
@@ -1949,6 +2023,11 @@ impl App {
         // The viewport callback signals close via an AtomicBool.
         if self.whats_new_closed.swap(false, Ordering::Relaxed) {
             self.whats_new_open = false;
+            // Restore focus to the widget that opened the viewport so the
+            // user's Tab position is preserved across the modal round-trip.
+            if let Some(opener) = self.whats_new_opener.take() {
+                ctx.memory_mut(|m| m.request_focus(opener));
+            }
         }
 
         if !self.whats_new_open {
