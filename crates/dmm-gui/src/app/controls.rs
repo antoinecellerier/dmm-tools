@@ -691,19 +691,188 @@ fn color_edit(
     let default = tc.effective_color(field);
     let mut color = override_color.map(|h| h.0).unwrap_or(default);
 
+    // Render the swatch as a plain Button with an explicit fill, so we control
+    // the open lifecycle. egui's `color_edit_button_srgba` also uses
+    // `Popup::menu`, but doesn't move focus into the popup when it opens —
+    // keyboard users end up stranded on the settings panel.
     let response = ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        let btn = egui::color_picker::color_edit_button_srgba(
-            ui,
-            &mut color,
-            egui::color_picker::Alpha::Opaque,
-        );
+        let btn_size = egui::Vec2::splat(ui.spacing().interact_size.y);
+        let btn = ui.add(egui::Button::new("").fill(color).min_size(btn_size));
         ui.label(RichText::new(label).small());
         btn
     });
 
     let btn_response = response.inner.on_hover_text(color_edit_tooltip(field));
-    if btn_response.changed() {
+    // The swatch's visible content is just a color, which screen readers
+    // can't describe — give it the label text as its accessible name.
+    crate::a11y::set_accessible_label(ui, btn_response.id, label);
+    // The fill covers the usual button border, so paint an explicit focus
+    // ring when the swatch is keyboard-focused.
+    crate::a11y::paint_focus_ring(ui, &btn_response);
+
+    let popup_id = btn_response.id.with("color_popup");
+    // "This click is the one that opens the popup" — true only on the click
+    // frame *and* only when the popup was closed at the start of the frame.
+    // `Popup::menu` flips the memory state inside its own `show` call, so at
+    // this point `is_id_open` still returns the pre-toggle value.
+    let newly_opened = btn_response.clicked() && !egui::Popup::is_id_open(ui.ctx(), popup_id);
+
+    // Popup has no built-in Esc handling (unlike egui::Modal), so consume
+    // Esc manually while the popup is open.
+    if egui::Popup::is_id_open(ui.ctx(), popup_id)
+        && ui
+            .ctx()
+            .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+    {
+        egui::Popup::close_id(ui.ctx(), popup_id);
+    }
+
+    // Track open state across frames to detect close transitions (click
+    // outside, Esc, or swatch re-click) so focus can be restored to the
+    // swatch regardless of how the popup closed.
+    let was_open_key = btn_response.id.with("color_popup_was_open");
+    let was_open: bool = ui.ctx().data(|d| d.get_temp(was_open_key)).unwrap_or(false);
+
+    let mut color_changed = false;
+    let hsva_cache_key = btn_response.id.with("hsva_cache");
+    egui::Popup::menu(&btn_response)
+        .id(popup_id)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            // Trap Tab focus to the popup's layer. Without this, Tab cycles
+            // through main-settings widgets (which are registered earlier in
+            // the frame) rather than through the picker's drag values and
+            // sliders.
+            ui.ctx().memory_mut(|m| m.set_modal_layer(ui.layer_id()));
+
+            // Invisible focusable anchor. When the popup first opens, focus
+            // is still on the swatch — in a layer *below* the modal layer and
+            // therefore no longer focusable — so Tab wouldn't advance to
+            // anything. Requesting focus on this anchor puts the user inside
+            // the popup's focus cycle immediately.
+            let anchor =
+                ui.add(egui::Label::new("").sense(egui::Sense::focusable_noninteractive()));
+            if newly_opened {
+                anchor.request_focus();
+            }
+
+            // HSVA is the source of truth while the popup is open.
+            // Converting srgba → Hsva each frame is slightly lossy (sRGB
+            // gamma), so we cache the Hsva in ctx temp data and only seed
+            // from the current color on first open.
+            let mut hsva: egui::ecolor::Hsva = if newly_opened {
+                egui::ecolor::Hsva::from(color)
+            } else {
+                ui.ctx()
+                    .data(|d| d.get_temp::<egui::ecolor::Hsva>(hsva_cache_key))
+                    .unwrap_or_else(|| egui::ecolor::Hsva::from(color))
+            };
+
+            // Arrow-key HSV adjustment. egui's `color_slider_1d` and
+            // `color_slider_2d` only handle `interact_pointer_pos` (mouse
+            // drag), so Tab-focused sliders do nothing on arrow press.
+            // Detect which slider currently has focus via the rect shape
+            // of the focused widget (2D slider is square, hue slider is
+            // wide-and-short) and apply the arrow deltas directly to
+            // `hsva` before the picker renders. The size thresholds are
+            // chosen to include 100-wide sliders (observed in this app's
+            // theme) while excluding small toggle/drag widgets (~20 px).
+            if let Some(fid) = ui.ctx().memory(|m| m.focused())
+                && fid != btn_response.id
+                && let Some(focused_resp) = ui.ctx().read_response(fid)
+            {
+                let rect = focused_resp.rect;
+                let is_2d_slider =
+                    rect.width() >= 50.0 && (rect.width() - rect.height()).abs() < 2.0;
+                let is_hue_slider = rect.width() >= 50.0 && rect.width() > rect.height() * 3.0;
+
+                let left = ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft));
+                let right = ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight));
+                let up = ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp));
+                let down = ui
+                    .ctx()
+                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown));
+
+                let step = 0.02;
+                let dx = if right { step } else { 0.0 } - if left { step } else { 0.0 };
+                let dy = if up { step } else { 0.0 } - if down { step } else { 0.0 };
+
+                if is_2d_slider && (dx != 0.0 || dy != 0.0) {
+                    hsva.s = (hsva.s + dx).clamp(0.0, 1.0);
+                    hsva.v = (hsva.v + dy).clamp(0.0, 1.0);
+                    color_changed = true;
+                } else if is_hue_slider && dx != 0.0 {
+                    hsva.h = (hsva.h + dx).rem_euclid(1.0);
+                    color_changed = true;
+                }
+            }
+
+            color_changed |= egui::color_picker::color_picker_hsva_2d(
+                ui,
+                &mut hsva,
+                egui::color_picker::Alpha::Opaque,
+            );
+
+            // Write back to Color32 and persist Hsva for next frame.
+            color = egui::Color32::from(hsva);
+            ui.ctx().data_mut(|d| d.insert_temp(hsva_cache_key, hsva));
+        });
+
+    let is_open_now = egui::Popup::is_id_open(ui.ctx(), popup_id);
+    if is_open_now {
+        // Trap arrow keys on whichever widget inside the popup currently
+        // has focus. egui's color_slider_1d/2d (hue + saturation-value) are
+        // focusable but don't respond to arrow keys; without trapping, the
+        // first arrow press Tab-jumps focus off the slider spatially.
+        // Trapping keeps focus inside the popup so the user can still Tab
+        // between sliders and the RGBA drag values (which ARE keyboard-
+        // adjustable via Enter-to-edit + Up/Down). See the "Known
+        // limitations" note in docs/gui-reference.md on the color picker.
+        if let Some(focused_id) = ui.ctx().memory(|m| m.focused())
+            && focused_id != btn_response.id
+        {
+            ui.ctx().memory_mut(|m| {
+                m.set_focus_lock_filter(
+                    focused_id,
+                    egui::EventFilter {
+                        horizontal_arrows: true,
+                        vertical_arrows: true,
+                        ..Default::default()
+                    },
+                );
+            });
+            // `set_focus_lock_filter` only takes effect on the *next*
+            // frame because of its `had_focus_last_frame` gate. Cover the
+            // first-frame case by also resetting `focus_direction` if any
+            // arrow is held this frame.
+            let any_arrow_down = ui.ctx().input(|i| {
+                i.key_down(egui::Key::ArrowLeft)
+                    || i.key_down(egui::Key::ArrowRight)
+                    || i.key_down(egui::Key::ArrowUp)
+                    || i.key_down(egui::Key::ArrowDown)
+            });
+            if any_arrow_down {
+                ui.ctx()
+                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
+        }
+    }
+    if was_open && !is_open_now {
+        // Popup just closed — put focus back on the swatch so keyboard users
+        // don't get teleported to the top of the Tab order.
+        ui.ctx().memory_mut(|m| m.request_focus(btn_response.id));
+    }
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(was_open_key, is_open_now));
+
+    if color_changed {
         *override_color = Some(HexColor(color));
         return true;
     }
