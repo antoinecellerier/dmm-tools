@@ -25,6 +25,18 @@ struct DataPoint {
     value: f64,
 }
 
+/// Quantize a `f64` to ~3 decimal digits before hashing so animated plot
+/// transforms (which produce sub-pixel jitter on the y bounds) don't
+/// invalidate label caches every frame. Returns an `i64` so the result is
+/// `Hash`-stable and not affected by `f64::NaN` weirdness.
+fn quantize_for_hash(v: f64) -> i64 {
+    if v.is_nan() {
+        i64::MIN
+    } else {
+        (v * 1000.0).round() as i64
+    }
+}
+
 /// Time window presets.
 pub const TIME_WINDOWS: &[(f64, &str)] = &[
     (5.0, "5s"),
@@ -121,6 +133,11 @@ pub struct Graph {
     history: VecDeque<DataPoint>,
     current_mode: Option<String>,
     current_unit: String,
+    /// Last `display_raw` string from the latest pushed measurement, kept
+    /// for the a11y plot summary so screen readers hear the same digits the
+    /// sighted user sees (e.g. "1.234 mV" instead of the raw f64 value
+    /// printed at fixed precision, which mis-scales auto-range readings).
+    last_display_raw: Option<String>,
     origin: Option<Instant>,
     /// Time window width in seconds for the main view.
     pub time_window_secs: f64,
@@ -216,6 +233,7 @@ impl Graph {
             history: VecDeque::with_capacity(MAX_POINTS),
             current_mode: None,
             current_unit: String::new(),
+            last_display_raw: None,
             origin: None,
             time_window_secs: 60.0,
             live: true,
@@ -270,7 +288,14 @@ impl Graph {
         self.gap_threshold_secs = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
     }
 
-    pub fn push(&mut self, value: f64, timestamp: Instant, mode: &str, unit: &str) {
+    pub fn push(
+        &mut self,
+        value: f64,
+        timestamp: Instant,
+        mode: &str,
+        unit: &str,
+        display_raw: Option<&str>,
+    ) {
         let now = timestamp;
 
         if self.origin.is_none() {
@@ -289,8 +314,21 @@ impl Graph {
             self.bbox_zoom_start_px = None;
             self.bbox_zoom_current_px = None;
             self.invalidate_cache();
+            self.last_display_raw = None;
         }
         self.current_unit = unit.to_string();
+        // Track the most recent raw display string so the a11y plot
+        // summary can speak it verbatim. We update it in-place to avoid
+        // allocating per push when the underlying `Cow<'static, str>` is a
+        // borrowed protocol-level constant.
+        match (display_raw, &mut self.last_display_raw) {
+            (Some(s), Some(buf)) => {
+                buf.clear();
+                buf.push_str(s);
+            }
+            (Some(s), None) => self.last_display_raw = Some(s.to_string()),
+            (None, _) => self.last_display_raw = None,
+        }
 
         if self.history.len() >= MAX_POINTS {
             self.history.pop_front();
@@ -303,6 +341,7 @@ impl Graph {
         self.history.clear();
         self.current_mode = None;
         self.current_unit.clear();
+        self.last_display_raw = None;
         self.origin = None;
         self.live = true;
         self.view_center = 0.0;
@@ -1027,12 +1066,21 @@ impl Graph {
         let sig = {
             let mut h = std::collections::hash_map::DefaultHasher::new();
             self.time_window_secs.to_bits().hash(&mut h);
-            y_min.to_bits().hash(&mut h);
-            y_max.to_bits().hash(&mut h);
+            // Quantize y bounds before hashing. Otherwise sub-pixel jitter
+            // from animated auto-fit (and last-bit f64 noise from plot
+            // transforms) busts the cache every frame, defeating the
+            // throttle and forcing a fresh format! per render.
+            quantize_for_hash(y_min).hash(&mut h);
+            quantize_for_hash(y_max).hash(&mut h);
             self.history.len().hash(&mut h);
             self.live.hash(&mut h);
             last_value.map(f64::to_bits).hash(&mut h);
             self.current_unit.hash(&mut h);
+            // Mode + display_raw drive the spoken last-reading; if either
+            // changes (e.g. mode switch during paused playback) the label
+            // must follow.
+            self.current_mode.as_deref().unwrap_or("").hash(&mut h);
+            self.last_display_raw.as_deref().unwrap_or("").hash(&mut h);
             h.finish()
         };
         if sig != self.a11y_label_sig {
@@ -1043,9 +1091,15 @@ impl Graph {
                 &self.current_unit
             };
             let state = if self.live { "live" } else { "paused" };
-            let reading = match last_value {
-                Some(v) => format!("last reading {v:.4} {unit}"),
-                None => "no data".to_string(),
+            // Prefer the meter's own raw display string for the spoken
+            // reading — it already encodes range/scale (e.g. "  1.234"
+            // for a 22 V range vs " 12.34" for a 220 V range), so AT
+            // users hear what sighted users see. Fall back to the f64
+            // value only if the protocol doesn't provide display_raw.
+            let reading = match (self.last_display_raw.as_deref(), last_value) {
+                (Some(raw), _) => format!("last reading {} {unit}", raw.trim()),
+                (None, Some(v)) => format!("last reading {v:.4} {unit}"),
+                (None, None) => "no data".to_string(),
             };
             self.a11y_label = format!(
                 "Measurement plot. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples. {}. {}.",
@@ -1828,19 +1882,50 @@ mod tests {
     #[test]
     fn push_adds_point() {
         let mut g = Graph::new();
-        g.push(5.0, Instant::now(), "DC V", "V");
+        g.push(5.0, Instant::now(), "DC V", "V", None);
         assert_eq!(g.len(), 1);
         assert!(!g.is_empty());
         assert!(g.origin.is_some());
     }
 
     #[test]
+    fn push_records_display_raw_for_a11y() {
+        let mut g = Graph::new();
+        g.push(0.001234, Instant::now(), "DC V", "mV", Some("  1.234"));
+        assert_eq!(g.last_display_raw.as_deref(), Some("  1.234"));
+        // A second push with display_raw must reuse the existing String
+        // buffer, not allocate a new one.
+        g.push(0.005, Instant::now(), "DC V", "mV", Some("  5.000"));
+        assert_eq!(g.last_display_raw.as_deref(), Some("  5.000"));
+    }
+
+    #[test]
+    fn push_clears_display_raw_on_mode_change() {
+        let mut g = Graph::new();
+        g.push(0.001, Instant::now(), "DC V", "mV", Some("  1.000"));
+        // Mode change clears history and the cached raw.
+        g.push(100.0, Instant::now(), "Ohm", "Ω", None);
+        assert!(g.last_display_raw.is_none());
+    }
+
+    #[test]
+    fn quantize_for_hash_collapses_jitter() {
+        // Two values that differ by less than the quantization step (1e-3)
+        // must hash-quantize to the same bucket.
+        assert_eq!(quantize_for_hash(1.2345), quantize_for_hash(1.2346));
+        // Values that differ by more than one bucket must not collapse.
+        assert_ne!(quantize_for_hash(1.234), quantize_for_hash(1.236));
+        // NaN gets a sentinel so it doesn't poison the hasher.
+        assert_eq!(quantize_for_hash(f64::NAN), i64::MIN);
+    }
+
+    #[test]
     fn mode_change_clears_history() {
         let mut g = Graph::new();
-        g.push(5.0, Instant::now(), "DC V", "V");
-        g.push(5.1, Instant::now(), "DC V", "V");
+        g.push(5.0, Instant::now(), "DC V", "V", None);
+        g.push(5.1, Instant::now(), "DC V", "V", None);
         assert_eq!(g.len(), 2);
-        g.push(100.0, Instant::now(), "Ohm", "Ω");
+        g.push(100.0, Instant::now(), "Ohm", "Ω", None);
         assert_eq!(g.len(), 1);
     }
 
@@ -1848,7 +1933,7 @@ mod tests {
     fn max_points_evicts_oldest() {
         let mut g = Graph::new();
         for i in 0..MAX_POINTS + 100 {
-            g.push(i as f64, Instant::now(), "DC V", "V");
+            g.push(i as f64, Instant::now(), "DC V", "V", None);
         }
         assert_eq!(g.len(), MAX_POINTS);
     }
@@ -1856,7 +1941,7 @@ mod tests {
     #[test]
     fn clear_resets_everything() {
         let mut g = Graph::new();
-        g.push(5.0, Instant::now(), "DC V", "V");
+        g.push(5.0, Instant::now(), "DC V", "V", None);
         g.live = false;
         g.clear();
         assert!(g.is_empty());
@@ -1868,9 +1953,9 @@ mod tests {
     #[test]
     fn segments_without_gaps() {
         let mut g = Graph::new();
-        g.push(1.0, Instant::now(), "DC V", "V");
-        g.push(2.0, Instant::now(), "DC V", "V");
-        g.push(3.0, Instant::now(), "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V", None);
+        g.push(2.0, Instant::now(), "DC V", "V", None);
+        g.push(3.0, Instant::now(), "DC V", "V", None);
         let segments = g.build_raw_segments();
         assert_eq!(segments.len(), 1);
     }
@@ -1878,8 +1963,8 @@ mod tests {
     #[test]
     fn gap_detection() {
         let mut g = Graph::new();
-        g.push(1.0, Instant::now(), "DC V", "V");
-        g.push(2.0, Instant::now(), "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V", None);
+        g.push(2.0, Instant::now(), "DC V", "V", None);
         let gaps = g.find_gap_ranges();
         assert!(gaps.is_empty());
     }
@@ -1888,8 +1973,8 @@ mod tests {
     fn elapsed_secs_relative_to_origin() {
         let mut g = Graph::new();
         let t0 = Instant::now();
-        g.push(1.0, t0, "DC V", "V");
-        g.push(2.0, t0 + Duration::from_millis(50), "DC V", "V");
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push(2.0, t0 + Duration::from_millis(50), "DC V", "V", None);
         let t = g.elapsed_secs(g.history.back().unwrap().time);
         assert!((t - 0.05).abs() < 1e-9);
     }
@@ -1898,7 +1983,7 @@ mod tests {
     fn live_view_bounds_follow_latest() {
         let mut g = Graph::new();
         g.time_window_secs = 10.0;
-        g.push(1.0, Instant::now(), "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V", None);
         let (vmin, vmax) = g.view_bounds();
         assert!(vmin >= 0.0);
         assert!(vmax >= vmin);
@@ -1953,7 +2038,7 @@ mod tests {
     fn scroll_view_does_not_panic() {
         let mut g = Graph::new();
         for i in 0..20 {
-            g.push(i as f64, Instant::now(), "V DC", "V");
+            g.push(i as f64, Instant::now(), "V DC", "V", None);
         }
         assert!(g.live);
         // With only ~ms of real elapsed time and a 60s window, the view
@@ -1966,7 +2051,7 @@ mod tests {
     #[test]
     fn jump_to_start_exits_live() {
         let mut g = Graph::new();
-        g.push(1.0, Instant::now(), "V DC", "V");
+        g.push(1.0, Instant::now(), "V DC", "V", None);
         assert!(g.live);
         g.jump_to_start();
         assert!(!g.live);
@@ -2057,7 +2142,7 @@ mod tests {
     fn apply_pan_in_live_mode_drops_out_of_live() {
         let mut g = Graph::new();
         g.time_window_secs = 10.0;
-        g.push(1.0, Instant::now(), "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V", None);
         assert!(g.live);
         // Any non-zero drag while live flips us to browse mode.
         g.apply_pan(2.0);
@@ -2068,7 +2153,7 @@ mod tests {
     fn apply_pan_in_live_mode_snaps_view_center_to_end() {
         let mut g = Graph::new();
         g.time_window_secs = 10.0;
-        g.push(1.0, Instant::now(), "DC V", "V");
+        g.push(1.0, Instant::now(), "DC V", "V", None);
         // Zero-delta pan while live still snaps view_center to the end of
         // data — so the view doesn't visibly jump on drag start.
         g.apply_pan(0.0);

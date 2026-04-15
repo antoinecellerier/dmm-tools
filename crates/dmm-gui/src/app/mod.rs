@@ -637,7 +637,13 @@ impl App {
 
                     match &m.value {
                         MeasuredValue::Normal(v) => {
-                            self.graph.push(*v, m.timestamp, &m.mode, &m.unit);
+                            self.graph.push(
+                                *v,
+                                m.timestamp,
+                                &m.mode,
+                                &m.unit,
+                                m.display_raw.as_deref(),
+                            );
                             self.stats.push(*v);
                             self.integrator.push(*v, m.timestamp);
                         }
