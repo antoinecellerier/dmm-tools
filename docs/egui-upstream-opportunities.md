@@ -16,6 +16,25 @@ All file references resolve under
 `~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/egui-0.34.1/src/`
 unless otherwise noted.
 
+**Local wrapper layer.** The recurring workaround patterns are
+encapsulated as two extension traits in `crates/dmm-gui/src/a11y.rs`:
+
+- `ResponseA11yExt` — chainable `Response::a11y_label(&str)`,
+  `Response::a11y_toggled(bool)`, `Response::a11y_role(Role)`. Lets
+  call sites attach an AccessKit label, toggle state, or role directly
+  onto an existing widget chain (e.g.
+  `ui.button("?").on_hover_text("…").a11y_label("Settings")`).
+  Workarounds for gaps #2/#3 in `Button` live here.
+- `UiA11yExt` — `Ui::landmark(id_salt, role, add_contents)` and
+  `Ui::live_region_horizontal(fp, make_label, add_contents)`. Both
+  bake in the stable-id-salt workaround for gap #5 and the cached
+  fingerprint logic for gap #6.
+
+The chainable / extension-method signatures are deliberately shaped
+like the upstream APIs we'd want — when egui ships e.g.
+`Button::toggled(bool)` the local wrapper becomes a one-line delegator
+and then disappears.
+
 ## Table of contents
 
 - [Accessibility — labels and roles](#accessibility--labels-and-roles)
@@ -115,10 +134,13 @@ plain `Button` (`atom_ui` path) never sets `info.selected`, so a
 LIVE, etc.) cannot announce its state to a screen reader without
 bypassing `widget_info` entirely.
 
-**Workaround we used.** Added `crate::a11y::set_toggled` which calls
-`ctx.accesskit_node_builder(id, |b| b.set_toggled(...))` directly,
-bypassing `widget_info`. See `crates/dmm-gui/src/a11y.rs:21-30` and
-the call sites in `crates/dmm-gui/src/app/controls.rs`.
+**Workaround we used.** Added a chainable `Response::a11y_toggled`
+extension (`ResponseA11yExt` in `crates/dmm-gui/src/a11y.rs`) which
+calls `ctx.accesskit_node_builder(id, |b| b.set_toggled(...))`
+directly, bypassing `widget_info`. Call sites:
+`crates/dmm-gui/src/app/controls.rs` and `crates/dmm-gui/src/graph.rs`.
+The chainable signature `Response::a11y_toggled(bool) -> Response`
+prefigures the proposed upstream `Button::toggled(bool) -> Self`.
 
 We tried using `Response::widget_info(WidgetInfo::selected(...))` for
 this first and discovered it pushes a duplicate `OutputEvent::Clicked`
@@ -180,7 +202,9 @@ which makes Orca lose track of the `Role::Status` landmark.
 
 **Workaround.** Use `ui.scope_builder(UiBuilder::new().id_salt("status_landmark"), ...)`
 with an explicit id salt so the id is stable across sibling-count
-changes.
+changes. Encapsulated locally as `Ui::landmark(id_salt, role,
+add_contents)` (see `UiA11yExt` in `crates/dmm-gui/src/a11y.rs`); the
+signature directly prefigures the proposed upstream API below.
 
 **Suggested fix.** Add a first-class landmark API:
 

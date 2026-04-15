@@ -13,6 +13,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::a11y::{ResponseA11yExt, UiA11yExt};
 use crate::display;
 use crate::graph::Graph;
 use crate::recording::Recording;
@@ -848,10 +849,9 @@ impl App {
         // frames. egui's default scope id is derived from a running
         // `next_auto_id_salt` counter; if any sibling above ever changes
         // shape, the salt shifts and AT loses track of the landmark.
-        let scope = ui.scope_builder(egui::UiBuilder::new().id_salt("top_bar_landmark"), |ui| {
-            self.show_top_bar_inner(ui, ctx)
+        ui.landmark("top_bar_landmark", egui::accesskit::Role::Toolbar, |ui| {
+            self.show_top_bar_inner(ui, ctx);
         });
-        crate::a11y::set_role(ui, scope.response.id, egui::accesskit::Role::Toolbar);
     }
 
     fn show_top_bar_inner(&mut self, ui: &mut Ui, ctx: &egui::Context) {
@@ -952,48 +952,46 @@ impl App {
             // (Connect button vs. Disconnect+Pause+Clear). Without an
             // explicit salt, the auto-derived scope id flips on every
             // state transition and AT loses the Status landmark.
-            let status_scope =
-                ui.scope_builder(egui::UiBuilder::new().id_salt("status_landmark"), |ui| {
-                    // Decorative status dot — not interactive or focusable.
-                    let (rect, _) =
-                        ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
-                    ui.painter().circle_filled(rect.center(), 5.0, dot_color);
-                    ui.label(RichText::new(&status_text).small());
+            ui.landmark("status_landmark", egui::accesskit::Role::Status, |ui| {
+                // Decorative status dot — not interactive or focusable.
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
+                ui.painter().circle_filled(rect.center(), 5.0, dot_color);
+                ui.label(RichText::new(&status_text).small());
 
-                    // Show EXPERIMENTAL badge based on connected state or selected device.
-                    let device_entry = self.selected_device();
-                    let proto = (device_entry.new_protocol)();
-                    let profile = proto.profile();
-                    let is_experimental = if self.connection_state == ConnectionState::Connected {
-                        self.experimental
+                // Show EXPERIMENTAL badge based on connected state or selected device.
+                let device_entry = self.selected_device();
+                let proto = (device_entry.new_protocol)();
+                let profile = proto.profile();
+                let is_experimental = if self.connection_state == ConnectionState::Connected {
+                    self.experimental
+                } else {
+                    profile.stability == dmm_lib::protocol::Stability::Experimental
+                };
+                if is_experimental {
+                    let url = if self.connection_state == ConnectionState::Connected
+                        && !self.feedback_url.is_empty()
+                    {
+                        self.feedback_url.clone()
                     } else {
-                        profile.stability == dmm_lib::protocol::Stability::Experimental
+                        profile.feedback_url()
                     };
-                    if is_experimental {
-                        let url = if self.connection_state == ConnectionState::Connected
-                            && !self.feedback_url.is_empty()
-                        {
-                            self.feedback_url.clone()
-                        } else {
-                            profile.feedback_url()
-                        };
-                        ui.hyperlink_to(
-                            RichText::new("EXPERIMENTAL").small().strong().color(orange),
-                            url,
-                        )
-                        .on_hover_text(format!(
-                            "{} support is experimental \u{2014} click to report feedback",
-                            profile.model_name
-                        ));
-                    }
+                    ui.hyperlink_to(
+                        RichText::new("EXPERIMENTAL").small().strong().color(orange),
+                        url,
+                    )
+                    .on_hover_text(format!(
+                        "{} support is experimental \u{2014} click to report feedback",
+                        profile.model_name
+                    ));
+                }
 
-                    // Toast inline on this row
-                    if let Some((msg, is_error, _)) = &self.toast {
-                        let color = if *is_error { tc.status_error() } else { green };
-                        ui.label(RichText::new(msg).small().color(color));
-                    }
-                });
-            crate::a11y::set_role(ui, status_scope.response.id, egui::accesskit::Role::Status);
+                // Toast inline on this row
+                if let Some((msg, is_error, _)) = &self.toast {
+                    let color = if *is_error { tc.status_error() } else { green };
+                    ui.label(RichText::new(msg).small().color(color));
+                }
+            });
 
             let left_width = ui.min_rect().right() - left_start;
             ui.data_mut(|d| d.insert_temp(left_id, left_width));
@@ -1033,14 +1031,16 @@ impl App {
         // "Show release notes". `frame_when_inactive(false)` keeps the
         // resting visual identical to a label while still painting hover and
         // focus backgrounds when the user mouses over or Tab-focuses it.
-        let version_resp = ui.add(
-            egui::Button::new(
-                RichText::new(crate::version_label())
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
+        let version_resp = ui
+            .add(
+                egui::Button::new(
+                    RichText::new(crate::version_label())
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                )
+                .frame_when_inactive(false),
             )
-            .frame_when_inactive(false),
-        );
+            .a11y_label("Show release notes");
         if version_resp.clicked() {
             if self.whats_new_open {
                 self.whats_new_open = false;
@@ -1049,7 +1049,6 @@ impl App {
                 self.open_whats_new();
             }
         }
-        crate::a11y::set_accessible_label(ui, version_resp.id, "Show release notes");
         version_resp
             .on_hover_text("Show What's New — release notes for this version")
             .on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -1060,7 +1059,8 @@ impl App {
         .on_hover_text("Open the dmm-tools project page on GitHub");
         let shortcuts_btn = ui
             .button("?")
-            .on_hover_text("Show keyboard shortcuts and mouse gestures (?)");
+            .on_hover_text("Show keyboard shortcuts and mouse gestures (?)")
+            .a11y_label("Keyboard shortcuts and mouse gestures");
         if shortcuts_btn.clicked() {
             let will_open = !self.shortcut_help_open;
             self.shortcut_help_open = will_open;
@@ -1069,19 +1069,14 @@ impl App {
                 self.shortcut_help_focus_pending = true;
             }
         }
-        crate::a11y::set_accessible_label(
-            ui,
-            shortcuts_btn.id,
-            "Keyboard shortcuts and mouse gestures",
-        );
 
         let settings_btn = ui
             .button("\u{2699}")
-            .on_hover_text("Show or hide the settings panel");
+            .on_hover_text("Show or hide the settings panel")
+            .a11y_label("Settings");
         if settings_btn.clicked() {
             self.settings_open = !self.settings_open;
         }
-        crate::a11y::set_accessible_label(ui, settings_btn.id, "Settings");
 
         let actual_width = ui.min_rect().right() - before;
         ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
@@ -1404,16 +1399,13 @@ impl App {
 
             let sep = ui.separator();
             let sep_id = ui.id().with("rec_resize");
-            let sep_response = ui.interact(
-                sep.rect.expand2(egui::vec2(0.0, 4.0)),
-                sep_id,
-                egui::Sense::drag(),
-            );
-            crate::a11y::set_accessible_label(
-                ui,
-                sep_response.id,
-                "Resize recording panel (Up/Down to adjust)",
-            );
+            let sep_response = ui
+                .interact(
+                    sep.rect.expand2(egui::vec2(0.0, 4.0)),
+                    sep_id,
+                    egui::Sense::drag(),
+                )
+                .a11y_label("Resize recording panel (Up/Down to adjust)");
             if sep_response.dragged() {
                 self.recording_height = (self.recording_height - sep_response.drag_delta().y)
                     .clamp(40.0, (total - 80.0).max(40.0));
@@ -1744,7 +1736,7 @@ impl eframe::App for App {
                         self.show_big_meter_toggle_at(ui, btn_rect);
                     }
                 });
-            crate::a11y::set_role(ui, main.response.id, egui::accesskit::Role::Main);
+            main.response.a11y_role(egui::accesskit::Role::Main);
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
             let reading_panel = egui::Panel::left("reading_panel")
@@ -1831,42 +1823,46 @@ impl eframe::App for App {
             }
 
             // Wide: center panel for graph + recording
-            let main = egui::CentralPanel::default().show_inside(ui, |ui| {
-                self.show_graph_recording_split(ui, false);
-            });
-            crate::a11y::set_role(ui, main.response.id, egui::accesskit::Role::Main);
+            egui::CentralPanel::default()
+                .show_inside(ui, |ui| {
+                    self.show_graph_recording_split(ui, false);
+                })
+                .response
+                .a11y_role(egui::accesskit::Role::Main);
         } else {
             // Narrow: single column
-            let main = egui::CentralPanel::default().show_inside(ui, |ui| {
-                let dark = ui.visuals().dark_mode;
-                display::show_reading_compact(
-                    ui,
-                    self.last_measurement.as_ref(),
-                    self.settings.color_preset,
-                    self.settings.color_overrides.for_mode(dark),
-                );
-                let controls_top = ui.cursor().top();
-                self.show_remote_controls(ui, 1.0);
-                let controls_bottom = ui.cursor().top();
-                let toggle_rect = egui::Rect::from_min_max(
-                    egui::pos2(ui.max_rect().left(), controls_top),
-                    egui::pos2(ui.max_rect().right(), controls_bottom),
-                );
-                self.show_big_meter_toggle_at(ui, toggle_rect);
-                self.show_connection_help(ui);
-                self.show_specs_section_compact(ui);
+            egui::CentralPanel::default()
+                .show_inside(ui, |ui| {
+                    let dark = ui.visuals().dark_mode;
+                    display::show_reading_compact(
+                        ui,
+                        self.last_measurement.as_ref(),
+                        self.settings.color_preset,
+                        self.settings.color_overrides.for_mode(dark),
+                    );
+                    let controls_top = ui.cursor().top();
+                    self.show_remote_controls(ui, 1.0);
+                    let controls_bottom = ui.cursor().top();
+                    let toggle_rect = egui::Rect::from_min_max(
+                        egui::pos2(ui.max_rect().left(), controls_top),
+                        egui::pos2(ui.max_rect().right(), controls_bottom),
+                    );
+                    self.show_big_meter_toggle_at(ui, toggle_rect);
+                    self.show_connection_help(ui);
+                    self.show_specs_section_compact(ui);
 
-                if self.settings.show_stats {
-                    ui.separator();
-                    self.show_stats_section(ui, true, 1.0);
-                }
+                    if self.settings.show_stats {
+                        ui.separator();
+                        self.show_stats_section(ui, true, 1.0);
+                    }
 
-                if self.settings.show_graph || self.settings.show_recording {
-                    ui.separator();
-                    self.show_graph_recording_split(ui, true);
-                }
-            });
-            crate::a11y::set_role(ui, main.response.id, egui::accesskit::Role::Main);
+                    if self.settings.show_graph || self.settings.show_recording {
+                        ui.separator();
+                        self.show_graph_recording_split(ui, true);
+                    }
+                })
+                .response
+                .a11y_role(egui::accesskit::Role::Main);
         }
 
         self.show_shortcut_help(&ctx);
@@ -1895,8 +1891,7 @@ impl App {
         child.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
             let color = ui.visuals().weak_text_color();
             let btn = egui::Button::new(RichText::new(icon).size(14.0).color(color));
-            let response = ui.add(btn).on_hover_text(tooltip);
-            crate::a11y::set_accessible_label(ui, response.id, tooltip);
+            let response = ui.add(btn).on_hover_text(tooltip).a11y_label(tooltip);
             if response.clicked() {
                 if self.big_meter_mode == BigMeterMode::Off {
                     // Enter big meter — use cycle_big_meter() to handle
@@ -1952,12 +1947,8 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.heading("Keyboard & Mouse");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let close_btn = ui.button("\u{2715}");
-                        crate::a11y::set_accessible_label(
-                            ui,
-                            close_btn.id,
-                            "Close keyboard shortcuts",
-                        );
+                        let close_btn =
+                            ui.button("\u{2715}").a11y_label("Close keyboard shortcuts");
                         // First focus stop: the close button. Tab/Shift+Tab
                         // walks from here through the (non-interactive) grid
                         // labels.

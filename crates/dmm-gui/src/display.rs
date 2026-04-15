@@ -2,6 +2,7 @@ use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use eframe::egui::{Color32, FontId, RichText, Ui};
 
+use crate::a11y::UiA11yExt;
 use crate::settings::{ColorPreset, PaletteOverrides};
 use crate::theme::ThemeColors;
 
@@ -190,24 +191,22 @@ fn show_reading_sized(
         Some(m) => {
             let (value_text, value_color) = value_display(ui, m, tc);
 
-            let value_row = ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                ui.label(
-                    RichText::new(&value_text)
-                        .font(FontId::monospace(value_size))
-                        .color(value_color),
-                );
-                ui.label(
-                    RichText::new(&*m.unit)
-                        .font(FontId::monospace(unit_size))
-                        .color(ui.visuals().text_color()),
-                );
-            });
-            crate::a11y::set_live_region_cached(
-                ui,
-                value_row.response.id,
+            ui.live_region_horizontal(
                 live_region_fingerprint(Some(m)),
                 || live_region_label(Some(m)),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.label(
+                        RichText::new(&value_text)
+                            .font(FontId::monospace(value_size))
+                            .color(value_color),
+                    );
+                    ui.label(
+                        RichText::new(&*m.unit)
+                            .font(FontId::monospace(unit_size))
+                            .color(ui.visuals().text_color()),
+                    );
+                },
             );
 
             ui.horizontal_wrapped(|ui| {
@@ -233,19 +232,17 @@ fn show_reading_sized(
             // the inner ui.label() Response. egui maps Role::Label
             // overrides to set_value, not set_label, so attaching directly
             // to the label would silently drop the live-region label.
-            let row = ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(crate::NO_DATA)
-                        .font(FontId::monospace(value_size))
-                        .color(ui.visuals().weak_text_color()),
-                );
-                ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
-            });
-            crate::a11y::set_live_region_cached(
-                ui,
-                row.response.id,
+            ui.live_region_horizontal(
                 live_region_fingerprint(None),
                 || live_region_label(None),
+                |ui| {
+                    ui.label(
+                        RichText::new(crate::NO_DATA)
+                            .font(FontId::monospace(value_size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                    ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
+                },
             );
         }
     }
@@ -265,50 +262,46 @@ fn show_reading_inline(
         Some(m) => {
             let (value_text, value_color) = value_display(ui, m, tc);
 
-            let row = ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                ui.label(
-                    RichText::new(&value_text)
-                        .font(FontId::monospace(value_size))
-                        .color(value_color),
-                );
-                ui.label(
-                    RichText::new(&*m.unit)
-                        .font(FontId::monospace(unit_size))
-                        .color(ui.visuals().text_color()),
-                );
-                ui.separator();
-                ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
-                ui.label(
-                    RichText::new(&*m.mode)
-                        .font(FontId::proportional(mode_size))
-                        .color(ui.visuals().weak_text_color()),
-                );
-                show_flags(ui, m, mode_size, tc);
-            });
-            crate::a11y::set_live_region_cached(
-                ui,
-                row.response.id,
+            ui.live_region_horizontal(
                 live_region_fingerprint(Some(m)),
                 || live_region_label(Some(m)),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.label(
+                        RichText::new(&value_text)
+                            .font(FontId::monospace(value_size))
+                            .color(value_color),
+                    );
+                    ui.label(
+                        RichText::new(&*m.unit)
+                            .font(FontId::monospace(unit_size))
+                            .color(ui.visuals().text_color()),
+                    );
+                    ui.separator();
+                    ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
+                    ui.label(
+                        RichText::new(&*m.mode)
+                            .font(FontId::proportional(mode_size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                    show_flags(ui, m, mode_size, tc);
+                },
             );
         }
         None => {
             // See `show_reading_sized` for why the placeholder is wrapped
             // in a horizontal scope: egui Role::Label silently swallows
             // accesskit set_label overrides.
-            let row = ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("{} No reading", crate::NO_DATA))
-                        .font(FontId::monospace(value_size))
-                        .color(ui.visuals().weak_text_color()),
-                );
-            });
-            crate::a11y::set_live_region_cached(
-                ui,
-                row.response.id,
+            ui.live_region_horizontal(
                 live_region_fingerprint(None),
                 || live_region_label(None),
+                |ui| {
+                    ui.label(
+                        RichText::new(format!("{} No reading", crate::NO_DATA))
+                            .font(FontId::monospace(value_size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                },
             );
         }
     }
@@ -431,45 +424,42 @@ pub fn show_reading_compact(
             let value_text = format_value_display(m);
             let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
 
-            let row = ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                ui.label(
-                    RichText::new(&value_text).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
-                );
-                ui.label(
-                    RichText::new(&*m.unit).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
-                );
-                ui.separator();
-                ui.label(
-                    RichText::new(&*m.mode)
-                        .color(ui.visuals().weak_text_color())
-                        .small(),
-                );
-                show_flags(ui, m, 0.0, &tc);
-            });
-            crate::a11y::set_live_region_cached(
-                ui,
-                row.response.id,
+            ui.live_region_horizontal(
                 live_region_fingerprint(Some(m)),
                 || live_region_label(Some(m)),
+                |ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.label(
+                        RichText::new(&value_text)
+                            .font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
+                    );
+                    ui.label(
+                        RichText::new(&*m.unit).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
+                    );
+                    ui.separator();
+                    ui.label(
+                        RichText::new(&*m.mode)
+                            .color(ui.visuals().weak_text_color())
+                            .small(),
+                    );
+                    show_flags(ui, m, 0.0, &tc);
+                },
             );
         }
         None => {
             // See `show_reading_sized` for why the placeholder is wrapped
             // in a horizontal scope: egui Role::Label silently swallows
             // accesskit set_label overrides.
-            let row = ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(format!("{} No reading", crate::NO_DATA))
-                        .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
-                        .color(ui.visuals().weak_text_color()),
-                );
-            });
-            crate::a11y::set_live_region_cached(
-                ui,
-                row.response.id,
+            ui.live_region_horizontal(
                 live_region_fingerprint(None),
                 || live_region_label(None),
+                |ui| {
+                    ui.label(
+                        RichText::new(format!("{} No reading", crate::NO_DATA))
+                            .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                },
             );
         }
     }

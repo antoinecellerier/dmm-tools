@@ -2,6 +2,7 @@ use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use eframe::egui::{self, RichText, Ui};
 
+use crate::a11y::ResponseA11yExt;
 use crate::settings::{ColorOverrides, ColorPreset, HexColor, ThemeMode};
 use crate::theme::ThemeColors;
 
@@ -87,8 +88,10 @@ impl App {
                 } else {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
-                let resp = ui.add(egui::Button::new(text)).on_hover_text(tooltip);
-                crate::a11y::set_toggled(ui, resp.id, active);
+                let resp = ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(tooltip)
+                    .a11y_toggled(active);
                 if resp.clicked() {
                     self.send_command(cmd);
                 }
@@ -124,8 +127,10 @@ impl App {
                 } else {
                     RichText::new(label).font(egui::FontId::proportional(font_size))
                 };
-                let resp = ui.add(egui::Button::new(text)).on_hover_text(tooltip);
-                crate::a11y::set_toggled(ui, resp.id, active);
+                let resp = ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(tooltip)
+                    .a11y_toggled(active);
                 if resp.clicked() {
                     self.send_command(cycle_cmd);
                 }
@@ -135,8 +140,10 @@ impl App {
                         .color(active_color);
                     let x_btn = egui::Button::new(x_text).min_size(egui::Vec2::ZERO);
                     let exit_label = format!("Exit {label} mode");
-                    let x_resp = ui.add(x_btn).on_hover_text(exit_label.clone());
-                    crate::a11y::set_accessible_label(ui, x_resp.id, &exit_label);
+                    let x_resp = ui
+                        .add(x_btn)
+                        .on_hover_text(exit_label.clone())
+                        .a11y_label(&exit_label);
                     if x_resp.clicked() {
                         self.send_command(exit_cmd);
                     }
@@ -703,10 +710,12 @@ fn color_edit(
         btn
     });
 
-    let btn_response = response.inner.on_hover_text(color_edit_tooltip(field));
     // The swatch's visible content is just a color, which screen readers
     // can't describe — give it the label text as its accessible name.
-    crate::a11y::set_accessible_label(ui, btn_response.id, label);
+    let btn_response = response
+        .inner
+        .on_hover_text(color_edit_tooltip(field))
+        .a11y_label(label);
     // The fill covers the usual button border, so paint an explicit focus
     // ring when the swatch is keyboard-focused.
     crate::a11y::paint_focus_ring(ui, &btn_response);

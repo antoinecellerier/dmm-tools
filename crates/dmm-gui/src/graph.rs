@@ -5,6 +5,7 @@ use egui_plot::{
 use std::collections::VecDeque;
 use std::time::Instant;
 
+use crate::a11y::ResponseA11yExt;
 use crate::settings::{ColorOverrides, ColorPreset};
 use crate::theme::ThemeColors;
 
@@ -200,12 +201,6 @@ pub struct Graph {
     a11y_label: String,
     /// Signature of the state used to build `a11y_label`, for change detection.
     a11y_label_sig: u64,
-    /// Last-rendered minimap widget id, captured in `show_minimap` so that
-    /// `handle_keyboard` (which runs at the top of each frame, before
-    /// `show_minimap`) can detect whether keyboard focus is currently on
-    /// the minimap and suppress egui's directional focus navigation after
-    /// consuming a pan arrow key.
-    last_minimap_id: Option<egui::Id>,
 }
 
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
@@ -267,7 +262,6 @@ impl Graph {
             bbox_zoom_current_px: None,
             a11y_label: String::new(),
             a11y_label_sig: 0,
-            last_minimap_id: None,
         }
     }
 
@@ -357,40 +351,22 @@ impl Graph {
     }
 
     /// Handle keyboard shortcuts for graph navigation.
+    ///
+    /// Minimap pan keys are NOT handled here — they live in `show_minimap`
+    /// instead, gated on `pointer_response.has_focus()`. Doing the focus
+    /// check + `move_focus(FocusDirection::None)` reset *after*
+    /// `interested_in_focus` has already run on the pointer response is
+    /// what lets Tab / Shift+Tab still escape the minimap. If we did the
+    /// reset here at the top of the frame, it would also wipe egui's
+    /// `Focus::begin_pass` snapshot of Tab into `focus_direction = Next`
+    /// (egui treats Tab and arrow keys with the same field), trapping
+    /// keyboard focus on the minimap.
     pub fn handle_keyboard(&mut self, ctx: &egui::Context) {
         use egui::{Key, Modifiers};
 
-        // Minimap pan: runs even when a widget is focused, because the whole
-        // point is that the minimap IS the focused widget. The
-        // `egui_wants_keyboard_input` gate below returns true for any
-        // focused widget (not just text inputs), so we have to handle this
-        // case before the early return.
-        //
-        // While the minimap is focused, unconditionally clear
-        // `focus_direction` *every frame*. egui's `Focus::begin_pass`
-        // snapshots arrow events into `focus_direction` before any widget
-        // code runs, and `end_pass` commits a directional Tab move from
-        // it without checking whether the event was consumed. If we only
-        // reset on the axis we *handled* (Left/Right), an Up/Down press
-        // would still steal focus to the spatially nearest widget. The
-        // unconditional reset closes that hole and is cheap (one memory
-        // write per frame the minimap is focused).
-        let minimap_focused = self
-            .last_minimap_id
-            .is_some_and(|id| ctx.memory(|m| m.focused()) == Some(id));
-        if minimap_focused {
-            ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
-            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft)) {
-                self.scroll_view(-0.25);
-            }
-            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight)) {
-                self.scroll_view(0.25);
-            }
-        }
-
-        // Everything else: only when no widget has focus (preserves the
-        // existing behaviour that Tab-navigating to a button doesn't steal
-        // arrow/Home/End keys from the graph's pan/jump bindings).
+        // Only when no widget has focus (preserves the existing behaviour
+        // that Tab-navigating to a button doesn't steal arrow/Home/End
+        // keys from the graph's pan/jump bindings).
         if ctx.egui_wants_keyboard_input() {
             return;
         }
@@ -601,8 +577,8 @@ impl Graph {
                 ))
                 .on_hover_text(
                     "Auto-follow the newest samples — off while panning (End to jump back)",
-                );
-            crate::a11y::set_toggled(ui, live_resp.id, self.live);
+                )
+                .a11y_toggled(self.live);
             if live_resp.clicked() {
                 self.live = !self.live;
             }
@@ -1429,20 +1405,13 @@ impl Graph {
             egui::vec2(ui.available_width(), total_height),
             egui::Sense::click_and_drag(),
         );
-        // Record the minimap's id so `handle_keyboard` (which runs earlier
-        // in the frame) can detect when the minimap has keyboard focus and
-        // reset `focus_direction` after consuming pan arrow keys.
-        self.last_minimap_id = Some(pointer_response.id);
-        let pointer_response = pointer_response.on_hover_text(
-            "Minimap — click or drag to pan, drag the bracket edges to resize the view",
-        );
-        // Give the minimap an accessible label so screen readers can
-        // announce it as a navigable element.
-        crate::a11y::set_accessible_label(
-            ui,
-            pointer_response.id,
-            "Graph minimap — click or drag to navigate timeline (Left/Right to pan), drag bracket edges to resize",
-        );
+        let pointer_response = pointer_response
+            .on_hover_text(
+                "Minimap — click or drag to pan, drag the bracket edges to resize the view",
+            )
+            .a11y_label(
+                "Graph minimap — click or drag to navigate timeline (Left/Right to pan), drag bracket edges to resize",
+            );
         // Inset the plot area so brackets at edges have room to render
         let rect = egui::Rect::from_min_size(
             egui::pos2(full_rect.left() + margin, full_rect.top() + margin),
@@ -1654,6 +1623,45 @@ impl Graph {
         // Reset drag state when pointer is released
         if !pointer_response.is_pointer_button_down_on() {
             self.minimap_drag = MinimapDrag::None;
+        }
+
+        // Keyboard pan when the minimap holds focus. Has to run *after*
+        // `allocate_exact_size` above (which runs `interested_in_focus`
+        // on the pointer response) so that on a Tab press focus has
+        // already advanced away and `pointer_response.has_focus()`
+        // returns false. Otherwise the `move_focus(FocusDirection::None)`
+        // below would also wipe egui's `Focus::begin_pass` snapshot of
+        // Tab into `focus_direction = Next` (egui stores arrow keys and
+        // Tab in the same field), trapping focus on the minimap.
+        if pointer_response.has_focus() {
+            use egui::{Key, Modifiers};
+            let left = ui
+                .ctx()
+                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowLeft));
+            let right = ui
+                .ctx()
+                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowRight));
+            // Up/Down get consumed too even though they don't pan —
+            // without that, `end_pass` would walk
+            // `find_widget_in_direction` on the begin_pass snapshot and
+            // Tab-jump focus to the spatially nearest widget on every
+            // Up/Down press.
+            let up = ui
+                .ctx()
+                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowUp));
+            let down = ui
+                .ctx()
+                .input_mut(|i| i.consume_key(Modifiers::NONE, Key::ArrowDown));
+            if left {
+                self.scroll_view(-0.25);
+            }
+            if right {
+                self.scroll_view(0.25);
+            }
+            if left || right || up || down {
+                ui.ctx()
+                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+            }
         }
 
         // Paint focus ring last so it sits on top of the minimap content
