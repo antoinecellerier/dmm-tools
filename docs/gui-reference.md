@@ -383,18 +383,20 @@ Auto-reconnection retries every 2 seconds after a disconnect.
 ### Keyboard
 
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
-- Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the graph minimap, and the recording-panel resize divider.
-- The `?` keyboard-shortcut help overlay and the "What's New" window both trap focus inside while open. Press Esc or Ctrl+W to close, and focus returns to the button you used to open them.
+- Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the **Customize colors** disclosure header, the graph minimap, the recording-panel resize divider, and the left side-panel resize handle.
+- Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the 2D saturation/value square and the 1D hue gradient also accept arrow keys (2 % step, horizontal for saturation/hue, vertical for value).
+- Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
+- The `?` keyboard-shortcut help overlay traps focus inside while open and restores focus to the `?` button when closed (Esc or Ctrl+W). The version label opens a separate **What's New** OS window — that window has its own focus management, but closing it restores focus to the version label in the main window.
 
 ### Screen reader
 
 Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md). Reports of what does and doesn't come through as expected are welcome.
 
-- Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color.
+- Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color. The clickable version label in the top bar announces "Show release notes" rather than the literal version string.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, and the graph's LIVE button announce whether they are currently on or off — you don't have to rely on the color change.
-- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you.
-- The graph announces a one-line summary of what it's showing: time window, Y-axis range, number of samples, whether it's following live, and the most recent reading. The summary updates whenever any of those change.
-- Orca's landmark navigation jumps between the top bar (Toolbar), the main content area (Main), and the connection status region (Status).
+- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation.
+- The graph announces a one-line summary of what it's showing: time window, Y-axis range, number of samples, whether it's following live, and the most recent reading (using the same digit string the sighted user sees). The summary updates whenever any of those change.
+- The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 
 ### Known limitations
 
