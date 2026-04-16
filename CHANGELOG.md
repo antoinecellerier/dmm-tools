@@ -12,7 +12,7 @@
 
 ### Bug fixes
 
-- **Graph frame rate no longer degrades as history grows** — per-frame Y-bounds, statistics, envelope, crossings, and nearest-point helpers now binary-search to the visible window instead of scanning the full 10 000-point buffer; the minimap's O(n²) Y-range pass and the envelope's O(n²) inner scan are also fixed.
+- **Graph frame rate no longer degrades as history grows** — per-frame work now scales with the visible window instead of the full 10 000-point buffer, and the minimap keeps a steady frame rate at full history.
 - **Graph drag-to-pan works in live mode** — starting a drag in live mode snaps the view to the current end of data and drops out of live, matching the scroll-wheel behaviour. Previously drag was silently inert while following live data.
 - **Graph X-axis labels gain sub-second precision** — tight zooms (e.g. a 0.5 s span) no longer produce duplicate "9 s" labels; labels now use the grid step to add decimals when it's sub-second (e.g. "9.25 s", "1m 30.5s").
 - **Graph X axis reflects acquisition time, not UI drain time** — each point carries the timestamp captured at the device read, so UI work or CPU load no longer warps the X axis during drag/zoom/toasts.
