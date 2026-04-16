@@ -96,7 +96,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - For Edit tool `replace_all` operations: did the replacement match only the intended locations? Check the full file for unintended side effects.
 - For specification data: was every value verified against the actual PDF manual (not a text-extracted version)?
 - For new device support: update `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Create a GitHub verification issue (match the pattern of existing issues #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
-- For user-visible changes: is there a `CHANGELOG.md` entry in the `## Unreleased` section? New features, bug fixes, new device support, and breaking changes all need entries. Internal refactors and doc-only changes do not.
+- For user-visible changes: is there a `CHANGELOG.md` entry in the `## Unreleased` section? Apply the user-visibility test: **would someone running a prebuilt binary notice the difference?** If yes (new feature, bug fix, new device support, breaking change, changed behavior, visible performance win), add an entry. If no (extracted a shared helper, moved types to another module, added a trait method, swapped owned `String` for `Cow`, renamed an internal function, added tests, restructured tracing), **do not add an entry** — even if the diff is large or the refactor is architecturally interesting. Commit message is the right place for that context.
 
 ### Documentation
 - Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought
@@ -110,7 +110,11 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - `docs/research/<family>/reverse-engineering-approach.md` — per-family RE methodology, sources, confidence tags
 - `docs/research/<family>/reverse-engineered-protocol.md` — per-family wire protocol specification (authoritative reference for implementation)
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
-- `CHANGELOG.md` — add entries to the `## Unreleased` section **in the same commit** as user-visible changes. Don't defer to release time — that's how entries get lost. Organized by component (GUI, CLI, Library, Bug fixes, Internal, Documentation). The release workflow extracts the entry for the tagged version. Internal refactors, doc-only changes, and CI tweaks don't need entries unless they affect users.
+- `CHANGELOG.md` — add entries to the `## Unreleased` section **in the same commit** as user-visible changes. Don't defer to release time — that's how entries get lost. The release workflow extracts the entry for the tagged version.
+  - **Scope is strictly user-visible impact.** A change belongs in the changelog only if someone running a prebuilt binary could notice it. Phrase each entry from that perspective — what the user sees, hears, or measures, not what the code now looks like.
+  - **Do NOT add entries for:** internal refactors, code reorganization, new public trait methods or library helpers, moving types between modules, `String` → `Cow` swaps, extracted shared functions, added test coverage, dependency version bumps, or CI tweaks. These are commit-message content, not changelog content. This holds even when the refactor is large, architecturally meaningful, or resolves a noted finding — the bar is observable behavior, not internal quality.
+  - Organized by component: GUI, CLI, Library, Bug fixes, Documentation. Prefer a component section over `Internal`; reserve `Internal` for changes whose *cause* is internal but whose *symptom* is user-visible (e.g., a scheduling fix that removes visible jitter), and lead those entries with the user-facing symptom.
+  - Rule of thumb when tempted: write the "before/after a user would observe" sentence out loud. If you can't, don't add the entry.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 
 ### Clean-room reverse engineering
