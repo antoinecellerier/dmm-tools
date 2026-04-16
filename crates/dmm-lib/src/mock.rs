@@ -395,10 +395,11 @@ impl MockProtocol {
     /// The mode repeats indefinitely; use `select`/`select2` commands to switch manually.
     pub fn with_mode(mode: MockMode) -> Self {
         let all = scenarios();
+        // test_with_mode_covers_all_variants below enforces this lookup can't fail.
         let idx = all
             .iter()
             .position(|s| s.id == mode)
-            .expect("MockMode must have a matching scenario");
+            .expect("scenarios() must contain every MockMode variant");
         let mut proto = Self::new();
         proto.current_scenario = idx;
         proto.auto_cycle = false;
@@ -930,6 +931,18 @@ mod tests {
         }
 
         proto.send_command(&transport, "exit_minmax").unwrap();
+    }
+
+    #[test]
+    fn test_with_mode_covers_all_variants() {
+        // with_mode() panics if scenarios() is missing a MockMode variant.
+        // Iterate every known variant to guarantee the lookup never fails —
+        // a new variant without a matching scenario would trip this test
+        // before it reaches a caller.
+        for mode in MockMode::ALL {
+            let proto = MockProtocol::with_mode(*mode);
+            assert_eq!(proto.current_mode(), *mode);
+        }
     }
 
     #[test]
