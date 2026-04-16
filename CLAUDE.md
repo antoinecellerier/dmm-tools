@@ -4,147 +4,122 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 
 ## Project structure
 
-- `crates/dmm-lib/` — library: CP2110 and CH9329 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut171`, `ut181a`, `vc880`, `vc890`. `protocol` module is `pub(crate)` — consumers use `Dmm` API, not raw frame extraction.
-- `crates/dmm-settings/` — shared settings schema (currently just `SharedSettings { device_family }`) used by both the CLI and GUI so the config file contract is compile-enforced. GUI-only fields (colors, panel visibility, theme) live in `dmm-gui` and merge onto `SharedSettings` via `#[serde(flatten)]`.
-- `crates/dmm-cli/` — CLI binary `dmm-cli` (`main.rs` for commands, `capture.rs` for guided capture tool, `format.rs` for output formatting)
-- `crates/dmm-gui/` — GUI binary `dmm-gui`: real-time display and plotting (eframe/egui)
+- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut171`, `ut181a`, `vc880`, `vc890`. `protocol` module is `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction.
+- `crates/dmm-settings/` — shared settings schema (`SharedSettings { device_family }`) used by both CLI and GUI so the config-file contract is compile-enforced. GUI-only fields (colors, panel visibility, theme) live in `dmm-gui` and merge via `#[serde(flatten)]`.
+- `crates/dmm-cli/` — CLI binary `dmm-cli`.
+- `crates/dmm-gui/` — GUI binary `dmm-gui` (eframe/egui).
 
 ## Build & test
 
-- `cargo build --workspace` — build everything
-- `cargo test --workspace` — run all tests
-- `cargo clippy --workspace -- -D warnings` — lint (must pass clean)
-- `cargo fmt --check` — formatting check
+- `cargo build --workspace`
+- `cargo test --workspace`
+- `cargo clippy --workspace -- -D warnings` (must pass clean)
+- `cargo fmt --check`
 
 ## Working with the user
 
 ### Physical device interaction
-- When testing requires physical device interaction (dial position, lead placement, connections), describe the required setup and **wait for user confirmation** before running each step. Never assume the device is already in the right state or drive through verification steps autonomously.
+- When testing requires physical device interaction (dial position, lead placement, connections), describe the setup and **wait for user confirmation** before each step. Never assume the device is in the right state.
 
 ### Specification data
-- **Never fabricate specification data** (accuracy, resolution, frequency response). If a value cannot be directly read from the source document, mark it as unknown/missing rather than guessing. Wrong data is worse than missing data.
-- When transcribing specification data from PDF manuals, always verify against the actual PDF rendering (not text-extracted versions). PDF-to-text conversion corrupts multi-column and merged-cell tables: values shift to wrong rows, and interleaved columns produce garbage. Visual verification of every value against the PDF is required.
+- **Never fabricate specification data.** If a value cannot be directly read from the source document, mark it unknown rather than guessing.
+- Verify PDF-sourced specs against the actual PDF rendering, not text-extracted versions — PDF-to-text conversion corrupts multi-column and merged-cell tables.
 
-### Simplicity
-- Default to the simplest approach that meets the requirement. Don't add complexity speculatively — no "just in case" abstractions, configurability, or generalization beyond what's asked.
-- When told "keep it simple" or "don't over-engineer", take it seriously — revert anything that adds complexity without clear value.
+### Simplicity and scope
+- Default to the simplest approach that meets the requirement. No speculative abstractions or "just in case" configurability.
+- When told "keep it simple", revert anything that adds complexity without clear value.
+- When a request is ambiguous about scope, ask before implementing.
+- For multi-step work, persist progress in durable files (e.g. `docs/verification-backlog.md`) — sessions can run out of context.
 
-### Scope and clarification
-- When a request is ambiguous about scope (e.g., "add zoom"), clarify before implementing. A quick "Do you mean X or Y?" is cheaper than implementing the wrong thing.
-- When working on multi-step tasks, persist progress in durable files (verification-backlog.md, task lists in docs/) rather than relying on conversation context — sessions can run out of context.
-
-### Tool usage preferences
-- Prefer Read/Grep/Glob/Write/Edit tools over Bash commands wherever possible to reduce permission prompts.
-- When Bash is necessary, prefer commands already in the allow-list. Avoid command substitution when a simpler form exists.
-- Run git commands directly — cwd is already the repo. Don't use `git -C`.
-- When using the Edit tool with `replace_all`, verify the pattern doesn't match unintended locations. `replace_all` replaces EVERY occurrence in the file — if the pattern appears in multiple functions or contexts, it can break brace structure or rename unrelated identifiers (e.g., replacing `AcDcA` also catches `AcDcA2`). Prefer targeted single replacements.
+### Tool usage
+- Prefer Read/Grep/Glob/Write/Edit over Bash to reduce permission prompts.
+- Run git commands directly — cwd is the repo. Don't use `git -C`.
+- With Edit's `replace_all`: check the pattern doesn't match unintended locations (e.g. replacing `AcDcA` also catches `AcDcA2`). Prefer targeted single replacements.
 
 ## Engineering standards
 
 ### Code quality
-- All code must pass `cargo clippy -- -D warnings` and `cargo fmt --check` before committing
-- Write unit tests for any non-trivial logic, especially protocol parsing and byte manipulation
-- Use `#[cfg(test)]` modules in the same file as the code being tested
-- Prefer returning `Result` over panicking — `unwrap()` is only acceptable in tests and examples
-- Use `thiserror` for error types in the library crate
-- Default new items to `pub(crate)` visibility. Only widen to `pub` when there's a concrete external consumer.
-- Prefer `&'static str` over `String` when values come from static lookup tables — avoids per-call heap allocation in hot paths like measurement parsing.
+- All code must pass `cargo clippy --workspace -- -D warnings` and `cargo fmt --check`.
+- Write tests alongside non-trivial logic, especially protocol parsing and byte manipulation.
+- `unwrap()` only in tests and examples; return `Result` elsewhere.
+- Default new items to `pub(crate)`; widen to `pub` only for a concrete external consumer.
+- Prefer `&'static str` over `String` for static lookup values — avoids allocation in measurement-parsing hot paths.
 - Prefer enums over string-typed status/state values — lets the compiler catch typos and missing match arms.
-- Add `#[serde(default)]` on all optional/new fields in serialized structs (settings, config). Forgetting this breaks deserialization of existing user config files.
-- Deduplicate user-facing error/help strings — extract shared messages into helper functions rather than duplicating string literals across code paths. Duplicated strings drift over time.
-- Avoid `unsafe` blocks unless absolutely necessary. Never use `unsafe { std::mem::zeroed() }` as a shortcut — find a safe alternative.
+- Add `#[serde(default)]` on all optional/new fields in serialized structs. Forgetting this breaks deserialization of existing user config files.
+- Deduplicate user-facing error/help strings via helper functions — duplicated strings drift.
+- Avoid `unsafe` unless absolutely necessary.
 
 ### Robustness
-- Use `checked_duration_since()` instead of `duration_since()` — the latter panics if the system clock goes backward (VM suspend, NTP correction).
-- Background threads must propagate errors back to the main thread via channel, not silently fail. Wrap thread bodies in `catch_unwind` and send the error.
-- Write data files atomically: write to a `.tmp` path, then `fs::rename` to the final path. Protects against kill signals and disk-full mid-write.
-- After refactors: check for dead code warnings (`unused` fields, methods, imports). Remove them in the same commit rather than letting them accumulate.
+- Use `checked_duration_since()` instead of `duration_since()` — the latter panics on backward clock jumps (VM suspend, NTP correction).
+- Background threads must propagate errors to the main thread via channel; wrap bodies in `catch_unwind` rather than silently failing.
+- Write data files atomically: write to `.tmp`, then `fs::rename`. Protects user data (settings, captures, CSV exports) against kill signals and disk-full mid-write.
+- Bound buffer growth. Current caps: graph history 10K points, recording 500K samples. New buffers need an explicit bound too.
 
 ### Protocol correctness
-- Protocol code is byte-level — off-by-one errors are easy to introduce. Always validate checksums on received data.
-- Document byte offsets and masking operations with comments referencing the relevant protocol spec in `docs/research/<family>/reverse-engineered-protocol.md`.
+- Protocol code is byte-level. Always validate checksums. Document byte offsets and masks with comments referencing `docs/research/<family>/reverse-engineered-protocol.md`.
 - Test parsing with known-good byte sequences captured from real device traces.
-- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=dmm_lib=trace cargo run --bin dmm-cli -- --device <id> debug` to capture raw bytes. Unit tests alone are not sufficient — we've found three major bugs (frame length, mode enum, flag bits) that only showed up against real hardware.
-- Our protocol understanding comes from reverse engineering — not official documentation. See `docs/verification-backlog.md` for what's been verified and what still needs testing.
-- Per-family protocol specs live in `docs/research/`: `ut61-family/`, `ut8803/`, `uci-bench-family/`, `ut171/`, `ut181/`, `vc880/`, `vc890/`. `docs/protocol.md` is a short index that points at each per-family spec — it holds no protocol content of its own.
-- Reference implementations: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, most complete for UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880). Cross-check against these when in doubt.
-- Mock/test implementations must match real device behavior as closely as practical. Document any simplifications. Mocks that set impossible flag combinations (e.g., MIN+MAX simultaneously) or return incorrect data types (live values instead of stored values) create false confidence in tests.
+- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=dmm_lib=trace cargo run --bin dmm-cli -- --device <id> debug` to capture raw bytes. Three major bugs (frame length, mode enum, flag bits) only surfaced against real hardware.
+- For unsafe or HID parsing code: confirm a malformed response cannot panic (check buffer sizes, bounds).
+- Our protocol understanding comes from reverse engineering, not official documentation. See `docs/verification-backlog.md` for what's been verified and what's pending.
+- Per-family protocol specs live in `docs/research/<family>/reverse-engineered-protocol.md`. `docs/protocol.md` is only an index.
+- Reference implementations to cross-check when in doubt: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880).
+- Mocks must match real-device behavior: no impossible flag combinations (e.g. MIN+MAX simultaneously), correct data types for stored vs live values. Mocks that diverge create false confidence.
 
 ### Commit discipline
-- **Every commit must include tests for new code** — write tests before or alongside the code, never defer them
-- Commit logical units of work — one concept per commit
-- Each commit should compile and pass tests (`cargo build && cargo test`)
-- Write concise commit messages: imperative mood, explain the "why" not just the "what"
-- Don't bundle unrelated changes in the same commit
-- Never commit files from `references/` — this directory is gitignored and contains vendor software, decompilations, and manuals that must not be in the repository
-
-### Review checklist (apply *while writing code*, not just after)
-This checklist exists to prevent issues, not to find them after the fact. Mentally walk through each item for the code you just wrote before committing.
-- Does `cargo clippy --workspace -- -D warnings` pass?
-- Does `cargo test --workspace` pass?
-- Are new public types/functions documented?
-- For CLI changes: is `docs/cli-reference.md` updated to reflect new/changed/removed commands and options?
-- For GUI changes: is `docs/gui-reference.md` updated to reflect new/changed/removed features, panels, or controls?
-- For protocol code: are byte offsets and masks correct? Cross-check against the relevant `docs/research/<family>/reverse-engineered-protocol.md`.
-- For unsafe or HID code: are buffer sizes correct? Can a malformed response cause a panic?
-- For GUI render paths: avoid per-frame allocations in hot loops. The graph has two rendering tiers: the minimap uses a full-history segment cache (auto-invalidated via a monotonic `history_version` counter), while the main graph builds segments from only the visible slice each frame via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) also iterate only the visible slice — do not regress them to full-history scans.
-- For new buffers: ensure bounded growth. Graph history caps at 10K points, recording at 500K samples.
-- For serialized structs: do new fields have `#[serde(default)]`? Missing this breaks existing users' config files on upgrade.
-- For file writes: is the write atomic? User data (captures, settings, CSV exports) should use write-to-tmp-then-rename.
-- For user-initiated actions (export, clear, connect): is there visible feedback (toast, status message, log line)? Silent success is a UX bug.
-- For icon-only or custom-painted interactive widgets: does it have an AccessKit label? Use `accesskit_node_builder` to set one. Buttons with descriptive text get this automatically; icon buttons and custom widgets do not.
-- For Edit tool `replace_all` operations: did the replacement match only the intended locations? Check the full file for unintended side effects.
-- For specification data: was every value verified against the actual PDF manual (not a text-extracted version)?
-- For new device support: update `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Create a GitHub verification issue (match the pattern of existing issues #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
-- For user-visible changes: is there a `CHANGELOG.md` entry in the `## Unreleased` section? Apply the user-visibility test: **would someone running a prebuilt binary notice the difference?** If yes (new feature, bug fix, new device support, breaking change, changed behavior, visible performance win), add an entry. If no (extracted a shared helper, moved types to another module, added a trait method, swapped owned `String` for `Cow`, renamed an internal function, added tests, restructured tracing), **do not add an entry** — even if the diff is large or the refactor is architecturally interesting. Commit message is the right place for that context.
-
-### Documentation
-- Keep `docs/` up to date as you go — documentation is part of the deliverable, not an afterthought
-- After completing a feature or fix, proactively update all affected documentation in the same commit. Don't wait to be asked "are docs up to date?"
-- `docs/architecture.md` — crate layout, module responsibilities, data flow diagrams, key design decisions and rationale
-- `docs/protocol.md` — short index of per-family protocol references. Authoritative wire-level details live in `docs/research/<family>/reverse-engineered-protocol.md`; update those when real device behavior reveals new information.
-- `docs/ux-design.md` — CLI command interface, output formats, GUI layout and interaction patterns
-- `docs/setup.md` — build prerequisites, udev setup, first-run instructions, troubleshooting common issues
-- `docs/development.md` — how to run tests, add new device models, coding conventions, release process
-- `docs/adding-devices.md` — end-to-end guide: discovery, clean-room RE, implementation, spec data extraction, hardware verification, common pitfalls. **Read this before starting work on any new device.**
-- `docs/research/<family>/reverse-engineering-approach.md` — per-family RE methodology, sources, confidence tags
-- `docs/research/<family>/reverse-engineered-protocol.md` — per-family wire protocol specification (authoritative reference for implementation)
-- `docs/verification-backlog.md` — update whenever items are verified or new unknowns are discovered. This is critical for preserving state across sessions.
-- `CHANGELOG.md` — add entries to the `## Unreleased` section **in the same commit** as user-visible changes. Don't defer to release time — that's how entries get lost. The release workflow extracts the entry for the tagged version.
-  - **Scope is strictly user-visible impact.** A change belongs in the changelog only if someone running a prebuilt binary could notice it. Phrase each entry from that perspective — what the user sees, hears, or measures, not what the code now looks like.
-  - **Do NOT add entries for:** internal refactors, code reorganization, new public trait methods or library helpers, moving types between modules, `String` → `Cow` swaps, extracted shared functions, added test coverage, dependency version bumps, or CI tweaks. These are commit-message content, not changelog content. This holds even when the refactor is large, architecturally meaningful, or resolves a noted finding — the bar is observable behavior, not internal quality.
-  - Organized by component: GUI, CLI, Library, Bug fixes, Documentation. Prefer a component section over `Internal`; reserve `Internal` for changes whose *cause* is internal but whose *symptom* is user-visible (e.g., a scheduling fix that removes visible jitter), and lead those entries with the user-facing symptom.
-  - **Keep entries crisp.** Lead with a bolded user-visible summary, then at most one short follow-up sentence for context. Don't paste the debugging narrative or walk through implementation details — that belongs in the commit message. If you find yourself writing a paragraph, you're writing commit-message content.
-  - Rule of thumb when tempted: write the "before/after a user would observe" sentence out loud. If you can't, don't add the entry.
-- Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
-
-### Clean-room reverse engineering
-- When performing clean-room RE, only consume sources the user has explicitly approved (typically: official manuals, vendor software, public component datasheets). Do not read external implementations or community code until the clean-room analysis is complete and the user approves cross-referencing.
-- Document which sources were used and which were avoided, so the clean-room boundary is auditable.
+- Commit logical units of work — one concept per commit, each compiling and passing tests.
+- Include tests alongside new non-trivial code.
+- Commit messages: imperative mood, explain the *why*.
+- Never commit `references/` — gitignored; holds vendor software, decompilations, and manuals that must not live in the repo.
 
 ### Logging
-- Use the `log` crate with structured levels: `TRACE` for raw HID byte dumps, `DEBUG` for protocol events (request/response/checksum), `INFO` for connection state, `WARN` for recoverable issues (timeouts, retries), `ERROR` for failures
-- `RUST_LOG=dmm_lib=trace` should give complete wire-level debugging
-- Never log at `INFO` or above in hot paths (measurement loop)
+- `log` crate, structured levels: `TRACE` for raw HID bytes, `DEBUG` for protocol events (request/response/checksum), `INFO` for connection state, `WARN` for recoverable issues (timeouts, retries), `ERROR` for failures.
+- `RUST_LOG=dmm_lib=trace` should give complete wire-level debugging.
+- Never log at `INFO` or above inside the measurement loop.
 
-### GUI design
-- **Test every visual change in both dark and light themes.** This has been the single largest source of rework — colors tuned for dark mode routinely fail WCAG contrast on light backgrounds.
-- All colors must be theme-aware — use `ui.visuals().dark_mode` to select darker variants for light backgrounds
-- WCAG 2.1 AA contrast ratios: ≥4.5:1 for text, ≥3:1 for graphical elements (lines, markers)
-- Verify contrast ratios numerically when adding/changing colors (use relative luminance formula)
-- Never rely on color alone — use bold/style, line patterns, or text labels as secondary indicators
-- Minimum font size 11pt throughout
-- Display value strings should use `display_raw` from the meter for stable width (no jitter)
-- **Think through boundary conditions before writing code:** extreme window sizes (very wide, very narrow, maximized, quarter-screen), high zoom levels, empty/no-data state, and mode transitions. Don't ship the happy path and iterate.
-- Start with the simplest visual approach. Prefer minimal rendering (lines, text labels) over complex shapes (filled polygons, gradients). Offer to enhance later if the user wants more.
+### GUI correctness
+- **Test every visual change in both dark and light themes.** Colors tuned for dark mode routinely fail WCAG contrast on light backgrounds — the single largest source of rework in this project.
+- All colors must be theme-aware (`ui.visuals().dark_mode`).
+- WCAG 2.1 AA contrast: ≥4.5:1 for text, ≥3:1 for graphical elements. Verify numerically when adding/changing colors.
+- Never rely on color alone — add line style, text, or bold as a secondary indicator.
+- Minimum font size 11pt throughout.
+- Display value strings use `display_raw` for stable width (no jitter).
+- Icon-only or custom-painted interactive widgets need an AccessKit label via `accesskit_node_builder`. Buttons with text get this automatically; icon buttons and custom widgets do not.
+- User-initiated actions (export, clear, connect) need visible feedback — toast, status message, or log line. Silent success is a UX bug.
+- Think through boundary conditions before writing code: extreme window sizes (very wide, very narrow, quarter-screen, maximized), high zoom, empty/no-data state, mode transitions.
+- Graph rendering has two tiers. The minimap uses a full-history segment cache invalidated by the monotonic `history_version` counter; the main graph builds segments from the visible slice via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) must also iterate only the visible slice — do not regress them to full-history scans.
 - egui pitfalls learned the hard way:
-  - `set_plot_bounds()` overrides both axes — use `set_plot_bounds_x()`/`set_plot_bounds_y()` (added in egui_plot 0.33) to constrain a single axis.
-  - `allow_drag(false)` also suppresses pointer position events; use `plot.reset()` per frame instead to pin the view while keeping events.
-  - After mode changes or data clears, call `plot.reset()` to prevent stale bounds from the previous state.
-  - `set_pixels_per_point()` and `set_visuals()` called every frame reset egui's internal panel state (resize positions, scroll offsets). Only call these when the value actually changes.
-  - egui API naming is inconsistent — verify method names against docs before using them (e.g., `fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
+  - `set_plot_bounds()` overrides both axes — use `set_plot_bounds_x()` / `_y()` (egui_plot 0.33+) to constrain one axis.
+  - `allow_drag(false)` also suppresses pointer position events; use `plot.reset()` per frame to pin the view while keeping events.
+  - After mode changes or data clears, call `plot.reset()` to avoid stale bounds from the previous state.
+  - `set_pixels_per_point()` and `set_visuals()` called every frame reset egui's internal panel state (resize positions, scroll offsets). Only call when the value changes.
+  - egui API naming is inconsistent — verify method names against docs (`fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
 
 ### Dependencies
-- Library crate (`dmm-lib`): keep self-contained — only `hidapi`, `thiserror`, `log`. Protocol parsing and transport code must not pull in external utility crates; this is the core that talks to hardware and must stay minimal.
-- CLI and GUI crates: prefer well-maintained community crates over reimplementing functionality (markdown rendering, UI widgets, date handling, etc.). A good dependency is better than a worse hand-rolled version.
-- Evaluate new dependencies on: maintenance health, transitive dependency footprint, and whether they solve a real problem vs. something achievable in a few lines.
+- `dmm-lib` stays self-contained: only `hidapi`, `thiserror`, `log`. No external utility crates — this is the core that talks to hardware.
+- CLI and GUI crates: prefer well-maintained community crates over hand-rolled equivalents (markdown rendering, UI widgets, date handling).
+- Evaluate new dependencies on maintenance health, transitive footprint, and whether they solve a real problem vs. something achievable in a few lines.
+
+### Clean-room reverse engineering
+- Only consume sources the user has explicitly approved (manuals, vendor software, public datasheets). Do not read external implementations or community code until the clean-room analysis is complete and the user approves cross-referencing.
+- Document sources used and avoided so the clean-room boundary is auditable.
+
+## Documentation
+
+Documentation is part of the deliverable — update affected docs in the same commit as the change, not after.
+
+- `docs/architecture.md` — crate layout, module responsibilities, data flow, key design decisions.
+- `docs/protocol.md` — index of per-family specs. Authoritative content lives in `docs/research/<family>/reverse-engineered-protocol.md`.
+- `docs/setup.md`, `docs/development.md`, `docs/ux-design.md`, `docs/cli-reference.md`, `docs/gui-reference.md` — user and contributor references; update when their subject changes.
+- `docs/adding-devices.md` — end-to-end guide for new device support. **Read this before starting work on any new device.**
+- `docs/research/<family>/` — per-family RE methodology and wire-protocol spec.
+- `docs/verification-backlog.md` — update whenever items are verified or new unknowns surface. Critical for preserving state across sessions.
+- For new device support, touch all of: `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Also create a GitHub verification issue (match the pattern of #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
+- Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
+
+### Changelog
+- Add entries to `## Unreleased` in the same commit as user-visible changes. The release workflow extracts the entry for the tagged version — don't defer.
+- **Scope is strictly user-visible impact.** Someone running a prebuilt binary must be able to notice the difference. Phrase entries from that perspective.
+- **Do NOT add entries for:** internal refactors, code reorganization, new public trait methods, `String`→`Cow` swaps, extracted helpers, added tests, dependency bumps, or CI tweaks — even if the diff is large or architecturally meaningful.
+- Organized by component: GUI, CLI, Library, Bug fixes, Documentation. Reserve `Internal` for changes whose *cause* is internal but *symptom* is user-visible (e.g., a scheduling fix that removes visible jitter); lead those entries with the user-facing symptom.
+- **Keep entries crisp.** Lead with a bolded user-visible summary, then at most one follow-up sentence for context. If you're writing a paragraph, that's commit-message content.
+- Rule of thumb when tempted: write the "before/after a user would observe" sentence out loud. If you can't, don't add the entry.
