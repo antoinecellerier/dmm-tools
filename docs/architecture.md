@@ -114,7 +114,7 @@ sample log, persistent settings.
 6. **Device tables via trait** — within the UT61E+ family, adding a new meter model = adding one file implementing `DeviceTable`.
 7. **No nom** — payload is a fixed 14-byte struct. Direct indexing is clearer.
 8. **Measurement fields use `&'static str`** — `unit` and `range_label` reference static table data, avoiding heap allocation per measurement.
-9. **Graph segment caching** — segments and gap ranges are rebuilt only when history changes, not every render frame.
+9. **Graph two-tier rendering** — the minimap needs the full history, so it uses a segment/gap cache that auto-rebuilds when a monotonic `history_version` counter changes. The main graph skips the full cache entirely: it binary-searches the history for the visible time window (`visible_index_range`), then builds segments from that ~150-point slice each frame. All per-frame helpers (Y-bounds, statistics, envelope, crossings, nearest-point) also operate on the visible slice only, keeping frame cost independent of total history size.
 10. **Bounded buffers** — graph history (10K points), recording (500K samples), and the background channel prevent unbounded memory growth during sustained use.
 11. **Settings schema evolution** — `#[serde(default)]` on `Settings` allows adding new fields without breaking existing config files.
 12. **Device registry** — all device metadata (display names, aliases, activation instructions, protocol factories, manual URLs) lives in a single `DEVICES` slice in the library. CLI and GUI consume the registry without device-specific knowledge, so adding a new device family requires zero app code changes.

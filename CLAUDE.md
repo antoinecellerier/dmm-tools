@@ -87,7 +87,7 @@ This checklist exists to prevent issues, not to find them after the fact. Mental
 - For GUI changes: is `docs/gui-reference.md` updated to reflect new/changed/removed features, panels, or controls?
 - For protocol code: are byte offsets and masks correct? Cross-check against the relevant `docs/research/<family>/reverse-engineered-protocol.md`.
 - For unsafe or HID code: are buffer sizes correct? Can a malformed response cause a panic?
-- For GUI render paths: avoid per-frame allocations in hot loops. Use cached data with dirty flags where possible. Graph segments and gap ranges are cached — invalidate via `invalidate_cache()` when data changes.
+- For GUI render paths: avoid per-frame allocations in hot loops. The graph has two rendering tiers: the minimap uses a full-history segment cache (auto-invalidated via a monotonic `history_version` counter), while the main graph builds segments from only the visible slice each frame via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) also iterate only the visible slice — do not regress them to full-history scans.
 - For new buffers: ensure bounded growth. Graph history caps at 10K points, recording at 500K samples.
 - For serialized structs: do new fields have `#[serde(default)]`? Missing this breaks existing users' config files on upgrade.
 - For file writes: is the write atomic? User data (captures, settings, CSV exports) should use write-to-tmp-then-rename.
