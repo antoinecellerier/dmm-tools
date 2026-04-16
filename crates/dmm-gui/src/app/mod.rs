@@ -2127,7 +2127,10 @@ impl App {
             }
             egui::CentralPanel::default().show_inside(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    crate::changelog::show_changelog(ui, &mut cache.lock().unwrap());
+                    let mut cache = cache
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    crate::changelog::show_changelog(ui, &mut cache);
                 });
             });
         });
