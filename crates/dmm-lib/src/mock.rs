@@ -5,6 +5,7 @@ use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
+use std::f64::consts::TAU;
 use std::time::{Duration, Instant};
 
 const MOCK_COMMANDS: &[&str] = &[
@@ -115,7 +116,9 @@ impl std::fmt::Display for MockMode {
 ///
 /// Values are a pure function of elapsed seconds since the scenario started,
 /// so displayed waveforms trace smooth curves regardless of read cadence or
-/// scheduling jitter.
+/// scheduling jitter. Each waveform is periodic over `duration_secs` — it
+/// returns identical values at `t = 0` and `t = duration_secs`, so the
+/// scenario can loop without a visible jump when it wraps.
 struct Scenario {
     id: MockMode,
     mode: &'static str,
@@ -125,7 +128,7 @@ struct Scenario {
     range_label: &'static str,
     range_max: f64,
     duration_secs: f64,
-    value_fn: fn(f64) -> MeasuredValue,
+    value_fn: fn(f64, f64) -> MeasuredValue,
 }
 
 impl Scenario {
@@ -139,7 +142,7 @@ impl Scenario {
         range_label: &'static str,
         range_max: f64,
         duration_secs: f64,
-        value_fn: fn(f64) -> MeasuredValue,
+        value_fn: fn(f64, f64) -> MeasuredValue,
     ) -> Self {
         Self {
             id,
@@ -155,55 +158,59 @@ impl Scenario {
     }
 }
 
-fn dcv_value(t: f64) -> MeasuredValue {
-    // Period ≈ 9.42 s (matches the original 15-read-per-radian waveform at
-    // 100 ms/read: step/15 → t*10/15 → t*2/3).
-    MeasuredValue::Normal(5.0 + 3.0 * (t * 2.0 / 3.0).sin())
-}
-
-fn acv_value(t: f64) -> MeasuredValue {
-    // Period ≈ 6.28 s (step/10 at 100 ms → t).
-    MeasuredValue::Normal(120.0 + 2.0 * t.sin())
-}
-
-fn ohm_value(t: f64) -> MeasuredValue {
-    // Triangle 1..10 with a 10-second period.
-    let phase = (t / 10.0).rem_euclid(1.0);
-    let v = if phase < 0.5 {
-        1.0 + phase * 2.0 * 9.0
+/// Triangle wave on `[lo, hi]`, period-1 in phase. `phase = 0` and `phase = 1`
+/// both map to `lo`, so the wave loops continuously.
+fn triangle(phase: f64, lo: f64, hi: f64) -> f64 {
+    let p = phase.rem_euclid(1.0);
+    let span = hi - lo;
+    if p < 0.5 {
+        lo + p * 2.0 * span
     } else {
-        10.0 - (phase - 0.5) * 2.0 * 9.0
-    };
-    MeasuredValue::Normal(v)
+        hi - (p - 0.5) * 2.0 * span
+    }
 }
 
-fn cap_value(t: f64) -> MeasuredValue {
-    // Sawtooth ramp 1..20 with a 10-second period.
-    MeasuredValue::Normal(1.0 + (t / 10.0).rem_euclid(1.0) * 19.0)
+fn dcv_value(t: f64, duration: f64) -> MeasuredValue {
+    // One full sine cycle per duration.
+    MeasuredValue::Normal(5.0 + 3.0 * (t / duration * TAU).sin())
 }
 
-fn hz_value(t: f64) -> MeasuredValue {
-    // Period ≈ 12.57 s (step/20 at 100 ms → t/2).
-    MeasuredValue::Normal(60.0 + 0.5 * (t / 2.0).sin())
+fn acv_value(t: f64, duration: f64) -> MeasuredValue {
+    // Two sine cycles per duration.
+    MeasuredValue::Normal(120.0 + 2.0 * (t / duration * 2.0 * TAU).sin())
 }
 
-fn temp_value(t: f64) -> MeasuredValue {
-    // Sawtooth ramp 20..30 with an 8-second period.
-    MeasuredValue::Normal(20.0 + (t / 8.0).rem_euclid(1.0) * 10.0)
+fn ohm_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(triangle(t / duration, 1.0, 10.0))
 }
 
-fn dcma_value(t: f64) -> MeasuredValue {
-    // Period ≈ 5.03 s (step/8 at 100 ms → t*1.25).
-    MeasuredValue::Normal(50.0 + 5.0 * (t * 1.25).sin())
+fn cap_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(triangle(t / duration, 1.0, 20.0))
 }
 
-fn ohm_ol_value(_t: f64) -> MeasuredValue {
+fn hz_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(60.0 + 0.5 * (t / duration * TAU).sin())
+}
+
+fn temp_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(triangle(t / duration, 20.0, 30.0))
+}
+
+fn dcma_value(t: f64, duration: f64) -> MeasuredValue {
+    // Two sine cycles per duration.
+    MeasuredValue::Normal(50.0 + 5.0 * (t / duration * 2.0 * TAU).sin())
+}
+
+fn ohm_ol_value(_t: f64, _duration: f64) -> MeasuredValue {
     MeasuredValue::Overload
 }
 
-fn ncv_value(t: f64) -> MeasuredValue {
+fn ncv_value(t: f64, duration: f64) -> MeasuredValue {
+    // Discrete triangle: 0,1,2,3,4,3,2,1 stepped across the duration, so the
+    // level at t=duration is the starting level at t=0.
     const LEVELS: [u8; 8] = [0, 1, 2, 3, 4, 3, 2, 1];
-    let idx = ((t / 0.5).floor().rem_euclid(LEVELS.len() as f64)) as usize;
+    let phase = (t / duration).rem_euclid(1.0);
+    let idx = ((phase * LEVELS.len() as f64) as usize).min(LEVELS.len() - 1);
     MeasuredValue::NcvLevel(LEVELS[idx])
 }
 
@@ -473,7 +480,7 @@ impl Protocol for MockProtocol {
         // Extract scenario data up front to avoid borrow conflict with &mut self.
         let elapsed = self.elapsed_secs();
         let scenario = &self.scenarios[self.current_scenario];
-        let raw_value = (scenario.value_fn)(elapsed);
+        let raw_value = (scenario.value_fn)(elapsed, scenario.duration_secs);
         let mode: Cow<'static, str> = Cow::Borrowed(scenario.mode);
         let mode_raw = scenario.mode_raw;
         let range_raw = scenario.range_raw;
@@ -602,7 +609,7 @@ impl Protocol for MockProtocol {
                 if self.hold {
                     let elapsed = self.elapsed_secs();
                     let scenario = self.current_scenario();
-                    self.held_value = Some((scenario.value_fn)(elapsed));
+                    self.held_value = Some((scenario.value_fn)(elapsed, scenario.duration_secs));
                 } else {
                     self.held_value = None;
                 }
@@ -612,7 +619,9 @@ impl Protocol for MockProtocol {
                 if self.rel {
                     let elapsed = self.elapsed_secs();
                     let scenario = self.current_scenario();
-                    if let MeasuredValue::Normal(v) = (scenario.value_fn)(elapsed) {
+                    if let MeasuredValue::Normal(v) =
+                        (scenario.value_fn)(elapsed, scenario.duration_secs)
+                    {
                         self.rel_base = Some(v);
                     }
                 } else {
@@ -1012,21 +1021,21 @@ mod tests {
 
     #[test]
     fn test_dcv_is_smooth_function_of_time() {
-        // dcv_value is `5 + 3 * sin(2t/3)`, angular period 3π seconds, so
-        // samples one period apart must match exactly and samples a quarter
-        // period apart must be symmetric about the centre value. This is what
-        // makes the displayed waveform jitter-free — the value depends only on
-        // the sample time, not on the read cadence.
-        let period = 3.0 * std::f64::consts::PI;
-        let a = match dcv_value(0.0) {
+        // dcv_value completes one full sine cycle over `duration`, so samples
+        // one period apart must match exactly and samples a quarter period
+        // apart must be symmetric about the centre value. This is what makes
+        // the displayed waveform jitter-free — the value depends only on the
+        // sample time, not on the read cadence.
+        let duration = 10.0;
+        let a = match dcv_value(0.0, duration) {
             MeasuredValue::Normal(v) => v,
             _ => panic!("expected Normal"),
         };
-        let b = match dcv_value(period) {
+        let b = match dcv_value(duration, duration) {
             MeasuredValue::Normal(v) => v,
             _ => panic!("expected Normal"),
         };
-        let c = match dcv_value(2.0 * period) {
+        let c = match dcv_value(2.0 * duration, duration) {
             MeasuredValue::Normal(v) => v,
             _ => panic!("expected Normal"),
         };
@@ -1034,11 +1043,11 @@ mod tests {
         assert!((b - c).abs() < 1e-9, "period mismatch: {b} vs {c}");
 
         // Half-period (sin is odd about zero): values symmetric about 5.0.
-        let left = match dcv_value(period / 4.0) {
+        let left = match dcv_value(duration / 4.0, duration) {
             MeasuredValue::Normal(v) => v,
             _ => panic!("expected Normal"),
         };
-        let right = match dcv_value(3.0 * period / 4.0) {
+        let right = match dcv_value(3.0 * duration / 4.0, duration) {
             MeasuredValue::Normal(v) => v,
             _ => panic!("expected Normal"),
         };
@@ -1046,6 +1055,30 @@ mod tests {
             ((left - 5.0) + (right - 5.0)).abs() < 1e-9,
             "half-period samples should be symmetric about 5.0: {left}, {right}"
         );
+    }
+
+    #[test]
+    fn test_waveforms_loop_continuously() {
+        // Every scenario must satisfy f(0) == f(duration): when the pattern
+        // wraps back to t=0 the displayed value must not jump.
+        for s in scenarios() {
+            let start = (s.value_fn)(0.0, s.duration_secs);
+            let end = (s.value_fn)(s.duration_secs, s.duration_secs);
+            match (&start, &end) {
+                (MeasuredValue::Normal(a), MeasuredValue::Normal(b)) => {
+                    assert!(
+                        (a - b).abs() < 1e-9,
+                        "{:?}: f(0)={a} but f(duration)={b}",
+                        s.id
+                    );
+                }
+                (MeasuredValue::Overload, MeasuredValue::Overload) => {}
+                (MeasuredValue::NcvLevel(a), MeasuredValue::NcvLevel(b)) => {
+                    assert_eq!(a, b, "{:?}: ncv level jumps at wrap", s.id);
+                }
+                _ => panic!("{:?}: variant differs at wrap: {start:?} vs {end:?}", s.id),
+            }
+        }
     }
 
     #[test]
