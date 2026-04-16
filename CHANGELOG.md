@@ -8,6 +8,7 @@
 - **Educational hover tooltips on every control** — every button, link, toggle, checkbox, and setting in the GUI now has a descriptive hover tooltip explaining what it does, plus its keyboard shortcut when one exists. First-time users can discover every feature by hovering. Device command buttons (HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, SELECT, LIGHT) use device-agnostic wording so tooltips stay accurate across all supported meter families.
 - **Graph bounding-box zoom** — hold Shift and drag on the graph to draw a rectangle; on release the view zooms to the selected time and value range. Press Escape to cancel mid-drag. A new **Reset Zoom** toolbar button (also bound to double-click on the plot) returns the graph to live follow with auto Y.
 - **Help overlay now covers mouse gestures** — the `?` popup (renamed "Keyboard & Mouse") gains a Graph (mouse) section documenting drag, shift-drag zoom, scroll-wheel zoom, double-click reset, cursor placement, and minimap drag.
+- **Reconnection shows progress and the latest error.** When the background thread loses the device and enters its auto-reconnect loop, the connection-status button now displays the attempt counter (e.g. "Reconnecting (attempt 3)...") and its hover tooltip shows the most recent reconnect failure reason. A Disconnect click is also picked up immediately instead of waiting up to 2 s for the next retry interval.
 
 ### Bug fixes
 

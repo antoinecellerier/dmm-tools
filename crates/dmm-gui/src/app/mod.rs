@@ -137,6 +137,11 @@ pub struct App {
     pub(super) last_error: Option<String>,
     /// Consecutive timeout count (0 = not waiting).
     pub(super) waiting_timeouts: u32,
+    /// Reconnect attempt count (0 = not reconnecting). Populated from the
+    /// background thread while the state is `Reconnecting`.
+    pub(super) reconnect_attempt: u32,
+    /// Last reconnect failure message, if any.
+    pub(super) reconnect_last_error: Option<String>,
     pub(super) last_measurement: Option<Measurement>,
 
     /// Cached per-range spec for current measurement (avoids lookup per frame).
@@ -238,6 +243,8 @@ impl App {
             paused: false,
             last_error: None,
             waiting_timeouts: 0,
+            reconnect_attempt: 0,
+            reconnect_last_error: None,
             last_measurement: None,
             cached_spec: None,
             cached_mode_spec: None,
@@ -588,6 +595,8 @@ impl App {
         self.feedback_url.clear();
         self.supported_commands.clear();
         self.paused = false;
+        self.reconnect_attempt = 0;
+        self.reconnect_last_error = None;
     }
 
     fn drain_messages(&mut self) {
@@ -617,10 +626,19 @@ impl App {
                         Some(name.clone())
                     };
                     self.last_error = None;
+                    self.reconnect_attempt = 0;
+                    self.reconnect_last_error = None;
                     info!("UI: connected to {name}");
                 }
                 DmmMessage::WaitingForMeter(count) => {
                     self.waiting_timeouts = count;
+                }
+                DmmMessage::Reconnecting {
+                    attempt,
+                    last_error,
+                } => {
+                    self.reconnect_attempt = attempt;
+                    self.reconnect_last_error = last_error;
                 }
                 DmmMessage::Measurement(m) => {
                     self.last_error = None;
@@ -924,10 +942,21 @@ impl App {
                     }
                 }
                 ConnectionState::Reconnecting => {
-                    ui.add_enabled(false, egui::Button::new("Reconnecting..."))
-                        .on_disabled_hover_text(
-                            "Retrying the connection automatically — click Disconnect to stop",
-                        );
+                    let label = if self.reconnect_attempt > 0 {
+                        format!("Reconnecting (attempt {})...", self.reconnect_attempt)
+                    } else {
+                        "Reconnecting...".to_string()
+                    };
+                    let hover = if let Some(err) = &self.reconnect_last_error {
+                        format!(
+                            "Retrying the connection automatically — click Disconnect to stop.\nLast error: {err}",
+                        )
+                    } else {
+                        "Retrying the connection automatically — click Disconnect to stop"
+                            .to_string()
+                    };
+                    ui.add_enabled(false, egui::Button::new(label))
+                        .on_disabled_hover_text(hover);
                 }
             }
 
@@ -941,7 +970,14 @@ impl App {
                     }
                 }
                 ConnectionState::Disconnected => (gray, "Disconnected".to_string()),
-                ConnectionState::Reconnecting => (orange, "Reconnecting...".to_string()),
+                ConnectionState::Reconnecting => {
+                    let label = if self.reconnect_attempt > 0 {
+                        format!("Reconnecting (attempt {})...", self.reconnect_attempt)
+                    } else {
+                        "Reconnecting...".to_string()
+                    };
+                    (orange, label)
+                }
             };
 
             // Group status indicators (dot, label, experimental badge, toast)

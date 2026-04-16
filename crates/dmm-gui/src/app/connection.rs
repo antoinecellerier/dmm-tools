@@ -17,6 +17,12 @@ pub(crate) enum DmmMessage {
         supported_commands: Vec<String>,
     },
     Disconnected(String),
+    /// Reconnect attempt in progress — `attempt` is 1-based.
+    /// `last_error` is the most recent reconnect failure, if any.
+    Reconnecting {
+        attempt: u32,
+        last_error: Option<String>,
+    },
     Error(String),
     /// USB cable/adapter not detected on the bus.
     DeviceNotFound,
@@ -126,19 +132,37 @@ pub(super) fn run_device_thread<T, F>(
                 let _ = msg_tx.send(DmmMessage::Disconnected(e.to_string()));
                 ctx.request_repaint();
 
-                // Reconnection loop
+                // Reconnection loop. Waits on the stop channel so disconnects
+                // propagate within the retry interval instead of up to 2s later,
+                // and reports each attempt to the UI so the user sees progress.
+                let retry_interval = Duration::from_secs(2);
+                let mut attempt: u32 = 0;
+                let mut last_error: Option<String> = None;
                 loop {
-                    if stop_rx.try_recv().is_ok() {
-                        return;
+                    attempt += 1;
+                    let _ = msg_tx.send(DmmMessage::Reconnecting {
+                        attempt,
+                        last_error: last_error.clone(),
+                    });
+                    ctx.request_repaint();
+
+                    // Sleep, but wake early on stop signal.
+                    match stop_rx.recv_timeout(retry_interval) {
+                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
-                    std::thread::sleep(std::time::Duration::from_secs(2));
+
                     match open_fn() {
                         Ok(mut d) => {
+                            info!("background thread: reconnected on attempt {attempt}");
                             establish_connection(&mut d, query_name, &msg_tx, &ctx);
                             dmm = d;
                             break;
                         }
-                        Err(_) => continue,
+                        Err(err) => {
+                            warn!("background thread: reconnect attempt {attempt} failed: {err}");
+                            last_error = Some(err.to_string());
+                        }
                     }
                 }
             }
