@@ -1,10 +1,11 @@
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::Stability;
+use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Transport;
 use eframe::egui;
 use log::{error, info, warn};
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Messages from the background thread to the UI.
 pub(crate) enum DmmMessage {
@@ -92,34 +93,33 @@ pub(super) fn run_device_thread<T, F>(
     };
 
     let tick = Duration::from_millis(sample_interval_ms as u64);
-    let mut next_tick = Instant::now() + tick;
-    let mut consecutive_timeouts: u32 = 0;
+    let mut stream = MeasurementStream::new(&mut dmm, tick);
     loop {
         if stop_rx.try_recv().is_ok() {
             info!("background thread: stop signal received");
             break;
         }
 
-        // Process any pending remote commands
+        // Process any pending remote commands. Goes through the stream's
+        // `dmm_mut()` so the underlying `Dmm` stays owned by the stream
+        // across command sends and doesn't reset its tick schedule.
         while let Ok(cmd) = cmd_rx.try_recv() {
-            if let Err(e) = dmm.send_command(&cmd) {
+            if let Err(e) = stream.dmm_mut().send_command(&cmd) {
                 warn!("background thread: command failed: {e}");
             }
         }
 
-        match dmm.request_measurement() {
-            Ok(m) => {
-                consecutive_timeouts = 0;
+        match stream.tick() {
+            Ok(StreamEvent::Measurement(m)) => {
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
                     break;
                 }
             }
-            Err(dmm_lib::error::Error::Timeout) => {
-                consecutive_timeouts += 1;
-                warn!("background thread: measurement timeout ({consecutive_timeouts})");
-                let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive_timeouts));
+            Ok(StreamEvent::Timeout { consecutive }) => {
+                warn!("background thread: measurement timeout ({consecutive})");
+                let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive));
                 ctx.request_repaint();
-                if consecutive_timeouts == 5 {
+                if consecutive == 5 {
                     let _ = msg_tx.send(DmmMessage::Error(
                         "No response from meter \u{2014} check device selection and USB mode"
                             .to_string(),
@@ -135,6 +135,14 @@ pub(super) fn run_device_thread<T, F>(
                 // Reconnection loop. Waits on the stop channel so disconnects
                 // propagate within the retry interval instead of up to 2s later,
                 // and reports each attempt to the UI so the user sees progress.
+                //
+                // End the stream's borrow on `dmm` before reassigning; we
+                // rebuild the stream after reconnect so tick scheduling
+                // restarts fresh from the post-reconnect instant.
+                // (`drop()` would be clearer but clippy warns because the
+                //  stream itself has no Drop impl — the borrow-release we
+                //  actually need is what reassignment accomplishes here.)
+                let _ = stream;
                 let retry_interval = Duration::from_secs(2);
                 let mut attempt: u32 = 0;
                 let mut last_error: Option<String> = None;
@@ -165,25 +173,11 @@ pub(super) fn run_device_thread<T, F>(
                         }
                     }
                 }
+                stream = MeasurementStream::new(&mut dmm, tick);
             }
         }
 
         ctx.request_repaint();
-        if tick > Duration::ZERO {
-            // Absolute-tick pacing: sleep until `next_tick`, then advance. This
-            // keeps the sample period equal to `tick` regardless of how long
-            // `request_measurement` took, and catches up cleanly after long
-            // stalls (reconnect, suspend).
-            let now = Instant::now();
-            if let Some(wait) = next_tick.checked_duration_since(now) {
-                std::thread::sleep(wait);
-            }
-            next_tick += tick;
-            let now = Instant::now();
-            if next_tick < now {
-                next_tick = now + tick;
-            }
-        }
     }
 }
 

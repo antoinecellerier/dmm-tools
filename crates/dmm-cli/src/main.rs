@@ -6,11 +6,12 @@ use clap_complete::Shell;
 use console::style;
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
+use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use log::{error, info};
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 fn version_string() -> &'static str {
     let version = env!("CARGO_PKG_VERSION");
@@ -643,18 +644,16 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     }
 
     let tick = Duration::from_millis(interval_ms);
-    let mut next_tick = Instant::now() + tick;
     let wall_clock = dmm_lib::WallClock::new();
     let mut stats = dmm_lib::stats::RunningStats::default();
     let mut integrator = dmm_lib::stats::Integrator::new();
     let mut integral_unit: Option<String> = None;
     let mut i = 0usize;
-    let mut consecutive_timeouts: u32 = 0;
+    let mut stream = MeasurementStream::new(dmm, tick);
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
-        match dmm.request_measurement() {
-            Ok(m) => {
-                consecutive_timeouts = 0;
+        match stream.tick() {
+            Ok(StreamEvent::Measurement(m)) => {
                 if let MeasuredValue::Normal(v) = &m.value {
                     stats.push(*v);
                 }
@@ -696,10 +695,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 writer.flush()?;
                 i += 1;
             }
-            Err(dmm_lib::error::Error::Timeout) => {
-                consecutive_timeouts += 1;
+            Ok(StreamEvent::Timeout { consecutive }) => {
                 log::warn!("measurement timeout, retrying");
-                if consecutive_timeouts == 5
+                if consecutive == 5
                     && let Some(d) = device
                 {
                     print_no_response_help(d);
@@ -712,18 +710,6 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             }
             Err(e) => {
                 return Err(e.into());
-            }
-        }
-        if tick > Duration::ZERO && (count == 0 || i < count) {
-            // Absolute-tick pacing: sleep until `next_tick`, then advance.
-            let now = Instant::now();
-            if let Some(wait) = next_tick.checked_duration_since(now) {
-                std::thread::sleep(wait);
-            }
-            next_tick += tick;
-            let now = Instant::now();
-            if next_tick < now {
-                next_tick = now + tick;
             }
         }
     }
@@ -833,12 +819,12 @@ fn cmd_debug(
     }
 
     let tick = Duration::from_millis(interval_ms);
-    let mut next_tick = Instant::now() + tick;
     let mut i = 0;
+    let mut stream = MeasurementStream::new(&mut dmm, tick);
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
-        match dmm.request_measurement() {
-            Ok(m) => {
+        match stream.tick() {
+            Ok(StreamEvent::Measurement(m)) => {
                 let display = m.display_raw.as_deref().unwrap_or("(none)");
                 println!(
                     "{} mode_raw={:04X} display={:?} progress={:?} flags={} raw={:02X?} \u{2192} {}",
@@ -851,6 +837,13 @@ fn cmd_debug(
                     style(format!("{m}")).green(),
                 );
             }
+            Ok(StreamEvent::Timeout { .. }) => {
+                eprintln!(
+                    "{} {}",
+                    style(format!("[{i}]")).dim(),
+                    style("error: timeout").red()
+                );
+            }
             Err(e) => {
                 eprintln!(
                     "{} {}",
@@ -860,17 +853,6 @@ fn cmd_debug(
             }
         }
         i += 1;
-        if tick > Duration::ZERO && (count == 0 || i < count) {
-            let now = Instant::now();
-            if let Some(wait) = next_tick.checked_duration_since(now) {
-                std::thread::sleep(wait);
-            }
-            next_tick += tick;
-            let now = Instant::now();
-            if next_tick < now {
-                next_tick = now + tick;
-            }
-        }
     }
 
     Ok(())
