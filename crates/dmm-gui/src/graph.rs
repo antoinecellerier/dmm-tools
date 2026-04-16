@@ -461,6 +461,36 @@ impl Graph {
         }
     }
 
+    /// Return the half-open index range `[start, end)` of history points
+    /// whose elapsed time falls within `[x_min, x_max]`.
+    ///
+    /// `self.history` is time-ordered (push_back only, pop_front on eviction),
+    /// so we can binary-search via `partition_point`. `VecDeque` doesn't expose
+    /// a single contiguous slice, but its two halves from `as_slices()` are
+    /// each sorted, so we search both and combine the results.
+    fn visible_index_range(&self, x_min: f64, x_max: f64) -> (usize, usize) {
+        let (a, b) = self.history.as_slices();
+        let a_len = a.len();
+
+        // Find first index with elapsed_secs >= x_min.
+        let start_a = a.partition_point(|p| self.elapsed_secs(p.time) < x_min);
+        let start = if start_a < a_len {
+            start_a
+        } else {
+            a_len + b.partition_point(|p| self.elapsed_secs(p.time) < x_min)
+        };
+
+        // Find first index with elapsed_secs > x_max (i.e. one past the last visible).
+        let end_a = a.partition_point(|p| self.elapsed_secs(p.time) <= x_max);
+        let end = if end_a < a_len {
+            end_a
+        } else {
+            a_len + b.partition_point(|p| self.elapsed_secs(p.time) <= x_max)
+        };
+
+        (start, end)
+    }
+
     fn data_time_range(&self) -> (f64, f64) {
         let x_min = self
             .history
@@ -780,17 +810,15 @@ impl Graph {
         });
     }
 
-    /// Auto-scaled Y range (ignoring fixed mode setting). Used to snapshot
-    /// current auto range when switching to fixed mode.
-    fn y_range_for_view_auto(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
+    /// Compute min/max Y over the visible slice, with 10% padding.
+    fn y_min_max_padded(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
+        let (start, end) = self.visible_index_range(x_min, x_max);
         let mut y_min = f64::INFINITY;
         let mut y_max = f64::NEG_INFINITY;
-        for point in &self.history {
-            let t = self.elapsed_secs(point.time);
-            if t >= x_min && t <= x_max {
-                y_min = y_min.min(point.value);
-                y_max = y_max.max(point.value);
-            }
+        for i in start..end {
+            let v = self.history[i].value;
+            y_min = y_min.min(v);
+            y_max = y_max.max(v);
         }
         if y_min.is_infinite() {
             return None;
@@ -800,27 +828,18 @@ impl Graph {
         Some((y_min - pad, y_max + pad))
     }
 
+    /// Auto-scaled Y range (ignoring fixed mode setting). Used to snapshot
+    /// current auto range when switching to fixed mode.
+    fn y_range_for_view_auto(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
+        self.y_min_max_padded(x_min, x_max)
+    }
+
     /// Compute Y range from data points visible in the given X range, with padding.
     fn y_range_for_view(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
         if self.y_axis_fixed {
             return Some((self.y_fixed_min, self.y_fixed_max));
         }
-        let mut y_min = f64::INFINITY;
-        let mut y_max = f64::NEG_INFINITY;
-        for point in &self.history {
-            let t = self.elapsed_secs(point.time);
-            if t >= x_min && t <= x_max {
-                y_min = y_min.min(point.value);
-                y_max = y_max.max(point.value);
-            }
-        }
-        if y_min.is_infinite() {
-            return None;
-        }
-        // Add 10% padding
-        let range = (y_max - y_min).max(1e-6);
-        let pad = range * 0.1;
-        Some((y_min - pad, y_max + pad))
+        self.y_min_max_padded(x_min, x_max)
     }
 
     /// Render the main graph.
@@ -1698,43 +1717,36 @@ impl Graph {
     /// visible window. Returns `None` if fewer than 2 points are visible.
     pub fn visible_data_span_secs(&self) -> Option<f64> {
         let (x_min, x_max) = self.view_bounds();
-        let mut first: Option<f64> = None;
-        let mut last: Option<f64> = None;
-        for point in &self.history {
-            let t = self.elapsed_secs(point.time);
-            if t >= x_min && t <= x_max {
-                if first.is_none() {
-                    first = Some(t);
-                }
-                last = Some(t);
-            }
+        let (start, end) = self.visible_index_range(x_min, x_max);
+        if end - start < 2 {
+            return None;
         }
-        match (first, last) {
-            (Some(f), Some(l)) if l > f => Some(l - f),
-            _ => None,
+        let first = self.elapsed_secs(self.history[start].time);
+        let last = self.elapsed_secs(self.history[end - 1].time);
+        if last > first {
+            Some(last - first)
+        } else {
+            None
         }
     }
 
     pub fn visible_stats(&self) -> Option<(f64, f64, f64, usize)> {
         let (x_min, x_max) = self.view_bounds();
+        let (start, end) = self.visible_index_range(x_min, x_max);
+        if start >= end {
+            return None;
+        }
         let mut min = f64::INFINITY;
         let mut max = f64::NEG_INFINITY;
         let mut sum = 0.0;
-        let mut count = 0usize;
-        for point in &self.history {
-            let t = self.elapsed_secs(point.time);
-            if t >= x_min && t <= x_max {
-                min = min.min(point.value);
-                max = max.max(point.value);
-                sum += point.value;
-                count += 1;
-            }
+        let count = end - start;
+        for i in start..end {
+            let v = self.history[i].value;
+            min = min.min(v);
+            max = max.max(v);
+            sum += v;
         }
-        if count > 0 {
-            Some((min, max, sum / count as f64, count))
-        } else {
-            None
-        }
+        Some((min, max, sum / count as f64, count))
     }
 
     /// Build min/max envelope using a trailing sliding window.
@@ -1753,12 +1765,14 @@ impl Graph {
     ) -> (Vec<[f64; 2]>, Vec<[f64; 2]>) {
         let window = window_secs.max(0.1);
 
-        // Collect points: need data back to x_min - window for edge correctness
-        let points: Vec<(f64, f64)> = self
-            .history
-            .iter()
-            .map(|p| (self.elapsed_secs(p.time), p.value))
-            .filter(|(t, _)| *t >= x_min - window && *t <= x_max)
+        // Collect points: need data back to x_min - window for edge correctness.
+        // Use visible_index_range to skip the bulk of the history.
+        let (start, end) = self.visible_index_range(x_min - window, x_max);
+        let points: Vec<(f64, f64)> = (start..end)
+            .map(|i| {
+                let p = &self.history[i];
+                (self.elapsed_secs(p.time), p.value)
+            })
             .collect();
 
         if points.is_empty() {
@@ -1814,16 +1828,14 @@ impl Graph {
     /// Find points where the data crosses any of the given threshold values.
     /// Returns crossing points as [time, threshold_value].
     fn find_crossings(&self, thresholds: &[f64], x_min: f64, x_max: f64) -> Vec<[f64; 2]> {
+        let (start, end) = self.visible_index_range(x_min, x_max);
         let mut crossings = Vec::new();
-        let mut prev: Option<(f64, f64)> = None;
+        let mut prev: Option<f64> = None;
 
-        for point in &self.history {
+        for i in start..end {
+            let point = &self.history[i];
             let t = self.elapsed_secs(point.time);
-            if t < x_min || t > x_max {
-                continue;
-            }
-
-            if let Some((_, prev_v)) = prev {
+            if let Some(prev_v) = prev {
                 for &thresh in thresholds {
                     let crossed = (prev_v <= thresh && point.value >= thresh)
                         || (prev_v >= thresh && point.value <= thresh);
@@ -1832,20 +1844,36 @@ impl Graph {
                     }
                 }
             }
-            prev = Some((t, point.value));
+            prev = Some(point.value);
         }
         crossings
     }
 
-    /// Find the nearest data point to the given time.
+    /// Find the nearest data point to the given time via binary search.
     /// Returns (snapped_time, value).
     fn nearest_point(&self, t: f64) -> Option<(f64, f64)> {
-        let mut best: Option<(f64, f64, f64)> = None; // (distance, time, value)
-        for point in &self.history {
-            let pt = self.elapsed_secs(point.time);
-            let dist = (pt - t).abs();
-            if best.is_none() || dist < best.unwrap().0 {
-                best = Some((dist, pt, point.value));
+        if self.history.is_empty() {
+            return None;
+        }
+        // Find the insertion point — the first index whose time > t.
+        let (a, b) = self.history.as_slices();
+        let a_len = a.len();
+        let pos_a = a.partition_point(|p| self.elapsed_secs(p.time) <= t);
+        let pos = if pos_a < a_len {
+            pos_a
+        } else {
+            a_len + b.partition_point(|p| self.elapsed_secs(p.time) <= t)
+        };
+
+        // The nearest point is either at `pos` or `pos - 1`. Check both.
+        let mut best: Option<(f64, f64, f64)> = None; // (dist, time, value)
+        for &idx in &[pos.wrapping_sub(1), pos] {
+            if idx < self.history.len() {
+                let pt = self.elapsed_secs(self.history[idx].time);
+                let dist = (pt - t).abs();
+                if best.is_none() || dist < best.unwrap().0 {
+                    best = Some((dist, pt, self.history[idx].value));
+                }
             }
         }
         best.map(|(_, t, v)| (t, v))
@@ -1856,18 +1884,14 @@ impl Graph {
     /// data points exist in the range. Skips intervals exceeding `gap_threshold_secs`.
     fn cursor_integral(&self, ta: f64, tb: f64) -> Option<f64> {
         let (t_start, t_end) = if ta <= tb { (ta, tb) } else { (tb, ta) };
+        let (start, end) = self.visible_index_range(t_start, t_end);
         let mut integral = 0.0;
         let mut prev: Option<(f64, f64)> = None; // (time, value)
         let mut has_pair = false;
 
-        for point in &self.history {
+        for i in start..end {
+            let point = &self.history[i];
             let t = self.elapsed_secs(point.time);
-            if t < t_start {
-                continue;
-            }
-            if t > t_end {
-                break;
-            }
             if let Some((pt, pv)) = prev {
                 let dt = t - pt;
                 if dt <= self.gap_threshold_secs {
@@ -2158,6 +2182,59 @@ mod tests {
         assert!(!g.y_axis_fixed);
         assert!(!g.y_user_set);
         assert_eq!(g.view_center, 0.0);
+    }
+
+    #[test]
+    fn visible_index_range_finds_correct_slice() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        // Push 10 points at 1-second intervals: t=0..9
+        for i in 0..10 {
+            g.push(i as f64, t0 + Duration::from_secs(i), "DC V", "V", None);
+        }
+        // Ask for points in [3.0, 6.0]
+        let (start, end) = g.visible_index_range(3.0, 6.0);
+        assert_eq!(start, 3);
+        assert_eq!(end, 7); // half-open: indices 3,4,5,6
+
+        // Empty range
+        let (s, e) = g.visible_index_range(20.0, 30.0);
+        assert_eq!(s, e);
+
+        // Full range
+        let (s, e) = g.visible_index_range(0.0, 100.0);
+        assert_eq!(s, 0);
+        assert_eq!(e, 10);
+    }
+
+    #[test]
+    fn nearest_point_binary_search() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        // Points at t=0, 1, 2, 3
+        for i in 0..4 {
+            g.push(
+                (i * 10) as f64,
+                t0 + Duration::from_secs(i),
+                "DC V",
+                "V",
+                None,
+            );
+        }
+        // Exact match
+        let (pt, v) = g.nearest_point(2.0).unwrap();
+        assert!((pt - 2.0).abs() < 0.01);
+        assert!((v - 20.0).abs() < 0.01);
+        // Between points — closer to t=1 (value=10) than t=2 (value=20)
+        let (pt, v) = g.nearest_point(1.3).unwrap();
+        assert!((pt - 1.0).abs() < 0.01);
+        assert!((v - 10.0).abs() < 0.01);
+        // Before all data
+        let (pt, _) = g.nearest_point(-5.0).unwrap();
+        assert!((pt - 0.0).abs() < 0.01);
+        // After all data
+        let (pt, _) = g.nearest_point(100.0).unwrap();
+        assert!((pt - 3.0).abs() < 0.01);
     }
 
     #[test]

@@ -11,9 +11,7 @@
 
 ### Bug fixes
 
-- **Graph refresh no longer scales with total history length.** As the capture buffer accumulated samples (e.g. several minutes of mock data with the visible window pinned to 5 s), the GUI became visibly slower frame-over-frame. The minimap was accidentally O(n²) — recomputing the same Y range for every drawn point — and the trailing min/max envelope re-scanned its whole window per sample. Both are now linear: the minimap hoists the Y-range computation out of the per-point loop, and the envelope uses two monotonic deques for true sliding-window extrema.
-
-
+- **Graph refresh no longer scales with total history length.** As the capture buffer accumulated samples (e.g. several minutes of mock data with the visible window pinned to 5 s), the GUI became visibly slower frame-over-frame. Every per-frame helper (Y-bounds, statistics, envelope, crossings, nearest-point lookup) scanned the entire 10 000-point history instead of the visible slice. Now each pass binary-searches to the visible window first, reducing per-frame work from O(total) to O(log n + visible). The minimap's accidental O(n²) Y-range recomputation and the envelope's O(n²) inner scan are also fixed.
 
 - **Graph drag-to-pan now works in live mode.** Previously the click-drag pan gesture was silently inert whenever the graph was following live data — only worked once the view was already on a non-live segment. Starting a drag in live mode now snaps the view to the current end of data and drops out of live, mirroring the scroll-wheel-in-live-mode behaviour.
 - **Graph X-axis labels gain sub-second precision when zoomed in.** Previously a tight zoom (e.g. a 0.5 s span) produced duplicate labels like "9 s" / "9 s" because the formatter was hardcoded to integer seconds. Labels now read the grid step size and add decimal seconds when it's sub-second — e.g. "9.1 s", "9.25 s", "1m 30.5s".
