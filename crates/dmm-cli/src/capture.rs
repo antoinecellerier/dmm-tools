@@ -541,22 +541,24 @@ pub fn run_capture_step(
         );
     }
 
-    let screen = if interactive && !sample_data.is_empty() {
-        let summary = sample_data.last().expect("checked non-empty").summary();
-        eprintln!("  We read: {}", style(&summary).green());
-        let input = prompt(&format!(
-            "  {} ",
-            style("Enter=correct, or type what the meter actually shows:").dim()
-        ))?;
-        if input.is_empty() {
-            Some(format!("confirmed: {summary}"))
+    let screen = if let Some(last) = sample_data.last() {
+        if interactive {
+            let summary = last.summary();
+            eprintln!("  We read: {}", style(&summary).green());
+            let input = prompt(&format!(
+                "  {} ",
+                style("Enter=correct, or type what the meter actually shows:").dim()
+            ))?;
+            Some(if input.is_empty() {
+                format!("confirmed: {summary}")
+            } else {
+                input
+            })
         } else {
-            Some(input)
+            None
         }
-    } else if sample_data.is_empty() {
-        eprintln!("  {}", style("No response from meter.").yellow());
-        None
     } else {
+        eprintln!("  {}", style("No response from meter.").yellow());
         None
     };
 
@@ -1224,16 +1226,16 @@ fn run_freeform_captures(
             eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
         }
 
-        let screen = if !sample_data.is_empty() {
-            let summary = sample_data.last().expect("checked non-empty").summary();
+        let screen = if let Some(last) = sample_data.last() {
+            let summary = last.summary();
             let input = prompt(&format!(
                 "  We read: {summary}\n  Enter=correct, or type correction: "
             ))?;
-            if input.is_empty() {
-                Some(format!("confirmed: {summary}"))
+            Some(if input.is_empty() {
+                format!("confirmed: {summary}")
             } else {
-                Some(input)
-            }
+                input
+            })
         } else {
             eprintln!("  No response from meter.");
             None
