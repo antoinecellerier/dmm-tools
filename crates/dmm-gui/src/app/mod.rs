@@ -674,8 +674,8 @@ impl App {
                     // last_measurement.spec / .mode_spec is what render code reads.
                     self.last_measurement = Some(m);
                 }
-                DmmMessage::Disconnected(reason) => {
-                    info!("UI: disconnected: {reason}");
+                DmmMessage::Disconnected { reason, kind } => {
+                    info!("UI: disconnected: {reason} ({kind:?})");
                     self.connection_state = ConnectionState::Reconnecting;
                 }
                 DmmMessage::DeviceNotFound => {

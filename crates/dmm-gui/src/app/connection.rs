@@ -1,3 +1,4 @@
+use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::Stability;
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
@@ -17,7 +18,10 @@ pub(crate) enum DmmMessage {
         feedback_url: String,
         supported_commands: Vec<String>,
     },
-    Disconnected(String),
+    Disconnected {
+        reason: String,
+        kind: ErrorKind,
+    },
     /// Reconnect attempt in progress — `attempt` is 1-based.
     /// `last_error` is the most recent reconnect failure, if any.
     Reconnecting {
@@ -129,7 +133,11 @@ pub(super) fn run_device_thread<T, F>(
             }
             Err(e) => {
                 error!("background thread: device error: {e}");
-                let _ = msg_tx.send(DmmMessage::Disconnected(e.to_string()));
+                let kind = e.kind();
+                let _ = msg_tx.send(DmmMessage::Disconnected {
+                    reason: e.to_string(),
+                    kind,
+                });
                 ctx.request_repaint();
 
                 // Reconnection loop. Waits on the stop channel so disconnects

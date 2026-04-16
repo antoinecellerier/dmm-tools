@@ -81,3 +81,91 @@ impl Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Coarse classification of an [`Error`] for consumers that need to branch
+/// on the failure category without matching every variant. Small and
+/// `Copy` so it can be sent across channels or stored in UI state without
+/// moving the underlying [`Error`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorKind {
+    /// USB adapter not found on the bus (unplugged, permissions, wrong VID/PID).
+    /// Reconnect is expected to succeed once the hardware comes back.
+    DeviceNotFound,
+    /// I/O failure underneath the HID layer.
+    Transport,
+    /// Meter didn't respond in time.
+    Timeout,
+    /// Response arrived but couldn't be parsed (checksum, invalid response,
+    /// unknown mode byte). Reconnect alone won't help if the protocol is wrong.
+    Protocol,
+    /// User-side misconfiguration (unknown device ID, bad adapter selector,
+    /// unsupported command). Reconnect won't help.
+    Configuration,
+    /// Interrupted system call — typically a Ctrl-C signal mid-read.
+    Interrupted,
+}
+
+impl Error {
+    /// Classify this error into a coarse [`ErrorKind`] for consumers that
+    /// want to branch on the failure category.
+    pub fn kind(&self) -> ErrorKind {
+        if self.is_interrupted() {
+            return ErrorKind::Interrupted;
+        }
+        match self {
+            Self::DeviceNotFound { .. } | Self::NoTransportFound => ErrorKind::DeviceNotFound,
+            Self::Hid(_) => ErrorKind::Transport,
+            Self::Timeout => ErrorKind::Timeout,
+            Self::InvalidResponse { .. } | Self::ChecksumMismatch { .. } | Self::UnknownMode(_) => {
+                ErrorKind::Protocol
+            }
+            Self::UnknownDevice(_) | Self::AdapterNotFound(_) | Self::UnsupportedCommand(_) => {
+                ErrorKind::Configuration
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kind_maps_timeout() {
+        assert_eq!(Error::Timeout.kind(), ErrorKind::Timeout);
+    }
+
+    #[test]
+    fn kind_maps_not_found() {
+        assert_eq!(
+            Error::DeviceNotFound { vid: 0, pid: 0 }.kind(),
+            ErrorKind::DeviceNotFound
+        );
+        assert_eq!(Error::NoTransportFound.kind(), ErrorKind::DeviceNotFound);
+    }
+
+    #[test]
+    fn kind_maps_protocol() {
+        assert_eq!(
+            Error::ChecksumMismatch {
+                expected: 1,
+                actual: 2
+            }
+            .kind(),
+            ErrorKind::Protocol
+        );
+        assert_eq!(Error::UnknownMode(0xFF).kind(), ErrorKind::Protocol);
+    }
+
+    #[test]
+    fn kind_maps_config() {
+        assert_eq!(
+            Error::UnknownDevice("foo".into()).kind(),
+            ErrorKind::Configuration
+        );
+        assert_eq!(
+            Error::UnsupportedCommand("bar".into()).kind(),
+            ErrorKind::Configuration
+        );
+    }
+}
