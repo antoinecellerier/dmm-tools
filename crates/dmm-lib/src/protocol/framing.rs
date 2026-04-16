@@ -43,6 +43,11 @@ where
 {
     const READ_TIMEOUT_MS: i32 = 2000;
     const MAX_ATTEMPTS: usize = 64;
+    // Bounded growth: the largest legitimate frame we handle is ~21 bytes
+    // (UT8803), and we drain on successful extraction or on SkipAndRetry.
+    // Cap at 4 KiB so a misbehaving / unsupported protocol family that
+    // speaks a stream we can't parse doesn't grow `rx_buf` without bound.
+    const MAX_RX_BUF: usize = 4096;
 
     for _ in 0..MAX_ATTEMPTS {
         match extract_fn(rx_buf) {
@@ -58,6 +63,11 @@ where
                 );
             }
             Ok(None) => {
+                if rx_buf.len() >= MAX_RX_BUF {
+                    warn!("{label}: rx_buf hit {MAX_RX_BUF} bytes without a valid frame, clearing");
+                    rx_buf.clear();
+                    return Err(Error::Timeout);
+                }
                 let mut tmp = [0u8; 64];
                 let n = transport.read_timeout(&mut tmp, READ_TIMEOUT_MS)?;
                 if n == 0 {
@@ -1033,5 +1043,33 @@ mod tests {
         let (payload, consumed) = extract_frame_fs9721(&buf).unwrap().unwrap();
         assert_eq!(payload, good_nibbles.to_vec());
         assert_eq!(consumed, 3 + 14); // 3 garbage bytes + 14 frame bytes
+    }
+
+    #[test]
+    fn read_frame_caps_rx_buf_when_garbage_spans_calls() {
+        // rx_buf is persistent across `read_frame` calls, so a previous
+        // call can leave it partially filled. Simulate that: preload it
+        // with 4000 bytes of junk, then give the transport 64-byte reads
+        // of more junk. The cap should fire on the first iteration where
+        // `rx_buf.len() >= 4096` and clear the buffer before returning.
+        let garbage = vec![vec![0x55u8; 64]; 10];
+        let mock = MockTransport::new(garbage);
+        let mut rx_buf = vec![0x55u8; 4000];
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_abcd_be16,
+            |_| true,
+            FrameErrorRecovery::Propagate,
+            "test",
+            &HEADER,
+        );
+        assert!(matches!(result, Err(Error::Timeout)));
+        // Cap path clears rx_buf; the MAX_ATTEMPTS exit path does not.
+        assert!(
+            rx_buf.is_empty(),
+            "rx_buf should have been cleared by the 4 KiB cap (got {} bytes)",
+            rx_buf.len()
+        );
     }
 }
