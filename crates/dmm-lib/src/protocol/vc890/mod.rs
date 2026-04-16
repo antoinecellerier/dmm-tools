@@ -553,6 +553,8 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         flags,
         aux_values: vec![],
         raw_payload: payload.to_vec(),
+        spec: None,
+        mode_spec: None,
     })
 }
 

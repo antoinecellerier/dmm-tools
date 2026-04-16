@@ -190,6 +190,16 @@ impl Protocol for Ut61PlusProtocol {
         &self.profile
     }
 
+    fn spec_info(&self, mode_raw: u16, range_raw: u8) -> Option<&'static crate::specs::SpecInfo> {
+        let mode = Mode::from_byte(mode_raw as u8).ok()?;
+        self.table.spec_info(mode, range_raw)
+    }
+
+    fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static crate::specs::ModeSpecInfo> {
+        let mode = Mode::from_byte(mode_raw as u8).ok()?;
+        self.table.mode_spec_info(mode)
+    }
+
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::protocol::CaptureStep;
         vec![
@@ -430,6 +440,8 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
         flags,
         aux_values: vec![],
         raw_payload: payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN].to_vec(),
+        spec: None,
+        mode_spec: None,
     })
 }
 

@@ -7,6 +7,8 @@ pub mod ut61e_plus;
 
 use super::mode::Mode;
 
+pub use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
+
 /// Information about a specific measurement range.
 #[derive(Debug, Clone)]
 pub struct RangeInfo {
@@ -14,35 +16,6 @@ pub struct RangeInfo {
     pub unit: &'static str,
     pub overload_pos: f64,
     pub overload_neg: f64,
-}
-
-/// Accuracy for a specific frequency band (or DC).
-#[derive(Debug, Clone)]
-pub struct AccuracyBand {
-    /// Frequency range label, or `None` for DC / single-band modes.
-    pub freq_range: Option<&'static str>,
-    /// Accuracy string without leading `±` (e.g. "0.1%+5").
-    pub accuracy: &'static str,
-}
-
-/// Per-range specification data (resolution and accuracy).
-#[derive(Debug, Clone)]
-pub struct SpecInfo {
-    /// Display resolution (e.g. "0.01mV", "1Ω").
-    pub resolution: &'static str,
-    /// Accuracy bands: 1 for DC, 2-3 for AC with multiple frequency ranges.
-    pub accuracy: &'static [AccuracyBand],
-}
-
-/// Per-mode specification data shared across all ranges.
-#[derive(Debug, Clone)]
-pub struct ModeSpecInfo {
-    /// Input impedance (e.g. "~10 MΩ"), if applicable.
-    pub input_impedance: Option<&'static str>,
-    /// Overload protection description.
-    pub overload_protection: Option<&'static str>,
-    /// Additional notes (e.g. "True RMS", "K-type thermocouple").
-    pub notes: &'static [&'static str],
 }
 
 /// Look up a range entry by index. Shared by all device table implementations.

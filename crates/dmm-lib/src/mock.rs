@@ -579,6 +579,8 @@ impl Protocol for MockProtocol {
             flags,
             aux_values: vec![],
             raw_payload: vec![],
+            spec: None,
+            mode_spec: None,
         };
 
         if elapsed >= duration_secs {

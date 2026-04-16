@@ -1,4 +1,5 @@
 use crate::flags::StatusFlags;
+use crate::specs::{ModeSpecInfo, SpecInfo};
 use std::borrow::Cow;
 use std::time::Instant;
 
@@ -66,6 +67,12 @@ pub struct Measurement {
     pub aux_values: Vec<AuxValue>,
     /// Raw payload bytes as received (for protocol debugging).
     pub raw_payload: Vec<u8>,
+    /// Per-range resolution/accuracy for this mode+range, if the protocol provides specs.
+    /// Populated by `Dmm::request_measurement` — protocols that don't override
+    /// `Protocol::spec_info` leave this as `None`.
+    pub spec: Option<&'static SpecInfo>,
+    /// Per-mode input impedance and notes, if the protocol provides specs.
+    pub mode_spec: Option<&'static ModeSpecInfo>,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -92,6 +99,8 @@ impl Measurement {
             flags,
             aux_values: vec![],
             raw_payload: vec![],
+            spec: None,
+            mode_spec: None,
         }
     }
 }

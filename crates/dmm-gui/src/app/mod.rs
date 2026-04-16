@@ -144,13 +144,6 @@ pub struct App {
     pub(super) reconnect_last_error: Option<String>,
     pub(super) last_measurement: Option<Measurement>,
 
-    /// Cached per-range spec for current measurement (avoids lookup per frame).
-    pub(super) cached_spec: Option<&'static SpecInfo>,
-    /// Cached per-mode spec for current measurement.
-    pub(super) cached_mode_spec: Option<&'static ModeSpecInfo>,
-    /// Key used to invalidate spec cache: (mode_raw, range_raw).
-    cached_spec_key: (u16, u8),
-
     graph: Graph,
     stats: RunningStats,
     integrator: Integrator,
@@ -246,9 +239,6 @@ impl App {
             reconnect_attempt: 0,
             reconnect_last_error: None,
             last_measurement: None,
-            cached_spec: None,
-            cached_mode_spec: None,
-            cached_spec_key: (u16::MAX, u8::MAX),
             graph,
             stats: RunningStats::new(),
             integrator: Integrator::new(),
@@ -680,16 +670,8 @@ impl App {
                         ));
                     }
 
-                    // Update spec cache if mode/range changed
-                    let new_key = (m.mode_raw, m.range_raw);
-                    if new_key != self.cached_spec_key {
-                        self.cached_spec_key = new_key;
-                        use dmm_lib::protocol::ut61eplus::tables;
-                        let device_id = &self.settings.shared.device_family;
-                        self.cached_spec = tables::lookup_spec(device_id, m.mode_raw, m.range_raw);
-                        self.cached_mode_spec = tables::lookup_mode_spec(device_id, m.mode_raw);
-                    }
-
+                    // Specs are attached to each measurement by `Dmm::request_measurement`;
+                    // last_measurement.spec / .mode_spec is what render code reads.
                     self.last_measurement = Some(m);
                 }
                 DmmMessage::Disconnected(reason) => {
@@ -1332,8 +1314,10 @@ impl App {
             return;
         }
         let manual_url = self.manual_url();
-        if let Some(spec) = self.cached_spec {
-            render_fn(ui, spec, self.cached_mode_spec, manual_url, scale);
+        let spec = self.last_measurement.as_ref().and_then(|m| m.spec);
+        let mode_spec = self.last_measurement.as_ref().and_then(|m| m.mode_spec);
+        if let Some(spec) = spec {
+            render_fn(ui, spec, mode_spec, manual_url, scale);
         } else if let Some(url) = manual_url {
             specs::show_manual_only(ui, url, scale);
         }
@@ -1799,7 +1783,12 @@ impl eframe::App for App {
                     self.show_connection_help(ui);
                     ui.add_space(8.0);
 
-                    if self.cached_spec.is_some() || self.manual_url().is_some() {
+                    let has_spec = self
+                        .last_measurement
+                        .as_ref()
+                        .map(|m| m.spec.is_some())
+                        .unwrap_or(false);
+                    if has_spec || self.manual_url().is_some() {
                         ui.separator();
                         self.show_specs_section(ui, 1.0);
                     }

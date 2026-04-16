@@ -25,6 +25,7 @@
 
 - **Mock device waveforms are now a function of elapsed time**, not a per-read step counter. Displayed mock curves stay on the ideal smooth shape regardless of read cadence or scheduling jitter — the root cause of apparent "jitter" in mock-mode graph rendering.
 - **`dmm_lib::WallClock`** — small `(Instant, SystemTime)` origin helper used by the GUI recording and CLI formatter to derive wall-clock timestamps from monotonic `Instant`s.
+- **Spec metadata flows through the measurement, not a GUI-side lookup.** Per-range resolution/accuracy and per-mode input-impedance/notes are now attached to each `Measurement` by `Dmm::request_measurement` via new `Protocol::spec_info` / `Protocol::mode_spec_info` trait methods. The GUI reads these fields directly instead of reaching into `ut61eplus::tables` with the device-family string, so adding spec tables for other families only requires the new protocol to override the trait method. `SpecInfo` / `ModeSpecInfo` / `AccuracyBand` moved to a top-level `dmm_lib::specs` module and are re-exported from `ut61eplus::tables` for backward compatibility.
 
 ## v0.4.0
 

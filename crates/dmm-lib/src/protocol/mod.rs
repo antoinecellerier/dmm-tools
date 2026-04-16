@@ -12,6 +12,7 @@ mod vc8x0_common;
 
 use crate::error::Result;
 use crate::measurement::Measurement;
+use crate::specs::{ModeSpecInfo, SpecInfo};
 use crate::transport::Transport;
 
 /// Protocol stability level.
@@ -134,5 +135,17 @@ pub trait Protocol: Send {
     /// Returns basic measurement mode steps that any user can run.
     fn capture_steps(&self) -> Vec<CaptureStep> {
         vec![]
+    }
+
+    /// Per-range resolution/accuracy specs for the current measurement.
+    /// Default `None` — families without a spec table can leave this unimplemented.
+    fn spec_info(&self, _mode_raw: u16, _range_raw: u8) -> Option<&'static SpecInfo> {
+        None
+    }
+
+    /// Per-mode specs (input impedance, overload protection, notes).
+    /// Default `None` — families without a spec table can leave this unimplemented.
+    fn mode_spec_info(&self, _mode_raw: u16) -> Option<&'static ModeSpecInfo> {
+        None
     }
 }

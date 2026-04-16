@@ -6,6 +6,7 @@ pub mod flags;
 pub mod measurement;
 pub mod mock;
 pub mod protocol;
+pub mod specs;
 pub mod stats;
 pub mod transport;
 pub mod wall_clock;
@@ -45,8 +46,16 @@ impl<T: Transport> Dmm<T> {
     }
 
     /// Request a single measurement from the meter.
+    ///
+    /// Enriches the parsed measurement with the protocol's per-range and
+    /// per-mode spec metadata when available, so consumers can display
+    /// resolution/accuracy/impedance without knowing which protocol family
+    /// they're talking to.
     pub fn request_measurement(&mut self) -> Result<measurement::Measurement> {
-        self.protocol.request_measurement(&self.transport)
+        let mut m = self.protocol.request_measurement(&self.transport)?;
+        m.spec = self.protocol.spec_info(m.mode_raw, m.range_raw);
+        m.mode_spec = self.protocol.mode_spec_info(m.mode_raw);
+        Ok(m)
     }
 
     /// Send a named command to the meter (e.g. "hold", "range", "auto").
