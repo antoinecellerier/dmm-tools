@@ -1389,16 +1389,17 @@ impl App {
                     let start = self.recording.samples.len().saturating_sub(500);
                     for s in &self.recording.samples[start..] {
                         let time = s.wall_time.format("%H:%M:%S%.3f");
-                        let flags = if s.flags.is_empty() {
+                        let flags_str = s.flags_str();
+                        let flags = if flags_str.is_empty() {
                             String::new()
                         } else {
-                            format!(" [{}]", s.flags)
+                            format!(" [{flags_str}]")
                         };
                         ui.label(
                             RichText::new(format!(
                                 "{time}  {val:>10} {unit}{flags}",
-                                val = s.value_str,
-                                unit = s.unit,
+                                val = s.value_str(),
+                                unit = s.unit(),
                             ))
                             .font(egui::FontId::monospace(11.0)),
                         );
@@ -1499,12 +1500,12 @@ impl App {
                     wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
                     for s in &samples {
                         wtr.write_record([
-                            &s.wall_time.to_rfc3339(),
-                            &s.mode,
-                            &s.value_str,
-                            &s.unit,
-                            &s.range_label,
-                            &s.flags,
+                            s.wall_time.to_rfc3339().as_str(),
+                            s.mode(),
+                            s.value_str().as_str(),
+                            s.unit(),
+                            s.range_label(),
+                            s.flags_str().as_str(),
                         ])?;
                     }
                     wtr.flush()?;

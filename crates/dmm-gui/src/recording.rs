@@ -6,35 +6,53 @@ use dmm_lib::measurement::{MeasuredValue, Measurement};
 const MAX_RECORDING_SAMPLES: usize = 500_000;
 
 /// A single recorded sample.
+///
+/// Holds the underlying `Measurement` directly so both the recording panel
+/// and CSV export consume exactly the same data shape the protocol produced,
+/// and static-lookup-table strings (`mode`, `unit`, `range_label`) stay as
+/// `Cow::Borrowed` instead of being re-cloned onto the heap for every sample.
 #[derive(Debug, Clone)]
 pub struct Sample {
     pub wall_time: DateTime<Local>,
-    pub mode: String,
-    pub value_str: String,
-    pub unit: String,
-    pub range_label: String,
-    pub flags: String,
+    pub measurement: Measurement,
 }
 
 impl Sample {
     pub fn from_measurement(m: &Measurement, wall_clock: &WallClock) -> Self {
-        let value_str = if let Some(raw) = &m.display_raw {
+        Self {
+            wall_time: wall_clock.wall_time_for(m.timestamp).into(),
+            measurement: m.clone(),
+        }
+    }
+
+    /// Display form of the measured value: trimmed `display_raw` when the
+    /// protocol provides it, or a numeric / OL / NCV fallback otherwise.
+    pub fn value_str(&self) -> String {
+        if let Some(raw) = &self.measurement.display_raw {
             raw.trim().to_string()
         } else {
-            match &m.value {
+            match &self.measurement.value {
                 MeasuredValue::Normal(v) => format!("{v}"),
                 MeasuredValue::Overload => "OL".to_string(),
                 MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
             }
-        };
-        Self {
-            wall_time: wall_clock.wall_time_for(m.timestamp).into(),
-            mode: m.mode.to_string(),
-            value_str,
-            unit: m.unit.to_string(),
-            range_label: m.range_label.to_string(),
-            flags: m.flags.to_string(),
         }
+    }
+
+    pub fn mode(&self) -> &str {
+        &self.measurement.mode
+    }
+
+    pub fn unit(&self) -> &str {
+        &self.measurement.unit
+    }
+
+    pub fn range_label(&self) -> &str {
+        &self.measurement.range_label
+    }
+
+    pub fn flags_str(&self) -> String {
+        self.measurement.flags.to_string()
     }
 }
 
@@ -192,9 +210,9 @@ mod tests {
         let m = make_measurement(b"  5.678");
         let wc = WallClock::new();
         let s = Sample::from_measurement(&m, &wc);
-        assert_eq!(s.mode, "DC V");
-        assert_eq!(s.value_str, "5.678");
-        assert_eq!(s.unit, "V");
+        assert_eq!(s.mode(), "DC V");
+        assert_eq!(s.value_str(), "5.678");
+        assert_eq!(s.unit(), "V");
     }
 
     #[test]
