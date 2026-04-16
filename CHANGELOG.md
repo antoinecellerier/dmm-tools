@@ -24,7 +24,6 @@
 ### Internal
 
 - **Mock device waveforms are now a function of elapsed time**, not a per-read step counter. Displayed mock curves stay on the ideal smooth shape regardless of read cadence or scheduling jitter — the root cause of apparent "jitter" in mock-mode graph rendering.
-- **`dmm_lib::WallClock`** — small `(Instant, SystemTime)` origin helper used by the GUI recording and CLI formatter to derive wall-clock timestamps from monotonic `Instant`s.
 
 ## v0.4.0
 
