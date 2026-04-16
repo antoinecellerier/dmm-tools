@@ -7,7 +7,7 @@ use std::time::Duration;
 // --- Data types ---
 
 #[derive(Serialize, Deserialize, Default)]
-pub struct CaptureReport {
+pub(crate) struct CaptureReport {
     pub date: String,
     pub tool_version: String,
     pub device_name: String,
@@ -29,7 +29,7 @@ pub struct CaptureReport {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum StepStatus {
+pub(crate) enum StepStatus {
     Captured,
     Skipped,
     Timeout,
@@ -37,7 +37,7 @@ pub enum StepStatus {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct StepResult {
+pub(crate) struct StepResult {
     pub id: String,
     pub instruction: String,
     pub status: StepStatus,
@@ -50,7 +50,7 @@ pub struct StepResult {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct SampleData {
+pub(crate) struct SampleData {
     /// Raw 14-byte payload as hex string (e.g. "02 30 20 30 2E 30 30 30 30 00 00 30 30 30")
     pub raw_hex: String,
     pub mode_byte: String,
@@ -64,7 +64,7 @@ pub struct SampleData {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct SampleFlags {
+pub(crate) struct SampleFlags {
     pub hold: bool,
     pub rel: bool,
     pub auto_range: bool,
@@ -78,7 +78,7 @@ pub struct SampleFlags {
 }
 
 impl SampleData {
-    pub fn from_measurement(m: &Measurement) -> Self {
+    pub(crate) fn from_measurement(m: &Measurement) -> Self {
         let value = match &m.value {
             MeasuredValue::Normal(v) => format!("{v}"),
             MeasuredValue::Overload => "OL".to_string(),
@@ -114,7 +114,7 @@ impl SampleData {
         }
     }
 
-    pub fn summary(&self) -> String {
+    pub(crate) fn summary(&self) -> String {
         let mut flag_parts = Vec::new();
         if self.flags.auto_range {
             flag_parts.push("AUTO");
@@ -190,7 +190,7 @@ fn run_protocol_capture(
 
 // --- Step definitions ---
 
-pub struct CaptureStep {
+pub(crate) struct CaptureStep {
     pub id: &'static str,
     pub instruction: &'static str,
     pub command: Option<&'static str>,
@@ -212,7 +212,7 @@ impl CaptureStep {
 }
 
 /// IDs for part 1 (modes) vs part 2 (flags) grouping.
-pub const MODE_STEP_IDS: &[&str] = &[
+pub(crate) const MODE_STEP_IDS: &[&str] = &[
     "dcv",
     "dcv_short",
     "acv",
@@ -231,7 +231,7 @@ pub const MODE_STEP_IDS: &[&str] = &[
     "dca",
     "temp",
 ];
-pub const FLAG_STEP_IDS: &[&str] = &[
+pub(crate) const FLAG_STEP_IDS: &[&str] = &[
     "hold",
     "hold_off",
     "rel",
@@ -242,7 +242,7 @@ pub const FLAG_STEP_IDS: &[&str] = &[
     "auto",
 ];
 
-pub fn all_capture_steps() -> &'static [CaptureStep] {
+pub(crate) fn all_capture_steps() -> &'static [CaptureStep] {
     static STEPS: &[CaptureStep] = &[
         // Part 1: Modes
         CaptureStep {
@@ -409,7 +409,7 @@ pub fn all_capture_steps() -> &'static [CaptureStep] {
 
 // --- Helpers ---
 
-pub fn prompt(msg: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub(crate) fn prompt(msg: &str) -> Result<String, Box<dyn std::error::Error>> {
     eprint!("{msg}");
     std::io::stderr().flush()?;
     let mut input = String::new();
@@ -417,7 +417,7 @@ pub fn prompt(msg: &str) -> Result<String, Box<dyn std::error::Error>> {
     Ok(input.trim().to_string())
 }
 
-pub fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> {
+pub(crate) fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> {
     let term = console::Term::stderr();
     eprint!("{msg}");
     std::io::stderr().flush()?;
@@ -426,7 +426,7 @@ pub fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> {
     Ok(ch)
 }
 
-pub fn capture_samples(
+pub(crate) fn capture_samples(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     n: usize,
 ) -> Vec<Measurement> {
@@ -446,7 +446,10 @@ pub fn capture_samples(
     samples
 }
 
-pub fn save_report(report: &CaptureReport, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn save_report(
+    report: &CaptureReport,
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use std::io::Write;
     let yaml = serde_yaml_ng::to_string(report)?;
     // Atomic write: write to temp file then rename, so a crash mid-write
@@ -460,7 +463,7 @@ pub fn save_report(report: &CaptureReport, path: &str) -> Result<(), Box<dyn std
 }
 
 /// Insert or replace a step result in the report.
-pub fn upsert_step(report: &mut CaptureReport, result: StepResult) {
+pub(crate) fn upsert_step(report: &mut CaptureReport, result: StepResult) {
     if let Some(pos) = report.steps.iter().position(|s| s.id == result.id) {
         report.steps[pos] = result;
     } else {
@@ -469,7 +472,7 @@ pub fn upsert_step(report: &mut CaptureReport, result: StepResult) {
 }
 
 /// Run one capture step. Returns Ok(true) if user wants to quit.
-pub fn run_capture_step(
+pub(crate) fn run_capture_step(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step: &CaptureStep,
     report: &mut CaptureReport,
@@ -872,7 +875,7 @@ mod tests {
 
 // --- Main capture command ---
 
-pub fn list_steps() {
+pub(crate) fn list_steps() {
     let steps = all_capture_steps();
     eprintln!("{}", style("Available capture steps:").bold());
     eprintln!();
@@ -1263,7 +1266,7 @@ fn run_freeform_captures(
     Ok(())
 }
 
-pub fn cmd_capture(
+pub(crate) fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
