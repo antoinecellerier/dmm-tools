@@ -19,6 +19,10 @@ const GAP_MINIMUM_SECS: f64 = 1.0;
 /// Minimap height in logical pixels.
 const MINIMAP_HEIGHT: f32 = 60.0;
 
+/// Segments (contiguous runs of [time, value] points) paired with gap
+/// ranges (start_time, end_time) where the data was interrupted.
+type SegmentsAndGaps = (Vec<Vec<[f64; 2]>>, Vec<(f64, f64)>);
+
 /// A data point with an absolute timestamp.
 #[derive(Clone, Copy)]
 struct DataPoint {
@@ -180,11 +184,16 @@ pub struct Graph {
     cursor_b: Option<f64>,
     /// Which cursor to place next on click.
     cursor_next_is_b: bool,
-    /// Cached segment data, rebuilt only when history changes.
+    /// Cached segment data for minimap (full history), rebuilt only when
+    /// `history_version` changes.
     cached_segments: Vec<Vec<[f64; 2]>>,
     cached_gaps: Vec<(f64, f64)>,
-    /// Number of history entries when cache was built.
-    cache_len: usize,
+    /// Monotonic counter incremented on every push/clear/mode-change.
+    /// Used as the cache key instead of `history.len()` because a
+    /// push_back+pop_front leaves the length unchanged but the data differs.
+    history_version: u64,
+    /// Version when the cache was last rebuilt.
+    cache_version: u64,
     /// Color preset for graph rendering.
     color_preset: ColorPreset,
     /// Per-theme color overrides for graph rendering.
@@ -254,7 +263,8 @@ impl Graph {
             cursor_next_is_b: false,
             cached_segments: Vec::new(),
             cached_gaps: Vec::new(),
-            cache_len: 0,
+            history_version: 0,
+            cache_version: 0,
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
             minimap_drag: MinimapDrag::None,
@@ -329,6 +339,7 @@ impl Graph {
         }
 
         self.history.push_back(DataPoint { time: now, value });
+        self.history_version += 1;
     }
 
     pub fn clear(&mut self) {
@@ -435,17 +446,16 @@ impl Graph {
     }
 
     fn invalidate_cache(&mut self) {
-        self.cache_len = 0;
-        self.cached_segments.clear();
-        self.cached_gaps.clear();
+        self.history_version += 1;
     }
 
-    /// Rebuild cached segments/gaps only if history has changed.
+    /// Rebuild cached segments/gaps (full history, for minimap) only if
+    /// history has changed since the last rebuild.
     fn ensure_cache(&mut self) {
-        if self.cache_len != self.history.len() {
+        if self.cache_version != self.history_version {
             self.cached_segments = self.build_raw_segments();
             self.cached_gaps = self.find_gap_ranges();
-            self.cache_len = self.history.len();
+            self.cache_version = self.history_version;
         }
     }
 
@@ -842,12 +852,53 @@ impl Graph {
         self.y_min_max_padded(x_min, x_max)
     }
 
+    /// Build segment and gap data for a slice of history, suitable for
+    /// passing to egui_plot. Only the points in `[start, end)` are visited.
+    fn build_segments_for_range(&self, start: usize, end: usize) -> SegmentsAndGaps {
+        let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
+        let mut gaps: Vec<(f64, f64)> = Vec::new();
+        let mut current_segment: Vec<[f64; 2]> = Vec::new();
+        let mut prev_time: Option<Instant> = None;
+
+        for i in start..end {
+            let point = &self.history[i];
+            let t = self.elapsed_secs(point.time);
+
+            if let Some(prev) = prev_time {
+                let gap = point
+                    .time
+                    .checked_duration_since(prev)
+                    .map(|d| d.as_secs_f64())
+                    .unwrap_or(0.0);
+                if gap > self.gap_threshold_secs && !current_segment.is_empty() {
+                    let gap_start = self.elapsed_secs(prev);
+                    gaps.push((gap_start, t));
+                    segments.push(std::mem::take(&mut current_segment));
+                }
+            }
+
+            current_segment.push([t, point.value]);
+            prev_time = Some(point.time);
+        }
+
+        if !current_segment.is_empty() {
+            segments.push(current_segment);
+        }
+
+        (segments, gaps)
+    }
+
     /// Render the main graph.
     pub fn show_main(&mut self, ui: &mut Ui) {
-        self.ensure_cache();
-        let raw_segments = &self.cached_segments;
-        let gap_ranges = &self.cached_gaps;
         let (view_min, view_max) = self.view_bounds();
+
+        // Build segments and gaps for the visible slice only, plus one
+        // point on each side so line segments at the view edges render
+        // correctly and aren't clipped to nothing.
+        let (vis_start, vis_end) = self.visible_index_range(view_min, view_max);
+        let ext_start = vis_start.saturating_sub(1);
+        let ext_end = (vis_end + 1).min(self.history.len());
+        let (visible_segments, visible_gaps) = self.build_segments_for_range(ext_start, ext_end);
 
         // Theme-aware colors from shared palette
         let tc = self.theme_colors(ui.visuals().dark_mode);
@@ -957,11 +1008,11 @@ impl Graph {
                 );
             }
 
-            for seg in raw_segments {
+            for seg in &visible_segments {
                 plot_ui.line(Line::new("data", PlotPoints::new(seg.clone())).color(line_color));
             }
 
-            for &(gap_start, gap_end) in gap_ranges {
+            for &(gap_start, gap_end) in &visible_gaps {
                 plot_ui.vline(
                     VLine::new("gap_start", gap_start)
                         .color(gap_color)
