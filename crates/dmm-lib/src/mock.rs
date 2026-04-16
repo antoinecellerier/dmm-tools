@@ -144,6 +144,9 @@ impl Scenario {
         duration_secs: f64,
         value_fn: fn(f64, f64) -> MeasuredValue,
     ) -> Self {
+        // value_fns divide by duration_secs to compute phase. All current
+        // scenarios use 10–20 s; guard against a future 0.0 sneaking in.
+        debug_assert!(duration_secs > 0.0, "scenario duration must be positive");
         Self {
             id,
             mode,
