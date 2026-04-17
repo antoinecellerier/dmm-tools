@@ -49,8 +49,6 @@ Log out and back in for the group change to take effect.
 
 The CP2110 adapter may require a driver from [Silicon Labs](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers). After installation, verify the device appears in Device Manager under "Human Interface Devices" or "USB Devices". The CH9329 and CH9325 adapters are standard HID devices and need no driver.
 
-> **Windows ARM:** Builds are provided but haven't been tested against real hardware yet. If you're on this platform, please [report your experience](https://github.com/antoinecellerier/dmm-tools/issues/11).
-
 ### macOS — no driver needed
 
 macOS recognizes all three USB adapters (CP2110, CH9329, CH9325) as standard HID devices via IOKit — no driver installation is required. Plug in the USB adapter and it should appear automatically.

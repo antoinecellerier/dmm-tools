@@ -52,10 +52,9 @@ If you have any of the [supported meters](docs/supported-devices.md), we'd love 
 
 ## Unconfirmed platform testing
 
-macOS ARM (Apple Silicon) and Linux ARM (Raspberry Pi 3B+) have been confirmed working. The following platforms have builds but haven't been verified yet:
+macOS ARM (Apple Silicon), Linux ARM (Raspberry Pi 3B+), and Windows ARM have been confirmed working. The following platforms have builds but haven't been verified yet:
 
 - **macOS Intel** — [issue #2](https://github.com/antoinecellerier/dmm-tools/issues/2)
-- **Windows ARM** — [issue #11](https://github.com/antoinecellerier/dmm-tools/issues/11)
 
 If you have one of these platforms and a supported meter:
 
