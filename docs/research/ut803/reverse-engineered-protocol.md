@@ -357,15 +357,54 @@ Parse the proprietary data nibbles, NOT LCD segments:
 
 ### 7.3 What Needs Hardware Verification
 
-- Negative value encoding (sign bit location)
+- Negative value encoding (sign bit location) — see §3.2
 - Exact mode list for UT803
 - Range-to-decimal-point tables for all modes
-- Status flag bits (MIN, MAX, REL, Low Battery)
-- Nibbles 12-14 content
+- Status flag bits (MIN, MAX, REL, Low Battery) — see §7.4
+- Nibbles 12-14 content — see §7.4
 - Whether 0x5A trigger byte is needed
 - Streaming rate
 - Digit encoding for values > 9 (0xA = blank confirmed, others unknown)
 - Whether nibble 4 = 'B' guard condition has meaning
+
+### 7.4 Unresolved: Nibbles 12-14 and Secondary Status Bits
+
+Two Ghidra passes over `ut803-decompiled.txt` and `ut804-decompiled.txt`
+(226K / 227K lines each, 2026-04-19) have established a negative
+finding about the upper nibbles:
+
+- **Nibbles 12, 13, 14 are never read in the visible decompile.** A
+  full grep for `param_1 + 0xB / 0xC / 0xD / 0xE` (and the short-
+  pointer equivalents) against the frame-parse function (`FUN_00558a7c`
+  in UT804 / its UT803 peer) returns no hits. The visible parser only
+  consumes nibbles 1-11.
+- **The display formatter (`FUN_00490730` / `FUN_0049091c`) reads a
+  precomputed 0-15 byte from a global pointer** (`*PTR_DAT_005659c4` /
+  `*PTR_DAT_005699c4`) and uses it to choose between sixteen format
+  strings — four of which (cases 1, 5, 8, 9) prepend `-`. The cross-
+  reference grep finds exactly one hit per global: the read above. No
+  writer appears anywhere, including at the HID-receive sites.
+- **The `*-gap-decompiled.txt` files are Ghidra build logs, not code**,
+  and contain no additional function bodies.
+
+The implication: the write path that populates the sign global — and
+plausibly the secondary status bits implied by the "may carry
+additional flags" note at the top of this file — lives in code Ghidra
+reconstructed as non-returning / inlined / as an assembly stub. A
+future investigation should either:
+
+1. Re-run Ghidra with call-graph and data-flow recovery tuned to be
+   more aggressive, specifically around the HID transfer callbacks;
+2. Use a raw disassembler (not a decompiler) on the regions
+   cross-referenced by the globals, to see the asm-level store; or
+3. Capture a real UT803 / UT804 reading a known negative value (and a
+   second reading with MIN, MAX, REL, and low-battery each toggled in
+   turn) — four of those captures would nail down exactly which
+   nibble/bit carries each flag.
+
+Until one of those happens, this spec leaves nibbles 12-14 as
+`[UNVERIFIED]` and the Rust `fs9721` parser reports every reading as
+positive.
 
 ---
 
