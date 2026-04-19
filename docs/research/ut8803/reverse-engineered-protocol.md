@@ -289,6 +289,28 @@ The debug format string extracts these fields from the status word:
 This exactly matches the Flags word layout documented in the
 programming manual (section 3.2). [VENDOR]
 
+**Raw-byte → status-word mapping (resolved 2026-04-19)**: A second
+Ghidra pass traced each status-word bit back to a frame byte by
+following the intermediate `local_1e`, `local_1f`, `local_21`,
+`local_27`, `local_28`, `local_29`, `local_1d` assignments from their
+write sites (lines 24985-25013) and then counting the accumulated
+shifts in the status-word construction at lines 25027-25031. Resolved
+mapping:
+
+| Status-word bit | Flag | Source byte | Source bit | Notes |
+|---|---|---|---|---|
+| D6 | AUTO | frame byte 15 | bit 1 | **inverted** (vendor: `bVar17 = local_16 == '\0'`) |
+| D7 | OL (overload) | frame byte 14 | bit 2 | `local_1e = bVar4 >> 2 & 1` |
+| D19 | Sign (minus) | frame byte 14 | bit 3 | vendor negates the parsed float when set: `*param_4 = *param_4 * DAT_101bde08` (line 25041) |
+| D28 | MAX | frame byte 16 | bit 1 | `local_29` via `bVar12 >> 1` |
+| D29 | MIN | frame byte 16 | bit 0 | `local_21` via `(uVar14 >> 8) & 1` |
+| D30 | REL | frame byte 15 | bit 0 | `local_1f` via the byte-15 bit-0 chain at line 24997 |
+| D31 | HOLD | frame byte 14 | bit 0 | `local_27` via `uVar9 & 0xffffff01` at line 24990 |
+
+D15 (LowBat) and D17 (Under) are present in the programming-manual
+status-word layout but are **not populated** by this parser —
+consistent with the UT8803 being an AC-mains bench meter. [VENDOR]
+
 **High-byte flags (param_4 + 3)**: The parser also constructs a
 separate byte at `param_4 + 0x18` (offset 24 from param_4 base):
 ```c

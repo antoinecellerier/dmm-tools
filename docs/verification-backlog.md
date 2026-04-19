@@ -118,10 +118,15 @@ real hardware**. Every aspect needs end-to-end verification.
 - Mode byte mapping (23 position codes, 0x00-0x16)
 - Range byte (0x30 prefix, like UT61E+)
 - Display bytes (5 raw bytes — ASCII or binary encoding?)
-- Flag byte → semantic flag mapping (HOLD, REL, MIN, MAX, AUTO, OL).
-  The RE spec documents the constructed 32-bit status word, but the
-  raw-byte-to-status-word construction is complex. Current bit assignments
-  are plausible guesses — need real device verification.
+- Flag byte → semantic flag mapping (HOLD, REL, MIN, MAX, AUTO, OL, Sign).
+  **Resolved from vendor [VENDOR]** (2026-04-19): a second Ghidra pass
+  traced each status-word bit back to a specific raw-frame bit by
+  following the intermediate locals and shift chain in `FUN_1001e5f0`.
+  Mapping: HOLD / OL / Sign from frame byte 14 bits 0/2/3, REL / AUTO
+  (inverted) from frame byte 15 bits 0/1, MIN / MAX from frame byte 16
+  bits 0/1. Still needs real-hardware confirmation but no longer a
+  speculative guess. See `docs/research/ut8803/reverse-engineered-protocol.md`
+  §2.3 for the derivation.
 - Display value parsing (5 bytes → float)
 - Streaming rate (~2-3 Hz per manual)
 

@@ -309,28 +309,36 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         .collect();
     let display_trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
 
-    // Flag extraction from raw bytes to semantic flags.
+    // Flag bit positions traced from the UT8803 parser in uci.dll
+    // (`FUN_1001e5f0`). The parser builds a 32-bit status word by OR-ing
+    // shifted extracts of a handful of intermediate locals, and the final
+    // debug format string at line 25091 pins each status-word bit to its
+    // name (`isauto = uVar9 >> 6 & 1`, `ismax = ... >> 0x1c & 1`, ...).
+    // Tracing each intermediate local back to its source byte yields:
     //
-    // IMPORTANT: These bit assignments are UNVERIFIED against real hardware.
-    // The RE spec documents the *constructed* 32-bit status word layout
-    // (D0-D31), but the raw-byte-to-status-word construction in uci.dll
-    // involves complex bit-shifting (see RE spec section 2.3). The mapping
-    // below is our best guess based on the decompilation, but the actual
-    // bit positions in the raw flag bytes may differ from the status word.
-    // These need real device verification.
+    //   HOLD (D31) ← frame byte 14 bit 0 = payload[12] & 0x01
+    //   OL   (D7)  ← frame byte 14 bit 2 = payload[12] & 0x04
+    //   Sign (D19) ← frame byte 14 bit 3 = payload[12] & 0x08
+    //   REL  (D30) ← frame byte 15 bit 0 = payload[13] & 0x01
+    //   AUTO (D6)  ← frame byte 15 bit 1 = payload[13] & 0x02, **inverted**
+    //                (vendor `bVar17 = local_16 == '\0';`)
+    //   MIN  (D29) ← frame byte 16 bit 0 = payload[14] & 0x01
+    //   MAX  (D28) ← frame byte 16 bit 1 = payload[14] & 0x02
+    //
+    // See docs/research/ut8803/reverse-engineered-protocol.md §2.3 for the
+    // full derivation. `flags3 = payload[16]` is no longer used for any
+    // documented status bit.
     let flags1_lo = payload[12];
     let flags1_hi = payload[13];
-    let flags3 = payload[16];
+    let flags2_lo = payload[14];
 
-    let hold = flags3 & 0x02 != 0; // [UNVERIFIED] flag_15 → bit1 of flags3
-    let rel = flags1_hi & 0x40 != 0; // [UNVERIFIED] bit 6 of flags1 high byte
-    let min_flag = flags1_hi & 0x20 != 0; // [UNVERIFIED] bit 5
-    let max_flag = flags1_hi & 0x10 != 0; // [UNVERIFIED] bit 4
-
-    let auto_range = flags1_lo & 0x40 != 0; // [UNVERIFIED] D6 of status word
-
-    // Overload
-    let overload = flags1_lo & 0x80 != 0; // D7 of status word
+    let hold = flags1_lo & 0x01 != 0;
+    let overload = flags1_lo & 0x04 != 0;
+    let negative = flags1_lo & 0x08 != 0;
+    let rel = flags1_hi & 0x01 != 0;
+    let auto_range = flags1_hi & 0x02 == 0; // inverted: clear = AUTO active
+    let min_flag = flags2_lo & 0x01 != 0;
+    let max_flag = flags2_lo & 0x02 != 0;
 
     let flags = StatusFlags {
         hold,
@@ -374,7 +382,9 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let value = if overload {
         MeasuredValue::Overload
     } else if let Ok(v) = display_trimmed.parse::<f64>() {
-        MeasuredValue::Normal(v)
+        // Vendor (`FUN_1001e5f0` after line 25040) checks status-word bit
+        // 19 and negates the parsed float when set.
+        MeasuredValue::Normal(if negative { -v } else { v })
     } else if display_trimmed.contains("OL") {
         MeasuredValue::Overload
     } else {
@@ -413,7 +423,18 @@ mod tests {
         display: &[u8; 5],
         flags1_lo: u8,
         flags1_hi: u8,
-        flags3: u8,
+        _flags3: u8,
+    ) -> Vec<u8> {
+        make_payload_full(mode, range, display, flags1_lo, flags1_hi, 0x00)
+    }
+
+    fn make_payload_full(
+        mode: u8,
+        range: u8,
+        display: &[u8; 5],
+        flags1_lo: u8,
+        flags1_hi: u8,
+        flags2_lo: u8,
     ) -> Vec<u8> {
         vec![
             0x00,         // byte 0 (frame byte 2)
@@ -430,9 +451,9 @@ mod tests {
             0x00, // bytes 10-11 (flags0)
             flags1_lo,
             flags1_hi, // bytes 12-13 (flags1)
-            0x00,
-            0x00,   // bytes 14-15 (flags2)
-            flags3, // byte 16 (flags3)
+            flags2_lo,
+            0x00, // bytes 14-15 (flags2)
+            0x00, // byte 16 (flags3)
         ]
     }
 
@@ -470,26 +491,61 @@ mod tests {
 
     #[test]
     fn parse_overload_flag() {
-        // D7 = overload bit in flags1_lo
-        let payload = make_payload(0x08, 0x00, b"    0", 0x80, 0x00, 0x00);
+        // OL = payload[12] bit 2 (D7 of the status word)
+        let payload = make_payload(0x08, 0x00, b"    0", 0x04, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
     }
 
     #[test]
     fn parse_hold_flag() {
-        // flags3 bit1 = HOLD
-        let payload = make_payload(0x01, 0x00, b" 1.23", 0x00, 0x00, 0x02);
+        // HOLD = payload[12] bit 0 (D31 of the status word)
+        let payload = make_payload(0x01, 0x00, b" 1.23", 0x01, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.hold);
     }
 
     #[test]
     fn parse_auto_range() {
-        // D6 of flags1_lo = auto range
-        let payload = make_payload(0x01, 0x00, b" 1.23", 0x40, 0x00, 0x00);
+        // AUTO is inverted: payload[13] bit 1 clear means AUTO active.
+        let payload = make_payload(0x01, 0x00, b" 1.23", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.auto_range);
+
+        let payload = make_payload(0x01, 0x00, b" 1.23", 0x00, 0x02, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(!m.flags.auto_range);
+    }
+
+    #[test]
+    fn parse_rel_flag() {
+        // REL = payload[13] bit 0 (D30 of the status word)
+        let payload = make_payload(0x01, 0x00, b" 0.00", 0x00, 0x01, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.rel);
+    }
+
+    #[test]
+    fn parse_min_max_flags() {
+        // MIN = payload[14] bit 0, MAX = payload[14] bit 1
+        let payload = make_payload_full(0x01, 0x00, b" 1.23", 0x00, 0x00, 0x01);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.min);
+        assert!(!m.flags.max);
+
+        let payload = make_payload_full(0x01, 0x00, b" 1.23", 0x00, 0x00, 0x02);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.max);
+        assert!(!m.flags.min);
+    }
+
+    #[test]
+    fn parse_negative_value() {
+        // Sign = payload[12] bit 3 (D19 of the status word); vendor negates
+        // the parsed float when set.
+        let payload = make_payload(0x01, 0x00, b"12.34", 0x08, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v + 12.34).abs() < 1e-6));
     }
 
     #[test]
