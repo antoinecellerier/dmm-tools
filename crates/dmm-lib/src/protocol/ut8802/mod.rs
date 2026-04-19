@@ -259,7 +259,8 @@ fn bcd_to_char(nibble: u8) -> char {
 /// - byte 1: digits 1-2 (high nibble = d1, low nibble = d2)
 /// - byte 2: digits 3-4 (high nibble = d3, low nibble = d4)
 /// - byte 3: digit 5 (low nibble = d5, high nibble unused)
-/// - byte 4: decimal point position (low nibble, 0-4) + AC/DC flags (bits 4-5)
+/// - byte 4: decimal point position (low nibble, 0-4) + AC/DC coupling
+///   (bits 4-5: 0=OFF, 1=AC, 2=DC, 3=AC+DC, per spec §3.4)
 /// - byte 5: status/bargraph byte [UNVERIFIED purpose]
 /// - byte 6: sign (bit 7) + status flags (bits 0-6)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
@@ -275,6 +276,12 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let position = payload[0];
     let dp_pos = payload[4] & 0x0F;
+    // Byte 4 bits 4-5 encode AC/DC coupling per spec §3.4 [VENDOR]:
+    //   0 = OFF, 1 = AC, 2 = DC, 3 = AC+DC.
+    // Byte 6 bits 0-1 also contribute to the ACDC status-word field per §3.7,
+    // but without device traces the exact combination is unclear, so we take
+    // byte 4 alone as the authoritative AC-vs-DC indicator.
+    let acdc_bits = (payload[4] >> 4) & 0x03;
     let sign_byte = payload[6];
 
     // Look up position code
@@ -378,7 +385,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         auto_range,
         low_battery: false,
         hv_warning: false,
-        dc: false,
+        dc: matches!(acdc_bits, 2 | 3),
         peak_max: false,
         peak_min: false,
         ..Default::default()
@@ -515,6 +522,31 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert!(!m.flags.max);
         assert!(m.flags.min);
+    }
+
+    #[test]
+    fn parse_acdc_bits() {
+        // Byte 4 bits 4-5 encode AC/DC coupling per spec §3.4:
+        //   0=OFF, 1=AC, 2=DC, 3=AC+DC. Only 2 and 3 set flags.dc.
+        // AC V position 0x0A with acdc_bits=1 (AC) → dc = false
+        let payload = make_payload(0x0A, [0, 1, 2, 3, 4], 2, 0x01, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(!m.flags.dc);
+
+        // DC V position 0x05 with acdc_bits=2 (DC) → dc = true
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.dc);
+
+        // AC+DC (acdc_bits=3) → dc = true
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x03, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.dc);
+
+        // OFF (acdc_bits=0, e.g. resistance) → dc = false
+        let payload = make_payload(0x1A, [0, 1, 2, 3, 4], 3, 0x00, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(!m.flags.dc);
     }
 
     #[test]
