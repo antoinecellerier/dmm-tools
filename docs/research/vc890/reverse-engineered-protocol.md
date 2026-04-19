@@ -96,10 +96,21 @@ Offset  Size  Field
 59      1     Status 3: AutoPower(0), Warning(1), Loz(2), Void(3)
 60      1     Status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
 61      1     Status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
-62      1     Battery level (low nibble)
+62      1     Battery level (low nibble, raw 0-15 — see note below)
 63      1     Misplug warning (low nibble: 0=none, 1=mA err, 2=A err)
 64-65   2     Checksum (BE16)
 ```
+
+**Battery level (byte 62, low nibble)**: The DLL stores the raw 0–15
+value (`DMSShare_decompiled.cs:23648`, `battery_flag = msg[62] & 0xF`)
+and does nothing else with it — `battery_flag` is declared `public int`
+but never read elsewhere in DMSShare.dll, and no low-battery threshold
+is computed at this layer. The thresholding therefore lives in the
+VoltSoft GUI (`VoltSoft System.exe` / `DeviceClient`, not yet
+decompiled). Contrast VC-880 (`msg[33]` bit 3 is a single `Low_batt_flag`
+bool at `DMSShare_decompiled.cs:16799`). Until the GUI is reversed or
+a real device is tested, consumers should surface the raw level and
+treat "low battery" conservatively.
 
 ## Function Codes -- [VENDOR]
 

@@ -545,8 +545,16 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let hold = status_bytes[2] & 0x01 != 0;
     let auto_range = status_bytes[2] & 0x02 == 0; // Manual bit inverted
     let hv_warning = status_bytes[3] & 0x02 != 0; // Warning bit
-    // Battery is a nibble value at status_bytes[6], not a flag bit
-    let low_battery = status_bytes[6] & 0x0F >= 3; // heuristic: ≥3 = low [UNVERIFIED]
+    // Battery level is the low nibble of status_bytes[6]. The vendor DLL
+    // (`DMSShare_decompiled.cs:23648`, `battery_flag = msg[62] & 0xF`)
+    // stores the raw 0-15 value and does not threshold it here — the
+    // VoltSoft GUI (a separate binary not yet reversed) decides what
+    // counts as "low". Without that threshold the previous guess of
+    // `>= 3 == low` was as likely to cry wolf as to help, so we report
+    // low_battery only for a fully-empty nibble. The raw level stays
+    // available in raw_payload for consumers that want the gauge.
+    let battery_level = status_bytes[6] & 0x0F;
+    let low_battery = battery_level == 0;
 
     let flags = StatusFlags {
         hold,
