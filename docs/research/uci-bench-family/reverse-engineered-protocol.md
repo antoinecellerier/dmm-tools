@@ -284,11 +284,25 @@ debug format string confirms these fields are extracted:
 "ACDC:%s,dotpos:%d,fun:%d,isauto:%d,ismax:%d,ismin:%d,ishold:%d,isrel:%d,isOL:%d,diodeDirectio:0x%x"
 ```
 
-Known bit assignments:
-- **Bit 7**: Sign/polarity (1 = negative)
-- **Bit 2**: AUTO flag (**inverted logic**: bit clear = auto ON, same as UT61E+)
-- **Bits 0-1**: Contribute to ACDC field construction
-- **Bits 3-6**: Encode HOLD, REL, MAX, MIN (exact positions need device verification)
+Known bit assignments (resolved 2026-04-19 from a second Ghidra pass
+over `FUN_1001e0a0`, status-word construction at lines 24768-24773 and
+debug format at line 24865):
+
+- **Bit 0**: MIN → D29
+- **Bit 1**: MAX → D28
+- **Bit 2**: AUTO, **inverted logic** (bit clear = auto ON). Vendor
+  expression `(byte)~(byte)((uint)param_2[7] >> 2) & 1` maps this to
+  status-word D6.
+- **Bit 3**: REL → D30
+- **Bit 4**: HOLD → D31
+- **Bit 5**: Over-range → D18 (not currently surfaced in `StatusFlags`)
+- **Bit 6**: OL → D7
+- **Bit 7**: Sign/polarity (1 = negative) → D19. Vendor multiplies the
+  parsed float by -1 when set.
+
+[VENDOR]. Real-device confirmation is still pending — the mapping is
+deterministically derived from the decompile but has not been witnessed
+on hardware.
 
 ### 3.6 Byte 6 Purpose -- [UNVERIFIED]
 
@@ -311,12 +325,12 @@ the UT8803 protocol doc). The flag format string confirms:
 | D7 | OverLoad | From digit nibble == 0x0C detection |
 | D8-D11 | UnitType | From FUN_1001cf30 (position → unit lookup) |
 | D12-D14 | UnitMag | From FUN_1001cd30 (position → prefix lookup) |
-| D19 | Minus | From byte 7 bit 6 (negate flag) |
+| D19 | Minus | From byte 7 bit 7 (sign/polarity) — see §3.5 |
 | D24-D27 | ScalePos | From byte 5 low nibble (decimal position) |
-| D28 | MAX | From byte 7 (exact bit TBD) |
-| D29 | MIN | From byte 7 (exact bit TBD) |
-| D30 | REL | From byte 7 (exact bit TBD) |
-| D31 | HOLD | From byte 7 (exact bit TBD) |
+| D28 | MAX | From byte 7 bit 1 — see §3.5 |
+| D29 | MIN | From byte 7 bit 0 — see §3.5 |
+| D30 | REL | From byte 7 bit 3 — see §3.5 |
+| D31 | HOLD | From byte 7 bit 4 — see §3.5 |
 
 The high 32-bit status word (at `param_4 + 0x18`) is also constructed,
 with D2-D3 encoding diode/SCR probe direction from byte 5 bits 4-5.
@@ -678,7 +692,7 @@ An implementation could:
 | UT805A serial frame format | UT805A manual documents ASCII text protocol (10-byte frames + CR/LF, single-letter commands). NOT the same as HID models. |
 | ~~UT805A 7-bit vs 8-bit data~~ | **RESOLVED**: UT805A manual says 9600/8N1. USB is virtual COM port (not HID). |
 | UT8802 byte 6 purpose | Bargraph? Secondary status? |
-| UT8802 byte 7 exact bit assignments | HOLD/REL/MAX/MIN positions within bits 0-6 |
+| ~~UT8802 byte 7 exact bit assignments~~ | **RESOLVED**: MIN=bit 0, MAX=bit 1, AUTO=bit 2 (inverted), REL=bit 3, HOLD=bit 4, Sign=bit 7. See §3.5. |
 | UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
 | UT803/UT804 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding, nibbles 12-14 — all need verification against real hardware. See `docs/research/ut803/reverse-engineered-protocol.md` |
 | UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |

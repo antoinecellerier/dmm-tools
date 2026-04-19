@@ -360,22 +360,26 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         }
     };
 
-    // Flag extraction from byte 6 (sign_byte).
+    // Flag bit positions from the UT8802 parser in uci.dll (`FUN_1001e0a0`,
+    // status-word construction at line 24768-24773). Tracing each source
+    // bit through the shift chain back to `param_2[7]` and matching the
+    // status-word bits to the debug format string at line 24865 gives:
     //
-    // Known:
-    //   bit 7: sign/polarity (handled above)
-    //   bit 2: AUTO flag, **inverted logic** (clear = auto ON) [VENDOR]
+    //   bit 0: MIN  (→ status-word D29)
+    //   bit 1: MAX  (→ D28)
+    //   bit 2: AUTO **inverted** (→ D6 via `~bit2`) [VENDOR]
+    //   bit 3: REL  (→ D30)
+    //   bit 4: HOLD (→ D31)
+    //   bit 5: Over (→ D18; not surfaced by StatusFlags)
+    //   bit 6: OL   (→ D7)
+    //   bit 7: sign (→ D19, handled above)
     //
-    // Best-guess from Ghidra debug format string and D28-D31 status word layout:
-    //   bit 6: HOLD  [UNVERIFIED]
-    //   bit 5: REL   [UNVERIFIED]
-    //   bit 4: MAX   [UNVERIFIED]
-    //   bit 3: MIN   [UNVERIFIED]
-    let auto_range = sign_byte & 0x04 == 0; // bit 2 inverted
-    let hold = sign_byte & 0x40 != 0; // [UNVERIFIED] bit 6
-    let rel = sign_byte & 0x20 != 0; // [UNVERIFIED] bit 5
-    let max_flag = sign_byte & 0x10 != 0; // [UNVERIFIED] bit 4
-    let min_flag = sign_byte & 0x08 != 0; // [UNVERIFIED] bit 3
+    // See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.5.
+    let auto_range = sign_byte & 0x04 == 0;
+    let hold = sign_byte & 0x10 != 0;
+    let rel = sign_byte & 0x08 != 0;
+    let max_flag = sign_byte & 0x02 != 0;
+    let min_flag = sign_byte & 0x01 != 0;
 
     let flags = StatusFlags {
         hold,
@@ -496,29 +500,29 @@ mod tests {
 
     #[test]
     fn parse_hold_flag() {
-        // [UNVERIFIED] bit 6 = HOLD
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x40);
+        // HOLD = byte 7 bit 4 (status-word D31)
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x10);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.hold);
     }
 
     #[test]
     fn parse_rel_flag() {
-        // [UNVERIFIED] bit 5 = REL
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x20);
+        // REL = byte 7 bit 3 (D30)
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x08);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.rel);
     }
 
     #[test]
     fn parse_max_min_flags() {
-        // [UNVERIFIED] bit 4 = MAX, bit 3 = MIN
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x10);
+        // MAX = byte 7 bit 1 (D28), MIN = byte 7 bit 0 (D29)
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x02);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.max);
         assert!(!m.flags.min);
 
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x08);
+        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x01);
         let m = parse_measurement(&payload).unwrap();
         assert!(!m.flags.max);
         assert!(m.flags.min);

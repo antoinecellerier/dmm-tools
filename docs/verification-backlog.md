@@ -106,8 +106,14 @@ real hardware**. Every aspect needs end-to-end verification.
 - AC/DC coupling flags (byte 5 bits 4-5)
 - Sign/polarity (byte 7 bit 7)
 - AUTO flag inverted logic (byte 7 bit 2 clear = auto ON)
-- Byte 7 flag bits: exact HOLD/REL/MAX/MIN positions [UNVERIFIED] —
-  current assignments (bits 6/5/4/3) are best-guess from Ghidra
+- Byte 7 flag bits (HOLD/REL/MAX/MIN). **Resolved from vendor [VENDOR]**
+  (2026-04-19): a second Ghidra pass traced each status-word bit back
+  to a specific byte-7 bit via the shift chain in `FUN_1001e0a0`.
+  Mapping: MIN=bit 0, MAX=bit 1, AUTO=bit 2 (inverted), REL=bit 3,
+  HOLD=bit 4, Over=bit 5, OL=bit 6, Sign=bit 7. All five previous
+  guesses (bits 6/5/4/3 for HOLD/REL/MAX/MIN) were wrong — HOLD and
+  REL swap with bit-range 4-5 vs 0-3. Real-hardware confirmation is
+  still pending. See `docs/research/uci-bench-family/reverse-engineered-protocol.md` §3.5.
 - Byte 6 purpose: bargraph or secondary status? [UNVERIFIED]
 - Overload detection (BCD nibble 0x0C)
 - Streaming rate
