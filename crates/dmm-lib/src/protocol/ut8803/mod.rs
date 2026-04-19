@@ -277,8 +277,36 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         Cow::Owned(format!("Unknown({:#04x})", mode_byte))
     };
 
-    // Parse display value: 5 raw bytes → string → f64
-    let display_str = String::from_utf8_lossy(display_bytes).to_string();
+    // Parse display value: 5 raw ASCII bytes appended by the vendor parser
+    // (`FUN_1001fce0` per spec §2.3) and then converted to a float via
+    // `FUN_1017f410`. Validate that every byte is in the character set a
+    // numeric-or-"OL" display can produce; a byte outside that set means
+    // the frame is malformed and should be surfaced as a parse error rather
+    // than silently smuggled past `String::from_utf8_lossy` as U+FFFD,
+    // which would mask real corruption during HW verification.
+    for &b in display_bytes {
+        let allowed = b == 0x00
+            || b == b' '
+            || b == b'+'
+            || b == b'-'
+            || b == b'.'
+            || b.is_ascii_digit()
+            || b == b'O'
+            || b == b'L';
+        if !allowed {
+            return Err(Error::invalid_response(
+                format!("ut8803 invalid display byte {b:#04x} in {display_bytes:02X?}"),
+                payload,
+            ));
+        }
+    }
+    // All bytes validated as ASCII; construct string without the lossy path.
+    // Null padding is dropped so the numeric parse below sees a clean string.
+    let display_str: String = display_bytes
+        .iter()
+        .filter(|&&b| b != 0x00)
+        .map(|&b| b as char)
+        .collect();
     let display_trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
 
     // Flag extraction from raw bytes to semantic flags.
@@ -496,5 +524,42 @@ mod tests {
         let payload = make_payload(0x01, 0x00, b"12.34", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.display_raw.as_deref(), Some("12.34"));
+    }
+
+    #[test]
+    fn display_overload_string() {
+        // "   OL" is explicitly allowed by the validator
+        let payload = make_payload(0x09, 0x00, b"   OL", 0x00, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+    }
+
+    #[test]
+    fn display_null_padding_dropped() {
+        // Trailing nulls are treated as padding, not data.
+        let payload = make_payload(0x01, 0x00, b"1.2\0\0", 0x00, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("1.2"));
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1.2).abs() < 1e-6));
+    }
+
+    #[test]
+    fn invalid_display_byte_rejects_frame() {
+        // A byte with the high bit set can't come from a numeric display;
+        // surface it as a parse error rather than silently turning it into
+        // U+FFFD via `from_utf8_lossy`.
+        let payload = make_payload(0x01, 0x00, b"1\xff234", 0x00, 0x00, 0x00);
+        let err = parse_measurement(&payload).unwrap_err();
+        assert!(
+            format!("{err}").contains("invalid display byte"),
+            "expected display-byte error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn unexpected_letter_rejects_frame() {
+        // A stray ASCII letter that isn't O/L is also rejected.
+        let payload = make_payload(0x01, 0x00, b"1A.34", 0x00, 0x00, 0x00);
+        assert!(parse_measurement(&payload).is_err());
     }
 }
