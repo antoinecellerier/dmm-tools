@@ -115,10 +115,44 @@ The display value is constructed from nibbles 1-5 (or 2-5 when nibble 1
 is a flag indicator). The decimal point position is determined by the
 range code (nibble 6) within each mode.
 
-**Negative values:** The sign encoding is [UNVERIFIED]. Possibilities:
-- A specific nibble value (e.g., 0x0B = minus sign)
+**Negative values:** Sign encoding is [UNVERIFIED]. Two Ghidra passes
+over `ut803-decompiled.txt` and `ut804-decompiled.txt` (226K / 227K
+lines each) together establish:
+
+- The display formatter (`FUN_00490730` in UT803.exe / `FUN_0049091c`
+  in UT804.exe) switches on a single 0–15 value and prepends `-` in
+  exactly four of the sixteen cases: **1, 5, 8, 9** (cases 2/3/6/7/13
+  place the minus in the middle of the formatted string, and
+  0/4/14/15 use a parenthesised format). UT803 and UT804 are
+  byte-identical here.
+- That 0–15 value is read from a **global pointer** at display time —
+  UT803 `*PTR_DAT_005659c4` (line 101186), UT804 `*PTR_DAT_005699c4`
+  (line 101276). A full cross-reference grep for those addresses
+  returns **exactly one hit each**: the read above. No writer appears
+  anywhere in the decompile, including near the HID / USB plumbing.
+- The `*-gap-decompiled.txt` files contain only Ghidra build logs, no
+  additional code.
+- The visible frame-parsing path (around `FUN_00558a7c` in UT804)
+  never accesses nibbles 12, 13, or 14.
+
+The write to the sign global therefore lives outside what Ghidra
+reconstructed — most likely in an HID-receive callback Ghidra marked as
+non-returning, or in an inline-assembly stub. Progressing from here
+requires either a raw disassembler pass (not a decompiler) over the
+binary in that region, or a real-device capture of a known negative
+reading.
+
+Possibilities still open, none of which have decompile evidence picking
+between them:
+
+- A specific nibble value in the digit slots (e.g. `0x0B` = minus sign)
 - A bit in nibble 9 or another status nibble
-- Encoded in a nibble 12-14 flag
+- A bit in one of nibbles 12-14 (never read in the visible path)
+
+Until a real-device trace of a known negative reading arrives, the Rust
+parser treats every reading as positive; implementing a speculative
+decode risks negating valid positive readings, which would be worse
+than the current "display magnitude only" behaviour.
 
 ### 3.3 Nibble 1-2 Flag Mode — [VENDOR]
 

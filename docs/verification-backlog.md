@@ -76,14 +76,22 @@ real hardware**. Every aspect needs end-to-end verification.
 - Protocol: `fs9721` family — implemented with mode/range/unit tables,
   AC/DC detection, HOLD/AUTO flags.
 - **Needs hardware verification:**
-  - Negative value encoding (sign bit location unknown)
+  - Negative value encoding (sign bit location unknown — see note below)
   - Exact range-to-decimal-point tables for all modes
   - UT803 exact mode list (fewer than UT804's 15)
   - Status flags beyond HOLD/AUTO (MIN, MAX, REL, Low Battery)
-  - Nibbles 12-14 purpose
+  - Nibbles 12-14 purpose (not read in the visible decompile)
   - Whether 0x5A trigger byte helps/hurts
   - Streaming rate and connection stability
   - Overload representation in digit nibbles
+- **Sign (2026-04-19 decompile pass):** the display formatter reads a
+  precomputed 0–15 byte from a global pointer (UT803 `*PTR_DAT_005659c4`
+  / UT804 `*PTR_DAT_005699c4`) and prepends `-` in four of the sixteen
+  cases. A full cross-reference of both binaries finds no writer for
+  that global — the write path is outside what Ghidra decompiled.
+  Resolving sign therefore needs either a raw disassembler pass over
+  the HID-receive region or a real-device capture of a known negative
+  reading. See `docs/research/ut803/reverse-engineered-protocol.md` §3.2.
 - See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
