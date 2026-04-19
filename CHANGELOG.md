@@ -9,6 +9,7 @@
 - **Graph box zoom** — Shift-drag to draw a rectangle; on release the view zooms to that time and value range. Escape cancels mid-drag. A new **Reset Zoom** toolbar button (also bound to double-click on the plot) returns the graph to live follow with auto Y.
 - **Help overlay covers mouse gestures** — the `?` popup (renamed "Keyboard & Mouse") documents drag pan, Shift-drag zoom, wheel zoom, double-click reset, cursor placement, and minimap drag.
 - **Reconnect progress is visible** — the connection-status button shows the current attempt counter ("Reconnecting (attempt 3)…") with the latest failure reason in its tooltip, and a Disconnect click is picked up immediately instead of after the next retry interval (up to 2 s).
+- **VC-890 LoZ and VOID badges** — the GUI and CLI now surface the meter's low-impedance measurement indicator and the "reading voided" marker alongside the other status flags, and the screen-reader live region announces them when they toggle.
 
 ### Bug fixes
 

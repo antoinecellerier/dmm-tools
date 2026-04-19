@@ -544,7 +544,11 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let max_flag = status_bytes[1] & 0x08 != 0;
     let hold = status_bytes[2] & 0x01 != 0;
     let auto_range = status_bytes[2] & 0x02 == 0; // Manual bit inverted
-    let hv_warning = status_bytes[3] & 0x02 != 0; // Warning bit
+    let hv_warning = status_bytes[3] & 0x02 != 0; // Warning bit (byte 59 bit 1)
+    // Spec byte 59: Loz(2), Void(3). Vendor (DMSShare_decompiled.cs:23638-23639)
+    // reads both into dedicated `Loz_flag` / `Void_flag` bools.
+    let loz = status_bytes[3] & 0x04 != 0;
+    let void = status_bytes[3] & 0x08 != 0;
     // Battery level is the low nibble of status_bytes[6]. The vendor DLL
     // (`DMSShare_decompiled.cs:23648`, `battery_flag = msg[62] & 0xF`)
     // stores the raw 0-15 value and does not threshold it here — the
@@ -567,6 +571,8 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         dc: false,
         peak_max: false,
         peak_min: false,
+        loz,
+        void,
         ..Default::default()
     };
 
@@ -760,6 +766,38 @@ mod tests {
         let sum: u16 = frame[..4].iter().map(|&b| b as u16).sum();
         assert_eq!(frame[4], (sum >> 8) as u8);
         assert_eq!(frame[5], (sum & 0xFF) as u8);
+    }
+
+    #[test]
+    fn parse_loz_flag() {
+        // Byte 59 bit 2 = LoZ. Maps to status_bytes[3] & 0x04.
+        let mut status = zero_status();
+        status[3] = 0x04;
+        let payload = make_payload(0x02, 0x30, b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.loz);
+        assert!(!m.flags.void);
+    }
+
+    #[test]
+    fn parse_void_flag() {
+        // Byte 59 bit 3 = Void. Maps to status_bytes[3] & 0x08.
+        let mut status = zero_status();
+        status[3] = 0x08;
+        let payload = make_payload(0x02, 0x30, b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.void);
+        assert!(!m.flags.loz);
+    }
+
+    #[test]
+    fn parse_loz_and_void_together() {
+        let mut status = zero_status();
+        status[3] = 0x0C; // bits 2 and 3
+        let payload = make_payload(0x02, 0x30, b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.loz);
+        assert!(m.flags.void);
     }
 
     #[test]

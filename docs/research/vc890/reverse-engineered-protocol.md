@@ -94,6 +94,8 @@ Offset  Size  Field
 57      1     Status 1: Rel(0), Avg(1), Min(2), Max(3)
 58      1     Status 2: Hold(0), Manual(1), OL1(2), OL2(3)
 59      1     Status 3: AutoPower(0), Warning(1), Loz(2), Void(3)
+              (Loz and Void both exposed as dedicated bools in vendor:
+              DMSShare_decompiled.cs:23638-23639)
 60      1     Status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
 61      1     Status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
 62      1     Battery level (low nibble, raw 0-15 — see note below)

@@ -17,6 +17,11 @@ pub struct StatusFlags {
     pub lead_error: bool,
     pub comp: bool,
     pub record: bool,
+    /// Low-impedance voltage measurement active (e.g. VC-890 byte 59 bit 2).
+    pub loz: bool,
+    /// Reading marked invalid by the meter (e.g. VC-890 byte 59 bit 3, via
+    /// misplug / reference-disconnect detection).
+    pub void: bool,
 }
 
 impl StatusFlags {
@@ -82,6 +87,12 @@ impl std::fmt::Display for StatusFlags {
         }
         if self.record {
             parts.push("REC");
+        }
+        if self.loz {
+            parts.push("LoZ");
+        }
+        if self.void {
+            parts.push("VOID");
         }
         write!(f, "{}", parts.join(" "))
     }

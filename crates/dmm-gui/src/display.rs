@@ -114,6 +114,12 @@ fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
     if flags.record {
         push("recording", out);
     }
+    if flags.loz {
+        push("low impedance", out);
+    }
+    if flags.void {
+        push("void", out);
+    }
 }
 
 /// Pack a `StatusFlags` into a u16 bitfield for fingerprint hashing. Stable
@@ -133,6 +139,8 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
         | ((flags.lead_error as u16) << 10)
         | ((flags.comp as u16) << 11)
         | ((flags.record as u16) << 12)
+        | ((flags.loz as u16) << 13)
+        | ((flags.void as u16) << 14)
 }
 
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
@@ -644,6 +652,20 @@ mod tests {
                     ..Default::default()
                 },
             ),
+            (
+                "loz",
+                StatusFlags {
+                    loz: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "void",
+                StatusFlags {
+                    void: true,
+                    ..Default::default()
+                },
+            ),
         ];
         let mut seen = std::collections::HashSet::new();
         for (name, flags) in &names {
@@ -710,5 +732,11 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) {
     }
     if m.flags.record {
         badge(ui, "REC", accent);
+    }
+    if m.flags.loz {
+        badge(ui, "LoZ", accent);
+    }
+    if m.flags.void {
+        badge(ui, "VOID", warning);
     }
 }
