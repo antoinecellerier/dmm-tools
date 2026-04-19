@@ -593,6 +593,7 @@ pub(crate) fn run_capture_step(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;

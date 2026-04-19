@@ -14,6 +14,9 @@ use dmm_lib::protocol::ut61eplus::tables::{
     AccuracyBand, DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_mode_spec, lookup_spec,
 };
 
+/// (range byte, spec, optional (range info, range label)) for one mode in the dump.
+type RangeRow<'a> = (u8, &'a SpecInfo, Option<(&'a RangeInfo, &'a str)>);
+
 /// All mode bytes in protocol order (0x00..=0x1E).
 const ALL_MODES: &[(u8, &str)] = &[
     (0x00, "AC V"),
@@ -124,7 +127,7 @@ fn dump_device(device_id: &str, device_name: &str) {
     for &(mode_byte, mode_label) in ALL_MODES {
         let mode_spec = lookup_mode_spec(device_id, mode_byte as u16);
 
-        let mut ranges: Vec<(u8, &SpecInfo, Option<(&RangeInfo, &str)>)> = Vec::new();
+        let mut ranges: Vec<RangeRow> = Vec::new();
         for r in 0..20u8 {
             if let Some(spec) = lookup_spec(device_id, mode_byte as u16, r) {
                 // Skip placeholder entries that have no range label AND no accuracy

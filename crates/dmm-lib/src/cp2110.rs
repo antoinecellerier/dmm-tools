@@ -154,6 +154,64 @@ impl Cp2110 {
     }
 }
 
+impl Transport for Cp2110 {
+    fn write(&self, data: &[u8]) -> Result<()> {
+        // CP2110 interrupt OUT: first byte is length, then payload (AN434 §6.1).
+        if data.len() > MAX_REPORT_PAYLOAD {
+            return Err(Error::invalid_response_msg(format!(
+                "data too large for single HID report: {} bytes (max {MAX_REPORT_PAYLOAD})",
+                data.len()
+            )));
+        }
+        let mut report = Vec::with_capacity(data.len() + 1);
+        report.push(data.len() as u8);
+        report.extend_from_slice(data);
+        trace!("CP2110 TX: {:02X?}", report);
+        self.device.write(&report)?;
+        Ok(())
+    }
+
+    fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
+        let mut raw = vec![0u8; buf.len() + 1];
+        let n = self.device.read_timeout(&mut raw, timeout_ms)?;
+        if n == 0 {
+            return Ok(0);
+        }
+        // CP2110 interrupt IN: first byte is length, rest is payload
+        let payload_len = raw[0] as usize;
+        let actual = payload_len.min(n - 1).min(buf.len());
+        buf[..actual].copy_from_slice(&raw[1..1 + actual]);
+        trace!("CP2110 RX ({actual} bytes): {:02X?}", &buf[..actual]);
+        Ok(actual)
+    }
+
+    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
+        trace!("CP2110 feature report: {:02X?}", data);
+        self.device.send_feature_report(data).map_err(Error::Hid)?;
+        Ok(())
+    }
+
+    fn transport_info(&self) -> Result<String> {
+        let ver = self.version_info()?;
+        Ok(format!(
+            "CP2110 part={:#04x} firmware={}",
+            ver.part_number, ver.device_version
+        ))
+    }
+
+    fn transport_status(&self) -> Result<String> {
+        let st = self.uart_status()?;
+        Ok(format!(
+            "TX FIFO: {} bytes, RX FIFO: {} bytes, parity_err={}, overrun_err={}, line_break={}",
+            st.tx_fifo, st.rx_fifo, st.parity_error, st.overrun_error, st.line_break
+        ))
+    }
+
+    fn transport_name(&self) -> &'static str {
+        "CP2110"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,63 +278,5 @@ mod tests {
         let cloned = info.clone();
         assert_eq!(cloned.part_number, info.part_number);
         assert_eq!(cloned.device_version, info.device_version);
-    }
-}
-
-impl Transport for Cp2110 {
-    fn write(&self, data: &[u8]) -> Result<()> {
-        // CP2110 interrupt OUT: first byte is length, then payload (AN434 §6.1).
-        if data.len() > MAX_REPORT_PAYLOAD {
-            return Err(Error::invalid_response_msg(format!(
-                "data too large for single HID report: {} bytes (max {MAX_REPORT_PAYLOAD})",
-                data.len()
-            )));
-        }
-        let mut report = Vec::with_capacity(data.len() + 1);
-        report.push(data.len() as u8);
-        report.extend_from_slice(data);
-        trace!("CP2110 TX: {:02X?}", report);
-        self.device.write(&report)?;
-        Ok(())
-    }
-
-    fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
-        let mut raw = vec![0u8; buf.len() + 1];
-        let n = self.device.read_timeout(&mut raw, timeout_ms)?;
-        if n == 0 {
-            return Ok(0);
-        }
-        // CP2110 interrupt IN: first byte is length, rest is payload
-        let payload_len = raw[0] as usize;
-        let actual = payload_len.min(n - 1).min(buf.len());
-        buf[..actual].copy_from_slice(&raw[1..1 + actual]);
-        trace!("CP2110 RX ({actual} bytes): {:02X?}", &buf[..actual]);
-        Ok(actual)
-    }
-
-    fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        trace!("CP2110 feature report: {:02X?}", data);
-        self.device.send_feature_report(data).map_err(Error::Hid)?;
-        Ok(())
-    }
-
-    fn transport_info(&self) -> Result<String> {
-        let ver = self.version_info()?;
-        Ok(format!(
-            "CP2110 part={:#04x} firmware={}",
-            ver.part_number, ver.device_version
-        ))
-    }
-
-    fn transport_status(&self) -> Result<String> {
-        let st = self.uart_status()?;
-        Ok(format!(
-            "TX FIFO: {} bytes, RX FIFO: {} bytes, parity_err={}, overrun_err={}, line_break={}",
-            st.tx_fifo, st.rx_fifo, st.parity_error, st.overrun_error, st.line_break
-        ))
-    }
-
-    fn transport_name(&self) -> &'static str {
-        "CP2110"
     }
 }

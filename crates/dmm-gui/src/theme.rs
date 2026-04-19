@@ -443,8 +443,10 @@ mod tests {
 
     #[test]
     fn override_takes_precedence() {
-        let mut overrides = PaletteOverrides::default();
-        overrides.graph_line = Some(HexColor(Color32::from_rgb(0, 0, 255)));
+        let overrides = PaletteOverrides {
+            graph_line: Some(HexColor(Color32::from_rgb(0, 0, 255))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(tc.graph_line(), Color32::from_rgb(0, 0, 255));
@@ -453,8 +455,10 @@ mod tests {
 
     #[test]
     fn derived_colors_track_base() {
-        let mut overrides = PaletteOverrides::default();
-        overrides.graph_cursor = Some(HexColor(Color32::from_rgb(100, 200, 50)));
+        let overrides = PaletteOverrides {
+            graph_cursor: Some(HexColor(Color32::from_rgb(100, 200, 50))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(tc.graph_cursor_delta(), Color32::from_rgb(100, 200, 50));
@@ -466,8 +470,10 @@ mod tests {
 
     #[test]
     fn minimap_line_derives_from_graph_line() {
-        let mut overrides = PaletteOverrides::default();
-        overrides.graph_line = Some(HexColor(Color32::from_rgb(50, 100, 200)));
+        let overrides = PaletteOverrides {
+            graph_line: Some(HexColor(Color32::from_rgb(50, 100, 200))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(
@@ -478,8 +484,10 @@ mod tests {
 
     #[test]
     fn live_indicator_derives_from_status_ok() {
-        let mut overrides = PaletteOverrides::default();
-        overrides.status_ok = Some(HexColor(Color32::from_rgb(0, 255, 128)));
+        let overrides = PaletteOverrides {
+            status_ok: Some(HexColor(Color32::from_rgb(0, 255, 128))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(tc.live_green(), Color32::from_rgb(0, 255, 128));
@@ -487,8 +495,10 @@ mod tests {
 
     #[test]
     fn recording_warning_derives_from_status_warning() {
-        let mut overrides = PaletteOverrides::default();
-        overrides.status_warning = Some(HexColor(Color32::from_rgb(255, 200, 0)));
+        let overrides = PaletteOverrides {
+            status_warning: Some(HexColor(Color32::from_rgb(255, 200, 0))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(tc.recording_full_warning(), Color32::from_rgb(255, 200, 0));
@@ -515,10 +525,12 @@ mod tests {
 
     #[test]
     fn ui_chrome_colors_resolve() {
-        let mut overrides = PaletteOverrides::default();
-        overrides.background = Some(HexColor(Color32::from_rgb(10, 20, 30)));
-        overrides.text = Some(HexColor(Color32::from_rgb(200, 210, 220)));
-        overrides.button = Some(HexColor(Color32::from_rgb(80, 80, 80)));
+        let overrides = PaletteOverrides {
+            background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
+            text: Some(HexColor(Color32::from_rgb(200, 210, 220))),
+            button: Some(HexColor(Color32::from_rgb(80, 80, 80))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(tc.background(), Color32::from_rgb(10, 20, 30));
@@ -532,9 +544,11 @@ mod tests {
         assert_eq!(tc.plot_background(), Color32::from_gray(10));
         assert_eq!(tc.graph_crosshair(), Color32::from_gray(200));
 
-        let mut overrides = PaletteOverrides::default();
-        overrides.plot_background = Some(HexColor(Color32::from_rgb(20, 20, 40)));
-        overrides.graph_crosshair = Some(HexColor(Color32::from_rgb(255, 255, 0)));
+        let overrides = PaletteOverrides {
+            plot_background: Some(HexColor(Color32::from_rgb(20, 20, 40))),
+            graph_crosshair: Some(HexColor(Color32::from_rgb(255, 255, 0))),
+            ..Default::default()
+        };
 
         let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
         assert_eq!(tc.plot_background(), Color32::from_rgb(20, 20, 40));

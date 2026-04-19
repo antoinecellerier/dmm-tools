@@ -445,7 +445,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     })
 }
 
-/// Build a 14-byte payload and parse it into a `Measurement` using the UT61E+ table.
+/// Build a 14-byte UT61E+ protocol payload from parts (for tests).
 ///
 /// This is a convenience helper for tests that need a realistic `Measurement`
 /// produced by the protocol parser rather than a hand-constructed struct.
@@ -456,7 +456,6 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
 /// - `display`: 7-byte ASCII display value (e.g. `b"  5.678"`)
 /// - `progress`: (tens, ones) bar graph digits — decoded as tens*10+ones
 /// - `flags`: (flag1, flag2, flag3) nibbles (0x30 prefix added automatically)
-/// Build a 14-byte UT61E+ protocol payload from parts (for tests).
 #[cfg(any(test, feature = "test-support"))]
 fn make_payload(
     mode: u8,
