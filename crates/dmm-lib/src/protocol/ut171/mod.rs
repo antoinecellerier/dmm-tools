@@ -22,6 +22,55 @@ use log::{debug, warn};
 use std::borrow::Cow;
 use std::time::Instant;
 
+/// Look up the human-readable range label for a (mode, range) pair.
+///
+/// Spec §5.4 lists vendor-extracted range tables from UT171C.exe strings.
+/// Range byte is raw and 1-based (`0` = auto-range, no specific label).
+/// Only the modes whose range tables are explicitly documented in the spec
+/// are returned here; others get `None` and fall through to an empty label,
+/// so we never fabricate range bounds that the vendor string dump did not
+/// prove. AC variants of mADC/uADC/ADC share the same magnitudes as the DC
+/// tables per §5.4; AC+DC variants are not documented and intentionally
+/// return `None`.
+fn lookup_range(mode_byte: u8, range_byte: u8) -> Option<&'static str> {
+    if range_byte == 0 {
+        return None;
+    }
+    match (mode_byte, range_byte) {
+        // 0x08 Continuity (BEEP)
+        (0x08, 1) => Some("600Ω"),
+        // 0x09 Capacitance — continuous indexing nF/µF/mF
+        (0x09, 1) => Some("6nF"),
+        (0x09, 2) => Some("60nF"),
+        (0x09, 3) => Some("600nF"),
+        (0x09, 4) => Some("6µF"),
+        (0x09, 5) => Some("60µF"),
+        (0x09, 6) => Some("600µF"),
+        (0x09, 7) => Some("6mF"),
+        (0x09, 8) => Some("60mF"),
+        // 0x0E Conductance (nS)
+        (0x0E, 1) => Some("60nS"),
+        // 0x0F Frequency — continuous indexing Hz/kHz/MHz
+        (0x0F, 1) => Some("60Hz"),
+        (0x0F, 2) => Some("600Hz"),
+        (0x0F, 3) => Some("6kHz"),
+        (0x0F, 4) => Some("60kHz"),
+        (0x0F, 5) => Some("600kHz"),
+        (0x0F, 6) => Some("6MHz"),
+        (0x0F, 7) => Some("60MHz"),
+        // 0x11 µA DC, 0x12 µA AC (same magnitudes per §5.4)
+        (0x11 | 0x12, 1) => Some("600µA"),
+        (0x11 | 0x12, 2) => Some("6000µA"),
+        // 0x14 mA DC, 0x15 mA AC
+        (0x14 | 0x15, 1) => Some("60mA"),
+        (0x14 | 0x15, 2) => Some("600mA"),
+        // 0x17 A DC
+        (0x17, 1) => Some("6A"),
+        (0x17, 2) => Some("20A"),
+        _ => None,
+    }
+}
+
 /// Look up mode name and unit from mode byte.
 /// Returns `(Cow::Borrowed(name), unit)` for known modes,
 /// or `(Cow::Owned("Unknown(0xNN)"), "")` for unknown bytes.
@@ -297,9 +346,10 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let flags_byte = payload[2];
     let mode_byte = payload[4];
-    let _range_byte = payload[5];
+    let range_byte = payload[5];
 
     let (mode, unit) = lookup_mode(mode_byte);
+    let range_label = lookup_range(mode_byte, range_byte).unwrap_or("");
 
     // Parse IEEE 754 float32 LE main value
     let main_bytes: [u8; 4] = [payload[6], payload[7], payload[8], payload[9]];
@@ -329,10 +379,10 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         timestamp: Instant::now(),
         mode,
         mode_raw: mode_byte as u16,
-        range_raw: 0,
+        range_raw: range_byte,
         value,
         unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(""),
+        range_label: Cow::Borrowed(range_label),
         progress: None,
         display_raw: None,
         flags,
@@ -449,6 +499,85 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode_raw, 0x0F);
         assert_eq!(m.mode, "Hz");
+    }
+
+    #[test]
+    fn range_label_capacitance() {
+        // 0x09 capacitance spans 8 continuous indices nF→µF→mF
+        for (r, expected) in [
+            (1, "6nF"),
+            (2, "60nF"),
+            (3, "600nF"),
+            (4, "6µF"),
+            (5, "60µF"),
+            (6, "600µF"),
+            (7, "6mF"),
+            (8, "60mF"),
+        ] {
+            let payload = make_payload(0x09, r, 0.0, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert_eq!(m.range_label, expected, "cap range {r}");
+            assert_eq!(m.range_raw, r);
+        }
+    }
+
+    #[test]
+    fn range_label_frequency() {
+        // 0x0F Hz continuous 1-7 across Hz/kHz/MHz
+        for (r, expected) in [
+            (1, "60Hz"),
+            (2, "600Hz"),
+            (3, "6kHz"),
+            (4, "60kHz"),
+            (5, "600kHz"),
+            (6, "6MHz"),
+            (7, "60MHz"),
+        ] {
+            let payload = make_payload(0x0F, r, 0.0, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert_eq!(m.range_label, expected, "Hz range {r}");
+        }
+    }
+
+    #[test]
+    fn range_label_current() {
+        // µA DC (0x11) and µA AC (0x12) share the same magnitudes per §5.4.
+        let payload = make_payload(0x11, 1, 0.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "600µA");
+        let payload = make_payload(0x12, 2, 0.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "6000µA");
+        // mA DC (0x14) / mA AC (0x15)
+        let payload = make_payload(0x14, 1, 0.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "60mA");
+        let payload = make_payload(0x15, 2, 0.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "600mA");
+        // A DC (0x17)
+        let payload = make_payload(0x17, 1, 0.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "6A");
+        let payload = make_payload(0x17, 2, 0.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "20A");
+    }
+
+    #[test]
+    fn range_label_auto_is_empty() {
+        // Range byte 0 = auto-range, no specific label.
+        let payload = make_payload(0x0F, 0, 50.0, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.range_label, "");
+        assert_eq!(m.range_raw, 0);
+    }
+
+    #[test]
+    fn range_label_undocumented_mode_is_empty() {
+        // Voltage modes have no range table in spec §5.4 — label stays empty
+        // rather than fabricated.
+        let payload = make_payload(0x02, 1, 12.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "");
+        let payload = make_payload(0x0A, 2, 470.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "");
+        // AC+DC variants (0x13, 0x16, 0x19) also absent from §5.4 — empty.
+        let payload = make_payload(0x13, 1, 100.0, 0x00);
+        assert_eq!(parse_measurement(&payload).unwrap().range_label, "");
     }
 
     #[test]
