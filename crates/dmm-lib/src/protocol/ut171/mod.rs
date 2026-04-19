@@ -14,7 +14,7 @@
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
@@ -375,6 +375,26 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         MeasuredValue::Normal(main_float as f64)
     };
 
+    // Aux float32 at payload[12..16] per spec §5.1. The vendor software
+    // populates this for dual-display modes (e.g. V AC with frequency aux),
+    // but the per-mode semantics — including the aux unit — are not spelled
+    // out in the decompilation, so we surface the number with a neutral
+    // label and no unit and leave interpretation to the consumer.
+    // Gate on finite + non-zero so static-layout modes that never use the
+    // aux slot don't emit a spurious "Aux: 0" entry.
+    let aux_bytes: [u8; 4] = [payload[12], payload[13], payload[14], payload[15]];
+    let aux_float = f32::from_le_bytes(aux_bytes);
+    let mut aux_values = Vec::new();
+    if aux_float.is_finite() && aux_float != 0.0 {
+        aux_values.push(AuxValue {
+            label: Cow::Borrowed("Aux"),
+            value: MeasuredValue::Normal(aux_float as f64),
+            unit: Cow::Borrowed(""),
+            display_raw: None,
+            elapsed_secs: None,
+        });
+    }
+
     Ok(Measurement {
         timestamp: Instant::now(),
         mode,
@@ -386,7 +406,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         progress: None,
         display_raw: None,
         flags,
-        aux_values: vec![],
+        aux_values,
         raw_payload: payload.to_vec(),
         spec: None,
         mode_spec: None,
@@ -398,7 +418,12 @@ mod tests {
     use super::*;
 
     fn make_payload(mode: u8, range: u8, value: f32, flags: u8) -> Vec<u8> {
+        make_payload_with_aux(mode, range, value, flags, 0.0)
+    }
+
+    fn make_payload_with_aux(mode: u8, range: u8, value: f32, flags: u8, aux: f32) -> Vec<u8> {
         let vbytes = value.to_le_bytes();
+        let abytes = aux.to_le_bytes();
         vec![
             0x00,  // reserved
             0x02,  // type = measurement
@@ -409,8 +434,8 @@ mod tests {
             vbytes[0], vbytes[1], vbytes[2], vbytes[3], // main value
             0x00,      // status2
             0x00,      // unknown
-            0x00, 0x00, 0x00, 0x00, // aux value
-            0x00, // padding
+            abytes[0], abytes[1], abytes[2], abytes[3], // aux value
+            0x00,      // padding
         ]
     }
 
@@ -565,6 +590,34 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.range_label, "");
         assert_eq!(m.range_raw, 0);
+    }
+
+    #[test]
+    fn aux_value_populated_when_nonzero() {
+        let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.aux_values.len(), 1);
+        assert_eq!(m.aux_values[0].label, "Aux");
+        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
+            assert!((v - 50.0).abs() < 0.01);
+        } else {
+            panic!("expected Normal aux");
+        }
+    }
+
+    #[test]
+    fn aux_value_empty_when_zero() {
+        // Modes that don't use the aux slot send 0.0; don't surface a spurious entry.
+        let payload = make_payload_with_aux(0x02, 0x00, 12.345, 0x00, 0.0);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.aux_values.is_empty());
+    }
+
+    #[test]
+    fn aux_value_skipped_when_nan() {
+        let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, f32::NAN);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.aux_values.is_empty());
     }
 
     #[test]
