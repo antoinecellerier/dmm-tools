@@ -42,10 +42,36 @@ WriteCommand(94);  // 0x5E
 byte[] array = ReceiveOneMessage(1);  // type 0x01
 ```
 
-**Ack protocol**: After receiving certain responses, the vendor sends
-`command=0xFF, data=[0x00]` three times with 100ms delays, then flushes.
-This is done by `AckMessage()` (line 3861). [UNVERIFIED whether meter
-requires ack or just tolerates it]
+**Ack protocol**: The Voltsoft vendor software wraps every VC-890
+request/response pair in an ack sequence. `AckMessage(clear: true)` at
+`DMSShare_decompiled.cs:3861` sends `command = 0xFF` with `data = [0x00]`
+three times with a 100ms `Thread.Sleep` between writes and a
+`FlushBuffer()` afterwards. Using `WriteCommand(byte, byte[], bool)` at
+line 3805 to build the frame yields the exact wire bytes
+
+```
+AB CD 04 FF 00 02 7B
+```
+
+(`0x04` = header(2) + command(1) + data(1), and checksum = AB + CD + 04
++ FF + 00 = 0x027B, BE).
+
+The sequence is invoked in two places per measurement cycle:
+
+1. **Pre-clear** — `WriteCommand(byte command, bool ack = true)`
+   (line 3773) calls `AckMessage(clear: true)` before writing the
+   command frame. `GetReading()` / `SendCommand()` take this default
+   path, so every outgoing command is preceded by the 3× ack burst.
+2. **Post-confirm** — `ReceiveOneMessage(byte messageType, bool ack =
+   true)` (line 3977) calls `AckMessage(ack)` right after a valid
+   response frame is reassembled (line 4009). Default `ack = true` →
+   3× ack burst after every received frame.
+
+A similar single-shot `AckMessage(clear: false)` (one write, no sleeps)
+is used on an HID read error path at line 3941. The meter still
+receiving / initiating vs. requiring the ack is [UNVERIFIED], but the
+vendor's double bracketing is strong enough evidence to ship the
+sequence on both sides of a measurement.
 
 ## Live Data Frame (66 bytes) -- [VENDOR]
 

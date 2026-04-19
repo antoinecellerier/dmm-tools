@@ -22,7 +22,34 @@ use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
-use std::time::Instant;
+use std::thread;
+use std::time::{Duration, Instant};
+
+/// Ack frame sent as both a pre-clear (before each command) and a
+/// post-confirm (after each received frame). Decoded from
+/// `DMSShare_decompiled.cs:3861` (`AckMessage`) plus the `WriteCommand`
+/// builder at line 3805: command = `0xFF`, data = `[0x00]`, header
+/// `0xAB 0xCD`, length byte `0x04` (= 2 + cmd + 1 data), checksum
+/// `0xAB + 0xCD + 0x04 + 0xFF + 0x00 = 0x027B` (BE).
+const ACK_FRAME: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+
+/// Gap between the three ack writes, matching `Thread.Sleep(100)` in
+/// the vendor code.
+const ACK_GAP: Duration = Duration::from_millis(100);
+
+/// Send the vendor's 3× ack sequence (`AckMessage(clear: true)`):
+/// three ack frames separated by 100ms sleeps. The vendor also calls
+/// `FlushBuffer()` at the end, but the `Transport` trait has no flush
+/// and we have not observed a functional need for one.
+fn send_ack_sequence(transport: &dyn Transport) -> Result<()> {
+    for i in 0..3 {
+        transport.write(&ACK_FRAME)?;
+        if i < 2 {
+            thread::sleep(ACK_GAP);
+        }
+    }
+    Ok(())
+}
 
 /// Live data message type byte.
 const MSG_TYPE_LIVE_DATA: u8 = 0x01;
@@ -282,11 +309,15 @@ impl Protocol for Vc890Protocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // Send measurement request (0x5E) — same command as UT61E+
+        // Vendor wraps every request/response in an ack burst — see the
+        // spec's "Ack protocol" section and `send_ack_sequence` above.
+        send_ack_sequence(transport)?;
+
+        // Send measurement request (0x5E) — same command as UT61E+.
         let request = super::vc8x0_common::build_command(CMD_GET_MEASUREMENT);
         transport.write(&request)?;
 
-        // Read response
+        // Read response.
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
@@ -296,6 +327,10 @@ impl Protocol for Vc890Protocol {
             "vc890",
             &framing::HEADER,
         )?;
+
+        // Post-confirm ack after a valid frame is reassembled.
+        send_ack_sequence(transport)?;
+
         parse_measurement(&payload)
     }
 
@@ -304,6 +339,8 @@ impl Protocol for Vc890Protocol {
         let cmd_byte = vc8x0_common::command_byte(command)?;
         let frame = vc8x0_common::build_command(cmd_byte);
         debug!("vc890: sending command {command} ({cmd_byte:#04x})");
+        // Pre-clear ack: vendor `WriteCommand(cmd, ack: true)` default path.
+        send_ack_sequence(transport)?;
         transport.write(&frame)?;
         Ok(())
     }
@@ -715,5 +752,26 @@ mod tests {
         let sum: u16 = frame[..4].iter().map(|&b| b as u16).sum();
         assert_eq!(frame[4], (sum >> 8) as u8);
         assert_eq!(frame[5], (sum & 0xFF) as u8);
+    }
+
+    #[test]
+    fn ack_frame_matches_vendor_bytes() {
+        // AB + CD + 04 + FF + 00 = 0x027B (BE checksum)
+        assert_eq!(ACK_FRAME, [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B]);
+        let sum: u16 = ACK_FRAME[..5].iter().map(|&b| b as u16).sum();
+        assert_eq!(ACK_FRAME[5], (sum >> 8) as u8);
+        assert_eq!(ACK_FRAME[6], (sum & 0xFF) as u8);
+    }
+
+    #[test]
+    fn send_ack_sequence_writes_three_copies() {
+        use crate::transport::mock::MockTransport;
+        let transport = MockTransport::new(vec![]);
+        send_ack_sequence(&transport).unwrap();
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 3, "ack should be sent three times");
+        for w in writes.iter() {
+            assert_eq!(w.as_slice(), &ACK_FRAME);
+        }
     }
 }
