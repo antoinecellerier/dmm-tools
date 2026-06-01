@@ -25,6 +25,27 @@ cargo clippy --workspace -- -D warnings
 cargo fmt --check
 ```
 
+## Build artifacts & disk usage
+
+Cargo does not garbage-collect `target/` — old hash-suffixed artifacts in
+`target/debug/deps` accumulate indefinitely. To reclaim space, run:
+
+```sh
+cargo clean                 # nuke target/ entirely (forces a full rebuild)
+# or, to keep recent/live artifacts:
+cargo install cargo-sweep   # one-time
+cargo sweep --installed     # drop artifacts from old toolchains
+cargo sweep --time 7        # drop artifacts not used in 7 days
+```
+
+The embedded git hash (`GIT_HASH`, shown in the GUI about line, `dmm-cli
+--version`, and capture `tool_version`) is only baked in for **release** builds.
+Debug builds use the constant `dev` so the binary's compile-time identity stays
+fixed across commits — otherwise every commit would mint a fresh `*-<hash>`
+binary in `target/debug/deps` and balloon disk usage. The release pipeline always
+builds `--release`, so distributed binaries still carry the real commit hash. See
+`crates/dmm-gui/build.rs` / `crates/dmm-cli/build.rs`.
+
 ## Adding Device Support
 
 See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end guide covering discovery, reverse engineering, implementation, testing, and verification.
