@@ -25,12 +25,14 @@ tables, flag bytes, command encoding, and hardware-verified behavior.
 
 ## Shared infrastructure
 
-Families that use a `0xAB 0xCD` header (UT61+/UT161, UT8803, UT171,
-UT181A, VC880, VC890) share the same framing skeleton: header + length
-byte + payload + 16-bit big-endian sum checksum. UT8802 uses a `0xAC`
-single-byte header with BCD frames, and UT803/UT804 carry proprietary
-structured data inside FS9721-style framing — see the per-family docs
-for the exact wire format.
+Families that use a `0xAB 0xCD` header share a framing skeleton but
+differ in the details: UT61+/UT161, UT8803, VC880, and VC890 use a
+1-byte length plus a 16-bit **big-endian** sum checksum, while UT171
+and UT181A use a 2-byte **little-endian** length (counting payload +
+checksum) plus a 16-bit **little-endian** sum. UT8802 uses a `0xAC`
+single-byte header with BCD frames and no checksum, and UT803/UT804
+carry proprietary structured data inside FS9721-style framing — see
+the per-family docs for the exact wire format.
 
 The UART byte stream is transport-agnostic within each family. Three
 HID bridge chips appear across the supported devices:

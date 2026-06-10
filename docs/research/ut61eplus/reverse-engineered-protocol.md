@@ -231,7 +231,7 @@ decompiled code — DMM.exe decompilation was incomplete):
 | 0x4C | Select (orange) | `actionSelect` | **[VERIFIED]** (cycles sub-modes, e.g. DC V → AC+DC V) |
 | 0x4D | PeakMinMax | `actionPeak` | **[VERIFIED]** (AC modes only; beeps but no visible effect on DC V) |
 | 0x4E | ExitPeak | `actionExitPeak` | **[VERIFIED]** (clears peak flags, returns to live) |
-| 0x5F | GetName | (device discovery) | **[UNVERIFIED]** |
+| 0x5F | GetName | (device discovery) | **[VERIFIED]** — two-frame response (FF 00 ack, then ASCII name); see verification backlog |
 
 Hardware verification: commands issued against a real UT61E+ via `dmm-cli`
 command tools; effects observed on the meter LCD and subsequent response
@@ -592,7 +592,6 @@ Configuration is stored in `options.xml`:
 
 1. **Flag byte 15 bit 3**: reserved/unused? Stored by PC software but
    never read; no observed behavior yet.
-2. **Commands 0x5F (GetName)**: not yet issued against hardware.
 3. **Mode bytes 0x03, 0x0D, 0x0F, 0x13**: not exercised (DC mV, AC µA,
    AC mA, Live). 0x0A/0x0B (temperature) are UT61D+ only.
 4. **Speculative mode bytes 0x1A-0x1E**: not yet observed from any device.
@@ -642,7 +641,7 @@ Configuration is stored in `options.xml`:
 | Byte15 bit3 flag name | **UNVERIFIED** | Stored by PC software but never read |
 | Bar graph position encoding (bytes 12-13) | **VERIFIED** | `byte12*10 + byte13` decimal, real device |
 | Commands 0x41/0x42/0x47/0x48/0x49/0x4B/0x4C/0x4D/0x4E | **VERIFIED** | Exercised against real UT61E+ via CLI |
-| Command 0x5F (GetName) | **UNVERIFIED** | Not in vendor software V2.02; not yet issued to real device |
+| Command 0x5F (GetName) | **VERIFIED** | Not in vendor software V2.02; confirmed on real UT61E+ — two-frame response (FF 00 ack, then ASCII name) |
 | Sampling rate ~10 Hz at 9600 baud | **VERIFIED** | Measured throughput, 19200/115200 unresponsive |
 | MIN/MAX and Peak 2-state cycles | **VERIFIED** | MAX → MIN → MAX, P-MAX → P-MIN → P-MAX |
 | Range byte 0x30 prefix sent by meter | **VERIFIED** | Real device observation |

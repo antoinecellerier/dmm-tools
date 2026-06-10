@@ -7,7 +7,7 @@ Based on pylablib source analysis (MIT-licensed `VC880` class) and EEVBlog teard
 
 | Property | Value |
 |----------|-------|
-| Devices | Voltcraft VC-880 (bench), VC650BT (handheld with Bluetooth) |
+| Devices | Voltcraft VC-880 (handheld, Conrad 124609), VC650BT (bench, Conrad 124411) |
 | Brand | Voltcraft (Conrad Electronics) |
 | Count | 40,000 |
 | Chipset | ES51966A (Cyrustek AFE) + MSP430F5418 MCU + BU9799KV LCD + CP2110 |

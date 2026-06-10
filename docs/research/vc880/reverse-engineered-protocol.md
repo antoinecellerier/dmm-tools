@@ -98,7 +98,9 @@ Frame sizes include the 2-byte header + length byte + type byte + payload + 2-by
 
 ## 4. Live Data Payload (type 0x01, 39 bytes) -- [VENDOR]
 
-This is the primary measurement frame, streamed continuously at ~2-3 Hz.
+This is the primary measurement frame, streamed continuously. (The
+"~2-3 Hz" rate is a manual claim, [UNVERIFIED] — nothing in the
+decompile establishes a rate.)
 
 ```
 Offset  Size  Field           Description
@@ -123,8 +125,10 @@ Offset  Size  Field           Description
 
 **Display values**: 7 bytes each, parsed as ASCII strings via
 `Encoding.ASCII.GetString()`. Right-justified with leading spaces.
-"OL" or "---" for overload (observed in pylablib, [UNVERIFIED] from
-vendor code). [VENDOR: `SetReadingValue()` line 16726]
+"OL" for overload. All-dashes means "no reading" in pylablib (it
+returns None — distinct from overload; corrected 2026-06). The vendor
+displays the raw string either way; [UNVERIFIED] when each occurs on
+the wire. [VENDOR: `SetReadingValue()` line 16726]
 
 ### 4.1 Function Codes (byte 4) -- [VENDOR]
 
@@ -159,7 +163,11 @@ Range byte is ASCII-encoded: `0x30` = range index 0, `0x31` = index 1, etc.
 Tables derived from the vendor switch statement, cross-referenced against
 manual spec tables.
 
-**Voltage (functions 0x00 DCV, 0x01 AC+DC V, 0x05 ACV, 0x12 LPF ACV)**:
+**Voltage (functions 0x00 DCV, 0x01 AC+DC V, 0x05 ACV)** — NOT 0x12:
+the vendor never reads the range byte for ACV LPF and fixes its range
+at 1000 (`case 18`, DMSShare_decompiled.cs:16671-16674); pylablib
+indexes the voltage table for LPF, disagreeing with the vendor —
+hardware must settle which matches the wire (corrected 2026-06):
 
 | Index | Range | Resolution | Manual |
 |-------|-------|------------|--------|

@@ -266,6 +266,26 @@ and AC mV (open leads, ~8.7 mV noise).
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 
 - Range byte values for most modes still need verification against real device.
+- **AC V top range: 750V vs 1000V conflict (2026-06 review).** The
+  UT61+ Series manual's AC tables end at 1000V (E+ column: 1000.0V),
+  but the code uses 750V for E+/B+/D+ (from the vendor decompile).
+  Testable on the in-house UT61E+: dial AC V, manual-range up to the
+  top range, and read the range byte + display.
+- **UT61D+ amps: manual lists 6.000A and 20.00A; code has only 20A**
+  (`ut61d_plus.rs` dc_a/ac_a copied from E+). Needs the 6A range row;
+  blocked on D+ hardware for index ordering (issue #7).
+- **UT61B+/D+ frequency ranges in code are invented structure** — the
+  manual gives only a 10.00 Hz–10.00 MHz span, no discrete ranges, and
+  the code's five ranges top out at 600 kHz. Issue #7.
+- **UT61B+/D+ "[DEDUCED] ascending" range-index ordering is
+  unverifiable from the manual** and is in tension with the only
+  verified family data point (E+ puts 220mV at index 4, after the
+  V ranges). Issue #7.
+- **Golden YAML fidelity (2026-06 review):** the three UT61E+ golden
+  captures look synthetic — the DC V case lacks the DC-indicator bit
+  (verified set on real DC V) and bar-graph bytes are 00 00 despite
+  non-zero readings. Re-capture from the real meter
+  (`dmm-cli capture`) so the goldens match verified device behavior.
 - **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
   The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
   the current reading. The code has a 5th entry (range 4=220mV) from vendor
@@ -282,7 +302,7 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
 were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
 Confirmed by real device captures and independently by vendor software
-decompilation (see `references/protocol-comparison.md`).
+decompilation (see `docs/research/ut61eplus/protocol-comparison.md`).
 
 ### GUI accessibility — screen reader walk-through
 
