@@ -143,33 +143,40 @@ The UT8802 uses a simpler wire format than the UT8803:
 |------|-------|------------|---------|
 | 0 | Header | Must equal `0xAC` | Frame sync |
 | 1 | Position | Raw byte | Rotary switch position code (0x01-0x2D) |
-| 2 | Digits 1-2 | High nibble (`>>4`): digit 1; Low nibble (`&0xF`): digit 2 | BCD display digits |
-| 3 | Digits 3-4 | High nibble (`>>4`): digit 3; Low nibble (`&0xF`): digit 4 | BCD display digits |
-| 4 | Digit 5 | Low nibble (`&0xF`): digit 5; High nibble: unused | 5th BCD digit |
-| 5 | DP + Flags | Low nibble (`&0xF`): decimal point position (0-4); Bits 4-5 (`>>4 & 3`): mode flags | Decimal placement + AC/DC |
+| 2 | Digits 4-5 | High nibble (`>>4`): digit 4; Low nibble (`&0xF`): digit 5 (LSD) | Display digits |
+| 3 | Digits 2-3 | High nibble (`>>4`): digit 2; Low nibble (`&0xF`): digit 3 | Display digits |
+| 4 | Digit 1 | Low nibble (`&0xF`): digit 1 (MSD); High nibble: unused | Most significant digit |
+| 5 | DP + Flags | Low nibble (`&0xF`): decimal point position (0-4); Bits 4-5 (`>>4 & 3`): diode/SCR probe direction | Decimal placement + probe direction |
 | 6 | Status | All 8 bits extracted individually | Bargraph or secondary status [UNVERIFIED] |
 | 7 | Sign + Flags | Bit 7 (`>>7`): polarity (1=negative); Bits 0-6: status flags | Sign + HOLD/REL/MAX/MIN/AUTO |
 
 **Frame size**: Fixed 8 bytes. No length byte, no checksum. [VENDOR]
 
-**Validation**: Only the header byte (must be 0xAC) and position code
-(must be valid in FUN_1001c7b0) are checked. There is no checksum
-verification. [VENDOR]
+**Validation**: The vendor parser checks: non-null buffer, length >= 8,
+header byte 0xAC, position code valid in FUN_1001c7b0, and decimal point
+position < 5 (frame silently skipped otherwise,
+uci_dll_decompiled.txt:24709-24726). There is no checksum verification
+and no per-nibble digit validation. [VENDOR]
 
-### 3.2 BCD Display Encoding -- [VENDOR]
+### 3.2 Display Encoding -- [VENDOR]
 
-The 5 BCD nibbles are extracted in order:
-1. Byte 2 high nibble → digit 1 (most significant)
-2. Byte 2 low nibble → digit 2
-3. Byte 3 high nibble → digit 3
-4. Byte 3 low nibble → digit 4
-5. Byte 4 low nibble → digit 5 (least significant)
+The 5 display nibbles are extracted MSD-first (vendor stack slots at
+uci_dll_decompiled.txt:24714-24719):
+1. Byte 4 low nibble → digit 1 (most significant)
+2. Byte 3 high nibble → digit 2
+3. Byte 3 low nibble → digit 3
+4. Byte 2 high nibble → digit 4
+5. Byte 2 low nibble → digit 5 (least significant)
 
-**BCD-to-ASCII conversion**:
-- Standard digits (0-9): add 0x30 (`'0'`) to get ASCII
-- Leading zeros: replaced with space (0x20)
-- Nibble value 0x0A: treated as zero (`'0'`, 0x30)
-- Nibble value 0x0C: converted to `'L'` (0x4C) -- overload indicator
+Byte 4's high nibble is never read.
+
+**Nibble-to-ASCII conversion**: the vendor blindly adds 0x30 to every
+nibble (uci_dll_decompiled.txt:24753-24760); only the *first* character
+is blanked to space when its nibble is 0. Earlier claims that 0x0A maps
+to `'0'` and 0x0C to `'L'` are not supported by the vendor code — the
+`'L'` in overload displays comes from a literal string (see below).
+What non-decimal nibble values the device actually sends (blank digits,
+overload) is [UNVERIFIED].
 
 **Decimal point insertion**: The decimal point position from byte 5 low
 nibble determines where `'.'` is inserted. Position 0 = no decimal
@@ -177,9 +184,11 @@ nibble determines where `'.'` is inserted. Position 0 = no decimal
 position is 4. The `'.'` character is inserted at
 `(end_of_digits - decimal_position)`. [VENDOR]
 
-**Overload detection**: When any digit nibble is 0x0C (`'L'`), the
-overload flag (bit 7 of status word) is set and the display string
-becomes `"  0L "`. [VENDOR]
+**Overload detection**: Byte 7 bit 6 is the sole overload mechanism:
+when set, the vendor skips the atof, stores a sentinel value, and
+replaces the display with the literal `"  0L "`
+(uci_dll_decompiled.txt:24806-24821). Digit nibbles are not involved.
+[VENDOR]
 
 **Sign**: Byte 7 bit 7 determines polarity. When set, the parsed
 numeric value is negated (multiplied by -1.0). [VENDOR]
@@ -256,16 +265,22 @@ exactly, confirming the position code assignments. [VENDOR]
 
 ### 3.4 Byte 5 Flags (Bits 4-5) -- [VENDOR]
 
-Byte 5 bits 4-5 (`>>4 & 3`) encode the AC/DC coupling status, used in
-combination with byte 7 flags to construct the ACDC field in the status
-word:
+Byte 5 bits 4-5 (`>>4 & 3`, `local_2d` at uci_dll_decompiled.txt:24728)
+are consumed **only** as diode/SCR probe-direction indicators
+(uci_dll_decompiled.txt:24777-24800, printed as `diodeDirectio` in the
+debug format at line 24865-24868). They are **not** AC/DC coupling — an
+earlier reading of the decompile conflated them with the status word's
+ACDC field, which actually comes from a position-code lookup
+(`FUN_1001ca30`, lines 23411-23445):
 
-| Value | Meaning |
-|-------|---------|
-| 0 | OFF (no AC/DC) |
-| 1 | AC or specific direction (context-dependent) |
-| 2 | DC |
-| 3 | AC+DC |
+| FUN_1001ca30 result | Meaning | Position codes |
+|---------------------|---------|----------------|
+| 2 | DC | 0x01, 0x03-0x06, 0x0D, 0x0E, 0x11, 0x12, 0x16 |
+| 1 | AC | 0x09-0x0C, 0x10, 0x13, 0x14, 0x18 |
+| 0 | neither | everything else |
+
+What byte 5 bits 4-5 contain outside diode/SCR positions is
+[UNVERIFIED] — the vendor never reads them there.
 
 For diode mode (position 0x23), these bits encode probe direction:
 - Value 0: both directions valid (bits 2+3 of high status set)
@@ -320,9 +335,9 @@ the UT8803 protocol doc). The flag format string confirms:
 | Bits | Field | Extraction |
 |------|-------|------------|
 | D0-D3 | FuncCode | From FUN_1001c7b0 (position → function lookup) |
-| D4-D5 | ACDC | From byte 5 bits 4-5 + byte 7 bits 0-1 |
+| D4-D5 | ACDC | From `FUN_1001ca30(position)` — see §3.4 |
 | D6 | AutoRange | From byte 7 bit 2 (**inverted**) |
-| D7 | OverLoad | From digit nibble == 0x0C detection |
+| D7 | OverLoad | From byte 7 bit 6 — see §3.2 |
 | D8-D11 | UnitType | From FUN_1001cf30 (position → unit lookup) |
 | D12-D14 | UnitMag | From FUN_1001cd30 (position → prefix lookup) |
 | D19 | Minus | From byte 7 bit 7 (sign/polarity) — see §3.5 |

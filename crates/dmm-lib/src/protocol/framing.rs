@@ -279,13 +279,15 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
         ));
     }
 
-    // Validate BCD nibbles (5 digits from bytes 2-4)
+    // Validate the 5 display nibbles from bytes 2-4. Display order is
+    // MSD = byte 4 low nibble … LSD = byte 2 low nibble (see
+    // ut8802::parse_measurement); the order is irrelevant for validation.
     let nibbles = [
-        frame[2] >> 4,   // digit 1
-        frame[2] & 0x0F, // digit 2
-        frame[3] >> 4,   // digit 3
-        frame[3] & 0x0F, // digit 4
-        frame[4] & 0x0F, // digit 5
+        frame[4] & 0x0F, // digit 1 (MSD)
+        frame[3] >> 4,   // digit 2
+        frame[3] & 0x0F, // digit 3
+        frame[2] >> 4,   // digit 4
+        frame[2] & 0x0F, // digit 5 (LSD)
     ];
     for (i, &nibble) in nibbles.iter().enumerate() {
         if !is_valid_bcd_nibble(nibble) {

@@ -243,6 +243,20 @@ impl Protocol for Ut8802Protocol {
 ///
 /// Other values should be rejected by the frame extractor's validation,
 /// but we handle them defensively with '?'.
+/// Whether a position code measures a DC quantity.
+///
+/// The vendor derives the status-word AC/DC field from the position code
+/// alone via a lookup (`FUN_1001ca30`, uci_dll_decompiled.txt:23411-23445:
+/// returns 2=DC for the codes below, 1=AC for 0x09-0x0C/0x10/0x13/0x14/0x18,
+/// 0 otherwise). Frame byte 5 bits 4-5 — previously misread as AC/DC
+/// coupling — are diode/SCR probe-direction indicators.
+fn position_is_dc(position: u8) -> bool {
+    matches!(
+        position,
+        0x01 | 0x03..=0x06 | 0x0D | 0x0E | 0x11 | 0x12 | 0x16
+    )
+}
+
 fn bcd_to_char(nibble: u8) -> char {
     match nibble {
         0x00..=0x09 => (b'0' + nibble) as char,
@@ -254,13 +268,16 @@ fn bcd_to_char(nibble: u8) -> char {
 
 /// Parse a UT8802 measurement payload (7 bytes = frame bytes 1..8).
 ///
-/// Layout (from Ghidra FUN_1001e0a0 + programming manual):
+/// Layout (from Ghidra FUN_1001e0a0 + programming manual; payload index =
+/// frame byte − 1):
 /// - byte 0: position code (0x01-0x2D, combined function + range)
-/// - byte 1: digits 1-2 (high nibble = d1, low nibble = d2)
-/// - byte 2: digits 3-4 (high nibble = d3, low nibble = d4)
-/// - byte 3: digit 5 (low nibble = d5, high nibble unused)
-/// - byte 4: decimal point position (low nibble, 0-4) + AC/DC coupling
-///   (bits 4-5: 0=OFF, 1=AC, 2=DC, 3=AC+DC, per spec §3.4)
+/// - bytes 1-3: 5 display nibbles, most significant digit in byte 3's low
+///   nibble: d1=b3 lo, d2=b2 hi, d3=b2 lo, d4=b1 hi, d5(LSD)=b1 lo
+///   (vendor stack slots at uci_dll_decompiled.txt:24714-24719; byte 3's
+///   high nibble is never read)
+/// - byte 4: decimal point position (low nibble, 0-4) + diode/SCR probe
+///   direction (bits 4-5, consumed only for positions 0x23/0x2A,
+///   uci_dll_decompiled.txt:24727, 24777-24800 — NOT AC/DC coupling)
 /// - byte 5: status/bargraph byte [UNVERIFIED purpose]
 /// - byte 6: sign (bit 7) + status flags (bits 0-6)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
@@ -276,12 +293,6 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let position = payload[0];
     let dp_pos = payload[4] & 0x0F;
-    // Byte 4 bits 4-5 encode AC/DC coupling per spec §3.4 [VENDOR]:
-    //   0 = OFF, 1 = AC, 2 = DC, 3 = AC+DC.
-    // Byte 6 bits 0-1 also contribute to the ACDC status-word field per §3.7,
-    // but without device traces the exact combination is unclear, so we take
-    // byte 4 alone as the authoritative AC-vs-DC indicator.
-    let acdc_bits = (payload[4] >> 4) & 0x03;
     let sign_byte = payload[6];
 
     // Look up position code
@@ -293,13 +304,17 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             (Cow::Owned(format!("Unknown({position:#04x})")), "", "")
         };
 
-    // Decode BCD digits
+    // Decode the 5 display nibbles, MSD first. The vendor parser fills its
+    // display buffer as [b3 lo, b2 hi, b2 lo, b1 hi, b1 lo] (payload
+    // indexing; uci_dll_decompiled.txt:24714-24719) and runs atof directly
+    // on the resulting string, so byte 3's low nibble is the most
+    // significant digit.
     let nibbles = [
-        payload[1] >> 4,
-        payload[1] & 0x0F,
+        payload[3] & 0x0F,
         payload[2] >> 4,
         payload[2] & 0x0F,
-        payload[3] & 0x0F,
+        payload[1] >> 4,
+        payload[1] & 0x0F,
     ];
 
     let mut overload = false;
@@ -339,6 +354,15 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     }
 
     let display_str: String = chars.iter().collect();
+
+    // The vendor's only overload mechanism is byte 6 bit 6: it skips the
+    // atof and substitutes a sentinel plus the literal display "  0L "
+    // (uci_dll_decompiled.txt:24806-24821). The digit-nibble 0x0C ('L')
+    // check above is kept as a defensive secondary — the vendor never
+    // validates digit nibbles.
+    if sign_byte & 0x40 != 0 {
+        overload = true;
+    }
 
     // Parse numeric value
     let value = if overload {
@@ -389,7 +413,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         auto_range,
         low_battery: false,
         hv_warning: false,
-        dc: matches!(acdc_bits, 2 | 3),
+        dc: position_is_dc(position),
         peak_max: false,
         peak_min: false,
         ..Default::default()
@@ -426,11 +450,13 @@ mod tests {
         status: u8,
         sign_flags: u8,
     ) -> Vec<u8> {
+        // digits[] is MSD-first; wire order is d1=b3 lo, d2=b2 hi,
+        // d3=b2 lo, d4=b1 hi, d5=b1 lo (payload bytes 1-3).
         vec![
             position,
-            (digits[0] << 4) | digits[1],
-            (digits[2] << 4) | digits[3],
-            digits[4],
+            (digits[3] << 4) | digits[4],
+            (digits[1] << 4) | digits[2],
+            digits[0],
             (acdc_bits << 4) | dp_pos,
             status,
             sign_flags,
@@ -483,6 +509,39 @@ mod tests {
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x80);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-1234.5)).abs() < 1e-6));
+    }
+
+    #[test]
+    fn digit_order_matches_vendor_wire_layout() {
+        // Raw bytes, not via make_payload: digits 1,2,3,4,5 (MSD→LSD) are
+        // d1=byte3 lo, d2=byte2 hi, d3=byte2 lo, d4=byte1 hi, d5=byte1 lo
+        // (uci_dll_decompiled.txt:24714-24719). dp_pos=1 → "1234.5".
+        let payload = [0x05, 0x45, 0x23, 0x01, 0x01, 0x00, 0x00];
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1234.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn overload_from_status_bit() {
+        // Vendor overload = byte 6 bit 6, with ordinary digits on the wire
+        // (uci_dll_decompiled.txt:24806-24821).
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+    }
+
+    #[test]
+    fn dc_flag_from_position_code() {
+        // AC position (0x09 = AC V per FUN_1001ca30) must not set dc even
+        // though byte 4 bits 4-5 (diode/SCR direction) read as "2".
+        let payload = make_payload(0x09, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(!m.flags.dc);
+
+        // DC position (0x05 = DC V) sets dc regardless of byte 4 bits.
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x01, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.dc);
     }
 
     #[test]

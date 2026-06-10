@@ -106,11 +106,25 @@ real hardware**. Every aspect needs end-to-end verification.
 
 **UT8802 / UT8802N**:
 - Frame extraction (8-byte, 0xAC header, no checksum)
-- 0x5A streaming trigger byte
+- 0x5A streaming trigger byte — the vendor DLL only sends 0x5A on the
+  QinHeng/CH9325 init path, never to CP2110 devices (2026-06 review);
+  does the UT8802 stream without it, and is sending it harmful?
 - Position code mapping (35 codes, 0x01-0x2D with gaps)
-- BCD display encoding (5 nibbles from bytes 2-4)
+- Display digit order. **Corrected from vendor [VENDOR]** (2026-06
+  review): MSD = byte 4 low nibble, then byte 3 hi/lo, byte 2 hi/lo
+  (uci_dll_decompiled.txt:24714-24719) — previous code had the order
+  reversed. Hardware confirmation pending: any reading with distinct
+  digits settles it.
 - Decimal point position (byte 5 low nibble, 0-4)
-- AC/DC coupling flags (byte 5 bits 4-5)
+- AC/DC determination. **Corrected from vendor [VENDOR]** (2026-06
+  review): AC/DC comes from a position-code lookup (FUN_1001ca30);
+  byte 5 bits 4-5 are diode/SCR probe direction, not coupling. What
+  byte 5 bits 4-5 carry outside diode/SCR modes is unverified.
+- Overload. **Corrected from vendor [VENDOR]** (2026-06 review): the
+  vendor's only OL mechanism is byte 7 bit 6 (uci_dll:24806-24821);
+  digit nibbles are never checked. We keep the 0x0C digit check as a
+  defensive secondary. Does a real OL set bit 6, send 0x0C nibbles,
+  both, or neither?
 - Sign/polarity (byte 7 bit 7)
 - AUTO flag inverted logic (byte 7 bit 2 clear = auto ON)
 - Byte 7 flag bits (HOLD/REL/MAX/MIN). **Resolved from vendor [VENDOR]**

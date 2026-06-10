@@ -13,6 +13,7 @@
 
 ### Bug fixes
 
+- **UT8802 readings no longer have their digits reversed** — the display digits were decoded in the opposite order from the meter's wire format (e.g. a reading of 1234.5 displayed as 5432.1). Overload is now detected from the meter's overload flag instead of a display-digit heuristic, and the AC/DC indicator now follows the dial position (the byte previously read as "AC/DC coupling" is actually the diode/SCR probe-direction indicator).
 - **VC-890 low-pass (ACV LPF) mode now reports its fixed 1000V range** — the vendor protocol ignores the range byte in LPF mode, so the range label no longer depends on an undefined byte (previously it could show 6V–1000V or nothing).
 - **Graph frame rate no longer degrades as history grows** — per-frame work now scales with the visible window instead of the full 10 000-point buffer, and the minimap keeps a steady frame rate at full history.
 - **Graph drag-to-pan works in live mode** — starting a drag in live mode snaps the view to the current end of data and drops out of live, matching the scroll-wheel behaviour. Previously drag was silently inert while following live data.
