@@ -1494,7 +1494,11 @@ impl App {
                 .save_file()
             {
                 let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-                    let mut file = std::fs::File::create(&path)?;
+                    // Write to a sibling .tmp and rename into place so a
+                    // crash mid-export can't leave a truncated file at the
+                    // user-chosen path.
+                    let tmp = path.with_extension("csv.tmp");
+                    let mut file = std::fs::File::create(&tmp)?;
                     writeln!(file, "# device: {device_model}")?;
                     let mut wtr = csv::Writer::from_writer(file);
                     wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
@@ -1509,6 +1513,8 @@ impl App {
                         ])?;
                     }
                     wtr.flush()?;
+                    drop(wtr);
+                    std::fs::rename(&tmp, &path)?;
                     Ok(())
                 })();
                 match result {

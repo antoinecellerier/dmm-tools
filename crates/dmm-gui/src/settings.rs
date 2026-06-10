@@ -271,7 +271,13 @@ impl Settings {
                 to_save.theme = original;
             }
             if let Ok(json) = serde_json::to_string_pretty(&to_save) {
-                let _ = std::fs::write(&path, json);
+                // Write atomically (.tmp + rename) so a kill or disk-full
+                // mid-write can't corrupt the existing config file.
+                let tmp = path.with_extension("json.tmp");
+                let result = std::fs::write(&tmp, json).and_then(|()| std::fs::rename(&tmp, &path));
+                if let Err(e) = result {
+                    log::warn!("failed to save settings to {}: {e}", path.display());
+                }
             }
         }
     }
