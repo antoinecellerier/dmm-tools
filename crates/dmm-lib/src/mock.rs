@@ -639,6 +639,12 @@ impl Protocol for MockProtocol {
                 self.auto_range = true;
             }
             "minmax" => {
+                // Mutually exclusive with Peak on the real device.
+                if self.peak_state != PeakState::Off {
+                    self.peak_state = PeakState::Off;
+                    self.stored_peak_min = None;
+                    self.stored_peak_max = None;
+                }
                 // Real device cycles: Off → MAX → MIN → MAX → MIN ...
                 self.minmax_state = match self.minmax_state {
                     MinMaxState::Off => {
@@ -659,6 +665,21 @@ impl Protocol for MockProtocol {
                 self.auto_range = self.auto_range_before_minmax;
             }
             "peak" => {
+                // Real device silently ignores Peak on DC modes
+                // (UT61E+ spec §2.7) and never shows Peak and MIN/MAX
+                // together — entering Peak ends MIN/MAX.
+                if matches!(
+                    self.current_scenario().id,
+                    MockMode::DcV | MockMode::DcMa | MockMode::OhmOl
+                ) {
+                    return Ok(());
+                }
+                if self.minmax_state != MinMaxState::Off {
+                    self.minmax_state = MinMaxState::Off;
+                    self.stored_min = None;
+                    self.stored_max = None;
+                    self.auto_range = self.auto_range_before_minmax;
+                }
                 // Real device cycles: Off → P-MAX → P-MIN → P-MAX → P-MIN ...
                 self.peak_state = match self.peak_state {
                     PeakState::Off => {
@@ -1007,8 +1028,39 @@ mod tests {
     }
 
     #[test]
+    fn test_peak_ignored_on_dc_mode() {
+        // Real device silently ignores Peak on DC modes (spec §2.7).
+        let mut dmm = open_mock().unwrap(); // starts on DC V
+        dmm.send_command("peak").unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert!(!m.flags.peak_max && !m.flags.peak_min);
+    }
+
+    #[test]
+    fn test_peak_and_minmax_mutually_exclusive() {
+        let mut dmm = open_mock().unwrap();
+        dmm.send_command("select").unwrap(); // DC V → AC V
+        dmm.send_command("minmax").unwrap();
+        dmm.send_command("peak").unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert!(m.flags.peak_max, "peak engaged");
+        assert!(
+            !m.flags.min && !m.flags.max,
+            "minmax must end when peak starts"
+        );
+        dmm.send_command("minmax").unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert!(m.flags.max, "minmax engaged");
+        assert!(
+            !m.flags.peak_max && !m.flags.peak_min,
+            "peak must end when minmax starts"
+        );
+    }
+
+    #[test]
     fn test_peak_flags_cycle() {
         let mut dmm = open_mock().unwrap();
+        dmm.send_command("select").unwrap(); // move off DC V (peak ignored there)
 
         // First press → P-MAX only (matching real device)
         dmm.send_command("peak").unwrap();
