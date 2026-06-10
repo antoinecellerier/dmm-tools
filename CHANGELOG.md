@@ -13,6 +13,8 @@
 
 ### Bug fixes
 
+- **UT61E+ recovers from a corrupted frame on the next reading** — corrupt data is discarded after a checksum error (matching the vendor software); previously the bad frame stayed buffered and every subsequent reading failed until reconnect.
+- **UT8802/UT8803 connections no longer stall on unexpected frames** — a non-measurement or corrupt-length frame is now skipped immediately instead of blocking measurement extraction until an internal buffer filled (~65 s of lost readings).
 - **UT8803 readings now show the correct unit magnitude** — the displayed unit carries the range's prefix (mV, kΩ, MΩ, mH, nF/µF/mF, kHz/MHz) as the meter's value is range-relative; previously a 5.999 kΩ reading showed as "5.999 Ω". The ESR sub-modes (Inductance R, Capacitance R) now report Ω instead of H/F, the Q/D factor sub-modes are unitless, and the DC indicator follows the dial mode.
 - **UT8802 and UT8803 no longer send a spurious 0x5A byte on connect** — the vendor software never sends it to these meters (it belongs to a different meter family's init); they stream unprompted.
 - **UT8802 readings no longer have their digits reversed** — the display digits were decoded in the opposite order from the meter's wire format (e.g. a reading of 1234.5 displayed as 5432.1). Overload is now detected from the meter's overload flag instead of a display-digit heuristic, and the AC/DC indicator now follows the dial position (the byte previously read as "AC/DC coupling" is actually the diode/SCR probe-direction indicator).

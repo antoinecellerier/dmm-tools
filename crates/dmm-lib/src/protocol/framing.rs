@@ -76,7 +76,15 @@ where
                 rx_buf.extend_from_slice(&tmp[..n]);
             }
             Err(e) => match recovery {
-                FrameErrorRecovery::Propagate => return Err(e),
+                FrameErrorRecovery::Propagate => {
+                    // Discard the corrupt data so the next request starts
+                    // clean — matching the vendor parser's "discard and
+                    // clear buffer" on a bad frame (UT61E+ spec §2.1).
+                    // Leaving it in place would re-extract the same
+                    // corrupt frame on every subsequent request.
+                    rx_buf.clear();
+                    return Err(e);
+                }
                 FrameErrorRecovery::SkipAndRetry => {
                     warn!("{label}: frame error: {e}, skipping");
                     if let Some(pos) = rx_buf
@@ -123,7 +131,14 @@ pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // i.e. payload + 2-byte checksum. Verified against real device traces.
     let len_byte = remaining[2] as usize;
     if len_byte < 2 {
-        return Ok(None);
+        // A real frame's length always covers at least the checksum.
+        // Returning Ok(None) here would leave this header at the buffer
+        // head forever (poisoning reads until the buffer cap); error out
+        // so the recovery policy can resync.
+        return Err(Error::invalid_response(
+            format!("abcd_be16 length byte {len_byte} < 2"),
+            remaining,
+        ));
     }
     let frame_len = 2 + 1 + len_byte; // header + len_byte + (payload + checksum)
     let payload_len = len_byte - 2;
@@ -178,11 +193,17 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
         return Ok(None);
     }
 
-    // Byte 3 must be 0x02 (measurement response type)
+    // Byte 3 must be 0x02 (measurement response type). Error out rather
+    // than returning Ok(None): Ok(None) means "need more data" and never
+    // consumes, so one non-measurement frame at the buffer head would
+    // block extraction until the buffer cap clears everything. The
+    // family's SkipAndRetry recovery drains past this header instead.
     if remaining[3] != 0x02 {
-        // Not a measurement frame; skip past this header
         debug!("framing: ut8803 byte3={:#04x}, expected 0x02", remaining[3]);
-        return Ok(None);
+        return Err(Error::invalid_response(
+            format!("ut8803 frame type {:#04x}, expected 0x02", remaining[3]),
+            remaining,
+        ));
     }
 
     let frame = &remaining[..FRAME_LEN];
@@ -389,7 +410,12 @@ pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usiz
 
     let len_val = u16::from_le_bytes([remaining[2], remaining[3]]) as usize;
     if len_val < 2 {
-        return Ok(None);
+        // See abcd_be16: Ok(None) would pin this header at the buffer
+        // head until the cap clears; error out so recovery can resync.
+        return Err(Error::invalid_response(
+            format!("2byte_le16 length field {len_val} < 2"),
+            remaining,
+        ));
     }
 
     let payload_len = len_val - 2;
@@ -402,9 +428,14 @@ pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usiz
     let frame = &remaining[..frame_len];
     trace!("framing: 2byte_le16 raw frame: {:02X?}", frame);
 
-    // Checksum: 16-bit LE sum of bytes[2..frame_len-2] (length field + payload)
+    // Checksum: 16-bit LE sum of bytes[2..frame_len-2] (length field +
+    // payload), mod 2^16. wrapping_add: the range can be ~4 KiB of
+    // attacker-controlled bytes, and a plain u16 Sum would overflow-panic
+    // in debug builds on malformed input.
     let checksum_range = &frame[2..frame_len - 2];
-    let computed: u16 = checksum_range.iter().map(|&b| b as u16).sum();
+    let computed: u16 = checksum_range
+        .iter()
+        .fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
     let received = u16::from_le_bytes([frame[frame_len - 2], frame[frame_len - 1]]);
 
     if computed != received {
@@ -552,6 +583,40 @@ mod tests {
         assert_eq!(payload[0], 0x02);
         assert_eq!(payload[1] & 0x0F, 0x00);
         assert_eq!(&payload[2..9], b" 0.0004");
+    }
+
+    #[test]
+    fn ut8803_non_measurement_frame_errors_for_resync() {
+        // A frame with byte3 != 0x02 must produce Err (so SkipAndRetry
+        // drains past it), not Ok(None) which would pin it at the buffer
+        // head and stall extraction forever.
+        let mut buf = vec![0xAB, 0xCD, 0x00, 0x05];
+        buf.resize(21, 0x00);
+        assert!(extract_frame_ut8803(&buf).is_err());
+    }
+
+    #[test]
+    fn abcd_be16_short_length_errors_for_resync() {
+        let buf = vec![0xAB, 0xCD, 0x01, 0x00, 0x00, 0x00];
+        assert!(extract_frame_abcd_be16(&buf).is_err());
+    }
+
+    #[test]
+    fn abcd_2byte_le16_short_length_errors_for_resync() {
+        let buf = vec![0xAB, 0xCD, 0x01, 0x00, 0x00, 0x00];
+        assert!(extract_frame_abcd_2byte_le16(&buf).is_err());
+    }
+
+    #[test]
+    fn abcd_2byte_le16_checksum_overflow_does_not_panic() {
+        // ~4 KiB of 0xFF after a large length field: a plain u16 Sum over
+        // the checksum range would overflow-panic in debug builds.
+        let len: u16 = 4000;
+        let mut buf = vec![0xAB, 0xCD];
+        buf.extend_from_slice(&len.to_le_bytes());
+        buf.extend(std::iter::repeat_n(0xFFu8, len as usize + 2));
+        // Wrong checksum is fine — it must reject, not panic.
+        assert!(extract_frame_abcd_2byte_le16(&buf).is_err());
     }
 
     #[test]
