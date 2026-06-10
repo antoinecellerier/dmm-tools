@@ -436,6 +436,22 @@ re-derived independently by an adversarial second pass:
    Frequency unit boundaries: ranges 0-1 Hz, 2-4 kHz, 5-7 MHz; Ω:
    range 1 Ω, 2-4 kΩ, 5-6 MΩ.
 
+8. **The frame-string-builder is confirmed (2026-06 follow-up).** The
+   one remaining inferred link — that the parser's positional
+   `Copy(s, idx, 1)` reads wire nibbles in FS9721 index order — was the
+   HID receive handler `H71ARData` (VA 0x55822c), which RTTI names but
+   Ghidra's call graph never reached (it appears in *neither*
+   decompile). Raw-disassembling it from the recovered binary shows it
+   converts each received byte to a 2-char hex string
+   (`FUN_00409230` → `FUN_004090d0`, an `IntToHex`-style formatter with
+   `add dl,0x30`), peels the data nibble keyed by the byte's high-nibble
+   index, accumulates it into the Delphi string global `DAT_0056b698`,
+   and frame-syncs on the hex markers `"0D"`/`"DA"`/`"AD"` (= the 0x0D/
+   0x0A trailer). So the string the parser reads positionally *is* the
+   ordered sequence of wire data nibbles — the structured-nibble model
+   (not LCD segments) and the 1-based-`Copy` indexing are both
+   vendor-confirmed, not assumed.
+
 The Rust `fs9721` module now implements separate UT803/UT804 parsers
 with these corrections. Clean-room note: approval was given to consult
 the sigrok FS9721 decoder and the FS9721-LP3 datasheet for this family,
