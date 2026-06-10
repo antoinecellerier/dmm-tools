@@ -1,12 +1,37 @@
 //! UT803/UT804 bench multimeter protocol.
 //!
-//! These meters use FS9721-style 14-byte framing (index nibble in high 4 bits)
-//! but with a **proprietary data encoding** — the data nibbles carry structured
-//! measurement data (mode codes, range codes, digit values, status flags),
-//! NOT raw LCD segment data.
+//! These meters use FS9721-style 14-byte framing (index nibble in high 4
+//! bits) but with a **proprietary data encoding** — the data nibbles carry
+//! structured measurement data (mode codes, range codes, digit values,
+//! status flags), NOT raw LCD segment data.
 //!
-//! Confirmed by Ghidra decompilation of UT803.exe V1.01 and UT804.exe V2.00
-//! (standalone PC applications) plus binary constant extraction.
+//! **UT803 and UT804 use different payload layouts** (2026-06 review,
+//! re-derived from UT803.exe V1.01 / UT804.exe V2.00 with string constants
+//! resolved from the recovered binaries and the vendor LCD fonts rendered):
+//!
+//! UT804 (nibble index = vendor 1-based char − 1):
+//! - nibbles 0-4: digits 1-5 (MSD first; 0xA = blank)
+//! - nibble 5: range (decimal point position via per-mode table)
+//! - nibble 6: mode code (1-15)
+//! - nibble 7: AC/DC (0=default, 1=AC, 2=DC, 3=AC+DC)
+//! - nibble 8: status — bit 3 unknown, bit 2 = **negative sign** (duty-%
+//!   selector in frequency mode), bits 1-0: AUTO when == 1
+//! - nibbles 9-10: format markers 0xD 0xA (low nibbles of CR/LF)
+//! - nibbles 11-13: never read by the vendor app; purpose unknown
+//!
+//! UT803:
+//! - nibble 1: range
+//! - nibbles 2-5: digits 1-4 (MSD first)
+//! - nibble 6: mode code (different meanings from UT804!)
+//! - nibble 7: bit 3 = alt-mode (RPM / °C-vs-°F), bit 2 = **negative
+//!   sign**, bit 1 = unknown, bit 0 = overload
+//! - nibble 8: bit 3 = HOLD, bits 2-1 = unknown indicators
+//! - nibble 9: bit 3 = DC, bit 2 = AC, bit 1 = AUTO (else MANU)
+//! - nibbles 0, 10-13: never read by the vendor app
+//!
+//! The decimal point value in the per-mode range tables is the position
+//! FROM THE LEFT (point placed after digit position+1), matching the
+//! vendor's display assembly.
 //!
 //! See docs/research/ut803/reverse-engineered-protocol.md
 
@@ -20,228 +45,414 @@ use log::{debug, warn};
 use std::borrow::Cow;
 use std::time::Instant;
 
-/// Mode table entry: (mode_code, mode_name, base_unit).
-///
-/// The base_unit may be modified by the range code (e.g., "Ω" → "kΩ").
-/// Modes common to both UT803 and UT804 are listed first.
-const MODE_TABLE: &[(u8, &str, &str)] = &[
-    (0x01, "DC V", "V"),
-    (0x02, "AC V", "V"),
-    (0x03, "DC mV", "mV"),
-    (0x04, "Ω", "Ω"),
-    (0x05, "Capacitance", "F"),
-    (0x06, "Diode", "V"),
-    (0x07, "Hz", "Hz"),
-    (0x08, "Duty %", "%"),
-    (0x09, "hFE", ""),
-    (0x0A, "Temperature", "°C"),
-    (0x0B, "DC µA", "µA"),
-    (0x0C, "A", "A"),
-    (0x0D, "Continuity", "Ω"),
-    (0x0E, "ADP", ""), // UT804 only, [UNVERIFIED] purpose
-    (0x0F, "AC mA", "mA"),
-];
-
-/// Look up a mode code. Returns (mode_name, base_unit).
-fn lookup_mode(code: u8) -> Option<(&'static str, &'static str)> {
-    MODE_TABLE
-        .iter()
-        .find(|(c, _, _)| *c == code)
-        .map(|(_, name, unit)| (*name, *unit))
+/// Which meter model the frames come from — the two share framing but
+/// not payload layout.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Fs9721Model {
+    Ut803,
+    Ut804,
 }
 
-/// Derive the unit string from mode, range code, and base unit.
+/// UT804 per-(mode, range) display info: mode name, unit, and decimal
+/// point position from the left (point after digit `pos+1`; a position
+/// past the last digit means an integer display).
 ///
-/// The range code selects prefix multipliers within certain modes.
-/// Exact range-to-unit mappings are [UNVERIFIED] — these are best guesses
-/// from the decompiled switch statements.
-fn derive_unit(mode: u8, range: u8, base_unit: &'static str) -> Cow<'static, str> {
-    match mode {
-        0x04 => {
-            // Resistance: range selects Ω/kΩ/MΩ
+/// From the UT804.exe parse function `FUN_00558a7c` unit-string appends
+/// (ut804-decompiled.txt:224075-224184) and range switches
+/// (223961-224033, 224129-224170), with unit glyphs resolved from the
+/// vendor LCD fonts (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω).
+fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u8)> {
+    Some(match mode {
+        // Modes 1 and 2 have byte-identical handlers; the AC/DC label
+        // comes solely from nibble 7. Which dial sends 1 vs 2 is unknown.
+        0x1 | 0x2 => (
+            "V",
+            "V",
             match range {
-                0..=2 => Cow::Borrowed("Ω"),
-                3..=4 => Cow::Borrowed("kΩ"),
-                5..=6 => Cow::Borrowed("MΩ"),
-                _ => Cow::Borrowed("Ω"),
-            }
-        }
-        0x05 => {
-            // Capacitance: range selects nF/µF/mF
-            match range {
-                0..=2 => Cow::Borrowed("nF"),
-                3..=5 => Cow::Borrowed("µF"),
-                6..=7 => Cow::Borrowed("mF"),
-                _ => Cow::Borrowed("F"),
-            }
-        }
-        0x07 => {
-            // Frequency: range selects Hz/kHz/MHz
-            match range {
-                0..=2 => Cow::Borrowed("Hz"),
-                3..=4 => Cow::Borrowed("kHz"),
-                5..=7 => Cow::Borrowed("MHz"),
-                _ => Cow::Borrowed("Hz"),
-            }
-        }
-        0x0C => {
-            // Current (A): range selects mA/A
-            match range {
-                0..=2 => Cow::Borrowed("mA"),
-                3..=7 => Cow::Borrowed("A"),
-                _ => Cow::Borrowed("A"),
-            }
-        }
-        _ => Cow::Borrowed(base_unit),
-    }
-}
-
-/// Derive the decimal point position from mode and range code.
-///
-/// Returns the number of decimal places (0-4). These are [UNVERIFIED]
-/// best guesses from the decompiled range switch statements.
-fn decimal_places(mode: u8, range: u8) -> u8 {
-    match mode {
-        // DC V / AC V: 4 ranges with decreasing decimal places
-        0x01 | 0x02 => match range {
-            1 => 0,
-            2 => 1,
-            3 => 2,
-            4 => 3,
-            _ => 1,
+                1 => 0, // 3.999
+                2 => 1, // 39.99
+                3 => 2, // 399.9
+                4 => 3, // 1000
+                _ => return None,
+            },
+        ),
+        0x3 => ("mV", "mV", 2), // 399.9 fixed
+        0x4 => match range {
+            1 => ("Ω", "Ω", 2), // 399.9 Ω
+            2 => ("Ω", "kΩ", 0),
+            3 => ("Ω", "kΩ", 1),
+            4 => ("Ω", "kΩ", 2),
+            5 => ("Ω", "MΩ", 0),
+            6 => ("Ω", "MΩ", 1),
+            _ => return None,
         },
-        // DC mV: fixed 2 decimal places
-        0x03 => 2,
-        // Resistance: varies by sub-range
-        0x04 => match range {
-            1 => 1,
-            2 => 2,
-            3 => 3,
-            4 => 2,
-            5 => 3,
-            6 => 2,
-            _ => 1,
+        0x5 => match range {
+            1 => ("Capacitance", "nF", 1),
+            2 => ("Capacitance", "nF", 2),
+            3 => ("Capacitance", "µF", 0),
+            4 => ("Capacitance", "µF", 1),
+            5 => ("Capacitance", "µF", 2),
+            6 => ("Capacitance", "mF", 0),
+            7 => ("Capacitance", "mF", 1),
+            _ => return None,
         },
-        // Default: 1 decimal place
-        _ => 1,
-    }
+        0x6 => ("Temperature", "°C", 3),
+        0x7 => match range {
+            0 => ("µA", "µA", 2), // 399.9
+            1 => ("µA", "µA", 3), // 3999
+            _ => return None,
+        },
+        0x8 => match range {
+            0 => ("mA", "mA", 1), // 39.99
+            1 => ("mA", "mA", 2), // 399.9
+            _ => return None,
+        },
+        0x9 => ("A", "A", 1), // 10.00
+        0xA => ("Continuity", "Ω", 2),
+        0xB => ("Diode", "V", 0),
+        0xC => match range {
+            0 => ("Frequency", "Hz", 1),
+            1 => ("Frequency", "Hz", 2),
+            2 => ("Frequency", "kHz", 0),
+            3 => ("Frequency", "kHz", 1),
+            4 => ("Frequency", "kHz", 2),
+            5 => ("Frequency", "MHz", 0),
+            6 => ("Frequency", "MHz", 1),
+            7 => ("Frequency", "MHz", 2),
+            _ => return None,
+        },
+        0xD => ("Temperature", "°F", 3),
+        // Unknown glyph in the vendor font ("W"); possibly hFE/ADP.
+        0xE => ("ADP", "", 3),
+        // Unit string "mA%" — most plausibly 4-20 mA loop percentage.
+        0xF => ("mA%", "mA%", 2),
+        _ => return None,
+    })
 }
 
-/// Parse a UT803/UT804 measurement from 14 data nibbles.
-///
-/// The nibbles are the low 4 bits of each FS9721 byte, in order (nibble 1-14).
-pub(crate) fn parse_measurement(nibbles: &[u8]) -> Result<Measurement> {
-    if nibbles.len() < 14 {
+/// UT804 modes whose AC/DC nibble value 0 defaults to a DC label
+/// (vendor applies "DC" to V/mV/µA/mA/A, ut804-decompiled.txt:224195-224215).
+fn ut804_default_dc(mode: u8) -> bool {
+    matches!(mode, 0x1 | 0x2 | 0x3 | 0x7 | 0x8 | 0x9)
+}
+
+/// UT803 per-(mode, range) display info, same convention as
+/// [`ut804_mode_info`] but with 4 digits and the UT803's own mode codes
+/// (ut803-decompiled.txt:224441-225068). `alt` is nibble 7 bit 3 (selects
+/// RPM for frequency, °C vs °F for temperature).
+fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'static str, u8)> {
+    Some(match mode {
+        0xB => match range {
+            0 => ("V", "V", 0),   // 5.999
+            1 => ("V", "V", 1),   // 59.99
+            2 => ("V", "V", 2),   // 599.9
+            3 => ("V", "V", 3),   // 1000
+            4 => ("mV", "mV", 2), // 599.9 mV
+            _ => return None,
+        },
+        0xD => match range {
+            0 => ("µA", "µA", 2), // 599.9
+            1 => ("µA", "µA", 3), // 5999
+            _ => return None,
+        },
+        0xF => match range {
+            0 => ("mA", "mA", 1), // 59.99
+            1 => ("mA", "mA", 2), // 599.9
+            _ => return None,
+        },
+        0x9 => ("A", "A", 1), // 10.00
+        0x3 => match range {
+            0 => ("Ω", "Ω", 2), // 599.9
+            1 => ("Ω", "kΩ", 0),
+            2 => ("Ω", "kΩ", 1),
+            3 => ("Ω", "kΩ", 2),
+            4 => ("Ω", "MΩ", 0),
+            5 => ("Ω", "MΩ", 1),
+            _ => return None,
+        },
+        0x2 => {
+            // Frequency, or tachometer RPM when the alt bit is set.
+            // Range 0's decimal position is [UNVERIFIED] (the vendor
+            // handler for it is ambiguous); treat as integer Hz.
+            let (name, unit) = if alt {
+                ("Tachometer", "RPM")
+            } else {
+                ("Frequency", "Hz")
+            };
+            match (range, alt) {
+                (0, _) => (name, unit, 3),
+                (1, false) => (name, "kHz", 1),
+                (2, false) => (name, "kHz", 2),
+                (3, false) => (name, "MHz", 0),
+                (4, false) => (name, "MHz", 1),
+                (5, false) => (name, "MHz", 2),
+                (1, true) => (name, "kRPM", 1),
+                (2, true) => (name, "kRPM", 2),
+                (3, true) => (name, "MRPM", 0),
+                (4, true) => (name, "MRPM", 1),
+                (5, true) => (name, "MRPM", 2),
+                _ => return None,
+            }
+        }
+        0x4 => {
+            if alt {
+                ("Temperature", "°C", 3)
+            } else {
+                ("Temperature", "°F", 3)
+            }
+        }
+        0x5 => ("Continuity", "Ω", 3),
+        0x1 => ("Diode", "V", 0), // 5.999
+        0x6 => match range {
+            0 => ("Capacitance", "nF", 0),
+            1 => ("Capacitance", "nF", 1),
+            2 => ("Capacitance", "nF", 2),
+            3 => ("Capacitance", "µF", 0),
+            4 => ("Capacitance", "µF", 1),
+            5 => ("Capacitance", "µF", 2),
+            6 => ("Capacitance", "mF", 0),
+            7 => ("Capacitance", "mF", 1),
+            _ => return None,
+        },
+        // Two indicators, no unit, possibly hFE.
+        0xE => ("ADP", "", 3),
+        _ => return None,
+    })
+}
+
+/// Build the display string and numeric value from MSD-first digit
+/// nibbles and a decimal position from the left (point after digit
+/// `dp_pos+1`). Digit nibble 0xA renders as a blank (trailing blank =
+/// 4-digit reading on the UT804's 5-digit field).
+fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, f64)> {
+    let mut s = String::with_capacity(digits.len() + 2);
+    if negative {
+        s.push('-');
+    }
+    let mut digit_count = 0usize;
+    for &d in digits {
+        match d {
+            0x0..=0x9 => {
+                s.push((b'0' + d) as char);
+                digit_count += 1;
+            }
+            0xA => {} // blank digit
+            _ => {
+                return Err(Error::invalid_response(
+                    format!("fs9721 invalid digit nibble {d:#03x}"),
+                    digits,
+                ));
+            }
+        }
+        // Insert the decimal point after digit position dp_pos+1
+        // (skipped when dp_pos points past the last digit = integer).
+        if digit_count == dp_pos as usize + 1 && digit_count < digits.len() {
+            s.push('.');
+        }
+    }
+    let trimmed = s.trim_end_matches('.').to_string();
+    let value: f64 = trimmed.parse().map_err(|_| {
+        Error::invalid_response(format!("fs9721 unparseable value {trimmed:?}"), digits)
+    })?;
+    Ok((trimmed, value))
+}
+
+/// Parse a UT804 measurement payload (14 data nibbles).
+pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
+    if nibbles.len() < 11 {
         return Err(Error::invalid_response(
-            format!(
-                "fs9721 payload too short: {} nibbles, expected 14",
-                nibbles.len()
-            ),
+            format!("fs9721 payload too short: {} nibbles", nibbles.len()),
             nibbles,
         ));
     }
 
-    // Validate format markers (nibbles 10-11).
-    // The manufacturer app (UT804.exe) only enters the main parse path when
-    // nibble 10 = 0x0D and nibble 11 = 0x0A. Non-matching frames are skipped.
+    // Format markers (vendor chars 'D'/'A' = low nibbles of CR/LF).
     if nibbles[9] != 0x0D || nibbles[10] != 0x0A {
-        debug!(
-            "fs9721: skipping frame with non-standard markers: nib10={:#x} nib11={:#x}",
-            nibbles[9], nibbles[10]
-        );
         return Err(Error::invalid_response(
             format!(
-                "fs9721 format markers invalid: expected 0D 0A, got {:02X} {:02X}",
+                "ut804 format markers {:#03x} {:#03x}, expected 0xD 0xA",
                 nibbles[9], nibbles[10]
             ),
             nibbles,
         ));
     }
 
-    // Mode code from nibble 7 (0-indexed: nibbles[6])
+    let range = nibbles[5];
     let mode_code = nibbles[6];
-
-    // Range code from nibble 6 (0-indexed: nibbles[5])
-    let range_code = nibbles[5];
-
-    // Look up mode
-    let (mode_name, base_unit) = if let Some((m, u)) = lookup_mode(mode_code) {
-        (Cow::Borrowed(m), u)
-    } else {
-        warn!("fs9721: unknown mode code {mode_code:#04x}");
-        (Cow::Owned(format!("Unknown({mode_code:#04x})")), "")
-    };
-
-    let unit = derive_unit(mode_code, range_code, base_unit);
-
-    // AC/DC from nibble 8 (0-indexed: nibbles[7])
-    // Also check nibble 1-2 flag mode: when nibble 1 = 0x0A, nibble 2 = 0x0C means AC.
-    let acdc_nibble = nibbles[7];
-    let nibble1_ac = nibbles[0] == 0x0A && nibbles[1] == 0x0C;
-    let mode_with_acdc = match acdc_nibble {
-        1 => mode_name.clone(), // explicit AC
-        3 => {
-            // AC+DC
-            Cow::Owned(format!(
-                "AC+DC {}",
-                mode_name
-                    .trim_start_matches("AC ")
-                    .trim_start_matches("DC ")
-            ))
-        }
-        _ => mode_name.clone(), // 0 = default, 2 = DC
-    };
-    // Determine DC flag: only set for modes that are inherently DC.
-    // Modes like Hz, Capacitance, hFE, Diode, Continuity are neither AC nor DC.
-    let is_dc_mode = mode_name.starts_with("DC");
-    let dc = match acdc_nibble {
-        1 => false,                     // explicit AC
-        2 => true,                      // explicit DC
-        3 => false,                     // AC+DC
-        _ => is_dc_mode && !nibble1_ac, // default: DC only if mode is inherently DC
-    };
-
-    // Status flags from nibble 9 (0-indexed: nibbles[8])
-    // Bit decomposition from UT804 decompilation (lines 224244-224283):
-    //   if value >= 8: value -= 8  (strip bit 3, purpose unknown)
-    //   if value >= 4: value -= 4  → HOLD active
-    //   if value == 1:             → AUTO active (exactly 1, not just bit 0)
+    let acdc = nibbles[7];
     let status = nibbles[8];
-    let hold = status & 0x04 != 0; // bit 2 [VENDOR]
-    let auto_range = (status & 0x03) == 0x01; // bit 0 set AND bit 1 clear [VENDOR]
 
-    // Extract digits from nibbles 1-5 (0-indexed: nibbles[0..5])
-    //
-    // When nibble 1 = 0x0A: flag mode (nibble 2 carries AC/DC subtype, not a digit)
-    //   → digits from nibbles 3-5 only (3 digits)
-    // When nibble 1 ≠ 0x0A: digit mode
-    //   → digits from nibbles 1-5 (up to 5 digits, with 0x0A = blank)
-    let (digits, negative) = extract_digits(nibbles);
+    // Status nibble (vendor char 9, ut804-decompiled.txt:224244-224266):
+    // bit 3 stripped (unknown), bit 2 = sign, remaining value == 1 → AUTO.
+    let sign_bit = status & 0x4 != 0;
+    let auto_range = status & 0x3 == 0x1;
 
-    // Build display string with decimal point
-    let dp = decimal_places(mode_code, range_code) as usize;
-    let display_str = format_display(&digits, dp);
-
-    // Parse numeric value
-    let value = if digits.is_empty() {
-        // Idle/clear frame (nibble 4 = 0x0B) — no digit data available.
-        MeasuredValue::Overload
-    } else if digits.contains(&b'L') {
-        MeasuredValue::Overload
-    } else {
-        let trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
-        match trimmed.parse::<f64>() {
-            Ok(mut v) => {
-                if negative {
-                    v = -v;
-                }
-                MeasuredValue::Normal(v)
-            }
-            Err(_) => {
-                warn!("fs9721: could not parse display value: {display_str:?}");
-                MeasuredValue::Overload
-            }
+    let (mode_name, unit, dp_pos) = match ut804_mode_info(mode_code, range) {
+        Some(info) => info,
+        None => {
+            warn!("ut804: unknown mode/range {mode_code:#03x}/{range}");
+            ("?", "", 3)
         }
+    };
+
+    // In frequency mode the sign bit selects the duty-cycle display
+    // (ut804-decompiled.txt:224271-224283) — a negative frequency is
+    // impossible, so the bit is reused.
+    let (mode, negative, dp_pos, unit): (Cow<'static, str>, bool, u8, &'static str) =
+        if mode_code == 0xC && sign_bit {
+            (Cow::Borrowed("Duty %"), false, 2, "%")
+        } else if mode_name == "?" {
+            (
+                Cow::Owned(format!("Unknown({mode_code:#03x})")),
+                sign_bit,
+                dp_pos,
+                unit,
+            )
+        } else {
+            // AC/DC labeling comes from nibble 7 for the V/mV/current
+            // modes (0 = default DC); other modes keep their plain name.
+            let label = match (acdc, ut804_default_dc(mode_code)) {
+                (1, _) => match mode_name {
+                    "V" => Some("AC V"),
+                    "mV" => Some("AC mV"),
+                    "µA" => Some("AC µA"),
+                    "mA" => Some("AC mA"),
+                    "A" => Some("AC A"),
+                    _ => None,
+                },
+                (2, _) | (0, true) => match mode_name {
+                    "V" => Some("DC V"),
+                    "mV" => Some("DC mV"),
+                    "µA" => Some("DC µA"),
+                    "mA" => Some("DC mA"),
+                    "A" => Some("DC A"),
+                    _ => None,
+                },
+                (3, _) => match mode_name {
+                    "V" => Some("AC+DC V"),
+                    "mV" => Some("AC+DC mV"),
+                    "µA" => Some("AC+DC µA"),
+                    "mA" => Some("AC+DC mA"),
+                    "A" => Some("AC+DC A"),
+                    _ => None,
+                },
+                _ => None,
+            };
+            (
+                Cow::Borrowed(label.unwrap_or(mode_name)),
+                sign_bit,
+                dp_pos,
+                unit,
+            )
+        };
+
+    let dc = matches!(acdc, 2 | 3) || (acdc == 0 && ut804_default_dc(mode_code));
+
+    // Overload frames: digit 1 = 0xA. Vendor forces the displays to
+    // "0L" (overload, possibly negative) when digit 2 == 0xC, or "L0"
+    // → value 0.0 otherwise (ut804-decompiled.txt:223810-223823,
+    // 224361-224391). An idle frame (digit 4 == 0xB) shows all zeros.
+    let (value, display_raw) = if nibbles[0] == 0xA {
+        if nibbles[1] == 0xC {
+            (
+                MeasuredValue::Overload,
+                Some(if negative {
+                    "-0L".to_string()
+                } else {
+                    "0L".to_string()
+                }),
+            )
+        } else {
+            (MeasuredValue::Normal(0.0), Some("L0".to_string()))
+        }
+    } else if nibbles[3] == 0xB {
+        (MeasuredValue::Normal(0.0), Some("0".to_string()))
+    } else {
+        let (display, v) = assemble_value(&nibbles[0..5], dp_pos, negative)?;
+        (MeasuredValue::Normal(v), Some(display))
+    };
+
+    let flags = StatusFlags {
+        auto_range,
+        dc,
+        ..Default::default()
+    };
+
+    Ok(Measurement {
+        timestamp: Instant::now(),
+        mode,
+        mode_raw: mode_code as u16,
+        range_raw: range,
+        value,
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(""),
+        progress: None,
+        display_raw,
+        flags,
+        aux_values: vec![],
+        raw_payload: nibbles.to_vec(),
+        spec: None,
+        mode_spec: None,
+    })
+}
+
+/// Parse a UT803 measurement payload (14 data nibbles).
+pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
+    if nibbles.len() < 10 {
+        return Err(Error::invalid_response(
+            format!("fs9721 payload too short: {} nibbles", nibbles.len()),
+            nibbles,
+        ));
+    }
+
+    let range = nibbles[1];
+    let mode_code = nibbles[6];
+    let nib8 = nibbles[7]; // vendor char 8
+    let nib9 = nibbles[8]; // vendor char 9
+    let nib10 = nibbles[9]; // vendor char 10
+
+    let alt = nib8 & 0x8 != 0;
+    let negative = nib8 & 0x4 != 0;
+    let overload = nib8 & 0x1 != 0;
+    // HOLD lights the LCDHold widget from char 9 bit 3
+    // (ut803-decompiled.txt:225086); bits 2-1 drive unlabeled indicators.
+    let hold = nib9 & 0x8 != 0;
+    let dc = nib10 & 0x8 != 0;
+    let auto_range = nib10 & 0x2 != 0;
+
+    let (mode_name, unit, dp_pos) = match ut803_mode_info(mode_code, range, alt) {
+        Some(info) => info,
+        None => {
+            warn!("ut803: unknown mode/range {mode_code:#03x}/{range}");
+            ("?", "", 3)
+        }
+    };
+
+    let mode: Cow<'static, str> = if mode_name == "?" {
+        Cow::Owned(format!("Unknown({mode_code:#03x})"))
+    } else if mode_name == "V" || mode_name == "mV" {
+        Cow::Borrowed(match (mode_name, dc) {
+            ("V", true) => "DC V",
+            ("V", false) => "AC V",
+            ("mV", true) => "DC mV",
+            _ => "AC mV",
+        })
+    } else {
+        Cow::Borrowed(mode_name)
+    };
+
+    let (value, display_raw) = if overload {
+        (
+            MeasuredValue::Overload,
+            Some(if negative {
+                "-0L".to_string()
+            } else {
+                "0L".to_string()
+            }),
+        )
+    } else {
+        let (display, v) = assemble_value(&nibbles[2..6], dp_pos, negative)?;
+        (MeasuredValue::Normal(v), Some(display))
     };
 
     let flags = StatusFlags {
@@ -253,14 +464,14 @@ pub(crate) fn parse_measurement(nibbles: &[u8]) -> Result<Measurement> {
 
     Ok(Measurement {
         timestamp: Instant::now(),
-        mode: mode_with_acdc,
+        mode,
         mode_raw: mode_code as u16,
-        range_raw: range_code,
+        range_raw: range,
         value,
-        unit,
-        range_label: Cow::Borrowed(""), // [UNVERIFIED] — need range tables
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(""),
         progress: None,
-        display_raw: Some(display_str),
+        display_raw,
         flags,
         aux_values: vec![],
         raw_payload: nibbles.to_vec(),
@@ -269,81 +480,18 @@ pub(crate) fn parse_measurement(nibbles: &[u8]) -> Result<Measurement> {
     })
 }
 
-/// Extract digit characters from the nibble data.
-///
-/// Returns (digit_chars, is_negative). Digit chars are b'0'-b'9' or b'L' for
-/// overload. The sign encoding is [UNVERIFIED] — currently we don't detect
-/// negative values from the nibble data.
-fn extract_digits(nibbles: &[u8]) -> (Vec<u8>, bool) {
-    let digit_nibbles = if nibbles[0] == 0x0A {
-        // Flag mode: nibble 1 = 0x0A (flag indicator), nibble 2 = AC/DC subtype.
-        // Neither is a digit. Digits come from nibbles 3-5 only.
-        &nibbles[2..5]
-    } else if nibbles[3] == 0x0B {
-        // Idle/clear frame: nibble 4 = 0x0B means no data. The manufacturer
-        // app (UT804.exe, line 223828) clears all digit displays in this case.
-        // Return empty digits — the caller will treat this as an unparseable value.
-        return (vec![], false);
-    } else {
-        // Digit mode: nibbles 1-5 are all digits
-        &nibbles[0..5]
-    };
-
-    let mut digits = Vec::with_capacity(digit_nibbles.len());
-    for &n in digit_nibbles {
-        match n {
-            0x00..=0x09 => digits.push(b'0' + n),
-            0x0A => {}                 // blank — skip
-            0x0C => digits.push(b'L'), // overload [DEDUCED from FS9721 convention]
-            _ => digits.push(b'?'),    // unknown encoding
-        }
-    }
-
-    // Sign: [UNVERIFIED] — we don't know how negative values are encoded.
-    // Possible locations: a specific nibble value, nibble 12-14, or nibble 9 bit.
-    let negative = false;
-
-    (digits, negative)
-}
-
-/// Format a display string from digit characters with decimal point insertion.
-///
-/// When `dp >= digit_str.len()`, leading zeros and "0." are prepended
-/// (e.g., digits "234" with dp=3 → "0.234", digits "5" with dp=3 → "0.005").
-fn format_display(digits: &[u8], dp: usize) -> String {
-    let digit_str: String = digits.iter().map(|&b| b as char).collect();
-
-    if dp == 0 {
-        return digit_str;
-    }
-
-    if dp >= digit_str.len() {
-        // Need leading zeros: e.g., "234" with dp=3 → "0.234"
-        let leading_zeros = dp - digit_str.len();
-        let mut result = String::with_capacity(dp + 2);
-        result.push_str("0.");
-        for _ in 0..leading_zeros {
-            result.push('0');
-        }
-        result.push_str(&digit_str);
-        return result;
-    }
-
-    let insert_pos = digit_str.len() - dp;
-    let mut result = String::with_capacity(digit_str.len() + 1);
-    result.push_str(&digit_str[..insert_pos]);
-    result.push('.');
-    result.push_str(&digit_str[insert_pos..]);
-    result
-}
-
 // --- Protocol trait implementation ---
 
 const FS9721_COMMANDS: &[&str] = &[];
 
+/// Known UT803 mode codes, used to filter garbage frames (the UT803
+/// layout has no format markers to key on).
+const UT803_MODES: &[u8] = &[0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x9, 0xB, 0xD, 0xE, 0xF];
+
 /// Protocol implementation for UT803/UT804 bench multimeters.
 pub struct Fs9721Protocol {
     rx_buf: Vec<u8>,
+    model: Fs9721Model,
     profile: DeviceProfile,
 }
 
@@ -351,6 +499,7 @@ impl Fs9721Protocol {
     pub(crate) fn new_ut803() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
+            model: Fs9721Model::Ut803,
             profile: DeviceProfile {
                 family_name: "FS9721",
                 model_name: "UNI-T UT803",
@@ -364,6 +513,7 @@ impl Fs9721Protocol {
     pub(crate) fn new_ut804() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
+            model: Fs9721Model::Ut804,
             profile: DeviceProfile {
                 family_name: "FS9721",
                 model_name: "UNI-T UT804",
@@ -385,19 +535,30 @@ impl Protocol for Fs9721Protocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // The FS9721 extractor handles false starts internally (no Err from framing).
-        // Use accept_fn to skip non-data frames (wrong format markers) so that
-        // read_frame keeps trying until it gets a valid data frame.
+        // The FS9721 extractor handles false starts internally (no Err
+        // from framing). The accept_fn filters frames that can't be a
+        // measurement for the model: UT804 frames carry 0xD 0xA markers
+        // at nibbles 9-10; UT803 has no markers, so gate on a known mode
+        // code instead.
+        let model = self.model;
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
             framing::extract_frame_fs9721,
-            |nibbles| nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
+            |nibbles| match model {
+                Fs9721Model::Ut804 => {
+                    nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A
+                }
+                Fs9721Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
+            },
             FrameErrorRecovery::Propagate,
             "fs9721",
             &framing::FS9721_HEADER,
         )?;
-        parse_measurement(&payload)
+        match self.model {
+            Fs9721Model::Ut803 => parse_measurement_ut803(&payload),
+            Fs9721Model::Ut804 => parse_measurement_ut804(&payload),
+        }
     }
 
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
@@ -422,6 +583,12 @@ impl Protocol for Fs9721Protocol {
                 samples: 5,
             },
             CaptureStep {
+                id: "dcv_negative",
+                instruction: "Set meter to DC V with leads reversed (negative reading)",
+                command: None,
+                samples: 5,
+            },
+            CaptureStep {
                 id: "acv",
                 instruction: "Set meter to AC V",
                 command: None,
@@ -430,6 +597,12 @@ impl Protocol for Fs9721Protocol {
             CaptureStep {
                 id: "ohm",
                 instruction: "Set meter to Resistance (Ω)",
+                command: None,
+                samples: 5,
+            },
+            CaptureStep {
+                id: "ohm_ol",
+                instruction: "Set meter to Resistance (Ω) with open leads (overload)",
                 command: None,
                 samples: 5,
             },
@@ -457,6 +630,12 @@ impl Protocol for Fs9721Protocol {
                 command: None,
                 samples: 5,
             },
+            CaptureStep {
+                id: "hold",
+                instruction: "Press HOLD (wire encoding unknown — capture needed)",
+                command: None,
+                samples: 5,
+            },
         ]
     }
 }
@@ -465,299 +644,264 @@ impl Protocol for Fs9721Protocol {
 mod tests {
     use super::*;
 
-    /// Build a 14-nibble payload with the proprietary UT803/UT804 format.
-    ///
-    /// Nibble layout: [nib1, nib2, nib3, nib4, nib5, range, mode, acdc, flags, 0xD, 0xA, 0, 0, 0]
-    fn make_payload(digit_nibbles: &[u8], range: u8, mode: u8, acdc: u8, flags: u8) -> Vec<u8> {
-        let mut p = vec![0u8; 14];
-        for (i, &d) in digit_nibbles.iter().enumerate().take(5) {
-            p[i] = d;
-        }
-        p[5] = range;
-        p[6] = mode;
-        p[7] = acdc;
-        p[8] = flags;
-        p[9] = 0x0D; // format marker
-        p[10] = 0x0A; // format marker
-        p
+    /// Build a 14-nibble UT804 payload.
+    /// digits = MSD-first nibbles 0-4; then range, mode, acdc, status.
+    fn ut804_payload(digits: &[u8; 5], range: u8, mode: u8, acdc: u8, status: u8) -> Vec<u8> {
+        vec![
+            digits[0], digits[1], digits[2], digits[3], digits[4], range, mode, acdc, status, 0x0D,
+            0x0A, 0x0, 0x0, 0x0,
+        ]
     }
 
+    /// Build a 14-nibble UT803 payload.
+    /// digits = MSD-first nibbles 2-5; range at nibble 1; mode at 6;
+    /// nib8/nib9/nib10 at 7/8/9.
+    fn ut803_payload(
+        digits: &[u8; 4],
+        range: u8,
+        mode: u8,
+        nib8: u8,
+        nib9: u8,
+        nib10: u8,
+    ) -> Vec<u8> {
+        vec![
+            0x0, range, digits[0], digits[1], digits[2], digits[3], mode, nib8, nib9, nib10, 0x0,
+            0x0, 0x0, 0x0,
+        ]
+    }
+
+    // --- UT804 ---
+
     #[test]
-    fn parse_dcv_flag_mode() {
-        // Flag mode: nibble 1 = 0x0A, nibble 2 = DC flag (not 0x0C).
-        // Digits from nibbles 3-5 only: [2, 3, 4] → "23.4" with range 2 (1 dp)
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
+    fn ut804_dcv_range1() {
+        // DC V range 1: 3.999 full scale → decimal after digit 1.
+        let p = ut804_payload(&[3, 9, 9, 9, 0xA], 1, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(m.mode, "DC V");
         assert_eq!(m.unit, "V");
-        assert_eq!(m.mode_raw, 1);
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 23.4).abs() < 0.01));
-    }
-
-    #[test]
-    fn parse_dcv_digit_mode() {
-        // Digit mode: nibble 1 ≠ 0x0A → all 5 nibbles are digits.
-        // Digits [0, 1, 2, 3, 4] → "0123.4" with range 2 (1 dp)
-        let payload = make_payload(&[0, 1, 2, 3, 4], 2, 0x01, 2, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "DC V");
         assert!(m.flags.dc);
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 123.4).abs() < 0.01));
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 3.999).abs() < 1e-9));
+        assert_eq!(m.display_raw.as_deref(), Some("3.999"));
     }
 
     #[test]
-    fn parse_acv() {
-        // Mode 2 (AC V), acdc=1 (AC), range 3 (2 dp)
-        // Flag mode: nibble 2 = 0x0C (AC). Digits from nibbles 3-5: [5, 6, 7]
-        let payload = make_payload(&[0x0A, 0x0C, 5, 6, 7], 3, 0x02, 1, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "AC V");
-        assert!(!m.flags.dc);
+    fn ut804_negative_sign_nibble9_bit2() {
+        // Status nibble bit 2 = negative sign (NOT hold).
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0x1, 2, 0x4);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert!(!m.flags.hold);
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-12.34)).abs() < 1e-9));
+        assert_eq!(m.display_raw.as_deref(), Some("-12.34"));
     }
 
     #[test]
-    fn parse_resistance() {
-        // Mode 4 (Ω), range 3 (kΩ, 3 dp). Digits: [2, 3, 4]
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 3, 0x04, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
+    fn ut804_auto_flag() {
+        let p = ut804_payload(&[1, 0, 0, 0, 0xA], 1, 0x1, 2, 0x1);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert!(m.flags.auto_range);
+        // Sign bit set alongside: AUTO still derived after stripping.
+        let p = ut804_payload(&[1, 0, 0, 0, 0xA], 1, 0x1, 2, 0x5);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert!(m.flags.auto_range);
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if v < 0.0));
+    }
+
+    #[test]
+    fn ut804_overload_nibble1() {
+        // Digit1 = 0xA + digit2 = 0xC → overload.
+        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x4, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+
+        // Negative overload via status bit 2.
+        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x1, 2, 0x4);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.display_raw.as_deref(), Some("-0L"));
+    }
+
+    #[test]
+    fn ut804_resistance_kilo_range() {
+        // Ω range 2 = 39.99 kΩ? No: range 2 → kΩ with point after digit 1
+        // (3.999 kΩ style).
+        let p = ut804_payload(&[3, 9, 9, 9, 0xA], 2, 0x4, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(m.mode, "Ω");
         assert_eq!(m.unit, "kΩ");
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 3.999).abs() < 1e-9));
     }
 
     #[test]
-    fn parse_capacitance() {
-        // Mode 5 (Cap), range 4 (µF). Digits: [4, 7, 0]
-        let payload = make_payload(&[0x0A, 0x00, 4, 7, 0], 4, 0x05, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "Capacitance");
-        assert_eq!(m.unit, "µF");
+    fn ut804_frequency_and_duty() {
+        // Mode 0xC range 2 = kHz, point after digit 1.
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0xC, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "Frequency");
+        assert_eq!(m.unit, "kHz");
+        // Sign bit in frequency mode = duty-cycle display, not negative.
+        let p = ut804_payload(&[5, 0, 0, 0, 0xA], 2, 0xC, 0, 0x4);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "Duty %");
+        assert_eq!(m.unit, "%");
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if v > 0.0));
     }
 
     #[test]
-    fn parse_frequency() {
-        // Mode 7 (Hz), range 0 (Hz). Digits: [0, 0, 0]
-        let payload = make_payload(&[0x0A, 0x00, 0, 0, 0], 0, 0x07, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "Hz");
-        assert_eq!(m.unit, "Hz");
+    fn ut804_temperature_modes() {
+        let p = ut804_payload(&[0, 0, 2, 5, 0xA], 0, 0x6, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "Temperature");
+        assert_eq!(m.unit, "°C");
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 25.0).abs() < 1e-9));
+        let p = ut804_payload(&[0, 0, 7, 7, 0xA], 0, 0xD, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.unit, "°F");
     }
 
     #[test]
-    fn parse_continuity() {
-        let payload = make_payload(&[0x0A, 0x00, 0, 0, 0], 1, 0x0D, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "Continuity");
-        assert_eq!(m.unit, "Ω");
-    }
-
-    #[test]
-    fn parse_hold_flag() {
-        // Nibble 9 bit 2 = HOLD
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 0, 0x04);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.hold);
-    }
-
-    #[test]
-    fn parse_auto_flag() {
-        // Nibble 9: exactly 1 = AUTO (bit 0 set, bit 1 clear)
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 0, 0x01);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.auto_range);
-    }
-
-    #[test]
-    fn parse_auto_flag_not_set_when_bit1_also_set() {
-        // Nibble 9 = 3 (bits 0+1): AUTO should NOT be set per decompilation
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 0, 0x03);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.auto_range);
-    }
-
-    #[test]
-    fn parse_acdc_mode() {
-        // AC+DC (acdc = 3)
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 3, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.mode.contains("AC+DC"));
+    fn ut804_acv_label_from_acdc_nibble() {
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x2, 1, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "AC V");
         assert!(!m.flags.dc);
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x2, 3, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "AC+DC V");
     }
 
     #[test]
-    fn parse_five_digit_mode() {
-        // nibble 1 ≠ 0x0A → 5 digit values
-        let payload = make_payload(&[3, 9, 9, 9, 0x0A], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        // nibble 5 = 0x0A → blank, so only 4 digits: "3999"
-        // with 1 dp from range 2 → "399.9"
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 399.9).abs() < 0.1));
+    fn ut804_current_modes() {
+        // Mode 7 = µA (not Hz as the old table claimed).
+        let p = ut804_payload(&[3, 9, 9, 9, 0xA], 0, 0x7, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "DC µA");
+        assert_eq!(m.unit, "µA");
+        // Mode 9 = A.
+        let p = ut804_payload(&[1, 0, 0, 0, 0xA], 0, 0x9, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(m.mode, "DC A");
+        assert_eq!(m.unit, "A");
     }
 
     #[test]
-    fn parse_blank_digit_skipped() {
-        // Flag mode: nibbles 3-5. nibble 5 = 0x0A → blank.
-        // Digits: [2, 3] (blank skipped) → "2.3" with 1 dp
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 0x0A], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.display_raw.as_deref(), Some("2.3"));
-    }
-
-    #[test]
-    fn parse_unknown_mode() {
-        let payload = make_payload(&[0x0A, 0x00, 0, 0, 0], 0, 0x00, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.mode.contains("Unknown"));
-    }
-
-    #[test]
-    fn parse_all_valid_modes() {
-        for &(code, _, _) in MODE_TABLE {
-            let payload = make_payload(&[0x0A, 0x00, 1, 2, 3], 1, code, 0, 0);
-            let m = parse_measurement(&payload).unwrap();
-            assert!(
-                !m.mode.contains("Unknown"),
-                "mode {code:#04x} should be known"
-            );
-        }
-    }
-
-    #[test]
-    fn parse_payload_too_short() {
-        let payload = vec![0x0A, 0x01, 0x02];
-        assert!(parse_measurement(&payload).is_err());
-    }
-
-    #[test]
-    fn dc_flag_set_for_dc_mode() {
-        // Mode 1 (DC V) with acdc = 0 → DC because mode name starts with "DC"
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.dc);
-    }
-
-    #[test]
-    fn dc_flag_clear_for_ac_mode_name() {
-        // Mode 2 (AC V) with acdc = 0 → NOT DC because mode name starts with "AC"
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x02, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.dc);
-    }
-
-    #[test]
-    fn dc_flag_clear_for_explicit_ac() {
-        // acdc = 1 → AC
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 2, 0x01, 1, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.dc);
-    }
-
-    #[test]
-    fn dc_flag_clear_for_nibble2_ac() {
-        // nibble 1 = 0x0A, nibble 2 = 0x0C → AC via flag mode
-        let payload = make_payload(&[0x0A, 0x0C, 2, 3, 4], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.dc);
-    }
-
-    #[test]
-    fn nibble2_0c_not_treated_as_digit() {
-        // Flag mode: nibble 2 = 0x0C (AC flag, not a digit).
-        // Only nibbles 3-5 are digits: [1, 2, 3] → "12.3" with 1 dp
-        let payload = make_payload(&[0x0A, 0x0C, 1, 2, 3], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.display_raw.as_deref(), Some("12.3"));
-    }
-
-    #[test]
-    fn parse_overload() {
-        // Nibble value 0x0C → 'L' (overload, from FS9721 convention)
-        let payload = make_payload(&[0x0A, 0x00, 0x0C, 0, 0], 1, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
-    }
-
-    #[test]
-    fn parse_zero_reading() {
-        // All-zero digits: [0, 0, 0] → "00.0" with 1 dp → value 0.0
-        let payload = make_payload(&[0x0A, 0x00, 0, 0, 0], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
+    fn ut804_idle_frame() {
+        // Digit 4 == 0xB → idle, all displays zero.
+        let p = ut804_payload(&[0, 0, 0, 0xB, 0], 1, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 0.0));
     }
 
     #[test]
-    fn dc_flag_false_for_non_acdc_modes() {
-        // Hz, Capacitance, hFE, Diode, Continuity are neither AC nor DC.
-        // dc flag should be false for these even with acdc nibble = 0.
-        for &mode in &[0x05, 0x06, 0x07, 0x08, 0x09, 0x0D, 0x0E] {
-            let payload = make_payload(&[0x0A, 0x00, 1, 2, 3], 1, mode, 0, 0);
-            let m = parse_measurement(&payload).unwrap();
-            assert!(
-                !m.flags.dc,
-                "mode {mode:#04x} ({}) should not have dc=true",
-                m.mode
-            );
-        }
+    fn ut804_bad_markers_rejected() {
+        let mut p = ut804_payload(&[1, 2, 3, 4, 0xA], 1, 0x1, 2, 0x0);
+        p[9] = 0x0;
+        assert!(parse_measurement_ut804(&p).is_err());
     }
 
     #[test]
-    fn dc_flag_true_for_explicit_dc_nibble() {
-        // acdc = 2 (explicit DC) should set dc=true even for non-DC modes
-        let payload = make_payload(&[0x0A, 0x00, 1, 2, 3], 1, 0x07, 2, 0);
-        let m = parse_measurement(&payload).unwrap();
+    fn ut804_five_digit_reading() {
+        // All five digits present (no blank): 4-digit count plus extra digit.
+        let p = ut804_payload(&[1, 2, 3, 4, 5], 2, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 12.345).abs() < 1e-9));
+    }
+
+    // --- UT803 ---
+
+    #[test]
+    fn ut803_dcv() {
+        let p = ut803_payload(&[5, 9, 9, 9], 0, 0xB, 0x0, 0x0, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(m.unit, "V");
         assert!(m.flags.dc);
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 5.999).abs() < 1e-9));
     }
 
     #[test]
-    fn format_display_dp_equals_digit_count() {
-        // 3 digits with dp=3: "234" → "0.234" (not "234")
-        let digits = vec![b'2', b'3', b'4'];
-        assert_eq!(format_display(&digits, 3), "0.234");
+    fn ut803_negative_sign_nib8_bit2() {
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x4, 0x0, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-12.34)).abs() < 1e-9));
     }
 
     #[test]
-    fn format_display_dp_exceeds_digit_count() {
-        // 1 digit with dp=3: "5" → "0.005"
-        let digits = vec![b'5'];
-        assert_eq!(format_display(&digits, 3), "0.005");
-    }
-
-    #[test]
-    fn format_display_dp_zero() {
-        let digits = vec![b'1', b'2', b'3'];
-        assert_eq!(format_display(&digits, 0), "123");
-    }
-
-    #[test]
-    fn format_display_empty_digits() {
-        // Empty digits with dp=1: dp >= len (1 >= 0), so "0." + 1 leading zero + "" = "0.0"
-        let digits: Vec<u8> = vec![];
-        assert_eq!(format_display(&digits, 1), "0.0");
-    }
-
-    #[test]
-    fn parse_invalid_markers_rejected() {
-        // nibble 10 != 0x0D → rejected
-        let mut payload = make_payload(&[0x0A, 0x00, 1, 2, 3], 1, 0x01, 0, 0);
-        payload[9] = 0x00; // wrong marker
-        assert!(parse_measurement(&payload).is_err());
-    }
-
-    #[test]
-    fn parse_idle_frame_nibble4_0b() {
-        // Digit mode with nibble 4 = 0x0B → idle/clear frame.
-        // Empty digits → parse failure → Overload (no crash).
-        let payload = make_payload(&[0, 1, 2, 0x0B, 4], 2, 0x01, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
+    fn ut803_overload_nib8_bit0() {
+        let p = ut803_payload(&[0, 0, 0, 0], 0, 0x3, 0x1, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
     }
 
     #[test]
-    fn resistance_flag_mode_dp3() {
-        // Resistance mode, range 3 (kΩ, dp=3), flag mode (3 digits: [2, 3, 4])
-        // Should produce "0.234" → value 0.234
-        let payload = make_payload(&[0x0A, 0x00, 2, 3, 4], 3, 0x04, 0, 0);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.display_raw.as_deref(), Some("0.234"));
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 0.234).abs() < 0.001));
+    fn ut803_hold_nib9_bit3() {
+        let p = ut803_payload(&[1, 0, 0, 0], 0, 0xB, 0x0, 0x8, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert!(m.flags.hold);
+    }
+
+    #[test]
+    fn ut803_auto_and_ac() {
+        // nib10: bit 2 = AC, bit 1 = AUTO.
+        let p = ut803_payload(&[2, 3, 0, 0], 1, 0xB, 0x0, 0x0, 0x6);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.mode, "AC V");
+        assert!(m.flags.auto_range);
+        assert!(!m.flags.dc);
+    }
+
+    #[test]
+    fn ut803_mv_range4() {
+        let p = ut803_payload(&[5, 9, 9, 9], 4, 0xB, 0x0, 0x0, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.mode, "DC mV");
+        assert_eq!(m.unit, "mV");
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 599.9).abs() < 1e-9));
+    }
+
+    #[test]
+    fn ut803_resistance_mega() {
+        let p = ut803_payload(&[5, 9, 9, 9], 4, 0x3, 0x0, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.mode, "Ω");
+        assert_eq!(m.unit, "MΩ");
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 5.999).abs() < 1e-9));
+    }
+
+    #[test]
+    fn ut803_temperature_alt_bit() {
+        // nib8 bit 3 set → °C; clear → °F.
+        let p = ut803_payload(&[0, 0, 2, 5], 0, 0x4, 0x8, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.unit, "°C");
+        let p = ut803_payload(&[0, 0, 7, 7], 0, 0x4, 0x0, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.unit, "°F");
+    }
+
+    #[test]
+    fn ut803_tachometer_alt_bit() {
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(m.mode, "Tachometer");
+        assert_eq!(m.unit, "kRPM");
+    }
+
+    #[test]
+    fn ut803_unknown_mode_permissive() {
+        let p = ut803_payload(&[1, 0, 0, 0], 0, 0x7, 0x0, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert!(m.mode.starts_with("Unknown"));
+    }
+
+    #[test]
+    fn payload_too_short() {
+        assert!(parse_measurement_ut804(&[0x1, 0x2]).is_err());
+        assert!(parse_measurement_ut803(&[0x1, 0x2]).is_err());
+    }
+
+    #[test]
+    fn invalid_digit_nibble_errors() {
+        let p = ut804_payload(&[1, 0xF, 0, 0, 0xA], 1, 0x1, 2, 0x0);
+        assert!(parse_measurement_ut804(&p).is_err());
     }
 }

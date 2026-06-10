@@ -74,31 +74,33 @@ real hardware**. Every aspect needs end-to-end verification.
 - VC650BT compatibility (same protocol confirmed by installer comparison)
 
 **UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
-- **Correction (2026-04-10):** These meters use FS9721-style 14-byte framing
-  but with **proprietary structured data**, NOT raw LCD segment encoding.
-  Nibble 7 = mode code (1-15), nibble 6 = range, nibbles 1-5 = digits,
-  nibbles 10-11 = format markers (0x0D, 0x0A). Confirmed by binary constant
-  extraction from UT803.exe V1.01 and UT804.exe V2.00.
+- **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
+  - **Sign**: UT804 = nibble 9 bit 2 (previously misread as HOLD);
+    UT803 = nibble 8 bit 2. The old "sign global with no writer" was
+    Delphi RTL locale state (NegCurrFormat), a red herring.
+  - **Two layouts**: UT803 and UT804 use different payloads (UT803:
+    range=nib 2, digits=nibs 3-6, own mode codes, no 0xD/0xA markers);
+    the parser is now model-split.
+  - **Decimal positions count from the left**; all range→dp tables
+    re-derived per mode.
+  - **UT804 mode table corrected** for 9 of 15 codes (6=°C, 7=µA,
+    8=mA, 9=A, A=Cont, B=Diode, C=Freq/Duty, D=°F, F=mA%).
+  - **Overload** = nibble 1 == 0xA (UT804) / nibble 8 bit 0 (UT803).
+  - **Nibbles 12-14 never read by the vendor** (confirmed via the
+    Delphi-string access pattern); UT803 also ignores nibbles 1, 11-14.
+  - UT803 HOLD = nibble 9 bit 3. UT804 HOLD wire encoding is unknown
+    (in neither vendor parser).
 - Transport: CH9325 HID at 2400 baud — implemented.
-- Protocol: `fs9721` family — implemented with mode/range/unit tables,
-  AC/DC detection, HOLD/AUTO flags.
-- **Needs hardware verification:**
-  - Negative value encoding (sign bit location unknown — see note below)
-  - Exact range-to-decimal-point tables for all modes
-  - UT803 exact mode list (fewer than UT804's 15)
-  - Status flags beyond HOLD/AUTO (MIN, MAX, REL, Low Battery)
-  - Nibbles 12-14 purpose (not read in the visible decompile)
-  - Whether 0x5A trigger byte helps/hurts
-  - Streaming rate and connection stability
-  - Overload representation in digit nibbles
-- **Sign (2026-04-19 decompile pass):** the display formatter reads a
-  precomputed 0–15 byte from a global pointer (UT803 `*PTR_DAT_005659c4`
-  / UT804 `*PTR_DAT_005699c4`) and prepends `-` in four of the sixteen
-  cases. A full cross-reference of both binaries finds no writer for
-  that global — the write path is outside what Ghidra decompiled.
-  Resolving sign therefore needs either a raw disassembler pass over
-  the HID-receive region or a real-device capture of a known negative
-  reading. See `docs/research/ut803/reverse-engineered-protocol.md` §3.2.
+- **Needs hardware verification** (all of the above is decompile-derived):
+  - One frame per dial position on each meter (settles mode codes and
+    decimal tables in one pass)
+  - A negative reading (sign bits) and an overload (OL patterns)
+  - MIN/MAX/REL/low-battery toggles — candidates: nibbles 12-14,
+    UT803 nibble 9 bits 2-1, UT804 nibble 9 bits 3/1
+  - UT804 modes 0xE (unknown glyph; hFE?) and 0xF ("mA%") dial
+    positions; which of modes 1/2 each V dial sends
+  - UT803 frequency range 0 decimal position; tachometer (RPM) frames
+  - Whether 0x5A trigger byte helps/hurts; streaming rate
 - See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial

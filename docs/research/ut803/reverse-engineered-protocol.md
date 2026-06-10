@@ -69,6 +69,16 @@ at VA 0x560BC1/0x560BF0 (`CMP EBX, 14` loop).
 
 ## 3. Data Format — **PROPRIETARY, NOT LCD Segments**
 
+> **2026-06 corrections:** several subsections below were corrected by
+> the protocol-correctness review — see §7.4 for the full list with
+> evidence. In particular: nibble 9 bit 2 is the **sign** (not HOLD);
+> nibble 1 = 0xA is an **overload frame** (not an AC flag mode); the
+> decimal position counts **from the left**; the UT804 mode table was
+> wrong for codes 6/7/8/9/A/B/C/D/F; and the UT803 uses an entirely
+> different layout (§5). The Rust parser follows the corrected
+> derivation; the tables below retain their original [VENDOR] markers
+> where still accurate.
+
 **Critical finding:** Despite using FS9721 framing, the data nibbles do NOT
 contain raw LCD segment data. The firmware sends **structured measurement
 data** with explicit mode codes, range codes, and digit values.
@@ -230,7 +240,7 @@ Nibble 9 is decomposed as individual bits in the UT804 parser
 | Bit | Mask | Flag | Confirmed |
 |-----|------|------|-----------|
 | bit 3 | 0x8 | Unknown (stripped first, no visible effect) | [UNVERIFIED] |
-| bit 2 | 0x4 | HOLD | [VENDOR] — shows '-' indicator |
+| bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4) | [VENDOR] |
 | bit 1 | 0x2 | Unknown | [UNVERIFIED] |
 | bit 0 | 0x1 | AUTO | [VENDOR] — shows "AUTO" text |
 
@@ -367,7 +377,75 @@ Parse the proprietary data nibbles, NOT LCD segments:
 - Digit encoding for values > 9 (0xA = blank confirmed, others unknown)
 - Whether nibble 4 = 'B' guard condition has meaning
 
-### 7.4 Unresolved: Nibbles 12-14 and Secondary Status Bits
+### 7.4 RESOLVED (2026-06): Sign, Nibbles 12-14, and the Two-Model Split
+
+The 2026-06 protocol-correctness review closed this section's open
+questions by recovering the analyzed binaries (wine administrative
+install of the vendor installers; MD5s match §8 exactly), raw-
+disassembling the cross-referenced globals, resolving every string
+constant, and rendering the bundled LCD fonts. Headline results, each
+re-derived independently by an adversarial second pass:
+
+1. **The "sign global" was a red herring.** `*PTR_DAT_005659c4`
+   (UT803) / `*PTR_DAT_005699c4` (UT804) is Delphi SysUtils'
+   `NegCurrFormat` locale global — its writer is the RTL locale init
+   (UT803 VA 0x40E217, reading `GetLocaleInfo(LOCALE_INEGCURR)`), and
+   the 16-case `-` switch in `FUN_00490730`/`FUN_0049091c` is the RTL's
+   negative-**currency** formatter. Nothing to do with the wire
+   protocol. (The cluster: 0x566688 CurrencyFormat, 0x566689
+   NegCurrFormat, 0x56668A ThousandSeparator, 0x56668B
+   DecimalSeparator.)
+2. **The real sign is in-band.** UT804: nibble 9 bit 2 (the bit §3.6
+   previously labeled HOLD — the vendor lights the `LcdFH` sign
+   indicator and prepends `"-"`, VA 0x55a3dc; negative overload
+   comparand `"-0@"` at 0x55a434; ut804-decompiled.txt:224244-224374).
+   UT803: nibble 8 bit 2 (ut803-decompiled.txt:224458-224469). HOLD on
+   the UT803 is nibble 9 bit 3 (`LCDHold`, line 225086); HOLD's wire
+   encoding on the UT804 appears in **neither** parser and remains
+   unknown.
+3. **Nibbles 12-14 are genuinely never read** — confirmed with the
+   correct access pattern: the frame arrives as a Delphi string of hex
+   characters parsed via 1-based `Copy(s, idx, 1)` (which is why
+   pointer-arithmetic greps found nothing). The UT804 parser reads
+   indices 1-11 only; the UT803 parser reads 2-10. The 0xD/0xA markers
+   are the low nibbles of CR/LF — an ASCII-protocol trailer, which
+   explains the unused tail. Whatever MIN/MAX/REL/low-battery encode
+   on the wire, if anything, may live in those nibbles — only hardware
+   can settle it.
+4. **The frame parse is model-specific.** UT804.exe contains three
+   protocol paths selected by UI control (Delphi RTTI method table:
+   `H71ARData`/`LcdDisplay71A` = the UT804 structured parser;
+   `H60BRData`/`LcdDisplay60B` = a 7-segment decoder for legacy
+   UT60A/B/C support; `H70BRData`/`LcdDisplay70B` = dead). The UT803
+   uses its own layout (range=nibble 2, digits=nibbles 3-6, different
+   mode-code meanings — see §5).
+5. **Decimal positions count from the left** (point after digit
+   `pos+1`), per the display assembly at ut804-decompiled.txt:
+   224289-224356 (point slots LcdP0-LcdP3 interleaved with the digit
+   labels). The previous places-from-right reading inverted every
+   table.
+6. **Nibble 1 = 0xA marks an overload frame** (digits forced to
+   "0L"/"L0" via the LCD font where '@' renders as 'L'); `"0@"` → +OL,
+   `"-0@"` → −OL, `"@0"` → 0.0. It is not an "AC flag mode".
+7. **The UT804 mode table was wrong for 9 of 15 codes.** Corrected via
+   unit-string constants + font glyphs (`#`=°C, `?`=°F, `)`=diode,
+   `&`=beeper, `*`=Ω, `@`='L', `$`=battery): 6=Temp °C, 7=µA, 8=mA,
+   9=A, A=Continuity, B=Diode, C=Frequency (duty-% via nibble 9 bit 2,
+   reused since negative frequency is impossible), D=Temp °F,
+   E=unknown glyph (possibly hFE), F="mA%" (likely 4-20 mA loop).
+   Frequency unit boundaries: ranges 0-1 Hz, 2-4 kHz, 5-7 MHz; Ω:
+   range 1 Ω, 2-4 kΩ, 5-6 MΩ.
+
+The Rust `fs9721` module now implements separate UT803/UT804 parsers
+with these corrections. Clean-room note: approval was given to consult
+the sigrok FS9721 decoder and the FS9721-LP3 datasheet for this family,
+but the resolution above required neither — it is derived entirely
+from the vendor binaries, their fonts, and the existing decompiles, so
+the clean-room boundary for UT803/UT804 remains unopened.
+
+The section below is kept for the historical record of the gap.
+
+### 7.4.1 Historical: Nibbles 12-14 and Secondary Status Bits (superseded)
 
 Two Ghidra passes over `ut803-decompiled.txt` and `ut804-decompiled.txt`
 (226K / 227K lines each, 2026-04-19) have established a negative
