@@ -342,56 +342,6 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     Ok(Some((payload, consumed)))
 }
 
-/// Extract a frame using UT171 format: AB CD len payload chk_lo chk_hi.
-///
-/// Length is a 1-byte uint8 counting payload bytes only (NOT including checksum).
-/// Checksum is 16-bit LE sum of bytes from offset 2 through end of payload
-/// (covers length byte + payload, excludes header and checksum).
-///
-/// Total frame: header(2) + length(1) + payload(N) + checksum(2) = N + 5.
-pub fn extract_frame_abcd_1byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
-    let Some(start) = buf.windows(2).position(|w| w == HEADER) else {
-        return Ok(None);
-    };
-
-    let remaining = &buf[start..];
-    if remaining.len() < 5 {
-        // header(2) + length(1) + checksum(2) minimum
-        return Ok(None);
-    }
-
-    let payload_len = remaining[2] as usize;
-    let frame_len = 2 + 1 + payload_len + 2; // header + length_byte + payload + checksum
-
-    if remaining.len() < frame_len {
-        return Ok(None);
-    }
-
-    let frame = &remaining[..frame_len];
-    trace!("framing: 1byte_le16 raw frame: {:02X?}", frame);
-
-    // Checksum: 16-bit LE sum of bytes[2..frame_len-2] (length byte + payload)
-    let checksum_range = &frame[2..frame_len - 2];
-    let computed: u16 = checksum_range.iter().map(|&b| b as u16).sum();
-    let received = u16::from_le_bytes([frame[frame_len - 2], frame[frame_len - 1]]);
-
-    if computed != received {
-        debug!(
-            "framing: 1byte_le16 checksum mismatch: computed={computed:#06x}, received={received:#06x}, frame={frame:02X?}"
-        );
-        return Err(Error::ChecksumMismatch {
-            expected: received,
-            actual: computed,
-        });
-    }
-
-    let payload = frame[3..3 + payload_len].to_vec();
-    let consumed = start + frame_len;
-
-    debug!("framing: 1byte_le16 valid frame, payload_len={payload_len}, consumed={consumed}");
-    Ok(Some((payload, consumed)))
-}
-
 /// Extract a frame using UT181A format: AB CD len_lo len_hi payload chk_lo chk_hi.
 ///
 /// Length is 2-byte LE uint16 = payload_size + 2 (includes checksum bytes).
@@ -673,18 +623,11 @@ mod tests {
 
     #[test]
     fn le16_frame_ut171() {
-        // Build a valid UT171 frame (1-byte length = payload size, LE checksum)
-        let payload = vec![0x00, 0x02, 0x80, 0x01, 0x0A, 0x01];
-        let len_byte = payload.len() as u8;
-        let mut frame = vec![0xAB, 0xCD, len_byte];
-        frame.extend_from_slice(&payload);
-        // Checksum: LE sum of bytes[2..] (length byte + payload)
-        let sum: u16 = frame[2..].iter().map(|&b| b as u16).sum();
-        frame.push((sum & 0xFF) as u8);
-        frame.push((sum >> 8) as u8);
-
-        let (p, consumed) = extract_frame_abcd_1byte_le16(&frame).unwrap().unwrap();
-        assert_eq!(p, payload);
+        // UT171 shares the UT181A framing: 2-byte LE length = payload +
+        // checksum. This is the real connect command capture.
+        let frame = [0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00];
+        let (p, consumed) = extract_frame_abcd_2byte_le16(&frame).unwrap().unwrap();
+        assert_eq!(p, vec![0x0A, 0x01]);
         assert_eq!(consumed, frame.len());
     }
 

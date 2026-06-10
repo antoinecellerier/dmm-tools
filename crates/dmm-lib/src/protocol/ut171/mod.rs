@@ -115,10 +115,27 @@ fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
     }
 }
 
+/// Display unit for a (mode, range) pair.
+///
+/// The resistance float is range-relative: gulux/Uni-T-CP2110
+/// (capture-driven against real hardware) multiplies by 1000 when the
+/// range byte is >= 2 and again when >= 5 — i.e. ranges 2-4 read in kΩ
+/// and 5-6 in MΩ. We keep the wire value and put the magnitude in the
+/// unit instead. Scaling for other modes (capacitance, conductance) is
+/// [UNVERIFIED]; they keep the base unit.
+fn display_unit(mode_byte: u8, range_byte: u8, base_unit: &'static str) -> &'static str {
+    match (mode_byte, range_byte) {
+        (0x0A, 2..=4) => "kΩ",
+        (0x0A, r) if r >= 5 => "MΩ",
+        _ => base_unit,
+    }
+}
+
 const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 
 /// Known UT171 command frames (complete wire bytes from RE docs).
-/// Frame format: AB CD len payload chk_lo chk_hi
+/// Frame format: AB CD len_lo len_hi payload chk_lo chk_hi, where the
+/// LE16 length counts payload + checksum (same framing as UT181A).
 const UT171_CMD_CONNECT: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00];
 const UT171_CMD_PAUSE: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x00, 0x0E, 0x00];
 
@@ -162,9 +179,15 @@ impl Protocol for Ut171Protocol {
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
-            framing::extract_frame_abcd_1byte_le16,
-            // Only accept measurement frames (type byte = 0x02 at payload[1])
-            |p| p.len() >= 2 && p[1] == 0x02,
+            // UT171 framing is identical to UT181A: 2-byte LE length =
+            // payload + checksum, LE16 sum. Verified against the connect
+            // command (AB CD 04 00 0A 01 0F 00: len 4, sum 04+00+0A+01 =
+            // 0x000F LE) and gulux/Uni-T-CP2110's capture-driven parser.
+            framing::extract_frame_abcd_2byte_le16,
+            // Accept only full measurement frames: type 0x02 at payload[0]
+            // AND a measurement-sized payload — short ack/response frames
+            // share the 0x02 type byte (gulux observes lengths 4-8).
+            |p| p.len() >= 15 && p[0] == 0x02,
             FrameErrorRecovery::SkipAndRetry,
             "ut171",
             &framing::HEADER,
@@ -321,38 +344,40 @@ impl Protocol for Ut171Protocol {
 
 /// Parse a UT171 measurement payload (pure function).
 ///
-/// Standard frame payload (length=0x11, 17 bytes):
-/// - byte 0:   reserved (0x00)
-/// - byte 1:   type (0x02 = measurement)
-/// - byte 2:   flags byte
-/// - byte 3:   frame type (0x01=standard, 0x03=extended)
-/// - byte 4:   mode byte
-/// - byte 5:   range byte (raw, 1-based)
-/// - bytes 6-9: main value (float32 LE)
-/// - byte 10:  status2 (0x40=DC, 0x20=AC)
-/// - byte 11:  unknown
-/// - bytes 12-15: aux value (float32 LE)
-/// - byte 16:  padding
+/// Payload from the 2-byte-LE-length extractor (standard frame: 21 bytes
+/// on the wire → 15-byte payload; extended: 27 → 21). Offsets relative to
+/// the payload (= wire frame offset − 4):
+/// - byte 0:   type (0x02 = measurement)
+/// - byte 1:   flags byte
+/// - byte 2:   frame type (0x01=standard, 0x03=extended)
+/// - byte 3:   mode byte
+/// - byte 4:   range byte (raw, 1-based)
+/// - bytes 5-8: main value (float32 LE)
+/// - byte 9:   status2 (0x40=DC, 0x20=AC — capture-deduced, [UNVERIFIED])
+/// - byte 10:  unknown
+/// - bytes 11-14: aux value (float32 LE)
+/// - extended frames continue with a third float at bytes 17-20 (unparsed)
 pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < 17 {
+    if payload.len() < 15 {
         return Err(Error::invalid_response(
             format!(
-                "ut171 payload too short: {} bytes, expected >= 17",
+                "ut171 payload too short: {} bytes, expected >= 15",
                 payload.len()
             ),
             payload,
         ));
     }
 
-    let flags_byte = payload[2];
-    let mode_byte = payload[4];
-    let range_byte = payload[5];
+    let flags_byte = payload[1];
+    let mode_byte = payload[3];
+    let range_byte = payload[4];
 
-    let (mode, unit) = lookup_mode(mode_byte);
+    let (mode, base_unit) = lookup_mode(mode_byte);
     let range_label = lookup_range(mode_byte, range_byte).unwrap_or("");
+    let unit = display_unit(mode_byte, range_byte, base_unit);
 
     // Parse IEEE 754 float32 LE main value
-    let main_bytes: [u8; 4] = [payload[6], payload[7], payload[8], payload[9]];
+    let main_bytes: [u8; 4] = [payload[5], payload[6], payload[7], payload[8]];
     let main_float = f32::from_le_bytes(main_bytes);
 
     // Parse flags
@@ -375,21 +400,25 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         MeasuredValue::Normal(main_float as f64)
     };
 
-    // Aux float32 at payload[12..16] per spec §5.1. The vendor software
-    // populates this for dual-display modes (e.g. V AC with frequency aux),
-    // but the per-mode semantics — including the aux unit — are not spelled
-    // out in the decompilation, so we surface the number with a neutral
-    // label and no unit and leave interpretation to the consumer.
+    // Aux float32 at payload[11..15]. gulux/Uni-T-CP2110 (capture-driven)
+    // labels the aux value "kHz" for the AC voltage modes; other modes'
+    // aux semantics are unknown, so they get a neutral label and no unit.
     // Gate on finite + non-zero so static-layout modes that never use the
     // aux slot don't emit a spurious "Aux: 0" entry.
-    let aux_bytes: [u8; 4] = [payload[12], payload[13], payload[14], payload[15]];
+    let aux_bytes: [u8; 4] = [payload[11], payload[12], payload[13], payload[14]];
     let aux_float = f32::from_le_bytes(aux_bytes);
     let mut aux_values = Vec::new();
     if aux_float.is_finite() && aux_float != 0.0 {
+        // 0x03 = V AC, 0x06 = mV AC
+        let (aux_label, aux_unit) = if matches!(mode_byte, 0x03 | 0x06) {
+            ("Frequency", "kHz")
+        } else {
+            ("Aux", "")
+        };
         aux_values.push(AuxValue {
-            label: Cow::Borrowed("Aux"),
+            label: Cow::Borrowed(aux_label),
             value: MeasuredValue::Normal(aux_float as f64),
-            unit: Cow::Borrowed(""),
+            unit: Cow::Borrowed(aux_unit),
             display_raw: None,
             elapsed_secs: None,
         });
@@ -424,8 +453,9 @@ mod tests {
     fn make_payload_with_aux(mode: u8, range: u8, value: f32, flags: u8, aux: f32) -> Vec<u8> {
         let vbytes = value.to_le_bytes();
         let abytes = aux.to_le_bytes();
+        // Payload as produced by the 2-byte-LE-length extractor: starts at
+        // the type byte (wire frame offset 4).
         vec![
-            0x00,  // reserved
             0x02,  // type = measurement
             flags, // flags byte
             0x01,  // frame type = standard
@@ -435,7 +465,6 @@ mod tests {
             0x00,      // status2
             0x00,      // unknown
             abytes[0], abytes[1], abytes[2], abytes[3], // aux value
-            0x00,      // padding
         ]
     }
 
@@ -455,10 +484,20 @@ mod tests {
 
     #[test]
     fn parse_ohm() {
-        let payload = make_payload(0x0A, 0x02, 470.5, 0x00);
+        // Range 1 reads in Ω; ranges 2-4 are range-relative kΩ and 5-6 MΩ
+        // (gulux scales ×1000 at range >= 2 and again at >= 5).
+        let payload = make_payload(0x0A, 0x01, 470.5, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
         assert_eq!(m.unit, "Ω");
+
+        let payload = make_payload(0x0A, 0x02, 4.705, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.unit, "kΩ");
+
+        let payload = make_payload(0x0A, 0x05, 5.99, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.unit, "MΩ");
     }
 
     #[test]
@@ -594,10 +633,12 @@ mod tests {
 
     #[test]
     fn aux_value_populated_when_nonzero() {
+        // V AC (0x03): aux is the frequency readout in kHz per gulux.
         let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.aux_values.len(), 1);
-        assert_eq!(m.aux_values[0].label, "Aux");
+        assert_eq!(m.aux_values[0].label, "Frequency");
+        assert_eq!(m.aux_values[0].unit, "kHz");
         if let MeasuredValue::Normal(v) = m.aux_values[0].value {
             assert!((v - 50.0).abs() < 0.01);
         } else {

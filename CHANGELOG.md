@@ -13,6 +13,7 @@
 
 ### Bug fixes
 
+- **UT171 frame decoding fixed** — the frame length and checksum were computed with an off-by-one model, so a real UT171 could never deliver a valid reading; framing now matches the meter's actual format (identical to UT181A). Resistance readings now carry the right magnitude (kΩ/MΩ on upper ranges), and the second display on AC voltage modes is labeled as a frequency in kHz.
 - **UT61E+ recovers from a corrupted frame on the next reading** — corrupt data is discarded after a checksum error (matching the vendor software); previously the bad frame stayed buffered and every subsequent reading failed until reconnect.
 - **UT8802/UT8803 connections no longer stall on unexpected frames** — a non-measurement or corrupt-length frame is now skipped immediately instead of blocking measurement extraction until an internal buffer filled (~65 s of lost readings).
 - **UT8803 readings now show the correct unit magnitude** — the displayed unit carries the range's prefix (mV, kΩ, MΩ, mH, nF/µF/mF, kHz/MHz) as the meter's value is range-relative; previously a 5.999 kΩ reading showed as "5.999 Ω". The ESR sub-modes (Inductance R, Capacitance R) now report Ω instead of H/F, the Q/D factor sub-modes are unitless, and the DC indicator follows the dial mode.

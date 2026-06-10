@@ -167,15 +167,29 @@ real hardware**. Every aspect needs end-to-end verification.
 - Streaming rate (~2-3 Hz per manual)
 
 **UT171A / UT171B / UT171C** ([issue #4](https://github.com/antoinecellerier/dmm-tools/issues/4)):
-- Frame extraction (1-byte length, LE checksum)
+- Frame extraction. **Corrected (2026-06 review)**: framing is
+  byte-identical to UT181A — 2-byte LE length = payload + checksum,
+  total = length + 4, LE16 checksum over [2..len+2). The previous
+  1-byte-length model (total = length + 5) could never have validated a
+  real frame; its "reserved" byte was the length high byte and its
+  "padding" byte the checksum low byte. Confirmed by connect-command
+  arithmetic and gulux/Uni-T-CP2110; needs one real measurement frame
+  to close.
 - Connect command (`AB CD 04 00 0A 01 0F 00`) — may be needed before streaming
 - Mode byte mapping (26 modes, 0x01-0x24)
-- Float32 LE value parsing
-- Flags byte (HOLD bit 7, AUTO bit 6 inverted, Low Battery bit 2)
+- Float32 LE value parsing — resistance is range-relative (kΩ at range
+  >= 2, MΩ at >= 5 per gulux); scaling for capacitance/conductance
+  [UNVERIFIED]
+- Flags byte (HOLD bit 7, AUTO bit 6 inverted, Low Battery bit 2) — the
+  decompile citations previously backing bits 0/1/3 were Delphi dataset
+  code, not wire protocol (2026-06 review); all flag bits need hardware
 - Range byte (raw, 1-based)
-- Extended frame (28 bytes, frame type 0x03) — not yet parsed
-- Status2 byte (offset 13) meaning
-- Aux value interpretation
+- Extended frame (27 bytes, frame type 0x03) — not yet parsed; no
+  decompile evidence located for its layout
+- Status2 byte (offset 13) — capture-deduced 0x40=DC/0x20=AC, no
+  decompile evidence
+- Aux value interpretation — kHz frequency on V AC / mV AC per gulux;
+  other modes unknown
 
 **UT181A** ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)):
 - ~~SET_MONITOR command required during init~~ — **VERIFIED** 2026-04-07

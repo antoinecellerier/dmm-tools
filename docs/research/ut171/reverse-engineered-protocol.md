@@ -161,22 +161,32 @@ frame[len+3] = (checksum >> 8) & 0xFF // high byte
 Verified against captured frames. Ghidra confirms LE byte order via
 endianness-conversion functions.
 
-### 3.3 Frame Header Validation -- [VENDOR]
+### 3.3 Frame Header Validation -- [RETRACTED]
 
-From `FUN_0065478e`: Checks `*param_1 == 0xABCD`. A secondary magic
-value also accepted (possibly for diagnostic frames). For non-standard
-frames, sub-fields at offsets 1 and 6 must be <= 3.
+The previously cited evidence (`FUN_0065478e`, `FUN_0065492d`,
+`FUN_00654bf5`) is **not wire-protocol code**: those functions parse
+Delphi Midas/ClientDataSet packets (magic `0xBDE01996`,
+`SafeArrayAccessData`, ROWDATA/DATAPACKET strings) used by the app's
+internal datasets (2026-06 review). No wire-frame validation routine
+has been located in the decompile; header validation is [DEDUCED]
+from captures only.
 
 ### 3.4 Valid Frame Sizes -- [VENDOR]
 
+Totals corrected 2026-06: the length field is a 2-byte LE value
+counting payload + 2-byte checksum, so total = length + 4 (identical
+to UT181A framing). Confirmed by the connect-command capture
+`AB CD 04 00 0A 01 0F 00` (len 4, checksum 0x04+0x00+0x0A+0x01 =
+0x000F LE) and by gulux/Uni-T-CP2110's capture-driven parser.
+
 | Length | Total | Purpose |
 |--------|-------|---------|
-| 0x03 | 8 | Simple command (connect/pause, query count) |
-| 0x04 | 9 | Single-parameter command (delete) |
-| 0x0A | 15 | Data logging read command |
-| 0x11 | 22 | Standard measurement response |
-| 0x12 | 23 | Start auto-save command |
-| 0x17 | 28 | Extended measurement response |
+| 0x03 | 7 | Simple command (connect/pause, query count) |
+| 0x04 | 8 | Single-parameter command (delete) |
+| 0x0A | 14 | Data logging read command |
+| 0x11 | 21 | Standard measurement response |
+| 0x12 | 22 | Start auto-save command |
+| 0x17 | 27 | Extended measurement response |
 
 ---
 
@@ -273,26 +283,28 @@ Square wave output (UT171C): pseudo-mode 0x1007, commands 0xE0/0xE1.
 
 ## 5. Measurement Response -- [VENDOR]
 
-### 5.1 Standard Frame (22 bytes, length = 0x11)
+### 5.1 Standard Frame (21 bytes, length = 0x11)
+
+(Corrected 2026-06: the previous "reserved 0x00" byte was the length
+high byte and the trailing "padding" byte was the checksum low byte;
+total is 21 bytes, not 22.)
 
 | Offset | Size | Field | Description | Confidence |
 |--------|------|-------|-------------|------------|
 | 0-1 | 2 | Header | `0xAB 0xCD` | [VENDOR] |
-| 2 | 1 | Length | `0x11` (17) | [VENDOR] |
-| 3 | 1 | Reserved | `0x00` | [VENDOR] |
+| 2-3 | 2 | Length | uint16 LE `0x0011` = payload + checksum | [VENDOR] |
 | 4 | 1 | Type | `0x02` (measurement data) | [VENDOR] |
 | 5 | 1 | Flags | Status bits (see 5.3) | [VENDOR] |
 | 6 | 1 | Frame type | 0x01=standard, 0x03=extended | [VENDOR] |
 | 7 | 1 | Mode | Measurement type (see 6) | [VENDOR] |
 | 8 | 1 | Range | Range index (raw, 1-based) | [VENDOR] |
 | 9-12 | 4 | Main value | IEEE 754 float32, LE | [VENDOR] |
-| 13 | 1 | Status2 | 0x40=DC, 0x20=AC | [DEDUCED] |
+| 13 | 1 | Status2 | 0x40=DC, 0x20=AC | [DEDUCED from captures; no decompile evidence] |
 | 14 | 1 | Unknown | Values 0x00, 0x01 | [UNVERIFIED] |
-| 15-18 | 4 | Aux value | IEEE 754 float32, LE | [VENDOR] |
-| 19 | 1 | (padding) | | |
-| 20-21 | 2 | Checksum | uint16 LE | [VENDOR] |
+| 15-18 | 4 | Aux value | IEEE 754 float32, LE; frequency in kHz on V AC / mV AC per gulux | [VENDOR] |
+| 19-20 | 2 | Checksum | uint16 LE | [VENDOR] |
 
-### 5.2 Extended Frame (28 bytes, length = 0x17)
+### 5.2 Extended Frame (27 bytes, length = 0x17)
 
 All standard fields plus:
 
@@ -300,8 +312,7 @@ All standard fields plus:
 |--------|------|-------|-------------|
 | 19-20 | 2 | Extra flags | Additional metadata |
 | 21-24 | 4 | Third value | IEEE 754 float32, LE (AC+DC combined?) |
-| 25 | 1 | Unknown | |
-| 26-27 | 2 | Checksum | uint16 LE |
+| 25-26 | 2 | Checksum | uint16 LE |
 
 Byte 6 = 0x03 signals extended frame. The third float is close to the
 main value in AC modes, suggesting AC+DC combined measurement. [DEDUCED]
@@ -490,7 +501,7 @@ Needs device verification.
 | Mode 0x1A (VFC): deduced from gap, not seen in data-log encoder | Minor |
 | Exact simple command IDs (save, stop, query count) | Need USB capture |
 | 0x51 vs 0x52 exact semantics | Need USB capture |
-| Status2 byte (offset 13) meaning | Display hint only |
+| Status2 byte (offset 13) meaning | Capture-deduced 0x40=DC/0x20=AC; no decompile evidence; needs hardware |
 | Flag bits 4-5 (0x10, 0x20) | Not observed |
 | UART status FIFO count endianness (cp2110.rs potential bug) | Need device test |
 
