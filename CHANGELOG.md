@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.0
 
 ### GUI
 
@@ -33,6 +33,8 @@
 - **Integrator flags skipped intervals** — intervals longer than the 2 s limit are still skipped (to avoid post-disconnect spikes), but the CLI `read --integrate` summary and the GUI stats panel now show the skipped count instead of silently reporting `0`, and the first skip logs a warning.
 - **Mock meter no longer shows impossible states** — Peak and MIN/MAX can't be active at once (each ends the other, as on the real meter), and Peak presses are ignored in DC modes like the real UT61E+.
 - **Mock waveforms are smoother and loop seamlessly** — scenario waveforms are now driven by elapsed time and are periodic over their duration, so scheduling jitter no longer shows as visible noise and pinned mock modes no longer snap at the loop point. The capacitance and temperature sawtooths became triangles for the same reason.
+
+**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.4.0...v0.5.0
 
 ## v0.4.0
 
