@@ -51,16 +51,22 @@ const PRESET_DEFAULT: PresetColors = PresetColors {
     button: ColorPair::new(Color32::from_gray(60), Color32::from_gray(230)),
     status_ok: ColorPair::new(
         Color32::from_rgb(60, 180, 75),
-        Color32::from_rgb(0, 140, 30),
+        // 5.34:1 on gray(248); the previous (0,140,30) was 4.15:1 (< AA 4.5)
+        Color32::from_rgb(0, 120, 25),
     ),
     status_warning: ColorPair::new(
         Color32::from_rgb(200, 120, 0),
         Color32::from_rgb(180, 80, 0),
     ),
-    status_error: ColorPair::new(Color32::from_rgb(220, 60, 60), Color32::from_rgb(180, 0, 0)),
+    status_error: ColorPair::new(
+        // 4.62:1 on gray(27); the previous (220,60,60) was 3.90:1 (< AA 4.5)
+        Color32::from_rgb(230, 80, 80),
+        Color32::from_rgb(180, 0, 0),
+    ),
     status_inactive: ColorPair::new(
         Color32::from_rgb(150, 150, 150),
-        Color32::from_rgb(120, 120, 120),
+        // 4.80:1 on gray(248); the previous (120,120,120) was 4.16:1 (< AA 4.5)
+        Color32::from_rgb(110, 110, 110),
     ),
     accent: ColorPair::new(
         Color32::from_rgb(100, 180, 255),
@@ -111,7 +117,8 @@ const PRESET_HIGH_CONTRAST: PresetColors = PresetColors {
     status_ok: ColorPair::new(Color32::from_rgb(0, 230, 0), Color32::from_rgb(0, 130, 0)),
     status_warning: ColorPair::new(
         Color32::from_rgb(255, 160, 0),
-        Color32::from_rgb(200, 100, 0),
+        // 5.77:1 on white; the previous (200,100,0) was 3.98:1 (< AA 4.5)
+        Color32::from_rgb(160, 80, 0),
     ),
     status_error: ColorPair::new(Color32::from_rgb(255, 40, 40), Color32::from_rgb(200, 0, 0)),
     status_inactive: ColorPair::new(
@@ -160,12 +167,18 @@ const PRESET_COLORBLIND_SAFE: PresetColors = PresetColors {
     ),
     status_warning: ColorPair::new(
         Color32::from_rgb(230, 159, 0),
-        Color32::from_rgb(180, 100, 0),
+        // 4.79:1 on gray(248); the previous (180,100,0) was 4.15:1 (< AA 4.5)
+        Color32::from_rgb(165, 92, 0),
     ),
-    status_error: ColorPair::new(Color32::from_rgb(213, 94, 0), Color32::from_rgb(170, 50, 0)),
+    status_error: ColorPair::new(
+        // 4.91:1 on gray(27); the previous (213,94,0) was 4.45:1 (< AA 4.5)
+        Color32::from_rgb(224, 100, 0),
+        Color32::from_rgb(170, 50, 0),
+    ),
     status_inactive: ColorPair::new(
         Color32::from_rgb(150, 150, 150),
-        Color32::from_rgb(120, 120, 120),
+        // 4.80:1 on gray(248); the previous (120,120,120) was 4.16:1 (< AA 4.5)
+        Color32::from_rgb(110, 110, 110),
     ),
     accent: ColorPair::new(
         Color32::from_rgb(86, 180, 233),
@@ -436,7 +449,7 @@ mod tests {
         assert_eq!(tc.background(), Color32::from_gray(27));
 
         let tc_light = ThemeColors::new(false, ColorPreset::Default, &PaletteOverrides::default());
-        assert_eq!(tc_light.status_ok(), Color32::from_rgb(0, 140, 30));
+        assert_eq!(tc_light.status_ok(), Color32::from_rgb(0, 120, 25));
         assert_eq!(tc_light.graph_line(), Color32::from_rgb(180, 40, 40));
         assert_eq!(tc_light.background(), Color32::from_gray(248));
     }
@@ -536,6 +549,60 @@ mod tests {
         assert_eq!(tc.background(), Color32::from_rgb(10, 20, 30));
         assert_eq!(tc.text(), Color32::from_rgb(200, 210, 220));
         assert_eq!(tc.button(), Color32::from_rgb(80, 80, 80));
+    }
+
+    /// WCAG 2.1 relative luminance of an sRGB color.
+    fn luminance(c: Color32) -> f64 {
+        fn lin(c: u8) -> f64 {
+            let c = c as f64 / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        }
+        0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
+    }
+
+    /// WCAG 2.1 contrast ratio between two colors (1.0..=21.0).
+    fn contrast(a: Color32, b: Color32) -> f64 {
+        let (la, lb) = (luminance(a), luminance(b));
+        let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    /// Every color used to render text must meet WCAG 2.1 AA (>= 4.5:1)
+    /// against its preset's panel background, in both themes. Catches
+    /// dark-tuned colors that fail on light backgrounds — historically the
+    /// largest source of rework in this project.
+    #[test]
+    fn text_colors_meet_wcag_aa_in_both_themes() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let bg = tc.background();
+                let text_colors = [
+                    ("text", tc.text()),
+                    ("status_ok", tc.status_ok()),
+                    ("status_warning", tc.status_warning()),
+                    ("status_error", tc.status_error()),
+                    ("status_inactive", tc.status_inactive()),
+                    ("accent", tc.accent()),
+                ];
+                for (name, fg) in text_colors {
+                    let ratio = contrast(fg, bg);
+                    assert!(
+                        ratio >= 4.5,
+                        "{preset:?} {} mode: {name} {fg:?} on {bg:?} is {ratio:.2}:1, below WCAG AA 4.5:1",
+                        if dark { "dark" } else { "light" },
+                    );
+                }
+            }
+        }
     }
 
     #[test]
