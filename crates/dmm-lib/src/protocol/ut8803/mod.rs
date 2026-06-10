@@ -49,6 +49,70 @@ const POSITION_TABLE: &[(u8, &str)] = &[
 
 const UT8803_COMMANDS: &[&str] = &[];
 
+/// Display unit (magnitude prefix + base unit) for a (mode, range) pair.
+///
+/// The display value is range-relative — e.g. 5.999 on Ω range 1 means
+/// 5.999 kΩ — so the unit must carry the magnitude prefix. Base units per
+/// mode from `FUN_1001cff0` (uci_dll_decompiled.txt:23789-23829: 2=Ω also
+/// for IndR/CapR ESR sub-modes, default 0xF=no unit for IndQ/CapD);
+/// prefixes per (mode, range) from `FUN_1001cdc0` (lines 23644-23700:
+/// 0=n, 1=µ, 2=m, 3=none, 4=k, 5=M).
+fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
+    match mode_byte {
+        // V: range 0 = mV, others V
+        0x00 | 0x01 => {
+            if range_idx == 0 {
+                "mV"
+            } else {
+                "V"
+            }
+        }
+        0x02 | 0x05 => "µA",
+        0x03 | 0x06 => "mA",
+        0x04 | 0x07 => "A",
+        // Ω, Continuity, Inductance R (ESR), Capacitance R (ESR)
+        0x08 | 0x09 | 0x0D | 0x10 => match range_idx {
+            1..=3 => "kΩ",
+            4..=5 => "MΩ",
+            _ => "Ω",
+        },
+        0x0A | 0x12 => "V",
+        // Inductance: ranges 0-3 = mH, above = H
+        0x0B => {
+            if range_idx < 4 {
+                "mH"
+            } else {
+                "H"
+            }
+        }
+        // Inductance Q / Capacitance D: dimensionless
+        0x0C | 0x0F => "",
+        0x0E => match range_idx {
+            0..=2 => "nF",
+            3..=5 => "µF",
+            6 => "mF",
+            _ => "F",
+        },
+        0x11 => "",
+        0x13 => "°C",
+        0x14 => "°F",
+        0x15 => match range_idx {
+            1..=3 => "kHz",
+            4..=5 => "MHz",
+            _ => "Hz",
+        },
+        0x16 => "%",
+        _ => "",
+    }
+}
+
+/// Whether a mode measures a DC quantity, per `FUN_1001ca90`
+/// (uci_dll_decompiled.txt:23449-23466: AC = modes 0x00/0x02-0x04,
+/// DC = 0x01/0x05-0x07).
+fn mode_is_dc(mode_byte: u8) -> bool {
+    matches!(mode_byte, 0x01 | 0x05..=0x07)
+}
+
 /// Protocol implementation for the UT8803/UT8803E bench multimeter.
 pub struct Ut8803Protocol {
     rx_buf: Vec<u8>,
@@ -79,10 +143,14 @@ impl Ut8803Protocol {
 }
 
 impl Protocol for Ut8803Protocol {
-    fn init(&mut self, transport: &dyn Transport) -> Result<()> {
-        // Send 0x5A trigger byte to start streaming
-        debug!("ut8803: sending 0x5A trigger byte");
-        transport.write(&[0x5A])?;
+    fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
+        // No trigger byte: the vendor's CP2110 init path (uci.dll
+        // FUN_1001d460, uci_dll_decompiled.txt:24031-24085) configures the
+        // UART and reads — it never writes. The 0x5A trigger we previously
+        // sent here belongs to the QinHeng/CH9325 init path for other
+        // meters (FUN_1001d360, lines 24003-24005). Whether the UT8803
+        // tolerates a stray 0x5A is untested on hardware.
+        debug!("ut8803: init (no trigger byte; meter streams unprompted)");
         self.triggered = true;
         Ok(())
     }
@@ -262,7 +330,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let mode_byte = payload[2];
     let range_raw = payload[3];
-    let _range_byte = if range_raw >= 0x30 {
+    let range_idx = if range_raw >= 0x30 {
         range_raw - 0x30
     } else {
         range_raw
@@ -348,36 +416,13 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         auto_range,
         low_battery: false, // D15, would need to extract from status word
         hv_warning: false,
-        dc: false,
+        dc: mode_is_dc(mode_byte),
         peak_max: false,
         peak_min: false,
         ..Default::default()
     };
 
-    // Determine unit from functional coding (bits D8-D14 of status word)
-    let _func_code = flags1_lo & 0x0F; // D0-D3
-    let unit_type = (flags1_lo >> 4) & 0x03; // simplified — actual is D8-D11
-    let _ = unit_type; // unit determination from mode is more reliable
-
-    // Build unit string from mode name heuristics
-    let unit: &'static str = match &*mode {
-        "DC V" | "AC V" => "V",
-        "DC µA" | "AC µA" => "µA",
-        "DC mA" | "AC mA" => "mA",
-        "DC A" | "AC A" => "A",
-        "Ω" => "Ω",
-        "Hz" => "Hz",
-        "Duty %" => "%",
-        "°C" => "°C",
-        "°F" => "°F",
-        "Capacitance" | "Capacitance D" | "Capacitance R" => "F",
-        "Inductance" | "Inductance Q" | "Inductance R" => "H",
-        "hFE" => "",
-        "Continuity" => "Ω",
-        "Diode" => "V",
-        "SCR" => "V",
-        _ => "",
-    };
+    let unit = display_unit(mode_byte, range_idx);
 
     let value = if overload {
         MeasuredValue::Overload
@@ -459,27 +504,55 @@ mod tests {
 
     #[test]
     fn parse_dcv() {
-        let payload = make_payload(0x01, 0x00, b"12.34", 0x00, 0x00, 0x00);
+        let payload = make_payload(0x01, 0x01, b"12.34", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "DC V");
         assert_eq!(m.unit, "V");
+        assert!(m.flags.dc);
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 12.34).abs() < 1e-6));
     }
 
     #[test]
     fn parse_acv() {
-        let payload = make_payload(0x00, 0x00, b" 5.67", 0x00, 0x00, 0x00);
+        let payload = make_payload(0x00, 0x01, b" 5.67", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "AC V");
         assert_eq!(m.unit, "V");
+        assert!(!m.flags.dc);
     }
 
     #[test]
     fn parse_ohm() {
+        // Range 1 is the kΩ range: the display value is range-relative,
+        // so the unit must carry the vendor's magnitude prefix
+        // (FUN_1001cdc0, uci_dll_decompiled.txt:23644-23700).
         let payload = make_payload(0x08, 0x01, b"123.4", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
-        assert_eq!(m.unit, "Ω");
+        assert_eq!(m.unit, "kΩ");
+    }
+
+    #[test]
+    fn display_unit_magnitude_prefixes() {
+        // Spot-check the (mode, range) → prefixed-unit table against
+        // FUN_1001cdc0 / FUN_1001cff0.
+        assert_eq!(display_unit(0x01, 0), "mV"); // V range 0 = mV
+        assert_eq!(display_unit(0x08, 0), "Ω");
+        assert_eq!(display_unit(0x08, 4), "MΩ");
+        assert_eq!(display_unit(0x0D, 2), "kΩ"); // Inductance R = ESR in Ω
+        assert_eq!(display_unit(0x10, 0), "Ω"); // Capacitance R = ESR in Ω
+        assert_eq!(display_unit(0x0C, 0), ""); // Inductance Q: unitless
+        assert_eq!(display_unit(0x0F, 0), ""); // Capacitance D: unitless
+        assert_eq!(display_unit(0x0B, 0), "mH");
+        assert_eq!(display_unit(0x0B, 4), "H");
+        assert_eq!(display_unit(0x0E, 0), "nF");
+        assert_eq!(display_unit(0x0E, 3), "µF");
+        assert_eq!(display_unit(0x0E, 6), "mF");
+        assert_eq!(display_unit(0x15, 0), "Hz");
+        assert_eq!(display_unit(0x15, 2), "kHz");
+        assert_eq!(display_unit(0x15, 5), "MHz");
+        assert_eq!(display_unit(0x02, 0), "µA");
+        assert_eq!(display_unit(0x07, 0), "A");
     }
 
     #[test]

@@ -13,6 +13,8 @@
 
 ### Bug fixes
 
+- **UT8803 readings now show the correct unit magnitude** — the displayed unit carries the range's prefix (mV, kΩ, MΩ, mH, nF/µF/mF, kHz/MHz) as the meter's value is range-relative; previously a 5.999 kΩ reading showed as "5.999 Ω". The ESR sub-modes (Inductance R, Capacitance R) now report Ω instead of H/F, the Q/D factor sub-modes are unitless, and the DC indicator follows the dial mode.
+- **UT8802 and UT8803 no longer send a spurious 0x5A byte on connect** — the vendor software never sends it to these meters (it belongs to a different meter family's init); they stream unprompted.
 - **UT8802 readings no longer have their digits reversed** — the display digits were decoded in the opposite order from the meter's wire format (e.g. a reading of 1234.5 displayed as 5432.1). Overload is now detected from the meter's overload flag instead of a display-digit heuristic, and the AC/DC indicator now follows the dial position (the byte previously read as "AC/DC coupling" is actually the diode/SCR probe-direction indicator).
 - **VC-890 low-pass (ACV LPF) mode now reports its fixed 1000V range** — the vendor protocol ignores the range byte in LPF mode, so the range label no longer depends on an undefined byte (previously it could show 6V–1000V or nothing).
 - **Graph frame rate no longer degrades as history grows** — per-frame work now scales with the visible window instead of the full 10 000-point buffer, and the minimap keeps a steady frame rate at full history.

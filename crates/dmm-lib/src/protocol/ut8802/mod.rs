@@ -105,10 +105,13 @@ impl Ut8802Protocol {
 }
 
 impl Protocol for Ut8802Protocol {
-    fn init(&mut self, transport: &dyn Transport) -> Result<()> {
-        // Send 0x5A trigger byte to start streaming (same as UT8803)
-        debug!("ut8802: sending 0x5A trigger byte");
-        transport.write(&[0x5A])?;
+    fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
+        // No trigger byte: the vendor's CP2110 init path (uci.dll
+        // FUN_1001d460) never writes to the UART; the 0x5A trigger we
+        // previously sent belongs to the QinHeng/CH9325 init path
+        // (FUN_1001d360) for other meters. See the UT8803 init for the
+        // same correction.
+        debug!("ut8802: init (no trigger byte; meter streams unprompted)");
         self.triggered = true;
         Ok(())
     }

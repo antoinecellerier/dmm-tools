@@ -141,9 +141,18 @@ real hardware**. Every aspect needs end-to-end verification.
 
 **UT8803 / UT8803E** ([issue #3](https://github.com/antoinecellerier/dmm-tools/issues/3)):
 - Frame extraction (21-byte, AB CD header, BE checksum)
-- 0x5A streaming trigger byte
+- 0x5A streaming trigger byte. **Corrected (2026-06 review)**: the
+  vendor never sends 0x5A on the CP2110 path (FUN_1001d460 performs no
+  UART write; the 0x5A lives in the CH9325 init FUN_1001d360). We no
+  longer send it. Hardware should confirm the meter streams unprompted.
 - Mode byte mapping (23 position codes, 0x00-0x16)
 - Range byte (0x30 prefix, like UT61E+)
+- Unit magnitude prefixes per (mode, range). **Resolved from vendor
+  [VENDOR]** (2026-06 review): FUN_1001cdc0 maps (mode, range) → n/µ/m/
+  none/k/M and FUN_1001cff0 gives base units (IndR/CapR are ESR in Ω;
+  IndQ/CapD are unitless). The display value is range-relative, so the
+  displayed unit now carries the prefix (e.g. kΩ). Hardware must
+  confirm range-byte values per mode before this counts as verified.
 - Display bytes (5 raw bytes — ASCII or binary encoding?)
 - Flag byte → semantic flag mapping (HOLD, REL, MIN, MAX, AUTO, OL, Sign).
   **Resolved from vendor [VENDOR]** (2026-04-19): a second Ghidra pass

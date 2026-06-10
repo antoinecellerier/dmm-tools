@@ -449,7 +449,7 @@ in the decompilation.
 | Feature reports | 0x41 enable + 0x50 config (AN434 format) | 10-byte: report_id + baud_16LE + config |
 | Baud rate | 9600 (hard-coded) | 2400 (primary), 19200 (fallback) |
 | Data framing | [length, payload...] 64 bytes | [0xF0+len, payload...] 8 bytes, max 7 UART bytes |
-| Trigger | 0x5A byte after UART config | 0x5A byte (primary) or none (fallback) |
+| Trigger | None — FUN_1001d460 performs no UART write (corrected 2026-06; 0x5A was misattributed) | 0x5A byte (primary) or none (fallback) |
 | Purge | Not sent (unlike UT61E+) | Not applicable |
 | Buffer size | 3072 bytes (0xC00) | 512 bytes (0x200) |
 | HID input buffers | 64 | 64 |
@@ -617,7 +617,7 @@ A cross-platform implementation needs to handle three transport paths:
 
 1. **CP2110 HID** (UT8802, UT8803): Same transport as UT61E+.
    Initialize with feature reports 0x41 + 0x50 (same as UT61E+, minus
-   the purge). Send 0x5A trigger byte. Read continuously.
+   the purge). No trigger byte (corrected 2026-06). Read continuously.
 
 2. **QinHeng HID** (UT632, UT803, UT804): Different chip, different
    feature report format. Try primary init with trigger, fall back to
@@ -658,13 +658,13 @@ UT8803) share VID 0x10C4, PID 0xEA80. Discrimination must happen at
 the application layer:
 
 - UT61E+/B+/D+/UT161x: polled protocol (send request, get response)
-- UT8802: streaming after 0x5A trigger, 0xAC frames
-- UT8803: streaming after 0x5A trigger, 0xABCD frames
+- UT8802: streaming unprompted, 0xAC frames
+- UT8803: streaming unprompted, 0xABCD frames
 
 An implementation could:
 1. Send the UT61E+ measurement request (`AB CD 03 5E 01 D9`)
 2. If a valid response arrives: it's a UT61E+ family device
-3. If no response: send 0x5A trigger and listen for streaming data
+3. If no response: listen for unprompted streaming data
 4. Detect 0xAC vs 0xABCD from first frame header
 
 ---

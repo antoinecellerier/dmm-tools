@@ -73,11 +73,17 @@ The feature report 0x50 bytes decode per AN434 as:
 | 7 | 0x00 | Data bits: **8** (0x00 = 8 bits per AN434) |
 | 8 | 0x00 | Stop bits: **1** (short stop bit) |
 
-This is identical to the UT61E+ configuration. Additionally, after
-configuring UART, the init function sends byte `0x5A` over the UART
-via `FUN_1002a4d0(param_2, 0x5a, 1000)`. This appears to be a
-**wake/trigger command** sent to the meter immediately after CP2110
-initialization.
+This is identical to the UT61E+ configuration.
+
+**Correction (2026-06 review): no trigger byte on the CP2110 path.**
+The 0x5A byte previously attributed to this init function is not there:
+`FUN_1001d460` (uci_dll_decompiled.txt:24031-24085) sends only the
+feature reports and sets the input buffer count — it performs no UART
+write. The only `FUN_1002a4d0(handle, 0x5a, 1000)` call in uci.dll is
+in `FUN_1001d360` (lines 23981-24027), the **QinHeng/CH9325 2400-baud
+init path** used for other meters (UT803/UT804 class). The UT8803
+streams without any trigger. Whether a stray 0x5A is harmless to a
+UT8803 is untested on hardware.
 
 | Parameter | Value | Confidence |
 |-----------|-------|------------|
@@ -94,8 +100,10 @@ From `FUN_1001d460` in uci.dll (CP2110 HID path for UT8802/UT8803):
 1. Open HID device matching VID 0x10C4, PID 0xEA80
 2. Send feature report 0x41: Enable UART (`[0x41, 0x01]`)
 3. Send feature report 0x50: Configure 9600/8N1 (`[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x03, 0x00, 0x00]`)
-4. Send byte 0x5A over UART (wake/trigger command, 1000ms timeout)
-5. Set HID input buffer count to 64 (`HidD_SetNumInputBuffers(0x40)`)
+4. Set HID input buffer count to 64 (`HidD_SetNumInputBuffers(0x40)`)
+
+(No trigger byte — see the §1.3 correction; the 0x5A belongs to the
+CH9325 init path for other meters.)
 
 Note: There is a separate function `FUN_1001d2b0` that sends different
 feature report values (`0x34b0000` for the report payload) — this
@@ -247,7 +255,7 @@ From the parser at `0x1001e5f0` (decompiled UT8803 parser):
 | 6 | (included in checksum) | Not directly accessed by the parser. Included in the alternating-byte checksum sum but no field extraction. Likely reserved or padding. |
 | 7-11 | Display | 5 raw bytes, appended to string buffer via `FUN_1001fce0` (buffer append, no transformation) |
 | 12-13 | Flags0 | Part of `param_2[6]` (bytes 12-13 as a 16-bit word). Byte 12 low bits: unknown purpose. Byte 13 (`*(byte*)((int)param_2 + 0x11)`): combined with byte 16 to form a 9-bit field for inductance test frequency and other flags |
-| 14-15 | Flags1 | `param_2[7]` (bytes 14-15): bit 0 = flag_27, bit 1 = unused, bit 2 = flag_1e, bit 3 = flag_1d; high byte provides additional flag bits |
+| 14-15 | Flags1 | `param_2[7]` (bytes 14-15): bit 0 = flag_27 (HOLD), bit 1 = Over-range → status D18 (uci_dll_decompiled.txt:24994-24996, 25029 — previously misread as unused), bit 2 = flag_1e (OL), bit 3 = flag_1d (Sign); high byte provides additional flag bits |
 | 16-17 | Flags2 | `param_2[8]` (bytes 16-17): bit 2+ = flag_23 (2-bit field), bit 1 = flag_29, bit 0 combined with byte 13 for 9-bit inductance field |
 | 18 | Flags3 | `(char)param_2[9]`: bit 0 = flag_28, bit 1 = flag_15; high part provides flag_25 |
 | 19-20 | Checksum | 16-bit BE, alternating-byte sum |
@@ -342,11 +350,10 @@ text-based SCPI commands on the wire. The UCI library translates the
 text API commands (`data?;`, `disp?;`) into a binary polling
 mechanism:
 
-**Initialization trigger**: After CP2110 UART setup, the library sends
-a single byte `0x5A` to the meter via `FUN_1002a4d0(handle, 0x5a, 1000)`.
-This call uses `FUN_1002a500`, which calls `WriteFile` to write the byte
-to the HID device. The 1000ms timeout suggests this is a blocking
-handshake command.
+**No initialization trigger** (corrected, 2026-06 review): the
+`FUN_1002a4d0(handle, 0x5a, 1000)` call previously described here is in
+the CH9325 init path (`FUN_1001d360`), not the CP2110 path used by the
+UT8803 — see §1.3. The UT8803 receives no host bytes at all.
 
 **Read loop**: The `FUN_1001f170` function implements the frame read
 loop. It calls `FUN_1002a380` which calls `FUN_1002a260` to perform
@@ -354,8 +361,8 @@ HID reads (with 0x32 = 50ms individual timeouts). The function reads
 chunks from the HID device, accumulates them in a buffer, then calls
 the parser (`FUN_1001e5f0` for UT8803, `FUN_1001e0a0` for UT8802)
 when enough data has been received. There is **no evidence of the
-host sending a per-measurement request command** — the meter appears
-to **stream data continuously** after the initial 0x5A trigger.
+host sending a per-measurement request command** — the meter
+**streams data continuously**, unprompted.
 
 **Frame dispatch**: The function `FUN_1001eb30` is the frame
 discriminator. It scans the received HID data (which arrives in 64-byte
@@ -370,8 +377,8 @@ The DMM parser path (`FUN_1001e5f0`) does not use SCPI commands.
 
 | Aspect | Details | Confidence |
 |--------|---------|------------|
-| Trigger command | Single byte `0x5A` sent after UART init | [VENDOR] |
-| Communication model | Meter streams continuously after trigger | [VENDOR] |
+| Trigger command | None (0x5A was a misattribution — §1.3) | [VENDOR] |
+| Communication model | Meter streams continuously, unprompted | [VENDOR] |
 | Frame reassembly | HID reports concatenated, header-delimited | [VENDOR] |
 | Per-measurement command | None — no request per sample | [VENDOR] |
 
@@ -380,8 +387,8 @@ The DMM parser path (`FUN_1001e5f0`) does not use SCPI commands.
 The UT8803 uses a **streaming** model, not a polled model:
 
 1. Host opens HID device and configures CP2110 UART (9600/8N1)
-2. Host sends byte `0x5A` to trigger measurement streaming
-3. Meter begins sending 21-byte measurement frames continuously
+2. Meter sends 21-byte measurement frames continuously (no trigger —
+   see §1.3 correction)
 4. UCI library's `FUN_1001f170` reads HID reports in a loop,
    reassembles frames, and parses each complete frame
 5. The `uci_ReadX("data?;")` and `uci_ReadX("disp?;")` calls simply
@@ -701,7 +708,7 @@ function and range:
 |--------|--------|--------|
 | **Protocol abstraction** | Raw binary protocol | UCI SDK layer over binary protocol |
 | **USB bridge** | CP2110 (0x10C4/0xEA80) | CP2110 (same VID/PID) |
-| **Command format** | Binary: `AB CD 03 cmd chk_hi chk_lo` | Single byte `0x5A` trigger, then streaming |
+| **Command format** | Binary: `AB CD 03 cmd chk_hi chk_lo` | None — streaming, no host bytes |
 | **Response format** | 19-byte binary frame | DMFRM struct (64-104 bytes) or 8-byte double |
 | **Mode encoding** | Single mode byte (0x00-0x19) | 4-bit FuncCode + 2-bit ACDC + 8-bit Position |
 | **Range encoding** | Single byte with 0x30 prefix | Embedded in Position code or separate |
@@ -710,7 +717,7 @@ function and range:
 | **Meter type** | Handheld (22000 counts) | Bench (6000 counts) |
 | **Extra features** | NCV, LoZ, LPF, Peak Min/Max | Inductance L/Q/R, Capacitance C/D/R, SCR, SER/PAL |
 | **Software model** | Qt app with plugin DLLs | UCI SDK-based application |
-| **Communication model** | Polled (1 request per measurement) | Streaming (continuous after 0x5A trigger) |
+| **Communication model** | Polled (1 request per measurement) | Streaming (continuous, no trigger) |
 | **Baud rate** | 9600 (confirmed) | 9600 (confirmed from uci.dll feature report 0x50) |
 
 ---
@@ -727,10 +734,9 @@ the uci.dll decompilation to implement a direct driver:
 2. Send feature report 0x41: Enable UART (`[0x41, 0x01]`)
 3. Send feature report 0x50: Configure 9600/8N1
    (`[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x03, 0x00, 0x00]`)
-4. Send HID interrupt report with 1 data byte: `0x5A` (trigger)
-5. Read HID interrupt reports continuously
-6. Reassemble 21-byte frames by finding `0xAB 0xCD` headers
-7. Validate checksum (alternating-byte sum, BE at bytes 19-20)
+4. Read HID interrupt reports continuously (no trigger byte)
+5. Reassemble 21-byte frames by finding `0xAB 0xCD` headers
+6. Validate checksum (alternating-byte sum, BE at bytes 19-20)
 8. Parse mode (byte 4), range (byte 5 - 0x30), display (bytes 7-11),
    and flags (bytes 14-18)
 
@@ -795,8 +801,8 @@ D24-D27 = 0x2 = Scaling position 2
 | UT8802 uses different header (0xAC, 8-byte frames) | **[VENDOR]** | Ghidra: discriminator |
 | Inductance test freq: 0=100Hz, 1=1kHz | **[VENDOR]** | Ghidra: mode 0x0B-0x10 branch |
 | Baud rate 9600 | **[VENDOR]** | Ghidra: feature report 0x50 with 0x00002580 |
-| CP2110 init sequence (full) | **[VENDOR]** | Ghidra: `FUN_1001d460` — 0x41, 0x50, 0x5A sequence |
-| Trigger command: 0x5A byte | **[VENDOR]** | Ghidra: `FUN_1002a4d0(param_2, 0x5a, 1000)` |
+| CP2110 init sequence (full) | **[VENDOR]** | Ghidra: `FUN_1001d460` — 0x41, 0x50, SetNumInputBuffers (no UART write) |
+| No trigger command (0x5A is CH9325-path only) | **[VENDOR]** | Ghidra: `FUN_1002a4d0(param_2, 0x5a, 1000)` only in `FUN_1001d360` |
 | Streaming model (not polled) | **[VENDOR]** | Ghidra: read loop with no per-measurement send |
 | Display bytes: raw passthrough (no 0x30 prefix) | **[VENDOR]** | Ghidra: `FUN_1001fce0` is buffer append |
 | Flag byte-to-status-word mapping | **[VENDOR]** | Ghidra: bit shifts + format string verification |
@@ -813,9 +819,9 @@ D24-D27 = 0x2 = Scaling position 2
 
 **Answer**: The UT8803 does not use per-measurement command encoding.
 Instead:
-- The host sends a single byte `0x5A` over UART after CP2110 init
-  to trigger continuous streaming
-- The meter then sends 21-byte binary frames at ~2-3 Hz
+- The host sends nothing (the 0x5A trigger previously documented here
+  belongs to the CH9325 init path — §1.3)
+- The meter sends 21-byte binary frames at ~2-3 Hz
 - The UCI library reads these frames in a loop; `uci_ReadX("data?;")`
   and `uci_ReadX("disp?;")` return the most recent parsed measurement
 - There is no SCPI text protocol for DMMs — the `:DISPlay:DATA?`
@@ -825,9 +831,9 @@ Instead:
 
 ### Q2: Is the meter streaming continuously or polled?
 
-**Answer**: The meter **streams continuously** after receiving the
-0x5A trigger byte. The Ghidra decompilation shows:
-- `FUN_1001d460` sends 0x5A immediately after UART configuration
+**Answer**: The meter **streams continuously**, with no trigger. The
+Ghidra decompilation shows:
+- `FUN_1001d460` performs no UART write (0x5A correction in §1.3)
 - `FUN_1001f170` implements a read loop calling `FUN_1002a380`
   (which calls HID read) repeatedly, without sending any data
   between reads
