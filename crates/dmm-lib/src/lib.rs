@@ -1,5 +1,5 @@
-pub mod ch9325;
-pub mod ch9329;
+pub(crate) mod ch9325;
+pub(crate) mod ch9329;
 pub mod cp2110;
 pub mod error;
 pub mod flags;

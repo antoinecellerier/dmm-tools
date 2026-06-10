@@ -1,13 +1,15 @@
-pub mod framing;
-pub mod fs9721;
+pub(crate) mod framing;
+pub(crate) mod fs9721;
 pub mod registry;
-pub mod ut171;
-pub mod ut181a;
+pub(crate) mod ut171;
+pub(crate) mod ut181a;
+// `ut61eplus` stays `pub`: the GUI specs panel consumes its tables, the CLI
+// its remote-control commands, and the golden tests its parser.
 pub mod ut61eplus;
-pub mod ut8802;
-pub mod ut8803;
-pub mod vc880;
-pub mod vc890;
+pub(crate) mod ut8802;
+pub(crate) mod ut8803;
+pub(crate) mod vc880;
+pub(crate) mod vc890;
 mod vc8x0_common;
 
 use crate::error::Result;

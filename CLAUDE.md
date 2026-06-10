@@ -4,7 +4,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 
 ## Project structure
 
-- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut171`, `ut181a`, `vc880`, `vc890`. `protocol` module is `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction.
+- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `fs9721` (UT803/UT804), `ut171`, `ut181a`, `vc880`, `vc890`. Protocol internals (framing, per-family parsers) are `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction; only `protocol::registry` and `protocol::ut61eplus` (tables, commands) are `pub` for the CLI/GUI.
 - `crates/dmm-settings/` — shared settings schema (`SharedSettings { device_family }`) used by both CLI and GUI so the config-file contract is compile-enforced. GUI-only fields (colors, panel visibility, theme) live in `dmm-gui` and merge via `#[serde(flatten)]`.
 - `crates/dmm-cli/` — CLI binary `dmm-cli`.
 - `crates/dmm-gui/` — GUI binary `dmm-gui` (eframe/egui).

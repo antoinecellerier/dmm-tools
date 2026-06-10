@@ -37,8 +37,11 @@ impl Ch9329 {
     /// only accept config commands on the output report endpoint. If this fails,
     /// we may need platform-specific code or a different HID library.
     ///
-    /// This function is not called during normal operation (config init is skipped).
-    pub fn read_config(&self) -> Result<[u8; 128]> {
+    /// This function is not called during normal operation (config init is
+    /// skipped). Kept as a diagnostic while CH9329 hardware validation is
+    /// pending (issue #5).
+    #[allow(dead_code)]
+    pub(crate) fn read_config(&self) -> Result<[u8; 128]> {
         let mut config = [0u8; 128];
         let offsets: [u8; 4] = [0x00, 0x20, 0x40, 0x60];
 
