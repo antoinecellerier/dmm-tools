@@ -112,7 +112,17 @@ GPL-3.0-or-later. See [LICENSE](LICENSE) for details.
 
 ## References
 
-- [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Protocol reverse engineering and Python implementation
-- [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Protocol reverse engineering and Go implementation
+- [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Protocol reverse engineering and Python implementation (UT61E+)
+- [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Protocol reverse engineering and Go implementation (UT61E+)
 - [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf) — CP2110/4 HID-to-UART interface specification
 - [UT61B+/D+/E+ | User Manual](https://meters.uni-trend.com/download/ut61b-d-e-user-manual/) - UNI-T user manual
+
+Independent implementations used to **cross-check** (not derive) some
+families' protocol findings — our specs are reverse-engineered clean-room
+from vendor binaries and manuals; these were consulted only for
+validation during review:
+
+- [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110) — capture-driven Python parser; cross-checked the UT171 framing, resistance scaling, and aux-frequency unit
+- [sigrok / libsigrok `uni-t-ut181a`](https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a) — cross-checked the UT181A mode-word table, COMP precision nibble, and reply codes
+- [antage/ut181a](https://github.com/antage/ut181a) — cross-checked the UT181A mode words and the HOLD button-code command
+- [pylablib](https://github.com/AlexShkarin/pyLabLib) — cross-checked the VC-880 function/range tables and status flags
