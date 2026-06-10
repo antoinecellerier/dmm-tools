@@ -84,7 +84,7 @@ Documentation is part of the deliverable — update affected docs in the same co
 - `docs/adding-devices.md` — end-to-end guide for new device support. **Read this before starting work on any new device.**
 - `docs/research/<family>/` — per-family RE methodology and wire-protocol spec.
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns surface. Critical for preserving state across sessions.
-- For new device support, touch all of: `README.md`, `docs/supported-devices.md`, `docs/verification-backlog.md`, `docs/architecture.md`, `docs/cli-reference.md`, `docs/gui-reference.md`. Also create a GitHub verification issue (match the pattern of #3/#4/#5/#12/#13/#14) and link it from `supported-devices.md`.
+- For new device support, use the `/add-device` skill (`.claude/skills/add-device/SKILL.md`) — it carries the full checklist of gates, doc touchpoints, and the verification-issue pattern.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 
 ### Changelog
