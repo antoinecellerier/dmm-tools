@@ -46,7 +46,14 @@ real hardware**. Every aspect needs end-to-end verification.
 - 7 display value fields (main + 6 sub-displays) — format and content
 - Status flag bytes (8 bytes at msg[56..63]) — all bit positions correct?
 - Battery level nibble (msg[62]) — what do the values mean?
-- Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err
+- Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err, 3=V err
+- ACV LPF (0x01) range byte — vendor ignores it and fixes 1000V (2026-06
+  review, DMSShare_decompiled.cs:23466); what does the meter send there?
+- Inbound checksum — the vendor never validates meter→host checksums; our
+  BE16 check is inferred from the host-side builder. If real frames are
+  all rejected with ChecksumMismatch, suspect a different inbound scheme.
+- Command confirmation frames — vendor `SendCommand` waits for a frame
+  whose type byte equals the command byte (5 retries); we fire-and-forget.
 - Ack protocol (0xFF+\[0x00\] after responses) — is it required or optional?
 - Commands: same as VC-880 plus 0x5D (Set Time) and 0x5E (Get Measurement)
 - PC button activation requirement

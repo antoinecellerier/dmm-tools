@@ -13,6 +13,7 @@
 
 ### Bug fixes
 
+- **VC-890 low-pass (ACV LPF) mode now reports its fixed 1000V range** — the vendor protocol ignores the range byte in LPF mode, so the range label no longer depends on an undefined byte (previously it could show 6V–1000V or nothing).
 - **Graph frame rate no longer degrades as history grows** — per-frame work now scales with the visible window instead of the full 10 000-point buffer, and the minimap keeps a steady frame rate at full history.
 - **Graph drag-to-pan works in live mode** — starting a drag in live mode snaps the view to the current end of data and drops out of live, matching the scroll-wheel behaviour. Previously drag was silently inert while following live data.
 - **Graph X-axis labels gain sub-second precision** — tight zooms (e.g. a 0.5 s span) no longer produce duplicate "9 s" labels; labels now use the grid step to add decimals when it's sub-second (e.g. "9.25 s", "1m 30.5s").

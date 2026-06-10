@@ -99,7 +99,8 @@ Offset  Size  Field
 60      1     Status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
 61      1     Status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
 62      1     Battery level (low nibble, raw 0-15 — see note below)
-63      1     Misplug warning (low nibble: 0=none, 1=mA err, 2=A err)
+63      1     Misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
+              3=V err — DMSShare_decompiled.cs:23649-23665)
 64-65   2     Checksum (BE16)
 ```
 
@@ -146,7 +147,8 @@ treat "low battery" conservatively.
 
 | Function | Ranges |
 |----------|--------|
-| Voltage (0x00-0x03) | 6V, 60V, 600V, 1000V |
+| Voltage (0x00, 0x02, 0x03) | 6V, 60V, 600V, 1000V |
+| ACV LPF (0x01) | fixed 1000V — vendor never reads the range byte (`case 1` at DMSShare_decompiled.cs:23466-23469); wire contents of the range byte in LPF mode unknown |
 | DC mV (0x04) | 600mV |
 | Frequency (0x05) | 60Hz, 600Hz, 6kHz, 60kHz, 600kHz, 6MHz, 60MHz, 600MHz |
 | Resistance (0x07) | 600Ω, 6kΩ, 60kΩ, 600kΩ, 6MΩ, 60MΩ |
@@ -154,7 +156,7 @@ treat "low battery" conservatively.
 | DC/AC µA (0x0D/0x0E) | 600µA, 6000µA |
 | DC/AC mA (0x0F/0x10) | 60mA, 600mA |
 | DC/AC A (0x11/0x12) | 10A |
-| Duty (0x06), Diode (0x09), Cont (0x08), Temp, LPF | single range |
+| Duty (0x06), Diode (0x09), Cont (0x08), Temp | single range |
 
 ## Commands -- [VENDOR]
 

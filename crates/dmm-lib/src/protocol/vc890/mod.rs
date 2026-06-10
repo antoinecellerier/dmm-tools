@@ -12,7 +12,7 @@
 //!
 //! Based on ILSpy decompilation of Voltsoft DMSShare.dll (VC890Obj,
 //! VC890Reading classes).
-//! See docs/research/vc880/reverse-engineered-protocol.md
+//! See docs/research/vc890/reverse-engineered-protocol.md
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
@@ -99,8 +99,15 @@ struct RangeEntry {
 /// VC-890 has 60,000 counts — range values are 6/60/600 (not 4/40/400).
 fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
     let table: &[RangeEntry] = match function {
-        // ACV, ACV LPF, DCV, AC+DC V — voltage ranges
-        0x00..=0x03 => &[
+        // ACV LPF: vendor never reads the range byte and fixes the range
+        // at 1000V (DMSShare_decompiled.cs:23466-23469, `case 1`), unlike
+        // the other voltage functions. What the meter sends in the range
+        // byte for LPF is unknown — accept any index.
+        0x01 => {
+            return Some(("V", "1000V"));
+        }
+        // ACV, DCV, AC+DC V — voltage ranges
+        0x00 | 0x02 | 0x03 => &[
             RangeEntry {
                 unit_override: "",
                 range_label: "6V",
@@ -495,7 +502,8 @@ impl Protocol for Vc890Protocol {
 ///   payload[57]    = status 4: OuterSel(0), Pass(1), Comp(2), Log_h(3)
 ///   payload[58]    = status 5: Mem(0), BarPol(1), Clr(2), Shift(3)
 ///   payload[59]    = battery level (low nibble)
-///   payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err)
+///   payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
+///     3=V err — DMSShare_decompiled.cs:23649-23665)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     if payload.len() < LIVE_DATA_PAYLOAD_LEN {
         return Err(Error::invalid_response(
@@ -651,6 +659,19 @@ mod tests {
         assert_eq!(m.mode, "AC V");
         assert_eq!(m.unit, "V");
         assert_eq!(m.range_label, "6V");
+    }
+
+    #[test]
+    fn parse_acv_lpf_fixed_range() {
+        // Vendor fixes LPF at 1000V and never reads the range byte
+        // (DMSShare_decompiled.cs:23466-23469) — any index must work.
+        for range_byte in [0x30, 0x33, 0x00, 0xFF] {
+            let payload = make_payload(0x01, range_byte, b" 230.45", zero_status());
+            let m = parse_measurement(&payload).unwrap();
+            assert_eq!(m.mode, "ACV LPF");
+            assert_eq!(m.unit, "V");
+            assert_eq!(m.range_label, "1000V");
+        }
     }
 
     #[test]
