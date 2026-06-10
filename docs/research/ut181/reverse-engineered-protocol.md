@@ -138,7 +138,7 @@ The checksum covers the length field and all payload bytes. It does
 | 0x0D | GET_REC_SAMPLES | uint16 LE index + uint32 LE offset(1-based) | Get recording data |
 | 0x0E | GET_REC_COUNT | (none) | Get count of recordings |
 | 0x0F | DEL_RECORDING | uint16 LE index | Delete recording [VENDOR] — confirmed from UT181A.exe decompilation: called after "Are you sure that you want to delete this record?" dialog, followed by GET_REC_COUNT refresh. Not in community implementations. |
-| 0x12 | HOLD | (none) | Toggle HOLD mode |
+| 0x12 | HOLD (button press) | `0x5A` = HOLD button code | antage — the only implementation that transmits 0x12 — sends `[0x12, 0x5A]` (its `toggle_hold`); sigrok defines the opcode but never sends it. Whether bare `[0x12]` also works is untested. |
 
 ---
 
@@ -231,7 +231,7 @@ When misc2 bit 4 (COMP) is set, after the bargraph unit field:
 |--------|------|-------|
 | 0 | 1 | Comparison mode: 0=INNER, 1=OUTER, 2=BELOW, 3=ABOVE |
 | 1 | 1 | Result: 0=PASS, 1=FAIL |
-| 2 | 1 | Precision/digits |
+| 2 | 1 | Precision/digits — **low nibble, unshifted** (sigrok protocol.c:112: "1 byte digits, not shifted as in other precision fields") |
 | 3 | 4 | High limit (float32 LE) |
 | 7 | 4 | Low limit (float32 LE, only for INNER/OUTER modes) |
 
@@ -245,7 +245,7 @@ The mode word is uint16 LE with structured nibble encoding:
 - Nibble 1: variant (1=normal, 2=Hz/peak/ACDC, 3=peak, 4=LPF, etc.)
 - Nibble 0 (LSB): 1=standard, 2=REL variant
 
-97 total modes. Selected examples:
+79 total modes (count corrected 2026-06: both sigrok and antage define 79). Selected examples:
 
 | Mode | Code | Description |
 |------|------|-------------|
@@ -449,7 +449,7 @@ driver). No [UNVERIFIED] items remain.
 |--------|--------|---------|
 | Frame format (header, length, checksum) | [KNOWN] | 3 implementations |
 | All 15 commands (0x01-0x12) | [KNOWN] | antage + sigrok + loblab |
-| All 97 mode words | [KNOWN] | antage + sigrok |
+| All 79 mode words | [KNOWN] | antage + sigrok |
 | Range bytes 0x00-0x08 | [KNOWN] | 3 implementations |
 | Measurement packet (all 4 variants) | [KNOWN] | antage + sigrok |
 | COMP mode extension | [KNOWN] | sigrok driver |

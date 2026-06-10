@@ -202,8 +202,16 @@ real hardware**. Every aspect needs end-to-end verification.
   2026-04-07 by @alexander-magon: VDC mode returns valid float32 values.
   Precision byte decimal places (bits 4-7) confirmed to produce sane
   display formatting.
-- Mode word decoding (97 nibble-encoded uint16 modes) — only 0x3111
-  (V DC) verified so far. Need at least one mode per family to confirm
+- Mode word decoding (79 nibble-encoded uint16 modes) — only 0x3111
+  (V DC) verified so far. **Corrections from the 2026-06 review** (per
+  sigrok + antage, hardware pending): DC-current n1=2 codes
+  (0x8121/0x9121/0xA121) are AC+DC, not Hz; 0x4121 = mV DC Peak (sigrok
+  notes 0x4131 as a possible alternative — check on hardware); 0x5212 =
+  Continuity open-beeper and 0x6112 = Diode Alarm (not REL variants);
+  temperature n1 selects the display arrangement (T1(T2)/T2(T1)/
+  T1-T2/T2-T1). HOLD command now sends `[0x12, 0x5A]` (antage's
+  button-code form) — confirm it toggles HOLD. COMP digits read from
+  the low nibble unshifted. Need at least one mode per family to confirm
   the nibble decoder works broadly.
 - Device-sent unit string parsing — only "VDC" verified so far
 - Relative format (0x10) parsing — implemented, needs hardware verification

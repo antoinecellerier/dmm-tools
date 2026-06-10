@@ -149,7 +149,7 @@ ON" in the meter's SETUP menu.
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
 | **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/4) | 1-byte length, LE float32, 26 modes |
-| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | 🧪 [partial hardware verification](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 97 modes. Init, framing, and VDC parsing confirmed on real hardware ([details](verification-backlog.md)); other modes pending. |
+| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | 🧪 [partial hardware verification](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 79 modes. Init, framing, and VDC parsing confirmed on real hardware ([details](verification-backlog.md)); other modes pending. |
 
 ### Independent research findings
 
@@ -167,7 +167,7 @@ Our research into the UT171 and UT181A protocols is documented in
   report IDs). Cross-referenced against
   [gulux/Uni-T-CP2110](https://github.com/gulux/Uni-T-CP2110).
 - **UT181A**: Fully documented by the community (3 independent
-  implementations agree on every detail). 97 measurement modes, complete
+  implementations agree on every detail). 79 measurement modes, complete
   recording/data logging protocol, COMP mode. The
   [antage/ut181a Protocol.md](https://github.com/antage/ut181a/blob/master/Protocol.md)
   is the definitive reference.

@@ -8,7 +8,7 @@
 //! Checksum = 16-bit LE sum of length + payload bytes.
 //!
 //! Values are IEEE 754 float32 (LE) with device-sent unit strings.
-//! 97 mode words (uint16 LE) with structured nibble encoding.
+//! 79 mode words (uint16 LE) with structured nibble encoding.
 //!
 //! Based on 3 independent community implementations:
 //! antage/ut181a (Rust), loblab/ut181a (C++), sigrok uni-t-ut181a (C).
@@ -46,6 +46,33 @@ fn decode_mode_word(mode: u16) -> Cow<'static, str> {
     let n2 = (mode >> 8) & 0xF;
     let n1 = (mode >> 4) & 0xF;
     let n0 = mode & 0xF;
+
+    // Two mode words break the "N0=2 means REL" rule (sigrok
+    // MODE_CONT_OPEN / MODE_DIODE_ALARM; antage Beeper_Open /
+    // Diode_Alarm agree):
+    match mode {
+        0x5212 => return Cow::Borrowed("Continuity (open)"),
+        0x6112 => return Cow::Borrowed("Diode Alarm"),
+        _ => {}
+    }
+
+    // Temperature families use N1 as the display arrangement, not the
+    // generic variant nibble (sigrok: T1(T2), T2(T1), T1-T2, T2-T1).
+    if n3 == 0x4 && (n2 == 0x2 || n2 == 0x3) {
+        let family = if n2 == 0x2 { "°C" } else { "°F" };
+        let arrangement = match n1 {
+            0x2 => " T2",
+            0x3 => " T1-T2",
+            0x4 => " T2-T1",
+            _ => "",
+        };
+        let rel = if n0 == 0x2 { " REL" } else { "" };
+        return if arrangement.is_empty() && rel.is_empty() {
+            Cow::Borrowed(family)
+        } else {
+            Cow::Owned(format!("{family}{arrangement}{rel}"))
+        };
+    }
 
     let family = match n3 {
         0x1 => "V AC",
@@ -94,10 +121,19 @@ fn decode_mode_word(mode: u16) -> Cow<'static, str> {
 
     let variant = match n1 {
         0x1 => "",
-        0x2 => match n3 {
-            0x1 | 0x2 => " Hz",
-            0x3 => " AC+DC",
-            0x8..=0xA => " Hz",
+        0x2 => match (n3, n2) {
+            // V AC / mV AC: frequency display
+            (0x1 | 0x2, _) => " Hz",
+            // V DC: AC+DC
+            (0x3, _) => " AC+DC",
+            // mV DC: 0x4121 = mV DC Peak per sigrok/antage (sigrok notes
+            // the code might be 0x4131 — hardware check pending)
+            (0x4, 0x1) => " Peak",
+            // Currents: n1=2 on the DC sub-function (n2=1) is AC+DC
+            // (sigrok MODE_uA/mA/A_DC_ACDC = 0x8121/0x9121/0xA121);
+            // Hz applies only to the AC sub-function (n2=2)
+            (0x8..=0xA, 0x1) => " AC+DC",
+            (0x8..=0xA, 0x2) => " Hz",
             _ => "",
         },
         0x3 => " Peak",
@@ -122,10 +158,16 @@ fn decode_mode_word(mode: u16) -> Cow<'static, str> {
 }
 
 /// Parse a UT181A unit string from 8 bytes (null-terminated).
+///
+/// The meter sends Latin-1, not UTF-8 (spec §8: 0xB0 = degree symbol),
+/// so decode byte-by-byte — `from_utf8_lossy` would mangle °C/°F into
+/// replacement characters.
 fn parse_unit_string(bytes: &[u8]) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    let trimmed = s.trim_end_matches('\0');
-    trimmed.to_string()
+    bytes
+        .iter()
+        .take_while(|&&b| b != 0)
+        .map(|&b| b as char)
+        .collect()
 }
 
 const UT181A_COMMANDS: &[&str] = &[
@@ -208,7 +250,11 @@ impl Protocol for Ut181aProtocol {
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let frame = match command {
-            "hold" => build_command(&[0x12]),
+            // 0x12 = button-press command, 0x5A = HOLD button code.
+            // antage (the only reference implementation that transmits
+            // this) sends the two-byte payload; sending bare [0x12] is
+            // untested. Hardware check pending.
+            "hold" => build_command(&[0x12, 0x5A]),
             "range" => {
                 // Cycle to next manual range (range + 1, wrapping)
                 // Without state tracking, just toggle to range 1
@@ -650,7 +696,11 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                     data[offset + 5],
                     data[offset + 6],
                 ]);
-                let dp = ((comp_prec >> 4) & 0x0F) as usize;
+                // COMP digits live in the LOW nibble, unshifted — unlike
+                // the other precision fields (sigrok protocol.c:112
+                // "1 byte digits, not shifted as in other precision
+                // fields"; decode at protocol.c:2123).
+                let dp = (comp_prec & 0x0F) as usize;
                 let comp_mode_str = match comp_mode {
                     0 => "INNER",
                     1 => "OUTER",
@@ -916,6 +966,30 @@ mod tests {
         assert_eq!(decode_mode_word(0x1141), "V AC LPF");
         assert_eq!(decode_mode_word(0x3121), "V DC AC+DC");
         assert_eq!(decode_mode_word(0x1112), "V AC REL");
+        // DC currents with n1=2 are AC+DC (sigrok MODE_*_DC_ACDC), not Hz;
+        // Hz applies only to the AC sub-function.
+        assert_eq!(decode_mode_word(0x8121), "µA DC AC+DC");
+        assert_eq!(decode_mode_word(0x9121), "mA DC AC+DC");
+        assert_eq!(decode_mode_word(0xA121), "A DC AC+DC");
+        assert_eq!(decode_mode_word(0x8221), "µA AC Hz");
+        // 0x4121 = mV DC Peak (sigrok/antage)
+        assert_eq!(decode_mode_word(0x4121), "mV DC Peak");
+        // Non-REL exceptions to the n0=2 rule
+        assert_eq!(decode_mode_word(0x5212), "Continuity (open)");
+        assert_eq!(decode_mode_word(0x6112), "Diode Alarm");
+        // Temperature display arrangements
+        assert_eq!(decode_mode_word(0x4211), "°C");
+        assert_eq!(decode_mode_word(0x4221), "°C T2");
+        assert_eq!(decode_mode_word(0x4231), "°C T1-T2");
+        assert_eq!(decode_mode_word(0x4241), "°C T2-T1");
+        assert_eq!(decode_mode_word(0x4321), "°F T2");
+    }
+
+    #[test]
+    fn parse_unit_string_latin1_degree() {
+        // 0xB0 = '°' in Latin-1; from_utf8_lossy would produce U+FFFD.
+        assert_eq!(parse_unit_string(&[0xB0, b'C', 0, 0, 0, 0, 0, 0]), "°C");
+        assert_eq!(parse_unit_string(&[0xB0, b'F', 0, 0, 0, 0, 0, 0]), "°F");
     }
 
     #[test]
@@ -972,9 +1046,10 @@ mod tests {
 
     #[test]
     fn build_command_hold() {
-        let frame = build_command(&[0x12]);
-        // AB CD 03 00 12 15 00
-        assert_eq!(frame, vec![0xAB, 0xCD, 0x03, 0x00, 0x12, 0x15, 0x00]);
+        // Button-press (0x12) with HOLD button code (0x5A), per antage.
+        let frame = build_command(&[0x12, 0x5A]);
+        // len = 2 + 2 = 4; checksum = 04 + 00 + 12 + 5A = 0x70
+        assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x12, 0x5A, 0x70, 0x00]);
     }
 
     #[test]
