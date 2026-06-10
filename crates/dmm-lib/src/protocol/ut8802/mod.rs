@@ -296,6 +296,15 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let position = payload[0];
     let dp_pos = payload[4] & 0x0F;
+    // The framing extractor already rejects dp_pos > 4, but the index math
+    // below (`chars.len() - dp_pos - 1`) would panic on larger values, so
+    // guard here too in case this is ever called on unvalidated payloads.
+    if dp_pos > 4 {
+        return Err(Error::invalid_response(
+            format!("ut8802 invalid decimal point position {dp_pos}"),
+            payload,
+        ));
+    }
     let sign_byte = payload[6];
 
     // Look up position code
@@ -504,6 +513,17 @@ mod tests {
         let payload = make_payload(0x01, [0, 0, 0x0C, 0, 0], 0, 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
+    }
+
+    #[test]
+    fn out_of_range_dp_pos_errors_instead_of_panicking() {
+        // dp_pos 5-15 would underflow the decimal-insertion index math;
+        // normally rejected by the framing extractor, but parse_measurement
+        // must also refuse it rather than panic.
+        for dp_pos in 5..=15u8 {
+            let payload = make_payload(0x05, [1, 2, 3, 4, 5], dp_pos, 0x02, 0x00, 0x00);
+            assert!(parse_measurement(&payload).is_err(), "dp_pos={dp_pos}");
+        }
     }
 
     #[test]
