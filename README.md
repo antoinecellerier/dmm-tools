@@ -10,6 +10,14 @@ Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 
 ![GUI screenshot — live DC mA measurement with graph, statistics, reference line triggers, and recording](assets/gui-screenshot.png)
 
+## [GUI](docs/gui-reference.md)
+
+- Real-time value display and time-series graph with minimap
+- Statistics, cursor measurements, reference lines with threshold triggers
+- Live specifications (resolution, accuracy) for the current range
+- Recording with CSV export and remote control buttons
+- Big meter mode for bench-mount use
+
 ## [CLI](docs/cli-reference.md)
 
 - Live measurement streaming with text, CSV, and JSON output
@@ -48,14 +56,6 @@ Connect to other device families with `--device`:
 $ dmm-cli --device ut8803 capture
 WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware).
 ```
-
-## [GUI](docs/gui-reference.md)
-
-- Real-time value display and time-series graph with minimap
-- Statistics, cursor measurements, reference lines with threshold triggers
-- Live specifications (resolution, accuracy) for the current range
-- Recording with CSV export and remote control buttons
-- Big meter mode for bench-mount use
 
 ## Supported devices
 
