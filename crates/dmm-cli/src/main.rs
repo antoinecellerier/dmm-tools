@@ -1061,6 +1061,27 @@ mod tests {
         assert_eq!(fields[4], "22V");
     }
 
+    /// The UT61E+ separates the sign from the digits on some ranges. That
+    /// space must not reach the CSV, or the whole column parses as text.
+    #[test]
+    fn format_csv_negative_value_is_numeric() {
+        let m = make_test_measurement(0x02, 0x01, b"- 55.79", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let mut buf = Vec::new();
+        format::format_measurement(
+            &mut buf,
+            &m,
+            &dmm_lib::WallClock::new(),
+            &OutputFormat::Csv,
+            false,
+            None,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        let fields: Vec<&str> = output.trim().split(',').collect();
+        assert_eq!(fields[2], "-55.79");
+        assert_eq!(fields[2].parse::<f64>().unwrap(), -55.79);
+    }
+
     #[test]
     fn format_json_output() {
         // flag1=0x02 (HOLD), flag2=0x00 (AUTO on, inverted logic)

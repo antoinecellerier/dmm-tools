@@ -75,6 +75,37 @@ pub struct Measurement {
     pub mode_spec: Option<&'static ModeSpecInfo>,
 }
 
+impl Measurement {
+    /// The measured value formatted for machine-readable export (CSV).
+    ///
+    /// Prefers the meter's own display digits so the exported precision
+    /// matches what the meter showed ("5.0000", not "5"), but strips the
+    /// spaces some protocols place between the sign and the digits — the
+    /// UT61E+ sends `"- 55.79"` on some ranges, which would make the whole
+    /// column parse as text. The result is the same string the protocol
+    /// parsed the value from, so it always reads back as a number.
+    ///
+    /// For display use `to_string()` / `display_raw` instead: those keep the
+    /// meter's padding, which holds the on-screen width steady.
+    pub fn value_export_str(&self) -> Cow<'_, str> {
+        match &self.value {
+            MeasuredValue::Normal(v) => match self.display_raw.as_deref() {
+                Some(raw) => {
+                    let trimmed = raw.trim();
+                    if trimmed.contains(' ') {
+                        Cow::Owned(trimmed.chars().filter(|c| *c != ' ').collect())
+                    } else {
+                        Cow::Borrowed(trimmed)
+                    }
+                }
+                None => Cow::Owned(v.to_string()),
+            },
+            MeasuredValue::Overload => Cow::Borrowed("OL"),
+            MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
+        }
+    }
+}
+
 #[cfg(any(test, feature = "test-support"))]
 impl Measurement {
     /// Create a `Measurement` with sensible defaults for testing.
@@ -145,6 +176,41 @@ mod tests {
     fn display_overload() {
         let m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
         assert!(m.to_string().contains("OL"));
+    }
+
+    #[test]
+    fn export_str_keeps_the_meter_digits() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        // test_fixture's display_raw is "  5.678" — padding only.
+        assert_eq!(m.value_export_str(), "5.678");
+    }
+
+    /// The UT61E+ sends the sign and digits separated by a space on some
+    /// ranges; leaving it in makes the CSV `value` column non-numeric.
+    #[test]
+    fn export_str_strips_the_sign_space() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(-55.79), "V", StatusFlags::default());
+        m.display_raw = Some("- 55.79".to_string());
+        assert_eq!(m.value_export_str(), "-55.79");
+        assert_eq!(m.value_export_str().parse::<f64>().unwrap(), -55.79);
+    }
+
+    #[test]
+    fn export_str_falls_back_to_the_parsed_value() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.25), "V", StatusFlags::default());
+        m.display_raw = None;
+        assert_eq!(m.value_export_str(), "1.25");
+    }
+
+    #[test]
+    fn export_str_labels_overload_and_ncv() {
+        let mut m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
+        assert_eq!(m.value_export_str(), "OL");
+        m.value = MeasuredValue::NcvLevel(3);
+        assert_eq!(m.value_export_str(), "NCV:3");
     }
 
     #[test]

@@ -1538,7 +1538,7 @@ impl App {
                         wtr.write_record([
                             s.wall_time.to_rfc3339().as_str(),
                             s.mode(),
-                            s.value_str().as_str(),
+                            s.value_export_str().as_ref(),
                             s.unit(),
                             s.range_label(),
                             s.flags_str().as_str(),

@@ -27,6 +27,10 @@ impl Sample {
 
     /// Display form of the measured value: trimmed `display_raw` when the
     /// protocol provides it, or a numeric / OL / NCV fallback otherwise.
+    ///
+    /// Keeps the meter's own spacing for a steady on-screen width. Use
+    /// [`Sample::value_export_str`] for CSV, where that spacing would make the
+    /// column non-numeric.
     pub fn value_str(&self) -> String {
         if let Some(raw) = &self.measurement.display_raw {
             raw.trim().to_string()
@@ -37,6 +41,11 @@ impl Sample {
                 MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
             }
         }
+    }
+
+    /// Value formatted for CSV export — see [`Measurement::value_export_str`].
+    pub fn value_export_str(&self) -> std::borrow::Cow<'_, str> {
+        self.measurement.value_export_str()
     }
 
     pub fn mode(&self) -> &str {
