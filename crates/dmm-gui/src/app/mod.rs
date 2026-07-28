@@ -649,11 +649,17 @@ impl App {
                         continue;
                     }
 
-                    // Reset integrator on mode change (units become incompatible).
+                    // Reset the session accumulators on mode change: units
+                    // become incompatible, and the stats panel labels Min/Max/
+                    // Avg with the *current* unit, so carrying volt-scale
+                    // numbers into an ohms reading presents them as ohms.
+                    // `Graph::push` clears its own history on the same
+                    // condition.
                     if let Some(prev) = &self.last_measurement
                         && prev.mode != m.mode
                     {
                         self.integrator.reset();
+                        self.stats.reset();
                     }
 
                     match &m.value {
