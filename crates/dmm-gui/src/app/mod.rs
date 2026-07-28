@@ -395,8 +395,9 @@ impl App {
         if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::C)) {
             match self.connection_state {
                 ConnectionState::Disconnected => self.connect(ctx),
-                ConnectionState::Connected => self.disconnect(),
-                ConnectionState::Reconnecting => {}
+                // Reconnecting cancels the retry loop, matching the
+                // Disconnect button shown in that state.
+                ConnectionState::Connected | ConnectionState::Reconnecting => self.disconnect(),
             }
         }
 
@@ -971,6 +972,16 @@ impl App {
                     };
                     ui.add_enabled(false, egui::Button::new(label))
                         .on_disabled_hover_text(hover);
+                    // The reconnect loop retries every 2 s indefinitely, so
+                    // this is the user's only way out short of killing the
+                    // app — the status tooltip above tells them to click it.
+                    if ui
+                        .button("Disconnect")
+                        .on_hover_text("Stop retrying and close the connection (Ctrl+Shift+C)")
+                        .clicked()
+                    {
+                        self.disconnect();
+                    }
                 }
             }
 

@@ -371,7 +371,8 @@ Shown automatically when connection fails:
   during initial timeouts, then step-by-step instructions to enable USB mode
   (insert module, turn on, long-press USB/Hz until S icon appears)
 
-Auto-reconnection retries every 2 seconds after a disconnect.
+Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
+(or press `Ctrl+Shift+C`) while it is retrying to stop the loop.
 
 ## Accessibility
 
