@@ -1523,6 +1523,14 @@ impl App {
 
     fn export_csv(&mut self) {
         if self.recording.samples.is_empty() {
+            // Returning silently made the button and Ctrl+E look broken:
+            // no file dialog, no message, nothing in the log. Say why.
+            info!("export skipped: recording buffer is empty");
+            self.toast = Some((
+                "Nothing to export \u{2014} press Record to capture samples first".to_string(),
+                true,
+                Instant::now(),
+            ));
             return;
         }
         // Clone samples so the file dialog + write runs on a separate thread
