@@ -9,6 +9,10 @@
 - **Meters on a CH9325 or CH9329 cable now deliver readings** — an idle poll (the cable reporting "nothing new since last time") was treated as a lost connection, so UT803/UT804 timed out on every measurement and never showed a value.
 - **A single corrupted reading no longer drops the GUI connection** — one bad frame used to trigger a full reconnect: a two-second gap in the graph plus an identification beep from the meter. Unreadable frames are now reported and skipped, and a dial position the meter's tables don't cover no longer leaves the GUI reconnecting in a loop.
 
+### CLI
+
+- **`read` survives an unreadable frame instead of exiting** — one bad checksum used to end the run, so an overnight `--count 0` capture stopped at the first glitch. Bad frames are now skipped with a warning and counted in the closing summary.
+
 ## v0.5.0
 
 ### GUI

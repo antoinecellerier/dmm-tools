@@ -4,6 +4,7 @@ mod format;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
+use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
@@ -649,6 +650,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let mut integrator = dmm_lib::stats::Integrator::new();
     let mut integral_unit: Option<String> = None;
     let mut i = 0usize;
+    let mut protocol_errors = 0usize;
     let mut stream = MeasurementStream::new(dmm, tick);
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
@@ -708,6 +710,24 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 // Break so the summary prints normally.
                 break;
             }
+            Err(e) if e.kind() == ErrorKind::Protocol => {
+                // One unparseable frame must not end a long logging run: a
+                // single noisy byte would throw away the rest of an overnight
+                // capture even though the next request would have succeeded.
+                // Report it and carry on, as `debug` does.
+                //
+                // Throttled: a meter parked in a mode this family's tables
+                // don't cover fails on every sample, and an unattended run
+                // would otherwise fill stderr with identical lines.
+                log::warn!("protocol error: {e}");
+                protocol_errors += 1;
+                if protocol_errors == 1 || protocol_errors.is_multiple_of(100) {
+                    eprintln!(
+                        "{} {e} (skipped {protocol_errors} so far)",
+                        style("Warning:").yellow()
+                    );
+                }
+            }
             Err(e) => {
                 return Err(e.into());
             }
@@ -716,6 +736,13 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
     info!("shutting down");
     writer.flush()?;
+
+    if protocol_errors > 0 {
+        eprintln!(
+            "\n{} {protocol_errors} readings skipped (unreadable frames)",
+            style("Note:").yellow(),
+        );
+    }
 
     if stats.count > 0 {
         eprintln!(
