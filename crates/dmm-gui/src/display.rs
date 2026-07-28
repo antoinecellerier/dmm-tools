@@ -81,6 +81,9 @@ fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
         out.push_str(", ");
         out.push_str(label);
     };
+    if flags.hv_warning {
+        push("high voltage warning", out);
+    }
     if flags.auto_range {
         push("auto range", out);
     }
@@ -530,6 +533,27 @@ mod tests {
         assert!(label.contains("hold"), "got {label:?}");
     }
 
+    /// The meter's high-voltage indicator is a safety signal — a screen
+    /// reader user must hear it, and hear it before the routine flags.
+    #[test]
+    fn live_region_label_announces_high_voltage_first() {
+        let m = Measurement::test_fixture(
+            MeasuredValue::Normal(400.0),
+            "V",
+            StatusFlags {
+                hv_warning: true,
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        let label = live_region_label(Some(&m));
+        let hv = label.find("high voltage").expect("HV must be announced");
+        let auto = label
+            .find("auto range")
+            .expect("auto range still announced");
+        assert!(hv < auto, "HV must come first, got {label:?}");
+    }
+
     #[test]
     fn live_region_label_no_flags_when_inactive() {
         let m = Measurement::test_fixture(MeasuredValue::Normal(0.0), "V", StatusFlags::default());
@@ -706,6 +730,13 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) {
     let accent = tc.accent();
     let warning = tc.recording_full_warning();
 
+    // Hazard first, and in the error color rather than the generic warning
+    // one — this is the meter telling the user the probes are on a dangerous
+    // potential. The "HV!" text matches `StatusFlags::Display`, so the badge,
+    // the recording panel and the CSV flags column all say the same thing.
+    if m.flags.hv_warning {
+        badge(ui, "HV!", tc.status_error());
+    }
     if m.flags.auto_range {
         badge(ui, "AUTO", accent);
     }
