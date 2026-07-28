@@ -263,6 +263,39 @@ The switch statement maps position codes to abstract functional codes:
 Note: The decompiled switch statement matches the programming manual
 exactly, confirming the position code assignments. [VENDOR]
 
+**Unit magnitude per position** -- **Resolved from vendor [VENDOR]**
+(2026-07 review):
+
+The five display digits are **range-relative**, not absolute. With a
+decimal-point position of 0-4 the smallest magnitude the frame can carry
+is 0.0001, so 10 nF (1e-8 F) or 1.5 MHz cannot be expressed in the base
+unit at all — the position code supplies the SI prefix.
+
+`FUN_1001cd30` (uci_dll_decompiled.txt:23603) maps the position code to a
+UnitMag index, which the vendor renders through `FUN_1001cec0`
+(line 23704). Index semantics are the same `n/u/m/std/K/M/G` scale the
+UT8803 uses for its D12-D14 field:
+
+| UnitMag | Prefix | Position codes |
+|---------|--------|----------------|
+| 0 | n | 0x27 |
+| 1 | µ | 0x0D, 0x28 |
+| 2 | m | 0x01, 0x0E, 0x10-0x14, 0x29 |
+| 3 | (none) | all others (default) |
+| 4 | k | 0x1A-0x1C, 0x2C |
+| 5 | M | 0x1D, 0x1F, 0x2D |
+
+Base units come from `FUN_1001cf30` (line 23729): 0=V (0x01, 0x03-0x06,
+0x09-0x0C, 0x23, 0x2A), 1=A (0x0D, 0x0E, 0x10-0x14, 0x16, 0x18),
+2=Ω (0x19-0x1D, 0x1F, 0x24), 3=Hz (0x2B-0x2D), 7=F (0x27-0x29),
+8=hFE (0x25), 9=% (0x22).
+
+Our `POSITION_TABLE` bakes prefix and base unit together into its `unit`
+column, so a 2 kΩ reading of "1.234" reports `1.234 kΩ` and a 200 mV
+reading reports millivolts. This mirrors how the UT8803 parser resolves
+its units (`FUN_1001cdc0` + `FUN_1001cff0`). Hardware confirmation is
+still pending — see `docs/verification-backlog.md`.
+
 ### 3.4 Byte 5 Flags (Bits 4-5) -- [VENDOR]
 
 Byte 5 bits 4-5 (`>>4 & 3`, `local_2d` at uci_dll_decompiled.txt:24728)

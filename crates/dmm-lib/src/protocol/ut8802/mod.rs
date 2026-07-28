@@ -27,8 +27,23 @@ use std::time::Instant;
 /// Combined function + range position codes from the programming manual
 /// (page 10) and Ghidra decompilation (FUN_1001c7b0, line 23234).
 /// Both sources agree on all 35 entries.
+///
+/// `unit` carries the SI prefix for the position, because the meter's five
+/// display digits are **range-relative**: with a decimal point at 0-4 the
+/// smallest magnitude it can express is 0.0001, so 10 nF or 1.5 MHz simply
+/// cannot be sent in farads or hertz. The prefix per position comes from
+/// `FUN_1001cd30` in uci.dll (line 23603), which returns the UnitMag index
+/// (0=n, 1=µ, 2=m, 3=none, 4=k, 5=M) that the vendor renders via
+/// `FUN_1001cec0`; the base units it combines with are `FUN_1001cf30`
+/// (line 23729) and match the `unit` column here. The sibling UT8803 parser
+/// resolves its units the same way (`display_unit`, FUN_1001cdc0/FUN_1001cff0).
+/// See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.3.
+///
+/// `range_label` is left empty where the manual publishes no numeric span —
+/// the capacitance and frequency positions are named only by their decade,
+/// which is now in `unit`.
 const POSITION_TABLE: &[(u8, &str, &str, &str)] = &[
-    (0x01, "DC V", "V", "200mV"),
+    (0x01, "DC V", "mV", "200mV"),
     (0x03, "DC V", "V", "2V"),
     (0x04, "DC V", "V", "20V"),
     (0x05, "DC V", "V", "200V"),
@@ -47,22 +62,22 @@ const POSITION_TABLE: &[(u8, &str, &str, &str)] = &[
     (0x16, "DC A", "A", "2A"),
     (0x18, "AC A", "A", "20A"),
     (0x19, "Ω", "Ω", "200Ω"),
-    (0x1A, "Ω", "Ω", "2kΩ"),
-    (0x1B, "Ω", "Ω", "20kΩ"),
-    (0x1C, "Ω", "Ω", "200kΩ"),
-    (0x1D, "Ω", "Ω", "2MΩ"),
-    (0x1F, "Ω", "Ω", "200MΩ"),
+    (0x1A, "Ω", "kΩ", "2kΩ"),
+    (0x1B, "Ω", "kΩ", "20kΩ"),
+    (0x1C, "Ω", "kΩ", "200kΩ"),
+    (0x1D, "Ω", "MΩ", "2MΩ"),
+    (0x1F, "Ω", "MΩ", "200MΩ"),
     (0x22, "Duty %", "%", ""),
     (0x23, "Diode", "V", ""),
     (0x24, "Continuity", "Ω", ""),
     (0x25, "hFE", "", ""),
-    (0x27, "Capacitance", "F", "nF"),
-    (0x28, "Capacitance", "F", "µF"),
-    (0x29, "Capacitance", "F", "mF"),
+    (0x27, "Capacitance", "nF", ""),
+    (0x28, "Capacitance", "µF", ""),
+    (0x29, "Capacitance", "mF", ""),
     (0x2A, "SCR", "V", ""),
-    (0x2B, "Hz", "Hz", "Hz"),
-    (0x2C, "Hz", "Hz", "kHz"),
-    (0x2D, "Hz", "Hz", "MHz"),
+    (0x2B, "Hz", "Hz", ""),
+    (0x2C, "Hz", "kHz", ""),
+    (0x2D, "Hz", "MHz", ""),
 ];
 
 /// Look up a position code in the table. Returns (mode, unit, range_label).
@@ -498,13 +513,69 @@ mod tests {
 
     #[test]
     fn parse_resistance() {
-        // Resistance 2kΩ, display "1.234" (dp_pos=3)
+        // Resistance 2kΩ, display "1.234" (dp_pos=3). The digits are
+        // range-relative, so this is 1.234 kΩ — the unit carries the prefix.
         let payload = make_payload(0x1A, [0, 1, 2, 3, 4], 3, 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "Ω");
-        assert_eq!(m.unit, "Ω");
+        assert_eq!(m.unit, "kΩ");
         assert_eq!(m.range_label, "2kΩ");
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1.234).abs() < 1e-6));
+    }
+
+    /// The five display digits are range-relative: 10 nF is sent as "10.00"
+    /// on the nF position, and reporting that in farads would be off by 10^9.
+    /// Prefixes come from `FUN_1001cd30` (uci.dll).
+    #[test]
+    fn capacitance_units_carry_the_range_decade() {
+        for (position, expected) in [(0x27, "nF"), (0x28, "µF"), (0x29, "mF")] {
+            let payload = make_payload(position, [0, 1, 0, 0, 0], 2, 0x00, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert_eq!(m.mode, "Capacitance");
+            assert_eq!(m.unit, expected, "position {position:#04x}");
+            assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 10.0).abs() < 1e-6));
+        }
+    }
+
+    #[test]
+    fn frequency_units_carry_the_range_decade() {
+        for (position, expected) in [(0x2B, "Hz"), (0x2C, "kHz"), (0x2D, "MHz")] {
+            let payload = make_payload(position, [0, 1, 5, 0, 0], 3, 0x00, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert_eq!(m.mode, "Hz");
+            assert_eq!(m.unit, expected, "position {position:#04x}");
+            assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1.5).abs() < 1e-6));
+        }
+    }
+
+    /// The 200 mV position reports millivolts, not volts — `FUN_1001cd30`
+    /// returns the `m` prefix for position 0x01.
+    #[test]
+    fn millivolt_range_reports_millivolts() {
+        let payload = make_payload(0x01, [0, 1, 2, 3, 4], 2, 0x00, 0x00, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(m.unit, "mV");
+        assert_eq!(m.range_label, "200mV");
+    }
+
+    /// Positions whose base unit needs no prefix must stay unprefixed.
+    #[test]
+    fn unprefixed_positions_keep_the_base_unit() {
+        for (position, expected) in [
+            (0x04, "V"),  // DC V 20V
+            (0x16, "A"),  // DC A 2A
+            (0x19, "Ω"),  // 200Ω
+            (0x22, "%"),  // duty
+            (0x23, "V"),  // diode
+            (0x24, "Ω"),  // continuity
+            (0x25, ""),   // hFE
+            (0x2B, "Hz"), // Hz
+        ] {
+            let payload = make_payload(position, [0, 0, 1, 0, 0], 1, 0x00, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert_eq!(m.unit, expected, "position {position:#04x}");
+        }
     }
 
     #[test]

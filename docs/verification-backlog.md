@@ -112,6 +112,15 @@ real hardware**. Every aspect needs end-to-end verification.
   QinHeng/CH9325 init path, never to CP2110 devices (2026-06 review);
   does the UT8802 stream without it, and is sending it harmful?
 - Position code mapping (35 codes, 0x01-0x2D with gaps)
+- Unit magnitude per position. **Resolved from vendor [VENDOR]** (2026-07
+  review): the display digits are range-relative, and `FUN_1001cd30`
+  (uci_dll_decompiled.txt:23603) maps each position code to the SI prefix
+  the vendor renders via `FUN_1001cec0`. Previously the table reported
+  base units with the decade stranded in `range_label`, so capacitance
+  and frequency readings were exported off by up to 10^9 (10 nF logged
+  as "10.00 F"). Hardware must confirm: does a 200 mV reading arrive as
+  millivolts (e.g. "123.45") as the prefix table implies, and does a
+  2 kΩ range report "1.234" for 1.234 kΩ?
 - Display digit order. **Corrected from vendor [VENDOR]** (2026-06
   review): MSD = byte 4 low nibble, then byte 3 hi/lo, byte 2 hi/lo
   (uci_dll_decompiled.txt:24714-24719) — previous code had the order
