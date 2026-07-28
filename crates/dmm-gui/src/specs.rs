@@ -17,13 +17,17 @@ fn manual_link(ui: &mut Ui, url: &str, font_size: f32, color: Color32) {
 /// Build a compact single-line accuracy string from the spec's accuracy bands.
 /// For a single band: `±(0.1%+5)`. For multiple bands: first band only with its
 /// frequency range appended, e.g. `±(0.1%+5) 45Hz~1kHz`.
-fn compact_accuracy_str(spec: &SpecInfo) -> String {
-    if spec.accuracy.len() == 1 {
-        format!("\u{00B1}({})", spec.accuracy[0].accuracy)
+///
+/// Returns `None` when the spec carries no accuracy bands — modes such as
+/// continuity and diode have no accuracy figure in the manual and ship an
+/// empty slice.
+fn compact_accuracy_str(spec: &SpecInfo) -> Option<String> {
+    let (first, rest) = spec.accuracy.split_first()?;
+    if rest.is_empty() {
+        Some(format!("\u{00B1}({})", first.accuracy))
     } else {
-        let band = &spec.accuracy[0];
-        let freq = band.freq_range.unwrap_or("");
-        format!("\u{00B1}({}) {freq}", band.accuracy)
+        let freq = first.freq_range.unwrap_or("");
+        Some(format!("\u{00B1}({}) {freq}", first.accuracy))
     }
 }
 
@@ -37,11 +41,10 @@ fn build_spec_parts(
     res_label: &str,
     acc_label: &str,
 ) -> Vec<String> {
-    let acc_str = compact_accuracy_str(spec);
-    let mut parts = vec![
-        format!("{res_label} {}", spec.resolution),
-        format!("{acc_label} {acc_str}"),
-    ];
+    let mut parts = vec![format!("{res_label} {}", spec.resolution)];
+    if let Some(acc_str) = compact_accuracy_str(spec) {
+        parts.push(format!("{acc_label} {acc_str}"));
+    }
     if let Some(ms) = mode_spec
         && let Some(z) = ms.input_impedance
     {
@@ -74,21 +77,26 @@ pub fn show_specs(
             .font(egui::FontId::proportional(main_font)),
     );
 
-    // Accuracy
-    if spec.accuracy.len() == 1 {
-        ui.label(
-            RichText::new(format!("Accuracy  {}", compact_accuracy_str(spec)))
-                .font(egui::FontId::proportional(main_font)),
-        );
-    } else {
-        ui.label(RichText::new("Accuracy").font(egui::FontId::proportional(main_font)));
-        for band in spec.accuracy {
-            let freq = band.freq_range.unwrap_or(crate::NO_DATA);
+    // Accuracy — omitted entirely for modes that have no accuracy figure
+    // (continuity, diode), which ship an empty band slice.
+    match spec.accuracy {
+        [] => {}
+        [single] => {
             ui.label(
-                RichText::new(format!("  {freq}  \u{00B1}({})", band.accuracy))
-                    .font(egui::FontId::proportional(sub_font))
-                    .color(weak),
+                RichText::new(format!("Accuracy  \u{00B1}({})", single.accuracy))
+                    .font(egui::FontId::proportional(main_font)),
             );
+        }
+        bands => {
+            ui.label(RichText::new("Accuracy").font(egui::FontId::proportional(main_font)));
+            for band in bands {
+                let freq = band.freq_range.unwrap_or(crate::NO_DATA);
+                ui.label(
+                    RichText::new(format!("  {freq}  \u{00B1}({})", band.accuracy))
+                        .font(egui::FontId::proportional(sub_font))
+                        .color(weak),
+                );
+            }
         }
     }
 
@@ -180,4 +188,61 @@ pub fn show_manual_only(ui: &mut Ui, url: &str, scale: f32) {
     let font_size = 11.0 * scale;
     let weak = ui.visuals().weak_text_color();
     manual_link(ui, url, font_size, weak);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmm_lib::protocol::ut61eplus::tables::AccuracyBand;
+
+    const DC_BAND: &[AccuracyBand] = &[AccuracyBand {
+        freq_range: None,
+        accuracy: "0.1%+5",
+    }];
+    const AC_BANDS: &[AccuracyBand] = &[
+        AccuracyBand {
+            freq_range: Some("45Hz~1kHz"),
+            accuracy: "0.5%+30",
+        },
+        AccuracyBand {
+            freq_range: Some("1kHz~10kHz"),
+            accuracy: "1.5%+30",
+        },
+    ];
+
+    fn spec(accuracy: &'static [AccuracyBand]) -> SpecInfo {
+        SpecInfo {
+            resolution: "0.01mV",
+            accuracy,
+        }
+    }
+
+    /// Continuity and diode ship `accuracy: &[]`; the compact renderers must not
+    /// index into it.
+    #[test]
+    fn empty_accuracy_yields_no_string() {
+        assert_eq!(compact_accuracy_str(&spec(&[])), None);
+    }
+
+    #[test]
+    fn empty_accuracy_omits_the_accuracy_part() {
+        let parts = build_spec_parts(&spec(&[]), None, "Res:", "Acc:");
+        assert_eq!(parts, vec!["Res: 0.01mV".to_string()]);
+    }
+
+    #[test]
+    fn single_band_has_no_frequency_suffix() {
+        assert_eq!(
+            compact_accuracy_str(&spec(DC_BAND)).as_deref(),
+            Some("\u{00B1}(0.1%+5)")
+        );
+    }
+
+    #[test]
+    fn multi_band_appends_first_frequency_range() {
+        assert_eq!(
+            compact_accuracy_str(&spec(AC_BANDS)).as_deref(),
+            Some("\u{00B1}(0.5%+30) 45Hz~1kHz")
+        );
+    }
 }

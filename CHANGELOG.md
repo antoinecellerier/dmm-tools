@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Bug fixes
+
+- **The GUI no longer crashes in Continuity or Diode mode on narrow windows** — modes without a published accuracy figure made the compact and big-meter spec lines panic; the accuracy field is now omitted for them.
+
 ## v0.5.0
 
 ### GUI
