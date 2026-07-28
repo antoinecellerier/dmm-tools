@@ -5,6 +5,7 @@
 ### Bug fixes
 
 - **The GUI no longer crashes in Continuity or Diode mode on narrow windows** — modes without a published accuracy figure made the compact and big-meter spec lines panic; the accuracy field is now omitted for them.
+- **A malformed colour in `settings.json` no longer stops the GUI from starting** — a value containing a non-ASCII character crashed on load instead of falling back to the default palette.
 
 ## v0.5.0
 

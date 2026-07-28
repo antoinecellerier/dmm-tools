@@ -37,10 +37,18 @@ impl serde::Serialize for HexColor {
 impl<'de> serde::Deserialize<'de> for HexColor {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = String::deserialize(deserializer)?;
-        if !s.starts_with('#') {
+        let Some(hex) = s.strip_prefix('#') else {
             return Err(serde::de::Error::custom("hex color must start with '#'"));
+        };
+        // The digits are sliced by byte index below, so reject anything that is
+        // not an ASCII hex digit first: a multi-byte character would otherwise
+        // be split mid-codepoint and panic instead of erroring. This also
+        // rejects the leading `+` that `from_str_radix` would accept.
+        if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(serde::de::Error::custom(
+                "hex color must contain only hex digits",
+            ));
         }
-        let hex = &s[1..];
         let parse_byte =
             |slice: &str| u8::from_str_radix(slice, 16).map_err(serde::de::Error::custom);
         match hex.len() {
@@ -423,6 +431,31 @@ mod tests {
     fn hex_color_invalid_length() {
         let result: Result<HexColor, _> = serde_json::from_str(r##""#FFF""##);
         assert!(result.is_err());
+    }
+
+    /// A multi-byte character can make the string six *bytes* long while being
+    /// shorter in characters; slicing it by byte index used to panic.
+    #[test]
+    fn hex_color_non_ascii_errors_instead_of_panicking() {
+        for json in [r##""#€345""##, r##""#€€""##, r##""#ÿÿÿÿ""##] {
+            let result: Result<HexColor, _> = serde_json::from_str(json);
+            assert!(result.is_err(), "{json} should be rejected");
+        }
+    }
+
+    #[test]
+    fn hex_color_rejects_signed_digits() {
+        let result: Result<HexColor, _> = serde_json::from_str(r##""#+1+2+3""##);
+        assert!(result.is_err());
+    }
+
+    /// A bad color value must surface as a deserialization error so `load()`
+    /// can fall back to defaults, rather than unwinding out of serde.
+    #[test]
+    fn settings_with_invalid_color_errors_rather_than_panicking() {
+        let json = r##"{"color_overrides":{"dark":{"graph_line":"#€345"}}}"##;
+        let parsed: Result<Settings, _> = serde_json::from_str(json);
+        assert!(parsed.is_err());
     }
 
     #[test]
