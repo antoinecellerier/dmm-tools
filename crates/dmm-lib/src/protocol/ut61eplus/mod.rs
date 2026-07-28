@@ -50,26 +50,71 @@ impl Ut61PlusProtocol {
     /// Create a protocol instance for a specific model name.
     ///
     /// Recognized model strings (case-insensitive):
-    /// - "ut61e+", "ut161e" -> UT61E+ table (Verified)
-    /// - "ut61b+", "ut161b" -> UT61B+ table (Experimental)
-    /// - "ut61d+", "ut161d" -> UT61D+ table (Experimental)
+    /// - "ut61e+" (Verified), "ut161e" -> UT61E+ table
+    /// - "ut61b+", "ut161b" -> UT61B+ table
+    /// - "ut61d+", "ut161d" -> UT61D+ table
+    ///
+    /// Several models share a table — the UT161x meters are believed to speak
+    /// the same protocol as their UT61x+ counterparts — so the reported model
+    /// name and stability come from the requested model, not from the table.
+    /// Otherwise a UT161E would introduce itself as a verified UT61E+.
     ///
     /// Returns `None` if the model string is not recognized.
     pub fn for_model(model: &str) -> Option<Self> {
-        let table: Box<dyn DeviceTable> = match model.to_lowercase().as_str() {
-            "ut61e+" | "ut161e" => Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
-            "ut61b+" | "ut161b" => Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
-            "ut61d+" | "ut161d" => Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
-            _ => return None,
-        };
-        Some(Self::with_table(table))
+        // (table, reported model name, verified against real hardware)
+        let (table, model_name, verified): (Box<dyn DeviceTable>, _, _) =
+            match model.to_lowercase().as_str() {
+                "ut61e+" => (
+                    Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+                    "UNI-T UT61E+",
+                    true,
+                ),
+                "ut161e" => (
+                    Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+                    "UNI-T UT161E",
+                    false,
+                ),
+                "ut61b+" => (
+                    Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
+                    "UNI-T UT61B+",
+                    false,
+                ),
+                "ut161b" => (
+                    Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
+                    "UNI-T UT161B",
+                    false,
+                ),
+                "ut61d+" => (
+                    Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
+                    "UNI-T UT61D+",
+                    false,
+                ),
+                "ut161d" => (
+                    Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
+                    "UNI-T UT161D",
+                    false,
+                ),
+                _ => return None,
+            };
+        Some(Self::with_profile(table, model_name, verified))
     }
 
+    /// Build a protocol whose profile is derived from the wrapped table.
+    ///
+    /// Only correct when the table's model is the model actually connected;
+    /// prefer [`Ut61PlusProtocol::for_model`], which keeps the two separate.
     pub fn with_table(table: Box<dyn DeviceTable>) -> Self {
         let model_name = table.model_name();
         // UT61E+ is the only model verified against real hardware.
-        // B+ and D+ tables are based on RE of vendor software + manual specs.
-        let (stability, verification_issue) = if model_name == "UNI-T UT61E+" {
+        let verified = model_name == "UNI-T UT61E+";
+        Self::with_profile(table, model_name, verified)
+    }
+
+    fn with_profile(table: Box<dyn DeviceTable>, model_name: &'static str, verified: bool) -> Self {
+        // Everything except the UT61E+ is based on RE of the vendor software
+        // plus manual specs, so it reports as experimental and points at the
+        // family verification issue.
+        let (stability, verification_issue) = if verified {
             (Stability::Verified, None)
         } else {
             (Stability::Experimental, Some(7))

@@ -34,13 +34,29 @@ fn factory<P: Protocol + Default + 'static>() -> Box<dyn Protocol> {
     Box::new(P::default())
 }
 
-fn new_ut61bplus() -> Box<dyn Protocol> {
-    Box::new(Ut61PlusProtocol::for_model("ut61b+").unwrap())
+/// Build a UT61+/UT161 protocol for one specific model.
+///
+/// Every entry in the family goes through here rather than sharing a factory,
+/// so a meter reports the model the user actually selected. The UT161x models
+/// reuse their UT61x+ counterpart's table, and deriving the profile from the
+/// table would make a UT161E introduce itself as a verified UT61E+.
+macro_rules! ut61_family_factory {
+    ($name:ident, $model:literal) => {
+        fn $name() -> Box<dyn Protocol> {
+            Box::new(
+                Ut61PlusProtocol::for_model($model)
+                    .expect(concat!($model, " must be a known UT61+/UT161 model")),
+            )
+        }
+    };
 }
 
-fn new_ut61dplus() -> Box<dyn Protocol> {
-    Box::new(Ut61PlusProtocol::for_model("ut61d+").unwrap())
-}
+ut61_family_factory!(new_ut61eplus, "ut61e+");
+ut61_family_factory!(new_ut61bplus, "ut61b+");
+ut61_family_factory!(new_ut61dplus, "ut61d+");
+ut61_family_factory!(new_ut161e, "ut161e");
+ut61_family_factory!(new_ut161b, "ut161b");
+ut61_family_factory!(new_ut161d, "ut161d");
 
 const ACTIVATION_UT61EPLUS: &str = "\
 1. Insert the USB module into the meter
@@ -84,7 +100,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
-        new_protocol: factory::<Ut61PlusProtocol>,
+        new_protocol: new_ut61eplus,
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     },
     SelectableDevice {
@@ -114,7 +130,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61bplus, // same table as UT61B+
+        new_protocol: new_ut161b, // same table as UT61B+
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     SelectableDevice {
@@ -124,7 +140,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61dplus,
+        new_protocol: new_ut161d, // same table as UT61D+
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     SelectableDevice {
@@ -134,7 +150,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
-        new_protocol: factory::<Ut61PlusProtocol>,
+        new_protocol: new_ut161e, // same table as UT61E+
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     // Other families
@@ -218,7 +234,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         requires_hardware: true,
         activation_instructions: ACTIVATION_VC880, // same protocol as VC-880
         family: DeviceFamily::Vc880,
-        new_protocol: factory::<Vc880Protocol>,
+        new_protocol: || Box::new(Vc880Protocol::for_model("Voltcraft VC650BT")),
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
         ),
@@ -276,6 +292,7 @@ pub fn default_device() -> &'static SelectableDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::Stability;
 
     #[test]
     fn find_device_by_id() {
@@ -376,6 +393,52 @@ mod tests {
             let profile = protocol.profile();
             assert!(!profile.family_name.is_empty(), "device {}", device.id);
             assert!(!profile.model_name.is_empty(), "device {}", device.id);
+        }
+    }
+
+    /// Several models share a device table. Each registry entry must still
+    /// report its own model, or a UT161E introduces itself as a UT61E+ and the
+    /// user never learns which meter the readings were decoded as.
+    #[test]
+    fn distinct_devices_report_distinct_model_names() {
+        let mut seen: Vec<(&str, &str)> = Vec::new();
+        for device in DEVICES {
+            let model = (device.new_protocol)().profile().model_name;
+            if let Some((other, _)) = seen.iter().find(|(_, m)| *m == model) {
+                panic!("devices {other} and {} both report {model:?}", device.id);
+            }
+            seen.push((device.id, model));
+        }
+    }
+
+    /// Only the UT61E+ has been checked against real hardware; everything else
+    /// must stay flagged so the GUI shows the EXPERIMENTAL badge and links to
+    /// the verification issue.
+    #[test]
+    fn only_ut61eplus_is_verified() {
+        for device in DEVICES {
+            if !device.requires_hardware {
+                continue;
+            }
+            let protocol = (device.new_protocol)();
+            let profile = protocol.profile();
+            let expected = if device.id == "ut61eplus" {
+                Stability::Verified
+            } else {
+                Stability::Experimental
+            };
+            assert_eq!(
+                profile.stability, expected,
+                "device {} has unexpected stability",
+                device.id
+            );
+            if expected == Stability::Experimental {
+                assert!(
+                    profile.verification_issue.is_some(),
+                    "experimental device {} must link to a verification issue",
+                    device.id
+                );
+            }
         }
     }
 

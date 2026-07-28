@@ -263,11 +263,20 @@ impl Default for Vc880Protocol {
 
 impl Vc880Protocol {
     pub(crate) fn new() -> Self {
+        Self::for_model("Voltcraft VC-880")
+    }
+
+    /// Build the protocol for one specific model of the family.
+    ///
+    /// The VC650BT speaks the same protocol, but it has to report its own name
+    /// — otherwise a user who selected the VC650BT sees "Voltcraft VC-880" in
+    /// the header and can't tell whether the right device was picked.
+    pub(crate) fn for_model(model_name: &'static str) -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
             profile: DeviceProfile {
                 family_name: "VC880",
-                model_name: "Voltcraft VC-880",
+                model_name,
                 stability: Stability::Experimental,
                 supported_commands: VC880_COMMANDS,
                 verification_issue: Some(13),
