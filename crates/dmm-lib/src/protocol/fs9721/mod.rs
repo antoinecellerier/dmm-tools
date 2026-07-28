@@ -239,7 +239,7 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
             0xA => {} // blank digit
             _ => {
                 return Err(Error::invalid_response(
-                    format!("fs9721 invalid digit nibble {d:#03x}"),
+                    format!("fs9721 invalid digit nibble {d:#04x}"),
                     digits,
                 ));
             }
@@ -270,7 +270,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     if nibbles[9] != 0x0D || nibbles[10] != 0x0A {
         return Err(Error::invalid_response(
             format!(
-                "ut804 format markers {:#03x} {:#03x}, expected 0xD 0xA",
+                "ut804 format markers {:#04x} {:#04x}, expected 0xD 0xA",
                 nibbles[9], nibbles[10]
             ),
             nibbles,
@@ -290,7 +290,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     let (mode_name, unit, dp_pos) = match ut804_mode_info(mode_code, range) {
         Some(info) => info,
         None => {
-            warn!("ut804: unknown mode/range {mode_code:#03x}/{range}");
+            warn!("ut804: unknown mode/range {mode_code:#04x}/{range}");
             ("?", "", 3)
         }
     };
@@ -303,7 +303,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
             (Cow::Borrowed("Duty %"), false, 2, "%")
         } else if mode_name == "?" {
             (
-                Cow::Owned(format!("Unknown({mode_code:#03x})")),
+                Cow::Owned(format!("Unknown({mode_code:#04x})")),
                 sign_bit,
                 dp_pos,
                 unit,
@@ -423,13 +423,13 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     let (mode_name, unit, dp_pos) = match ut803_mode_info(mode_code, range, alt) {
         Some(info) => info,
         None => {
-            warn!("ut803: unknown mode/range {mode_code:#03x}/{range}");
+            warn!("ut803: unknown mode/range {mode_code:#04x}/{range}");
             ("?", "", 3)
         }
     };
 
     let mode: Cow<'static, str> = if mode_name == "?" {
-        Cow::Owned(format!("Unknown({mode_code:#03x})"))
+        Cow::Owned(format!("Unknown({mode_code:#04x})"))
     } else if mode_name == "V" || mode_name == "mV" {
         Cow::Borrowed(match (mode_name, dc) {
             ("V", true) => "DC V",

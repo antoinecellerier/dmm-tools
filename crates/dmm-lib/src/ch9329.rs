@@ -74,7 +74,7 @@ impl Ch9329 {
                 .copy_from_slice(&resp[src_start..src_start + copy_len]);
         }
 
-        debug!("CH9329 config (128 bytes): {:02X?}", &config);
+        debug!("CH9329 config (128 bytes): {:02X?}", config);
         Ok(config)
     }
 
