@@ -312,6 +312,13 @@ impl Graph {
             self.origin = Some(now);
             self.live = true;
             self.view_center = 0.0;
+            // Drop any pinned Y range too: it was chosen for the previous
+            // mode's scale, and keeping it would plot ohms against volt bounds
+            // — the trace lands far outside the plot and the graph just looks
+            // empty, with the old numbers still on the axis. `clear()` and
+            // `reset_view()` both release these for the same reason.
+            self.y_axis_fixed = false;
+            self.y_user_set = false;
             self.cursor_a = None;
             self.cursor_b = None;
             self.cursor_next_is_b = false;
@@ -2043,6 +2050,37 @@ mod tests {
             g.push(i as f64, Instant::now(), "DC V", "V", None);
         }
         assert_eq!(g.len(), MAX_POINTS);
+    }
+
+    /// A Y range pinned while measuring volts must not survive into ohms —
+    /// the new trace would sit far outside it and the plot would look empty.
+    #[test]
+    fn mode_change_releases_the_pinned_y_range() {
+        let mut g = Graph::new();
+        g.push(5.0, Instant::now(), "DC V", "V", None);
+        g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
+        assert!(g.y_axis_fixed);
+        assert_eq!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+
+        g.push(1000.0, Instant::now(), "Ohm", "Ω", None);
+        assert!(
+            !g.y_axis_fixed,
+            "mode change must release the fixed Y range"
+        );
+        assert!(!g.y_user_set);
+        assert_ne!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+    }
+
+    /// Staying in the same mode must keep the user's zoom — otherwise every
+    /// incoming sample would fight the pinned view.
+    #[test]
+    fn same_mode_keeps_the_pinned_y_range() {
+        let mut g = Graph::new();
+        g.push(5.0, Instant::now(), "DC V", "V", None);
+        g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
+        g.push(5.05, Instant::now(), "DC V", "V", None);
+        assert!(g.y_axis_fixed);
+        assert_eq!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
     }
 
     #[test]
