@@ -3,6 +3,7 @@
 use crate::error::{Error, Result};
 use crate::transport::Transport;
 use log::{debug, trace, warn};
+use std::time::{Duration, Instant};
 
 /// How to handle frame extraction errors (checksum mismatches).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,7 +28,9 @@ pub(crate) enum FrameErrorRecovery {
 ///   protocols, or `&UT8802_HEADER` (`[0xAC]`) for the UT8802.
 ///
 /// Constants match the values used by all protocol implementations:
-/// `READ_TIMEOUT_MS = 2000`, `MAX_ATTEMPTS = 64`.
+/// `READ_TIMEOUT_MS = 2000`, `MAX_ATTEMPTS = 64`. `READ_TIMEOUT_MS` bounds the
+/// total time spent waiting for bytes, not each individual read — see
+/// [`read_uart_bytes`] for why a single read can come back empty.
 pub(crate) fn read_frame<F, A>(
     rx_buf: &mut Vec<u8>,
     transport: &dyn Transport,
@@ -49,6 +52,8 @@ where
     // speaks a stream we can't parse doesn't grow `rx_buf` without bound.
     const MAX_RX_BUF: usize = 4096;
 
+    let deadline = Instant::now() + Duration::from_millis(READ_TIMEOUT_MS as u64);
+
     for _ in 0..MAX_ATTEMPTS {
         match extract_fn(rx_buf) {
             Ok(Some((payload, consumed))) => {
@@ -69,7 +74,7 @@ where
                     return Err(Error::Timeout);
                 }
                 let mut tmp = [0u8; 64];
-                let n = transport.read_timeout(&mut tmp, READ_TIMEOUT_MS)?;
+                let n = read_uart_bytes(transport, &mut tmp, deadline)?;
                 if n == 0 {
                     return Err(Error::Timeout);
                 }
@@ -101,6 +106,44 @@ where
     }
 
     Err(Error::Timeout)
+}
+
+/// Read UART bytes from `transport`, retrying reports that carry no payload.
+///
+/// A zero-length result from [`Transport::read_timeout`] does not mean the
+/// meter went quiet: the HID bridges deliver a report whenever the host polls
+/// them, and that report carries no UART payload if nothing arrived since the
+/// last poll. The CH9325 signals this with its `0xF0` header (payload length
+/// zero, §4.2) and the CH9329 with a zero length byte. At 2400 baud a UT803
+/// frame lands roughly every 100 ms, so most polls are empty and treating the
+/// first one as a timeout aborted every single frame read.
+///
+/// Returns `Ok(0)` once `deadline` has passed, i.e. a genuine timeout.
+fn read_uart_bytes(transport: &dyn Transport, buf: &mut [u8], deadline: Instant) -> Result<usize> {
+    // Every empty report costs a USB poll interval (~10 ms), so the deadline
+    // is normally what stops us. The counter is a guard against a transport
+    // that returns empty without blocking, which would otherwise busy-spin
+    // until the deadline.
+    const MAX_EMPTY_READS: usize = 256;
+
+    for _ in 0..MAX_EMPTY_READS {
+        // `checked_duration_since` rather than `duration_since`: a backward
+        // clock jump must not panic here.
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .unwrap_or_default();
+        let timeout_ms = i32::try_from(remaining.as_millis()).unwrap_or(i32::MAX);
+        if timeout_ms == 0 {
+            return Ok(0);
+        }
+        let n = transport.read_timeout(buf, timeout_ms)?;
+        if n > 0 {
+            return Ok(n);
+        }
+        trace!("read_frame: report carried no payload, retrying until deadline");
+    }
+
+    Ok(0)
 }
 
 /// Header bytes shared across all UNI-T protocols.
@@ -662,6 +705,32 @@ mod tests {
         let part1 = frame[..3].to_vec();
         let part2 = frame[3..].to_vec();
         let mock = MockTransport::new(vec![part1, part2]);
+        let mut rx_buf = Vec::new();
+
+        let result = read_frame(
+            &mut rx_buf,
+            &mock,
+            extract_frame_abcd_be16,
+            |_| true,
+            FrameErrorRecovery::Propagate,
+            "test",
+            &HEADER,
+        )
+        .unwrap();
+        assert_eq!(result, payload);
+    }
+
+    /// HID bridges answer a poll with an empty payload whenever the meter has
+    /// sent nothing since the last one. Those must not end the frame read —
+    /// at 2400 baud most polls are empty, which made UT803/UT804 time out on
+    /// every measurement.
+    #[test]
+    fn read_frame_survives_empty_reports_between_data() {
+        let payload = vec![0x01, 0x02, 0x03];
+        let frame = make_frame_be16(&payload);
+        let part1 = frame[..3].to_vec();
+        let part2 = frame[3..].to_vec();
+        let mock = MockTransport::new(vec![Vec::new(), Vec::new(), part1, Vec::new(), part2]);
         let mut rx_buf = Vec::new();
 
         let result = read_frame(

@@ -109,12 +109,22 @@ pub mod mock {
     }
 
     impl MockTransport {
+        /// Build a mock that replays `responses` in order.
+        ///
+        /// An empty entry models an HID report that carried no UART payload
+        /// (an idle poll); once the queue is exhausted the mock stays silent,
+        /// which is what a real timeout looks like.
         pub fn new(responses: Vec<Vec<u8>>) -> Self {
             Self {
                 responses: RefCell::new(responses),
                 written: RefCell::new(Vec::new()),
                 feature_reports: RefCell::new(Vec::new()),
             }
+        }
+
+        /// Queue another response after the mock has gone silent.
+        pub fn push_response(&self, response: Vec<u8>) {
+            self.responses.borrow_mut().push(response);
         }
     }
 

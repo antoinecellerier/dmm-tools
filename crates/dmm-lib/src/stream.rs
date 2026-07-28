@@ -177,14 +177,18 @@ mod tests {
 
     #[test]
     fn timeout_counter_resets_on_measurement() {
-        let mut dmm = new_dmm(vec![vec![], build_response(b"  3.000")]);
+        // Start silent so the first tick times out.
+        let mut dmm = new_dmm(vec![]);
         let mut stream = MeasurementStream::new(&mut dmm, Duration::ZERO);
 
-        // First: empty response queue entry → timeout.
         let _ = stream.tick();
         assert_eq!(stream.consecutive_timeouts(), 1);
 
-        // Second: good measurement.
+        // The meter answers again on the same stream.
+        stream
+            .dmm
+            .transport()
+            .push_response(build_response(b"  3.000"));
         let _ = stream.tick();
         assert_eq!(stream.consecutive_timeouts(), 0);
     }
