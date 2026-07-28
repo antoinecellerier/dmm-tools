@@ -7,6 +7,7 @@
 - **The GUI no longer crashes in Continuity or Diode mode on narrow windows** — modes without a published accuracy figure made the compact and big-meter spec lines panic; the accuracy field is now omitted for them.
 - **A malformed colour in `settings.json` no longer stops the GUI from starting** — a value containing a non-ASCII character crashed on load instead of falling back to the default palette.
 - **Meters on a CH9325 or CH9329 cable now deliver readings** — an idle poll (the cable reporting "nothing new since last time") was treated as a lost connection, so UT803/UT804 timed out on every measurement and never showed a value.
+- **A single corrupted reading no longer drops the GUI connection** — one bad frame used to trigger a full reconnect: a two-second gap in the graph plus an identification beep from the meter. Unreadable frames are now reported and skipped, and a dial position the meter's tables don't cover no longer leaves the GUI reconnecting in a loop.
 
 ## v0.5.0
 

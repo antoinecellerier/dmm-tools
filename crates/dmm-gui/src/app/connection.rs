@@ -96,8 +96,14 @@ pub(super) fn run_device_thread<T, F>(
         }
     };
 
+    // How often to re-report an ongoing protocol error to the UI. The first
+    // one is always reported; repeats are throttled so a meter parked in an
+    // unparseable state doesn't flood the channel.
+    const PROTOCOL_ERROR_REPORT_INTERVAL: u32 = 20;
+
     let tick = Duration::from_millis(sample_interval_ms as u64);
     let mut stream = MeasurementStream::new(&mut dmm, tick);
+    let mut protocol_errors: u32 = 0;
     loop {
         if stop_rx.try_recv().is_ok() {
             info!("background thread: stop signal received");
@@ -115,6 +121,7 @@ pub(super) fn run_device_thread<T, F>(
 
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
+                protocol_errors = 0;
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
                     break;
                 }
@@ -128,6 +135,26 @@ pub(super) fn run_device_thread<T, F>(
                         "No response from meter \u{2014} check device selection and USB mode"
                             .to_string(),
                     ));
+                    ctx.request_repaint();
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::Protocol => {
+                // A frame we couldn't parse is not a dead link. Either line
+                // noise corrupted a checksum, or the meter is in a dial
+                // position this family's tables don't cover — and reconnecting
+                // fixes neither. It costs a 2 s stall plus an audible
+                // identification beep, and for an unknown mode byte it flaps
+                // forever: connect, read, fail, repeat.
+                //
+                // Report it and keep reading. The next good frame clears the
+                // message (`DmmMessage::Measurement` resets `last_error`), so
+                // one corrupt frame is a blip rather than a hole in the graph.
+                protocol_errors = protocol_errors.saturating_add(1);
+                warn!("background thread: protocol error ({protocol_errors}): {e}");
+                if protocol_errors == 1
+                    || protocol_errors.is_multiple_of(PROTOCOL_ERROR_REPORT_INTERVAL)
+                {
+                    let _ = msg_tx.send(DmmMessage::Error(e.to_string()));
                     ctx.request_repaint();
                 }
             }
@@ -182,6 +209,7 @@ pub(super) fn run_device_thread<T, F>(
                     }
                 }
                 stream = MeasurementStream::new(&mut dmm, tick);
+                protocol_errors = 0;
             }
         }
 
