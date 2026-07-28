@@ -89,6 +89,28 @@ struct KnownTransport {
     init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
 }
 
+/// The USB cable(s) a device family is known to ship with, most likely first.
+///
+/// Sourced from the cable table in `docs/supported-devices.md`: the CP2110
+/// UT-D09 covers UT61x+/UT161x/UT171x/UT880x and the Voltcraft meters, the
+/// CH9329 UT-D09 variant is sold for the UT181A and UT171 series, and the
+/// CH9325 UT-D04 is what the UT803/UT804 use.
+///
+/// This only orders the candidates — [`open_first_match`] still falls back to
+/// the remaining transports, so an unusual cable keeps working. Without it,
+/// selecting a UT803 on a bench that also has a UT61E+ attached opens the
+/// UT61E+'s CP2110 and every read times out.
+fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static str] {
+    use protocol::DeviceFamily as F;
+    match family {
+        F::Ut61EPlus | F::Ut8802 | F::Ut8803 | F::Vc880 | F::Vc890 => &["CP2110"],
+        F::Fs9721 => &["CH9325"],
+        F::Ut181a => &["CH9329"],
+        F::Ut171 => &["CP2110", "CH9329"],
+        F::Mock => &[],
+    }
+}
+
 /// Transports are tried in order — most common first.
 const KNOWN_TRANSPORTS: &[KnownTransport] = &[
     KnownTransport {
@@ -139,7 +161,7 @@ pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box
 
     match adapter {
         Some(adapter) => open_with_adapter(&api, adapter),
-        None => open_first_match(&api),
+        None => open_first_match(&api, entry.family),
     }
     .map(|(device, kt)| {
         info!(
@@ -192,9 +214,12 @@ fn open_with_adapter(
     }
 }
 
-/// Open the first matching adapter across all known transports.
-/// Warns if multiple adapters are found.
-fn open_first_match(api: &hidapi::HidApi) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
+/// Open the first matching adapter, preferring the cable the selected device
+/// family actually ships with. Warns if multiple adapters are found.
+fn open_first_match(
+    api: &hidapi::HidApi,
+    family: protocol::DeviceFamily,
+) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
     let match_count: usize = api
         .device_list()
         .filter(|dev| {
@@ -207,11 +232,24 @@ fn open_first_match(api: &hidapi::HidApi) -> Result<(hidapi::HidDevice, &'static
     if match_count > 1 {
         warn!(
             "Multiple USB adapters found ({match_count} devices). \
-             Using first match. Specify an adapter to select a specific device."
+             Preferring the cable this meter uses. \
+             Specify an adapter to select a specific device."
         );
     }
 
-    for kt in KNOWN_TRANSPORTS {
+    // Preferred cables first, then everything else as a fallback so an
+    // unusual pairing still connects.
+    let preferred = preferred_transports(family);
+    let ordered = preferred
+        .iter()
+        .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
+        .chain(
+            KNOWN_TRANSPORTS
+                .iter()
+                .filter(|kt| !preferred.contains(&kt.name)),
+        );
+
+    for kt in ordered {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
             return Ok((device, kt));
         }
@@ -491,6 +529,61 @@ mod tests {
         let m = dmm.request_measurement().unwrap();
         assert!(
             matches!(m.value, measurement::MeasuredValue::Normal(v) if (v - (-12.345)).abs() < 1e-6)
+        );
+    }
+
+    /// A typo in `preferred_transports` would silently degrade to the old
+    /// fixed order rather than failing to build.
+    #[test]
+    fn preferred_transport_names_exist() {
+        for device in protocol::registry::DEVICES {
+            for name in preferred_transports(device.family) {
+                assert!(
+                    KNOWN_TRANSPORTS.iter().any(|kt| kt.name == *name),
+                    "device {} prefers unknown transport {name:?}",
+                    device.id,
+                );
+            }
+        }
+    }
+
+    /// Every hardware device must name the cable it ships with, otherwise it
+    /// falls back to opening whichever adapter happens to be first on the bus.
+    #[test]
+    fn every_hardware_family_names_its_cable() {
+        for device in protocol::registry::DEVICES {
+            if !device.requires_hardware {
+                continue;
+            }
+            assert!(
+                !preferred_transports(device.family).is_empty(),
+                "device {} has no preferred transport",
+                device.id,
+            );
+        }
+    }
+
+    /// The preferred cable must come first, but the others stay reachable so an
+    /// unusual pairing still connects.
+    #[test]
+    fn preference_orders_without_excluding() {
+        let preferred = preferred_transports(protocol::DeviceFamily::Fs9721);
+        let ordered: Vec<&str> = preferred
+            .iter()
+            .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
+            .chain(
+                KNOWN_TRANSPORTS
+                    .iter()
+                    .filter(|kt| !preferred.contains(&kt.name)),
+            )
+            .map(|kt| kt.name)
+            .collect();
+
+        assert_eq!(ordered[0], "CH9325", "UT803/UT804 use the CH9325 UT-D04");
+        assert_eq!(
+            ordered.len(),
+            KNOWN_TRANSPORTS.len(),
+            "every transport must stay reachable as a fallback"
         );
     }
 }

@@ -67,7 +67,11 @@ devices. Each `SelectableDevice` entry contains an ID, display name, aliases, ac
 instructions, and a factory function that creates the correct `Protocol` instance. The CLI
 and GUI resolve user input via `resolve_device()` and use `open_device_by_id()` to connect —
 they never match on `DeviceFamily` variants or instantiate protocol types directly.
-`open_device_by_id_auto()` tries CP2110, then CH9329, then CH9325, returning a `Box<dyn Transport>`.
+`open_device_by_id_auto()` returns a `Box<dyn Transport>`, trying the cable the selected entry's
+`DeviceFamily` ships with first (`preferred_transports()` in `lib.rs`, sourced from the cable table
+in `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
+when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
+CP2110 and time out on every read — and the fallback keeps unusual cable pairings working.
 Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
 
 ### dmm-settings
