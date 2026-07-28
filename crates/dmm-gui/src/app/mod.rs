@@ -590,11 +590,23 @@ impl App {
     }
 
     fn drain_messages(&mut self) {
-        let messages: Vec<DmmMessage> = self
-            .rx
-            .as_ref()
-            .map(|rx| rx.try_iter().collect())
-            .unwrap_or_default();
+        // Drain with `try_recv` rather than `try_iter` so a hung-up sender is
+        // distinguishable from an empty queue: the acquisition thread dropping
+        // its sender is the only signal that it has died.
+        let mut messages: Vec<DmmMessage> = Vec::new();
+        let mut thread_gone = false;
+        if let Some(rx) = self.rx.as_ref() {
+            loop {
+                match rx.try_recv() {
+                    Ok(msg) => messages.push(msg),
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        thread_gone = true;
+                        break;
+                    }
+                }
+            }
+        }
 
         let mut clear_channel = false;
 
@@ -693,6 +705,20 @@ impl App {
                     }
                 }
             }
+        }
+
+        if thread_gone && !clear_channel {
+            // The acquisition thread exited on its own — it panicked, or it
+            // gave up during connect. Nothing more will ever arrive on this
+            // channel, so drop the connection instead of leaving a green
+            // "Connected" dot and enabled controls in front of a dead thread.
+            error!("UI: acquisition thread exited unexpectedly");
+            if self.last_error.is_none() {
+                self.last_error = Some(
+                    "Acquisition stopped unexpectedly \u{2014} reconnect to resume".to_string(),
+                );
+            }
+            clear_channel = true;
         }
 
         if clear_channel {
