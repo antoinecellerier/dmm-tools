@@ -26,7 +26,7 @@ pub(crate) fn paint_focus_ring(ui: &Ui, response: &Response) {
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
             2.0,
-            egui::Stroke::new(2.0, stroke_color),
+            egui::Stroke::new(2.0_f32, stroke_color),
             egui::StrokeKind::Outside,
         );
     }

@@ -1901,7 +1901,7 @@ impl eframe::App for App {
                 ui.painter().vline(
                     panel_rect.right(),
                     panel_rect.y_range(),
-                    egui::Stroke::new(3.0, stroke_color),
+                    egui::Stroke::new(3.0_f32, stroke_color),
                 );
             }
 

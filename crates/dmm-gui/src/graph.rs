@@ -1057,7 +1057,7 @@ impl Graph {
                 plot_ui.points(
                     Points::new("crossings", PlotPoints::new(crossings.clone()))
                         .color(cross_color)
-                        .radius(4.0)
+                        .radius(4.0_f32)
                         .shape(egui_plot::MarkerShape::Diamond),
                 );
             }
@@ -1387,7 +1387,7 @@ impl Graph {
             let rect = egui::Rect::from_two_pos(start, current);
             let visuals = ui.visuals();
             let fill = visuals.selection.bg_fill.linear_multiply(0.25);
-            let stroke = egui::Stroke::new(1.0, visuals.selection.stroke.color);
+            let stroke = egui::Stroke::new(1.0_f32, visuals.selection.stroke.color);
             ui.painter().rect_filled(rect, 0.0, fill);
             ui.painter()
                 .rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
@@ -1530,7 +1530,10 @@ impl Graph {
                 })
                 .collect();
             for window in points.windows(2) {
-                painter.line_segment([window[0], window[1]], egui::Stroke::new(1.0, line_color));
+                painter.line_segment(
+                    [window[0], window[1]],
+                    egui::Stroke::new(1.0_f32, line_color),
+                );
             }
         }
 
@@ -1538,7 +1541,7 @@ impl Graph {
         let vp_left = time_to_x(view_min);
         let vp_right = time_to_x(view_max);
         let vp_color = tc.minimap_viewport();
-        let vp_stroke = egui::Stroke::new(2.5, vp_color);
+        let vp_stroke = egui::Stroke::new(2.5_f32, vp_color);
         let bracket_w = 4.0_f32; // horizontal arm of the bracket
 
         // Left bracket [
@@ -1607,7 +1610,7 @@ impl Graph {
                     egui::pos2(x, rect.bottom() - 2.0),
                     egui::pos2(x, rect.bottom()),
                 ],
-                egui::Stroke::new(1.0, label_color),
+                egui::Stroke::new(1.0_f32, label_color),
             );
             t += nice_interval;
         }
