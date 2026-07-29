@@ -17,11 +17,18 @@ pub(crate) const MIN_BIG_METER_FONT_SIZE: f32 = 12.0;
 const COMPACT_READING_FONT_SIZE: f32 = 28.0;
 
 /// Format the meter's raw 7-char display string for stable rendering.
-/// Replaces leading spaces with figure spaces (U+2007) so the minus sign
-/// doesn't shift digits in monospace font.
+///
+/// Right-aligns to the meter's own 7-character display width, so the reading
+/// keeps a constant width as digits and the minus sign come and go — the
+/// jitter `.claude/rules/gui.md` is guarding against with "display value
+/// strings use `display_raw` for stable width".
+///
+/// Ordinary spaces suffice: every caller draws this with
+/// `FontId::monospace`, where a space is already digit-width. (This comment
+/// previously claimed a figure-space (U+2007) substitution, which the body
+/// has never done and which would only matter in a proportional font.)
 fn format_display_raw(raw: &str) -> String {
     let trimmed = raw.trim_end();
-    // Pad to at least 7 chars for consistent width
     format!("{trimmed:>7}")
 }
 
