@@ -59,7 +59,17 @@ pub struct Measurement {
     pub range_label: Cow<'static, str>,
     /// Bar graph progress value, None if the protocol doesn't provide it.
     pub progress: Option<u16>,
-    /// Raw ASCII display value as received, None for float-based meters.
+    /// The digits to show for this reading, in the meter's own precision.
+    ///
+    /// Character-display meters (UT61E+, UT8802, …) put the ASCII field
+    /// straight from the wire here. Float-based meters (UT171, UT181A) format
+    /// their f32 into it, because the widened f64 in `value` prints its
+    /// binary-to-decimal artefact ("12.345000267028809") when formatted
+    /// directly. `None` means no display string is available — formatters then
+    /// fall back to `value`.
+    ///
+    /// Only meaningful for `MeasuredValue::Normal`: overload and NCV have no
+    /// digits, and consumers must decide from `value`, not from this field.
     pub display_raw: Option<String>,
     pub flags: StatusFlags,
     /// Auxiliary values (e.g. relative reference/absolute, min/max/avg sub-values).

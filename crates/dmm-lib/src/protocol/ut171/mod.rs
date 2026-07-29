@@ -400,6 +400,21 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         MeasuredValue::Normal(main_float as f64)
     };
 
+    // The wire value is an f32. `Normal` keeps it widened to f64 so arithmetic
+    // (stats, integration) works on the exact value the meter sent, but every
+    // formatter falls back to that f64 when `display_raw` is None — and
+    // `12.345f32 as f64` is 12.345000267028809, so a 60000-count meter printed
+    // 17 digits of binary-to-decimal artefact in the CLI, the CSV and the GUI.
+    //
+    // f32's Display prints the shortest decimal that round-trips to the same
+    // f32, so this is the wire value exactly, with no invented precision: the
+    // frame carries no decimal-places field (spec §5.1 offset 14 is [UNVERIFIED]),
+    // so we must not pad to a resolution the protocol never told us.
+    let display_raw = match value {
+        MeasuredValue::Normal(_) => Some(format!("{main_float}")),
+        MeasuredValue::Overload | MeasuredValue::NcvLevel(_) => None,
+    };
+
     // Aux float32 at payload[11..15]. gulux/Uni-T-CP2110 (capture-driven)
     // labels the aux value "kHz" for the AC voltage modes; other modes'
     // aux semantics are unknown, so they get a neutral label and no unit.
@@ -419,7 +434,8 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             label: Cow::Borrowed(aux_label),
             value: MeasuredValue::Normal(aux_float as f64),
             unit: Cow::Borrowed(aux_unit),
-            display_raw: None,
+            // Same f32-widening artefact as the main value above.
+            display_raw: Some(format!("{aux_float}")),
             elapsed_secs: None,
         });
     }
@@ -433,7 +449,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
         progress: None,
-        display_raw: None,
+        display_raw,
         flags,
         aux_values,
         raw_payload: payload.to_vec(),
@@ -480,6 +496,46 @@ mod tests {
         } else {
             panic!("expected Normal value");
         }
+    }
+
+    /// The wire float is an f32; widening it to f64 and formatting that
+    /// printed 12.345000267028809 for a meter showing 12.345. Every consumer
+    /// (CLI stdout, CSV `value`, the GUI reading) went through that fallback.
+    #[test]
+    fn value_prints_the_wire_float_not_its_widening_artefact() {
+        for v in [12.345f32, 5.999, -55.79, 0.1] {
+            let payload = make_payload(0x02, 0x01, v, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            let expected = v.to_string();
+            assert_eq!(m.display_raw.as_deref(), Some(expected.as_str()));
+            assert_eq!(m.value_export_str(), expected);
+            assert!(
+                m.to_string().starts_with(&expected),
+                "Display should show {expected}, got {m}"
+            );
+        }
+    }
+
+    /// The exported string must still parse back to the same f32 the meter
+    /// sent — shortest-round-trip formatting, not truncation.
+    #[test]
+    fn exported_value_round_trips_to_the_wire_float() {
+        for v in [12.345f32, 5.999, -55.79, 1234.5, 0.001] {
+            let payload = make_payload(0x02, 0x01, v, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            let parsed: f32 = m.value_export_str().parse().unwrap();
+            assert_eq!(parsed, v, "round trip failed for {v}");
+        }
+    }
+
+    /// Overload and NCV carry no digits of their own — leaving a stale
+    /// display string there is what made overloads render as numbers.
+    #[test]
+    fn overload_and_ncv_carry_no_display_string() {
+        let payload = make_payload(0x02, 0x01, f32::NAN, 0x00);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert!(m.display_raw.is_none());
     }
 
     #[test]
