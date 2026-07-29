@@ -926,6 +926,7 @@ impl Graph {
         let ext_start = vis_start.saturating_sub(1);
         let ext_end = (vis_end + 1).min(self.history.len());
         let (visible_segments, visible_gaps) = self.build_segments_for_range(ext_start, ext_end);
+        let pending_gap_start = self.pending_gap_start();
 
         // Theme-aware colors from shared palette
         let tc = self.theme_colors(ui.visuals().dark_mode);
@@ -1047,6 +1048,16 @@ impl Graph {
                 );
                 plot_ui.vline(
                     VLine::new("gap_end", gap_end)
+                        .color(gap_color)
+                        .style(egui_plot::LineStyle::dashed_dense()),
+                );
+            }
+
+            // Opening marker for a gap still in progress — the closing one
+            // appears with the first sample after the meter recovers.
+            if let Some(x) = pending_gap_start {
+                plot_ui.vline(
+                    VLine::new("gap_start", x)
                         .color(gap_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
@@ -2007,6 +2018,20 @@ impl Graph {
         has_pair.then_some(integral)
     }
 
+    /// X position for the opening marker of a gap that hasn't closed yet.
+    ///
+    /// `build_segments_for_range` pairs consecutive points, so it can only
+    /// emit a gap once a sample arrives *after* the interruption. While an
+    /// overload is still in progress no such sample exists, and the trace
+    /// would simply stop with nothing to say why until the meter came back.
+    /// Anchor the marker to the last plotted point — where the trace ends.
+    fn pending_gap_start(&self) -> Option<f64> {
+        if !self.pending_break {
+            return None;
+        }
+        self.history.back().map(|p| self.elapsed_secs(p.time))
+    }
+
     /// Gap ranges across the whole history, through the same builder the main
     /// graph renders from — so these tests exercise the path that actually
     /// draws the gap markers.
@@ -2151,6 +2176,40 @@ mod tests {
         g.push_break();
         g.push(3.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         assert_eq!(g.visible_gaps().len(), 1);
+    }
+
+    /// An overload that is still in progress has no closing sample, so the
+    /// paired-gap builder emits nothing and the trace just stops. The opening
+    /// marker has to be drawn from the pending state instead.
+    #[test]
+    fn an_unfinished_overload_still_marks_where_the_trace_stopped() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        assert_eq!(g.pending_gap_start(), None, "no break yet");
+
+        g.push_break();
+        // Still overloaded: no closing sample, so no paired gap exists...
+        assert!(g.visible_gaps().is_empty());
+        // ...but the marker anchors to the last plotted point.
+        let start = g
+            .pending_gap_start()
+            .expect("opening marker while overloaded");
+        assert!((start - 0.1).abs() < 1e-9, "got {start}");
+
+        // Meter recovers: the pair takes over and the pending marker clears.
+        g.push(3.0, t0 + Duration::from_millis(500), "DC V", "V", None);
+        assert_eq!(g.pending_gap_start(), None);
+        assert_eq!(g.visible_gaps().len(), 1);
+    }
+
+    /// An overload before any data has nothing to anchor to.
+    #[test]
+    fn a_break_with_no_history_marks_nothing() {
+        let mut g = Graph::new();
+        g.push_break();
+        assert_eq!(g.pending_gap_start(), None);
     }
 
     /// Consecutive overload samples are one interruption, not several.
