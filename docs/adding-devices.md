@@ -193,6 +193,8 @@ If the device manual includes accuracy/resolution tables per mode and range:
 1. **Always describe the required physical setup** before each step and wait for confirmation
 2. **Start with basic connectivity:** `cargo run --bin dmm-cli -- --device <id> debug` to confirm frames are received and parseable
 3. **Use the guided capture tool:** `cargo run --bin dmm-cli -- --device <id> capture` walks the user through each mode, flag, and command step-by-step, recording raw bytes and parsed results. Use `--steps` to filter to specific items. This is the primary verification workflow — it produces a YAML report that documents exactly what was tested and can be shared in bug reports.
+
+   The steps are whatever the device's `Protocol::capture_steps()` returns, so a new device gets its coverage by declaring them there — there is no separate table in the CLI. Include a manual range sweep (successive `range` commands, then `auto` to restore) if the meter has a range button: every other step captures a single auto-selected range, so without it the per-range tables and range-keyed specs go unverified. The freeform pass runs afterwards for every device and needs no declaration.
 4. **Test remote commands** (if supported): the capture tool covers these, but ad-hoc testing via `cargo run --bin dmm-cli -- --device <id> command <cmd>` is useful for debugging
 5. **Capture golden test data:** copy verified samples from the capture YAML into `tests/golden/<family>/` for regression testing
 

@@ -309,8 +309,19 @@ dmm-cli capture [OPTIONS]
 | Option | Default | Description |
 |---|---|---|
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
-| `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). |
-| `--list-steps` | | List all available step IDs and exit. |
+| `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
+| `--list-steps` | | List the selected device's step IDs and exit. |
+
+The steps come from the selected device's protocol, so `--list-steps` shows
+exactly what will run for that meter — pass `--device` to see another one's.
+Steps cover the measurement modes, the flag and button commands, and a manual
+range sweep (the only coverage for the per-range tables, since every other
+step captures whatever range auto-ranging picked).
+
+After the device's own steps, capture always offers **freeform captures**:
+describe any mode the step list doesn't cover, and the tool records the
+samples alongside your confirmation or correction of what it read. Filter to
+just this pass with `--steps extra`.
 
 **Examples:**
 
@@ -321,7 +332,10 @@ dmm-cli capture
 # Run only DC millivolt and temperature steps
 dmm-cli capture --steps dcmv,temp
 
-# List available steps
+# Run only the manual range sweep
+dmm-cli capture --steps range_1,range_2,range_3,range_4,range_5,range_6,auto
+
+# List the steps available for the selected device
 dmm-cli capture --list-steps
 ```
 

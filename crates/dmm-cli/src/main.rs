@@ -281,7 +281,9 @@ fn main() {
             list_steps,
         } => {
             if list_steps {
-                capture::list_steps();
+                // Device-scoped: the steps come from the selected device's
+                // protocol, so what's listed is what `--steps` will match.
+                capture::list_steps(device);
                 Ok(())
             } else {
                 open_with_help(device, adapter)

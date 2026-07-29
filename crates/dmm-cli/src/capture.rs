@@ -1,5 +1,6 @@
 use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::protocol::registry::SelectableDevice;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::time::Duration;
@@ -140,15 +141,18 @@ impl SampleData {
     }
 }
 
-/// Run a simplified capture using protocol-provided steps.
-/// Used for experimental (non-UT61E+) protocols.
+/// Run the device's own capture steps: modes, flags, and the manual range
+/// sweep, in the order the protocol declares them.
+///
+/// Returns `true` if the user asked to finish early, so the caller can skip
+/// the freeform pass.
 fn run_protocol_capture(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     protocol_steps: Vec<dmm_lib::protocol::CaptureStep>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<bool, Box<dyn std::error::Error>> {
     // Convert protocol steps to CLI steps
     let steps: Vec<CaptureStep> = protocol_steps
         .iter()
@@ -173,19 +177,13 @@ fn run_protocol_capture(
         if !step_included(step_filter, step.id) {
             continue;
         }
-        let done = run_capture_step(dmm, step, report, true)?;
-        save_report(report, output_path)?;
-        if done {
-            break;
+        if run_capture_step(dmm, step, report, true)? {
+            return Ok(true);
         }
+        save_report(report, output_path)?;
     }
 
-    eprintln!(
-        "\n{} {}",
-        style("Capture complete!").green().bold(),
-        style(format!("Saved to {output_path}")).dim()
-    );
-    Ok(())
+    Ok(false)
 }
 
 // --- Step definitions ---
@@ -209,202 +207,6 @@ impl CaptureStep {
             error,
         }
     }
-}
-
-/// IDs for part 1 (modes) vs part 2 (flags) grouping.
-pub(crate) const MODE_STEP_IDS: &[&str] = &[
-    "dcv",
-    "dcv_short",
-    "acv",
-    "dcmv",
-    "ohm",
-    "ohm_short",
-    "continuity",
-    "diode",
-    "capacitance",
-    "hz",
-    "duty",
-    "ncv",
-    "hfe",
-    "dcua",
-    "dcma",
-    "dca",
-    "temp",
-];
-pub(crate) const FLAG_STEP_IDS: &[&str] = &[
-    "hold",
-    "hold_off",
-    "rel",
-    "rel_off",
-    "minmax",
-    "minmax_off",
-    "range",
-    "auto",
-];
-
-pub(crate) fn all_capture_steps() -> &'static [CaptureStep] {
-    static STEPS: &[CaptureStep] = &[
-        // Part 1: Modes
-        CaptureStep {
-            id: "dcv",
-            instruction: "Set meter to DC V (V\u{23CF}). Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "dcv_short",
-            instruction: "DC V mode: touch the two probe tips together.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "acv",
-            instruction: "Set meter to AC V (V~). Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "dcmv",
-            instruction: "Set meter to DC mV. Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "ohm",
-            instruction: "Set meter to \u{03A9}. Leave leads open (should show OL).",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "ohm_short",
-            instruction: "\u{03A9} mode: touch the two probe tips together.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "continuity",
-            instruction: "Set meter to continuity (buzzer). Touch probes together.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "diode",
-            instruction: "Set meter to diode. Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "capacitance",
-            instruction: "Set meter to capacitance (F). Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "hz",
-            instruction: "Set meter to Hz. Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "duty",
-            instruction: "Hz mode: press USB/Hz to switch to duty cycle (%).",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "ncv",
-            instruction: "Set meter to NCV. Hold near a live wire if possible.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "hfe",
-            instruction: "Set meter to hFE. Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "dcua",
-            instruction: "Set meter to \u{00B5}A. Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "dcma",
-            instruction: "Set meter to mA. Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "dca",
-            instruction: "Set meter to A (if available). Leave leads open.",
-            command: None,
-            samples: 3,
-        },
-        CaptureStep {
-            id: "temp",
-            instruction: "Set meter to Temperature (if K-type thermocouple available).",
-            command: None,
-            samples: 3,
-        },
-        // Part 2: Flags
-        CaptureStep {
-            id: "hold",
-            instruction: "Sending HOLD command.",
-            command: Some("hold"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "hold_off",
-            instruction: "Toggling HOLD off.",
-            command: Some("hold"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "rel",
-            instruction: "Sending REL command.",
-            command: Some("rel"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "rel_off",
-            instruction: "Toggling REL off.",
-            command: Some("rel"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "minmax",
-            instruction: "Sending MIN/MAX command.",
-            command: Some("minmax"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "minmax_off",
-            instruction: "Exiting MIN/MAX.",
-            command: Some("exit_minmax"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "range",
-            instruction: "Sending RANGE (manual range).",
-            command: Some("range"),
-            samples: 3,
-        },
-        CaptureStep {
-            id: "auto",
-            instruction: "Sending AUTO (restore auto-range).",
-            command: Some("auto"),
-            samples: 3,
-        },
-        // Part 3: Range cycle
-        CaptureStep {
-            id: "range_cycle",
-            instruction: "Cycle through manual ranges on DC V.",
-            command: None,
-            samples: 0,
-        },
-    ];
-    STEPS
 }
 
 // --- Helpers ---
@@ -596,6 +398,9 @@ pub(crate) fn run_capture_step(
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+    // `capture_steps` is a Protocol method; the trait has to be in scope to
+    // call it on a concrete protocol type (not needed for `dyn Protocol`).
+    use dmm_lib::protocol::Protocol;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;
 
     #[test]
@@ -731,36 +536,91 @@ mod tests {
         assert_eq!(report.steps.len(), 3);
     }
 
+    /// Duplicate IDs would make resume and `--steps` ambiguous, and a step
+    /// could overwrite another's samples through `upsert_step`.
     #[test]
-    fn all_capture_steps_has_expected_count() {
-        let steps = all_capture_steps();
-        // 17 mode steps + 8 flag steps + 1 range_cycle = 26
-        assert_eq!(steps.len(), 26);
+    fn every_device_has_unique_capture_step_ids() {
+        for device in dmm_lib::protocol::registry::DEVICES {
+            let steps = (device.new_protocol)().capture_steps();
+            let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
+            let len_before = ids.len();
+            ids.sort_unstable();
+            ids.dedup();
+            assert_eq!(ids.len(), len_before, "duplicate step ID in {}", device.id);
+        }
     }
 
+    /// `extra` is the freeform pass, not a protocol step. A device declaring
+    /// it would make `--steps extra` ambiguous.
     #[test]
-    fn all_capture_steps_unique_ids() {
-        let steps = all_capture_steps();
-        let mut ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
-        let len_before = ids.len();
-        ids.sort();
-        ids.dedup();
-        assert_eq!(ids.len(), len_before, "step IDs must be unique");
-    }
-
-    #[test]
-    fn mode_and_flag_step_ids_cover_all_steps() {
-        let steps = all_capture_steps();
-        for step in steps {
-            let in_modes = MODE_STEP_IDS.contains(&step.id);
-            let in_flags = FLAG_STEP_IDS.contains(&step.id);
-            let is_range_cycle = step.id == "range_cycle";
+    fn no_device_claims_the_freeform_step_id() {
+        for device in dmm_lib::protocol::registry::DEVICES {
+            let steps = (device.new_protocol)().capture_steps();
             assert!(
-                in_modes || in_flags || is_range_cycle,
-                "step {} not in any category",
-                step.id
+                !steps.iter().any(|s| s.id == FREEFORM_STEP_ID),
+                "{} declares a step named {FREEFORM_STEP_ID}",
+                device.id
             );
         }
+    }
+
+    /// The range sweep is the only coverage for the per-range tables, so it
+    /// has to survive in the protocol that declares it.
+    #[test]
+    fn ut61eplus_declares_a_manual_range_sweep() {
+        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let sweep: Vec<&str> = steps
+            .iter()
+            .filter(|s| s.id.starts_with("range_"))
+            .map(|s| s.id)
+            .collect();
+        assert_eq!(sweep.len(), 6, "expected six manual range steps");
+        assert!(
+            steps.iter().all(|s| s.id != "range_cycle"),
+            "the CLI-side range_cycle step must be gone"
+        );
+        // The sweep must be followed by a restore, or the meter is left in
+        // manual range after the wizard exits.
+        assert!(steps.iter().any(|s| s.command == Some("auto")));
+    }
+
+    #[test]
+    fn unknown_step_ids_are_rejected() {
+        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let filter: Option<std::collections::HashSet<String>> = Some(
+            ["dcv".to_string(), "range_cycle".to_string()]
+                .into_iter()
+                .collect(),
+        );
+        let err = validate_step_filter(&filter, &steps)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("range_cycle"), "got {err}");
+        assert!(
+            !err.contains("dcv"),
+            "known IDs must not be reported: {err}"
+        );
+    }
+
+    #[test]
+    fn known_step_ids_and_the_freeform_keyword_pass() {
+        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let filter: Option<std::collections::HashSet<String>> = Some(
+            [
+                "dcv".to_string(),
+                "range_1".to_string(),
+                FREEFORM_STEP_ID.to_string(),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        assert!(validate_step_filter(&filter, &steps).is_ok());
+    }
+
+    #[test]
+    fn no_filter_accepts_everything() {
+        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        assert!(validate_step_filter(&None, &steps).is_ok());
     }
 
     #[test]
@@ -876,32 +736,38 @@ mod tests {
 
 // --- Main capture command ---
 
-pub(crate) fn list_steps() {
-    let steps = all_capture_steps();
-    eprintln!("{}", style("Available capture steps:").bold());
-    eprintln!();
-    eprintln!("{}", style("  Measurement modes:").cyan());
-    for s in steps {
-        if MODE_STEP_IDS.contains(&s.id) {
-            eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
-        }
-    }
-    eprintln!();
-    eprintln!("{}", style("  Flags & commands:").cyan());
-    for s in steps {
-        if FLAG_STEP_IDS.contains(&s.id) {
-            eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
-        }
-    }
-    eprintln!();
-    eprintln!("{}", style("  Other:").cyan());
+/// Filter keyword for the freeform capture pass. Not a protocol step — the
+/// pass generates `extra_0`, `extra_1`, … as the user describes each capture.
+pub(crate) const FREEFORM_STEP_ID: &str = "extra";
+
+/// Print the step IDs `--steps` accepts for the selected device.
+///
+/// The steps come from the device's own protocol, so what this prints is
+/// exactly what will run. It used to list a table held in this file, which no
+/// device had used since protocols started declaring their own steps: the IDs
+/// shown matched nothing, so `--steps` filtered everything out and wrote an
+/// empty report.
+pub(crate) fn list_steps(device: &'static SelectableDevice) {
+    let protocol = (device.new_protocol)();
+    let steps = protocol.capture_steps();
+
     eprintln!(
-        "    {:<16} Cycle through manual ranges on DC V",
-        style("range_cycle").bold()
+        "{} {}",
+        style("Available capture steps for").bold(),
+        style(device.display_name).bold().cyan()
     );
+    eprintln!();
+    if steps.is_empty() {
+        eprintln!("  This device declares no capture steps.");
+    }
+    for s in &steps {
+        eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
+    }
+    eprintln!();
+    eprintln!("{}", style("  Always available:").cyan());
     eprintln!(
-        "    {:<16} Freeform captures (Part 4)",
-        style("extra").bold()
+        "    {:<16} Freeform captures — describe any mode not covered above",
+        style(FREEFORM_STEP_ID).bold()
     );
     eprintln!();
     eprintln!(
@@ -909,6 +775,39 @@ pub(crate) fn list_steps() {
         style("dmm-cli capture --steps").dim(),
         style("dcmv,temp,duty").dim()
     );
+}
+
+/// Reject `--steps` IDs that no step will match.
+///
+/// Without this an unknown ID silently filtered every step out, leaving a
+/// report with `steps: []` that the CLI still announced as "Capture
+/// complete!" — so the user attached an empty file to their bug report.
+fn validate_step_filter(
+    step_filter: &Option<std::collections::HashSet<String>>,
+    steps: &[dmm_lib::protocol::CaptureStep],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(filter) = step_filter else {
+        return Ok(());
+    };
+    let known: std::collections::HashSet<&str> = steps
+        .iter()
+        .map(|s| s.id)
+        .chain(std::iter::once(FREEFORM_STEP_ID))
+        .collect();
+    let mut unknown: Vec<&str> = filter
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !known.contains(id))
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort_unstable();
+    Err(format!(
+        "unknown capture step(s): {}\nRun `dmm-cli capture --list-steps` to see the steps this device supports.",
+        unknown.join(", ")
+    )
+    .into())
 }
 
 /// Returns true if the given step ID is included by the filter (or if there is no filter).
@@ -1058,143 +957,6 @@ fn populate_report_metadata(
 }
 
 /// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
-fn run_mode_steps(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    step_filter: &Option<std::collections::HashSet<String>>,
-    report: &mut CaptureReport,
-    output_path: &str,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    let has_mode_steps = MODE_STEP_IDS
-        .iter()
-        .any(|id| step_included(step_filter, id));
-    if !has_mode_steps {
-        return Ok(false);
-    }
-
-    eprintln!(
-        "{}",
-        style("\u{2501}\u{2501}\u{2501} Part 1: Measurement Modes \u{2501}\u{2501}\u{2501}").bold()
-    );
-    eprintln!(
-        "{}",
-        style("any key=capture, s=skip one, q=skip to end and save").dim()
-    );
-
-    let all_steps = all_capture_steps();
-    for step in all_steps.iter().filter(|s| MODE_STEP_IDS.contains(&s.id)) {
-        if !step_included(step_filter, step.id) {
-            continue;
-        }
-        let quit = run_capture_step(dmm, step, report, true)?;
-        save_report(report, output_path)?;
-        if quit {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-/// Part 2: Run flag & remote command capture steps. Returns true if user wants to quit.
-fn run_flag_steps(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    step_filter: &Option<std::collections::HashSet<String>>,
-    report: &mut CaptureReport,
-    output_path: &str,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    let has_flag_steps = FLAG_STEP_IDS
-        .iter()
-        .any(|id| step_included(step_filter, id));
-    if !has_flag_steps {
-        return Ok(false);
-    }
-
-    eprintln!(
-        "\n{}",
-        style("\u{2501}\u{2501}\u{2501} Part 2: Flags & Remote Commands \u{2501}\u{2501}\u{2501}")
-            .bold()
-    );
-    eprintln!("Set meter to DC V mode for these tests.");
-    let ch = prompt_key(&format!(
-        "\n{} ",
-        style("Any key when ready on DC V, q=skip to end:").dim()
-    ))?;
-    if ch == 'q' || ch == 'Q' {
-        return Ok(true);
-    }
-
-    let all_steps = all_capture_steps();
-    for step in all_steps.iter().filter(|s| FLAG_STEP_IDS.contains(&s.id)) {
-        if !step_included(step_filter, step.id) {
-            continue;
-        }
-        let quit = run_capture_step(dmm, step, report, true)?;
-        save_report(report, output_path)?;
-        if quit {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
-}
-
-/// Part 3: Cycle through manual ranges on DC V. Returns true if user wants to quit.
-fn run_range_cycle(
-    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-    step_filter: &Option<std::collections::HashSet<String>>,
-    report: &mut CaptureReport,
-    output_path: &str,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    if !step_included(step_filter, "range_cycle") {
-        return Ok(false);
-    }
-
-    eprintln!(
-        "\n{}",
-        style("\u{2501}\u{2501}\u{2501} Part 3: Range Values \u{2501}\u{2501}\u{2501}").bold()
-    );
-    eprintln!("We'll cycle through manual ranges on DC V.");
-    let ch = prompt_key(&format!(
-        "\n{} ",
-        style("Any key to start, q=skip to end:").dim()
-    ))?;
-    if ch == 'q' || ch == 'Q' {
-        return Ok(true);
-    }
-
-    let _ = dmm.send_command("auto");
-    std::thread::sleep(Duration::from_millis(200));
-
-    let mut range_samples = Vec::new();
-    for r in 0..6 {
-        let _ = dmm.send_command("range");
-        std::thread::sleep(Duration::from_millis(300));
-        let raw = capture_samples(dmm, 2);
-        for m in &raw {
-            let s = SampleData::from_measurement(m);
-            eprintln!("  range_step_{r}: range={}", s.range_label);
-            range_samples.push(s);
-        }
-    }
-    let _ = dmm.send_command("auto");
-    std::thread::sleep(Duration::from_millis(200));
-
-    upsert_step(
-        report,
-        StepResult {
-            id: "range_cycle".to_string(),
-            instruction: "Cycle through manual ranges on DC V".to_string(),
-            status: StepStatus::Captured,
-            samples: range_samples,
-            screen: None,
-            error: None,
-        },
-    );
-    save_report(report, output_path)?;
-
-    Ok(false)
-}
-
 /// Part 4: Freeform additional captures.
 fn run_freeform_captures(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
@@ -1287,32 +1049,21 @@ pub(crate) fn cmd_capture(
 
     populate_report_metadata(&mut report, &mut dmm, device_name, supported);
 
-    // For non-UT61E+ protocols, use protocol-provided capture steps
+    validate_step_filter(&step_filter, &dmm.capture_steps())?;
+
+    // The device's own steps cover modes, flags and the manual range sweep;
+    // the freeform pass afterwards is device-agnostic and always offered,
+    // since it is the only way to capture a mode the step list doesn't
+    // anticipate — and the only step that records what the meter's screen
+    // actually said next to what we parsed.
     let protocol_steps = dmm.capture_steps();
-    if !protocol_steps.is_empty() {
-        return run_protocol_capture(
-            &mut dmm,
-            protocol_steps,
-            &step_filter,
-            &mut report,
-            &output_path,
-        );
-    }
-
-    // --- Parts 1-4: mode steps, flag steps, range cycle, freeform ---
-    let done = run_mode_steps(&mut dmm, &step_filter, &mut report, &output_path)?;
-
-    let done = if !done {
-        run_flag_steps(&mut dmm, &step_filter, &mut report, &output_path)?
-    } else {
-        done
-    };
-
-    let done = if !done {
-        run_range_cycle(&mut dmm, &step_filter, &mut report, &output_path)?
-    } else {
-        done
-    };
+    let done = run_protocol_capture(
+        &mut dmm,
+        protocol_steps,
+        &step_filter,
+        &mut report,
+        &output_path,
+    )?;
 
     if !done {
         run_freeform_captures(&mut dmm, &step_filter, &mut report, &output_path)?;

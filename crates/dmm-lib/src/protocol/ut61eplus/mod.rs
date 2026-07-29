@@ -388,11 +388,47 @@ impl Protocol for Ut61PlusProtocol {
                 command: Some("exit_minmax"),
                 samples: 3,
             },
+            // Manual range sweep. Every step above captures one dial position
+            // in whatever range auto-range picked, so this is the only
+            // coverage for the per-range tables: range labels, the range→unit
+            // prefix mapping, and the resolution/accuracy specs keyed on
+            // range. Six presses walks the DC V ranges back around to the
+            // first; "auto" then restores auto-ranging.
             CaptureStep {
-                id: "range",
-                instruction: "We will send RANGE to switch to manual.",
+                id: "range_1",
+                instruction: "Set the meter to DC V. We will send RANGE for manual range 1 of 6.",
                 command: Some("range"),
-                samples: 3,
+                samples: 2,
+            },
+            CaptureStep {
+                id: "range_2",
+                instruction: "We will send RANGE for manual range 2 of 6.",
+                command: Some("range"),
+                samples: 2,
+            },
+            CaptureStep {
+                id: "range_3",
+                instruction: "We will send RANGE for manual range 3 of 6.",
+                command: Some("range"),
+                samples: 2,
+            },
+            CaptureStep {
+                id: "range_4",
+                instruction: "We will send RANGE for manual range 4 of 6.",
+                command: Some("range"),
+                samples: 2,
+            },
+            CaptureStep {
+                id: "range_5",
+                instruction: "We will send RANGE for manual range 5 of 6.",
+                command: Some("range"),
+                samples: 2,
+            },
+            CaptureStep {
+                id: "range_6",
+                instruction: "We will send RANGE for manual range 6 of 6.",
+                command: Some("range"),
+                samples: 2,
             },
             CaptureStep {
                 id: "auto",
