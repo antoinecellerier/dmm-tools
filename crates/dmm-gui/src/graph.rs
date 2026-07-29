@@ -1987,7 +1987,7 @@ impl Graph {
             if idx < self.history.len() {
                 let pt = self.elapsed_secs(self.history[idx].time);
                 let dist = (pt - t).abs();
-                if best.is_none() || dist < best.unwrap().0 {
+                if best.is_none_or(|(best_dist, _, _)| dist < best_dist) {
                     best = Some((dist, pt, self.history[idx].value));
                 }
             }
