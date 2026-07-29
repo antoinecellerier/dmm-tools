@@ -53,9 +53,10 @@ use connection::{
 pub(super) enum ConnectionIssue {
     /// No supported USB adapter on the bus.
     DeviceNotFound,
-    /// `--adapter` was given but nothing matched it. Carries the selector
-    /// the user passed.
-    AdapterNotFound { selector: String },
+    /// `--adapter` was given but nothing matched it. Carries the finished
+    /// help text, including the connected-device list, because building it
+    /// enumerates the USB bus — far too heavy for the paint path.
+    AdapterNotFound { help: String },
     /// Anything else, as reported by the acquisition thread.
     Other(String),
 }
@@ -70,11 +71,41 @@ impl ConnectionIssue {
     fn from_message(message: String) -> Self {
         match message.strip_prefix("adapter not found: ") {
             Some(selector) => Self::AdapterNotFound {
-                selector: selector.to_string(),
+                help: adapter_not_found_help(selector),
             },
             None => Self::Other(message),
         }
     }
+}
+
+/// Build the "adapter not found" help, listing what is actually on the bus.
+///
+/// Called once when the error arrives, not from the render path:
+/// `list_devices()` constructs a fresh `HidApi` and walks every HID device
+/// on the system, and this help stays on screen across every repaint until
+/// the user reconnects. The list is a snapshot either way — the user has to
+/// restart with a different `--adapter` to act on it.
+fn adapter_not_found_help(selector: &str) -> String {
+    let mut msg = format!("No device matched --adapter '{selector}'.");
+    match dmm_lib::list_devices() {
+        Ok(devices) if devices.is_empty() => {
+            msg.push_str("\n\nNo devices currently connected.");
+        }
+        Ok(devices) => {
+            msg.push_str("\n\nConnected devices:");
+            for (i, dev) in devices.iter().enumerate() {
+                msg.push_str(&format!("\n  [{i}] {dev}"));
+            }
+            msg.push_str("\n\nRestart with the correct --adapter value.");
+        }
+        Err(_) => {
+            msg.push_str(
+                "\n\nRun 'dmm-cli list' to see connected devices,\n\
+                 then restart with the correct --adapter value.",
+            );
+        }
+    }
+    msg
 }
 
 /// Result of a CSV export, sent from the writer thread to the UI.
@@ -1049,29 +1080,10 @@ impl App {
                     "Opens the GitHub issue tracker to report experimental-support feedback",
                 );
             }
-        } else if let ConnectionIssue::AdapterNotFound { selector } = issue {
+        } else if let ConnectionIssue::AdapterNotFound { help } = issue {
             ui.label(RichText::new("Adapter not found").color(warn_color));
-            let mut msg = format!("No device matched --adapter '{selector}'.");
-            match dmm_lib::list_devices() {
-                Ok(devices) if devices.is_empty() => {
-                    msg.push_str("\n\nNo devices currently connected.");
-                }
-                Ok(devices) => {
-                    msg.push_str("\n\nConnected devices:");
-                    for (i, dev) in devices.iter().enumerate() {
-                        msg.push_str(&format!("\n  [{i}] {dev}"));
-                    }
-                    msg.push_str("\n\nRestart with the correct --adapter value.");
-                }
-                Err(_) => {
-                    msg.push_str(
-                        "\n\nRun 'dmm-cli list' to see connected devices,\n\
-                         then restart with the correct --adapter value.",
-                    );
-                }
-            }
             ui.label(
-                RichText::new(msg)
+                RichText::new(help)
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
@@ -2467,12 +2479,10 @@ mod tests {
     #[test]
     fn adapter_error_is_classified_with_its_selector() {
         let issue = ConnectionIssue::from_message("adapter not found: ABC123".to_string());
-        assert_eq!(
-            issue,
-            ConnectionIssue::AdapterNotFound {
-                selector: "ABC123".to_string()
-            }
-        );
+        let ConnectionIssue::AdapterNotFound { help } = issue else {
+            panic!("expected AdapterNotFound, got {issue:?}");
+        };
+        assert!(help.contains("ABC123"), "got {help}");
     }
 
     #[test]
