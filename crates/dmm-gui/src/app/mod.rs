@@ -155,6 +155,10 @@ pub struct App {
     wall_clock: dmm_lib::WallClock,
 
     rx: Option<mpsc::Receiver<DmmMessage>>,
+    /// Meter the buffered recording was captured from, taken when recording
+    /// started. Outlives disconnect so a capture can still be exported with
+    /// the right provenance after the meter is unplugged.
+    recording_device: Option<&'static str>,
     ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
     pub(super) cmd_tx: Option<mpsc::Sender<String>>,
     first_frame: bool,
@@ -245,6 +249,7 @@ impl App {
             recording: Recording::new(),
             wall_clock: dmm_lib::WallClock::new(),
             rx: None,
+            recording_device: None,
             ctrl_tx: None,
             cmd_tx: None,
             first_frame: true,
@@ -422,7 +427,7 @@ impl App {
         if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::R))
             && self.connection_state == ConnectionState::Connected
         {
-            self.recording.toggle();
+            self.toggle_recording();
         }
 
         // Ctrl+B: Cycle big meter mode (off -> full -> minimal -> off)
@@ -740,6 +745,20 @@ impl App {
         if clear_channel {
             // Disconnect properly: send stop signal so the background thread exits
             self.disconnect();
+        }
+    }
+
+    /// Start or stop recording, remembering which meter the samples came from.
+    ///
+    /// The device has to be captured here rather than read back at export
+    /// time: the Settings selection can change while a recording is held in
+    /// the buffer (it only schedules a reconnect, and neither connect nor
+    /// disconnect clears the samples), so reading it later labelled the file
+    /// with whatever meter happened to be picked last.
+    pub(super) fn toggle_recording(&mut self) {
+        self.recording.toggle();
+        if self.recording.active {
+            self.recording_device = Some(self.selected_device().display_name);
         }
     }
 
@@ -1414,7 +1433,7 @@ impl App {
 
         ui.horizontal(|ui| {
             if ui.button(btn_label).on_hover_text(btn_tooltip).clicked() {
-                self.recording.toggle();
+                self.toggle_recording();
             }
             if ui
                 .button("Export CSV")
@@ -1557,7 +1576,10 @@ impl App {
         // Clone samples so the file dialog + write runs on a separate thread
         // without blocking the UI.
         let samples = self.recording.samples.clone();
-        let device_model = self.selected_device().display_name;
+        // The meter these samples came from, not whatever is selected now.
+        let device_model = self
+            .recording_device
+            .unwrap_or_else(|| self.selected_device().display_name);
         let (tx, rx) = std::sync::mpsc::channel::<(String, bool)>();
         std::thread::spawn(move || {
             if let Some(path) = rfd::FileDialog::new()

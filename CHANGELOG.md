@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **Exported CSVs name the meter the samples came from** — the `# device:` header was read from the Settings selection at export time, so recording on one meter and then switching the selection produced a file labelled with the wrong model. The device is now captured when recording starts.
 - **Brief overloads now break the graph line instead of being drawn through** — an over-range excursion shorter than the gap threshold left no hole in the timestamps, so the trace ran straight from the last good reading to the first one after it, and the visible-range integral counted the area under that invented line. Overloads now split the trace and show a gap marker.
 - **Pause now actually stops talking to the meter** — it was a display-side freeze: the meter kept being polled over USB and the readings were thrown away in the UI. Unplugging the cable while "paused" therefore dropped the GUI into its reconnect loop, and the meter's comms indicator stayed active. Device buttons (HOLD, REL, RANGE, …) still work while paused.
 - **Auto-ranging no longer mixes two scales in the graph and statistics** — crossing a range boundary (219 Ω → 0.22 kΩ, mV → V, nF → µF) keeps the mode unchanged but moves the unit a decade, and the GUI carried the old readings over: the trace collapsed 1000x mid-plot with no gap, the axis relabelled itself, and Min/Max/Avg reported figures up to three orders of magnitude out. Graph history and session stats now reset on a unit change, as they already did on a mode change.
