@@ -368,9 +368,7 @@ impl App {
         });
 
         // Mock mode selector (only shown when mock device is selected)
-        if registry::find_device(&self.settings.shared.device_family)
-            .is_some_and(|d| d.id == "mock")
-        {
+        if self.selected_device().id == "mock" {
             ui.horizontal_wrapped(|ui| {
                 ui.label("Mock mode:");
                 let mut changed = false;

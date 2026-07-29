@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **Device aliases work everywhere in the GUI** — writing an alias such as `"ut61e+"` for `device_family` in `settings.json` (a spelling the CLI accepts) connected correctly but left the Manual link missing, the top-bar label reading "DMM", and the mock-mode selector hidden when the mock was chosen by alias.
 - **The Specifications panel works with the mock device** — it was permanently empty in mock mode (the demo and screenshot path), because the mock never looked up the spec tables even though they already map it to the UT61E+.
 - **"Waiting for meter…" no longer lingers after disconnecting** — the timeout counter behind that message was only cleared by an incoming reading, so if the meter went quiet before you clicked Disconnect the banner stayed up for the rest of the disconnected session.
 - **Record no longer silently destroys an unexported capture** — pressing Record again after a run (or mistyping Ctrl+R) cleared the buffer with no prompt, no toast and nothing in the log, so an hour of unexported samples could vanish on one keystroke. It now asks first, and only when the buffer actually holds samples that were never written to a CSV.

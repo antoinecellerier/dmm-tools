@@ -1075,9 +1075,11 @@ impl App {
         ui.horizontal(|ui| {
             let left_start = ui.cursor().left();
 
-            let device_label = registry::find_device(&self.settings.shared.device_family)
-                .map(|d| d.display_name)
-                .unwrap_or("DMM");
+            // `selected_device()`, not `find_device`: it accepts the aliases
+            // the CLI and settings file accept, and falls back to the same
+            // default the connection will actually open — so the label always
+            // names the meter this session will talk to.
+            let device_label = self.selected_device().display_name;
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
@@ -1505,7 +1507,7 @@ impl App {
     }
 
     fn manual_url(&self) -> Option<&'static str> {
-        registry::find_device(&self.settings.shared.device_family).and_then(|d| d.manual_url)
+        self.selected_device().manual_url
     }
 
     /// Render a specs section, calling `render_fn` when spec data is available,
