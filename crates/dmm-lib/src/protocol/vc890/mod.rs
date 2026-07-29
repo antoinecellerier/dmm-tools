@@ -488,6 +488,20 @@ impl Protocol for Vc890Protocol {
                 command: None,
                 samples: 5,
             },
+            // The battery nibble (payload byte 59) is in raw_hex on every
+            // sample already, but nothing records what the meter itself was
+            // showing, so the values can't be interpreted. Ask for that here:
+            // the step's screen-confirmation prompt is where the answer lands.
+            // We currently treat 0 as "empty", which is a guess — see the
+            // VC-890 entry in docs/verification-backlog.md.
+            CaptureStep {
+                id: "battery",
+                instruction: "Any mode. When prompted, type the battery indicator \
+                              shown on the meter (e.g. \"full\", \"2 of 3 bars\", \
+                              \"low-battery symbol lit\").",
+                command: None,
+                samples: 3,
+            },
         ]
     }
 }
