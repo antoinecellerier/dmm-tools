@@ -182,12 +182,14 @@ fn install_desktop_integration() {
             include_bytes!("../../../assets/icon.svg"),
         ),
     ];
+    // Only rewrite what actually differs. This runs before the window is
+    // created on every launch, and unconditionally writing a 256x256 PNG, an
+    // SVG and the .desktop file — then spawning gtk-update-icon-cache and
+    // waiting for it to exit — is a visible blank period at startup, paid
+    // every time to reproduce bytes that are already on disk.
+    let mut icons_changed = false;
     for (rel_path, content) in icons {
-        let path = data_dir.join(rel_path);
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let _ = fs::write(&path, content);
+        icons_changed |= write_if_changed(&data_dir.join(rel_path), content);
     }
 
     // Desktop entry — Exec points to whatever binary is currently running.
@@ -206,21 +208,42 @@ fn install_desktop_integration() {
              StartupWMClass=dmm-tools\n",
             exe_path.display()
         );
-        let app_dir = data_dir.join("applications");
-        let _ = fs::create_dir_all(&app_dir);
-        let _ = fs::write(app_dir.join("dmm-tools.desktop"), desktop);
+        let desktop_path = data_dir.join("applications/dmm-tools.desktop");
+        write_if_changed(&desktop_path, desktop.as_bytes());
     }
 
-    // Update the GTK icon cache so GNOME can find the icon without a session restart.
-    let icon_dir = data_dir.join("icons/hicolor");
-    let _ = std::process::Command::new("gtk-update-icon-cache")
-        .args(["-f", "-t"])
-        .arg(&icon_dir)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+    // Update the GTK icon cache so GNOME can find the icon without a session
+    // restart — but only when an icon actually changed. This spawns a process
+    // and blocks until it exits, which is the bulk of the startup cost.
+    if icons_changed {
+        let icon_dir = data_dir.join("icons/hicolor");
+        let _ = std::process::Command::new("gtk-update-icon-cache")
+            .args(["-f", "-t"])
+            .arg(&icon_dir)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        log::debug!("desktop integration files installed, icon cache refreshed");
+    } else {
+        log::debug!("desktop integration already up to date");
+    }
+}
 
-    log::debug!("desktop integration files installed");
+/// Write `content` to `path` unless it is already exactly that.
+///
+/// Returns whether anything was written. Creates parent directories on
+/// demand. Errors are ignored: desktop integration is best-effort, and a
+/// read-only or absent data dir must not stop the GUI starting.
+#[cfg(target_os = "linux")]
+fn write_if_changed(path: &std::path::Path, content: &[u8]) -> bool {
+    use std::fs;
+    if fs::read(path).is_ok_and(|existing| existing == content) {
+        return false;
+    }
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::write(path, content).is_ok()
 }
 
 fn main() -> eframe::Result<()> {
