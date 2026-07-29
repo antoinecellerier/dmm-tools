@@ -215,7 +215,16 @@ The length byte is always 0x03 (1 byte command + 2 bytes checksum).
 |-------------|-------|------|----------|
 | 0x5E | `^` | GetMeasurement | `QByteArray::append('^')` in constructor |
 | 0x4A | `J` | Hold | `QByteArray::append('J')` in FUN_10002170 |
-| 0x46 | `F` | Range | `QByteArray::append('F')` in FUN_100021f0 |
+| 0x46 | `F` | Range | `QByteArray::append('F')` in FUN_100021f0 — see note below |
+
+**Note on 0x46 (Range)** — the wire byte is confirmed, its *effect* is not.
+A first press engages manual ranging (the AUTO flag clears), but six
+consecutive presses on DC V neither stepped the range table monotonically
+nor returned the meter to auto, and the mode byte changed DC V -> AC+DC V on
+two of them — the cycle this table attributes to SELECT (0x4C). This is the
+only entry here without a hardware-verified behaviour note. See the UT61E+
+section of docs/verification-backlog.md for the capture and the experiment
+that would settle it.
 
 **Probable commands** (from DMM.exe UI action names, not yet seen in
 decompiled code — DMM.exe decompilation was incomplete):

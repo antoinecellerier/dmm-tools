@@ -388,47 +388,19 @@ impl Protocol for Ut61PlusProtocol {
                 command: Some("exit_minmax"),
                 samples: 3,
             },
-            // Manual range sweep. Every step above captures one dial position
-            // in whatever range auto-range picked, so this is the only
-            // coverage for the per-range tables: range labels, the range→unit
-            // prefix mapping, and the resolution/accuracy specs keyed on
-            // range. Six presses walks the DC V ranges back around to the
-            // first; "auto" then restores auto-ranging.
+            // A single RANGE press, not a sweep. A six-step sweep was tried
+            // and removed: on hardware it produced range indices 0, 2, 0, 0,
+            // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
+            // between DC V (0x02) and AC+DC V (0x19) partway through, which
+            // is the documented effect of SELECT (0x4C), not RANGE (0x46).
+            // Until what 0x46 actually does is known, stepping it repeatedly
+            // just files misleading data. See the UT61E+ section of
+            // docs/verification-backlog.md.
             CaptureStep {
-                id: "range_1",
-                instruction: "Set the meter to DC V. We will send RANGE for manual range 1 of 6.",
+                id: "range",
+                instruction: "We will send RANGE to switch to manual.",
                 command: Some("range"),
-                samples: 2,
-            },
-            CaptureStep {
-                id: "range_2",
-                instruction: "We will send RANGE for manual range 2 of 6.",
-                command: Some("range"),
-                samples: 2,
-            },
-            CaptureStep {
-                id: "range_3",
-                instruction: "We will send RANGE for manual range 3 of 6.",
-                command: Some("range"),
-                samples: 2,
-            },
-            CaptureStep {
-                id: "range_4",
-                instruction: "We will send RANGE for manual range 4 of 6.",
-                command: Some("range"),
-                samples: 2,
-            },
-            CaptureStep {
-                id: "range_5",
-                instruction: "We will send RANGE for manual range 5 of 6.",
-                command: Some("range"),
-                samples: 2,
-            },
-            CaptureStep {
-                id: "range_6",
-                instruction: "We will send RANGE for manual range 6 of 6.",
-                command: Some("range"),
-                samples: 2,
+                samples: 3,
             },
             CaptureStep {
                 id: "auto",

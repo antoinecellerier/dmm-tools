@@ -678,24 +678,34 @@ mod tests {
         }
     }
 
-    /// The range sweep is the only coverage for the per-range tables, so it
-    /// has to survive in the protocol that declares it.
+    /// One RANGE press, then AUTO to restore. Not a sweep: repeated presses
+    /// were tried against hardware and neither stepped the range table nor
+    /// returned the meter to auto — see the Command::Range doc comment.
     #[test]
-    fn ut61eplus_declares_a_manual_range_sweep() {
+    fn ut61eplus_sends_range_once_and_restores_auto() {
         let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
-        let sweep: Vec<&str> = steps
+        let range_steps: Vec<&str> = steps
             .iter()
-            .filter(|s| s.id.starts_with("range_"))
+            .filter(|s| s.command == Some("range"))
             .map(|s| s.id)
             .collect();
-        assert_eq!(sweep.len(), 6, "expected six manual range steps");
+        assert_eq!(
+            range_steps,
+            vec!["range"],
+            "repeated RANGE presses produce misleading data until 0x46 is understood"
+        );
         assert!(
             steps.iter().all(|s| s.id != "range_cycle"),
             "the CLI-side range_cycle step must be gone"
         );
-        // The sweep must be followed by a restore, or the meter is left in
-        // manual range after the wizard exits.
-        assert!(steps.iter().any(|s| s.command == Some("auto")));
+        // RANGE engages manual ranging, so the wizard must hand the meter
+        // back in auto or it leaves it stuck.
+        let auto_pos = steps.iter().position(|s| s.command == Some("auto"));
+        let range_pos = steps.iter().position(|s| s.command == Some("range"));
+        assert!(
+            matches!((range_pos, auto_pos), (Some(r), Some(a)) if a > r),
+            "AUTO must come after RANGE"
+        );
     }
 
     #[test]
@@ -722,7 +732,7 @@ mod tests {
         let filter: Option<std::collections::HashSet<String>> = Some(
             [
                 "dcv".to_string(),
-                "range_1".to_string(),
+                "range".to_string(),
                 FREEFORM_STEP_ID.to_string(),
             ]
             .into_iter()
@@ -1165,7 +1175,7 @@ pub(crate) fn cmd_capture(
 
     validate_step_filter(&step_filter, &dmm.capture_steps())?;
 
-    // The device's own steps cover modes, flags and the manual range sweep;
+    // The device's own steps cover modes, flags and button commands;
     // the freeform pass afterwards is device-agnostic and always offered,
     // since it is the only way to capture a mode the step list doesn't
     // anticipate — and the only step that records what the meter's screen

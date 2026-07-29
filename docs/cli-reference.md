@@ -320,9 +320,10 @@ dmm-cli capture [OPTIONS]
 
 The steps come from the selected device's protocol, so `--list-steps` shows
 exactly what will run for that meter — pass `--device` to see another one's.
-Steps cover the measurement modes, the flag and button commands, and a manual
-range sweep (the only coverage for the per-range tables, since every other
-step captures whatever range auto-ranging picked).
+Steps cover the measurement modes and the flag and button commands. Note that
+the per-range tables are still thinly covered: each mode step captures
+whatever range auto-ranging happened to pick, so ranges the meter doesn't
+select on its own go unverified.
 
 After the device's own steps, capture always offers **freeform captures**:
 describe any mode the step list doesn't cover, and the tool records the
@@ -338,8 +339,8 @@ dmm-cli capture
 # Run only DC millivolt and temperature steps
 dmm-cli capture --steps dcmv,temp
 
-# Run only the manual range sweep
-dmm-cli capture --steps range_1,range_2,range_3,range_4,range_5,range_6,auto
+# Run only the range/auto command steps
+dmm-cli capture --steps range,auto
 
 # List the steps available for the selected device
 dmm-cli capture --list-steps

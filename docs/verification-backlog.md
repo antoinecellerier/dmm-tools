@@ -4,6 +4,58 @@ Items that need real components or specific setups to verify.
 
 ## Pending Verification
 
+### UT61E+ RANGE command (0x46) — what do repeated presses do?
+
+Blocks any per-range verification, so it's worth doing early.
+
+`0x46` is the only entry in the protocol spec's *Confirmed commands* table
+with decompile evidence (`QByteArray::append('F')` in `FUN_100021f0`) but no
+verified behaviour note. `Command::Range` described it as "toggle range
+(auto/manual)"; a capture on 2026-07-29 contradicts that.
+
+Six consecutive `range` presses on the DC V dial position, leads
+disconnected, produced:
+
+| press | mode byte | range index | label |
+|---|---|---|---|
+| 1 | 0x02 DC V | 0 | 2.2V |
+| 2 | 0x02 DC V | 2 | 220V |
+| 3 | 0x02 DC V | 0 | 2.2V |
+| 4 | 0x19 AC+DC V | 0 | 2.2V |
+| 5 | 0x02 DC V | 0 | 2.2V |
+| 6 | 0x19 AC+DC V | 0 | 2.2V |
+
+Two things to explain:
+
+- The range index never stepped monotonically and never reached 22V (index 1)
+  or 1000V (index 3), so it isn't a simple "next range" stepper. Nor did it
+  return to auto — `auto_range` stayed false for all six — so it isn't an
+  auto/manual toggle either.
+- The **mode byte changed** at presses 4 and 6, DC V ↔ AC+DC V. §"Confirmed
+  commands" attributes exactly that cycle to SELECT (`0x4C`), not RANGE.
+
+Confirmed: the first press does engage manual ranging, and `0x47` (Auto)
+restores auto-ranging.
+
+To settle it, connect a stable source (a 1.5 V cell makes range changes
+visible in the reading) and send single presses, checking the LCD and a
+`read` after each:
+
+```
+dmm-cli --device ut61eplus command range
+dmm-cli --device ut61eplus read --count 2
+```
+
+Until then the capture wizard sends `range` once, not repeatedly — a
+six-step sweep was tried and removed, because it files data that looks like
+a range sweep but isn't.
+
+Note the same capture leaves the DC V range table unverified. `dc_v` has five
+entries (2.2V, 22V, 220V, 1000V, 220mV) and only 2.2V/22V/220V have ever been
+confirmed on hardware (commit `5c190c7`, bench PSU). The 220mV entry is
+suspect: DC mV is a separate mode byte (0x03) with its own `dc_mv` table, so
+it's unclear how DC V range index 4 is ever reached.
+
 ### Modes not yet tested with real signals
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).

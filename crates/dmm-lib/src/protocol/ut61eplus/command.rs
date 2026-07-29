@@ -14,7 +14,16 @@ pub enum Command {
     MinMax = 0x41,
     /// Exit MIN/MAX mode.
     ExitMinMax = 0x42,
-    /// Toggle range (auto/manual).
+    /// RANGE button.
+    ///
+    /// Engages manual ranging — that much is confirmed on hardware (the AUTO
+    /// flag clears and stays clear). What repeated presses do is **not**
+    /// known: this was described as "toggle range (auto/manual)", but six
+    /// consecutive presses never returned the meter to auto, and did not
+    /// step cleanly through the range table either. Unlike the other
+    /// commands, 0x46 has only decompile evidence (`QByteArray::append('F')`
+    /// in `FUN_100021f0`) and no verified behaviour note. See the UT61E+
+    /// section of docs/verification-backlog.md.
     Range = 0x46,
     /// Set auto-range.
     Auto = 0x47,
