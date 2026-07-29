@@ -679,7 +679,13 @@ impl App {
                             self.integrator.push(*v, m.timestamp);
                         }
                         MeasuredValue::Overload => {
+                            // An overload has no plottable value, so the graph
+                            // gets no point — tell it the series broke, or a
+                            // short excursion (one under the gap threshold)
+                            // would be drawn as a straight line through the
+                            // break and integrated across.
                             self.integrator.push_overload();
+                            self.graph.push_break();
                         }
                         _ => {}
                     }

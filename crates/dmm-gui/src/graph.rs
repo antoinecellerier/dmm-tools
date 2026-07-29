@@ -28,6 +28,10 @@ type SegmentsAndGaps = (Vec<Vec<[f64; 2]>>, Vec<(f64, f64)>);
 struct DataPoint {
     time: Instant,
     value: f64,
+    /// The series was interrupted immediately before this point — an overload
+    /// produced no plottable value, so the line must break here even though
+    /// the two neighbouring samples are adjacent in time.
+    break_before: bool,
 }
 
 /// Quantize a `f64` to ~3 decimal digits before hashing so animated plot
@@ -152,6 +156,10 @@ pub struct Graph {
     view_center: f64,
     /// Gap detection threshold in seconds.
     gap_threshold_secs: f64,
+    /// An overload arrived since the last plotted point, so the next one
+    /// starts a new segment. Time-based gap detection can't see this: an
+    /// over-range excursion shorter than the threshold leaves no time hole.
+    pending_break: bool,
     /// When true, Y axis uses fixed min/max instead of auto-scaling.
     pub y_axis_fixed: bool,
     /// Fixed Y-axis minimum (editable text buffer for UI).
@@ -243,6 +251,7 @@ impl Graph {
             live: true,
             view_center: 0.0,
             gap_threshold_secs: GAP_MINIMUM_SECS,
+            pending_break: false,
             y_axis_fixed: false,
             y_min_text: "-1".to_string(),
             y_max_text: "1".to_string(),
@@ -349,12 +358,37 @@ impl Graph {
             self.history.pop_front();
         }
 
-        self.history.push_back(DataPoint { time: now, value });
+        self.history.push_back(DataPoint {
+            time: now,
+            value,
+            break_before: std::mem::take(&mut self.pending_break),
+        });
         self.history_version += 1;
+    }
+
+    /// Record that the series was interrupted — the meter reported a value
+    /// that can't be plotted (an overload), so the next point starts a new
+    /// segment.
+    ///
+    /// Needed because gap detection is otherwise purely time-based: an
+    /// over-range excursion shorter than the gap threshold leaves no hole in
+    /// the timestamps, so the trace would be drawn straight through it and
+    /// the visible-range stats and integral would run across a value the
+    /// meter never measured.
+    pub fn push_break(&mut self) {
+        if self.pending_break {
+            return;
+        }
+        self.pending_break = true;
+        // The break only becomes visible once the next point lands, but the
+        // caches key on this counter — bump it so a stale segment list built
+        // before the overload isn't reused.
+        self.invalidate_cache();
     }
 
     pub fn clear(&mut self) {
         self.history.clear();
+        self.pending_break = false;
         self.current_mode = None;
         self.current_unit.clear();
         self.last_display_raw = None;
@@ -542,6 +576,19 @@ impl Graph {
         }
     }
 
+    /// Whether the line should break between `prev` and `point` instead of
+    /// being drawn through. Either the samples are far enough apart in time,
+    /// or an overload interrupted the series between them.
+    fn breaks_before(&self, prev: Instant, point: &DataPoint) -> bool {
+        point.break_before
+            || point
+                .time
+                .checked_duration_since(prev)
+                .map(|d| d.as_secs_f64())
+                .unwrap_or(0.0)
+                > self.gap_threshold_secs
+    }
+
     /// Build raw segment data as Vec<Vec<[f64;2]>> — avoids PlotPoints clone issues.
     fn build_raw_segments(&self) -> Vec<Vec<[f64; 2]>> {
         let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
@@ -551,15 +598,11 @@ impl Graph {
         for point in &self.history {
             let t = self.elapsed_secs(point.time);
 
-            if let Some(prev) = prev_time {
-                let gap = point
-                    .time
-                    .checked_duration_since(prev)
-                    .map(|d| d.as_secs_f64())
-                    .unwrap_or(0.0);
-                if gap > self.gap_threshold_secs && !current_segment.is_empty() {
-                    segments.push(std::mem::take(&mut current_segment));
-                }
+            if let Some(prev) = prev_time
+                && self.breaks_before(prev, point)
+                && !current_segment.is_empty()
+            {
+                segments.push(std::mem::take(&mut current_segment));
             }
 
             current_segment.push([t, point.value]);
@@ -578,17 +621,12 @@ impl Graph {
         let mut prev: Option<&DataPoint> = None;
 
         for point in &self.history {
-            if let Some(p) = prev {
-                let gap = point
-                    .time
-                    .checked_duration_since(p.time)
-                    .map(|d| d.as_secs_f64())
-                    .unwrap_or(0.0);
-                if gap > self.gap_threshold_secs {
-                    let t1 = self.elapsed_secs(p.time);
-                    let t2 = self.elapsed_secs(point.time);
-                    gaps.push((t1, t2));
-                }
+            if let Some(p) = prev
+                && self.breaks_before(p.time, point)
+            {
+                let t1 = self.elapsed_secs(p.time);
+                let t2 = self.elapsed_secs(point.time);
+                gaps.push((t1, t2));
             }
             prev = Some(point);
         }
@@ -875,17 +913,13 @@ impl Graph {
             let point = &self.history[i];
             let t = self.elapsed_secs(point.time);
 
-            if let Some(prev) = prev_time {
-                let gap = point
-                    .time
-                    .checked_duration_since(prev)
-                    .map(|d| d.as_secs_f64())
-                    .unwrap_or(0.0);
-                if gap > self.gap_threshold_secs && !current_segment.is_empty() {
-                    let gap_start = self.elapsed_secs(prev);
-                    gaps.push((gap_start, t));
-                    segments.push(std::mem::take(&mut current_segment));
-                }
+            if let Some(prev) = prev_time
+                && self.breaks_before(prev, point)
+                && !current_segment.is_empty()
+            {
+                let gap_start = self.elapsed_secs(prev);
+                gaps.push((gap_start, t));
+                segments.push(std::mem::take(&mut current_segment));
             }
 
             current_segment.push([t, point.value]);
@@ -1946,7 +1980,8 @@ impl Graph {
 
     /// Compute the time-integral between two cursor positions using the trapezoidal
     /// rule. Returns the raw integral in unit·seconds, or `None` if fewer than 2
-    /// data points exist in the range. Skips intervals exceeding `gap_threshold_secs`.
+    /// data points exist in the range. Skips intervals exceeding
+    /// `gap_threshold_secs`, and intervals interrupted by an overload.
     fn cursor_integral(&self, ta: f64, tb: f64) -> Option<f64> {
         let (t_start, t_end) = if ta <= tb { (ta, tb) } else { (tb, ta) };
         let (start, end) = self.visible_index_range(t_start, t_end);
@@ -1957,9 +1992,12 @@ impl Graph {
         for i in start..end {
             let point = &self.history[i];
             let t = self.elapsed_secs(point.time);
+            // An overload breaks the series even when the samples either side
+            // of it are adjacent in time — integrating across it would credit
+            // the area under a value the meter never measured.
             if let Some((pt, pv)) = prev {
                 let dt = t - pt;
-                if dt <= self.gap_threshold_secs {
+                if dt <= self.gap_threshold_secs && !point.break_before {
                     integral += (pv + point.value) / 2.0 * dt;
                     has_pair = true;
                 }
@@ -2075,6 +2113,78 @@ mod tests {
         g.push(0.22, Instant::now(), "Ω", "kΩ", None);
         assert!(!g.y_axis_fixed);
         assert!(!g.y_user_set);
+    }
+
+    /// A brief over-range excursion leaves no hole in the timestamps, so
+    /// time-based gap detection can't see it: the trace was drawn straight
+    /// from the last good sample to the first one after, through a region the
+    /// meter reported as unmeasurable.
+    #[test]
+    fn overload_breaks_the_trace_without_a_time_gap() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        g.push_break();
+        g.push(3.0, t0 + Duration::from_millis(200), "DC V", "V", None);
+
+        // All three samples are 100ms apart — well inside the 1s minimum gap
+        // threshold — so only the explicit break can split them.
+        let segments = g.build_raw_segments();
+        assert_eq!(segments.len(), 2, "overload must split the trace");
+        assert_eq!(segments[0].len(), 2);
+        assert_eq!(segments[1].len(), 1);
+    }
+
+    #[test]
+    fn overload_is_reported_as_a_gap_range() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break();
+        g.push(3.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        assert_eq!(g.find_gap_ranges().len(), 1);
+    }
+
+    /// Consecutive overload samples are one interruption, not several.
+    #[test]
+    fn repeated_overloads_produce_one_break() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        for _ in 0..5 {
+            g.push_break();
+        }
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        assert_eq!(g.build_raw_segments().len(), 2);
+        assert_eq!(g.find_gap_ranges().len(), 1);
+    }
+
+    /// The break must not persist past the point that consumed it.
+    #[test]
+    fn break_applies_only_to_the_next_point() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break();
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        g.push(3.0, t0 + Duration::from_millis(200), "DC V", "V", None);
+        let segments = g.build_raw_segments();
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[1].len(), 2, "samples after the break rejoin");
+    }
+
+    /// Clearing must drop a pending break, or the first point of the next
+    /// session would start orphaned.
+    #[test]
+    fn clear_discards_a_pending_break() {
+        let mut g = Graph::new();
+        g.push_break();
+        g.clear();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        assert_eq!(g.build_raw_segments().len(), 1);
     }
 
     /// Same mode and unit must not clear — otherwise the graph would reset on

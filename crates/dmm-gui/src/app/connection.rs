@@ -276,6 +276,23 @@ pub(super) fn run_device_thread<T, F>(
     }
 }
 
+pub(super) fn handle_thread_panic(
+    panic: Box<dyn std::any::Any + Send>,
+    tx: &mpsc::Sender<DmmMessage>,
+    ctx: &egui::Context,
+) {
+    let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+        s.to_string()
+    } else if let Some(s) = panic.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "unknown panic".to_string()
+    };
+    error!("background thread panicked: {msg}");
+    let _ = tx.send(DmmMessage::Error(format!("internal error: {msg}")));
+    ctx.request_repaint();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,21 +369,4 @@ mod tests {
             "must wait rather than spin"
         );
     }
-}
-
-pub(super) fn handle_thread_panic(
-    panic: Box<dyn std::any::Any + Send>,
-    tx: &mpsc::Sender<DmmMessage>,
-    ctx: &egui::Context,
-) {
-    let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-        s.to_string()
-    } else if let Some(s) = panic.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        "unknown panic".to_string()
-    };
-    error!("background thread panicked: {msg}");
-    let _ = tx.send(DmmMessage::Error(format!("internal error: {msg}")));
-    ctx.request_repaint();
 }
