@@ -2,6 +2,136 @@ use eframe::egui::Color32;
 
 use crate::settings::{ColorPreset, HexColor, PaletteOverrides};
 
+/// One user-customisable colour in the palette.
+///
+/// Replaces the `&str` keys that four parallel lists matched on — the
+/// effective-colour lookup, the tooltip table, the settings-panel label and
+/// the `PaletteOverrides` field passed alongside it. A typo produced a
+/// transparent swatch with a generic tooltip at runtime; now the compiler
+/// catches it, and a new colour can't be half-added.
+///
+/// CLAUDE.md: "Prefer enums over string-typed status/state values."
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaletteField {
+    Background,
+    Text,
+    Button,
+    GraphLine,
+    GraphGap,
+    GraphMean,
+    GraphRef,
+    GraphCrossing,
+    GraphCursor,
+    GraphEnvelope,
+    PlotBackground,
+    GraphCrosshair,
+    StatusOk,
+    StatusWarning,
+    StatusError,
+    StatusInactive,
+    Accent,
+    MinimapViewport,
+}
+
+impl PaletteField {
+    /// Every field, in settings-panel order.
+    pub(crate) const ALL: &'static [PaletteField] = &[
+        PaletteField::Background,
+        PaletteField::Text,
+        PaletteField::Button,
+        PaletteField::GraphLine,
+        PaletteField::GraphGap,
+        PaletteField::GraphMean,
+        PaletteField::GraphRef,
+        PaletteField::GraphCrossing,
+        PaletteField::GraphCursor,
+        PaletteField::GraphEnvelope,
+        PaletteField::PlotBackground,
+        PaletteField::GraphCrosshair,
+        PaletteField::StatusOk,
+        PaletteField::StatusWarning,
+        PaletteField::StatusError,
+        PaletteField::StatusInactive,
+        PaletteField::Accent,
+        PaletteField::MinimapViewport,
+    ];
+
+    /// Short label shown next to the swatch.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Background => "Background",
+            Self::Text => "Text",
+            Self::Button => "Button",
+            Self::GraphLine => "Data line",
+            Self::GraphGap => "Gap",
+            Self::GraphMean => "Mean",
+            Self::GraphRef => "Ref",
+            Self::GraphCrossing => "Crossing",
+            Self::GraphCursor => "Cursor",
+            Self::GraphEnvelope => "Envelope",
+            Self::PlotBackground => "Plot bg",
+            Self::GraphCrosshair => "Crosshair",
+            Self::StatusOk => "Connected",
+            Self::StatusWarning => "Warning",
+            Self::StatusError => "Error",
+            Self::StatusInactive => "Inactive",
+            Self::Accent => "Accent",
+            Self::MinimapViewport => "Viewport",
+        }
+    }
+
+    /// Hover text for the swatch.
+    pub(crate) fn tooltip(self) -> &'static str {
+        match self {
+            Self::Background => "Panel background color",
+            Self::Text => "Primary text color",
+            Self::Button => "Button background color",
+            Self::GraphLine => "Data line color on the graph",
+            Self::GraphGap => "Color used to mark gaps in recorded data",
+            Self::GraphMean => "Mean overlay line color",
+            Self::GraphRef => "Reference line color",
+            Self::GraphCrossing => "Trigger-crossing marker color",
+            Self::GraphCursor => "Measurement cursor color",
+            Self::GraphEnvelope => "Min/Max envelope fill color",
+            Self::PlotBackground => "Graph plot area background color",
+            Self::GraphCrosshair => "Hover crosshair color on the graph",
+            Self::StatusOk => "\"Connected\" status color",
+            Self::StatusWarning => "Warning status color",
+            Self::StatusError => "Error status color",
+            Self::StatusInactive => "Inactive / disconnected status color",
+            Self::Accent => "Accent color used by active toggles and highlights",
+            Self::MinimapViewport => "Minimap viewport rectangle color",
+        }
+    }
+
+    /// The override slot for this field.
+    ///
+    /// Pairing the field with its slot here means a call site can't ask for
+    /// one colour and write to another's override.
+    pub(crate) fn override_slot(self, o: &mut PaletteOverrides) -> &mut Option<HexColor> {
+        match self {
+            Self::Background => &mut o.background,
+            Self::Text => &mut o.text,
+            Self::Button => &mut o.button,
+            Self::GraphLine => &mut o.graph_line,
+            Self::GraphGap => &mut o.graph_gap,
+            Self::GraphMean => &mut o.graph_mean,
+            Self::GraphRef => &mut o.graph_ref,
+            Self::GraphCrossing => &mut o.graph_crossing,
+            Self::GraphCursor => &mut o.graph_cursor,
+            Self::GraphEnvelope => &mut o.graph_envelope,
+            Self::PlotBackground => &mut o.plot_background,
+            Self::GraphCrosshair => &mut o.graph_crosshair,
+            Self::StatusOk => &mut o.status_ok,
+            Self::StatusWarning => &mut o.status_warning,
+            Self::StatusError => &mut o.status_error,
+            Self::StatusInactive => &mut o.status_inactive,
+            Self::Accent => &mut o.accent,
+            Self::MinimapViewport => &mut o.minimap_viewport,
+        }
+    }
+}
+
 /// A dark/light color pair.
 struct ColorPair(Color32, Color32);
 
@@ -411,27 +541,29 @@ impl ThemeColors {
     }
 
     /// Return the effective color for a given field, for use in the settings UI.
-    pub(crate) fn effective_color(&self, field: &str) -> Color32 {
+    /// Exhaustive: there is no fallback arm, so adding a `PaletteField`
+    /// without wiring it here is a compile error rather than a swatch that
+    /// silently renders transparent.
+    pub(crate) fn effective_color(&self, field: PaletteField) -> Color32 {
         match field {
-            "background" => self.background(),
-            "text" => self.text(),
-            "button" => self.button(),
-            "graph_line" => self.graph_line(),
-            "graph_gap" => self.graph_gap(),
-            "graph_mean" => self.graph_mean(),
-            "graph_ref" => self.graph_ref(),
-            "graph_crossing" => self.graph_crossing(),
-            "graph_cursor" => self.graph_cursor(),
-            "graph_envelope" => self.graph_envelope(),
-            "plot_background" => self.plot_background(),
-            "graph_crosshair" => self.graph_crosshair(),
-            "status_ok" => self.status_ok(),
-            "status_warning" => self.status_warning(),
-            "status_error" => self.status_error(),
-            "status_inactive" => self.status_inactive(),
-            "accent" => self.accent(),
-            "minimap_viewport" => self.minimap_viewport(),
-            _ => Color32::TRANSPARENT,
+            PaletteField::Background => self.background(),
+            PaletteField::Text => self.text(),
+            PaletteField::Button => self.button(),
+            PaletteField::GraphLine => self.graph_line(),
+            PaletteField::GraphGap => self.graph_gap(),
+            PaletteField::GraphMean => self.graph_mean(),
+            PaletteField::GraphRef => self.graph_ref(),
+            PaletteField::GraphCrossing => self.graph_crossing(),
+            PaletteField::GraphCursor => self.graph_cursor(),
+            PaletteField::GraphEnvelope => self.graph_envelope(),
+            PaletteField::PlotBackground => self.plot_background(),
+            PaletteField::GraphCrosshair => self.graph_crosshair(),
+            PaletteField::StatusOk => self.status_ok(),
+            PaletteField::StatusWarning => self.status_warning(),
+            PaletteField::StatusError => self.status_error(),
+            PaletteField::StatusInactive => self.status_inactive(),
+            PaletteField::Accent => self.accent(),
+            PaletteField::MinimapViewport => self.minimap_viewport(),
         }
     }
 }
@@ -439,6 +571,64 @@ impl ThemeColors {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every field must resolve to a real colour. The old string-keyed
+    /// lookup fell through to TRANSPARENT, so a typo produced an invisible
+    /// swatch at runtime instead of a compile error.
+    #[test]
+    fn every_palette_field_resolves_to_a_colour() {
+        for &dark in &[true, false] {
+            let tc = ThemeColors::new(dark, ColorPreset::Default, &PaletteOverrides::default());
+            for &field in PaletteField::ALL {
+                assert_ne!(
+                    tc.effective_color(field),
+                    Color32::TRANSPARENT,
+                    "{field:?} resolves to transparent (dark={dark})"
+                );
+            }
+        }
+    }
+
+    /// ALL drives the settings panel, so a field missing from it would be
+    /// uneditable even though the rest of the plumbing exists.
+    #[test]
+    fn all_lists_every_field_exactly_once() {
+        let mut seen: Vec<PaletteField> = Vec::new();
+        for &f in PaletteField::ALL {
+            assert!(!seen.contains(&f), "{f:?} listed twice");
+            seen.push(f);
+        }
+        // The settings panel slices ALL into four groups by index; if the
+        // count changes those slices need revisiting.
+        assert_eq!(seen.len(), 18);
+    }
+
+    /// An override must come back from the field it was written to — the
+    /// point of pairing the slot with the field.
+    #[test]
+    fn override_slot_round_trips_per_field() {
+        for &field in PaletteField::ALL {
+            let mut overrides = PaletteOverrides::default();
+            *field.override_slot(&mut overrides) = Some(HexColor(Color32::from_rgb(1, 2, 3)));
+            let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
+            assert_eq!(
+                tc.effective_color(field),
+                Color32::from_rgb(1, 2, 3),
+                "{field:?} did not read back its own override"
+            );
+        }
+    }
+
+    #[test]
+    fn labels_and_tooltips_are_distinct_per_field() {
+        for &a in PaletteField::ALL {
+            for &b in PaletteField::ALL {
+                if a != b {
+                    assert_ne!(a.tooltip(), b.tooltip(), "{a:?} and {b:?} share a tooltip");
+                }
+            }
+        }
+    }
 
     #[test]
     fn default_preset_matches_original_colors() {

@@ -4,7 +4,7 @@ use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
 use crate::settings::{ColorOverrides, ColorPreset, HexColor, ThemeMode};
-use crate::theme::ThemeColors;
+use crate::theme::{PaletteField, ThemeColors};
 
 use super::{App, BigMeterMode};
 
@@ -511,150 +511,23 @@ impl App {
                 let preset = self.settings.color_preset;
                 let overrides = self.settings.color_overrides.for_mode_mut(dark);
 
-                // UI chrome
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("UI:");
-                    changed |= color_edit(
-                        ui,
-                        "Background",
-                        &mut overrides.background,
-                        preset,
-                        dark,
-                        "background",
-                    );
-                    changed |= color_edit(ui, "Text", &mut overrides.text, preset, dark, "text");
-                    changed |=
-                        color_edit(ui, "Button", &mut overrides.button, preset, dark, "button");
-                });
-
-                // Graph colors
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Graph:");
-                    changed |= color_edit(
-                        ui,
-                        "Data line",
-                        &mut overrides.graph_line,
-                        preset,
-                        dark,
-                        "graph_line",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Gap",
-                        &mut overrides.graph_gap,
-                        preset,
-                        dark,
-                        "graph_gap",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Mean",
-                        &mut overrides.graph_mean,
-                        preset,
-                        dark,
-                        "graph_mean",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Ref",
-                        &mut overrides.graph_ref,
-                        preset,
-                        dark,
-                        "graph_ref",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Crossing",
-                        &mut overrides.graph_crossing,
-                        preset,
-                        dark,
-                        "graph_crossing",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Cursor",
-                        &mut overrides.graph_cursor,
-                        preset,
-                        dark,
-                        "graph_cursor",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Envelope",
-                        &mut overrides.graph_envelope,
-                        preset,
-                        dark,
-                        "graph_envelope",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Plot bg",
-                        &mut overrides.plot_background,
-                        preset,
-                        dark,
-                        "plot_background",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Crosshair",
-                        &mut overrides.graph_crosshair,
-                        preset,
-                        dark,
-                        "graph_crosshair",
-                    );
-                });
-
-                // Status indicators
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Status:");
-                    changed |= color_edit(
-                        ui,
-                        "Connected",
-                        &mut overrides.status_ok,
-                        preset,
-                        dark,
-                        "status_ok",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Warning",
-                        &mut overrides.status_warning,
-                        preset,
-                        dark,
-                        "status_warning",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Error",
-                        &mut overrides.status_error,
-                        preset,
-                        dark,
-                        "status_error",
-                    );
-                    changed |= color_edit(
-                        ui,
-                        "Inactive",
-                        &mut overrides.status_inactive,
-                        preset,
-                        dark,
-                        "status_inactive",
-                    );
-                    changed |=
-                        color_edit(ui, "Accent", &mut overrides.accent, preset, dark, "accent");
-                });
-
-                // Minimap
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Minimap:");
-                    changed |= color_edit(
-                        ui,
-                        "Viewport",
-                        &mut overrides.minimap_viewport,
-                        preset,
-                        dark,
-                        "minimap_viewport",
-                    );
-                });
+                // Grouped by what the colour affects, in PaletteField::ALL
+                // order. Each row's label, tooltip and override slot come
+                // from the enum, so a colour can't be listed here with
+                // another's tooltip or wired to the wrong override.
+                for (heading, fields) in [
+                    ("UI:", &PaletteField::ALL[..3]),
+                    ("Graph:", &PaletteField::ALL[3..12]),
+                    ("Status:", &PaletteField::ALL[12..17]),
+                    ("Minimap:", &PaletteField::ALL[17..]),
+                ] {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(heading);
+                        for &field in fields {
+                            changed |= color_edit(ui, field, overrides, preset, dark);
+                        }
+                    });
+                }
 
                 // Reset button
                 ui.horizontal(|ui| {
@@ -689,17 +562,16 @@ impl App {
 /// Render a color edit button with label. Returns true if the color was changed.
 fn color_edit(
     ui: &mut Ui,
-    label: &str,
-    override_color: &mut Option<HexColor>,
+    field: PaletteField,
+    overrides: &mut crate::settings::PaletteOverrides,
     preset: ColorPreset,
     dark: bool,
-    field: &str,
 ) -> bool {
-    use crate::settings::PaletteOverrides;
-
-    // Get the effective color (override or preset default).
-    let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+    let label = field.label();
+    // Effective color = this field's override, or the preset default.
+    let tc = ThemeColors::new(dark, preset, &crate::settings::PaletteOverrides::default());
     let default = tc.effective_color(field);
+    let override_color = field.override_slot(overrides);
     let mut color = override_color.map(|h| h.0).unwrap_or(default);
 
     // Render the swatch as a plain Button with an explicit fill, so we control
@@ -718,7 +590,7 @@ fn color_edit(
     // can't describe — give it the label text as its accessible name.
     let btn_response = response
         .inner
-        .on_hover_text(color_edit_tooltip(field))
+        .on_hover_text(field.tooltip())
         .a11y_label(label);
     // The fill covers the usual button border, so paint an explicit focus
     // ring when the swatch is keyboard-focused.
@@ -891,29 +763,4 @@ fn color_edit(
     }
 
     false
-}
-
-/// Hover text for a color override button, keyed on the internal field name.
-fn color_edit_tooltip(field: &str) -> &'static str {
-    match field {
-        "background" => "Panel background color",
-        "text" => "Primary text color",
-        "button" => "Button background color",
-        "graph_line" => "Data line color on the graph",
-        "graph_gap" => "Color used to mark gaps in recorded data",
-        "graph_mean" => "Mean overlay line color",
-        "graph_ref" => "Reference line color",
-        "graph_crossing" => "Trigger-crossing marker color",
-        "graph_cursor" => "Measurement cursor color",
-        "graph_envelope" => "Min/Max envelope fill color",
-        "plot_background" => "Graph plot area background color",
-        "graph_crosshair" => "Hover crosshair color on the graph",
-        "status_ok" => "\"Connected\" status color",
-        "status_warning" => "Warning status color",
-        "status_error" => "Error status color",
-        "status_inactive" => "Inactive / disconnected status color",
-        "accent" => "Accent color used by active toggles and highlights",
-        "minimap_viewport" => "Minimap viewport rectangle color",
-        _ => "Color override",
-    }
 }
