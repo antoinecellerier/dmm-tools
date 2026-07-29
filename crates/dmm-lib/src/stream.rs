@@ -7,7 +7,9 @@
 //! The stream intentionally does not own cancellation — the CLI uses an
 //! `AtomicBool` driven by the Ctrl-C handler while the GUI uses an `mpsc`
 //! stop channel, and neither fits naturally inside the other. Callers check
-//! their own stop signal around each [`MeasurementStream::tick`] call.
+//! their own stop signal around each [`MeasurementStream::tick`] call, and
+//! can hand the stream a predicate via [`MeasurementStream::with_cancel`] so
+//! the pacing sleep gives up on that same signal instead of running to term.
 
 use crate::Dmm;
 use crate::error::{Error, Result};
@@ -46,7 +48,19 @@ pub struct MeasurementStream<'a, T: Transport> {
     tick: Duration,
     next_tick: Option<Instant>,
     consecutive_timeouts: u32,
+    /// `'static` rather than `'a`: a borrowed predicate would make the struct
+    /// invariant in `'a`, which stops callers shortening the `&mut Dmm` borrow
+    /// (the GUI reassigns `dmm` after a reconnect). Both callers hand over an
+    /// owned `Arc` anyway.
+    cancel: Option<Box<dyn Fn() -> bool + Send + 'static>>,
 }
+
+/// Longest single `thread::sleep` inside a cancellable pacing wait.
+///
+/// The wait is split into slices so the cancel predicate is polled about this
+/// often. Small enough that shutdown feels immediate, large enough that a slow
+/// sample interval doesn't spin.
+const CANCEL_POLL_SLICE: Duration = Duration::from_millis(50);
 
 impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// Build a stream around `dmm` targeting one measurement per `tick`.
@@ -58,7 +72,25 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
             tick,
             next_tick: None,
             consecutive_timeouts: 0,
+            cancel: None,
         }
+    }
+
+    /// Poll `cancel` during the pacing sleep and cut it short when it returns
+    /// true.
+    ///
+    /// Without this the sleep runs for the whole sample interval no matter
+    /// what: at a 2 s interval a shutdown request isn't noticed until the tick
+    /// elapses (plus the read timeout that follows), so the caller keeps the
+    /// device open long after the user asked it to stop. A hand-edited
+    /// interval of minutes wedges it entirely.
+    ///
+    /// The predicate only shortens the wait — it does not cancel the
+    /// measurement request that follows, so `tick` still returns an event and
+    /// the caller decides what to do next.
+    pub fn with_cancel(mut self, cancel: impl Fn() -> bool + Send + 'static) -> Self {
+        self.cancel = Some(Box::new(cancel));
+        self
     }
 
     /// Read one measurement, pacing to the tick schedule first.
@@ -106,7 +138,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         match self.next_tick {
             Some(target) => {
                 if let Some(wait) = target.checked_duration_since(now) {
-                    std::thread::sleep(wait);
+                    self.sleep_cancellable(wait);
                 }
                 let mut next = target + self.tick;
                 let now2 = Instant::now();
@@ -120,6 +152,29 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
                 // schedule anchored here.
                 self.next_tick = Some(now + self.tick);
             }
+        }
+    }
+
+    /// Sleep for `wait`, returning early if the cancel predicate fires.
+    ///
+    /// With no predicate this is a plain `thread::sleep`; the slicing costs
+    /// nothing when nobody is watching for cancellation.
+    fn sleep_cancellable(&self, wait: Duration) {
+        let Some(cancel) = &self.cancel else {
+            std::thread::sleep(wait);
+            return;
+        };
+        let deadline = Instant::now() + wait;
+        loop {
+            if cancel() {
+                return;
+            }
+            // `checked_duration_since` rather than a subtraction: a backward
+            // clock jump must not panic here.
+            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+                return;
+            };
+            std::thread::sleep(remaining.min(CANCEL_POLL_SLICE));
         }
     }
 }
@@ -205,6 +260,48 @@ mod tests {
         let elapsed = start.elapsed();
         // Second tick should land ~50ms after the first.
         assert!(elapsed >= tick, "expected >= {tick:?}, got {elapsed:?}");
+    }
+
+    /// A long sample interval used to hold the device open for the whole tick
+    /// after the user asked to stop.
+    #[test]
+    fn cancel_cuts_the_pacing_sleep_short() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let mut dmm = new_dmm(vec![build_response(b"  1.000"), build_response(b"  2.000")]);
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&stop);
+        let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(10))
+            .with_cancel(move || flag.load(Ordering::Relaxed));
+
+        let _ = stream.tick().unwrap(); // first tick fires immediately
+        stop.store(true, Ordering::Relaxed);
+
+        let start = Instant::now();
+        let _ = stream.tick().unwrap();
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "cancelled sleep should return promptly, took {:?}",
+            start.elapsed()
+        );
+    }
+
+    /// The predicate must not shorten a wait nobody asked to cancel.
+    #[test]
+    fn cancel_predicate_that_stays_false_still_paces() {
+        let mut dmm = new_dmm(vec![build_response(b"  1.000"), build_response(b"  2.000")]);
+        let tick = Duration::from_millis(120);
+        let mut stream = MeasurementStream::new(&mut dmm, tick).with_cancel(|| false);
+
+        let start = Instant::now();
+        let _ = stream.tick().unwrap();
+        let _ = stream.tick().unwrap();
+        assert!(
+            start.elapsed() >= tick,
+            "expected >= {tick:?}, got {:?}",
+            start.elapsed()
+        );
     }
 
     #[test]

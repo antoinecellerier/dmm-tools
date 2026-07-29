@@ -5,7 +5,8 @@ use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Transport;
 use eframe::egui;
 use log::{error, info, warn};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 /// Control messages from the UI to the background thread.
@@ -16,6 +17,15 @@ pub(crate) enum ThreadControl {
     /// being polled at all — it is not a display-side freeze.
     SetPaused(bool),
 }
+
+/// Upper bound on the configured sample interval.
+///
+/// `sample_interval_ms` is deserialized with `#[serde(default)]` and never
+/// validated, so a hand-edited `settings.json` can ask for minutes between
+/// samples. The meter then looks dead with nothing on screen explaining why.
+/// The UI presets top out at 2 s; this leaves generous room above them while
+/// keeping a mistyped value diagnosable.
+const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 
 /// How often a paused thread wakes to look for work.
 ///
@@ -110,19 +120,33 @@ fn establish_connection<T: Transport>(
     ctx.request_repaint();
 }
 
+/// Channels and settings the acquisition thread needs, besides the opener.
+pub(super) struct ThreadContext {
+    pub msg_tx: mpsc::Sender<DmmMessage>,
+    pub ctrl_rx: mpsc::Receiver<ThreadControl>,
+    pub cmd_rx: mpsc::Receiver<String>,
+    pub ctx: egui::Context,
+    pub query_name: bool,
+    pub sample_interval_ms: u32,
+    pub stop_flag: Arc<AtomicBool>,
+}
+
 /// Run the measurement loop on a background thread, generic over transport type.
-pub(super) fn run_device_thread<T, F>(
-    open_fn: F,
-    msg_tx: mpsc::Sender<DmmMessage>,
-    ctrl_rx: mpsc::Receiver<ThreadControl>,
-    cmd_rx: mpsc::Receiver<String>,
-    ctx: egui::Context,
-    query_name: bool,
-    sample_interval_ms: u32,
-) where
+pub(super) fn run_device_thread<T, F>(open_fn: F, thread_ctx: ThreadContext)
+where
     T: Transport + Send + 'static,
     F: Fn() -> dmm_lib::error::Result<dmm_lib::Dmm<T>> + Send + 'static,
 {
+    let ThreadContext {
+        msg_tx,
+        ctrl_rx,
+        cmd_rx,
+        ctx,
+        query_name,
+        sample_interval_ms,
+        stop_flag,
+    } = thread_ctx;
+
     info!("background thread: connecting to device");
     let mut dmm = match open_fn() {
         Ok(mut d) => {
@@ -146,12 +170,24 @@ pub(super) fn run_device_thread<T, F>(
     // unparseable state doesn't flood the channel.
     const PROTOCOL_ERROR_REPORT_INTERVAL: u32 = 20;
 
-    let tick = Duration::from_millis(sample_interval_ms as u64);
-    let mut stream = MeasurementStream::new(&mut dmm, tick);
+    if sample_interval_ms > MAX_SAMPLE_INTERVAL_MS {
+        warn!(
+            "sample_interval_ms {sample_interval_ms} exceeds the {MAX_SAMPLE_INTERVAL_MS} ms \
+             maximum, clamping"
+        );
+    }
+    let tick = Duration::from_millis(sample_interval_ms.min(MAX_SAMPLE_INTERVAL_MS) as u64);
+    // Let the pacing sleep observe the stop request too. Without it a 2 s
+    // interval keeps the USB handle open for the rest of the tick (plus the
+    // read timeout) after the user clicks Disconnect, while the UI already
+    // shows Disconnected and offers Connect again.
+    let sleep_stop = Arc::clone(&stop_flag);
+    let mut stream = MeasurementStream::new(&mut dmm, tick)
+        .with_cancel(move || sleep_stop.load(Ordering::Relaxed));
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
     loop {
-        if !handle_control(&ctrl_rx, &mut paused) {
+        if stop_flag.load(Ordering::Relaxed) || !handle_control(&ctrl_rx, &mut paused) {
             info!("background thread: stopping");
             break;
         }

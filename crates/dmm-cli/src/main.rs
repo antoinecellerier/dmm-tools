@@ -653,7 +653,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let mut series_unit: Option<String> = None;
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
-    let mut stream = MeasurementStream::new(dmm, tick);
+    // Give the pacing sleep the same Ctrl-C flag the loop checks, so a long
+    // --interval doesn't swallow the interrupt for a whole tick.
+    let cancel = running.clone();
+    let mut stream =
+        MeasurementStream::new(dmm, tick).with_cancel(move || !cancel.load(Ordering::SeqCst));
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
@@ -868,7 +872,9 @@ fn cmd_debug(
 
     let tick = Duration::from_millis(interval_ms);
     let mut i = 0;
-    let mut stream = MeasurementStream::new(&mut dmm, tick);
+    let cancel = running.clone();
+    let mut stream =
+        MeasurementStream::new(&mut dmm, tick).with_cancel(move || !cancel.load(Ordering::SeqCst));
 
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {

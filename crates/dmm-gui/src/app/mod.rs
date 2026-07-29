@@ -38,7 +38,9 @@ const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
 const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
 const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
 
-use connection::{DmmMessage, ThreadControl, handle_thread_panic, run_device_thread};
+use connection::{
+    DmmMessage, ThreadContext, ThreadControl, handle_thread_panic, run_device_thread,
+};
 
 /// Pre-formatted min/max/avg/count strings for a single stats group.
 struct FormattedStatsGroup {
@@ -160,6 +162,10 @@ pub struct App {
     /// the right provenance after the meter is unplugged.
     recording_device: Option<&'static str>,
     ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
+    /// Stop request, readable without consuming a channel message so the
+    /// acquisition thread's pacing sleep can bail out on it mid-tick.
+    /// `ctrl_tx` stays the control path; this is the wake signal.
+    stop_flag: Option<Arc<AtomicBool>>,
     pub(super) cmd_tx: Option<mpsc::Sender<String>>,
     first_frame: bool,
     /// Reconnect on next frame (device selection changed while connected).
@@ -251,6 +257,7 @@ impl App {
             rx: None,
             recording_device: None,
             ctrl_tx: None,
+            stop_flag: None,
             cmd_tx: None,
             first_frame: true,
             needs_reconnect: false,
@@ -517,8 +524,10 @@ impl App {
         let (msg_tx, msg_rx) = mpsc::channel();
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<String>();
+        let stop_flag = Arc::new(AtomicBool::new(false));
         self.rx = Some(msg_rx);
         self.ctrl_tx = Some(ctrl_tx);
+        self.stop_flag = Some(Arc::clone(&stop_flag));
         self.cmd_tx = Some(cmd_tx);
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
@@ -543,12 +552,15 @@ impl App {
                             Some(mode) => dmm_lib::mock::open_mock_mode(mode),
                             None => dmm_lib::mock::open_mock(),
                         },
-                        msg_tx,
-                        ctrl_rx,
-                        cmd_rx,
-                        ctx_clone,
-                        query_name,
-                        mock_interval,
+                        ThreadContext {
+                            msg_tx,
+                            ctrl_rx,
+                            cmd_rx,
+                            ctx: ctx_clone,
+                            query_name,
+                            sample_interval_ms: mock_interval,
+                            stop_flag,
+                        },
                     );
                 }));
                 if let Err(panic) = result {
@@ -564,12 +576,15 @@ impl App {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
                         move || dmm_lib::open_device_by_id_auto(device_id, adapter.as_deref()),
-                        msg_tx,
-                        ctrl_rx,
-                        cmd_rx,
-                        ctx_clone,
-                        query_name,
-                        sample_interval_ms,
+                        ThreadContext {
+                            msg_tx,
+                            ctrl_rx,
+                            cmd_rx,
+                            ctx: ctx_clone,
+                            query_name,
+                            sample_interval_ms,
+                            stop_flag,
+                        },
                     );
                 }));
                 if let Err(panic) = result {
@@ -580,6 +595,11 @@ impl App {
     }
 
     fn disconnect(&mut self) {
+        // Raise the flag before the message: the thread may be mid-sleep, and
+        // the flag is what cuts that short.
+        if let Some(flag) = self.stop_flag.take() {
+            flag.store(true, Ordering::Relaxed);
+        }
         if let Some(tx) = self.ctrl_tx.take() {
             let _ = tx.send(ThreadControl::Stop);
         }
