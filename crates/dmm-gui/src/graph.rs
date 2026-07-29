@@ -52,9 +52,11 @@ struct DataPoint {
     ///
     /// Bounds what we actually observed. If the meter goes over range and
     /// then the link drops, OL samples stop arriving and this stays at the
-    /// last one we heard — everything after it is silence, not over-range,
-    /// and must be drawn as a dropout rather than folded into the band.
+    /// last one we heard — everything after it is silence, not over-range.
     break_last_sample: Option<Instant>,
+    /// The interruption included a genuine loss of data, as reported by the
+    /// App — not merely a quiet meter. See `push_data_loss`.
+    break_had_data_loss: bool,
 }
 
 /// Quantize a `f64` to ~3 decimal digits before hashing so animated plot
@@ -184,6 +186,10 @@ pub struct Graph {
     /// this: an over-range excursion shorter than the threshold leaves no
     /// time hole.
     pending_break: Option<GapKind>,
+    /// A genuine dropout happened during the open interruption: the link
+    /// went down, or acquisition was stopped. Distinct from the meter simply
+    /// not sending — see `push_data_loss`.
+    pending_data_loss: bool,
     /// Timestamp of the newest overload sample while a break is open.
     ///
     /// Overload measurements carry a timestamp like any other; they just have
@@ -286,6 +292,7 @@ impl Graph {
             view_center: 0.0,
             gap_threshold_secs: GAP_MINIMUM_SECS,
             pending_break: None,
+            pending_data_loss: false,
             pending_break_since: None,
             y_axis_fixed: false,
             y_min_text: "-1".to_string(),
@@ -398,6 +405,7 @@ impl Graph {
             value,
             break_before: self.pending_break.take(),
             break_last_sample: self.pending_break_since.take(),
+            break_had_data_loss: std::mem::take(&mut self.pending_data_loss),
         });
         self.history_version += 1;
     }
@@ -425,9 +433,27 @@ impl Graph {
         self.invalidate_cache();
     }
 
+    /// Record that data was genuinely lost — the link dropped, or
+    /// acquisition was stopped — as opposed to the meter merely going quiet.
+    ///
+    /// The graph cannot tell those apart from timestamps. This meter pauses
+    /// its output for over a second while auto-ranging (measured: 462 ms then
+    /// 1153 ms stepping 2.2MΩ → 22MΩ → 220MΩ, against a 97 ms steady
+    /// cadence), which by elapsed time alone is indistinguishable from an
+    /// unplugged cable. The App receives the disconnect and drives pause, so
+    /// it states what happened instead of leaving the graph to infer it.
+    pub fn push_data_loss(&mut self) {
+        self.pending_data_loss = true;
+        if self.pending_break.is_none() {
+            self.pending_break = Some(GapKind::NoData);
+            self.invalidate_cache();
+        }
+    }
+
     pub fn clear(&mut self) {
         self.history.clear();
         self.pending_break = None;
+        self.pending_data_loss = false;
         self.pending_break_since = None;
         self.current_mode = None;
         self.current_unit.clear();
@@ -942,12 +968,10 @@ impl Graph {
                 // the band would claim the meter was over range for a period
                 // it never reported at all.
                 match (kind, point.break_last_sample) {
-                    (GapKind::Overload, Some(last)) => {
+                    (GapKind::Overload, Some(last)) if point.break_had_data_loss => {
                         let heard_until = self.elapsed_secs(last);
                         gaps.push((gap_start, heard_until, GapKind::Overload));
-                        if t - heard_until > self.gap_threshold_secs {
-                            gaps.push((heard_until, t, GapKind::NoData));
-                        }
+                        gaps.push((heard_until, t, GapKind::NoData));
                     }
                     _ => gaps.push((gap_start, t, kind)),
                 }
@@ -2369,6 +2393,7 @@ mod tests {
         g.push(1.0, t0, "DC V", "V", None);
         // Half a second of overload, then the link drops for 30 s.
         g.push_break(t0 + Duration::from_millis(500));
+        g.push_data_loss();
         g.push(2.0, t0 + Duration::from_secs(30), "DC V", "V", None);
 
         let gaps = g.visible_gaps();
@@ -2386,6 +2411,63 @@ mod tests {
         assert_eq!(gap_kind, GapKind::NoData);
         assert!((gap_start - 0.5).abs() < 1e-9);
         assert!((gap_end - 30.0).abs() < 1e-9);
+    }
+
+    /// Measured on hardware: releasing the leads makes the meter step
+    /// 2.2MΩ → 22MΩ → 220MΩ, pausing 462 ms and then 1153 ms against a 97 ms
+    /// steady cadence. That silence is longer than the gap threshold but is
+    /// not data loss — the link never dropped — and must not be painted as a
+    /// dropout.
+    #[test]
+    fn an_auto_range_stutter_is_not_a_dropout() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.4934, t0, "Ω", "MΩ", None);
+        g.push_break(t0 + Duration::from_millis(97)); // OL, 2.2MΩ
+        g.push_break(t0 + Duration::from_millis(559)); // OL, 22MΩ — 462 ms later
+        // 1153 ms later the meter reports again, still without a disconnect.
+        g.push(97.14, t0 + Duration::from_millis(1712), "Ω", "MΩ", None);
+
+        let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
+        assert_eq!(
+            kinds,
+            vec![GapKind::Overload],
+            "a quiet meter is not a lost connection"
+        );
+    }
+
+    /// A disconnect is not the only way data stops. A meter that powers off
+    /// mid-overload keeps its USB bridge enumerated, so nothing raises
+    /// Disconnected — the reads just time out. That has to split the band
+    /// too, or it would claim over-range for the whole outage.
+    #[test]
+    fn a_timeout_outage_during_an_overload_also_splits() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break(t0 + Duration::from_millis(100));
+        // Reads time out until the App gives up; no Disconnected involved.
+        g.push_data_loss();
+        g.push(2.0, t0 + Duration::from_secs(20), "DC V", "V", None);
+
+        let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
+        assert_eq!(kinds, vec![GapKind::Overload, GapKind::NoData]);
+    }
+
+    /// Data loss outside an overload still breaks the trace, even when the
+    /// outage is shorter than the elapsed-time threshold — the App knows
+    /// samples are missing, so it doesn't have to be inferred.
+    #[test]
+    fn a_brief_dropout_without_an_overload_still_shows() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_data_loss();
+        // Well under the 1 s threshold, so nothing would be inferred here.
+        g.push(2.0, t0 + Duration::from_millis(200), "DC V", "V", None);
+
+        let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
+        assert_eq!(kinds, vec![GapKind::NoData]);
     }
 
     /// While the link is up, OL samples keep arriving, so a long overload is
@@ -2408,8 +2490,9 @@ mod tests {
     /// No minimum width is applied on the main plot: a brief excursion stays
     /// sub-pixel and collapses to a line rather than being widened to
     /// something legible, which would overstate how long the meter was over
-    /// range. The band runs to the last OL sample actually received, so it is
-    /// bounded by observation rather than by the next good reading.
+    /// range. With no dropout recorded the band covers the whole
+    /// interruption — the meter was over range across it, we simply don't
+    /// sample continuously.
     #[test]
     fn a_brief_overload_is_not_widened() {
         let mut g = Graph::new();
@@ -2424,8 +2507,8 @@ mod tests {
         assert_eq!(kind, GapKind::Overload);
         let width = end - start;
         assert!(
-            (width - 0.0005).abs() < 1e-9,
-            "band must span to the OL sample at 0.5 ms, got {width}"
+            (width - 0.001).abs() < 1e-9,
+            "band must span the real 1 ms interruption, got {width}"
         );
     }
 

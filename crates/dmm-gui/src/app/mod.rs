@@ -731,6 +731,9 @@ impl App {
     }
 
     fn disconnect(&mut self) {
+        // Data stops here. The graph keeps its history across a reconnect, so
+        // the resulting hole needs marking as a genuine gap.
+        self.graph.push_data_loss();
         // Raise the flag before the message: the thread may be mid-sleep, and
         // the flag is what cuts that short.
         if let Some(flag) = self.stop_flag.take() {
@@ -800,6 +803,15 @@ impl App {
                 }
                 DmmMessage::WaitingForMeter(count) => {
                     self.waiting_timeouts = count;
+                    // A timeout never raises Disconnected — the bridge is
+                    // still enumerated, the meter just isn't answering (auto
+                    // power-off, or unplugged at the meter end). Without this
+                    // an outage during an overload would be drawn as one long
+                    // band, claiming over-range for a stretch nothing was
+                    // heard in. Same threshold the "no response" notice uses.
+                    if count >= connection::NO_RESPONSE_TIMEOUTS {
+                        self.graph.push_data_loss();
+                    }
                 }
                 DmmMessage::Reconnecting {
                     attempt,
@@ -870,6 +882,11 @@ impl App {
                 DmmMessage::Disconnected { reason, kind } => {
                     info!("UI: disconnected: {reason} ({kind:?})");
                     self.connection_state = ConnectionState::Reconnecting;
+                    // Tell the graph this was a real loss of data. It can't
+                    // infer that from timestamps — the meter goes quiet for
+                    // over a second while auto-ranging, which looks the same
+                    // as an unplugged cable.
+                    self.graph.push_data_loss();
                 }
                 DmmMessage::DeviceNotFound => {
                     error!("UI: USB cable not found");
@@ -998,6 +1015,12 @@ impl App {
     /// while data keeps arriving.
     pub(super) fn set_paused(&mut self, paused: bool) {
         self.paused = paused;
+        if paused {
+            // Acquisition stops, so the samples that would have covered this
+            // stretch never exist — a data gap the graph should show even if
+            // the pause is shorter than its elapsed-time threshold.
+            self.graph.push_data_loss();
+        }
         if let Some(tx) = &self.ctrl_tx {
             let _ = tx.send(ThreadControl::SetPaused(paused));
         }

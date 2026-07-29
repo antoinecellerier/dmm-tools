@@ -27,6 +27,11 @@ pub(crate) enum ThreadControl {
 /// keeping a mistyped value diagnosable.
 const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 
+/// Consecutive read timeouts after which the meter is treated as not
+/// responding — surfaced to the user, and marked on the graph as a genuine
+/// loss of data rather than a quiet meter.
+pub(super) const NO_RESPONSE_TIMEOUTS: u32 = 5;
+
 /// How often a paused thread wakes to look for work.
 ///
 /// Nothing is read from the meter while paused, but device commands (HOLD,
@@ -220,7 +225,7 @@ where
                 warn!("background thread: measurement timeout ({consecutive})");
                 let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive));
                 ctx.request_repaint();
-                if consecutive == 5 {
+                if consecutive == NO_RESPONSE_TIMEOUTS {
                     let _ = msg_tx.send(DmmMessage::Error(
                         "No response from meter \u{2014} check device selection and USB mode"
                             .to_string(),
