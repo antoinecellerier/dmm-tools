@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::transport::Transport;
 use hidapi::HidDevice;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 
 /// WCH CH9329 VID.
 pub const VID: u16 = 0x1A86;
@@ -128,12 +128,13 @@ impl Transport for Ch9329 {
             // Report ID present: byte 0 = 0x00 (report ID), byte 1 = length
             (raw[1] as usize, 2)
         } else if n >= 1 {
-            // Report ID stripped: byte 0 = length
-            warn!(
-                "CH9329 RX: report ID appears stripped (first byte = {:#04x}), \
-                 adjusting offset. If data looks wrong, this may need platform-specific tuning.",
-                raw[0]
-            );
+            // Report ID stripped: byte 0 = length. This is the normal layout
+            // on Windows/macOS, not an anomaly, so it is not worth a log line
+            // of its own — it would fire on every report, and
+            // `framing::read_uart_bytes` calls this up to MAX_EMPTY_READS
+            // (256) times per frame. The `trace!` below records raw[0], which
+            // is what tells the two layouts apart if the data ever looks
+            // wrong and the offset needs platform-specific tuning.
             (raw[0] as usize, 1)
         } else {
             return Ok(0);
