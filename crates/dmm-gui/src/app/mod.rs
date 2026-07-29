@@ -42,6 +42,41 @@ use connection::{
     DmmMessage, ThreadContext, ThreadControl, handle_thread_panic, run_device_thread,
 };
 
+/// Why the GUI currently has no readings to show.
+///
+/// Replaces a `String` that carried the sentinel `"__device_not_found__"`
+/// and was probed with `contains("adapter not found")` at the render site —
+/// CLAUDE.md: "Prefer enums over string-typed status/state values." The
+/// acquisition thread already distinguishes these cases; this stops the
+/// distinction being flattened into text and parsed back out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum ConnectionIssue {
+    /// No supported USB adapter on the bus.
+    DeviceNotFound,
+    /// `--adapter` was given but nothing matched it. Carries the selector
+    /// the user passed.
+    AdapterNotFound { selector: String },
+    /// Anything else, as reported by the acquisition thread.
+    Other(String),
+}
+
+impl ConnectionIssue {
+    /// Classify an error string from the acquisition thread.
+    ///
+    /// The adapter case has to be recovered from text because it originates
+    /// in `dmm_lib::Error::AdapterNotFound`, which crosses the channel as a
+    /// formatted message. Matching the prefix once here beats probing the
+    /// string at the render site on every repaint.
+    fn from_message(message: String) -> Self {
+        match message.strip_prefix("adapter not found: ") {
+            Some(selector) => Self::AdapterNotFound {
+                selector: selector.to_string(),
+            },
+            None => Self::Other(message),
+        }
+    }
+}
+
 /// Result of a CSV export, sent from the writer thread to the UI.
 struct ExportOutcome {
     /// Toast text.
@@ -146,7 +181,7 @@ pub struct App {
     pub(super) supported_commands: Vec<String>,
     /// When true, incoming measurements are ignored (connection stays alive).
     pub(super) paused: bool,
-    pub(super) last_error: Option<String>,
+    pub(super) last_error: Option<ConnectionIssue>,
     /// Consecutive timeout count (0 = not waiting).
     pub(super) waiting_timeouts: u32,
     /// Reconnect attempt count (0 = not reconnecting). Populated from the
@@ -807,14 +842,14 @@ impl App {
                 }
                 DmmMessage::DeviceNotFound => {
                     error!("UI: USB cable not found");
-                    self.last_error = Some("__device_not_found__".to_string());
+                    self.last_error = Some(ConnectionIssue::DeviceNotFound);
                     if self.connection_state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
                 }
                 DmmMessage::Error(e) => {
                     error!("UI: error: {e}");
-                    self.last_error = Some(e);
+                    self.last_error = Some(ConnectionIssue::from_message(e));
                     if self.connection_state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
@@ -829,9 +864,9 @@ impl App {
             // "Connected" dot and enabled controls in front of a dead thread.
             error!("UI: acquisition thread exited unexpectedly");
             if self.last_error.is_none() {
-                self.last_error = Some(
+                self.last_error = Some(ConnectionIssue::Other(
                     "Acquisition stopped unexpectedly \u{2014} reconnect to resume".to_string(),
-                );
+                ));
             }
             clear_channel = true;
         }
@@ -959,16 +994,13 @@ impl App {
             return;
         }
 
-        let error = match &self.last_error {
-            Some(e) => e.clone(),
-            None => return,
+        let Some(issue) = &self.last_error else {
+            return;
         };
 
         ui.add_space(8.0);
 
-        let is_device_not_found = error == "__device_not_found__";
-
-        if is_device_not_found {
+        if *issue == ConnectionIssue::DeviceNotFound {
             // HID device not found — dongle issue
             ui.label(RichText::new("USB cable not found").color(warn_color));
             let platform_hint = if cfg!(target_os = "linux") {
@@ -1017,11 +1049,9 @@ impl App {
                     "Opens the GitHub issue tracker to report experimental-support feedback",
                 );
             }
-        } else if error.contains("adapter not found") {
-            // --adapter specified but no matching device
+        } else if let ConnectionIssue::AdapterNotFound { selector } = issue {
             ui.label(RichText::new("Adapter not found").color(warn_color));
-            let detail = error.strip_prefix("adapter not found: ").unwrap_or(&error);
-            let mut msg = format!("No device matched --adapter '{detail}'.");
+            let mut msg = format!("No device matched --adapter '{selector}'.");
             match dmm_lib::list_devices() {
                 Ok(devices) if devices.is_empty() => {
                     msg.push_str("\n\nNo devices currently connected.");
@@ -2424,5 +2454,42 @@ impl App {
                 });
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The adapter case used to be recovered at the render site with
+    /// `error.contains("adapter not found")`, and "no adapter on the bus"
+    /// travelled as the sentinel string "__device_not_found__".
+    #[test]
+    fn adapter_error_is_classified_with_its_selector() {
+        let issue = ConnectionIssue::from_message("adapter not found: ABC123".to_string());
+        assert_eq!(
+            issue,
+            ConnectionIssue::AdapterNotFound {
+                selector: "ABC123".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn other_errors_keep_their_message() {
+        let issue = ConnectionIssue::from_message("timeout waiting for response".to_string());
+        assert_eq!(
+            issue,
+            ConnectionIssue::Other("timeout waiting for response".to_string())
+        );
+    }
+
+    /// A message that merely mentions the phrase must not be mistaken for
+    /// the adapter case — the old `contains` probe would have matched it.
+    #[test]
+    fn a_mention_of_the_phrase_is_not_the_adapter_case() {
+        let issue =
+            ConnectionIssue::from_message("meter reports adapter not found somewhere".to_string());
+        assert!(matches!(issue, ConnectionIssue::Other(_)));
     }
 }
