@@ -712,6 +712,20 @@ impl Protocol for MockProtocol {
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }
+
+    // The mock emits UT61E+ mode and range bytes, and the spec tables already
+    // map "mock" to the UT61E+ table (with `mock_delegates_to_ut61eplus`
+    // asserting it). Without these overrides the trait defaults returned None,
+    // so `Measurement::spec` was never populated and the GUI's Specifications
+    // panel stayed empty for the whole mock session — the path used for demos,
+    // screenshots and UI development.
+    fn spec_info(&self, mode_raw: u16, range_raw: u8) -> Option<&'static crate::specs::SpecInfo> {
+        crate::protocol::ut61eplus::tables::lookup_spec("mock", mode_raw, range_raw)
+    }
+
+    fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static crate::specs::ModeSpecInfo> {
+        crate::protocol::ut61eplus::tables::lookup_mode_spec("mock", mode_raw)
+    }
 }
 
 /// Create a mock Dmm instance that auto-cycles through all scenarios.
@@ -737,6 +751,38 @@ mod tests {
             assert_eq!(m.unit, "V");
             assert!(m.flags.auto_range);
         }
+    }
+
+    /// `Dmm::request_measurement` is what attaches specs, so go through it —
+    /// the parser alone leaves `spec` as None by design. Without the mock's
+    /// spec_info overrides the GUI's Specifications panel is empty for the
+    /// whole session.
+    #[test]
+    fn mock_measurements_carry_specs() {
+        let mut dmm = open_mock().unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert_eq!(m.mode, "DC V");
+        let spec = m.spec.expect("DC V should resolve a spec from the table");
+        assert!(!spec.resolution.is_empty());
+        assert!(
+            m.mode_spec.is_some_and(|ms| ms.input_impedance.is_some()),
+            "DC V should report an input impedance"
+        );
+    }
+
+    /// The mock is meant to stand in for a UT61E+, so its specs must be the
+    /// UT61E+'s — not a second copy that can drift.
+    #[test]
+    fn mock_specs_match_the_ut61eplus_table() {
+        let mut dmm = open_mock().unwrap();
+        let m = dmm.request_measurement().unwrap();
+        let direct =
+            crate::protocol::ut61eplus::tables::lookup_spec("ut61eplus", m.mode_raw, m.range_raw);
+        assert_eq!(
+            m.spec.map(|s| s.resolution),
+            direct.map(|s| s.resolution),
+            "mock spec must come from the UT61E+ table"
+        );
     }
 
     #[test]
