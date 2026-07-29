@@ -1550,10 +1550,20 @@ impl Graph {
         // before the loop — pulling this call inside the per-point closure
         // turned the minimap into an O(n²) hot spot, which dominated frame
         // time once the history filled.
-        let y_map = self.y_range_for_view(data_min, data_max).map(|(lo, hi)| {
-            let range = (hi - lo).max(1e-10);
-            (lo, range)
-        });
+        //
+        // Deliberately the *auto* range, not the main plot's: a pinned Y range
+        // (a Shift-drag box zoom, or a user-entered fixed range) is chosen to
+        // frame a detail of the main view, and scaling full history by it puts
+        // most points far outside this 60px strip. They clip to a flat line
+        // along the edges and overdraw the time axis below — the overview the
+        // minimap exists to give disappears exactly when zooming in makes it
+        // most useful.
+        let y_map = self
+            .y_range_for_view_auto(data_min, data_max)
+            .map(|(lo, hi)| {
+                let range = (hi - lo).max(1e-10);
+                (lo, range)
+            });
         for seg in raw_segments {
             let points: Vec<egui::Pos2> = seg
                 .iter()
@@ -2205,6 +2215,35 @@ mod tests {
             g.push(i as f64, Instant::now(), "DC V", "V", None);
         }
         assert_eq!(g.len(), MAX_POINTS);
+    }
+
+    /// The minimap is a full-history overview, so it must scale to the data
+    /// even when the main plot's Y axis is pinned to a narrow band. Scaling by
+    /// the pin put points many multiples of the 60px strip's height away, and
+    /// they clipped to a flat line along its edges.
+    #[test]
+    fn minimap_scale_ignores_the_pinned_y_range() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for (i, v) in [0.0, 5.0, 10.0].into_iter().enumerate() {
+            g.push(
+                v,
+                t0 + Duration::from_millis(i as u64 * 100),
+                "DC V",
+                "V",
+                None,
+            );
+        }
+        // Pin a narrow band, as a Shift-drag box zoom does.
+        g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
+        assert!(g.y_axis_fixed);
+        assert_eq!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+
+        let (lo, hi) = g.y_range_for_view_auto(0.0, 1.0).expect("auto range");
+        assert!(
+            lo <= 0.0 && hi >= 10.0,
+            "minimap range {lo}..{hi} must cover the full 0..10 data span"
+        );
     }
 
     /// A Y range pinned while measuring volts must not survive into ohms —
