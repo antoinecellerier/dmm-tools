@@ -33,14 +33,17 @@ pub enum Error {
     #[error("adapter not found: {0}")]
     AdapterNotFound(String),
 
+    /// The IDs come from the transport modules themselves rather than being
+    /// spelled out here, so a corrected PID or a fourth bridge can't leave
+    /// this message describing adapters we no longer look for.
     #[error(
         "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x})",
-        0x10C4,
-        0xEA80,
-        0x1A86,
-        0xE429,
-        0x1A86,
-        0xE008
+        crate::cp2110::VID,
+        crate::cp2110::PID,
+        crate::ch9329::VID,
+        crate::ch9329::PID,
+        crate::ch9325::VID,
+        crate::ch9325::PID
     )]
     NoTransportFound,
 }
@@ -167,5 +170,20 @@ mod tests {
             Error::UnsupportedCommand("bar".into()).kind(),
             ErrorKind::Configuration
         );
+    }
+
+    /// The message must name the adapters the code actually scans for. It
+    /// used to hardcode all six literals, so a corrected PID would have left
+    /// it advertising the old one.
+    #[test]
+    fn no_transport_message_uses_the_transport_constants() {
+        let msg = Error::NoTransportFound.to_string();
+        for (vid, pid) in [
+            (crate::cp2110::VID, crate::cp2110::PID),
+            (crate::ch9329::VID, crate::ch9329::PID),
+            (crate::ch9325::VID, crate::ch9325::PID),
+        ] {
+            assert!(msg.contains(&format!("{vid:#06x}:{pid:#06x}")), "got {msg}");
+        }
     }
 }
