@@ -594,6 +594,17 @@ impl Graph {
             .back()
             .map(|p| self.elapsed_secs(p.time))
             .unwrap_or(0.0);
+        // Overload samples carry timestamps but no plottable value, so they
+        // never enter `history` — yet they are the newest thing the meter
+        // sent. Extending the range here rather than at each call site means
+        // every consumer follows them: the live window, the minimap's time
+        // mapping and its drag clamping. Otherwise time visibly freezes for
+        // the duration of the excursion, which is exactly when the band being
+        // drawn needs somewhere to grow into.
+        let x_max = match self.pending_break_since {
+            Some(t) => x_max.max(self.elapsed_secs(t)),
+            None => x_max,
+        };
         (x_min, x_max)
     }
 
@@ -603,19 +614,12 @@ impl Graph {
         let half = self.time_window_secs / 2.0;
 
         if self.live {
-            // "Live" means the window ends at the newest *sample*, which is
-            // not always the newest plotted point: an overload produces
-            // samples with timestamps and no value. Ignoring them froze the
-            // window for the whole excursion, which pinned the gap's opening
-            // marker to the right edge where it read as the plot border.
-            //
-            // Driven by sample timestamps rather than wall-clock, so a paused
-            // or disconnected meter — which produces no samples at all —
-            // still holds its window still instead of scrolling its data off.
-            let x_max = match self.pending_break_since {
-                Some(t) => data_max.max(self.elapsed_secs(t)),
-                None => data_max,
-            };
+            // "Live" means the window ends at the newest *sample*, and
+            // `data_time_range` counts overload samples as such — so the
+            // window keeps advancing through an excursion rather than
+            // freezing at the last plotted point. A paused or disconnected
+            // meter sends nothing at all, so its window still holds still.
+            let x_max = data_max;
             let x_min = (x_max - self.time_window_secs).max(0.0);
             (x_min, x_max)
         } else {
@@ -2442,6 +2446,33 @@ mod tests {
         assert_eq!(g.pending_overload_span(), None);
         let (_, after) = g.view_bounds();
         assert!((after - 3.0).abs() < 1e-9, "got {after}");
+    }
+
+    /// The minimap maps time to x from `data_time_range`, so if that ignored
+    /// overload samples the strip would stop advancing mid-excursion and the
+    /// band would have nowhere to grow — the same freeze the main plot had.
+    /// Fixed at the range itself so every consumer follows, not per call site.
+    #[test]
+    fn the_data_range_counts_overload_samples() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+
+        let (_, before) = g.data_time_range();
+        assert!(before.abs() < 1e-9, "only sample sits at the origin");
+
+        g.push_break(t0 + Duration::from_secs(4));
+        let (min, max) = g.data_time_range();
+        assert!(min.abs() < 1e-9, "start is unaffected");
+        assert!(
+            (max - 4.0).abs() < 1e-9,
+            "range must reach the newest overload sample, got {max}"
+        );
+
+        // And hands back to the plotted data once the meter recovers.
+        g.push(2.0, t0 + Duration::from_secs(5), "DC V", "V", None);
+        let (_, after) = g.data_time_range();
+        assert!((after - 5.0).abs() < 1e-9, "got {after}");
     }
 
     /// A paused or disconnected meter produces no samples at all — not even
