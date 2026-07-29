@@ -125,7 +125,17 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - Time-series line plot with auto-scaling Y axis (10% padding)
 - Axis labels include units (e.g. "1.0 mV", "10 s")
 - Crosshair tooltip shows time and value with units
-- Disconnection gaps shown as dashed red vertical line pairs
+- Interruptions are drawn two ways, so a meter reporting a condition doesn't
+  look like a dropout:
+  - **No data** (disconnect, pause, or a sample interval longer than the gap
+    threshold) — a pair of dashed vertical lines, no fill.
+  - **Overload** — a filled band in the error colour with solid edges, drawn
+    at its true duration. Because the band is filled rather than marked only
+    at its edges, it stays visible when you zoom inside a period longer than
+    the time window; a brief excursion collapses to a line rather than being
+    widened to a minimum size. The crosshair reports `overload` inside a band,
+    and the plot's screen-reader summary says "currently over range" while the
+    meter is over range.
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds ~10,000 points (oldest dropped). A change of mode or
   of unit clears the graph since the scales are incompatible — auto-range

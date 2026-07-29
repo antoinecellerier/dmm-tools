@@ -1,6 +1,6 @@
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points, VLine,
+    AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points, Span, VLine,
 };
 use std::collections::VecDeque;
 use std::time::Instant;
@@ -19,19 +19,35 @@ const GAP_MINIMUM_SECS: f64 = 1.0;
 /// Minimap height in logical pixels.
 const MINIMAP_HEIGHT: f32 = 60.0;
 
-/// Segments (contiguous runs of [time, value] points) paired with gap
-/// ranges (start_time, end_time) where the data was interrupted.
-type SegmentsAndGaps = (Vec<Vec<[f64; 2]>>, Vec<(f64, f64)>);
+/// Why the trace is interrupted over a stretch of time.
+///
+/// The distinction is user-visible: an overload is the meter reporting a
+/// condition, while a data gap is the absence of any report at all. They are
+/// drawn differently — see `show_main`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GapKind {
+    /// No samples arrived: disconnect, pause, or a sample interval longer
+    /// than the gap threshold.
+    NoData,
+    /// The meter reported over-range. Carries no plottable value, but is a
+    /// measurement, not a dropout.
+    Overload,
+}
+
+/// Segments (contiguous runs of [time, value] points) paired with the gaps
+/// between them: (start_time, end_time, why).
+type SegmentsAndGaps = (Vec<Vec<[f64; 2]>>, Vec<(f64, f64, GapKind)>);
 
 /// A data point with an absolute timestamp.
 #[derive(Clone, Copy)]
 struct DataPoint {
     time: Instant,
     value: f64,
-    /// The series was interrupted immediately before this point — an overload
-    /// produced no plottable value, so the line must break here even though
-    /// the two neighbouring samples are adjacent in time.
-    break_before: bool,
+    /// The series was interrupted immediately before this point, and why —
+    /// an overload produces no plottable value, so the line must break here
+    /// even though the two neighbouring samples are adjacent in time.
+    /// `None` when this point continues the previous one.
+    break_before: Option<GapKind>,
 }
 
 /// Quantize a `f64` to ~3 decimal digits before hashing so animated plot
@@ -156,10 +172,11 @@ pub struct Graph {
     view_center: f64,
     /// Gap detection threshold in seconds.
     gap_threshold_secs: f64,
-    /// An overload arrived since the last plotted point, so the next one
-    /// starts a new segment. Time-based gap detection can't see this: an
-    /// over-range excursion shorter than the threshold leaves no time hole.
-    pending_break: bool,
+    /// A non-plottable sample arrived since the last plotted point, so the
+    /// next one starts a new segment. Time-based gap detection can't see
+    /// this: an over-range excursion shorter than the threshold leaves no
+    /// time hole.
+    pending_break: Option<GapKind>,
     /// Timestamp of the newest overload sample while a break is open.
     ///
     /// Overload measurements carry a timestamp like any other; they just have
@@ -257,7 +274,7 @@ impl Graph {
             live: true,
             view_center: 0.0,
             gap_threshold_secs: GAP_MINIMUM_SECS,
-            pending_break: false,
+            pending_break: None,
             pending_break_since: None,
             y_axis_fixed: false,
             y_min_text: "-1".to_string(),
@@ -367,7 +384,7 @@ impl Graph {
         self.history.push_back(DataPoint {
             time: now,
             value,
-            break_before: std::mem::take(&mut self.pending_break),
+            break_before: self.pending_break.take(),
         });
         self.pending_break_since = None;
         self.history_version += 1;
@@ -386,10 +403,10 @@ impl Graph {
         // Updated on every overload sample, not just the first: it is what
         // advances the live view for as long as the meter stays over range.
         self.pending_break_since = Some(timestamp);
-        if self.pending_break {
+        if self.pending_break.is_some() {
             return;
         }
-        self.pending_break = true;
+        self.pending_break = Some(GapKind::Overload);
         // The break only becomes visible once the next point lands, but the
         // caches key on this counter — bump it so a stale segment list built
         // before the overload isn't reused.
@@ -398,7 +415,7 @@ impl Graph {
 
     pub fn clear(&mut self) {
         self.history.clear();
-        self.pending_break = false;
+        self.pending_break = None;
         self.pending_break_since = None;
         self.current_mode = None;
         self.current_unit.clear();
@@ -601,17 +618,20 @@ impl Graph {
         }
     }
 
-    /// Whether the line should break between `prev` and `point` instead of
-    /// being drawn through. Either the samples are far enough apart in time,
-    /// or an overload interrupted the series between them.
-    fn breaks_before(&self, prev: Instant, point: &DataPoint) -> bool {
-        point.break_before
-            || point
-                .time
-                .checked_duration_since(prev)
-                .map(|d| d.as_secs_f64())
-                .unwrap_or(0.0)
-                > self.gap_threshold_secs
+    /// Why the line breaks between `prev` and `point`, or `None` if it
+    /// doesn't. A recorded break wins over the elapsed-time test: an overload
+    /// that lasted less than the gap threshold is still an overload, not a
+    /// dropout.
+    fn breaks_before(&self, prev: Instant, point: &DataPoint) -> Option<GapKind> {
+        if let Some(kind) = point.break_before {
+            return Some(kind);
+        }
+        let elapsed = point
+            .time
+            .checked_duration_since(prev)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or(0.0);
+        (elapsed > self.gap_threshold_secs).then_some(GapKind::NoData)
     }
 
     /// Build raw segment data as Vec<Vec<[f64;2]>> — avoids PlotPoints clone issues.
@@ -624,7 +644,7 @@ impl Graph {
             let t = self.elapsed_secs(point.time);
 
             if let Some(prev) = prev_time
-                && self.breaks_before(prev, point)
+                && self.breaks_before(prev, point).is_some()
                 && !current_segment.is_empty()
             {
                 segments.push(std::mem::take(&mut current_segment));
@@ -912,7 +932,7 @@ impl Graph {
     /// passing to egui_plot. Only the points in `[start, end)` are visited.
     fn build_segments_for_range(&self, start: usize, end: usize) -> SegmentsAndGaps {
         let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
-        let mut gaps: Vec<(f64, f64)> = Vec::new();
+        let mut gaps: Vec<(f64, f64, GapKind)> = Vec::new();
         let mut current_segment: Vec<[f64; 2]> = Vec::new();
         let mut prev_time: Option<Instant> = None;
 
@@ -921,11 +941,11 @@ impl Graph {
             let t = self.elapsed_secs(point.time);
 
             if let Some(prev) = prev_time
-                && self.breaks_before(prev, point)
+                && let Some(kind) = self.breaks_before(prev, point)
                 && !current_segment.is_empty()
             {
                 let gap_start = self.elapsed_secs(prev);
-                gaps.push((gap_start, t));
+                gaps.push((gap_start, t, kind));
                 segments.push(std::mem::take(&mut current_segment));
             }
 
@@ -951,12 +971,22 @@ impl Graph {
         let ext_start = vis_start.saturating_sub(1);
         let ext_end = (vis_end + 1).min(self.history.len());
         let (visible_segments, visible_gaps) = self.build_segments_for_range(ext_start, ext_end);
-        let pending_gap_start = self.pending_gap_start();
+        // Overload spans, including one still in progress. Used both to draw
+        // the bands and to answer the crosshair tooltip, which is the only
+        // non-visual cue available — `Span` is never a hover target.
+        let overload_spans: Vec<(f64, f64)> = visible_gaps
+            .iter()
+            .filter(|(_, _, kind)| *kind == GapKind::Overload)
+            .map(|&(a, b, _)| (a, b))
+            .chain(self.pending_overload_span())
+            .collect();
 
         // Theme-aware colors from shared palette
         let tc = self.theme_colors(ui.visuals().dark_mode);
         let line_color = tc.graph_line();
         let gap_color = tc.graph_gap();
+        let overload_edge = tc.graph_overload();
+        let overload_fill = tc.graph_overload_fill();
         let mean_color = tc.graph_mean();
         let ref_color = tc.graph_ref();
         let cross_color = tc.graph_crossing();
@@ -1017,6 +1047,8 @@ impl Graph {
         let mean_value = visible_stats.map(|(_, _, avg, _)| avg);
 
         let cursor_unit = self.current_unit.clone();
+        // Moved into the label_formatter closure, which is rebuilt each frame.
+        let tooltip_spans = overload_spans.clone();
         let plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
             .allow_drag(Vec2b::new(allow_plot_x_drag, false))
@@ -1037,6 +1069,13 @@ impl Graph {
                     let s = t % 60.0;
                     format!("{m:.0}m {s:.1}s")
                 };
+                // Inside a band there is no measured value to report, and
+                // `Span` can't be hovered itself (its geometry is None), so
+                // this is where the condition gets named. It is also the only
+                // cue that isn't visual.
+                if tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b) {
+                    return format!("{time_label}\noverload");
+                }
                 format!("{time_label}\n{:.4} {}", point.y, cursor_unit)
             });
 
@@ -1046,6 +1085,28 @@ impl Graph {
                 [view_min, y_min],
                 [view_max, y_max],
             ));
+
+            // Overload bands, before everything else so they sit behind the
+            // data. An overload is the meter reporting a condition, not an
+            // absence of one, so it reads as a filled region rather than the
+            // dashed edges used for a dropout — a distinction that survives
+            // without colour.
+            //
+            // Drawn at true duration with no minimum width: a brief excursion
+            // collapses to a line rather than overstating how long the meter
+            // was over range. `Span` clamps itself to the visible range, so a
+            // band wider than the window still fills the plot — the case where
+            // two edge markers would both be off-screen and show nothing.
+            for &(start, end) in &overload_spans {
+                plot_ui.span(
+                    // Empty name: `Span` renders its name as a label inside
+                    // the band, which would collide at narrow widths.
+                    Span::new("", start..=end)
+                        .fill(overload_fill)
+                        .border_color(overload_edge)
+                        .border_style(egui_plot::LineStyle::Solid),
+                );
+            }
 
             // Min/max envelope (drawn first so it's behind the data line)
             if show_envelope && !env_min.is_empty() {
@@ -1065,7 +1126,11 @@ impl Graph {
                 plot_ui.line(Line::new("data", PlotPoints::new(seg.clone())).color(line_color));
             }
 
-            for &(gap_start, gap_end) in &visible_gaps {
+            // No data: two dashed edges, no fill.
+            for &(gap_start, gap_end, kind) in &visible_gaps {
+                if kind != GapKind::NoData {
+                    continue;
+                }
                 plot_ui.vline(
                     VLine::new("gap_start", gap_start)
                         .color(gap_color)
@@ -1073,16 +1138,6 @@ impl Graph {
                 );
                 plot_ui.vline(
                     VLine::new("gap_end", gap_end)
-                        .color(gap_color)
-                        .style(egui_plot::LineStyle::dashed_dense()),
-                );
-            }
-
-            // Opening marker for a gap still in progress — the closing one
-            // appears with the first sample after the meter recovers.
-            if let Some(x) = pending_gap_start {
-                plot_ui.vline(
-                    VLine::new("gap_start", x)
                         .color(gap_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
@@ -1193,6 +1248,9 @@ impl Graph {
             // must follow.
             self.current_mode.as_deref().unwrap_or("").hash(&mut h);
             self.last_display_raw.as_deref().unwrap_or("").hash(&mut h);
+            // The over-range state is announced below, so it has to bust the
+            // cache — otherwise the band appears with no spoken counterpart.
+            self.pending_break.is_some().hash(&mut h);
             h.finish()
         };
         if sig != self.a11y_label_sig {
@@ -1209,6 +1267,13 @@ impl Graph {
             // users hear what sighted users see. Fall back to the f64
             // value only if the protocol doesn't provide display_raw.
             let reading = match (self.last_display_raw.as_deref(), last_value) {
+                // Over range is the present state, so it outranks the last
+                // plotted value — which is stale by definition while the
+                // meter has nothing to measure. The band is otherwise a
+                // purely visual cue.
+                _ if self.pending_break == Some(GapKind::Overload) => {
+                    "currently over range".to_string()
+                }
                 (Some(raw), _) => format!("last reading {} {unit}", raw.trim()),
                 (None, Some(v)) => format!("last reading {v:.4} {unit}"),
                 (None, None) => "no data".to_string(),
@@ -2032,7 +2097,7 @@ impl Graph {
             // the area under a value the meter never measured.
             if let Some((pt, pv)) = prev {
                 let dt = t - pt;
-                if dt <= self.gap_threshold_secs && !point.break_before {
+                if dt <= self.gap_threshold_secs && point.break_before.is_none() {
                     integral += (pv + point.value) / 2.0 * dt;
                     has_pair = true;
                 }
@@ -2043,25 +2108,34 @@ impl Graph {
         has_pair.then_some(integral)
     }
 
-    /// X position for the opening marker of a gap that hasn't closed yet.
+    /// Span of an interruption that hasn't closed yet, as `(start, end)`.
     ///
     /// `build_segments_for_range` pairs consecutive points, so it can only
     /// emit a gap once a sample arrives *after* the interruption. While an
     /// overload is still in progress no such sample exists, and the trace
     /// would simply stop with nothing to say why until the meter came back.
-    /// Anchor the marker to the last plotted point — where the trace ends.
-    fn pending_gap_start(&self) -> Option<f64> {
-        if !self.pending_break {
+    ///
+    /// Anchored to the last plotted point — where the trace ends — and closed
+    /// at the newest overload sample rather than at "now", so a meter that
+    /// disconnects mid-overload leaves a band covering the samples we actually
+    /// received instead of one that grows forever.
+    fn pending_overload_span(&self) -> Option<(f64, f64)> {
+        if self.pending_break != Some(GapKind::Overload) {
             return None;
         }
-        self.history.back().map(|p| self.elapsed_secs(p.time))
+        let start = self.history.back().map(|p| self.elapsed_secs(p.time))?;
+        let end = self
+            .pending_break_since
+            .map(|t| self.elapsed_secs(t))
+            .unwrap_or(start);
+        Some((start, end.max(start)))
     }
 
     /// Gap ranges across the whole history, through the same builder the main
     /// graph renders from — so these tests exercise the path that actually
     /// draws the gap markers.
     #[cfg(test)]
-    fn visible_gaps(&self) -> Vec<(f64, f64)> {
+    fn visible_gaps(&self) -> Vec<(f64, f64, GapKind)> {
         self.build_segments_for_range(0, self.history.len()).1
     }
 
@@ -2212,21 +2286,75 @@ mod tests {
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
-        assert_eq!(g.pending_gap_start(), None, "no break yet");
+        assert_eq!(g.pending_overload_span(), None, "no break yet");
 
         g.push_break(Instant::now());
         // Still overloaded: no closing sample, so no paired gap exists...
         assert!(g.visible_gaps().is_empty());
-        // ...but the marker anchors to the last plotted point.
-        let start = g
-            .pending_gap_start()
-            .expect("opening marker while overloaded");
+        // ...but the pending span anchors to the last plotted point.
+        let (start, _) = g
+            .pending_overload_span()
+            .expect("pending span while overloaded");
         assert!((start - 0.1).abs() < 1e-9, "got {start}");
 
         // Meter recovers: the pair takes over and the pending marker clears.
         g.push(3.0, t0 + Duration::from_millis(500), "DC V", "V", None);
-        assert_eq!(g.pending_gap_start(), None);
+        assert_eq!(g.pending_overload_span(), None);
         assert_eq!(g.visible_gaps().len(), 1);
+    }
+
+    /// The two kinds must be distinguishable by the renderer: an overload is
+    /// the meter reporting a condition, a time gap is the absence of any
+    /// report. They are drawn differently, so the builder has to say which.
+    #[test]
+    fn gap_kinds_distinguish_overload_from_data_loss() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break(t0 + Duration::from_millis(50));
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        // Well past the 1 s minimum gap threshold: a dropout, not an overload.
+        g.push(3.0, t0 + Duration::from_secs(5), "DC V", "V", None);
+
+        let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
+        assert_eq!(kinds, vec![GapKind::Overload, GapKind::NoData]);
+    }
+
+    /// A recorded overload wins over the elapsed-time test — an over-range
+    /// excursion that also happens to straddle the gap threshold is still an
+    /// overload, not a dropout.
+    #[test]
+    fn a_long_overload_is_not_reclassified_as_data_loss() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break(t0 + Duration::from_secs(3));
+        g.push(2.0, t0 + Duration::from_secs(6), "DC V", "V", None);
+
+        let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
+        assert_eq!(kinds, vec![GapKind::Overload]);
+    }
+
+    /// No minimum width is applied: a brief excursion is drawn at its true
+    /// duration and collapses to a line rather than overstating how long the
+    /// meter was over range.
+    #[test]
+    fn a_brief_overload_keeps_its_true_width() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break(t0 + Duration::from_micros(500));
+        g.push(2.0, t0 + Duration::from_millis(1), "DC V", "V", None);
+
+        let gaps = g.visible_gaps();
+        assert_eq!(gaps.len(), 1);
+        let (start, end, kind) = gaps[0];
+        assert_eq!(kind, GapKind::Overload);
+        let width = end - start;
+        assert!(
+            (width - 0.001).abs() < 1e-9,
+            "width must be the real 1 ms, got {width}"
+        );
     }
 
     /// An overload before any data has nothing to anchor to.
@@ -2234,7 +2362,7 @@ mod tests {
     fn a_break_with_no_history_marks_nothing() {
         let mut g = Graph::new();
         g.push_break(Instant::now());
-        assert_eq!(g.pending_gap_start(), None);
+        assert_eq!(g.pending_overload_span(), None);
     }
 
     /// The opening marker anchors to the last plotted point, and in live mode
@@ -2253,15 +2381,19 @@ mod tests {
         // Two seconds of overload samples arrive, carrying timestamps.
         g.push_break(t0 + Duration::from_secs(2));
         let (_, during) = g.view_bounds();
-        let marker = g.pending_gap_start().expect("marker while overloaded");
+        let (band_start, band_end) = g.pending_overload_span().expect("span while overloaded");
         assert!(
-            during > marker + 1.0,
-            "view must advance past the marker: marker={marker}, x_max={during}"
+            during > band_start + 1.0,
+            "view must advance past the band start: start={band_start}, x_max={during}"
+        );
+        assert!(
+            (band_end - 2.0).abs() < 1e-9,
+            "band closes at the newest overload sample, got {band_end}"
         );
 
         // Recovery closes the gap and hands the window back to the data.
         g.push(2.0, t0 + Duration::from_secs(3), "DC V", "V", None);
-        assert_eq!(g.pending_gap_start(), None);
+        assert_eq!(g.pending_overload_span(), None);
         let (_, after) = g.view_bounds();
         assert!((after - 3.0).abs() < 1e-9, "got {after}");
     }

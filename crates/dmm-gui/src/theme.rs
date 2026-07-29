@@ -519,6 +519,31 @@ impl ThemeColors {
         self.resolve(self.overrides.graph_envelope, &self.preset.graph_envelope)
     }
 
+    /// Border of an overload band — derives from status_error().
+    ///
+    /// Overload is the meter reporting a condition, not an absence of data, so
+    /// it is drawn as a filled band rather than the dashed gap markers. Using
+    /// the error colour ties it to the same signal the reading itself turns
+    /// when the meter goes over range.
+    pub(crate) fn graph_overload(&self) -> Color32 {
+        self.status_error()
+    }
+
+    /// Fill of an overload band — derives from status_error(), heavily
+    /// transparent so the grid and axis labels stay readable through it.
+    ///
+    /// `gamma_multiply` rather than the `from_rgba_premultiplied` idiom used
+    /// by the other derived colours here: `Color32` is premultiplied, so
+    /// pairing full-brightness RGB with a low alpha composites as an additive
+    /// glow instead of a faint tint. `gamma_multiply` scales the colour and
+    /// the alpha together, which is what a tint actually is.
+    pub(crate) fn graph_overload_fill(&self) -> Color32 {
+        // Light backgrounds need less: the same factor reads much stronger
+        // against white than against the near-black plot area.
+        let factor = if self.dark { 0.22 } else { 0.15 };
+        self.graph_overload().gamma_multiply(factor)
+    }
+
     /// Minimap data line — derives from graph_line() with semi-transparency.
     pub(crate) fn minimap_line(&self) -> Color32 {
         let base = self.graph_line();
@@ -669,6 +694,97 @@ mod tests {
             tc.graph_cursor_dim(),
             Color32::from_rgba_premultiplied(100, 200, 50, 80)
         );
+    }
+
+    #[test]
+    fn overload_colors_derive_from_status_error() {
+        let overrides = PaletteOverrides {
+            status_error: Some(HexColor(Color32::from_rgb(200, 40, 40))),
+            ..Default::default()
+        };
+
+        for &dark in &[true, false] {
+            let tc = ThemeColors::new(dark, ColorPreset::Default, &overrides);
+            assert_eq!(
+                tc.graph_overload(),
+                Color32::from_rgb(200, 40, 40),
+                "border must be the error colour itself (dark={dark})"
+            );
+
+            // A tint, not an additive glow: every channel and the alpha scale
+            // together, so the fill stays below the border on all of them.
+            let fill = tc.graph_overload_fill();
+            let [fr, fg, fb, fa] = fill.to_array();
+            let [br, bg, bb, ba] = tc.graph_overload().to_array();
+            assert!(fa < ba, "fill must be translucent (dark={dark})");
+            assert!(
+                fr <= br && fg <= bg && fb <= bb,
+                "fill {fill:?} brighter than its border (dark={dark})"
+            );
+        }
+    }
+
+    /// The fill has to be visible against the plot area but weak enough to
+    /// read the grid and the trace through. `luminance()` ignores alpha, so
+    /// composite it by hand first — `Color32` is premultiplied, so the blend
+    /// is `src + dst * (1 - a)`.
+    #[test]
+    fn overload_fill_is_a_visible_but_weak_tint() {
+        fn composite(src: Color32, dst: Color32) -> Color32 {
+            let [sr, sg, sb, sa] = src.to_array();
+            let [dr, dg, db, _] = dst.to_array();
+            let inv = 1.0 - (sa as f32 / 255.0);
+            Color32::from_rgb(
+                sr.saturating_add((dr as f32 * inv) as u8),
+                sg.saturating_add((dg as f32 * inv) as u8),
+                sb.saturating_add((db as f32 * inv) as u8),
+            )
+        }
+
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for &dark in &[true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let bg = tc.plot_background();
+                let banded = composite(tc.graph_overload_fill(), bg);
+                let ratio = contrast(banded, bg);
+
+                assert!(
+                    ratio > 1.10,
+                    "banded area {banded:?} is indistinguishable from the plot                      background {bg:?} ({ratio:.3}:1, {preset:?}, dark={dark})"
+                );
+                assert!(
+                    ratio < 3.0,
+                    "banded area {banded:?} is too strong against {bg:?}                      ({ratio:.3}:1) — the trace must stay readable through it                      ({preset:?}, dark={dark})"
+                );
+            }
+        }
+    }
+
+    /// `.claude/rules/gui.md` requires 3:1 for graphical elements. The band's
+    /// border is opaque so it can be checked directly; the fill is translucent
+    /// by design and `luminance()` ignores alpha, so it is not checked here.
+    #[test]
+    fn overload_border_meets_graphical_contrast_on_the_plot_area() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for &dark in &[true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let ratio = contrast(tc.graph_overload(), tc.plot_background());
+                assert!(
+                    ratio >= 3.0,
+                    "overload border {:?} on plot background {:?} is {ratio:.2}:1, below 3:1 ({preset:?}, dark={dark})",
+                    tc.graph_overload(),
+                    tc.plot_background()
+                );
+            }
+        }
     }
 
     #[test]

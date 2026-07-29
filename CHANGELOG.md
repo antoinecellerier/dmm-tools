@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **An overload no longer looks like a lost connection on the graph** — both were drawn as the same pair of dashed lines, so the meter reporting over-range was indistinguishable from the cable falling out. Overloads are now a filled band in the error colour, the crosshair reports `overload` inside one, and the screen-reader summary announces the state. The band also stays visible when you zoom inside a period longer than the time window, where two edge markers would both be off-screen and show nothing.
 - **The help overlay explains when bare-key shortcuts stop working** — it said graph and `Space` shortcuts are disabled "when a text field has focus", but they are disabled whenever any widget holds keyboard focus, including a button reached with `Tab`. It now says so, and points at `Escape` to release focus.
 - **Device aliases work everywhere in the GUI** — writing an alias such as `"ut61e+"` for `device_family` in `settings.json` (a spelling the CLI accepts) connected correctly but left the Manual link missing, the top-bar label reading "DMM", and the mock-mode selector hidden when the mock was chosen by alias.
 - **The GUI starts faster on Linux** — every launch rewrote its icon files and the desktop entry, then spawned `gtk-update-icon-cache` and waited for it before opening the window. It now writes only what has actually changed, and refreshes the icon cache only when an icon did.
