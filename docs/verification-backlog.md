@@ -55,6 +55,16 @@ real hardware**. Every aspect needs end-to-end verification.
 - Command confirmation frames — vendor `SendCommand` waits for a frame
   whose type byte equals the command byte (5 retries); we fire-and-forget.
 - Ack protocol (0xFF+\[0x00\] after responses) — is it required or optional?
+- GetDeviceID retries — the vendor loops up to 10 times with a `FlushBuffer`
+  between attempts (`DMSShare_decompiled.cs:3895`); we make a single attempt.
+  Does one attempt reliably return the name on real hardware?
+- Battery nibble ground truth — every capture report already carries the raw
+  byte in `raw_hex`, but nothing records what the meter's own battery
+  indicator showed at the time, so the values stay uninterpretable. The
+  `battery` capture step now asks for that; a report from a meter with a
+  fresh pack *and* one the meter flags as low would settle whether `0` means
+  empty or "not populated" (which is what our `low_battery` currently
+  assumes).
 - Commands: same as VC-880 plus 0x5D (Set Time) and 0x5E (Get Measurement)
 - PC button activation requirement
 

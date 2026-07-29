@@ -353,6 +353,17 @@ impl Protocol for Vc890Protocol {
     }
 
     fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>> {
+        // The shared helper is VC-880-shaped and writes the GetDeviceID frame
+        // bare. The VC-890 needs the ack burst first, like its every other
+        // exchange: the vendor's `GetDeviceID()` calls `WriteCommand(0)`
+        // (DMSShare_decompiled.cs:3895), and that overload is
+        // `WriteCommand(command, ack: true)` (:3800), whose body opens with
+        // `AckMessage(clear: true)` (:3775).
+        //
+        // The vendor also retries the whole exchange up to 10 times with a
+        // FlushBuffer between attempts; we make one. See the VC-890 entry in
+        // docs/verification-backlog.md.
+        send_ack_sequence(transport)?;
         super::vc8x0_common::read_device_name(&mut self.rx_buf, transport, "vc890")
     }
 
@@ -828,6 +839,32 @@ mod tests {
         let sum: u16 = ACK_FRAME[..5].iter().map(|&b| b as u16).sum();
         assert_eq!(ACK_FRAME[5], (sum >> 8) as u8);
         assert_eq!(ACK_FRAME[6], (sum & 0xFF) as u8);
+    }
+
+    /// The vendor sends the ack burst before GetDeviceID like every other
+    /// exchange (`WriteCommand(0)` → `WriteCommand(cmd, ack: true)` →
+    /// `AckMessage(clear: true)`, DMSShare_decompiled.cs:3895/3800/3775).
+    /// Ours went through the VC-880-shaped helper, which writes bare.
+    #[test]
+    fn get_name_sends_the_ack_burst_first() {
+        use crate::transport::mock::MockTransport;
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc890Protocol::new();
+        // No response queued, so this fails after the writes — the writes are
+        // what we're checking.
+        let _ = proto.get_name(&transport);
+
+        let writes = transport.written.borrow();
+        assert!(
+            writes.len() >= 4,
+            "expected 3 ack frames then the GetDeviceID frame, got {}",
+            writes.len()
+        );
+        for (i, w) in writes.iter().take(3).enumerate() {
+            assert_eq!(w.as_slice(), ACK_FRAME, "write {i} should be an ack frame");
+        }
+        // GetDeviceID is command byte 0x00.
+        assert_eq!(writes[3][3], 0x00, "fourth write should be GetDeviceID");
     }
 
     #[test]
