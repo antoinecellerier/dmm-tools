@@ -171,6 +171,13 @@ pub struct App {
     /// started. Outlives disconnect so a capture can still be exported with
     /// the right provenance after the meter is unplugged.
     recording_device: Option<&'static str>,
+    /// Profile of the selected device, refreshed only when the selection
+    /// changes. Two render paths need it every frame, and building a protocol
+    /// to read it allocates — the UT61E+ factory lowercases its model string,
+    /// boxes a device table and reserves an rx buffer.
+    selected_profile: dmm_lib::protocol::DeviceProfile,
+    /// Device id the cached profile belongs to.
+    selected_profile_id: &'static str,
     /// Record was pressed while the buffer held unexported samples; waiting
     /// for the user to confirm discarding them.
     confirm_discard_open: bool,
@@ -252,6 +259,8 @@ impl App {
         settings.overrides.adapter = cli.adapter;
         let mut graph = Graph::new();
         graph.set_color_config(settings.color_preset, settings.color_overrides.clone());
+        let initial_device = registry::resolve_device(&settings.shared.device_family)
+            .unwrap_or_else(registry::default_device);
         Self {
             settings,
             settings_open: false,
@@ -273,6 +282,8 @@ impl App {
             wall_clock: dmm_lib::WallClock::new(),
             rx: None,
             recording_device: None,
+            selected_profile: *(initial_device.new_protocol)().profile(),
+            selected_profile_id: initial_device.id,
             confirm_discard_open: false,
             confirm_discard_focus_pending: false,
             ctrl_tx: None,
@@ -310,6 +321,19 @@ impl App {
             self.settings.color_preset,
             self.settings.color_overrides.for_mode(dark),
         )
+    }
+
+    /// Re-read the selected device's profile if the selection changed.
+    ///
+    /// Called once per frame instead of at each use: the two render paths
+    /// that need it (`show_connection_help`, the status landmark) run every
+    /// repaint, and `(new_protocol)()` allocates.
+    fn refresh_selected_profile(&mut self) {
+        let device = self.selected_device();
+        if self.selected_profile_id != device.id {
+            self.selected_profile = *(device.new_protocol)().profile();
+            self.selected_profile_id = device.id;
+        }
     }
 
     /// Whether the UI should render dark, resolving `System` against the OS.
@@ -978,9 +1002,7 @@ impl App {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
-            let device_entry = self.selected_device();
-            let proto = (device_entry.new_protocol)();
-            let profile = proto.profile();
+            let profile = &self.selected_profile;
             if profile.stability == dmm_lib::protocol::Stability::Experimental {
                 ui.hyperlink_to(
                     RichText::new(format!(
@@ -1194,9 +1216,7 @@ impl App {
                 ui.label(RichText::new(&status_text).small());
 
                 // Show EXPERIMENTAL badge based on connected state or selected device.
-                let device_entry = self.selected_device();
-                let proto = (device_entry.new_protocol)();
-                let profile = proto.profile();
+                let profile = &self.selected_profile;
                 let is_experimental = if self.connection_state == ConnectionState::Connected {
                     self.experimental
                 } else {
@@ -1812,6 +1832,7 @@ impl eframe::App for App {
             ctx.memory_mut(|m| m.request_focus(target));
             self.shortcut_help_restore_focus = None;
         }
+        self.refresh_selected_profile();
         self.apply_theme(&ctx);
         self.apply_color_overrides(&ctx);
         self.apply_zoom(&ctx);

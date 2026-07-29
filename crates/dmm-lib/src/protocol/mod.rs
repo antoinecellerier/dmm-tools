@@ -27,6 +27,10 @@ pub enum Stability {
 }
 
 /// Static profile information about a device.
+///
+/// `Copy` so consumers can cache one without holding the protocol instance
+/// alive — every field is already a `'static` reference or a small value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DeviceProfile {
     pub family_name: &'static str,
     pub model_name: &'static str,
