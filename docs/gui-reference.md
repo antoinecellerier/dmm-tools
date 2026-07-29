@@ -50,11 +50,9 @@ The top bar contains:
   New" changelog popup. On release upgrades, this popup opens automatically
   on first launch.
 - **Connect / Disconnect** button
-- **Pause / Resume** button — halts acquisition without disconnecting: the
-  meter stops being polled entirely while paused, so the connection stays
-  open but no traffic flows. Pauses longer than the gap threshold produce gap
-  markers on the graph. (To freeze the *view* while data keeps arriving, use
-  the live-view toggle instead.)
+- **Pause / Resume** button — halts acquisition without disconnecting; the
+  meter stops being polled entirely. Use the live-view toggle instead to
+  freeze the view while data keeps arriving.
 - **Clear** button — resets graph history and statistics (does not affect
   recording)
 - **Connection status** — colored dot (green = connected, orange =
@@ -125,21 +123,13 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - Time-series line plot with auto-scaling Y axis (10% padding)
 - Axis labels include units (e.g. "1.0 mV", "10 s")
 - Crosshair tooltip shows time and value with units
-- Interruptions are drawn two ways, so a meter reporting a condition doesn't
-  look like a dropout:
-  - **No data** (disconnect, pause, or a sample interval longer than the gap
-    threshold) — a pair of dashed vertical lines, no fill.
-  - **Overload** — a filled band in the error colour with solid edges, drawn
-    at its true duration. Because the band is filled rather than marked only
-    at its edges, it stays visible when you zoom inside a period longer than
-    the time window; a brief excursion collapses to a line rather than being
-    widened to a minimum size. The crosshair reports `overload` inside a band,
-    and the plot's screen-reader summary says "currently over range" while the
-    meter is over range.
+- No-data gaps (disconnect, pause, slow sample interval) shown as dashed
+  vertical line pairs
+- Overloads shown as a filled band in the error colour, drawn at their true
+  duration; the crosshair reports `overload` inside one
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds ~10,000 points (oldest dropped). A change of mode or
-  of unit clears the graph since the scales are incompatible — auto-range
-  crossing a decade (Ω→kΩ, mV→V) counts, even though the mode is unchanged.
+  unit clears the graph — including auto-range crossing a decade (Ω→kΩ)
 
 ### Mouse Interactions
 
@@ -209,10 +199,8 @@ UT61E+). Other devices show only the Manual link.
 
 ## Recording
 
-- **Record (●) / Stop (■)** toggle button. Starting a recording clears the
-  buffer, so if it still holds samples that have not been exported, a
-  confirmation appears first (Cancel is focused by default). Once exported,
-  Record starts again without prompting.
+- **Record (●) / Stop (■)** toggle button — starting clears the buffer, so
+  it asks first if the buffer holds samples you haven't exported
 - **Export CSV** button — opens a file save dialog (runs on a background
   thread, does not freeze the UI)
 - Sample counter and duration shown while recording
@@ -337,10 +325,8 @@ Press `?` or click the `?` button in the top bar to open an in-app reference of 
 | `End` | Jump to live mode |
 
 Graph and `Space` shortcuts are disabled while any widget holds keyboard
-focus — not just text fields (Y-axis range, envelope window) but any button
-or toggle reached with `Tab`. This is deliberate: `Space` activates the
-focused widget and the arrow keys drive it. Press `Escape` to release focus
-and get the bare-key shortcuts back.
+focus — not just text fields but any button reached with `Tab`, since `Space`
+and the arrow keys drive the focused widget. Press `Escape` to release it.
 
 ## Layout Modes
 
@@ -416,7 +402,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color. The clickable version label in the top bar announces "Show release notes" rather than the literal version string.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, and the graph's LIVE button announce whether they are currently on or off — you don't have to rely on the color change.
 - The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation.
-- The graph announces a one-line summary of what it's showing: time window, Y-axis range, number of samples, whether it's following live, and the most recent reading (using the same digit string the sighted user sees). The summary updates whenever any of those change.
+- The graph announces a one-line summary of what it's showing: time window, Y-axis range, number of samples, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 
 ### Known limitations
