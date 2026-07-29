@@ -219,6 +219,10 @@ pub struct Graph {
     /// Cached segment data for minimap (full history), rebuilt only when
     /// `history_version` changes.
     cached_segments: Vec<Vec<[f64; 2]>>,
+    /// Full-history gaps, for the minimap's overload bands. (An earlier
+    /// version of this field was write-only and removed; the minimap now
+    /// reads it.)
+    cached_gaps: Vec<(f64, f64, GapKind)>,
     /// Monotonic counter incremented on every push/clear/mode-change.
     /// Used as the cache key instead of `history.len()` because a
     /// push_back+pop_front leaves the length unchanged but the data differs.
@@ -295,6 +299,7 @@ impl Graph {
             cursor_b: None,
             cursor_next_is_b: false,
             cached_segments: Vec::new(),
+            cached_gaps: Vec::new(),
             history_version: 0,
             cache_version: 0,
             color_preset: ColorPreset::Default,
@@ -522,14 +527,16 @@ impl Graph {
         self.history_version += 1;
     }
 
-    /// Rebuild the cached full-history segments (for the minimap) only if
-    /// history has changed since the last rebuild.
+    /// Rebuild the cached full-history segments and gaps (for the minimap)
+    /// only if history has changed since the last rebuild.
     ///
-    /// Segments only: the minimap draws no gap markers. The main graph gets
-    /// its gaps from `build_segments_for_range`, over the visible slice.
+    /// The main graph builds its own over the visible slice; this is the
+    /// whole-history pass the minimap needs.
     fn ensure_cache(&mut self) {
         if self.cache_version != self.history_version {
-            self.cached_segments = self.build_raw_segments();
+            let (segments, gaps) = self.build_segments_for_range(0, self.history.len());
+            self.cached_segments = segments;
+            self.cached_gaps = gaps;
             self.cache_version = self.history_version;
         }
     }
@@ -632,33 +639,6 @@ impl Graph {
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
         (elapsed > self.gap_threshold_secs).then_some(GapKind::NoData)
-    }
-
-    /// Build raw segment data as Vec<Vec<[f64;2]>> — avoids PlotPoints clone issues.
-    fn build_raw_segments(&self) -> Vec<Vec<[f64; 2]>> {
-        let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
-        let mut current_segment: Vec<[f64; 2]> = Vec::new();
-        let mut prev_time: Option<Instant> = None;
-
-        for point in &self.history {
-            let t = self.elapsed_secs(point.time);
-
-            if let Some(prev) = prev_time
-                && self.breaks_before(prev, point).is_some()
-                && !current_segment.is_empty()
-            {
-                segments.push(std::mem::take(&mut current_segment));
-            }
-
-            current_segment.push([t, point.value]);
-            prev_time = Some(point.time);
-        }
-
-        if !current_segment.is_empty() {
-            segments.push(current_segment);
-        }
-
-        segments
     }
 
     /// Render toolbar as two rows. Row 1: time presets, LIVE, Y-axis.
@@ -1594,6 +1574,15 @@ impl Graph {
 
         let tc = self.theme_colors(ui.visuals().dark_mode);
         let line_color = tc.minimap_line();
+        let overload_fill = tc.graph_overload_fill();
+        // Same spans the main plot bands, including one still open.
+        let overload_spans: Vec<(f64, f64)> = self
+            .cached_gaps
+            .iter()
+            .filter(|(_, _, kind)| *kind == GapKind::Overload)
+            .map(|&(a, b, _)| (a, b))
+            .chain(self.pending_overload_span())
+            .collect();
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes
         let label_height = 14.0;
@@ -1625,6 +1614,24 @@ impl Graph {
 
         // Background
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+
+        // Overload bands, matching the main plot so the two read the same way.
+        // Behind the trace, like the background.
+        //
+        // Widened to one pixel when the span is narrower. Unlike the main
+        // plot — where a floor would overstate the duration against a legible
+        // time axis — the minimap compresses the whole session into a strip,
+        // so sub-pixel is the normal case and the alternative is the band
+        // silently not existing.
+        for &(start, end) in &overload_spans {
+            let x0 = time_to_x(start);
+            let x1 = time_to_x(end).max(x0 + 1.0);
+            painter.rect_filled(
+                egui::Rect::from_min_max(egui::pos2(x0, rect.top()), egui::pos2(x1, rect.bottom())),
+                0.0,
+                overload_fill,
+            );
+        }
 
         // Draw data lines.
         //
@@ -2134,6 +2141,12 @@ impl Graph {
     /// Gap ranges across the whole history, through the same builder the main
     /// graph renders from — so these tests exercise the path that actually
     /// draws the gap markers.
+    /// Full-history segments, through the same builder the minimap caches.
+    #[cfg(test)]
+    fn all_segments(&self) -> Vec<Vec<[f64; 2]>> {
+        self.build_segments_for_range(0, self.history.len()).0
+    }
+
     #[cfg(test)]
     fn visible_gaps(&self) -> Vec<(f64, f64, GapKind)> {
         self.build_segments_for_range(0, self.history.len()).1
@@ -2261,7 +2274,7 @@ mod tests {
 
         // All three samples are 100ms apart — well inside the 1s minimum gap
         // threshold — so only the explicit break can split them.
-        let segments = g.build_raw_segments();
+        let segments = g.all_segments();
         assert_eq!(segments.len(), 2, "overload must split the trace");
         assert_eq!(segments[0].len(), 2);
         assert_eq!(segments[1].len(), 1);
@@ -2357,6 +2370,39 @@ mod tests {
         );
     }
 
+    /// The minimap reads its bands from the same cache it draws the trace
+    /// from, so the cache has to carry gaps — an earlier version of that
+    /// field was write-only and was removed.
+    #[test]
+    fn the_cache_carries_gaps_for_the_minimap() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.push_break(t0 + Duration::from_millis(50));
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+
+        g.ensure_cache();
+        assert_eq!(g.cached_segments.len(), 2, "trace splits either side");
+        let kinds: Vec<GapKind> = g.cached_gaps.iter().map(|&(_, _, k)| k).collect();
+        assert_eq!(kinds, vec![GapKind::Overload]);
+    }
+
+    /// The cache is keyed on history_version; a new sample must invalidate it
+    /// or the minimap would keep drawing a stale set of bands.
+    #[test]
+    fn the_cache_refreshes_when_a_break_arrives() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        g.ensure_cache();
+        assert!(g.cached_gaps.is_empty());
+
+        g.push_break(t0 + Duration::from_millis(50));
+        g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
+        g.ensure_cache();
+        assert_eq!(g.cached_gaps.len(), 1);
+    }
+
     /// An overload before any data has nothing to anchor to.
     #[test]
     fn a_break_with_no_history_marks_nothing() {
@@ -2425,7 +2471,7 @@ mod tests {
             g.push_break(Instant::now());
         }
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
-        assert_eq!(g.build_raw_segments().len(), 2);
+        assert_eq!(g.all_segments().len(), 2);
         assert_eq!(g.visible_gaps().len(), 1);
     }
 
@@ -2438,7 +2484,7 @@ mod tests {
         g.push_break(Instant::now());
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         g.push(3.0, t0 + Duration::from_millis(200), "DC V", "V", None);
-        let segments = g.build_raw_segments();
+        let segments = g.all_segments();
         assert_eq!(segments.len(), 2);
         assert_eq!(segments[1].len(), 2, "samples after the break rejoin");
     }
@@ -2453,7 +2499,7 @@ mod tests {
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
-        assert_eq!(g.build_raw_segments().len(), 1);
+        assert_eq!(g.all_segments().len(), 1);
     }
 
     /// Same mode and unit must not clear — otherwise the graph would reset on
@@ -2614,7 +2660,7 @@ mod tests {
         g.push(1.0, Instant::now(), "DC V", "V", None);
         g.push(2.0, Instant::now(), "DC V", "V", None);
         g.push(3.0, Instant::now(), "DC V", "V", None);
-        let segments = g.build_raw_segments();
+        let segments = g.all_segments();
         assert_eq!(segments.len(), 1);
     }
 

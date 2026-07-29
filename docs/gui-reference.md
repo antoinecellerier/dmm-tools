@@ -147,6 +147,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 A thin strip below the main plot showing the full capture history.
 
 - Bracket markers ([ ]) indicate the current viewport
+- Overload bands mirror the main plot, widened to a pixel when narrower
 - Click or drag the interior to jump to a specific time
 - Drag the bracket edges to resize the viewport to an arbitrary time width
 - Clicking near the end re-enables live mode
