@@ -8,6 +8,51 @@ use log::{error, info, warn};
 use std::sync::mpsc;
 use std::time::Duration;
 
+/// Control messages from the UI to the background thread.
+pub(crate) enum ThreadControl {
+    /// Exit the loop and release the device.
+    Stop,
+    /// Halt (`true`) or resume (`false`) acquisition. Halting stops the meter
+    /// being polled at all — it is not a display-side freeze.
+    SetPaused(bool),
+}
+
+/// How often a paused thread wakes to look for work.
+///
+/// Nothing is read from the meter while paused, but device commands (HOLD,
+/// REL, RANGE, …) are user actions rather than acquisition, so they must still
+/// reach the meter promptly instead of queueing until resume.
+const PAUSE_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// Apply pending control messages, blocking while paused.
+///
+/// Returns `false` when the thread should exit: an explicit `Stop`, or a
+/// hung-up channel. The hang-up case matters — the UI dropping its sender
+/// without stopping us (a panic on the UI thread, or a `connect()` that
+/// replaced the channel) used to be indistinguishable from "no messages", so
+/// the thread kept the USB handle open and polled the meter forever.
+fn handle_control(ctrl_rx: &mpsc::Receiver<ThreadControl>, paused: &mut bool) -> bool {
+    loop {
+        let msg = if *paused {
+            match ctrl_rx.recv_timeout(PAUSE_POLL_INTERVAL) {
+                Ok(m) => m,
+                Err(mpsc::RecvTimeoutError::Timeout) => return true,
+                Err(mpsc::RecvTimeoutError::Disconnected) => return false,
+            }
+        } else {
+            match ctrl_rx.try_recv() {
+                Ok(m) => m,
+                Err(mpsc::TryRecvError::Empty) => return true,
+                Err(mpsc::TryRecvError::Disconnected) => return false,
+            }
+        };
+        match msg {
+            ThreadControl::Stop => return false,
+            ThreadControl::SetPaused(p) => *paused = p,
+        }
+    }
+}
+
 /// Messages from the background thread to the UI.
 pub(crate) enum DmmMessage {
     Measurement(Measurement),
@@ -69,7 +114,7 @@ fn establish_connection<T: Transport>(
 pub(super) fn run_device_thread<T, F>(
     open_fn: F,
     msg_tx: mpsc::Sender<DmmMessage>,
-    stop_rx: mpsc::Receiver<()>,
+    ctrl_rx: mpsc::Receiver<ThreadControl>,
     cmd_rx: mpsc::Receiver<String>,
     ctx: egui::Context,
     query_name: bool,
@@ -104,9 +149,10 @@ pub(super) fn run_device_thread<T, F>(
     let tick = Duration::from_millis(sample_interval_ms as u64);
     let mut stream = MeasurementStream::new(&mut dmm, tick);
     let mut protocol_errors: u32 = 0;
+    let mut paused = false;
     loop {
-        if stop_rx.try_recv().is_ok() {
-            info!("background thread: stop signal received");
+        if !handle_control(&ctrl_rx, &mut paused) {
+            info!("background thread: stopping");
             break;
         }
 
@@ -117,6 +163,14 @@ pub(super) fn run_device_thread<T, F>(
             if let Err(e) = stream.dmm_mut().send_command(&cmd) {
                 warn!("background thread: command failed: {e}");
             }
+        }
+
+        // Pause halts acquisition itself, rather than letting the UI discard
+        // measurements it asked for: the meter is not polled at all. Without
+        // this the meter kept being read while "paused", so unplugging it then
+        // dropped the GUI into its reconnect loop.
+        if paused {
+            continue;
         }
 
         match stream.tick() {
@@ -189,9 +243,14 @@ pub(super) fn run_device_thread<T, F>(
                     });
                     ctx.request_repaint();
 
-                    // Sleep, but wake early on stop signal.
-                    match stop_rx.recv_timeout(retry_interval) {
-                        Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => return,
+                    // Sleep, but wake early on a control message. A pause that
+                    // arrives mid-reconnect is recorded and takes effect once
+                    // the link is back: there is nothing to halt until then.
+                    match ctrl_rx.recv_timeout(retry_interval) {
+                        Ok(ThreadControl::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                            return;
+                        }
+                        Ok(ThreadControl::SetPaused(p)) => paused = p,
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
 
@@ -214,6 +273,84 @@ pub(super) fn run_device_thread<T, F>(
         }
 
         ctx.request_repaint();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_messages_keeps_running() {
+        let (_tx, rx) = mpsc::channel::<ThreadControl>();
+        let mut paused = false;
+        assert!(handle_control(&rx, &mut paused));
+        assert!(!paused);
+    }
+
+    #[test]
+    fn stop_ends_the_loop() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(ThreadControl::Stop).unwrap();
+        let mut paused = false;
+        assert!(!handle_control(&rx, &mut paused));
+    }
+
+    /// The UI dropping its sender without sending Stop (a panic on the UI
+    /// thread, or a reconnect that replaced the channel) has to end the
+    /// thread too — otherwise it keeps the USB handle and polls forever.
+    #[test]
+    fn hung_up_channel_ends_the_loop() {
+        let (tx, rx) = mpsc::channel::<ThreadControl>();
+        drop(tx);
+        let mut paused = false;
+        assert!(!handle_control(&rx, &mut paused));
+    }
+
+    #[test]
+    fn pause_is_recorded_and_resume_returns_immediately() {
+        let (tx, rx) = mpsc::channel();
+        let mut paused = false;
+
+        tx.send(ThreadControl::SetPaused(true)).unwrap();
+        // Queue the resume too, so the paused branch has a message waiting
+        // and the test doesn't sit through the poll interval.
+        tx.send(ThreadControl::SetPaused(false)).unwrap();
+        assert!(handle_control(&rx, &mut paused));
+        assert!(!paused, "resume must clear the pause");
+    }
+
+    /// While paused the thread waits rather than spinning, but it still has
+    /// to notice a Stop.
+    #[test]
+    fn stop_is_honoured_while_paused() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(ThreadControl::Stop).unwrap();
+        let mut paused = true;
+        assert!(!handle_control(&rx, &mut paused));
+    }
+
+    #[test]
+    fn hung_up_channel_ends_the_loop_while_paused() {
+        let (tx, rx) = mpsc::channel::<ThreadControl>();
+        drop(tx);
+        let mut paused = true;
+        assert!(!handle_control(&rx, &mut paused));
+    }
+
+    /// A paused thread with nothing to do returns to the caller so queued
+    /// device commands still get sent, and stays paused.
+    #[test]
+    fn paused_thread_wakes_periodically_and_stays_paused() {
+        let (_tx, rx) = mpsc::channel::<ThreadControl>();
+        let mut paused = true;
+        let start = std::time::Instant::now();
+        assert!(handle_control(&rx, &mut paused));
+        assert!(paused);
+        assert!(
+            start.elapsed() >= PAUSE_POLL_INTERVAL,
+            "must wait rather than spin"
+        );
     }
 }
 

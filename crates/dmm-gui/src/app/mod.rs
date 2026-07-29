@@ -38,7 +38,7 @@ const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
 const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
 const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
 
-use connection::{DmmMessage, handle_thread_panic, run_device_thread};
+use connection::{DmmMessage, ThreadControl, handle_thread_panic, run_device_thread};
 
 /// Pre-formatted min/max/avg/count strings for a single stats group.
 struct FormattedStatsGroup {
@@ -155,7 +155,7 @@ pub struct App {
     wall_clock: dmm_lib::WallClock,
 
     rx: Option<mpsc::Receiver<DmmMessage>>,
-    stop_tx: Option<mpsc::Sender<()>>,
+    ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
     pub(super) cmd_tx: Option<mpsc::Sender<String>>,
     first_frame: bool,
     /// Reconnect on next frame (device selection changed while connected).
@@ -245,7 +245,7 @@ impl App {
             recording: Recording::new(),
             wall_clock: dmm_lib::WallClock::new(),
             rx: None,
-            stop_tx: None,
+            ctrl_tx: None,
             cmd_tx: None,
             first_frame: true,
             needs_reconnect: false,
@@ -484,7 +484,7 @@ impl App {
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space))
                 && self.connection_state == ConnectionState::Connected
             {
-                self.paused = !self.paused;
+                self.set_paused(!self.paused);
             }
 
             // ?: Toggle shortcut help
@@ -510,10 +510,10 @@ impl App {
         self.disconnect();
 
         let (msg_tx, msg_rx) = mpsc::channel();
-        let (stop_tx, stop_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<String>();
         self.rx = Some(msg_rx);
-        self.stop_tx = Some(stop_tx);
+        self.ctrl_tx = Some(ctrl_tx);
         self.cmd_tx = Some(cmd_tx);
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
@@ -539,7 +539,7 @@ impl App {
                             None => dmm_lib::mock::open_mock(),
                         },
                         msg_tx,
-                        stop_rx,
+                        ctrl_rx,
                         cmd_rx,
                         ctx_clone,
                         query_name,
@@ -560,7 +560,7 @@ impl App {
                     run_device_thread(
                         move || dmm_lib::open_device_by_id_auto(device_id, adapter.as_deref()),
                         msg_tx,
-                        stop_rx,
+                        ctrl_rx,
                         cmd_rx,
                         ctx_clone,
                         query_name,
@@ -575,8 +575,8 @@ impl App {
     }
 
     fn disconnect(&mut self) {
-        if let Some(tx) = self.stop_tx.take() {
-            let _ = tx.send(());
+        if let Some(tx) = self.ctrl_tx.take() {
+            let _ = tx.send(ThreadControl::Stop);
         }
         self.rx = None;
         self.cmd_tx = None;
@@ -734,6 +734,18 @@ impl App {
         if clear_channel {
             // Disconnect properly: send stop signal so the background thread exits
             self.disconnect();
+        }
+    }
+
+    /// Set the pause state and tell the acquisition thread about it.
+    ///
+    /// Pause halts acquisition — the meter stops being polled entirely. The
+    /// live-view toggle is the separate scroll-lock that freezes the view
+    /// while data keeps arriving.
+    pub(super) fn set_paused(&mut self, paused: bool) {
+        self.paused = paused;
+        if let Some(tx) = &self.ctrl_tx {
+            let _ = tx.send(ThreadControl::SetPaused(paused));
         }
     }
 
@@ -946,7 +958,7 @@ impl App {
                         .on_hover_text(pause_tooltip)
                         .clicked()
                     {
-                        self.paused = !self.paused;
+                        self.set_paused(!self.paused);
                     }
                     if ui
                         .button("Clear")

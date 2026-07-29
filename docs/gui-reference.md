@@ -50,8 +50,11 @@ The top bar contains:
   New" changelog popup. On release upgrades, this popup opens automatically
   on first launch.
 - **Connect / Disconnect** button
-- **Pause / Resume** button — freezes data capture without disconnecting.
-  Pauses longer than the gap threshold produce gap markers on the graph.
+- **Pause / Resume** button — halts acquisition without disconnecting: the
+  meter stops being polled entirely while paused, so the connection stays
+  open but no traffic flows. Pauses longer than the gap threshold produce gap
+  markers on the graph. (To freeze the *view* while data keeps arriving, use
+  the live-view toggle instead.)
 - **Clear** button — resets graph history and statistics (does not affect
   recording)
 - **Connection status** — colored dot (green = connected, orange =
