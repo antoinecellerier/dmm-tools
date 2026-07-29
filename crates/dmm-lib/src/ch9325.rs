@@ -107,6 +107,29 @@ impl Ch9325 {
     }
 }
 
+/// Locate the UART payload inside one raw RX report (§4.2).
+///
+/// The first data byte is `0xF0 + payload_length` (0xF0–0xF7). Whether
+/// hidapi prepends the 0x00 report ID depends on the platform — the CH9325
+/// descriptor declares none, so most return the 8 data bytes directly — so
+/// detect which layout arrived rather than assuming.
+///
+/// Returns `(header_byte, payload_start)`, or `None` for a report matching
+/// neither layout.
+///
+/// A free function so the tests exercise the same code the transport runs:
+/// they used to paste a copy of this branch into the test body and assert on
+/// the copy, which left the real one free to drift.
+fn locate_rx_payload(raw: &[u8], n: usize) -> Option<(u8, usize)> {
+    match raw.first() {
+        // Report ID present: byte 0 = 0x00, byte 1 = 0xF0+len
+        Some(0x00) if n >= 2 && raw[1] >= 0xF0 => Some((raw[1], 2)),
+        // No report ID: byte 0 = 0xF0+len directly
+        Some(&b) if b >= 0xF0 => Some((b, 1)),
+        _ => None,
+    }
+}
+
 impl Transport for Ch9325 {
     fn write(&self, data: &[u8]) -> Result<()> {
         // Split UART data across multiple 8-byte HID reports if needed.
@@ -132,18 +155,7 @@ impl Transport for Ch9325 {
             return Ok(0);
         }
 
-        // Parse the RX framing (§4.2):
-        //   First data byte = 0xF0 + payload_length (range 0xF0–0xF7)
-        //   Following bytes = UART payload, zero-padded
-        //
-        // Detect whether a report ID byte (0x00) was prepended by hidapi:
-        let (header_byte, payload_start) = if raw[0] == 0x00 && n >= 2 && raw[1] >= 0xF0 {
-            // Report ID present: byte 0 = 0x00, byte 1 = 0xF0+len
-            (raw[1], 2)
-        } else if raw[0] >= 0xF0 {
-            // No report ID: byte 0 = 0xF0+len directly
-            (raw[0], 1)
-        } else {
+        let Some((header_byte, payload_start)) = locate_rx_payload(&raw, n) else {
             // Unexpected framing — log and return empty
             trace!(
                 "Ch9325 RX: unexpected framing, raw[0]={:#04x}, n={n}, skipping",
@@ -254,20 +266,15 @@ mod tests {
         assert_eq!(chunks[1].len(), 1);
     }
 
+    /// Both layouts go through the production `locate_rx_payload`. These
+    /// tests used to paste a copy of that branch into the test body, so
+    /// changing the real one — e.g. tightening the report-ID heuristic after
+    /// hardware validation — left them green.
     #[test]
     fn rx_parsing_no_report_id() {
-        // Normal case: 8-byte read, no report ID prefix
-        // 0xF2 = 2 payload bytes
+        // Normal case: 8-byte read, no report ID prefix. 0xF2 = 2 payload bytes
         let raw: [u8; 8] = [0xF2, 0x35, 0x41, 0x00, 0x00, 0x00, 0x00, 0x00];
-        let n = 8usize;
-
-        let (header_byte, payload_start) = if raw[0] == 0x00 && n >= 2 && raw[1] >= 0xF0 {
-            (raw[1], 2usize)
-        } else if raw[0] >= 0xF0 {
-            (raw[0], 1usize)
-        } else {
-            panic!("unexpected framing");
-        };
+        let (header_byte, payload_start) = locate_rx_payload(&raw, 8).expect("framing recognised");
 
         assert_eq!(header_byte, 0xF2);
         assert_eq!(payload_start, 1);
@@ -284,15 +291,7 @@ mod tests {
     fn rx_parsing_with_report_id() {
         // Platform where hidapi prepends report ID 0x00
         let raw: [u8; 9] = [0x00, 0xF3, 0xAC, 0x05, 0x12, 0x00, 0x00, 0x00, 0x00];
-        let n = 9usize;
-
-        let (header_byte, payload_start) = if raw[0] == 0x00 && n >= 2 && raw[1] >= 0xF0 {
-            (raw[1], 2usize)
-        } else if raw[0] >= 0xF0 {
-            (raw[0], 1usize)
-        } else {
-            panic!("unexpected framing");
-        };
+        let (header_byte, payload_start) = locate_rx_payload(&raw, 9).expect("framing recognised");
 
         assert_eq!(header_byte, 0xF3);
         assert_eq!(payload_start, 2);
@@ -303,6 +302,18 @@ mod tests {
             &raw[payload_start..payload_start + payload_len],
             &[0xAC, 0x05, 0x12]
         );
+    }
+
+    /// A report matching neither layout must be reported as unrecognised, so
+    /// read_timeout skips it instead of reading a bogus length.
+    #[test]
+    fn rx_parsing_rejects_unknown_framing() {
+        assert_eq!(locate_rx_payload(&[0x12, 0x34], 2), None);
+        assert_eq!(locate_rx_payload(&[], 0), None);
+        // Report ID present but the next byte isn't a header.
+        assert_eq!(locate_rx_payload(&[0x00, 0x12], 2), None);
+        // Report ID present but the read was too short to carry a header.
+        assert_eq!(locate_rx_payload(&[0x00, 0xF2], 1), None);
     }
 
     #[test]
