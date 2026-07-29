@@ -64,6 +64,15 @@ pub(crate) struct SampleData {
     pub flags: SampleFlags,
 }
 
+/// Status flags recorded per sample.
+///
+/// Must cover every `StatusFlags` field — a capture report is the evidence a
+/// maintainer works from, and a flag missing here reads as "the meter didn't
+/// set it". `capture_report_covers_every_status_flag` enforces that.
+///
+/// `#[serde(default)]` on the fields added after the first release keeps
+/// older reports loadable, which `load_or_create_report` relies on to resume
+/// an interrupted capture.
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct SampleFlags {
     pub hold: bool,
@@ -76,6 +85,16 @@ pub(crate) struct SampleFlags {
     pub dc: bool,
     pub peak_min: bool,
     pub peak_max: bool,
+    #[serde(default)]
+    pub lead_error: bool,
+    #[serde(default)]
+    pub comp: bool,
+    #[serde(default)]
+    pub record: bool,
+    #[serde(default)]
+    pub loz: bool,
+    #[serde(default)]
+    pub void: bool,
 }
 
 impl SampleData {
@@ -111,6 +130,11 @@ impl SampleData {
                 dc: m.flags.dc,
                 peak_min: m.flags.peak_min,
                 peak_max: m.flags.peak_max,
+                lead_error: m.flags.lead_error,
+                comp: m.flags.comp,
+                record: m.flags.record,
+                loz: m.flags.loz,
+                void: m.flags.void,
             },
         }
     }
@@ -452,6 +476,64 @@ mod tests {
         assert!(s.flags.max);
         assert!(!s.flags.auto_range);
         assert!(s.flags.dc);
+    }
+
+    /// A capture report is the evidence a maintainer works from, so every
+    /// flag the meter can set has to reach it. Five were missing —
+    /// lead_error, comp, record, loz and void — so a VC-890 capture taken
+    /// with VOID lit arrived showing all-false.
+    ///
+    /// Serialize a fully-set SampleFlags and check the YAML has one key per
+    /// StatusFlags field, all true: that catches both a field never added
+    /// here and one added but left unassigned in `from_measurement`.
+    #[test]
+    fn capture_report_covers_every_status_flag() {
+        use dmm_lib::flags::StatusFlags;
+
+        let all_set = StatusFlags {
+            hold: true,
+            rel: true,
+            min: true,
+            max: true,
+            auto_range: true,
+            low_battery: true,
+            hv_warning: true,
+            dc: true,
+            peak_max: true,
+            peak_min: true,
+            lead_error: true,
+            comp: true,
+            record: true,
+            loz: true,
+            void: true,
+        };
+        let mut m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.flags = all_set;
+
+        let yaml = serde_yaml_ng::to_string(&SampleData::from_measurement(&m).flags).unwrap();
+        let parsed: std::collections::BTreeMap<String, bool> =
+            serde_yaml_ng::from_str(&yaml).unwrap();
+
+        assert_eq!(parsed.len(), StatusFlags::COUNT);
+        for (name, _) in all_set.as_pairs() {
+            assert_eq!(
+                parsed.get(name),
+                Some(&true),
+                "capture report drops or clears {name}"
+            );
+        }
+    }
+
+    /// Reports written before the five extra flags existed must still load,
+    /// or resuming an interrupted capture would fail.
+    #[test]
+    fn older_reports_without_the_new_flags_still_load() {
+        let yaml = "hold: true\nrel: false\nauto_range: true\nmin: false\nmax: false\n\
+                    low_battery: false\nhv_warning: false\ndc: true\npeak_min: false\n\
+                    peak_max: false\n";
+        let flags: SampleFlags = serde_yaml_ng::from_str(yaml).unwrap();
+        assert!(flags.hold);
+        assert!(!flags.void, "missing fields default to false");
     }
 
     #[test]
