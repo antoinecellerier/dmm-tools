@@ -172,7 +172,18 @@ impl Transport for Cp2110 {
     }
 
     fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
-        let mut raw = vec![0u8; buf.len() + 1];
+        // Stack, not heap: this is the measurement hot path.
+        // `framing::read_uart_bytes` can call it up to MAX_EMPTY_READS (256)
+        // times per frame while polling an idle bridge, and `read_frame`
+        // retries up to MAX_ATTEMPTS (64) times, so a single measurement was
+        // allocating and freeing thousands of short-lived buffers.
+        //
+        // One interrupt IN report is a length byte plus at most
+        // MAX_REPORT_PAYLOAD bytes, so this is the largest read that can
+        // land — the previous `buf.len() + 1` heap buffer was sized off the
+        // caller's slice, which is always the fixed 64-byte one in
+        // `read_uart_bytes` and never needed the extra byte.
+        let mut raw = [0u8; MAX_REPORT_PAYLOAD + 1];
         let n = self.device.read_timeout(&mut raw, timeout_ms)?;
         if n == 0 {
             return Ok(0);
