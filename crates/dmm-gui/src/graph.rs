@@ -48,6 +48,13 @@ struct DataPoint {
     /// even though the two neighbouring samples are adjacent in time.
     /// `None` when this point continues the previous one.
     break_before: Option<GapKind>,
+    /// Timestamp of the last non-plottable sample in that interruption.
+    ///
+    /// Bounds what we actually observed. If the meter goes over range and
+    /// then the link drops, OL samples stop arriving and this stays at the
+    /// last one we heard — everything after it is silence, not over-range,
+    /// and must be drawn as a dropout rather than folded into the band.
+    break_last_sample: Option<Instant>,
 }
 
 /// Quantize a `f64` to ~3 decimal digits before hashing so animated plot
@@ -390,8 +397,8 @@ impl Graph {
             time: now,
             value,
             break_before: self.pending_break.take(),
+            break_last_sample: self.pending_break_since.take(),
         });
-        self.pending_break_since = None;
         self.history_version += 1;
     }
 
@@ -929,7 +936,21 @@ impl Graph {
                 && !current_segment.is_empty()
             {
                 let gap_start = self.elapsed_secs(prev);
-                gaps.push((gap_start, t, kind));
+                // An interruption can be two things end to end: a stretch the
+                // meter reported on, then a stretch it didn't. Losing the link
+                // mid-overload is exactly that, and folding the silence into
+                // the band would claim the meter was over range for a period
+                // it never reported at all.
+                match (kind, point.break_last_sample) {
+                    (GapKind::Overload, Some(last)) => {
+                        let heard_until = self.elapsed_secs(last);
+                        gaps.push((gap_start, heard_until, GapKind::Overload));
+                        if t - heard_until > self.gap_threshold_secs {
+                            gaps.push((heard_until, t, GapKind::NoData));
+                        }
+                    }
+                    _ => gaps.push((gap_start, t, kind)),
+                }
                 segments.push(std::mem::take(&mut current_segment));
             }
 
@@ -2337,26 +2358,60 @@ mod tests {
         assert_eq!(kinds, vec![GapKind::Overload, GapKind::NoData]);
     }
 
-    /// A recorded overload wins over the elapsed-time test — an over-range
-    /// excursion that also happens to straddle the gap threshold is still an
-    /// overload, not a dropout.
+    /// Losing the link mid-overload is two things end to end: a stretch the
+    /// meter reported over-range, then a stretch it reported nothing. Folding
+    /// the silence into the band would claim the meter was over range for a
+    /// period it never reported at all.
     #[test]
-    fn a_long_overload_is_not_reclassified_as_data_loss() {
+    fn a_dropout_during_an_overload_splits_into_band_then_gap() {
         let mut g = Graph::new();
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
-        g.push_break(t0 + Duration::from_secs(3));
-        g.push(2.0, t0 + Duration::from_secs(6), "DC V", "V", None);
+        // Half a second of overload, then the link drops for 30 s.
+        g.push_break(t0 + Duration::from_millis(500));
+        g.push(2.0, t0 + Duration::from_secs(30), "DC V", "V", None);
+
+        let gaps = g.visible_gaps();
+        assert_eq!(gaps.len(), 2, "expected band then gap, got {gaps:?}");
+
+        let (band_start, band_end, band_kind) = gaps[0];
+        assert_eq!(band_kind, GapKind::Overload);
+        assert!(band_start.abs() < 1e-9);
+        assert!(
+            (band_end - 0.5).abs() < 1e-9,
+            "band must stop at the last OL sample we heard, got {band_end}"
+        );
+
+        let (gap_start, gap_end, gap_kind) = gaps[1];
+        assert_eq!(gap_kind, GapKind::NoData);
+        assert!((gap_start - 0.5).abs() < 1e-9);
+        assert!((gap_end - 30.0).abs() < 1e-9);
+    }
+
+    /// While the link is up, OL samples keep arriving, so a long overload is
+    /// all band and no dropout — the case that must not regress.
+    #[test]
+    fn a_connected_overload_produces_no_dropout() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+        // Ten seconds of overload, sampled throughout.
+        for i in 1..=100 {
+            g.push_break(t0 + Duration::from_millis(i * 100));
+        }
+        g.push(2.0, t0 + Duration::from_millis(10_100), "DC V", "V", None);
 
         let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
         assert_eq!(kinds, vec![GapKind::Overload]);
     }
 
-    /// No minimum width is applied: a brief excursion is drawn at its true
-    /// duration and collapses to a line rather than overstating how long the
-    /// meter was over range.
+    /// No minimum width is applied on the main plot: a brief excursion stays
+    /// sub-pixel and collapses to a line rather than being widened to
+    /// something legible, which would overstate how long the meter was over
+    /// range. The band runs to the last OL sample actually received, so it is
+    /// bounded by observation rather than by the next good reading.
     #[test]
-    fn a_brief_overload_keeps_its_true_width() {
+    fn a_brief_overload_is_not_widened() {
         let mut g = Graph::new();
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
@@ -2364,13 +2419,13 @@ mod tests {
         g.push(2.0, t0 + Duration::from_millis(1), "DC V", "V", None);
 
         let gaps = g.visible_gaps();
-        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps.len(), 1, "half a millisecond is under the threshold");
         let (start, end, kind) = gaps[0];
         assert_eq!(kind, GapKind::Overload);
         let width = end - start;
         assert!(
-            (width - 0.001).abs() < 1e-9,
-            "width must be the real 1 ms, got {width}"
+            (width - 0.0005).abs() < 1e-9,
+            "band must span to the OL sample at 0.5 ms, got {width}"
         );
     }
 
