@@ -341,7 +341,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let mode: Cow<'static, str> = if (mode_byte as usize) < POSITION_TABLE.len() {
         Cow::Borrowed(POSITION_TABLE[mode_byte as usize].1)
     } else {
-        warn!("ut8803: unknown mode byte {:#04x}", mode_byte);
+        debug!("ut8803: unknown mode byte {:#04x}", mode_byte);
         Cow::Owned(format!("Unknown({:#04x})", mode_byte))
     };
 

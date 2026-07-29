@@ -18,7 +18,7 @@ use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 use std::time::Instant;
 
@@ -109,7 +109,7 @@ fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
         0x1D => (Cow::Borrowed("600A AC"), "A"),
         0x24 => (Cow::Borrowed("NCV"), ""),
         _ => {
-            warn!("ut171: unknown mode byte {:#04x}", byte);
+            debug!("ut171: unknown mode byte {:#04x}", byte);
             (Cow::Owned(format!("Unknown({:#04x})", byte)), "")
         }
     }

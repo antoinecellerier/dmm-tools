@@ -41,7 +41,7 @@ use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{CaptureStep, DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 use std::time::Instant;
 
@@ -290,7 +290,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     let (mode_name, unit, dp_pos) = match ut804_mode_info(mode_code, range) {
         Some(info) => info,
         None => {
-            warn!("ut804: unknown mode/range {mode_code:#04x}/{range}");
+            debug!("ut804: unknown mode/range {mode_code:#04x}/{range}");
             ("?", "", 3)
         }
     };
@@ -423,7 +423,7 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     let (mode_name, unit, dp_pos) = match ut803_mode_info(mode_code, range, alt) {
         Some(info) => info,
         None => {
-            warn!("ut803: unknown mode/range {mode_code:#04x}/{range}");
+            debug!("ut803: unknown mode/range {mode_code:#04x}/{range}");
             ("?", "", 3)
         }
     };

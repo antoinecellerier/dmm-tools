@@ -480,7 +480,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     {
         (Cow::Borrowed(name), unit)
     } else {
-        warn!("vc880: unknown function code {function_code:#04x}");
+        debug!("vc880: unknown function code {function_code:#04x}");
         (Cow::Owned(format!("Unknown({function_code:#04x})")), "")
     };
 

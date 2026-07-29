@@ -327,7 +327,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         if let Some((m, u, r)) = lookup_position(position) {
             (Cow::Borrowed(m), u, r)
         } else {
-            warn!("ut8802: unknown position code {position:#04x}");
+            debug!("ut8802: unknown position code {position:#04x}");
             (Cow::Owned(format!("Unknown({position:#04x})")), "", "")
         };
 
