@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **Reference-line markers no longer bury the trace on a steady reading** — a signal sitting exactly on the reference value (a steady 5.000 V against Ref 5, or open leads at 0.000 against Ref 0) counted as crossing on every single sample, so the graph drew an unbroken row of markers along the reference line and hid the data underneath.
 - **The minimap keeps showing the full history while the graph is zoomed** — a Shift-drag box zoom (or a fixed Y range) was applied to the minimap too, so its trace collapsed to a flat line along the top and bottom edges and drew over the time axis, leaving no overview to navigate with until Reset Zoom.
 - **Exporting a long recording no longer doubles memory use** — Export CSV copied the whole sample buffer to hand it to the writer thread, so a full 500K-sample capture briefly needed twice the RAM and could fail (or be OOM-killed) at the moment the user was trying to save it. Recordings also hold ~20% less memory now that the debug-only wire bytes are no longer kept per sample.
 - **Disconnect and Ctrl-C take effect immediately at slow sample intervals** — the wait between samples couldn't be interrupted, so at the GUI's 2 s interval the meter stayed open for up to another 4 s after clicking Disconnect (while the UI already offered Connect again), and `dmm-cli read --interval-ms` sat out the full interval before honouring Ctrl-C. A `sample_interval_ms` hand-edited to an extreme value in `settings.json` is now clamped to 60 s with a warning instead of appearing to hang.

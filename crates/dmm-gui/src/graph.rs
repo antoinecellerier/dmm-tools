@@ -1946,8 +1946,15 @@ impl Graph {
             let t = self.elapsed_secs(point.time);
             if let Some(prev_v) = prev {
                 for &thresh in thresholds {
-                    let crossed = (prev_v <= thresh && point.value >= thresh)
-                        || (prev_v >= thresh && point.value <= thresh);
+                    // Strict on the "coming from" side. With `<=` on both,
+                    // prev_v == value == thresh satisfied *both* arms, so a
+                    // signal resting exactly on the reference (a steady 5.000 V
+                    // against Ref 5, or open leads reading 0.000 against Ref 0)
+                    // emitted a marker for every sample and painted a solid row
+                    // over the trace. A reading that arrives at the threshold
+                    // is still marked once, from whichever side it came.
+                    let crossed = (prev_v < thresh && point.value >= thresh)
+                        || (prev_v > thresh && point.value <= thresh);
                     if crossed {
                         crossings.push([t, thresh]);
                     }
@@ -2215,6 +2222,66 @@ mod tests {
             g.push(i as f64, Instant::now(), "DC V", "V", None);
         }
         assert_eq!(g.len(), MAX_POINTS);
+    }
+
+    /// A signal sitting exactly on the reference value used to report a
+    /// crossing on every sample, painting a solid row of markers along the
+    /// reference line and hiding the trace underneath.
+    #[test]
+    fn flat_signal_on_the_reference_is_not_a_crossing() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..10 {
+            g.push(5.0, t0 + Duration::from_millis(i * 100), "DC V", "V", None);
+        }
+        assert!(g.find_crossings(&[5.0], 0.0, 100.0).is_empty());
+    }
+
+    /// The zero case matters just as much: open leads read 0.000 and Ref 0 is
+    /// a natural thing to set.
+    #[test]
+    fn flat_zero_signal_on_a_zero_reference_is_not_a_crossing() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..5 {
+            g.push(0.0, t0 + Duration::from_millis(i * 100), "DC V", "V", None);
+        }
+        assert!(g.find_crossings(&[0.0], 0.0, 100.0).is_empty());
+    }
+
+    #[test]
+    fn real_crossings_are_still_reported() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        // Rise through the threshold, then fall back through it.
+        for (i, v) in [4.0, 6.0, 4.0].into_iter().enumerate() {
+            g.push(
+                v,
+                t0 + Duration::from_millis(i as u64 * 100),
+                "DC V",
+                "V",
+                None,
+            );
+        }
+        assert_eq!(g.find_crossings(&[5.0], 0.0, 100.0).len(), 2);
+    }
+
+    /// Arriving exactly on the reference is a crossing — once, not once per
+    /// sample spent sitting there.
+    #[test]
+    fn touching_the_reference_marks_a_single_crossing() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for (i, v) in [4.0, 5.0, 5.0, 5.0].into_iter().enumerate() {
+            g.push(
+                v,
+                t0 + Duration::from_millis(i as u64 * 100),
+                "DC V",
+                "V",
+                None,
+            );
+        }
+        assert_eq!(g.find_crossings(&[5.0], 0.0, 100.0).len(), 1);
     }
 
     /// The minimap is a full-history overview, so it must scale to the data
