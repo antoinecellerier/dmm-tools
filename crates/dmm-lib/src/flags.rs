@@ -47,6 +47,39 @@ impl StatusFlags {
             ..Default::default()
         }
     }
+
+    /// Number of flags in [`StatusFlags::as_pairs`] — i.e. every field.
+    pub const COUNT: usize = 15;
+
+    /// Every flag as a `(machine-readable name, value)` pair.
+    ///
+    /// Exists so consumers that need to enumerate the flags — the CLI's JSON
+    /// output, the capture report — don't each hand-maintain their own list.
+    /// Those lists had already drifted: JSON was missing `loz` and `void`,
+    /// and the capture report was missing five flags, so a VC-890 reading the
+    /// meter had marked VOID looked clean in both.
+    ///
+    /// Names are snake_case and are part of those output formats; renaming one
+    /// is a breaking change for downstream consumers.
+    pub fn as_pairs(&self) -> [(&'static str, bool); Self::COUNT] {
+        [
+            ("hold", self.hold),
+            ("rel", self.rel),
+            ("min", self.min),
+            ("max", self.max),
+            ("auto_range", self.auto_range),
+            ("low_battery", self.low_battery),
+            ("hv_warning", self.hv_warning),
+            ("dc", self.dc),
+            ("peak_max", self.peak_max),
+            ("peak_min", self.peak_min),
+            ("lead_error", self.lead_error),
+            ("comp", self.comp),
+            ("record", self.record),
+            ("loz", self.loz),
+            ("void", self.void),
+        ]
+    }
 }
 
 impl std::fmt::Display for StatusFlags {

@@ -37,6 +37,7 @@
 
 ### CLI
 
+- **JSON output reports the LoZ and VOID flags** — both were carried by the text and CSV formats but missing from the JSON `flags` object, so a script consuming JSON could not tell that a VC-890 had marked a reading invalid.
 - **`capture` collects the manual range sweep and freeform captures again** — both stopped running once protocols began declaring their own steps, so a capture on a UT61E+ silently skipped the range sweep (the only data covering the per-range tables) and never offered the freeform pass. `--list-steps` now lists the selected device's real step IDs instead of a stale internal list, and a `--steps` ID that matches nothing is an error rather than an empty report announced as "Capture complete!".
 - **`read`'s closing summary no longer mixes units** — Min/Max/Avg kept accumulating across a unit change, so turning the dial from volts to milliamps mid-run reported both as one series, printed without any unit. Statistics now reset on a unit change (as the integral already did) and the summary names the unit.
 - **`read` survives an unreadable frame instead of exiting** — one bad checksum used to end the run, so an overnight `--count 0` capture stopped at the first glitch. Bad frames are now skipped with a warning and counted in the closing summary.
