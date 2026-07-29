@@ -62,6 +62,22 @@ pub(crate) struct SampleData {
     pub range_label: String,
     pub progress: u16,
     pub flags: SampleFlags,
+    /// Sub-values the meter reported alongside the main reading (UT181A
+    /// REL/MIN-MAX/peak, UT171 frequency aux). Empty for most families, and
+    /// omitted from the YAML when empty so their reports are unchanged.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub aux: Vec<AuxSample>,
+}
+
+/// One sub-value in a captured sample.
+#[derive(Serialize, Deserialize, Clone)]
+pub(crate) struct AuxSample {
+    pub label: String,
+    pub value: String,
+    pub unit: String,
+    /// Seconds since the mode started, for the UT181A's MIN/MAX timestamps.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub elapsed_secs: Option<u32>,
 }
 
 /// Status flags recorded per sample.
@@ -136,6 +152,22 @@ impl SampleData {
                 loz: m.flags.loz,
                 void: m.flags.void,
             },
+            aux: m
+                .aux_values
+                .iter()
+                .map(|a| AuxSample {
+                    label: a.label.to_string(),
+                    value: a.value_str().into_owned(),
+                    // An empty aux unit means "same as the main reading";
+                    // resolve it here so the report stands on its own.
+                    unit: if a.unit.is_empty() {
+                        m.unit.to_string()
+                    } else {
+                        a.unit.to_string()
+                    },
+                    elapsed_secs: a.elapsed_secs,
+                })
+                .collect(),
         }
     }
 

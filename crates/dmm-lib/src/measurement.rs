@@ -33,6 +33,24 @@ pub struct AuxValue {
     pub elapsed_secs: Option<u32>,
 }
 
+impl AuxValue {
+    /// The sub-value formatted for display and export.
+    ///
+    /// Mirrors [`Measurement::value_export_str`]: the parsed value decides
+    /// first, so an overloaded sub-value reads "OL" rather than whatever
+    /// digits happened to be in `display_raw`.
+    pub fn value_str(&self) -> Cow<'_, str> {
+        match &self.value {
+            MeasuredValue::Normal(v) => match self.display_raw.as_deref() {
+                Some(raw) => Cow::Borrowed(raw.trim()),
+                None => Cow::Owned(v.to_string()),
+            },
+            MeasuredValue::Overload => Cow::Borrowed("OL"),
+            MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
+        }
+    }
+}
+
 /// A fully parsed measurement from the meter.
 ///
 /// This is the unified measurement type used by all protocol implementations.

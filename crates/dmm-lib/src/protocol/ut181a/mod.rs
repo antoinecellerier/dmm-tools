@@ -443,7 +443,8 @@ impl Protocol for Ut181aProtocol {
             CaptureStep {
                 id: "rel",
                 instruction: "V DC mode: long-press REL to enable relative. \
-                              Verify aux_values show Reference and Absolute.",
+                              The report should list Reference and Absolute \
+                              sub-values under each sample.",
                 command: None,
                 samples: 5,
             },
@@ -456,7 +457,8 @@ impl Protocol for Ut181aProtocol {
             CaptureStep {
                 id: "peak",
                 instruction: "V AC mode: enable Peak mode (FUNC button). \
-                              Verify aux_values show Peak Min.",
+                              The report should list a Peak Min sub-value \
+                              under each sample.",
                 command: None,
                 samples: 5,
             },

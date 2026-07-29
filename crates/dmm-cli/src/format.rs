@@ -26,10 +26,40 @@ pub fn format_measurement(
     match format {
         OutputFormat::Text => {
             if let Some((val, unit)) = integral {
-                writeln!(w, "{m} [\u{222b} {val:.4} {unit}]")
+                writeln!(w, "{m} [\u{222b} {val:.4} {unit}]")?;
             } else {
-                writeln!(w, "{m}")
+                writeln!(w, "{m}")?;
             }
+            // Sub-values, indented under the reading they belong to. The
+            // UT181A produces these in REL (Reference/Absolute), MIN/MAX
+            // (Max/Average/Min with timestamps) and peak modes, and the UT171
+            // for the AC frequency aux; before this they were parsed and
+            // discarded.
+            let label_w = m
+                .aux_values
+                .iter()
+                .map(|a| a.label.chars().count())
+                .max()
+                .unwrap_or(0);
+            for aux in &m.aux_values {
+                // An empty aux unit means "same as the main reading".
+                let unit = if aux.unit.is_empty() {
+                    &m.unit
+                } else {
+                    &aux.unit
+                };
+                let elapsed = aux
+                    .elapsed_secs
+                    .map(|s| format!(" @{s}s"))
+                    .unwrap_or_default();
+                writeln!(
+                    w,
+                    "  {:<label_w$}  {} {unit}{elapsed}",
+                    aux.label,
+                    aux.value_str()
+                )?;
+            }
+            Ok(())
         }
         OutputFormat::Csv => {
             // Through the csv crate rather than hand-joined with commas, as
@@ -92,6 +122,28 @@ pub fn format_measurement(
                 "experimental": experimental,
                 "flags": flags,
             });
+            // Omitted entirely when there are none, so output for the
+            // families that never produce sub-values is unchanged.
+            if !m.aux_values.is_empty() {
+                obj["aux"] = serde_json::json!(
+                    m.aux_values
+                        .iter()
+                        .map(|aux| {
+                            let unit = if aux.unit.is_empty() {
+                                m.unit.as_ref()
+                            } else {
+                                aux.unit.as_ref()
+                            };
+                            serde_json::json!({
+                                "label": aux.label,
+                                "value": aux.value_str(),
+                                "unit": unit,
+                                "elapsed_secs": aux.elapsed_secs,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                );
+            }
             if let Some((val, unit)) = integral {
                 obj["integral"] = serde_json::json!(val);
                 obj["integral_unit"] = serde_json::json!(unit);
@@ -148,6 +200,97 @@ mod tests {
         assert_eq!(v["flags"]["loz"], serde_json::json!(true));
         assert_eq!(v["flags"]["void"], serde_json::json!(true));
         assert_eq!(v["flags"]["hold"], serde_json::json!(false));
+    }
+
+    fn with_aux(m: &mut Measurement) {
+        use dmm_lib::measurement::AuxValue;
+        m.aux_values = vec![
+            AuxValue {
+                label: "Reference".into(),
+                value: MeasuredValue::Normal(1.234),
+                unit: "".into(), // empty = same as the main reading
+                display_raw: Some("1.2340".to_string()),
+                elapsed_secs: None,
+            },
+            AuxValue {
+                label: "Max".into(),
+                value: MeasuredValue::Overload,
+                unit: "mV".into(),
+                display_raw: None,
+                elapsed_secs: Some(42),
+            },
+        ];
+    }
+
+    /// UT181A REL/MIN-MAX sub-values were parsed and then discarded by every
+    /// output format.
+    #[test]
+    fn text_output_lists_aux_values() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_aux(&mut m);
+        let mut buf = Vec::new();
+        format_measurement(
+            &mut buf,
+            &m,
+            &WallClock::new(),
+            &OutputFormat::Text,
+            false,
+            None,
+        )
+        .unwrap();
+        let out = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 3, "reading plus two sub-values: {out}");
+        assert!(lines[1].contains("Reference"), "got {}", lines[1]);
+        // Empty aux unit falls back to the main reading's unit.
+        assert!(lines[1].trim().ends_with("1.2340 V"), "got {}", lines[1]);
+        // Overloaded sub-value reads OL, and carries its timestamp.
+        assert!(lines[2].contains("OL mV @42s"), "got {}", lines[2]);
+    }
+
+    #[test]
+    fn json_output_includes_aux_values() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_aux(&mut m);
+        let mut buf = Vec::new();
+        format_measurement(
+            &mut buf,
+            &m,
+            &WallClock::new(),
+            &OutputFormat::Json,
+            false,
+            None,
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+        let aux = v["aux"].as_array().expect("aux array");
+        assert_eq!(aux.len(), 2);
+        assert_eq!(aux[0]["label"], "Reference");
+        assert_eq!(aux[0]["unit"], "V");
+        assert_eq!(aux[1]["value"], "OL");
+        assert_eq!(aux[1]["elapsed_secs"], 42);
+    }
+
+    /// Families that report no sub-values must produce byte-identical output
+    /// to before.
+    #[test]
+    fn no_aux_means_no_change_to_either_format() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let mut buf = Vec::new();
+        format_measurement(
+            &mut buf,
+            &m,
+            &WallClock::new(),
+            &OutputFormat::Text,
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(String::from_utf8(buf).unwrap().lines().count(), 1);
+        assert!(json_for(StatusFlags::default()).get("aux").is_none());
     }
 
     fn csv_for(m: &Measurement) -> String {

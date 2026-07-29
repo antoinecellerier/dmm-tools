@@ -37,6 +37,7 @@
 
 ### CLI
 
+- **Meter sub-values are no longer thrown away** — the UT181A's REL (Reference/Absolute), MIN/MAX (Max/Average/Min with timestamps) and Peak values, and the UT171's frequency aux, were parsed and then dropped by every output. They now appear indented under the reading in text output, in an `aux` array in JSON, and per sample in capture reports — which is what the UT181A capture steps have been telling users to check for. CSV is unchanged.
 - **`dmm-cli read --format csv` can no longer be corrupted by meter text** — rows were joined with commas and never quoted, so a comma, quote or newline in a device-derived field (UT181A units come straight off the wire unvalidated, and an unrecognised mode reads as `Unknown(0x..)`) shifted every column after it. Output for ordinary readings is unchanged.
 - **Capture reports record every status flag** — `lead_error`, `comp`, `record`, `loz` and `void` were dropped, so a capture taken with the meter showing VOID or a lead error arrived at the maintainer looking clean, and the flag under investigation was the one missing.
 - **JSON output reports the LoZ and VOID flags** — both were carried by the text and CSV formats but missing from the JSON `flags` object, so a script consuming JSON could not tell that a VC-890 had marked a reading invalid.

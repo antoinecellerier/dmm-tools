@@ -168,6 +168,12 @@ CSV output begins with a `# device:` comment line identifying the meter model,
 followed by the column header. JSON output begins with a `_metadata` line
 containing the device model, followed by one measurement object per line.
 
+Meters that report sub-values alongside the reading — the UT181A in REL,
+MIN/MAX and Peak modes, the UT171's frequency aux — show them indented under
+the reading in text output and in an `aux` array in JSON. CSV is unchanged:
+its column count is fixed, so sub-values are not included there. Capture
+reports carry them per sample under `aux`.
+
 When the session ends, a summary line (sample count, min, max, average, each
 with its unit) is printed to stderr. When `--integrate` is active, the total
 integral is also shown.
