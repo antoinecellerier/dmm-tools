@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **"Waiting for meter…" no longer lingers after disconnecting** — the timeout counter behind that message was only cleared by an incoming reading, so if the meter went quiet before you clicked Disconnect the banner stayed up for the rest of the disconnected session.
 - **Record no longer silently destroys an unexported capture** — pressing Record again after a run (or mistyping Ctrl+R) cleared the buffer with no prompt, no toast and nothing in the log, so an hour of unexported samples could vanish on one keystroke. It now asks first, and only when the buffer actually holds samples that were never written to a CSV.
 - **The System theme follows the desktop instead of always being Dark** — `--theme system` was accepted, saved and documented, but rendered Dark regardless of the desktop's setting, and the Settings panel offered only Dark and Light so a config with System selected showed no theme at all. System is now a selectable option that tracks the OS (Dark if the desktop reports no preference).
 - **Reference-line markers no longer bury the trace on a steady reading** — a signal sitting exactly on the reference value (a steady 5.000 V against Ref 5, or open leads at 0.000 against Ref 0) counted as crossing on every single sample, so the graph drew an unbroken row of markers along the reference line and hid the data underneath.

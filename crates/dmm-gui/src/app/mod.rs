@@ -649,6 +649,10 @@ impl App {
         self.paused = false;
         self.reconnect_attempt = 0;
         self.reconnect_last_error = None;
+        // Otherwise only an incoming measurement clears this, and there won't
+        // be one — a meter that went quiet before the user disconnected left
+        // "Waiting for meter…" on screen for the whole disconnected session.
+        self.waiting_timeouts = 0;
     }
 
     fn drain_messages(&mut self) {
