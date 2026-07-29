@@ -28,15 +28,21 @@ fn format_display_raw(raw: &str) -> String {
 /// Format the measurement value as a display string.
 /// Uses the meter's raw 7-char display when available (UT61E+ protocol),
 /// otherwise formats the numeric value for float-based protocols.
+///
+/// The parsed `MeasuredValue` decides first: several protocols flag overload
+/// through a status bit while still sending ordinary digits in the display
+/// field (UT8802 `sign_byte & 0x40`, UT8803 `payload[12] & 0x04`). Preferring
+/// `display_raw` there would render an out-of-range reading as a plausible
+/// number. `display_raw` still wins for normal readings, which is what keeps
+/// the on-screen width steady.
 fn format_value_display(m: &Measurement) -> String {
-    if let Some(raw) = &m.display_raw {
-        format_display_raw(raw)
-    } else {
-        match &m.value {
-            MeasuredValue::Normal(v) => format!("{v:>7}"),
-            MeasuredValue::Overload => format!("{:>7}", "OL"),
-            MeasuredValue::NcvLevel(l) => format!("NCV {l}"),
-        }
+    match &m.value {
+        MeasuredValue::Normal(v) => match m.display_raw.as_deref() {
+            Some(raw) => format_display_raw(raw),
+            None => format!("{v:>7}"),
+        },
+        MeasuredValue::Overload => format!("{:>7}", "OL"),
+        MeasuredValue::NcvLevel(l) => format!("NCV {l}"),
     }
 }
 
@@ -513,6 +519,44 @@ mod tests {
     #[test]
     fn format_display_raw_empty() {
         assert_eq!(format_display_raw(""), "       ");
+    }
+
+    /// UT8802/UT8803 flag overload through a status bit while still sending
+    /// ordinary digits in the display field. Rendering those digits shows an
+    /// out-of-range input as a plausible reading (a bare `0` in Ω mode is
+    /// indistinguishable from a real short).
+    #[test]
+    fn overload_beats_display_raw_digits() {
+        let mut m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
+        m.display_raw = Some("    0".to_string());
+        assert_eq!(format_value_display(&m).trim(), "OL");
+    }
+
+    #[test]
+    fn ncv_level_beats_display_raw_digits() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::NcvLevel(3), "", StatusFlags::default());
+        m.display_raw = Some("  1.234".to_string());
+        assert_eq!(format_value_display(&m).trim(), "NCV 3");
+    }
+
+    /// Normal readings must still take the meter's own digits — that is what
+    /// holds the on-screen width steady between frames.
+    #[test]
+    fn normal_still_prefers_display_raw() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        assert_eq!(format_value_display(&m), "  5.678");
+    }
+
+    /// The visible reading and the spoken label must agree — this pair was
+    /// what made the bug user-visible in the first place.
+    #[test]
+    fn overload_reads_the_same_visibly_and_aloud() {
+        let mut m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
+        m.display_raw = Some("    0".to_string());
+        assert_eq!(format_value_display(&m).trim(), "OL");
+        assert!(live_region_label(Some(&m)).starts_with("overload"));
     }
 
     #[test]

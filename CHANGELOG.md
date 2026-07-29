@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **An overload now reads "OL" on screen instead of a plausible number** — meters that flag over-range through a status bit (UT8802, UT8803) keep sending digits in the display field, and the GUI showed those, so open leads in resistance mode read `0` — indistinguishable from a real short. The recording panel had the same fault while its CSV column correctly said `OL`.
 - **The GUI no longer crashes in Continuity or Diode mode on narrow windows** — modes without a published accuracy figure made the compact and big-meter spec lines panic; the accuracy field is now omitted for them.
 - **A malformed colour in `settings.json` no longer stops the GUI from starting** — a value containing a non-ASCII character crashed on load instead of falling back to the default palette.
 - **Meters on a CH9325 or CH9329 cable now deliver readings** — an idle poll (the cable reporting "nothing new since last time") was treated as a lost connection, so UT803/UT804 timed out on every measurement and never showed a value.

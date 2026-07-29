@@ -28,18 +28,23 @@ impl Sample {
     /// Display form of the measured value: trimmed `display_raw` when the
     /// protocol provides it, or a numeric / OL / NCV fallback otherwise.
     ///
+    /// Overload and NCV are decided by the parsed `MeasuredValue`, not by
+    /// `display_raw` — protocols that flag overload out-of-band still fill the
+    /// display field with digits, and showing those would turn an out-of-range
+    /// reading into a plausible number. Matches [`Measurement::value_export_str`]
+    /// so the panel and the CSV never disagree.
+    ///
     /// Keeps the meter's own spacing for a steady on-screen width. Use
     /// [`Sample::value_export_str`] for CSV, where that spacing would make the
     /// column non-numeric.
     pub fn value_str(&self) -> String {
-        if let Some(raw) = &self.measurement.display_raw {
-            raw.trim().to_string()
-        } else {
-            match &self.measurement.value {
-                MeasuredValue::Normal(v) => format!("{v}"),
-                MeasuredValue::Overload => "OL".to_string(),
-                MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
-            }
+        match &self.measurement.value {
+            MeasuredValue::Normal(v) => match self.measurement.display_raw.as_deref() {
+                Some(raw) => raw.trim().to_string(),
+                None => format!("{v}"),
+            },
+            MeasuredValue::Overload => "OL".to_string(),
+            MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
         }
     }
 
@@ -222,6 +227,27 @@ mod tests {
         assert_eq!(s.mode(), "DC V");
         assert_eq!(s.value_str(), "5.678");
         assert_eq!(s.unit(), "V");
+    }
+
+    /// The recording panel and the CSV must never disagree about an overload:
+    /// `value_export_str` has always said "OL", so `value_str` has to as well
+    /// even when the protocol left digits in `display_raw`.
+    #[test]
+    fn sample_value_str_reports_overload_not_digits() {
+        let mut m = make_measurement(b"      0");
+        m.value = MeasuredValue::Overload;
+        let s = Sample::from_measurement(&m, &WallClock::new());
+        assert_eq!(s.value_str(), "OL");
+        assert_eq!(s.value_export_str(), "OL");
+    }
+
+    #[test]
+    fn sample_value_str_reports_ncv_not_digits() {
+        let mut m = make_measurement(b"  1.234");
+        m.value = MeasuredValue::NcvLevel(2);
+        let s = Sample::from_measurement(&m, &WallClock::new());
+        assert_eq!(s.value_str(), "NCV:2");
+        assert_eq!(s.value_export_str(), "NCV:2");
     }
 
     #[test]
