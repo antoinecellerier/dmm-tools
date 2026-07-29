@@ -195,7 +195,6 @@ pub struct Graph {
     /// Cached segment data for minimap (full history), rebuilt only when
     /// `history_version` changes.
     cached_segments: Vec<Vec<[f64; 2]>>,
-    cached_gaps: Vec<(f64, f64)>,
     /// Monotonic counter incremented on every push/clear/mode-change.
     /// Used as the cache key instead of `history.len()` because a
     /// push_back+pop_front leaves the length unchanged but the data differs.
@@ -271,7 +270,6 @@ impl Graph {
             cursor_b: None,
             cursor_next_is_b: false,
             cached_segments: Vec::new(),
-            cached_gaps: Vec::new(),
             history_version: 0,
             cache_version: 0,
             color_preset: ColorPreset::Default,
@@ -494,12 +492,14 @@ impl Graph {
         self.history_version += 1;
     }
 
-    /// Rebuild cached segments/gaps (full history, for minimap) only if
+    /// Rebuild the cached full-history segments (for the minimap) only if
     /// history has changed since the last rebuild.
+    ///
+    /// Segments only: the minimap draws no gap markers. The main graph gets
+    /// its gaps from `build_segments_for_range`, over the visible slice.
     fn ensure_cache(&mut self) {
         if self.cache_version != self.history_version {
             self.cached_segments = self.build_raw_segments();
-            self.cached_gaps = self.find_gap_ranges();
             self.cache_version = self.history_version;
         }
     }
@@ -614,24 +614,6 @@ impl Graph {
         }
 
         segments
-    }
-
-    fn find_gap_ranges(&self) -> Vec<(f64, f64)> {
-        let mut gaps = Vec::new();
-        let mut prev: Option<&DataPoint> = None;
-
-        for point in &self.history {
-            if let Some(p) = prev
-                && self.breaks_before(p.time, point)
-            {
-                let t1 = self.elapsed_secs(p.time);
-                let t2 = self.elapsed_secs(point.time);
-                gaps.push((t1, t2));
-            }
-            prev = Some(point);
-        }
-
-        gaps
     }
 
     /// Render toolbar as two rows. Row 1: time presets, LIVE, Y-axis.
@@ -2025,6 +2007,14 @@ impl Graph {
         has_pair.then_some(integral)
     }
 
+    /// Gap ranges across the whole history, through the same builder the main
+    /// graph renders from — so these tests exercise the path that actually
+    /// draws the gap markers.
+    #[cfg(test)]
+    fn visible_gaps(&self) -> Vec<(f64, f64)> {
+        self.build_segments_for_range(0, self.history.len()).1
+    }
+
     #[cfg(test)]
     fn len(&self) -> usize {
         self.history.len()
@@ -2160,7 +2150,7 @@ mod tests {
         g.push(1.0, t0, "DC V", "V", None);
         g.push_break();
         g.push(3.0, t0 + Duration::from_millis(100), "DC V", "V", None);
-        assert_eq!(g.find_gap_ranges().len(), 1);
+        assert_eq!(g.visible_gaps().len(), 1);
     }
 
     /// Consecutive overload samples are one interruption, not several.
@@ -2174,7 +2164,7 @@ mod tests {
         }
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         assert_eq!(g.build_raw_segments().len(), 2);
-        assert_eq!(g.find_gap_ranges().len(), 1);
+        assert_eq!(g.visible_gaps().len(), 1);
     }
 
     /// The break must not persist past the point that consumed it.
@@ -2371,8 +2361,7 @@ mod tests {
         let mut g = Graph::new();
         g.push(1.0, Instant::now(), "DC V", "V", None);
         g.push(2.0, Instant::now(), "DC V", "V", None);
-        let gaps = g.find_gap_ranges();
-        assert!(gaps.is_empty());
+        assert!(g.visible_gaps().is_empty());
     }
 
     #[test]
