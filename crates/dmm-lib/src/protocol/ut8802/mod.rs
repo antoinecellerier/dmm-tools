@@ -701,29 +701,30 @@ mod tests {
         assert!(m.flags.min);
     }
 
+    /// Byte 4 bits 4-5 do **not** encode AC/DC coupling.
+    ///
+    /// They were read that way once ("0=OFF, 1=AC, 2=DC, 3=AC+DC"), and this
+    /// test was written to that reading — but it only ever passed because
+    /// each case's position code happened to agree with the coupling bits it
+    /// asserted on. `position_is_dc` documents the corrected reading: the
+    /// vendor derives AC/DC from the position code alone (`FUN_1001ca30`),
+    /// and these bits are diode/SCR probe-direction indicators.
+    ///
+    /// So sweep all four bit values against a fixed position and assert the
+    /// flag doesn't move. That fails if anyone reintroduces the old reading.
     #[test]
-    fn parse_acdc_bits() {
-        // Byte 4 bits 4-5 encode AC/DC coupling per spec §3.4:
-        //   0=OFF, 1=AC, 2=DC, 3=AC+DC. Only 2 and 3 set flags.dc.
-        // AC V position 0x0A with acdc_bits=1 (AC) → dc = false
-        let payload = make_payload(0x0A, [0, 1, 2, 3, 4], 2, 0x01, 0x00, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.dc);
+    fn acdc_bits_do_not_affect_the_dc_flag() {
+        for acdc_bits in 0..=3u8 {
+            // 0x05 = DC V: dc must stay set whatever the bits say.
+            let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, acdc_bits, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert!(m.flags.dc, "DC position with acdc_bits={acdc_bits}");
 
-        // DC V position 0x05 with acdc_bits=2 (DC) → dc = true
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.dc);
-
-        // AC+DC (acdc_bits=3) → dc = true
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x03, 0x00, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.dc);
-
-        // OFF (acdc_bits=0, e.g. resistance) → dc = false
-        let payload = make_payload(0x1A, [0, 1, 2, 3, 4], 3, 0x00, 0x00, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.dc);
+            // 0x0A = AC V: dc must stay clear whatever the bits say.
+            let payload = make_payload(0x0A, [0, 1, 2, 3, 4], 2, acdc_bits, 0x00, 0x00);
+            let m = parse_measurement(&payload).unwrap();
+            assert!(!m.flags.dc, "AC position with acdc_bits={acdc_bits}");
+        }
     }
 
     #[test]
