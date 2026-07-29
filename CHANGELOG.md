@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **Exporting a long recording no longer doubles memory use** — Export CSV copied the whole sample buffer to hand it to the writer thread, so a full 500K-sample capture briefly needed twice the RAM and could fail (or be OOM-killed) at the moment the user was trying to save it. Recordings also hold ~20% less memory now that the debug-only wire bytes are no longer kept per sample.
 - **Disconnect and Ctrl-C take effect immediately at slow sample intervals** — the wait between samples couldn't be interrupted, so at the GUI's 2 s interval the meter stayed open for up to another 4 s after clicking Disconnect (while the UI already offered Connect again), and `dmm-cli read --interval-ms` sat out the full interval before honouring Ctrl-C. A `sample_interval_ms` hand-edited to an extreme value in `settings.json` is now clamped to 60 s with a warning instead of appearing to hang.
 - **Exported CSVs name the meter the samples came from** — the `# device:` header was read from the Settings selection at export time, so recording on one meter and then switching the selection produced a file labelled with the wrong model. The device is now captured when recording starts.
 - **Brief overloads now break the graph line instead of being drawn through** — an over-range excursion shorter than the gap threshold left no hole in the timestamps, so the trace ran straight from the last good reading to the first one after it, and the visible-range integral counted the area under that invented line. Overloads now split the trace and show a gap marker.

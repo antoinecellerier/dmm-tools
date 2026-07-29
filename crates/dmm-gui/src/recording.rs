@@ -1,8 +1,46 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
+use std::io::Write;
 
-/// Maximum recording samples (~14 hours at 10Hz, ~22MB memory).
+/// Render samples as a CSV document, provenance header included.
+///
+/// Returns the finished bytes so the caller can hand them to a writer thread
+/// without duplicating the sample buffer — a full buffer is ~140 MB of
+/// `Sample`s, while the rendered CSV is a fraction of that and takes one pass
+/// instead of half a million allocations.
+pub fn render_csv(
+    samples: &[Sample],
+    device_model: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    // ~72 bytes covers a typical row (RFC3339 timestamp, mode, value, unit,
+    // range, flags) without repeated growth on large buffers.
+    let mut buf: Vec<u8> = Vec::with_capacity(samples.len() * 72 + 128);
+    writeln!(buf, "# device: {device_model}")?;
+    {
+        let mut wtr = csv::Writer::from_writer(&mut buf);
+        wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
+        for s in samples {
+            wtr.write_record([
+                s.wall_time.to_rfc3339().as_str(),
+                s.mode(),
+                s.value_export_str().as_ref(),
+                s.unit(),
+                s.range_label(),
+                s.flags_str().as_str(),
+            ])?;
+        }
+        wtr.flush()?;
+    }
+    Ok(buf)
+}
+
+/// Maximum recording samples (~14 hours at 10Hz).
+///
+/// A `Sample` is roughly 280 bytes — about 240 inline plus the `display_raw`
+/// heap string — so a full buffer holds on the order of 140 MB. (The figure
+/// quoted here used to be 22 MB, which was never achievable at this struct
+/// size.)
 const MAX_RECORDING_SAMPLES: usize = 500_000;
 
 /// A single recorded sample.
@@ -19,9 +57,13 @@ pub struct Sample {
 
 impl Sample {
     pub fn from_measurement(m: &Measurement, wall_clock: &WallClock) -> Self {
+        let mut measurement = m.clone();
+        // Drop the debug-only wire bytes. Nothing in the GUI reads them, and
+        // retaining a heap Vec per sample costs ~50 MB across a full buffer.
+        measurement.raw_payload = Vec::new();
         Self {
             wall_time: wall_clock.wall_time_for(m.timestamp).into(),
-            measurement: m.clone(),
+            measurement,
         }
     }
 
@@ -248,6 +290,43 @@ mod tests {
         let s = Sample::from_measurement(&m, &WallClock::new());
         assert_eq!(s.value_str(), "NCV:2");
         assert_eq!(s.value_export_str(), "NCV:2");
+    }
+
+    /// The wire bytes are debug-only and nothing in the GUI reads them;
+    /// keeping one heap Vec per sample cost ~50 MB across a full buffer.
+    #[test]
+    fn stored_samples_drop_the_debug_payload() {
+        let m = make_measurement(b"  1.234");
+        assert!(
+            !m.raw_payload.is_empty(),
+            "fixture should carry wire bytes to begin with"
+        );
+        let s = Sample::from_measurement(&m, &WallClock::new());
+        assert!(s.measurement.raw_payload.is_empty());
+    }
+
+    #[test]
+    fn render_csv_has_header_and_one_row_per_sample() {
+        let wc = WallClock::new();
+        let m = make_measurement(b"  5.678");
+        let samples: Vec<Sample> = (0..3).map(|_| Sample::from_measurement(&m, &wc)).collect();
+
+        let bytes = render_csv(&samples, "UNI-T UT61E+").unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+
+        assert_eq!(lines[0], "# device: UNI-T UT61E+");
+        assert_eq!(lines[1], "timestamp,mode,value,unit,range,flags");
+        assert_eq!(lines.len(), 5, "header + column row + 3 samples");
+        assert!(lines[2].contains("DC V"), "got {:?}", lines[2]);
+        assert!(lines[2].contains("5.678"), "got {:?}", lines[2]);
+    }
+
+    #[test]
+    fn render_csv_of_an_empty_buffer_is_just_the_headers() {
+        let bytes = render_csv(&[], "mock").unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert_eq!(text.lines().count(), 2);
     }
 
     #[test]

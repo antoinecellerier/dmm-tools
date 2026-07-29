@@ -16,7 +16,7 @@ use std::time::Instant;
 use crate::a11y::{ResponseA11yExt, UiA11yExt};
 use crate::display;
 use crate::graph::Graph;
-use crate::recording::Recording;
+use crate::recording::{Recording, render_csv};
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
 use crate::theme::ThemeColors;
@@ -1593,13 +1593,27 @@ impl App {
             ));
             return;
         }
-        // Clone samples so the file dialog + write runs on a separate thread
-        // without blocking the UI.
-        let samples = self.recording.samples.clone();
         // The meter these samples came from, not whatever is selected now.
         let device_model = self
             .recording_device
             .unwrap_or_else(|| self.selected_device().display_name);
+
+        // Render here and hand the bytes to the writer thread. Cloning the
+        // sample buffer instead — which is what this used to do so the dialog
+        // and write could run off the UI thread — duplicated every Sample,
+        // each with its own heap string, roughly doubling peak memory at the
+        // 500K cap. The rendered CSV is a fraction of that size, and building
+        // it is cheaper than 500K allocations.
+        let sample_count = self.recording.samples.len();
+        let csv_bytes = match render_csv(&self.recording.samples, device_model) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("CSV export failed: {e}");
+                self.toast = Some((format!("Export failed: {e}"), true, Instant::now()));
+                return;
+            }
+        };
+
         let (tx, rx) = std::sync::mpsc::channel::<(String, bool)>();
         std::thread::spawn(move || {
             if let Some(path) = rfd::FileDialog::new()
@@ -1613,33 +1627,21 @@ impl App {
                     // user-chosen path.
                     let tmp = path.with_extension("csv.tmp");
                     let mut file = std::fs::File::create(&tmp)?;
-                    writeln!(file, "# device: {device_model}")?;
-                    let mut wtr = csv::Writer::from_writer(file);
-                    wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
-                    for s in &samples {
-                        wtr.write_record([
-                            s.wall_time.to_rfc3339().as_str(),
-                            s.mode(),
-                            s.value_export_str().as_ref(),
-                            s.unit(),
-                            s.range_label(),
-                            s.flags_str().as_str(),
-                        ])?;
-                    }
-                    wtr.flush()?;
-                    drop(wtr);
+                    file.write_all(&csv_bytes)?;
+                    file.flush()?;
+                    drop(file);
                     std::fs::rename(&tmp, &path)?;
                     Ok(())
                 })();
                 match result {
                     Ok(()) => {
-                        info!("exported {} samples to {}", samples.len(), path.display());
+                        info!("exported {sample_count} samples to {}", path.display());
                         let file_name = path
                             .file_name()
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_else(|| path.display().to_string());
                         let _ = tx.send((
-                            format!("Exported {} samples to {file_name}", samples.len()),
+                            format!("Exported {sample_count} samples to {file_name}"),
                             false,
                         ));
                     }
