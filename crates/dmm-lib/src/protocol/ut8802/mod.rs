@@ -253,14 +253,6 @@ impl Protocol for Ut8802Protocol {
     }
 }
 
-/// Convert a BCD nibble to its display character.
-///
-/// - 0x0-0x9 → '0'-'9'
-/// - 0x0A → '0' (treated as zero per vendor code)
-/// - 0x0C → 'L' (overload indicator)
-///
-/// Other values should be rejected by the frame extractor's validation,
-/// but we handle them defensively with '?'.
 /// Whether a position code measures a DC quantity.
 ///
 /// The vendor derives the status-word AC/DC field from the position code
@@ -275,6 +267,14 @@ fn position_is_dc(position: u8) -> bool {
     )
 }
 
+/// Convert a BCD nibble to its display character.
+///
+/// - 0x0-0x9 → '0'-'9'
+/// - 0x0A → '0' (treated as zero per vendor code)
+/// - 0x0C → 'L' (overload indicator)
+///
+/// Other values should be rejected by the frame extractor's validation,
+/// but we handle them defensively with '?'.
 fn bcd_to_char(nibble: u8) -> char {
     match nibble {
         0x00..=0x09 => (b'0' + nibble) as char,
