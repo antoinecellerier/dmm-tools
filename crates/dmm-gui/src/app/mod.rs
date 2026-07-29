@@ -1138,11 +1138,7 @@ impl App {
                     }
                 }
                 ConnectionState::Reconnecting => {
-                    let label = if self.reconnect_attempt > 0 {
-                        format!("Reconnecting (attempt {})...", self.reconnect_attempt)
-                    } else {
-                        "Reconnecting...".to_string()
-                    };
+                    let label = self.reconnecting_label();
                     let hover = if let Some(err) = &self.reconnect_last_error {
                         format!(
                             "Retrying the connection automatically — click Disconnect to stop.\nLast error: {err}",
@@ -1177,11 +1173,7 @@ impl App {
                 }
                 ConnectionState::Disconnected => (gray, "Disconnected".to_string()),
                 ConnectionState::Reconnecting => {
-                    let label = if self.reconnect_attempt > 0 {
-                        format!("Reconnecting (attempt {})...", self.reconnect_attempt)
-                    } else {
-                        "Reconnecting...".to_string()
-                    };
+                    let label = self.reconnecting_label();
                     (orange, label)
                 }
             };
@@ -1402,20 +1394,7 @@ impl App {
                     RichText::new(format!("\u{222b}:{int}"))
                         .font(egui::FontId::monospace(main_font)),
                 );
-                if self.integrator.skipped_intervals > 0 {
-                    ui.label(
-                        RichText::new(format!(
-                            "\u{26A0} {} gaps >2s skipped",
-                            self.integrator.skipped_intervals
-                        ))
-                        .font(egui::FontId::proportional(sub_font))
-                        .color(ui.visuals().warn_fg_color),
-                    )
-                    .on_hover_text(
-                        "Intervals between samples longer than 2 s are not integrated. \
-                         Lower the sample interval or expect a partial integral.",
-                    );
-                }
+                self.show_integral_gap_warning(ui, sub_font);
             }
         } else {
             ui.label(
@@ -1444,20 +1423,7 @@ impl App {
                     RichText::new(format!("\u{222b}:{int}"))
                         .font(egui::FontId::monospace(main_font)),
                 );
-                if self.integrator.skipped_intervals > 0 {
-                    ui.label(
-                        RichText::new(format!(
-                            "\u{26A0} {} gaps >2s skipped",
-                            self.integrator.skipped_intervals
-                        ))
-                        .font(egui::FontId::proportional(sub_font))
-                        .color(ui.visuals().warn_fg_color),
-                    )
-                    .on_hover_text(
-                        "Intervals between samples longer than 2 s are not integrated. \
-                         Lower the sample interval or expect a partial integral.",
-                    );
-                }
+                self.show_integral_gap_warning(ui, sub_font);
             }
             if ui
                 .add(egui::Button::new(
@@ -1560,6 +1526,42 @@ impl App {
     /// Render specs for the narrow (compact single-line) layout.
     fn show_specs_section_compact(&self, ui: &mut Ui) {
         self.show_specs_with(ui, 1.0, specs::show_specs_compact_scaled);
+    }
+
+    /// Status text while the acquisition thread is retrying.
+    ///
+    /// One copy: the disabled connect button and the status indicator both
+    /// show this, and they were two independent formattings of the same
+    /// user-facing string.
+    fn reconnecting_label(&self) -> String {
+        if self.reconnect_attempt > 0 {
+            format!("Reconnecting (attempt {})...", self.reconnect_attempt)
+        } else {
+            "Reconnecting...".to_string()
+        }
+    }
+
+    /// Warn that intervals too long to integrate were skipped.
+    ///
+    /// Shared by the compact and wide stats layouts: the label and its hover
+    /// text were duplicated character-for-character between them, which
+    /// CLAUDE.md warns about precisely because the two copies drift.
+    fn show_integral_gap_warning(&self, ui: &mut Ui, font_size: f32) {
+        if self.integrator.skipped_intervals == 0 {
+            return;
+        }
+        ui.label(
+            RichText::new(format!(
+                "\u{26A0} {} gaps >2s skipped",
+                self.integrator.skipped_intervals
+            ))
+            .font(egui::FontId::proportional(font_size))
+            .color(ui.visuals().warn_fg_color),
+        )
+        .on_hover_text(
+            "Intervals between samples longer than 2 s are not integrated. \
+             Lower the sample interval or expect a partial integral.",
+        );
     }
 
     fn show_recording_section(&mut self, ui: &mut Ui, compact: bool) {
