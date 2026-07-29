@@ -4,6 +4,7 @@
 //! byte assignments and DeviceID retrieval logic.
 
 use crate::error::{Error, Result};
+use crate::protocol::CaptureStep;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::transport::Transport;
 use log::debug;
@@ -71,6 +72,142 @@ pub(crate) fn read_device_name(
             Ok(None)
         }
     }
+}
+
+/// Button commands, identical on both meters.
+pub(crate) const COMMANDS: &[&str] = &[
+    "hold",
+    "rel",
+    "max_min_avg",
+    "exit_max_min_avg",
+    "range_auto",
+    "range_manual",
+    "light",
+    "select",
+];
+
+/// Capture steps shared by the VC-880 and VC-890.
+///
+/// Both meters expose the same dial positions, so the list lived as ~120
+/// duplicated lines in each protocol. Device-specific steps are appended by
+/// the caller.
+pub(crate) fn capture_steps() -> Vec<CaptureStep> {
+    vec![
+        CaptureStep {
+            id: "dcv",
+            instruction: "Set meter to DC V",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "acv",
+            instruction: "Set meter to AC V",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "acdcv",
+            instruction: "Set meter to AC+DC V",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "dcmv",
+            instruction: "Set meter to DC mV",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "dcua",
+            instruction: "Set meter to DC µA",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "acua",
+            instruction: "Set meter to AC µA",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "dcma",
+            instruction: "Set meter to DC mA",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "acma",
+            instruction: "Set meter to AC mA",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "dca",
+            instruction: "Set meter to DC A",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "aca",
+            instruction: "Set meter to AC A",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "ohm",
+            instruction: "Set meter to Resistance (Ω)",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "cont",
+            instruction: "Set meter to Continuity",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "diode",
+            instruction: "Set meter to Diode",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "cap",
+            instruction: "Set meter to Capacitance",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "hz",
+            instruction: "Set meter to Frequency (Hz)",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "duty",
+            instruction: "Set meter to Duty Cycle (%)",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "tempc",
+            instruction: "Set meter to Temperature °C",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "tempf",
+            instruction: "Set meter to Temperature °F",
+            command: None,
+            samples: 5,
+        },
+        CaptureStep {
+            id: "lpf",
+            instruction: "Set meter to ACV Low-Pass Filter",
+            command: None,
+            samples: 5,
+        },
+    ]
 }
 
 #[cfg(test)]
