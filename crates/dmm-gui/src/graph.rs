@@ -160,6 +160,13 @@ pub struct Graph {
     /// starts a new segment. Time-based gap detection can't see this: an
     /// over-range excursion shorter than the threshold leaves no time hole.
     pending_break: bool,
+    /// Timestamp of the newest overload sample while a break is open.
+    ///
+    /// Overload measurements carry a timestamp like any other; they just have
+    /// no plottable value. Keeping the newest one lets the live view follow
+    /// the present while the meter is over range, instead of freezing at the
+    /// last plotted point.
+    pending_break_since: Option<Instant>,
     /// When true, Y axis uses fixed min/max instead of auto-scaling.
     pub y_axis_fixed: bool,
     /// Fixed Y-axis minimum (editable text buffer for UI).
@@ -251,6 +258,7 @@ impl Graph {
             view_center: 0.0,
             gap_threshold_secs: GAP_MINIMUM_SECS,
             pending_break: false,
+            pending_break_since: None,
             y_axis_fixed: false,
             y_min_text: "-1".to_string(),
             y_max_text: "1".to_string(),
@@ -361,6 +369,7 @@ impl Graph {
             value,
             break_before: std::mem::take(&mut self.pending_break),
         });
+        self.pending_break_since = None;
         self.history_version += 1;
     }
 
@@ -373,7 +382,10 @@ impl Graph {
     /// the timestamps, so the trace would be drawn straight through it and
     /// the visible-range stats and integral would run across a value the
     /// meter never measured.
-    pub fn push_break(&mut self) {
+    pub fn push_break(&mut self, timestamp: Instant) {
+        // Updated on every overload sample, not just the first: it is what
+        // advances the live view for as long as the meter stays over range.
+        self.pending_break_since = Some(timestamp);
         if self.pending_break {
             return;
         }
@@ -387,6 +399,7 @@ impl Graph {
     pub fn clear(&mut self) {
         self.history.clear();
         self.pending_break = false;
+        self.pending_break_since = None;
         self.current_mode = None;
         self.current_unit.clear();
         self.last_display_raw = None;
@@ -566,7 +579,19 @@ impl Graph {
         let half = self.time_window_secs / 2.0;
 
         if self.live {
-            let x_max = data_max;
+            // "Live" means the window ends at the newest *sample*, which is
+            // not always the newest plotted point: an overload produces
+            // samples with timestamps and no value. Ignoring them froze the
+            // window for the whole excursion, which pinned the gap's opening
+            // marker to the right edge where it read as the plot border.
+            //
+            // Driven by sample timestamps rather than wall-clock, so a paused
+            // or disconnected meter — which produces no samples at all —
+            // still holds its window still instead of scrolling its data off.
+            let x_max = match self.pending_break_since {
+                Some(t) => data_max.max(self.elapsed_secs(t)),
+                None => data_max,
+            };
             let x_min = (x_max - self.time_window_secs).max(0.0);
             (x_min, x_max)
         } else {
@@ -2157,7 +2182,7 @@ mod tests {
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
-        g.push_break();
+        g.push_break(Instant::now());
         g.push(3.0, t0 + Duration::from_millis(200), "DC V", "V", None);
 
         // All three samples are 100ms apart — well inside the 1s minimum gap
@@ -2173,7 +2198,7 @@ mod tests {
         let mut g = Graph::new();
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
-        g.push_break();
+        g.push_break(Instant::now());
         g.push(3.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         assert_eq!(g.visible_gaps().len(), 1);
     }
@@ -2189,7 +2214,7 @@ mod tests {
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         assert_eq!(g.pending_gap_start(), None, "no break yet");
 
-        g.push_break();
+        g.push_break(Instant::now());
         // Still overloaded: no closing sample, so no paired gap exists...
         assert!(g.visible_gaps().is_empty());
         // ...but the marker anchors to the last plotted point.
@@ -2208,8 +2233,54 @@ mod tests {
     #[test]
     fn a_break_with_no_history_marks_nothing() {
         let mut g = Graph::new();
-        g.push_break();
+        g.push_break(Instant::now());
         assert_eq!(g.pending_gap_start(), None);
+    }
+
+    /// The opening marker anchors to the last plotted point, and in live mode
+    /// the window used to end at that same point — so the marker landed on
+    /// the plot border and read as part of it. Overload samples carry
+    /// timestamps, so the window can follow them.
+    #[test]
+    fn the_view_follows_overload_samples() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(1.0, t0, "DC V", "V", None);
+
+        let (_, before) = g.view_bounds();
+        assert!(before.abs() < 1e-9, "window ends at the only sample");
+
+        // Two seconds of overload samples arrive, carrying timestamps.
+        g.push_break(t0 + Duration::from_secs(2));
+        let (_, during) = g.view_bounds();
+        let marker = g.pending_gap_start().expect("marker while overloaded");
+        assert!(
+            during > marker + 1.0,
+            "view must advance past the marker: marker={marker}, x_max={during}"
+        );
+
+        // Recovery closes the gap and hands the window back to the data.
+        g.push(2.0, t0 + Duration::from_secs(3), "DC V", "V", None);
+        assert_eq!(g.pending_gap_start(), None);
+        let (_, after) = g.view_bounds();
+        assert!((after - 3.0).abs() < 1e-9, "got {after}");
+    }
+
+    /// A paused or disconnected meter produces no samples at all — not even
+    /// overload ones — so its window must hold still rather than scrolling
+    /// the data off screen. This is why the view follows sample timestamps
+    /// and not the wall clock.
+    #[test]
+    fn the_view_holds_still_without_samples() {
+        let mut g = Graph::new();
+        let t0 = Instant::now() - Duration::from_secs(5);
+        g.push(1.0, t0, "DC V", "V", None);
+        let (_, first) = g.view_bounds();
+        let (_, second) = g.view_bounds();
+        assert!(
+            (first - second).abs() < 1e-9,
+            "window drifted with no samples"
+        );
     }
 
     /// Consecutive overload samples are one interruption, not several.
@@ -2219,7 +2290,7 @@ mod tests {
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
         for _ in 0..5 {
-            g.push_break();
+            g.push_break(Instant::now());
         }
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         assert_eq!(g.build_raw_segments().len(), 2);
@@ -2232,7 +2303,7 @@ mod tests {
         let mut g = Graph::new();
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);
-        g.push_break();
+        g.push_break(Instant::now());
         g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
         g.push(3.0, t0 + Duration::from_millis(200), "DC V", "V", None);
         let segments = g.build_raw_segments();
@@ -2245,7 +2316,7 @@ mod tests {
     #[test]
     fn clear_discards_a_pending_break() {
         let mut g = Graph::new();
-        g.push_break();
+        g.push_break(Instant::now());
         g.clear();
         let t0 = Instant::now();
         g.push(1.0, t0, "DC V", "V", None);

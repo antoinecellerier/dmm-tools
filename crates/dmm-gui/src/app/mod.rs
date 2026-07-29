@@ -850,7 +850,7 @@ impl App {
                             // would be drawn as a straight line through the
                             // break and integrated across.
                             self.integrator.push_overload();
-                            self.graph.push_break();
+                            self.graph.push_break(m.timestamp);
                         }
                         _ => {}
                     }
