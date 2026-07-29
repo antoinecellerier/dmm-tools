@@ -648,7 +648,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let wall_clock = dmm_lib::WallClock::new();
     let mut stats = dmm_lib::stats::RunningStats::default();
     let mut integrator = dmm_lib::stats::Integrator::new();
-    let mut integral_unit: Option<String> = None;
+    // Unit the current stats/integral series accumulates in. A change resets
+    // both, so the closing summary only ever covers one unit.
+    let mut series_unit: Option<String> = None;
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
     let mut stream = MeasurementStream::new(dmm, tick);
@@ -656,24 +658,36 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
+                // Min/Max/Avg and the integral are only meaningful within a
+                // single unit. Auto-range moves the unit a decade without
+                // touching the mode string, and turning the dial changes it
+                // outright — so without this the closing summary averages
+                // volts with milliamps. It prints bare numbers with no unit,
+                // so nothing on screen would reveal the mix.
+                let current_unit: &str = &m.unit;
+                if let Some(prev_unit) = &series_unit
+                    && prev_unit != current_unit
+                {
+                    let what = if integrate {
+                        "statistics and integral"
+                    } else {
+                        "statistics"
+                    };
+                    eprintln!(
+                        "{} Unit changed ({prev_unit} \u{2192} {current_unit}), {what} reset",
+                        style("Note:").yellow(),
+                    );
+                    stats.reset();
+                    integrator.reset();
+                }
+                series_unit = Some(current_unit.to_string());
+
                 if let MeasuredValue::Normal(v) = &m.value {
                     stats.push(*v);
                 }
 
                 // Integration tracking
                 let integral_display = if integrate {
-                    let current_unit: &str = &m.unit;
-                    if let Some(prev_unit) = &integral_unit
-                        && prev_unit != current_unit
-                    {
-                        eprintln!(
-                            "{} Unit changed ({prev_unit} \u{2192} {current_unit}), integral reset",
-                            style("Note:").yellow(),
-                        );
-                        integrator.reset();
-                    }
-                    integral_unit = Some(current_unit.to_string());
-
                     match &m.value {
                         MeasuredValue::Normal(v) => integrator.push(*v, m.timestamp),
                         MeasuredValue::Overload => integrator.push_overload(),
@@ -744,17 +758,24 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         );
     }
 
-    if stats.count > 0 {
+    if let (Some(min), Some(max), Some(avg)) = (stats.min, stats.max, stats.avg()) {
+        // Name the unit the figures are in. They reset on a unit change, so
+        // this is the unit every sample behind them was measured in.
+        let unit_suffix = series_unit
+            .as_deref()
+            .filter(|u| !u.is_empty())
+            .map(|u| format!(" {u}"))
+            .unwrap_or_default();
         eprintln!(
-            "\n{} {} samples | Min: {} | Max: {} | Avg: {}",
+            "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}",
             style("---").dim(),
             stats.count,
-            style(format!("{:.4}", stats.min.unwrap())).cyan(),
-            style(format!("{:.4}", stats.max.unwrap())).cyan(),
-            style(format!("{:.4}", stats.avg().unwrap())).cyan(),
+            style(format!("{min:.4}")).cyan(),
+            style(format!("{max:.4}")).cyan(),
+            style(format!("{avg:.4}")).cyan(),
         );
         if integrate
-            && let Some(unit_str) = &integral_unit
+            && let Some(unit_str) = &series_unit
             && let Some((disp_unit, divisor)) = dmm_lib::stats::integral_unit_info(unit_str)
         {
             let dt_str = integrator

@@ -24,6 +24,7 @@
 
 ### CLI
 
+- **`read`'s closing summary no longer mixes units** — Min/Max/Avg kept accumulating across a unit change, so turning the dial from volts to milliamps mid-run reported both as one series, printed without any unit. Statistics now reset on a unit change (as the integral already did) and the summary names the unit.
 - **`read` survives an unreadable frame instead of exiting** — one bad checksum used to end the run, so an overnight `--count 0` capture stopped at the first glitch. Bad frames are now skipped with a warning and counted in the closing summary.
 
 ## v0.5.0

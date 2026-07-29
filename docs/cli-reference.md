@@ -168,8 +168,13 @@ CSV output begins with a `# device:` comment line identifying the meter model,
 followed by the column header. JSON output begins with a `_metadata` line
 containing the device model, followed by one measurement object per line.
 
-When the session ends, a summary line (sample count, min, max, average) is
-printed to stderr. When `--integrate` is active, the total integral is also shown.
+When the session ends, a summary line (sample count, min, max, average, each
+with its unit) is printed to stderr. When `--integrate` is active, the total
+integral is also shown.
+
+Statistics and the integral cover a single unit: if the unit changes mid-run —
+by turning the dial, or by auto-range crossing a decade — both reset and a note
+is printed to stderr, so the summary always describes one comparable series.
 
 **Examples:**
 
