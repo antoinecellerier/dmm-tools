@@ -344,7 +344,17 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         payload[1] & 0x0F,
     ];
 
-    let mut overload = false;
+    // The vendor's only overload mechanism is byte 6 bit 6: it skips the
+    // atof and substitutes a sentinel plus the literal display "  0L "
+    // (uci_dll_decompiled.txt:24806-24821). The digit-nibble 0x0C ('L')
+    // check below is kept as a defensive secondary — the vendor never
+    // validates digit nibbles.
+    //
+    // Both sources must be resolved before the display string is built: the
+    // decimal-point insertion below is deliberately skipped on overload, so
+    // folding the vendor bit in afterwards left an over-range frame carrying
+    // a formatted numeric display ("1234.5") next to MeasuredValue::Overload.
+    let mut overload = sign_byte & 0x40 != 0;
     let mut chars: Vec<char> = Vec::with_capacity(6); // 5 digits + possible decimal point
     for &n in &nibbles {
         let ch = bcd_to_char(n);
@@ -381,15 +391,6 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     }
 
     let display_str: String = chars.iter().collect();
-
-    // The vendor's only overload mechanism is byte 6 bit 6: it skips the
-    // atof and substitutes a sentinel plus the literal display "  0L "
-    // (uci_dll_decompiled.txt:24806-24821). The digit-nibble 0x0C ('L')
-    // check above is kept as a defensive secondary — the vendor never
-    // validates digit nibbles.
-    if sign_byte & 0x40 != 0 {
-        overload = true;
-    }
 
     // Parse numeric value
     let value = if overload {
@@ -622,6 +623,25 @@ mod tests {
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
+    }
+
+    /// The vendor bit has to be folded in before the display string is
+    /// formatted. Inserting the decimal point first left the measurement
+    /// carrying `display_raw = "1234.5"` next to `MeasuredValue::Overload`,
+    /// so anything rendering the raw digits showed an over-range input as a
+    /// plausible reading.
+    #[test]
+    fn status_bit_overload_does_not_produce_a_formatted_number() {
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        let raw = m.display_raw.as_deref().unwrap_or_default();
+        assert!(
+            !raw.contains('.'),
+            "overload display must not be decimal-formatted, got {raw:?}"
+        );
+        // And the export/display path must call it what it is.
+        assert_eq!(m.value_export_str(), "OL");
     }
 
     #[test]
