@@ -125,6 +125,38 @@ Drop timestamped markers on the graph with optional text labels (e.g., "applied 
 
 Use cases: correlating measurement changes with physical events, making captured data meaningful after the fact.
 
+### Rendering the meter's other reported conditions
+
+**Complexity:** Medium
+
+Overloads are drawn as a filled band, distinct from the dashed markers used
+for data loss (see the GUI reference). Several other states the meter reports
+are still drawn as ordinary live readings, or not at all:
+
+- **NCV** — `MeasuredValue::NcvLevel` is shown and recorded but never reaches
+  the graph at all. It could be banded, or plotted on its own 0-4 scale.
+  Blocked on the mode-clear bug in the verification backlog.
+- **HOLD** — the display is frozen, so the same value repeats and draws as a
+  flat live trace.
+- **MIN / MAX / peak** — the meter is showing a stored extreme, not the
+  present reading.
+- **REL** — values are deltas from a reference rather than absolutes.
+- **`lead_error`** — lead placement is wrong, but the reading still plots.
+
+Splitting data loss by cause would help too: pause, connection loss and a
+sample interval longer than the gap threshold all render identically today,
+though the App knows which occurred and already reports it via
+`Graph::push_data_loss`.
+
+Once several *filled* kinds coexist, hue stops being enough to tell them
+apart. Hatched fills are the non-colour answer — note `egui_plot` has no
+pattern support (`Span::fill` and `Polygon::fill_color` take a flat colour),
+so it means hand-painting stripes with screen-space spacing via
+`PlotTransform`, clipped to the band and the plot rect.
+
+Use cases: telling "the meter said something unusual" apart from "the meter
+said nothing", without having to cross-check the recording.
+
 ### Measurement rate display
 
 **Complexity:** Low

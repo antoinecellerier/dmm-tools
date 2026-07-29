@@ -380,6 +380,32 @@ were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
 Confirmed by real device captures and independently by vendor software
 decompilation (see `docs/research/ut61eplus/protocol-comparison.md`).
 
+### VC-890 VOID readings are plotted as valid
+
+`flags.void` means the meter marked a reading invalid (misplug /
+reference-disconnect detection). It arrives alongside an ordinary `Normal`
+value, and the GUI plots that value, records it and exports it like any
+other — so an invalid reading is indistinguishable from a good one
+everywhere except the flags column.
+
+Needs a VC-890 to settle two things before changing behaviour: whether the
+accompanying value is meaningful at all when VOID is set, and whether
+`lead_error` behaves the same way. If the value is meaningless, it should not
+be plotted — which makes this a correctness fix rather than a rendering one.
+
+### Entering NCV leaves the previous mode's trace on the graph
+
+`Graph::push` is what detects a mode change and clears history, but in NCV
+mode every sample is `MeasuredValue::NcvLevel`, which never reaches it — the
+App's `drain_messages` drops those in a bare `_ => {}`. So switching to NCV
+leaves the previous mode's data on screen indefinitely, labelled with the old
+unit.
+
+Reproducible without hardware via the mock's `ncv` scenario. Fixing it means
+routing non-plottable samples through something that carries mode/unit, and
+establishing the time origin without any plottable points. That is also the
+prerequisite for banding NCV — see `docs/future-improvements.md`.
+
 ### GUI accessibility — screen reader walk-through
 
 The GUI accessibility pass wired up AccessKit labels, toggle-state

@@ -131,6 +131,10 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - History buffer holds ~10,000 points (oldest dropped). A change of mode or
   unit clears the graph — including auto-range crossing a decade (Ω→kΩ)
 
+Two cases the graph does not draw faithfully: a connection loss entirely
+inside a continuing overload is absorbed into the band instead of splitting
+it, and several dropouts between the same two readings collapse into one gap.
+
 ### Mouse Interactions
 
 | Action | Effect |

@@ -63,6 +63,7 @@ Subsystem-specific rules live in path-scoped rule files that load when their fil
 - Commit logical units of work — one concept per commit, each compiling and passing tests.
 - Include tests alongside new non-trivial code.
 - Commit messages: imperative mood, explain the *why*. Prefix with the affected component (`lib:`, `gui:`, `cli:`, `docs:`, `claude:` for assistant config) — not conventional-commits types.
+- **Keep messages short.** Subject ≤72 chars; body normally ≤10 lines, and only where the *why* isn't evident from the diff. State the reason and any non-obvious consequence — not the investigation that produced it. Rejected alternatives, per-test rationale, and known limitations belong in code comments, `docs/`, or the backlog, where they stay findable; a commit body is read once.
 - Never commit `references/` — gitignored; holds vendor software, decompilations, and manuals that must not live in the repo.
 
 ### Dependencies
