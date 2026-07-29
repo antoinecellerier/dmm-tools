@@ -306,9 +306,14 @@ impl Graph {
             self.origin = Some(now);
         }
 
-        if self.current_mode.as_deref() != Some(mode) {
+        // A unit change is as much a scale change as a mode change. Auto-range
+        // keeps the mode string fixed while the unit moves a decade (Ω→kΩ,
+        // mV→V, nF→µF), so comparing only the mode let the trace collapse by
+        // 1000x mid-plot with the axis relabelled and no gap to show why.
+        if self.current_mode.as_deref() != Some(mode) || self.current_unit != unit {
             self.history.clear();
             self.current_mode = Some(mode.to_string());
+            self.current_unit = unit.to_string();
             self.origin = Some(now);
             self.live = true;
             self.view_center = 0.0;
@@ -327,7 +332,6 @@ impl Graph {
             self.invalidate_cache();
             self.last_display_raw = None;
         }
-        self.current_unit = unit.to_string();
         // Track the most recent raw display string so the a11y plot
         // summary can speak it verbatim. We update it in-place to avoid
         // allocating per push when the underlying `Cow<'static, str>` is a
@@ -2044,6 +2048,44 @@ mod tests {
         assert_eq!(g.len(), 2);
         g.push(100.0, Instant::now(), "Ohm", "Ω", None);
         assert_eq!(g.len(), 1);
+    }
+
+    /// Auto-range crossing a decade keeps the mode string but moves the unit,
+    /// so 219 Ω and 0.22 kΩ would otherwise share one series — the trace
+    /// collapses 1000x mid-plot and the axis silently relabels.
+    #[test]
+    fn unit_change_clears_history() {
+        let mut g = Graph::new();
+        g.push(150.0, Instant::now(), "Ω", "Ω", None);
+        g.push(219.0, Instant::now(), "Ω", "Ω", None);
+        assert_eq!(g.len(), 2);
+        g.push(0.22, Instant::now(), "Ω", "kΩ", None);
+        assert_eq!(g.len(), 1, "kΩ points must not share a series with Ω");
+        assert_eq!(g.current_unit, "kΩ");
+    }
+
+    /// The pinned Y range is chosen for the old decade's numbers; keeping it
+    /// across a unit change plots the new scale far outside the view.
+    #[test]
+    fn unit_change_releases_the_pinned_y_range() {
+        let mut g = Graph::new();
+        g.push(150.0, Instant::now(), "Ω", "Ω", None);
+        g.y_axis_fixed = true;
+        g.y_user_set = true;
+        g.push(0.22, Instant::now(), "Ω", "kΩ", None);
+        assert!(!g.y_axis_fixed);
+        assert!(!g.y_user_set);
+    }
+
+    /// Same mode and unit must not clear — otherwise the graph would reset on
+    /// every sample and never accumulate.
+    #[test]
+    fn steady_unit_keeps_history() {
+        let mut g = Graph::new();
+        for i in 0..5 {
+            g.push(i as f64, Instant::now(), "DC V", "V", None);
+        }
+        assert_eq!(g.len(), 5);
     }
 
     #[test]

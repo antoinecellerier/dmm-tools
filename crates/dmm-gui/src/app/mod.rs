@@ -650,14 +650,17 @@ impl App {
                         continue;
                     }
 
-                    // Reset the session accumulators on mode change: units
-                    // become incompatible, and the stats panel labels Min/Max/
-                    // Avg with the *current* unit, so carrying volt-scale
-                    // numbers into an ohms reading presents them as ohms.
+                    // Reset the session accumulators on mode *or* unit change:
+                    // units become incompatible, and the stats panel labels
+                    // Min/Max/Avg with the *current* unit, so carrying
+                    // volt-scale numbers into an ohms reading presents them as
+                    // ohms. Auto-range moves the unit a decade without touching
+                    // the mode string (Ω→kΩ, mV→V, nF→µF), which is how a max
+                    // three orders of magnitude out reached the panel.
                     // `Graph::push` clears its own history on the same
-                    // condition.
+                    // condition; dmm-cli resets its integrator on the same one.
                     if let Some(prev) = &self.last_measurement
-                        && prev.mode != m.mode
+                        && (prev.mode != m.mode || prev.unit != m.unit)
                     {
                         self.integrator.reset();
                         self.stats.reset();

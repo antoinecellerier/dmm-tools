@@ -124,8 +124,9 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - Crosshair tooltip shows time and value with units
 - Disconnection gaps shown as dashed red vertical line pairs
 - Timeline is continuous across reconnects (data is not cleared)
-- History buffer holds ~10,000 points (oldest dropped). Mode changes clear
-  the graph since units are incompatible.
+- History buffer holds ~10,000 points (oldest dropped). A change of mode or
+  of unit clears the graph since the scales are incompatible — auto-range
+  crossing a decade (Ω→kΩ, mV→V) counts, even though the mode is unchanged.
 
 ### Mouse Interactions
 

@@ -150,7 +150,7 @@ Three components stacked vertically:
 - Clicking near the latest data re-enables LIVE mode
 - Time axis labels with smart interval selection
 
-**History:** ~10,000 points (VecDeque, oldest dropped). Mode changes clear the graph (incompatible units).
+**History:** ~10,000 points (VecDeque, oldest dropped). Mode *or* unit changes clear the graph (incompatible scales) — auto-range crossing a decade changes the unit while the mode stays put.
 
 ### Statistics Panel
 

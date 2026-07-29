@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **Auto-ranging no longer mixes two scales in the graph and statistics** — crossing a range boundary (219 Ω → 0.22 kΩ, mV → V, nF → µF) keeps the mode unchanged but moves the unit a decade, and the GUI carried the old readings over: the trace collapsed 1000x mid-plot with no gap, the axis relabelled itself, and Min/Max/Avg reported figures up to three orders of magnitude out. Graph history and session stats now reset on a unit change, as they already did on a mode change.
 - **UT171 readings no longer print 17 digits** — a meter showing 12.345 V was reported as `12.345000267028809` by `dmm-cli read`, in the CSV `value` column and in the GUI's main reading, because the wire float was widened before formatting. Readings now show exactly the digits the meter sent.
 - **An overload now reads "OL" on screen instead of a plausible number** — meters that flag over-range through a status bit (UT8802, UT8803) keep sending digits in the display field, and the GUI showed those, so open leads in resistance mode read `0` — indistinguishable from a real short. The recording panel had the same fault while its CSV column correctly said `OL`.
 - **The GUI no longer crashes in Continuity or Diode mode on narrow windows** — modes without a published accuracy figure made the compact and big-meter spec lines panic; the accuracy field is now omitted for them.
