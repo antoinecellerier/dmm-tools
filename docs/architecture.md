@@ -37,6 +37,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic) |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
+| `binary_help.rs` | `--version` / `--device` help text shared by both binaries. Lives here because the device list comes from the registry, so a new device reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
 | `lib.rs` | `Dmm` struct: top-level API tying everything together |
 
 **Data flow:**

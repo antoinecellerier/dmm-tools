@@ -15,13 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 fn version_string() -> &'static str {
-    let version = env!("CARGO_PKG_VERSION");
-    let hash = env!("GIT_HASH");
-    if version.contains("-dev") {
-        Box::leak(format!("{version} ({hash})").into_boxed_str())
-    } else {
-        version
-    }
+    dmm_lib::binary_help::version_string(env!("CARGO_PKG_VERSION"), env!("GIT_HASH"))
 }
 
 #[derive(Parser)]
@@ -306,23 +300,7 @@ fn main() {
 
 /// Build long help text for --device from the registry.
 fn build_device_help() -> String {
-    let mut help = String::from("Device to connect to.\n\nDevices:\n");
-    for d in registry::DEVICES {
-        let stability = (d.new_protocol)().profile().stability;
-        let tag = if !d.requires_hardware {
-            " (no hardware required)"
-        } else if stability == dmm_lib::protocol::Stability::Experimental {
-            " (experimental)"
-        } else {
-            ""
-        };
-        help.push_str(&format!("  {:<12} {}{}\n", d.id, d.display_name, tag));
-    }
-    help.push_str(
-        "\nAlso accepts aliases: ut61e+, ut61b, ut171a, ut181, etc.\n\
-         Quote names with special characters: --device 'ut61e+'",
-    );
-    help
+    dmm_lib::binary_help::device_help("Device to connect to.")
 }
 
 /// Resolve the shared settings file path for display in help text.
