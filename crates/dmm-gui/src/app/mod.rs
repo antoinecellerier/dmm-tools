@@ -526,7 +526,13 @@ impl App {
             self.shortcut_help_restore_focus = self.shortcut_help_opener.take();
         }
 
-        // --- Bare-key shortcuts (only when no text field has focus) ---
+        // --- Bare-key shortcuts (only when nothing holds keyboard focus) ---
+        //
+        // `egui_wants_keyboard_input()` is any focused widget, not just a
+        // TextEdit — and that is what we want: Space has to activate the
+        // focused button rather than also toggling pause, and arrow keys have
+        // to drive the focused widget rather than panning the graph.
+        // `text_edit_focused()` would be the text-only predicate.
         if !ctx.egui_wants_keyboard_input() {
             // Space: Pause/Resume
             if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space))
@@ -2299,7 +2305,8 @@ impl App {
                 ui.add_space(8.0);
                 ui.label(
                     RichText::new(
-                        "Graph and Space shortcuts are disabled when a text field has focus.",
+                        "Graph and Space shortcuts are disabled while any widget has keyboard \
+                         focus — press Escape to release it.",
                     )
                     .small()
                     .color(ui.visuals().weak_text_color()),

@@ -4,6 +4,7 @@
 
 ### Bug fixes
 
+- **The help overlay explains when bare-key shortcuts stop working** — it said graph and `Space` shortcuts are disabled "when a text field has focus", but they are disabled whenever any widget holds keyboard focus, including a button reached with `Tab`. It now says so, and points at `Escape` to release focus.
 - **Device aliases work everywhere in the GUI** — writing an alias such as `"ut61e+"` for `device_family` in `settings.json` (a spelling the CLI accepts) connected correctly but left the Manual link missing, the top-bar label reading "DMM", and the mock-mode selector hidden when the mock was chosen by alias.
 - **The Specifications panel works with the mock device** — it was permanently empty in mock mode (the demo and screenshot path), because the mock never looked up the spec tables even though they already map it to the UT61E+.
 - **"Waiting for meter…" no longer lingers after disconnecting** — the timeout counter behind that message was only cleared by an incoming reading, so if the meter went quiet before you clicked Disconnect the banner stayed up for the rest of the disconnected session.

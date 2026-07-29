@@ -326,8 +326,11 @@ Press `?` or click the `?` button in the top bar to open an in-app reference of 
 | `Home` | Jump to start of data |
 | `End` | Jump to live mode |
 
-Graph and `Space` shortcuts are disabled when a text field (e.g. Y-axis
-range, envelope window) has focus.
+Graph and `Space` shortcuts are disabled while any widget holds keyboard
+focus — not just text fields (Y-axis range, envelope window) but any button
+or toggle reached with `Tab`. This is deliberate: `Space` activates the
+focused widget and the arrow keys drive it. Press `Escape` to release focus
+and get the bare-key shortcuts back.
 
 ## Layout Modes
 
