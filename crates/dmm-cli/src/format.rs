@@ -32,21 +32,37 @@ pub fn format_measurement(
             }
         }
         OutputFormat::Csv => {
+            // Through the csv crate rather than hand-joined with commas, as
+            // the GUI export already does. Several of these fields carry
+            // device-derived text: UT181A units come from `parse_unit_string`,
+            // which maps raw frame bytes to chars with no character-set
+            // validation, and an unrecognised mode byte becomes
+            // `Unknown(0x..)`. One comma or quote in there and every
+            // downstream column shifts.
             let value_str = m.value_export_str();
             let ts = timestamp_rfc3339(m, wall_clock);
+            let flags = m.flags.to_string();
+            let mut wtr = csv::WriterBuilder::new()
+                // One row per call, so the default 8 KiB buffer is dead
+                // weight — a row is well under this.
+                .buffer_capacity(256)
+                .from_writer(w);
+            let mut record: Vec<&str> = vec![
+                &ts,
+                &m.mode,
+                value_str.as_ref(),
+                &m.unit,
+                &m.range_label,
+                &flags,
+            ];
+            let integral_str;
             if let Some((val, unit)) = integral {
-                writeln!(
-                    w,
-                    "{},{},{},{},{},{},{:.6},{unit}",
-                    ts, m.mode, value_str, m.unit, m.range_label, m.flags, val,
-                )
-            } else {
-                writeln!(
-                    w,
-                    "{},{},{},{},{},{}",
-                    ts, m.mode, value_str, m.unit, m.range_label, m.flags,
-                )
+                integral_str = format!("{val:.6}");
+                record.push(&integral_str);
+                record.push(unit);
             }
+            wtr.write_record(&record).map_err(std::io::Error::other)?;
+            wtr.flush()
         }
         OutputFormat::Json => {
             let value = match &m.value {
@@ -132,6 +148,66 @@ mod tests {
         assert_eq!(v["flags"]["loz"], serde_json::json!(true));
         assert_eq!(v["flags"]["void"], serde_json::json!(true));
         assert_eq!(v["flags"]["hold"], serde_json::json!(false));
+    }
+
+    fn csv_for(m: &Measurement) -> String {
+        let mut buf = Vec::new();
+        format_measurement(
+            &mut buf,
+            m,
+            &WallClock::new(),
+            &OutputFormat::Csv,
+            false,
+            None,
+        )
+        .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    /// A comma in any device-derived field used to shift every column after
+    /// it. UT181A units come straight off the wire.
+    #[test]
+    fn csv_quotes_a_field_containing_a_comma() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        m.mode = "Unknown(0x05), odd".into();
+        let line = csv_for(&m);
+        assert!(
+            line.contains("\"Unknown(0x05), odd\""),
+            "mode should be quoted, got {line}"
+        );
+        // Six fields, so five separating commas outside the quoted one.
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(line.as_bytes());
+        let rec = rdr.records().next().unwrap().unwrap();
+        assert_eq!(rec.len(), 6);
+        assert_eq!(&rec[1], "Unknown(0x05), odd");
+    }
+
+    #[test]
+    fn csv_escapes_quotes_and_newlines() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        m.unit = "a\"b\nc".into();
+        let line = csv_for(&m);
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(line.as_bytes());
+        let rec = rdr.records().next().unwrap().unwrap();
+        assert_eq!(rec.len(), 6);
+        assert_eq!(&rec[3], "a\"b\nc");
+    }
+
+    /// Ordinary rows must stay unquoted — the column layout is documented
+    /// and consumed by spreadsheets.
+    #[test]
+    fn csv_leaves_plain_fields_unquoted() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let line = csv_for(&m);
+        assert!(!line.contains('"'), "got {line}");
+        assert!(line.contains(",DC V,5.678,V,22V,"), "got {line}");
     }
 
     /// Text output already carried these; the three formats must agree.

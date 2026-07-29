@@ -37,6 +37,7 @@
 
 ### CLI
 
+- **`dmm-cli read --format csv` can no longer be corrupted by meter text** — rows were joined with commas and never quoted, so a comma, quote or newline in a device-derived field (UT181A units come straight off the wire unvalidated, and an unrecognised mode reads as `Unknown(0x..)`) shifted every column after it. Output for ordinary readings is unchanged.
 - **Capture reports record every status flag** — `lead_error`, `comp`, `record`, `loz` and `void` were dropped, so a capture taken with the meter showing VOID or a lead error arrived at the maintainer looking clean, and the flag under investigation was the one missing.
 - **JSON output reports the LoZ and VOID flags** — both were carried by the text and CSV formats but missing from the JSON `flags` object, so a script consuming JSON could not tell that a VC-890 had marked a reading invalid.
 - **`capture` collects the manual range sweep and freeform captures again** — both stopped running once protocols began declaring their own steps, so a capture on a UT61E+ silently skipped the range sweep (the only data covering the per-range tables) and never offered the freeform pass. `--list-steps` now lists the selected device's real step IDs instead of a stale internal list, and a `--steps` ID that matches nothing is an error rather than an empty report announced as "Capture complete!".
