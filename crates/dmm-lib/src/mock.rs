@@ -456,14 +456,25 @@ impl MockProtocol {
         }
     }
 
-    /// Compute progress bar value (0-800) proportional to value/range_max.
+    /// Lit segments on the UT61E+'s bar graph at full scale.
+    ///
+    /// The real meter sends `byte12 * 10 + byte13` = segments on a
+    /// 46-segment LCD bar (hardware-verified, see
+    /// docs/research/ut61eplus/reverse-engineered-protocol.md §"Bar graph
+    /// encoding"). The mock previously scaled to 0-800, roughly 17x that, so
+    /// anything developed or tested against `--device mock` saw a range the
+    /// hardware never produces.
+    const BAR_GRAPH_SEGMENTS: f64 = 46.0;
+
+    /// Bar-graph position for a reading, on the meter's own segment scale.
     fn compute_progress(value: &MeasuredValue, range_max: f64) -> Option<u16> {
         match value {
             MeasuredValue::Normal(v) => {
                 let ratio = v.abs() / range_max;
-                Some((ratio * 800.0).min(800.0) as u16)
+                Some((ratio * Self::BAR_GRAPH_SEGMENTS).min(Self::BAR_GRAPH_SEGMENTS) as u16)
             }
-            MeasuredValue::Overload => Some(800),
+            // Over-range pins the bar full.
+            MeasuredValue::Overload => Some(Self::BAR_GRAPH_SEGMENTS as u16),
             MeasuredValue::NcvLevel(_) => None,
         }
     }
@@ -783,6 +794,38 @@ mod tests {
             direct.map(|s| s.resolution),
             "mock spec must come from the UT61E+ table"
         );
+    }
+
+    /// .claude/rules/protocol.md: "Mocks must match real-device behavior …
+    /// Mocks that diverge create false confidence." The real UT61E+ bar graph
+    /// is 46 segments; the mock used to emit up to 800.
+    #[test]
+    fn progress_stays_on_the_real_bar_graph_scale() {
+        let mut dmm = open_mock().unwrap();
+        for _ in 0..20 {
+            let m = dmm.request_measurement().unwrap();
+            if let Some(p) = m.progress {
+                assert!(
+                    p <= MockProtocol::BAR_GRAPH_SEGMENTS as u16,
+                    "progress {p} exceeds the meter's 46-segment bar"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn overload_pins_the_bar_full() {
+        let p = MockProtocol::compute_progress(&MeasuredValue::Overload, 22.0);
+        assert_eq!(p, Some(MockProtocol::BAR_GRAPH_SEGMENTS as u16));
+    }
+
+    #[test]
+    fn progress_scales_with_the_range() {
+        // Half of full scale → half the segments.
+        let half = MockProtocol::compute_progress(&MeasuredValue::Normal(11.0), 22.0);
+        assert_eq!(half, Some(23));
+        let zero = MockProtocol::compute_progress(&MeasuredValue::Normal(0.0), 22.0);
+        assert_eq!(zero, Some(0));
     }
 
     #[test]
