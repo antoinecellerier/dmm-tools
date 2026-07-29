@@ -183,7 +183,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("Theme:");
             let mut changed = false;
-            for mode in [ThemeMode::Dark, ThemeMode::Light] {
+            for mode in [ThemeMode::Dark, ThemeMode::Light, ThemeMode::System] {
                 let selected = self.settings.theme == mode;
                 let base = match mode {
                     ThemeMode::Dark => "Dark",
@@ -195,7 +195,13 @@ impl App {
                 } else {
                     base.to_string()
                 };
-                let tooltip = format!("Use {base} mode for the whole GUI");
+                let tooltip = match mode {
+                    ThemeMode::System => {
+                        "Follow the desktop's light/dark setting (Dark if it reports none)"
+                            .to_string()
+                    }
+                    _ => format!("Use {base} mode for the whole GUI"),
+                };
                 if setting_selectable(ui, selected, label, &tooltip) {
                     self.settings.theme = mode;
                     // Clear the override — user explicitly chose a theme

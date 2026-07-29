@@ -292,16 +292,36 @@ impl App {
         )
     }
 
+    /// Whether the UI should render dark, resolving `System` against the OS.
+    ///
+    /// `system_theme()` returns `None` when the platform reports no
+    /// preference; Dark is the app's default, so that's the fallback.
+    fn resolve_dark(&self, ctx: &egui::Context) -> bool {
+        match self.settings.theme {
+            ThemeMode::Dark => true,
+            ThemeMode::Light => false,
+            ThemeMode::System => !matches!(ctx.system_theme(), Some(egui::Theme::Light)),
+        }
+    }
+
     fn apply_theme(&mut self, ctx: &egui::Context) {
-        let target = match self.settings.theme {
-            ThemeMode::Dark | ThemeMode::System => ThemeMode::Dark,
-            ThemeMode::Light => ThemeMode::Light,
+        // `applied_theme` holds the *resolved* mode, never `System`. That way
+        // an OS theme flip while set to System changes the target here and
+        // repaints, instead of comparing System to System and doing nothing.
+        let dark = self.resolve_dark(ctx);
+        let target = if dark {
+            ThemeMode::Dark
+        } else {
+            ThemeMode::Light
         };
         if self.applied_theme != Some(target) {
-            match target {
-                ThemeMode::Dark | ThemeMode::System => ctx.set_visuals(egui::Visuals::dark()),
-                ThemeMode::Light => ctx.set_visuals(egui::Visuals::light()),
-            }
+            // Only on change: set_visuals every frame resets egui's internal
+            // panel state (resize positions, scroll offsets).
+            ctx.set_visuals(if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            });
             self.applied_theme = Some(target);
             self.applied_ui_colors = None; // force reapply on top of new base
         }
@@ -309,7 +329,7 @@ impl App {
 
     /// Apply background, text, and button color overrides to egui Visuals.
     fn apply_color_overrides(&mut self, ctx: &egui::Context) {
-        let dark = matches!(self.settings.theme, ThemeMode::Dark | ThemeMode::System);
+        let dark = self.resolve_dark(ctx);
         let tc = self.theme_colors(dark);
         let bg = tc.background();
         let text = tc.text();

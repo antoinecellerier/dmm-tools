@@ -222,7 +222,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 
 | Setting | Default | Description |
 |---|---|---|
-| **Theme** | Dark | Dark or Light mode |
+| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none) |
 | **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
 | **Show Graph** | on | Toggle graph panel visibility |
 | **Show Statistics** | on | Toggle statistics panel visibility |
