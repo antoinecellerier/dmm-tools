@@ -190,6 +190,9 @@ pub struct App {
     applied_theme: Option<ThemeMode>,
     /// Last applied UI chrome colors (bg, text, button, plot_bg) to avoid per-frame Visuals mutation.
     applied_ui_colors: Option<(Color32, Color32, Color32, Color32)>,
+    /// Last minimum window size pushed to the windowing system, so the
+    /// viewport command is only re-sent when it actually changes.
+    applied_min_size: Option<egui::Vec2>,
     /// User-resizable recording panel height.
     recording_height: f32,
     /// Transient status toast (message, is_error, timestamp).
@@ -280,6 +283,7 @@ impl App {
             os_ppp: None,
             applied_theme: None,
             applied_ui_colors: None,
+            applied_min_size: None,
             recording_height: DEFAULT_RECORDING_HEIGHT,
             toast: None,
             export_result_rx: None,
@@ -1889,7 +1893,19 @@ impl eframe::App for App {
             // Full layout: top bar constrains width, panels need height.
             egui::vec2(bar_min_w, reading_h)
         };
-        ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min_size));
+        // Only when it changes. Its inputs — cached top-bar widths, meter
+        // ratios, big-meter mode — are stable across the vast majority of
+        // frames, and a viewport command sent every repaint is the same class
+        // of mistake .claude/rules/gui.md calls out for set_visuals() and
+        // set_pixels_per_point(). Half a pixel of tolerance keeps sub-pixel
+        // jitter in the cached widths from re-triggering it.
+        if self
+            .applied_min_size
+            .is_none_or(|prev| (prev - min_size).abs().max_elem() > 0.5)
+        {
+            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min_size));
+            self.applied_min_size = Some(min_size);
+        }
         // If the window is smaller than the new minimum (e.g. after exiting
         // minimal mode), grow it to fit.
         let screen = ctx.content_rect();
