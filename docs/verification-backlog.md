@@ -50,11 +50,16 @@ Until then the capture wizard sends `range` once, not repeatedly — a
 six-step sweep was tried and removed, because it files data that looks like
 a range sweep but isn't.
 
-Note the same capture leaves the DC V range table unverified. `dc_v` has five
-entries (2.2V, 22V, 220V, 1000V, 220mV) and only 2.2V/22V/220V have ever been
-confirmed on hardware (commit `5c190c7`, bench PSU). The 220mV entry is
-suspect: DC mV is a separate mode byte (0x03) with its own `dc_mv` table, so
-it's unclear how DC V range index 4 is ever reached.
+The range *count* is not an open question — see Completed Verification: **DC V
+has 4 manual ranges** (0=2.2V, 1=22V, 2=220V, 3=1000V), and 220mV is reachable
+only through the separate DC mV dial position (mode 0x03). So the six-step
+sweep was wrong by two even before the command behaviour is settled.
+
+That leaves a small live inconsistency: `Ut61ePlusTable::dc_v` is declared
+`[RangeInfo; 5]` with a fifth "220mV" entry, which the verified table says
+cannot occur for mode 0x02. Harmless today (the meter never sends range 4 on
+DC V, so the entry is simply never read), but it contradicts the verified
+record and should either go or gain a comment explaining why it's kept.
 
 ### Modes not yet tested with real signals
 
@@ -478,3 +483,6 @@ to reflect what is actually confirmed working and what still needs fixes.
 | CP2110 Get UART Status | report 0x42 | Verified (TX/RX FIFO=0, no errors at idle) |
 | CP2110 UART Config 9 bytes | report 0x50 | Verified (removed trailing 0x00, meter responds normally) |
 | CP2110 Set Reset Device | report 0x40 | Rejected — HID protocol error, likely locked out by UNI-T |
+| CP2110 read path (stack buffer) | — | Verified 2026-07-29: 50 consecutive reads, no skipped frames |
+| Paced-read loop (cancellable sleep) | — | Verified 2026-07-29: pacing intact over 50 reads; Ctrl-C responsiveness still untested |
+| Idle HID report handling | — | Verified 2026-07-29 on CP2110: no false timeouts over 50 reads |
