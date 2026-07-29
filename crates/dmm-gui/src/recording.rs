@@ -118,6 +118,10 @@ pub struct Recording {
     pub active: bool,
     pub samples: Vec<Sample>,
     pub start_time: Option<DateTime<Local>>,
+    /// How many samples are known to have reached a CSV file. Compared
+    /// against `samples.len()` to tell whether discarding the buffer would
+    /// lose anything the user hasn't saved.
+    exported_count: usize,
 }
 
 impl Recording {
@@ -126,6 +130,7 @@ impl Recording {
             active: false,
             samples: Vec::new(),
             start_time: None,
+            exported_count: 0,
         }
     }
 
@@ -133,8 +138,26 @@ impl Recording {
         self.active = !self.active;
         if self.active {
             self.samples.clear();
+            self.exported_count = 0;
             self.start_time = Some(Local::now());
         }
+    }
+
+    /// Samples captured since the last successful export.
+    ///
+    /// Non-zero means clearing the buffer would destroy data that exists
+    /// nowhere else, which is what the Record confirmation prompt checks.
+    pub fn unexported_count(&self) -> usize {
+        self.samples.len().saturating_sub(self.exported_count)
+    }
+
+    /// Record that the first `count` samples reached a file.
+    ///
+    /// Takes the count that was actually written rather than the current
+    /// length: samples arriving while the export ran are not in that file and
+    /// must still count as unexported.
+    pub fn mark_exported(&mut self, count: usize) {
+        self.exported_count = count.min(self.samples.len());
     }
 
     /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
@@ -226,6 +249,76 @@ mod tests {
         r.toggle(); // stop
         r.toggle(); // start again — should clear
         assert!(r.samples.is_empty());
+    }
+
+    /// The Record button clears the buffer, so this is what decides whether
+    /// pressing it would destroy data that exists nowhere else.
+    #[test]
+    fn unexported_count_tracks_samples_since_the_last_export() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+
+        assert_eq!(r.unexported_count(), 0, "empty buffer has nothing to lose");
+
+        r.toggle();
+        for _ in 0..3 {
+            r.push(&m, &wc);
+        }
+        assert_eq!(r.unexported_count(), 3);
+
+        r.mark_exported(3);
+        assert_eq!(r.unexported_count(), 0);
+
+        r.push(&m, &wc);
+        assert_eq!(r.unexported_count(), 1, "samples after an export count");
+    }
+
+    /// An export writes a snapshot; samples captured while it ran are not in
+    /// that file and must not be counted as saved.
+    #[test]
+    fn samples_arriving_during_an_export_stay_unexported() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle();
+        for _ in 0..5 {
+            r.push(&m, &wc);
+        }
+        // Export snapshots 5, two more arrive before it completes.
+        r.push(&m, &wc);
+        r.push(&m, &wc);
+        r.mark_exported(5);
+        assert_eq!(r.unexported_count(), 2);
+    }
+
+    #[test]
+    fn starting_a_new_recording_resets_the_export_mark() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle();
+        r.push(&m, &wc);
+        r.mark_exported(1);
+        r.toggle(); // stop
+        r.toggle(); // start again — buffer cleared
+        assert_eq!(r.unexported_count(), 0);
+        r.push(&m, &wc);
+        assert_eq!(r.unexported_count(), 1, "new samples are unexported again");
+    }
+
+    /// A stale count from a bigger previous buffer must not mask real data.
+    #[test]
+    fn export_mark_cannot_exceed_the_buffer() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle();
+        r.push(&m, &wc);
+        r.mark_exported(99);
+        assert_eq!(r.unexported_count(), 0);
+        r.push(&m, &wc);
+        assert_eq!(r.unexported_count(), 1);
     }
 
     #[test]

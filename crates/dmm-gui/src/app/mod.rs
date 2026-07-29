@@ -42,6 +42,16 @@ use connection::{
     DmmMessage, ThreadContext, ThreadControl, handle_thread_panic, run_device_thread,
 };
 
+/// Result of a CSV export, sent from the writer thread to the UI.
+struct ExportOutcome {
+    /// Toast text.
+    message: String,
+    is_error: bool,
+    /// Samples written, on success. Drives the recording's "saved" mark, so
+    /// a buffer that reached a file doesn't prompt before being discarded.
+    exported: Option<usize>,
+}
+
 /// Pre-formatted min/max/avg/count strings for a single stats group.
 struct FormattedStatsGroup {
     min: String,
@@ -161,6 +171,10 @@ pub struct App {
     /// started. Outlives disconnect so a capture can still be exported with
     /// the right provenance after the meter is unplugged.
     recording_device: Option<&'static str>,
+    /// Record was pressed while the buffer held unexported samples; waiting
+    /// for the user to confirm discarding them.
+    confirm_discard_open: bool,
+    confirm_discard_focus_pending: bool,
     ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
     /// Stop request, readable without consuming a channel message so the
     /// acquisition thread's pacing sleep can bail out on it mid-tick.
@@ -181,7 +195,7 @@ pub struct App {
     /// Transient status toast (message, is_error, timestamp).
     toast: Option<(String, bool, Instant)>,
     /// One-shot receiver for CSV export result.
-    export_result_rx: Option<mpsc::Receiver<(String, bool)>>,
+    export_result_rx: Option<mpsc::Receiver<ExportOutcome>>,
     /// Cached height of non-reading content at scale=1 for big meter mode.
     meter_content_height: f32,
     /// Cached reading dimension ratios for big meter mode.
@@ -256,6 +270,8 @@ impl App {
             wall_clock: dmm_lib::WallClock::new(),
             rx: None,
             recording_device: None,
+            confirm_discard_open: false,
+            confirm_discard_focus_pending: false,
             ctrl_tx: None,
             stop_flag: None,
             cmd_tx: None,
@@ -788,17 +804,86 @@ impl App {
         }
     }
 
-    /// Start or stop recording, remembering which meter the samples came from.
+    /// Start or stop recording.
+    ///
+    /// Starting clears the buffer, so if it holds samples that were never
+    /// exported this asks first — a second Record press (or a mistyped
+    /// Ctrl+R) used to destroy an unexported capture with no prompt, no
+    /// toast, and nothing in the log.
+    pub(super) fn toggle_recording(&mut self) {
+        if !self.recording.active && self.recording.unexported_count() > 0 {
+            self.confirm_discard_open = true;
+            self.confirm_discard_focus_pending = true;
+            return;
+        }
+        self.apply_recording_toggle();
+    }
+
+    /// Flip the recording state, remembering which meter the samples came
+    /// from.
     ///
     /// The device has to be captured here rather than read back at export
     /// time: the Settings selection can change while a recording is held in
     /// the buffer (it only schedules a reconnect, and neither connect nor
     /// disconnect clears the samples), so reading it later labelled the file
     /// with whatever meter happened to be picked last.
-    pub(super) fn toggle_recording(&mut self) {
+    fn apply_recording_toggle(&mut self) {
         self.recording.toggle();
         if self.recording.active {
             self.recording_device = Some(self.selected_device().display_name);
+        }
+    }
+
+    /// Confirmation shown when starting a recording would discard samples
+    /// that have not been written to a CSV.
+    fn show_discard_confirmation(&mut self, ctx: &egui::Context) {
+        if !self.confirm_discard_open {
+            return;
+        }
+        let unexported = self.recording.unexported_count();
+        if unexported == 0 {
+            // The buffer emptied under us (Clear, or an export completing
+            // while the prompt was up) — nothing left to warn about.
+            self.confirm_discard_open = false;
+            self.apply_recording_toggle();
+            return;
+        }
+
+        let focus_pending = std::mem::take(&mut self.confirm_discard_focus_pending);
+        let mut discard = false;
+        let mut cancel = false;
+        // egui::Modal rather than Window: it sets the modal layer, which traps
+        // keyboard focus inside the dialog.
+        let modal = egui::Modal::new(egui::Id::new("confirm_discard_modal")).show(ctx, |ui| {
+            ui.set_max_width(380.0);
+            ui.heading("Discard unexported samples?");
+            ui.add_space(4.0);
+            let noun = if unexported == 1 { "sample" } else { "samples" };
+            ui.label(format!(
+                "Starting a new recording will discard {unexported} unexported {noun}."
+            ));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                // Cancel takes focus: Enter and Space then default to the
+                // non-destructive choice.
+                let cancel_btn = ui.button("Cancel");
+                if focus_pending {
+                    cancel_btn.request_focus();
+                }
+                if cancel_btn.clicked() {
+                    cancel = true;
+                }
+                if ui.button("Discard and record").clicked() {
+                    discard = true;
+                }
+            });
+        });
+
+        if discard {
+            self.confirm_discard_open = false;
+            self.apply_recording_toggle();
+        } else if cancel || modal.should_close() {
+            self.confirm_discard_open = false;
         }
     }
 
@@ -1634,7 +1719,7 @@ impl App {
             }
         };
 
-        let (tx, rx) = std::sync::mpsc::channel::<(String, bool)>();
+        let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
         std::thread::spawn(move || {
             if let Some(path) = rfd::FileDialog::new()
                 .set_file_name("measurements.csv")
@@ -1660,14 +1745,19 @@ impl App {
                             .file_name()
                             .map(|n| n.to_string_lossy().into_owned())
                             .unwrap_or_else(|| path.display().to_string());
-                        let _ = tx.send((
-                            format!("Exported {sample_count} samples to {file_name}"),
-                            false,
-                        ));
+                        let _ = tx.send(ExportOutcome {
+                            message: format!("Exported {sample_count} samples to {file_name}"),
+                            is_error: false,
+                            exported: Some(sample_count),
+                        });
                     }
                     Err(e) => {
                         error!("CSV export failed: {e}");
-                        let _ = tx.send((format!("Export failed: {e}"), true));
+                        let _ = tx.send(ExportOutcome {
+                            message: format!("Export failed: {e}"),
+                            is_error: true,
+                            exported: None,
+                        });
                     }
                 }
             }
@@ -1677,9 +1767,14 @@ impl App {
 
     fn poll_export_result(&mut self) {
         if let Some(rx) = &self.export_result_rx
-            && let Ok((msg, is_error)) = rx.try_recv()
+            && let Ok(outcome) = rx.try_recv()
         {
-            self.toast = Some((msg, is_error, Instant::now()));
+            if let Some(count) = outcome.exported {
+                // Samples that arrived while the export ran are not in that
+                // file, so mark only what was actually written.
+                self.recording.mark_exported(count);
+            }
+            self.toast = Some((outcome.message, outcome.is_error, Instant::now()));
             self.export_result_rx = None;
         }
     }
@@ -2034,6 +2129,7 @@ impl eframe::App for App {
         }
 
         self.show_shortcut_help(&ctx);
+        self.show_discard_confirmation(&ctx);
         self.show_whats_new(&ctx);
 
         if self.connection_state == ConnectionState::Connected {

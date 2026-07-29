@@ -199,7 +199,10 @@ UT61E+). Other devices show only the Manual link.
 
 ## Recording
 
-- **Record (●) / Stop (■)** toggle button
+- **Record (●) / Stop (■)** toggle button. Starting a recording clears the
+  buffer, so if it still holds samples that have not been exported, a
+  confirmation appears first (Cancel is focused by default). Once exported,
+  Record starts again without prompting.
 - **Export CSV** button — opens a file save dialog (runs on a background
   thread, does not freeze the UI)
 - Sample counter and duration shown while recording
