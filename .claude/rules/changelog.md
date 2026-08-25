@@ -31,7 +31,10 @@ After:
 - If a later commit in the same Unreleased cycle changes the behaviour again, rewrite the existing entry to the net change since the last release.
 - Reread the whole Unreleased section against these rules as part of every release.
 
-## Release headings
+## Release heading, tagline and summary
 
-- Release: rename `## Unreleased` to `## v<version>`, or `## v<version> — <tagline>` to title the release; `release.yml` matches that line exactly, lifts the tagline into the release title, and fails if the section is missing. A themed release opens with a one-paragraph summary before the first `###`. End the section with `**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v<prev>...v<version>`.
+- Release: rename `## Unreleased` to `## v<version>` or `## v<version> — <tagline>`; `release.yml` matches that line exactly, lifts the tagline into the release title, and fails if the section is missing. End the section with `**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v<prev>...v<version>`.
+- Tagline (≤ 8 words): what the release changes in scope or intent, stated plainly — `Multi-Device Protocol Support` — not a feature list and not a slogan.
+- Summary: one or two short sentences (2–3 lines in GitHub's release view) directly under the heading, naming the intent and the main areas touched; the sections below carry the detail. Exempt from the 25-word rule.
+- Omit both when a release has no theme.
 - Dev bump: re-insert an empty `## Unreleased` above it.

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-## v0.6.0
+## v0.6.0 — Display Fidelity and Connection Fixes
+
+Overloads are shaded instead of breaking the graph line, and readings show what the meter shows (OL, digits, unit magnitudes, HV, model names). Pause, reconnect and corrupted-frame handling are fixed; CLI output carries every sub-value and flag.
 
 ### GUI
 
@@ -53,7 +55,9 @@
 
 **Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.5.0...v0.6.0
 
-## v0.5.0
+## v0.5.0 — Accessibility Pass and Protocol Corrections
+
+The GUI is fully keyboard- and screen-reader-operable, with tooltips throughout and graph box zoom. Five protocol decoders (UT803/UT804, UT181A, UT171, UT8802, UT8803) are corrected against real frame formats, and timestamps follow acquisition time.
 
 ### GUI
 
@@ -89,7 +93,9 @@
 
 **Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.4.0...v0.5.0
 
-## v0.4.0
+## v0.4.0 — Renamed to dmm-tools, Seven Device Families
+
+The project is renamed from its UT61E+ origin to dmm-tools (breaking, see below). Support widens to seven device families over three USB cable types, the GUI gains themes, big-meter mode and time integrals, and macOS/ARM binaries ship.
 
 ### Breaking changes
 

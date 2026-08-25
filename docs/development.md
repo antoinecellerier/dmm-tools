@@ -113,7 +113,7 @@ a new mode/range/flag combination against real hardware.
 
 ## Release Process
 
-1. Write the release entry in `CHANGELOG.md` (see existing entries for format). To title the release, put a tagline in the heading — `## v0.3.0 — Specifications, Keyboard Shortcuts & Mock Device` — and open the section with a one-paragraph summary
+1. Write the release entry in `CHANGELOG.md` (see existing entries for format). If the release has a theme, put a short tagline in the heading — `## v0.2.0 — Multi-Device Protocol Support` — stating what it changes in scope or intent, and open the section with a one- or two-sentence summary of the intent and main areas touched
 2. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
 3. Update `Cargo.lock`: `cargo update --workspace`
 4. Update the README screenshot if the GUI has changed
