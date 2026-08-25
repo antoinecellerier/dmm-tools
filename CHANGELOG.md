@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.6.0
 
 ### GUI
 
@@ -48,6 +48,8 @@
 - **`capture` offers the freeform pass again** — the pass had stopped running; `--list-steps` now lists the device's step IDs, and an unknown `--steps` ID is an error, not an empty report.
 - **`read`'s closing summary no longer mixes units** — Min/Max/Avg accumulated across a unit change and printed without a unit; they now reset and the summary names the unit.
 - **`read` survives an unreadable frame instead of exiting** — one bad checksum ended an overnight `--count 0` run; bad frames are now skipped, warned about and counted in the summary.
+
+**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.5.0...v0.6.0
 
 ## v0.5.0
 
