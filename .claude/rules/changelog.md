@@ -33,5 +33,5 @@ After:
 
 ## Release headings
 
-- Release: rename `## Unreleased` to `## v<version>` — exact match; `release.yml` extracts the notes with `^## v<version>$` — and end the section with `**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v<prev>...v<version>`.
+- Release: rename `## Unreleased` to `## v<version>`, or `## v<version> — <tagline>` to title the release; `release.yml` matches that line exactly, lifts the tagline into the release title, and fails if the section is missing. A themed release opens with a one-paragraph summary before the first `###`. End the section with `**Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v<prev>...v<version>`.
 - Dev bump: re-insert an empty `## Unreleased` above it.

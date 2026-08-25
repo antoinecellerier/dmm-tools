@@ -122,14 +122,24 @@ jobs:
         id: changelog
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # Extract the section for this version from CHANGELOG.md
-          # (everything between "## vX.Y.Z" and the next "## v" heading)
-          awk "/^## v${VERSION}\$/{found=1; next} /^## v/{if(found) exit} found" CHANGELOG.md > release_notes.md
+          # The section heading is "## vX.Y.Z", optionally followed by
+          # " — tagline". The tagline becomes the release title; the body is
+          # everything up to the next "## v" heading, so a summary paragraph
+          # placed right under the heading opens the release notes.
+          HEADING=$(grep -m1 -E "^## v${VERSION//./\\.}( — .+)?$" CHANGELOG.md) || {
+            echo "::error::CHANGELOG.md has no '## v${VERSION}' section"
+            exit 1
+          }
+          TAGLINE="${HEADING#"## v${VERSION}"}"
+          TAGLINE="${TAGLINE# — }"
+          echo "name=v${VERSION}${TAGLINE:+ — ${TAGLINE}}" >> "$GITHUB_OUTPUT"
+          awk -v heading="$HEADING" '$0 == heading {found=1; next} /^## v/{if(found) exit} found' CHANGELOG.md > release_notes.md
           cat release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          name: ${{ steps.changelog.outputs.name }}
           body_path: release_notes.md
           files: |
             artifacts/dmm-tools-linux-x86_64/*.tar.gz

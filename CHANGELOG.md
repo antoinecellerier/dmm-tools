@@ -180,9 +180,7 @@
 
 **Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.3.0...v0.4.0
 
-## v0.3.0
-
-### Specifications, Keyboard Shortcuts & Mock Device
+## v0.3.0 — Specifications, Keyboard Shortcuts & Mock Device
 
 This release adds live per-range specification display from device manuals, full keyboard navigation, screen reader support, and a simulated mock device for testing without hardware. Under the hood, a central device registry simplifies adding new meters, and a large refactoring improves code organization with 282 tests (up from 209).
 
@@ -233,9 +231,7 @@ This release adds live per-range specification display from device manuals, full
 
 **Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.2.0...v0.3.0
 
-## v0.2.0
-
-### Multi-Device Protocol Support
+## v0.2.0 — Multi-Device Protocol Support
 
 Rearchitects the library to support multiple UNI-T multimeter families behind a common Protocol trait.
 
@@ -274,7 +270,7 @@ Rearchitects the library to support multiple UNI-T multimeter families behind a 
 
 **Full Changelog**: https://github.com/antoinecellerier/dmm-tools/compare/v0.1.0...v0.2.0
 
-## v0.1.0
+## v0.1.0 — First Release
 
 First release of dmm-tools — CLI and GUI for the UNI-T UT61E+ multimeter over USB.
 

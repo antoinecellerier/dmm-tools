@@ -10,9 +10,13 @@ use egui_commonmark::{CommonMarkCache, CommonMarkViewer};
 const CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 
 /// Returns `true` if the changelog contains a `## v{version}` section.
+/// The heading may carry a tagline: `## v{version} — Tagline`.
 pub(crate) fn has_version_section(version: &str) -> bool {
     let header = format!("## v{version}");
-    CHANGELOG.lines().any(|line| line == header)
+    CHANGELOG.lines().any(|line| {
+        line.strip_prefix(header.as_str())
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(" — "))
+    })
 }
 
 /// Render the full embedded changelog into the given UI.
@@ -31,8 +35,20 @@ mod tests {
     }
 
     #[test]
+    fn has_section_for_heading_with_tagline() {
+        // v0.3.0's heading is "## v0.3.0 — Specifications, ...".
+        assert!(has_version_section("0.3.0"));
+    }
+
+    #[test]
     fn no_section_for_unknown_version() {
         assert!(!has_version_section("99.99.99"));
+    }
+
+    #[test]
+    fn no_section_for_version_prefix() {
+        // "## v0.1" is a prefix of "## v0.1.0" but not a heading for 0.1.
+        assert!(!has_version_section("0.1"));
     }
 
     #[test]
