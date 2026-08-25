@@ -40,7 +40,7 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 
 ## Engineering standards
 
-Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`) and `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`).
+Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`), `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`) and `.claude/rules/changelog.md` (entry format, sectioning — `CHANGELOG.md`).
 
 ### Code quality
 - All code must pass `cargo clippy --workspace -- -D warnings` and `cargo fmt --check`.
@@ -90,8 +90,5 @@ Documentation is part of the deliverable — update affected docs in the same co
 
 ### Changelog
 - Add entries to `## Unreleased` in the same commit as user-visible changes. The release workflow extracts the entry for the tagged version — don't defer.
-- **Scope is strictly user-visible impact.** Someone running a prebuilt binary must be able to notice the difference. Phrase entries from that perspective.
-- **Do NOT add entries for:** internal refactors, code reorganization, new public trait methods, `String`→`Cow` swaps, extracted helpers, added tests, dependency bumps, or CI tweaks — even if the diff is large or architecturally meaningful.
-- Organized by component: GUI, CLI, Library, Bug fixes, Documentation. Reserve `Internal` for changes whose *cause* is internal but *symptom* is user-visible (e.g., a scheduling fix that removes visible jitter); lead those entries with the user-facing symptom.
-- **Keep entries crisp.** Lead with a bolded user-visible summary, then at most one follow-up sentence for context. If you're writing a paragraph, that's commit-message content.
-- Rule of thumb when tempted: write the "before/after a user would observe" sentence out loud. If you can't, don't add the entry.
+- **Scope is strictly user-visible impact.** Someone running a prebuilt binary must be able to notice the difference; if you can't say the "before/after a user would observe" sentence out loud, don't add an entry. No entries for refactors, code reorganization, new public API, extracted helpers, added tests, dependency bumps, or CI tweaks — however large the diff.
+- Entry format and section order: `.claude/rules/changelog.md` (loads when `CHANGELOG.md` is edited).
