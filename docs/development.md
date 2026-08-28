@@ -160,3 +160,9 @@ these guidelines. Key points the assistant should follow:
 The `docs/research/` directories contain per-family reverse engineering notes
 that provide essential context for protocol work. The assistant should read
 the relevant `reverse-engineered-protocol.md` before modifying protocol code.
+
+Alongside `CLAUDE.md`, `.claude/rules/` holds path-scoped rules that load
+when their files are touched (`protocol.md` for `crates/dmm-lib/`, `gui.md`
+for `crates/dmm-gui/`, `changelog.md` for `CHANGELOG.md`), and
+`.claude/skills/` holds on-demand checklists: `add-device` (new-meter
+onboarding) and `issue-replies` (issue triage and GitHub reply drafting).
