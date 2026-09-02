@@ -14,6 +14,37 @@ pub enum MeasuredValue {
     NcvLevel(u8),
 }
 
+/// Render sub-values as one `", "`-joined line, each entry reading
+/// `"{label} {value}"` plus `" {unit}"` when the sub-value has a unit
+/// (unitless modes like NCV would otherwise trail a space) and `" @{n}s"`
+/// when it carries a mode-elapsed timestamp.
+///
+/// Takes already-resolved strings rather than [`AuxValue`]s so the same line
+/// can be built from a capture report loaded off disk, where the sub-values
+/// are plain strings and the originating [`Measurement`] is long gone. See
+/// [`Measurement::aux_summary`] for the common case.
+pub fn aux_summary_line<'a, V: AsRef<str>>(
+    entries: impl IntoIterator<Item = (&'a str, V, &'a str, Option<u32>)>,
+) -> String {
+    let mut out = String::new();
+    for (label, value, unit, elapsed_secs) in entries {
+        if !out.is_empty() {
+            out.push_str(", ");
+        }
+        out.push_str(label);
+        out.push(' ');
+        out.push_str(value.as_ref());
+        if !unit.is_empty() {
+            out.push(' ');
+            out.push_str(unit);
+        }
+        if let Some(secs) = elapsed_secs {
+            out.push_str(&format!(" @{secs}s"));
+        }
+    }
+    out
+}
+
 /// An auxiliary value associated with a measurement.
 ///
 /// Used by protocols that report multiple related values per reading:
@@ -162,25 +193,14 @@ impl Measurement {
     /// Empty when the measurement has no sub-values, so callers can print it
     /// unconditionally and get nothing for single-display meters.
     pub fn aux_summary(&self) -> String {
-        let mut out = String::new();
-        for aux in &self.aux_values {
-            if !out.is_empty() {
-                out.push_str(", ");
-            }
-            out.push_str(&aux.label);
-            out.push(' ');
-            out.push_str(&aux.value_str());
-            // Unitless modes (NCV) would otherwise leave a trailing space.
-            let unit = aux.unit_or(&self.unit);
-            if !unit.is_empty() {
-                out.push(' ');
-                out.push_str(unit);
-            }
-            if let Some(secs) = aux.elapsed_secs {
-                out.push_str(&format!(" @{secs}s"));
-            }
-        }
-        out
+        aux_summary_line(self.aux_values.iter().map(|aux| {
+            (
+                aux.label.as_ref(),
+                aux.value_str(),
+                aux.unit_or(&self.unit),
+                aux.elapsed_secs,
+            )
+        }))
     }
 }
 

@@ -601,17 +601,14 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     };
 
     let model_name = dmm.profile().model_name;
+    // Fixed for the whole run: the CSV column layout is per meter family, so
+    // a mode that reports fewer sub-values than the family can leaves the
+    // trailing slots empty rather than shortening the row.
+    let aux_slots = dmm.profile().max_aux_values;
     match format {
         OutputFormat::Csv => {
             writeln!(writer, "# device: {model_name}")?;
-            if integrate {
-                writeln!(
-                    writer,
-                    "timestamp,mode,value,unit,range,flags,integral,integral_unit"
-                )?;
-            } else {
-                writeln!(writer, "timestamp,mode,value,unit,range,flags")?;
-            }
+            writeln!(writer, "{}", format::csv_header(integrate, aux_slots))?;
         }
         OutputFormat::Json => {
             writeln!(
@@ -691,6 +688,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                     format,
                     experimental,
                     integral_display,
+                    aux_slots,
                 )?;
                 writer.flush()?;
                 i += 1;
@@ -870,6 +868,11 @@ fn cmd_debug(
                     m.raw_payload,
                     style(format!("{m}")).green(),
                 );
+                // The secondary displays a UT181A or UT171 sends alongside
+                // the reading; nothing else in the debug line shows them.
+                if !m.aux_values.is_empty() {
+                    println!("    {} {}", style("sub-values:").dim(), m.aux_summary());
+                }
             }
             Ok(StreamEvent::Timeout { .. }) => {
                 eprintln!(
@@ -1039,6 +1042,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1057,6 +1061,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1066,6 +1071,44 @@ mod tests {
         assert_eq!(fields[2], "5.678");
         assert_eq!(fields[3], "V");
         assert_eq!(fields[4], "22V");
+    }
+
+    /// Multi-display meters carry their sub-values in fixed trailing columns,
+    /// sized by the family's `max_aux_values` so every row of a file lines up
+    /// even when a mode reports fewer than the family can.
+    #[test]
+    fn format_csv_with_aux_slots() {
+        use dmm_lib::measurement::AuxValue;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"239.22 ", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.aux_values = vec![AuxValue {
+            label: "Frequency".into(),
+            value: MeasuredValue::Normal(50.01),
+            unit: "Hz".into(),
+            display_raw: Some("50.01".to_string()),
+            elapsed_secs: None,
+        }];
+        let mut buf = Vec::new();
+        format::format_measurement(
+            &mut buf,
+            &m,
+            &dmm_lib::WallClock::new(),
+            &OutputFormat::Csv,
+            false,
+            None,
+            2,
+        )
+        .unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        let fields: Vec<&str> = output.trim_end().split(',').collect();
+        assert_eq!(fields.len(), 6 + 2 * 3, "got {output}");
+        assert_eq!(&fields[6..9], ["Frequency", "50.01", "Hz"]);
+        // The unused second slot is present but empty.
+        assert_eq!(&fields[9..12], ["", "", ""]);
+        assert_eq!(
+            format::csv_header(false, 2).split(',').count(),
+            fields.len()
+        );
     }
 
     /// The UT61E+ separates the sign from the digits on some ranges. That
@@ -1081,6 +1124,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1101,6 +1145,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1124,6 +1169,7 @@ mod tests {
             &OutputFormat::Json,
             true,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1142,6 +1188,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1159,6 +1206,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1188,6 +1236,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1205,6 +1254,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1224,6 +1274,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1242,6 +1293,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
+            0,
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();

@@ -206,11 +206,29 @@ impl SampleData {
     pub(crate) fn summary(&self) -> String {
         let flags = StatusFlags::from(&self.flags).to_string();
         let value = self.display_raw.trim();
-        if flags.is_empty() {
+        let mut out = if flags.is_empty() {
             format!("{value} {}", self.unit)
         } else {
             format!("{value} {} [{flags}]", self.unit)
+        };
+        // Sub-values are on the meter's screen too, so the operator has to
+        // see them to confirm the sample — a UT181A in MIN/MAX or with the
+        // frequency display up otherwise confirms against half the screen.
+        // Appended, so single-display meters keep the line they had, and
+        // rendered by the same helper `dmm-cli read` uses so the two can't
+        // describe the same reading differently.
+        if !self.aux.is_empty() {
+            let aux = dmm_lib::measurement::aux_summary_line(self.aux.iter().map(|a| {
+                (
+                    a.label.as_str(),
+                    a.value.as_str(),
+                    a.unit.as_str(),
+                    a.elapsed_secs,
+                )
+            }));
+            out.push_str(&format!(" ({aux})"));
         }
+        out
     }
 }
 
@@ -635,6 +653,129 @@ mod tests {
                 "summary {summary:?} drops {expected}"
             );
         }
+    }
+
+    /// The confirmation line is what the operator compares against the
+    /// meter's screen, so a multi-display meter's sub-values have to be on
+    /// it — a UT181A showing frequency and period confirmed as the main
+    /// reading alone.
+    #[test]
+    fn summary_lists_sub_values() {
+        use dmm_lib::measurement::AuxValue;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"239.22 ", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.aux_values = vec![
+            AuxValue {
+                label: "Frequency".into(),
+                value: MeasuredValue::Normal(50.01),
+                unit: "Hz".into(),
+                display_raw: Some("50.01".to_string()),
+                elapsed_secs: None,
+            },
+            AuxValue {
+                label: "Period".into(),
+                value: MeasuredValue::Normal(20.0),
+                unit: "ms".into(),
+                display_raw: Some("20.00".to_string()),
+                elapsed_secs: None,
+            },
+        ];
+        assert_eq!(
+            SampleData::from_measurement(&m).summary(),
+            "239.22 V [AUTO] (Frequency 50.01 Hz, Period 20.00 ms)"
+        );
+    }
+
+    /// MIN/MAX sub-values carry the time since the mode started; that is on
+    /// the meter's screen, so it belongs on the line being confirmed.
+    #[test]
+    fn summary_shows_minmax_timestamps() {
+        use dmm_lib::measurement::AuxValue;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"  5.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.aux_values = vec![AuxValue {
+            label: "Max".into(),
+            value: MeasuredValue::Normal(5.0123),
+            // Empty: same quantity as the main reading, resolved on capture.
+            unit: "".into(),
+            display_raw: Some("5.0123".to_string()),
+            elapsed_secs: Some(12),
+        }];
+        assert_eq!(
+            SampleData::from_measurement(&m).summary(),
+            "5.000 V [AUTO] (Max 5.0123 V @12s)"
+        );
+    }
+
+    /// Single-display meters must confirm with exactly the line they did
+    /// before sub-values were recorded.
+    #[test]
+    fn summary_without_sub_values_is_unchanged() {
+        let m = make_test_measurement(0x02, 0x01, b"  1.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        assert_eq!(SampleData::from_measurement(&m).summary(), "1.000 V [AUTO]");
+    }
+
+    /// Resuming an interrupted capture reloads the report, so sub-values have
+    /// to survive the round-trip — including the optional timestamp, which is
+    /// omitted from the YAML when absent so single-display reports are
+    /// unchanged.
+    #[test]
+    fn aux_samples_survive_a_yaml_roundtrip() {
+        use dmm_lib::measurement::AuxValue;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"  5.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.aux_values = vec![
+            AuxValue {
+                label: "Frequency".into(),
+                value: MeasuredValue::Normal(50.01),
+                unit: "Hz".into(),
+                display_raw: Some("50.01".to_string()),
+                elapsed_secs: None,
+            },
+            AuxValue {
+                label: "Max".into(),
+                value: MeasuredValue::Overload,
+                unit: "".into(),
+                display_raw: None,
+                elapsed_secs: Some(12),
+            },
+        ];
+        let sample = SampleData::from_measurement(&m);
+
+        let yaml = serde_yaml_ng::to_string(&sample).unwrap();
+        assert_eq!(
+            yaml.matches("elapsed_secs").count(),
+            1,
+            "elapsed_secs: None must be omitted: {yaml}"
+        );
+
+        let parsed: SampleData = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(parsed.aux.len(), 2);
+        assert_eq!(parsed.aux[0].label, "Frequency");
+        assert_eq!(parsed.aux[0].value, "50.01");
+        assert_eq!(parsed.aux[0].unit, "Hz");
+        assert_eq!(parsed.aux[0].elapsed_secs, None);
+        assert_eq!(parsed.aux[1].value, "OL");
+        // The empty "same as the main reading" unit is resolved on capture.
+        assert_eq!(parsed.aux[1].unit, "V");
+        assert_eq!(parsed.aux[1].elapsed_secs, Some(12));
+        assert_eq!(parsed.summary(), sample.summary());
+    }
+
+    /// A report written before sub-values were recorded has no `aux` key.
+    #[test]
+    fn reports_without_aux_still_load() {
+        let sample = SampleData::from_measurement(&make_test_measurement(
+            0x02,
+            0x01,
+            b"  1.000",
+            (0x00, 0x00),
+            (0x00, 0x00, 0x00),
+        ));
+        let yaml = serde_yaml_ng::to_string(&sample).unwrap();
+        assert!(!yaml.contains("aux"), "empty aux must be omitted: {yaml}");
+        let parsed: SampleData = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert!(parsed.aux.is_empty());
     }
 
     #[test]

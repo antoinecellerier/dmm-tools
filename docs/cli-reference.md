@@ -173,9 +173,24 @@ containing the device model, followed by one measurement object per line.
 Meters that report sub-values alongside the reading — the UT181A's second
 thermocouple, its frequency and period displays, and its REL, MIN/MAX and Peak
 modes; the UT171's frequency aux — show them indented under the reading in text
-output and in an `aux` array in JSON. CSV is unchanged:
-its column count is fixed, so sub-values are not included there. Capture
-reports carry them per sample under `aux`.
+output and in an `aux` array in JSON. Capture reports carry them per sample
+under `aux`.
+
+CSV appends one `auxN_label,auxN_value,auxN_unit` group per sub-value the meter
+family can send: four for the UT181A, one for the UT171, two for the mock
+device. Single-display meters (UT61E+, UT61B+/D+, UT161x, UT8802, UT8803,
+UT803/UT804, VC-880, VC-890) send none, so their files carry the six original
+columns and are unchanged. The count is per meter family, not per mode, so a
+reading that fills fewer slots leaves the rest empty and every row of a file
+lines up. With `--integrate`, the `integral` and `integral_unit` columns come
+first, ahead of the aux groups.
+
+```
+# device: UNI-T UT181A
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
+2026-09-02T09:33:56.123+02:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
+2026-09-02T09:34:10.456+02:00,°C,25.4,°C,,AUTO,T2,24.6,°C,,,,,,,,,
+```
 
 When the session ends, a summary line (sample count, min, max, average, each
 with its unit) is printed to stderr. When `--integrate` is active, the total
@@ -272,6 +287,9 @@ dmm-cli debug [OPTIONS]
 | `--count <N>` | `1` | Number of requests to send. 0 = unlimited. |
 | `--interval-ms <MS>` | `500` | Interval between requests in milliseconds. |
 
+When the reading carries sub-values, they are listed on an indented
+`sub-values:` line under it.
+
 For full wire-level tracing, combine with the `RUST_LOG` environment variable:
 
 ```bash
@@ -327,6 +345,11 @@ Steps cover the measurement modes and the flag and button commands. Note that
 the per-range tables are still thinly covered: each mode step captures
 whatever range auto-ranging happened to pick, so ranges the meter doesn't
 select on its own go unverified.
+
+Each sample is read back for you to confirm against the meter's screen. On a
+meter with secondary displays, that confirmation line lists the sub-values in
+parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,
+Period 20.00 ms)` — so the whole screen is checked, not just the main value.
 
 After the device's own steps, capture always offers **freeform captures**:
 describe any mode the step list doesn't cover, and the tool records the

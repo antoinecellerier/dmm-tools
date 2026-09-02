@@ -1,9 +1,35 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
+use std::borrow::Cow;
 use std::io::Write;
 
 use crate::OutputFormat;
+
+/// The columns one aux slot contributes, in order. The header names these and
+/// a row writes exactly this many cells per slot, so the two cannot drift.
+const AUX_COLUMN_SUFFIXES: [&str; 3] = ["label", "value", "unit"];
+
+/// The CSV header for a run, matching what [`format_measurement`] writes for
+/// the same `integrate`/`aux_slots` pair.
+///
+/// `aux_slots` is the meter family's `max_aux_values`, not the count in any
+/// one reading: the column layout has to be fixed for the whole file, so a
+/// mode that reports fewer sub-values leaves the trailing slots empty. The
+/// aux groups come last, after the integral columns, so `--integrate`
+/// consumers keep the positions they had before sub-values were exported.
+pub fn csv_header(integrate: bool, aux_slots: usize) -> String {
+    let mut header = String::from("timestamp,mode,value,unit,range,flags");
+    if integrate {
+        header.push_str(",integral,integral_unit");
+    }
+    for i in 1..=aux_slots {
+        for suffix in AUX_COLUMN_SUFFIXES {
+            header.push_str(&format!(",aux{i}_{suffix}"));
+        }
+    }
+    header
+}
 
 /// Derive a wall-clock RFC3339 string from the measurement's monotonic
 /// timestamp using the session's `WallClock` origin. Keeps exported
@@ -22,6 +48,9 @@ pub fn format_measurement(
     format: &OutputFormat,
     experimental: bool,
     integral: Option<(f64, &str)>,
+    // Sub-value columns to write in CSV, from the family's `max_aux_values`.
+    // Ignored by the text and JSON arms, which size themselves per reading.
+    aux_slots: usize,
 ) -> std::io::Result<()> {
     match format {
         OutputFormat::Text => {
@@ -67,6 +96,16 @@ pub fn format_measurement(
             let value_str = m.value_export_str();
             let ts = timestamp_rfc3339(m, wall_clock);
             let flags = m.flags.to_string();
+            // Resolved ahead of the record so the borrowed cells outlive it.
+            // `take` guards the layout: a reading with more sub-values than
+            // the profile promised is truncated rather than shifting every
+            // later column (or panicking) mid-file.
+            let aux_cells: Vec<(&str, Cow<'_, str>, &str)> = m
+                .aux_values
+                .iter()
+                .take(aux_slots)
+                .map(|aux| (aux.label.as_ref(), aux.value_str(), aux.unit_or(&m.unit)))
+                .collect();
             let mut wtr = csv::WriterBuilder::new()
                 // One row per call, so the default 8 KiB buffer is dead
                 // weight — a row is well under this.
@@ -85,6 +124,18 @@ pub fn format_measurement(
                 integral_str = format!("{val:.6}");
                 record.push(&integral_str);
                 record.push(unit);
+            }
+            // Every slot is written whether or not this reading filled it —
+            // the file's column layout is fixed for the whole run.
+            for slot in 0..aux_slots {
+                match aux_cells.get(slot) {
+                    Some((label, value, unit)) => {
+                        record.push(label);
+                        record.push(value);
+                        record.push(unit);
+                    }
+                    None => record.extend(std::iter::repeat_n("", AUX_COLUMN_SUFFIXES.len())),
+                }
             }
             wtr.write_record(&record).map_err(std::io::Error::other)?;
             wtr.flush()
@@ -163,6 +214,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
+            0,
         )
         .unwrap();
         serde_json::from_slice(&buf).unwrap()
@@ -228,6 +280,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
+            0,
         )
         .unwrap();
         let out = String::from_utf8(buf).unwrap();
@@ -253,6 +306,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
+            0,
         )
         .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();
@@ -278,6 +332,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
+            0,
         )
         .unwrap();
         assert_eq!(String::from_utf8(buf).unwrap().lines().count(), 1);
@@ -293,6 +348,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
+            0,
         )
         .unwrap();
         String::from_utf8(buf).unwrap()
@@ -344,6 +400,149 @@ mod tests {
         assert!(line.contains(",DC V,5.678,V,22V,"), "got {line}");
     }
 
+    fn csv_with(m: &Measurement, integral: Option<(f64, &str)>, aux_slots: usize) -> String {
+        let mut buf = Vec::new();
+        format_measurement(
+            &mut buf,
+            m,
+            &WallClock::new(),
+            &OutputFormat::Csv,
+            false,
+            integral,
+            aux_slots,
+        )
+        .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    fn csv_fields(line: &str) -> Vec<String> {
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(line.as_bytes());
+        rdr.records()
+            .next()
+            .unwrap()
+            .unwrap()
+            .iter()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// A UT181A frequency/period pair: two sub-values with units of their own.
+    fn with_freq_aux(m: &mut Measurement) {
+        use dmm_lib::measurement::AuxValue;
+        m.aux_values = vec![
+            AuxValue {
+                label: "Frequency".into(),
+                value: MeasuredValue::Normal(50.01),
+                unit: "Hz".into(),
+                display_raw: Some("50.01".to_string()),
+                elapsed_secs: None,
+            },
+            AuxValue {
+                label: "Period".into(),
+                value: MeasuredValue::Normal(20.0),
+                unit: "ms".into(),
+                display_raw: Some("20.00".to_string()),
+                elapsed_secs: None,
+            },
+        ];
+    }
+
+    #[test]
+    fn csv_header_names_one_group_per_aux_slot() {
+        assert_eq!(
+            csv_header(false, 0),
+            "timestamp,mode,value,unit,range,flags"
+        );
+        assert_eq!(
+            csv_header(true, 0),
+            "timestamp,mode,value,unit,range,flags,integral,integral_unit"
+        );
+        assert_eq!(
+            csv_header(false, 4),
+            "timestamp,mode,value,unit,range,flags,\
+             aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,\
+             aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit"
+        );
+        // Integral columns first, so existing --integrate consumers keep
+        // their column positions.
+        assert_eq!(
+            csv_header(true, 1),
+            "timestamp,mode,value,unit,range,flags,integral,integral_unit,\
+             aux1_label,aux1_value,aux1_unit"
+        );
+    }
+
+    /// The header is written once at the top of the file and the rows by a
+    /// different function; a mismatch would silently misalign every column.
+    #[test]
+    fn csv_header_and_row_have_the_same_field_count() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_freq_aux(&mut m);
+        for integrate in [false, true] {
+            for slots in [0usize, 1, 4] {
+                let integral = integrate.then_some((1.5, "Vs"));
+                let row = csv_fields(&csv_with(&m, integral, slots));
+                let header = csv_fields(&csv_header(integrate, slots));
+                assert_eq!(
+                    header.len(),
+                    row.len(),
+                    "integrate={integrate} slots={slots}"
+                );
+            }
+        }
+    }
+
+    /// The column layout is fixed per family, not per mode, so a reading that
+    /// fills fewer slots than the family can report leaves the rest empty.
+    #[test]
+    fn csv_pads_unused_aux_slots() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_freq_aux(&mut m);
+        let line = csv_with(&m, None, 4);
+        assert!(
+            line.trim_end()
+                .ends_with(",Frequency,50.01,Hz,Period,20.00,ms,,,,,,"),
+            "got {line}"
+        );
+        assert_eq!(csv_fields(&line).len(), 6 + 4 * 3);
+    }
+
+    #[test]
+    fn csv_aux_falls_back_to_the_main_unit_and_reports_overload() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_aux(&mut m);
+        let fields = csv_fields(&csv_with(&m, None, 2));
+        // Empty aux unit means "same as the main reading".
+        assert_eq!(&fields[6..9], ["Reference", "1.2340", "V"]);
+        // Overloaded sub-value exports OL, like the main value does.
+        assert_eq!(&fields[9..12], ["Max", "OL", "mV"]);
+    }
+
+    /// A family with no sub-values must produce exactly the columns it did
+    /// before aux export existed.
+    #[test]
+    fn csv_zero_slots_adds_no_columns() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_freq_aux(&mut m);
+        assert_eq!(csv_fields(&csv_with(&m, None, 0)).len(), 6);
+    }
+
+    #[test]
+    fn csv_integral_columns_come_before_the_aux_columns() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        with_freq_aux(&mut m);
+        let fields = csv_fields(&csv_with(&m, Some((1.5, "Vs")), 2));
+        assert_eq!(&fields[6..8], ["1.500000", "Vs"]);
+        assert_eq!(&fields[8..11], ["Frequency", "50.01", "Hz"]);
+    }
+
     /// Text output already carried these; the three formats must agree.
     #[test]
     fn text_and_json_agree_on_void() {
@@ -360,6 +559,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
+            0,
         )
         .unwrap();
         assert!(String::from_utf8(buf).unwrap().contains("VOID"));
