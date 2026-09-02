@@ -10,6 +10,7 @@ pub mod protocol;
 pub mod specs;
 pub mod stats;
 pub mod stream;
+pub mod transform;
 pub mod transport;
 pub mod wall_clock;
 

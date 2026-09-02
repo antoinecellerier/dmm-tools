@@ -98,6 +98,11 @@ pub struct AuxValue {
 /// [`AuxValue::export_cells`], whose array is exactly this long, so a column
 /// cannot be added to one side's header without the other side's rows failing
 /// to compile.
+///
+/// Which sub-value goes in which slot is not the writers' business either:
+/// they must take the slots from [`Measurement::export_aux_slots`], which
+/// keeps a software-appended sub-value (a transform's `Raw`) in a fixed column
+/// even as the meter's own sub-value count changes from frame to frame.
 pub const AUX_EXPORT_COLUMNS: [&str; 3] = ["label", "value", "unit"];
 
 impl AuxValue {
@@ -234,6 +239,42 @@ impl Measurement {
                 aux.elapsed_secs,
             )
         }))
+    }
+
+    /// Lay the sub-values out for a fixed-column export.
+    ///
+    /// The first `family_slots` entries hold the meter's own sub-values in
+    /// order, padded with `None`; the following `extra_slots` entries hold the
+    /// last `extra_slots` sub-values — the ones software appended after the
+    /// meter's (a transform's `Raw`), so they keep a fixed column whatever the
+    /// meter sent that frame. Always returns exactly
+    /// `family_slots + extra_slots` entries; surplus meter sub-values are
+    /// truncated rather than shifting later columns.
+    ///
+    /// Without the split, a UT181A run crossing from DC V (no sub-values) to
+    /// AC V (frequency and period) would move `Raw` from `aux1_*` to `aux3_*`
+    /// mid-file, mixing three quantities into one column.
+    pub fn export_aux_slots(
+        &self,
+        family_slots: usize,
+        extra_slots: usize,
+    ) -> Vec<Option<&AuxValue>> {
+        let n = self.aux_values.len();
+        // A frame carrying fewer sub-values than `extra_slots` promises is one
+        // where the meter sent none of its own: take what is there as the
+        // appended ones and leave the meter's slots empty.
+        let extra = extra_slots.min(n);
+        let mut slots = Vec::with_capacity(family_slots + extra_slots);
+        slots.extend(
+            self.aux_values[..n - extra]
+                .iter()
+                .take(family_slots)
+                .map(Some),
+        );
+        slots.resize(family_slots, None);
+        slots.extend(self.aux_values[n - extra..].iter().map(Some));
+        slots.resize(family_slots + extra_slots, None);
+        slots
     }
 }
 
@@ -427,6 +468,98 @@ mod tests {
         over.value = MeasuredValue::Overload;
         m.aux_values = vec![over];
         assert_eq!(m.aux_summary(), "Max OL V");
+    }
+
+    /// Labels of an export layout, `""` for an empty slot.
+    fn slot_labels<'a>(slots: &[Option<&'a AuxValue>]) -> Vec<&'a str> {
+        slots
+            .iter()
+            .map(|slot| slot.map_or("", |aux| aux.label.as_ref()))
+            .collect()
+    }
+
+    #[test]
+    fn export_slots_pad_a_reading_without_sub_values() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let slots = m.export_aux_slots(2, 0);
+        assert_eq!(slots.len(), 2);
+        assert!(slots.iter().all(Option::is_none));
+    }
+
+    /// With nothing appended by software the layout is the plain
+    /// "first `family_slots` sub-values, then padding" it always was.
+    #[test]
+    fn export_slots_without_extras_keep_the_meter_order() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+        ];
+        assert_eq!(
+            slot_labels(&m.export_aux_slots(4, 0)),
+            ["Frequency", "Period", "", ""]
+        );
+    }
+
+    /// A UT181A AC V frame (4 meter slots) with a transform's `Raw` appended:
+    /// the meter's two sub-values keep the first columns and `Raw` takes the
+    /// fifth.
+    #[test]
+    fn an_appended_sub_value_takes_the_extra_slot() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+            aux("Raw", "230.0", "V"),
+        ];
+        let slots = m.export_aux_slots(4, 1);
+        assert_eq!(slot_labels(&slots), ["Frequency", "Period", "", "", "Raw"]);
+        assert_eq!(slots[4].map(|aux| aux.unit.as_ref()), Some("V"));
+    }
+
+    /// The next frame of that same run, after the dial moved to DC V: the
+    /// meter sends no sub-values, and `Raw` must not slide into `aux1_*`.
+    #[test]
+    fn an_appended_sub_value_holds_its_column_when_the_meter_sends_none() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![aux("Raw", "230.0", "V")];
+        assert_eq!(
+            slot_labels(&m.export_aux_slots(4, 1)),
+            ["", "", "", "", "Raw"]
+        );
+    }
+
+    /// A reading with more sub-values than the family profile promised is cut
+    /// short — the appended one still gets its own column.
+    #[test]
+    fn surplus_meter_sub_values_are_truncated_not_shifted() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            aux("Max", "5.01", ""),
+            aux("Average", "4.99", ""),
+            aux("Min", "4.96", ""),
+            aux("Raw", "230.0", "V"),
+        ];
+        assert_eq!(
+            slot_labels(&m.export_aux_slots(2, 1)),
+            ["Max", "Average", "Raw"]
+        );
+    }
+
+    /// A transform is on, but this frame carries nothing at all: every slot,
+    /// the extra one included, stays empty rather than borrowing a neighbour.
+    #[test]
+    fn an_empty_frame_leaves_the_extra_slot_empty() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let slots = m.export_aux_slots(4, 1);
+        assert_eq!(slots.len(), 5);
+        assert!(slots.iter().all(Option::is_none));
     }
 
     #[test]
