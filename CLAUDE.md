@@ -61,7 +61,7 @@ Subsystem-specific rules live in path-scoped rule files that load when their fil
 
 ### Commit discipline
 - **Never push without explicit per-push permission.** One "commit and push" authorizes that push only — re-ask for the next. Same for `--force`, tags, and opening or merging PRs. A plan that mentions pushing is not the permission; ask when the commits are ready.
-- **Editing a GitHub issue, PR or comment is an outward-facing action** — draft it, show it, and apply only when told to.
+- **Posting or editing a GitHub issue, PR or comment is an outward-facing action** — draft it, show it, and apply only when told to.
 - Commit logical units of work — one concept per commit, each compiling and passing tests.
 - Include tests alongside new non-trivial code.
 - Commit messages: imperative mood, explain the *why*. Prefix with the affected component (`lib:`, `gui:`, `cli:`, `docs:`, `claude:` for assistant config) — not conventional-commits types.

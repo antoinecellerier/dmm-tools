@@ -25,7 +25,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 ## Process
 
 - Draft in the reply or the scratchpad, never as a file in the repo — the posted comment is the record.
-- Post via `gh` only when told to ("post it"); the user often posts themselves. When posting: commit → push (confirm it's on the remote) → post, so cited SHAs and `main` URLs resolve.
+- Post via `gh` only when told to ("post it"); the user often posts themselves. A reply citing a SHA or a `main` URL needs those commits on the remote first, so ask for the push before posting — "post it" authorizes the comment, not the push (`CLAUDE.md`, Commit discipline).
 - End every reply with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
 ## Establish what is known before drafting

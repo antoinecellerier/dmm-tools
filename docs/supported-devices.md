@@ -6,7 +6,8 @@ Currently supported and experimental devices all use USB HID-to-UART
 bridges. Three bridge chips are supported: Silicon Labs CP2110
 (VID `0x10C4`, PID `0xEA80`), WCH CH9329 (VID `0x1A86`, PID `0xE429`),
 and WCH CH9325 (VID `0x1A86`, PID `0xE008`). The tool auto-detects
-which bridge is present. CH9329 and CH9325 support is experimental.
+which bridge is present. The CH9329 is confirmed working on a real
+UT181A by two reporters; CH9325 support is still untested on hardware.
 Future candidates include devices using Bluetooth LE and USB serial.
 
 ## ✅ Supported (same protocol as UT61E+)
@@ -152,8 +153,8 @@ units shipped with. The UT171 has not been tried on a meter at all.
 
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
-| **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/4) | 1-byte length, LE float32, 26 modes |
-| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | ✅ [confirmed working](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 79 modes. Init, framing, V DC, V AC + Hz and dual-probe temperature confirmed on real hardware over the CH9329 cable ([details](verification-backlog.md)); MIN/MAX, REL, Peak, COMP, the remote commands and the CP2110 cable still pending. |
+| **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` or `1A86:E429` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/4) | 1-byte length, LE float32, 26 modes |
+| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` or `1A86:E429` | ✅ [confirmed working](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 79 modes. Init, framing, V DC, V AC + Hz and dual-probe temperature confirmed on real hardware over the CH9329 cable ([details](verification-backlog.md)); MIN/MAX, REL, Peak, COMP, the remote commands and the CP2110 cable still pending. |
 
 ### Independent research findings
 
@@ -319,7 +320,7 @@ transport layer.
 | Cable | Chip | VID:PID | Direction | Notes |
 |-------|------|---------|-----------|-------|
 | **UT-D09** (CP2110) | CP2110 | `10C4:EA80` | Bidirectional | Used by UT61x+, UT161x, UT171x, UT880x |
-| **UT-D09** (CH9329) | CH9329 | `1A86:E429` | Bidirectional | Sold for UT181A, UT171 series, UT243; experimental support |
+| **UT-D09** (CH9329) | CH9329 | `1A86:E429` | Bidirectional | Sold for UT181A, UT171 series, UT243; confirmed working on a UT181A |
 | **UT-D04** | CH9325 / HE2325U | `1A86:E008` | RX only | Used by older UNI-T meters (UT61E original, etc.) |
 | **UT-D02** | RS232 level converter | N/A | Bidirectional | Serial port, no USB |
 

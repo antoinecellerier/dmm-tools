@@ -12,7 +12,11 @@ Confidence levels:
 - **[KNOWN]** -- confirmed by 3 independent implementations or official manual
 - **[VENDOR]** -- from vendor software analysis (not applicable here)
 - **[DEDUCED]** -- logical inference
-- **[UNVERIFIED]** -- needs device testing (none remaining for UT181A)
+- **[UNVERIFIED]** -- needs device testing
+
+[KNOWN] here means the three community implementations agree, which is
+not the same as tested on a meter. What a real UT181A has confirmed, and
+what is still outstanding, is tracked in `docs/verification-backlog.md`.
 
 ---
 
@@ -26,7 +30,7 @@ Confidence levels:
 | DCV accuracy | 0.025% + 5 counts |
 | Chipset | Cyrustek ES51997 analog frontend |
 | MCU | STM32F103 |
-| USB bridge | CP2110 (VID 0x10C4, PID 0xEA80) |
+| USB bridge | CP2110 (VID 0x10C4, PID 0xEA80) on older units; CH9329 (VID 0x1A86, PID 0xE429) on current production |
 | Sample rate | 2 Sa/s (60K counts), 10 Sa/s (600 counts) |
 | Data logging | 20,000 saved measurements |
 | Recording | Up to 20 named recordings |
@@ -44,16 +48,18 @@ power cycle.
 
 | Parameter | Value |
 |-----------|-------|
-| USB VID | 0x10C4 (Silicon Labs) |
-| USB PID | 0xEA80 (CP2110 default) |
+| USB VID | 0x10C4 (Silicon Labs), or 0x1A86 (WCH) on a CH9329 cable |
+| USB PID | 0xEA80 (CP2110 default), or 0xE429 (CH9329) |
 | Baud rate | 9600 |
 | Data bits | 8 |
 | Parity | None |
 | Stop bits | 1 |
 | Flow control | None |
 
-Same CP2110 bridge as UT61E+ and UT8803. The initialization sequence
-is the standard CP2110 UART enable + configure.
+Older units use the same CP2110 bridge as the UT61E+ and UT8803, with
+the standard CP2110 UART enable + configure. Current production ships a
+UT-D09 built on a WCH CH9329 instead; the UART framing above is
+identical either way, only the USB transport differs.
 
 ### 2.2 Header Byte Clarification
 
@@ -453,7 +459,13 @@ complete UT181A protocol library.
 
 Every protocol detail is **[KNOWN]** -- confirmed by three independent
 implementations (antage/ut181a Rust, loblab/ut181a C++, sigrok C
-driver). No [UNVERIFIED] items remain.
+driver). No item rests on inference alone.
+
+That is agreement between implementations, not hardware coverage. A real
+meter has so far confirmed the transport, framing, the normal-format
+value layout and three of the 79 mode words; the REL, MIN/MAX, Peak and
+COMP formats, every remote command and the recording protocol have never
+run against one. `docs/verification-backlog.md` is the live list.
 
 | Aspect | Status | Sources |
 |--------|--------|---------|
