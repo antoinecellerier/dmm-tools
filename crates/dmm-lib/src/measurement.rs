@@ -14,6 +14,31 @@ pub enum MeasuredValue {
     NcvLevel(u8),
 }
 
+/// Format a measured value as a string that reads back as a number.
+///
+/// Shared by [`Measurement::value_export_str`] and [`AuxValue::value_str`] so
+/// the main reading and its sub-values cannot drift apart: the parsed value
+/// decides OL/NCV first, the meter's own digits are preferred over the
+/// re-formatted float, and any space the meter puts between the sign and the
+/// digits is removed.
+fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) -> Cow<'a, str> {
+    match value {
+        MeasuredValue::Normal(v) => match display_raw {
+            Some(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.contains(' ') {
+                    Cow::Owned(trimmed.chars().filter(|c| *c != ' ').collect())
+                } else {
+                    Cow::Borrowed(trimmed)
+                }
+            }
+            None => Cow::Owned(v.to_string()),
+        },
+        MeasuredValue::Overload => Cow::Borrowed("OL"),
+        MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
+    }
+}
+
 /// Render sub-values as one `", "`-joined line, each entry reading
 /// `"{label} {value}"` plus `" {unit}"` when the sub-value has a unit
 /// (unitless modes like NCV would otherwise trail a space) and `" @{n}s"`
@@ -68,18 +93,15 @@ pub struct AuxValue {
 impl AuxValue {
     /// The sub-value formatted for display and export.
     ///
-    /// Mirrors [`Measurement::value_export_str`]: the parsed value decides
-    /// first, so an overloaded sub-value reads "OL" rather than whatever
-    /// digits happened to be in `display_raw`.
+    /// Applies the same rules as [`Measurement::value_export_str`], through
+    /// the same helper: the parsed value decides first, so an overloaded
+    /// sub-value reads "OL" rather than whatever digits happened to be in
+    /// `display_raw`; the meter's own digits are preferred over the parsed
+    /// float; and spaces are stripped — including one between the sign and
+    /// the digits — so the string reads back as a number in the CSV column
+    /// the sub-value is exported to.
     pub fn value_str(&self) -> Cow<'_, str> {
-        match &self.value {
-            MeasuredValue::Normal(v) => match self.display_raw.as_deref() {
-                Some(raw) => Cow::Borrowed(raw.trim()),
-                None => Cow::Owned(v.to_string()),
-            },
-            MeasuredValue::Overload => Cow::Borrowed("OL"),
-            MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
-        }
+        export_value_str(&self.value, self.display_raw.as_deref())
     }
 
     /// The unit to show for this sub-value, given the main reading's unit.
@@ -163,21 +185,7 @@ impl Measurement {
     /// For display use `to_string()` / `display_raw` instead: those keep the
     /// meter's padding, which holds the on-screen width steady.
     pub fn value_export_str(&self) -> Cow<'_, str> {
-        match &self.value {
-            MeasuredValue::Normal(v) => match self.display_raw.as_deref() {
-                Some(raw) => {
-                    let trimmed = raw.trim();
-                    if trimmed.contains(' ') {
-                        Cow::Owned(trimmed.chars().filter(|c| *c != ' ').collect())
-                    } else {
-                        Cow::Borrowed(trimmed)
-                    }
-                }
-                None => Cow::Owned(v.to_string()),
-            },
-            MeasuredValue::Overload => Cow::Borrowed("OL"),
-            MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
-        }
+        export_value_str(&self.value, self.display_raw.as_deref())
     }
 
     /// The sub-values as one line, for status bars and log messages.
@@ -301,6 +309,19 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(1.25), "V", StatusFlags::default());
         m.display_raw = None;
         assert_eq!(m.value_export_str(), "1.25");
+    }
+
+    /// Sub-values land in numeric CSV columns of their own, so `value_str`
+    /// has to strip the sign space exactly like the main value does
+    /// (see `export_str_strips_the_sign_space`).
+    #[test]
+    fn aux_value_str_strips_the_sign_space() {
+        let mut a = aux("Reference", "- 5.000", "");
+        // The helper's parse can't read the spaced form; the wire value is
+        // parsed by the protocol, not from `display_raw`.
+        a.value = MeasuredValue::Normal(-5.0);
+        assert_eq!(a.value_str(), "-5.000");
+        assert_eq!(a.value_str().parse::<f64>().unwrap(), -5.0);
     }
 
     #[test]
