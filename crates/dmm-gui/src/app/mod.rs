@@ -246,9 +246,19 @@ fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
 /// it stays reachable through the selector instead.
 fn resolve_plot_input<'a>(m: &'a Measurement, selected: Option<&str>) -> Option<PlotInput<'a>> {
     let main_unit: &str = &m.unit;
-    // A selection only holds while the meter still sends that sub-value;
-    // otherwise this frame falls back to the main reading.
-    let plotted = selected.and_then(|sel| m.aux_values.iter().find(|a| a.label.as_ref() == sel));
+    // A frame that omits the selected sub-value is skipped, not plotted:
+    // falling back to the main reading would hand `push_sample` a `series` of
+    // `None`, which it reads as a change of plotted series and answers by
+    // clearing the history, the cursors and the pinned Y range. A short or
+    // bit-clear frame must not do that. Gap detection is time-based, so
+    // dropping one frame at the normal cadence leaves no visible hole, and
+    // once the graph has given the selection up for good (`selected` is
+    // `None`) the main reading is plotted and that restart is the intended
+    // "the meter left the mode" behaviour.
+    let plotted = match selected {
+        Some(sel) => Some(m.aux_values.iter().find(|a| a.label.as_ref() == sel)?),
+        None => None,
+    };
 
     let (value, unit, display_raw, series) = match plotted {
         Some(aux) => (
@@ -1008,9 +1018,11 @@ impl App {
                     }
 
                     // Offer this frame's sub-values before resolving what to
-                    // plot: a selection whose label just vanished has to fall
-                    // back to the main reading in the same frame that clears
-                    // the graph, not one frame later.
+                    // plot, so that the frame the graph finally gives the
+                    // selection up on is also the one that plots the main
+                    // reading again, not the one after it. Until then a frame
+                    // missing the selected sub-value resolves to nothing and
+                    // is skipped, leaving the trace intact.
                     let options: Vec<(&str, &str)> = m
                         .aux_values
                         .iter()
@@ -2879,12 +2891,22 @@ mod tests {
         );
     }
 
-    /// The meter left the mode that produced the selected sub-value: fall
-    /// back to the main reading rather than plotting nothing.
+    /// A frame that omits the selected sub-value is skipped, not plotted as
+    /// the main reading: the graph reads a change of series as a restart and
+    /// would throw the trace away over one short frame.
     #[test]
-    fn an_absent_selection_falls_back_to_the_main_reading() {
+    fn a_frame_without_the_selected_sub_value_plots_nothing() {
         let m = meter(4.9, "V", vec![]);
-        let plot = resolve_plot_input(&m, Some("T2")).expect("plottable");
+        assert!(resolve_plot_input(&m, Some("T2")).is_none());
+    }
+
+    /// Once the graph has given the selection up, the main reading is plotted
+    /// again — and the restart that comes with it is the intended answer to
+    /// the meter having left the mode.
+    #[test]
+    fn a_dropped_selection_plots_the_main_reading() {
+        let m = meter(4.9, "V", vec![]);
+        let plot = resolve_plot_input(&m, None).expect("plottable");
         assert_eq!(plot.value, Some(4.9));
         assert_eq!(plot.series, None);
     }

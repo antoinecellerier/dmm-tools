@@ -124,7 +124,7 @@ rows.
 | **LIVE** | Auto-scroll to latest data (green when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171). Switching restarts the graph. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171). Switching restarts the graph, and so does the meter dropping the chosen sub-value for a few readings in a row — the graph returns to **Main**. |
 | **Show:** | One chip per same-unit sub-value drawn beside the plotted series — click to draw or hide that trace. Only appears once there is such a sub-value. Hiding one stops it being drawn (and drops it from the key and the Y-axis fit) but not recorded, so turning it back on brings its history with it. Session-only; survives `Ctrl+L` and a change of plotted series. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |

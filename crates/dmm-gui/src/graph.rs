@@ -18,6 +18,15 @@ const MAX_POINTS: usize = 10_000;
 /// the ceiling the wire imposes rather than a display choice.
 pub(crate) const MAX_OVERLAYS: usize = 4;
 
+/// Consecutive frames without the selected sub-value before the selection is
+/// dropped.
+///
+/// A single short or bit-clear frame from the UT181A isn't a mode change: it
+/// gates its sub-values on both a status bit and the frame being long enough,
+/// so one truncated reply omits them without the meter having moved. Three
+/// consecutive frames without the label is.
+const SERIES_DROP_FRAMES: u32 = 3;
+
 /// Default gap threshold multiplier: gap = max(interval * multiplier, minimum).
 const GAP_MULTIPLIER: f64 = 5.0;
 const GAP_MINIMUM_SECS: f64 = 1.0;
@@ -272,6 +281,9 @@ pub struct Graph {
     /// about the meter's current mode, so persisting it across restarts would
     /// silently plot a sub-value the next session may not even have.
     selected_series: Option<String>,
+    /// Consecutive offers that did not include `selected_series`. Debounces
+    /// the drop, see [`SERIES_DROP_FRAMES`].
+    series_missing_frames: u32,
     /// Sub-value labels the user has switched off in the toolbar's **Show:**
     /// group. Session-only, and deliberately keyed by label rather than by
     /// index so a choice survives `clear()`, a change of plotted series and a
@@ -481,6 +493,7 @@ impl Graph {
             current_unit: String::new(),
             current_series: None,
             selected_series: None,
+            series_missing_frames: 0,
             hidden_overlays: HashSet::new(),
             series_options: Vec::new(),
             last_display_raw: None,
@@ -681,13 +694,23 @@ impl Graph {
     /// Offer the sub-values the meter is currently sending, as
     /// (label, resolved unit), for the toolbar's series selector.
     ///
-    /// A selection whose label is no longer offered falls back to the main
-    /// reading — the meter left the mode that produced it.
+    /// A selection whose label stops being offered for [`SERIES_DROP_FRAMES`]
+    /// consecutive frames falls back to the main reading — the meter left the
+    /// mode that produced it. Dropping it on the first frame instead would
+    /// throw the trace away every time one reply arrives short or with the
+    /// sub-value bit clear; a single such frame is skipped rather than
+    /// plotted, so nothing is lost while the count runs.
     pub fn set_series_options(&mut self, options: &[(&str, &str)]) {
-        if let Some(sel) = &self.selected_series
-            && !options.iter().any(|(label, _)| *label == sel.as_str())
-        {
-            self.selected_series = None;
+        if let Some(sel) = &self.selected_series {
+            if options.iter().any(|(label, _)| *label == sel.as_str()) {
+                self.series_missing_frames = 0;
+            } else {
+                self.series_missing_frames += 1;
+                if self.series_missing_frames >= SERIES_DROP_FRAMES {
+                    self.selected_series = None;
+                    self.series_missing_frames = 0;
+                }
+            }
         }
         // Called on every sample; only pay for the strings when the offer
         // actually changed.
@@ -1321,8 +1344,14 @@ impl Graph {
         // new series and clears through the same branch a mode change uses,
         // releasing the pinned Y range, the cursors and any bbox state.
         match choice {
-            Some(None) => self.selected_series = None,
-            Some(Some(i)) => self.selected_series = Some(self.series_options[i].0.clone()),
+            Some(None) => {
+                self.selected_series = None;
+                self.series_missing_frames = 0;
+            }
+            Some(Some(i)) => {
+                self.selected_series = Some(self.series_options[i].0.clone());
+                self.series_missing_frames = 0;
+            }
             None => {}
         }
 
@@ -4179,10 +4208,10 @@ mod tests {
     }
 
     /// The toolbar selection survives as long as the meter keeps offering
-    /// that sub-value, and falls back to the main reading when it stops —
-    /// the meter left the mode that produced it.
+    /// that sub-value, and falls back to the main reading once it has stopped
+    /// for long enough — the meter left the mode that produced it.
     #[test]
-    fn a_selection_is_dropped_once_its_label_is_no_longer_offered() {
+    fn a_selection_is_dropped_once_its_label_stays_unoffered() {
         let mut g = Graph::new();
         g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")]);
         g.selected_series = Some("T2".to_string());
@@ -4190,6 +4219,35 @@ mod tests {
         g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")]);
         assert_eq!(g.selected_series(), Some("T2"));
 
+        // A short or bit-clear frame is not a mode change: the selection has
+        // to outlast one on its own.
+        for i in 1..SERIES_DROP_FRAMES {
+            g.set_series_options(&[("Frequency", "Hz")]);
+            assert_eq!(g.selected_series(), Some("T2"), "dropped after {i} frames");
+        }
+        g.set_series_options(&[("Frequency", "Hz")]);
+        assert_eq!(g.selected_series(), None);
+    }
+
+    /// The count is of *consecutive* frames: one frame that offers the label
+    /// again means the meter never left the mode.
+    #[test]
+    fn a_reoffered_label_restarts_the_drop_count() {
+        let mut g = Graph::new();
+        g.set_series_options(&[("T2", "\u{00B0}C")]);
+        g.selected_series = Some("T2".to_string());
+
+        for _ in 1..SERIES_DROP_FRAMES {
+            g.set_series_options(&[("Frequency", "Hz")]);
+        }
+        g.set_series_options(&[("T2", "\u{00B0}C")]);
+        assert_eq!(g.selected_series(), Some("T2"));
+
+        // Back to a full run: the near-miss above must not count towards it.
+        for i in 1..SERIES_DROP_FRAMES {
+            g.set_series_options(&[("Frequency", "Hz")]);
+            assert_eq!(g.selected_series(), Some("T2"), "dropped after {i} frames");
+        }
         g.set_series_options(&[("Frequency", "Hz")]);
         assert_eq!(g.selected_series(), None);
     }
