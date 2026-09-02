@@ -117,7 +117,7 @@ re-initialize after re-opening.
 error on the UT61E+'s CP2110. UNI-T likely locked this report out in the
 device's HID descriptor.
 
-### 1.6 CH9329 Alternate Transport — [VENDOR + DEDUCED]
+### 1.6 CH9329 Alternate Transport — [VENDOR + DEDUCED; VERIFIED on a UT181A]
 
 Some UT-D09 cables (sold by UNI-T for UT181A, UT171 series, UT243) use a
 WCH CH9329 instead of a CP2110. Vendor software includes `CH9329DLL.dll`
@@ -139,10 +139,12 @@ the HID report framing differs.
 Initialization requires no feature reports — the chip is ready for data
 transfer as soon as the HID device is opened.
 
-**[UNVERIFIED]** CH9329 support has not been exercised against real
-hardware. The HID framing above is deduced from the CH9329 datasheet and
-the vendor `CH9329DLL.dll` filename; byte-for-byte UART compatibility
-with the CP2110 path is assumed but unconfirmed.
+**[VERIFIED on a UT181A]** The HID framing above was deduced from the
+CH9329 datasheet and the vendor `CH9329DLL.dll` filename, then confirmed
+on a real UT181A by two reporters (issue #5, 2026-04-07 and 2026-09-02):
+the meter streams over it and honours the host's start command, so the
+UART bytes match the CP2110 path. No report yet covers a CH9329 cable on
+a UT61+ meter.
 
 ---
 
@@ -654,4 +656,4 @@ Configuration is stored in `options.xml`:
 | Sampling rate ~10 Hz at 9600 baud | **VERIFIED** | Measured throughput, 19200/115200 unresponsive |
 | MIN/MAX and Peak 2-state cycles | **VERIFIED** | MAX → MIN → MAX, P-MAX → P-MIN → P-MAX |
 | Range byte 0x30 prefix sent by meter | **VERIFIED** | Real device observation |
-| CH9329 alternate transport | **UNVERIFIED** | Framing deduced from datasheet, no device tested |
+| CH9329 alternate transport | **VERIFIED** | Streams and takes the start command on a real UT181A (issue #5); no UT61+ report yet |

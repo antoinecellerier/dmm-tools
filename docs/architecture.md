@@ -20,7 +20,7 @@ The library crate handles all device communication and data parsing. It has no U
 | Module | Responsibility |
 |--------|---------------|
 | `cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
-| `ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports (experimental) |
+| `ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
 | `transport.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |

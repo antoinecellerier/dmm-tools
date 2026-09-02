@@ -4,6 +4,13 @@ This document describes the step-by-step testing procedure for validating
 CH9329 transport support. It is designed for someone with a UT181A (or
 UT171/UT243) and the WCH CH9329-based UT-D09 cable.
 
+**Status (2026-09):** the transport is confirmed — two UT181A units have
+streamed over the CH9329 cable
+([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5),
+[PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8)). The
+steps below remain the procedure for the UT181A items still open in
+[verification-backlog.md](../../verification-backlog.md).
+
 ## Prerequisites
 
 1. Build from source:

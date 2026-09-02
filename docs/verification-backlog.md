@@ -269,7 +269,14 @@ real hardware**. Every aspect needs end-to-end verification.
 - Aux value interpretation — kHz frequency on V AC / mV AC per gulux;
   other modes unknown
 
-**UT181A** ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)):
+### UT181A — confirmed on hardware, formats still open
+
+Two reporters have run the UT181A on a real meter, both over the CH9329
+(UT-D09) cable ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
+The start command, framing, the normal-format value layout, V DC,
+V AC + Hz and dual-thermocouple temperature are confirmed; the binaries
+keep the EXPERIMENTAL label until the items below are closed.
+
 - ~~SET_MONITOR command required during init~~ — **VERIFIED** 2026-04-07
   by @alexander-magon on real UT181A (CH9329 cable). The meter does not
   stream until the host sends CMD_CONT_DATA (`AB CD 04 00 05 01 0A 00`).

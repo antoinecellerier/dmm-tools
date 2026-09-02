@@ -52,24 +52,26 @@ When the CLI falls through to the final fallback (you passed no `--device` and h
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
 | `ut161b` | | UT161B (experimental, same protocol as UT61B+) |
 | `ut161d` | | UT161D (experimental, same protocol as UT61D+) |
-| `ut161e` | `ut161` | UT161E (same protocol as UT61E+) |
+| `ut161e` | `ut161` | UT161E (experimental, same protocol as UT61E+) |
 | `ut8802` | `ut8802n` | UT8802 / UT8802N bench multimeter (experimental) |
 | `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
 | `ut803` | | UT803 bench multimeter, 6000 counts (experimental) |
 | `ut804` | | UT804 bench multimeter, 4000 counts (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
-| `ut181a` | `ut181` | UT181A (experimental, partial hardware verification) |
+| `ut181a` | `ut181` | UT181A (confirmed on real hardware; still warns as experimental, see below) |
 | `vc880` | `vc-880` | Voltcraft VC-880 handheld DMM (experimental) |
 | `vc650bt` | `vc-650bt` | Voltcraft VC650BT bench DMM (experimental, same protocol as VC-880) |
 | `vc890` | `vc-890` | Voltcraft VC-890 handheld DMM, 60K counts, OLED (experimental) |
 | `mock` | | Simulated device (no hardware required) |
 
 Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
-from vendor software, and most have not yet been verified against real hardware. UT181A is
-the exception: init, framing, and VDC parsing have been confirmed on real hardware, but
-other modes and format variants still need testing. When connecting to an experimental
-device, the CLI prints a yellow warning with a link to the device's verification issue on
-GitHub. Please report findings there.
+from vendor software, and most have not yet been verified against real hardware. The UT181A
+is the exception: two reporters have run it on a real meter over the CH9329 (UT-D09) cable,
+confirming V DC, V AC + Hz and dual-probe temperature. It keeps the experimental warning
+until the REL, MIN/MAX, Peak and COMP formats, the remote commands and the older CP2110
+cable are verified too. When connecting to an experimental device, the CLI prints a yellow
+warning with a link to the device's verification issue on GitHub. Please report findings
+there.
 
 The `mock` device generates synthetic measurements cycling through multiple modes
 (DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires
