@@ -1,14 +1,8 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{AUX_EXPORT_COLUMNS, MeasuredValue, Measurement};
 use std::borrow::Cow;
 use std::io::Write;
-
-/// Columns one aux slot contributes: label, value, unit.
-///
-/// Shared by the header and the rows so a slot can never be named with a
-/// different number of columns than it writes.
-const AUX_COLUMNS_PER_SLOT: usize = 3;
 
 /// Render samples as a CSV document, provenance header included.
 ///
@@ -40,14 +34,14 @@ pub fn render_csv(
                 .map(Cow::Borrowed)
                 .collect();
         for i in 1..=aux_slots {
-            header.push(Cow::Owned(format!("aux{i}_label")));
-            header.push(Cow::Owned(format!("aux{i}_value")));
-            header.push(Cow::Owned(format!("aux{i}_unit")));
+            for suffix in AUX_EXPORT_COLUMNS {
+                header.push(Cow::Owned(format!("aux{i}_{suffix}")));
+            }
         }
         wtr.write_record(header.iter().map(|c| c.as_ref()))?;
 
         let mut record: Vec<Cow<'_, str>> =
-            Vec::with_capacity(6 + aux_slots * AUX_COLUMNS_PER_SLOT);
+            Vec::with_capacity(6 + aux_slots * AUX_EXPORT_COLUMNS.len());
         for s in samples {
             record.clear();
             record.push(Cow::Owned(s.wall_time.to_rfc3339()));
@@ -61,12 +55,10 @@ pub fn render_csv(
             // desync every following column from the header.
             let m = &s.measurement;
             for aux in m.aux_values.iter().take(aux_slots) {
-                record.push(Cow::Borrowed(aux.label.as_ref()));
-                record.push(aux.value_str());
-                record.push(Cow::Borrowed(aux.unit_or(&m.unit)));
+                record.extend(aux.export_cells(&m.unit));
             }
             let missing = aux_slots.saturating_sub(m.aux_values.len());
-            for _ in 0..missing * AUX_COLUMNS_PER_SLOT {
+            for _ in 0..missing * AUX_EXPORT_COLUMNS.len() {
                 record.push(Cow::Borrowed(""));
             }
             wtr.write_record(record.iter().map(|c| c.as_ref()))?;

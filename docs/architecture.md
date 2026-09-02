@@ -34,7 +34,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
 | `protocol/vc880/` | VC-880/VC650BT: `Vc880Protocol` — streaming, AB CD framing (reuses UT61E+ extractor), ASCII display values |
 | `protocol/vc890/` | VC-890: `Vc890Protocol` — polled (0x5E request), AB CD framing, 60K counts, 66-byte frames |
-| `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic) |
+| `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic); `AuxValue` sub-values, with `AUX_EXPORT_COLUMNS` + `AuxValue::export_cells` defining the aux CSV column layout once for both the CLI and GUI exporters |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
 | `binary_help.rs` | `--version` / `--device` help text shared by both binaries. Lives here because the device list comes from the registry, so a new device reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |

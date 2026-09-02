@@ -1,14 +1,10 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{AUX_EXPORT_COLUMNS, MeasuredValue, Measurement};
 use std::borrow::Cow;
 use std::io::Write;
 
 use crate::OutputFormat;
-
-/// The columns one aux slot contributes, in order. The header names these and
-/// a row writes exactly this many cells per slot, so the two cannot drift.
-const AUX_COLUMN_SUFFIXES: [&str; 3] = ["label", "value", "unit"];
 
 /// The CSV header for a run, matching what [`format_measurement`] writes for
 /// the same `integrate`/`aux_slots` pair.
@@ -24,7 +20,7 @@ pub fn csv_header(integrate: bool, aux_slots: usize) -> String {
         header.push_str(",integral,integral_unit");
     }
     for i in 1..=aux_slots {
-        for suffix in AUX_COLUMN_SUFFIXES {
+        for suffix in AUX_EXPORT_COLUMNS {
             header.push_str(&format!(",aux{i}_{suffix}"));
         }
     }
@@ -100,11 +96,11 @@ pub fn format_measurement(
             // `take` guards the layout: a reading with more sub-values than
             // the profile promised is truncated rather than shifting every
             // later column (or panicking) mid-file.
-            let aux_cells: Vec<(&str, Cow<'_, str>, &str)> = m
+            let aux_cells: Vec<[Cow<'_, str>; AUX_EXPORT_COLUMNS.len()]> = m
                 .aux_values
                 .iter()
                 .take(aux_slots)
-                .map(|aux| (aux.label.as_ref(), aux.value_str(), aux.unit_or(&m.unit)))
+                .map(|aux| aux.export_cells(&m.unit))
                 .collect();
             let mut wtr = csv::WriterBuilder::new()
                 // One row per call, so the default 8 KiB buffer is dead
@@ -129,12 +125,8 @@ pub fn format_measurement(
             // the file's column layout is fixed for the whole run.
             for slot in 0..aux_slots {
                 match aux_cells.get(slot) {
-                    Some((label, value, unit)) => {
-                        record.push(label);
-                        record.push(value);
-                        record.push(unit);
-                    }
-                    None => record.extend(std::iter::repeat_n("", AUX_COLUMN_SUFFIXES.len())),
+                    Some(cells) => record.extend(cells.iter().map(|c| c.as_ref())),
+                    None => record.extend(std::iter::repeat_n("", AUX_EXPORT_COLUMNS.len())),
                 }
             }
             wtr.write_record(&record).map_err(std::io::Error::other)?;

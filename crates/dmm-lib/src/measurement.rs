@@ -90,6 +90,16 @@ pub struct AuxValue {
     pub elapsed_secs: Option<u32>,
 }
 
+/// The columns one sub-value slot contributes to a tabular (CSV) export, as
+/// header suffixes: `aux1_label,aux1_value,aux1_unit`.
+///
+/// The CLI and the GUI write the same file format from two different
+/// functions. Both name their columns from this list and fill their rows from
+/// [`AuxValue::export_cells`], whose array is exactly this long, so a column
+/// cannot be added to one side's header without the other side's rows failing
+/// to compile.
+pub const AUX_EXPORT_COLUMNS: [&str; 3] = ["label", "value", "unit"];
+
 impl AuxValue {
     /// The sub-value formatted for display and export.
     ///
@@ -117,6 +127,21 @@ impl AuxValue {
         } else {
             &self.unit
         }
+    }
+
+    /// The cells one exported slot writes, in [`AUX_EXPORT_COLUMNS`] order.
+    ///
+    /// `main_unit` is the parent reading's unit, used when the sub-value
+    /// leaves its own empty (see [`AuxValue::unit_or`]).
+    pub fn export_cells<'a>(
+        &'a self,
+        main_unit: &'a str,
+    ) -> [Cow<'a, str>; AUX_EXPORT_COLUMNS.len()] {
+        [
+            Cow::Borrowed(self.label.as_ref()),
+            self.value_str(),
+            Cow::Borrowed(self.unit_or(main_unit)),
+        ]
     }
 }
 
