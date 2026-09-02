@@ -1,7 +1,7 @@
 use crate::Dmm;
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
@@ -34,6 +34,8 @@ pub enum MockMode {
     DcMa,
     OhmOl,
     Ncv,
+    AcVHz,
+    TempDual,
 }
 
 impl MockMode {
@@ -48,6 +50,10 @@ impl MockMode {
         MockMode::DcMa,
         MockMode::OhmOl,
         MockMode::Ncv,
+        // Appended: the auto-cycle order of the modes above is load-bearing
+        // for the GUI demo and several tests.
+        MockMode::AcVHz,
+        MockMode::TempDual,
     ];
 
     /// Short string label for CLI and display.
@@ -62,6 +68,8 @@ impl MockMode {
             MockMode::DcMa => "dcma",
             MockMode::OhmOl => "ohm-ol",
             MockMode::Ncv => "ncv",
+            MockMode::AcVHz => "acv-hz",
+            MockMode::TempDual => "temp2",
         }
     }
 
@@ -77,6 +85,8 @@ impl MockMode {
             MockMode::DcMa => "DC mA (sine wave around 50mA)",
             MockMode::OhmOl => "Resistance overload (OL)",
             MockMode::Ncv => "NCV (cycling levels 0-4)",
+            MockMode::AcVHz => "AC Voltage with frequency and period sub-displays",
+            MockMode::TempDual => "Temperature with a second thermocouple (T2)",
         }
     }
 }
@@ -95,6 +105,8 @@ impl std::str::FromStr for MockMode {
             "dcma" | "dc-ma" | "dc_ma" | "ma" => Ok(MockMode::DcMa),
             "ohm-ol" | "ohm_ol" | "ol" | "overload" => Ok(MockMode::OhmOl),
             "ncv" => Ok(MockMode::Ncv),
+            "acv-hz" | "acvhz" | "acv_hz" => Ok(MockMode::AcVHz),
+            "temp2" | "temp-dual" | "temp_dual" => Ok(MockMode::TempDual),
             _ => {
                 let valid: Vec<&str> = MockMode::ALL.iter().map(|m| m.label()).collect();
                 Err(format!(
@@ -129,6 +141,22 @@ struct Scenario {
     range_max: f64,
     duration_secs: f64,
     value_fn: fn(f64, f64) -> MeasuredValue,
+    /// Secondary readings emitted with every measurement. Empty for the
+    /// single-display scenarios.
+    aux: &'static [AuxSpec],
+}
+
+/// A secondary reading a scenario emits alongside its main value.
+///
+/// Same `(elapsed, duration)` signature as the main `value_fn`, so sub-values
+/// are evaluated at the same instant as the main reading and stay consistent
+/// with it (and with each other) at any read cadence.
+struct AuxSpec {
+    label: &'static str,
+    /// Unit of this sub-value. Empty means "same as the main reading", the
+    /// convention `AuxValue::unit_or` resolves.
+    unit: &'static str,
+    value_fn: fn(f64, f64) -> MeasuredValue,
 }
 
 impl Scenario {
@@ -157,7 +185,14 @@ impl Scenario {
             range_max,
             duration_secs,
             value_fn,
+            aux: &[],
         }
+    }
+
+    /// Attach secondary readings, mirroring a multi-display meter.
+    fn with_aux(mut self, aux: &'static [AuxSpec]) -> Self {
+        self.aux = aux;
+        self
     }
 }
 
@@ -216,6 +251,58 @@ fn ncv_value(t: f64, duration: f64) -> MeasuredValue {
     let idx = ((phase * LEVELS.len() as f64) as usize).min(LEVELS.len() - 1);
     MeasuredValue::NcvLevel(LEVELS[idx])
 }
+
+/// Line frequency behind the `acv-hz` sub-displays, in Hz. Drifts by 0.05 Hz
+/// around 60 — the scale a mains-frequency reading actually moves on.
+///
+/// Three cycles per duration against the main AC voltage's two, so on the
+/// graph the frequency trace visibly runs at its own rate instead of looking
+/// like a rescaled copy of the voltage it sits beside.
+fn acv_line_hz(t: f64, duration: f64) -> f64 {
+    60.0 + 0.05 * (t / duration * 3.0 * TAU).sin()
+}
+
+fn acv_hz_freq_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(acv_line_hz(t, duration))
+}
+
+fn acv_hz_period_value(t: f64, duration: f64) -> MeasuredValue {
+    // Derived from the same frequency so the two sub-displays never disagree,
+    // as they can't on the meter either.
+    MeasuredValue::Normal(1000.0 / acv_line_hz(t, duration))
+}
+
+/// Second thermocouple of the `temp2` scenario, in °C.
+///
+/// Deliberately not derived from T1: two sine cycles per duration with a
+/// smaller swing, against T1's single triangle ramp. The two traces then cross
+/// repeatedly instead of running parallel, which is the point of the scenario —
+/// a graph with two sub-values on it has to show them apart. The 21–25 °C swing
+/// stays inside T1's 20–30 °C band so both share one Y axis.
+fn temp2_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(23.0 + 2.0 * (t / duration * 2.0 * TAU).sin())
+}
+
+/// Frequency then period — the order the UT181A's `0x1121` frame sends them.
+const ACV_HZ_AUX: &[AuxSpec] = &[
+    AuxSpec {
+        label: "Frequency",
+        unit: "Hz",
+        value_fn: acv_hz_freq_value,
+    },
+    AuxSpec {
+        label: "Period",
+        unit: "ms",
+        value_fn: acv_hz_period_value,
+    },
+];
+
+/// The second thermocouple of the UT181A's `0x4211` frame.
+const TEMP_DUAL_AUX: &[AuxSpec] = &[AuxSpec {
+    label: "T2",
+    unit: "\u{00B0}C",
+    value_fn: temp2_value,
+}];
 
 fn scenarios() -> Vec<Scenario> {
     vec![
@@ -315,6 +402,33 @@ fn scenarios() -> Vec<Scenario> {
             ohm_ol_value,
         ),
         Scenario::new(MockMode::Ncv, "NCV", 0x14, 0, "", "", 4.0, 4.0, ncv_value),
+        // Multi-display scenarios, appended so the auto-cycle order of the
+        // single-display ones above is unchanged. They exercise the
+        // `aux_values` path (UT181A, UT171) without the hardware.
+        Scenario::new(
+            MockMode::AcVHz,
+            "AC V",
+            0x00,
+            2,
+            "V",
+            "220V",
+            220.0,
+            10.0,
+            acv_value,
+        )
+        .with_aux(ACV_HZ_AUX),
+        Scenario::new(
+            MockMode::TempDual,
+            "Temp \u{00B0}C",
+            0x0A,
+            0,
+            "\u{00B0}C",
+            "",
+            400.0,
+            8.0,
+            temp_value,
+        )
+        .with_aux(TEMP_DUAL_AUX),
     ]
 }
 
@@ -348,6 +462,10 @@ pub struct MockProtocol {
     auto_cycle: bool,
     hold: bool,
     held_value: Option<MeasuredValue>,
+    /// Elapsed time HOLD was pressed at. Sub-values are functions of time, so
+    /// freezing them means re-evaluating at this instant rather than caching
+    /// each one.
+    held_elapsed: Option<f64>,
     rel: bool,
     rel_base: Option<f64>,
     auto_range: bool,
@@ -372,6 +490,7 @@ impl MockProtocol {
             auto_cycle: true,
             hold: false,
             held_value: None,
+            held_elapsed: None,
             rel: false,
             rel_base: None,
             auto_range: true,
@@ -504,6 +623,28 @@ impl Protocol for MockProtocol {
         let range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
         let range_max = scenario.range_max;
         let duration_secs = scenario.duration_secs;
+        let aux_specs = scenario.aux;
+
+        // Sub-values freeze with the main one under HOLD: evaluate them at the
+        // instant HOLD was pressed. REL, MIN/MAX and Peak act on the main
+        // reading only, as on the meter.
+        let aux_elapsed = match (self.hold, self.held_elapsed) {
+            (true, Some(held)) => held,
+            _ => elapsed,
+        };
+        let aux_values: Vec<AuxValue> = aux_specs
+            .iter()
+            .map(|spec| {
+                let value = (spec.value_fn)(aux_elapsed, duration_secs);
+                AuxValue {
+                    label: Cow::Borrowed(spec.label),
+                    display_raw: Self::format_display(&value),
+                    value,
+                    unit: Cow::Borrowed(spec.unit),
+                    elapsed_secs: None,
+                }
+            })
+            .collect();
 
         // Apply hold: freeze the value
         let live_value = if self.hold {
@@ -600,7 +741,7 @@ impl Protocol for MockProtocol {
             progress,
             display_raw,
             flags,
-            aux_values: vec![],
+            aux_values,
             raw_payload: vec![],
             spec: None,
             mode_spec: None,
@@ -626,8 +767,10 @@ impl Protocol for MockProtocol {
                     let elapsed = self.elapsed_secs();
                     let scenario = self.current_scenario();
                     self.held_value = Some((scenario.value_fn)(elapsed, scenario.duration_secs));
+                    self.held_elapsed = Some(elapsed);
                 } else {
                     self.held_value = None;
+                    self.held_elapsed = None;
                 }
             }
             "rel" => {
@@ -924,6 +1067,14 @@ mod tests {
     }
 
     #[test]
+    fn profile_max_aux_values_covers_every_scenario() {
+        // The CLI and GUI size their fixed sub-value columns from this, so a
+        // scenario may never emit more than the profile promises.
+        let widest = scenarios().iter().map(|s| s.aux.len()).max().unwrap_or(0);
+        assert_eq!(MockProtocol::new().profile().max_aux_values, widest);
+    }
+
+    #[test]
     fn test_open_mock() {
         let mut dmm = open_mock().unwrap();
         let m = dmm.request_measurement().unwrap();
@@ -1092,6 +1243,12 @@ mod tests {
         assert_eq!("ohm-ol".parse::<MockMode>().unwrap(), MockMode::OhmOl);
         assert_eq!("temp".parse::<MockMode>().unwrap(), MockMode::Temp);
         assert_eq!("ncv".parse::<MockMode>().unwrap(), MockMode::Ncv);
+        assert_eq!("acv-hz".parse::<MockMode>().unwrap(), MockMode::AcVHz);
+        assert_eq!("acv_hz".parse::<MockMode>().unwrap(), MockMode::AcVHz);
+        assert_eq!("acvhz".parse::<MockMode>().unwrap(), MockMode::AcVHz);
+        assert_eq!("temp2".parse::<MockMode>().unwrap(), MockMode::TempDual);
+        assert_eq!("temp-dual".parse::<MockMode>().unwrap(), MockMode::TempDual);
+        assert_eq!("temp_dual".parse::<MockMode>().unwrap(), MockMode::TempDual);
         assert!("invalid".parse::<MockMode>().is_err());
     }
 
@@ -1218,24 +1375,213 @@ mod tests {
     #[test]
     fn test_waveforms_loop_continuously() {
         // Every scenario must satisfy f(0) == f(duration): when the pattern
-        // wraps back to t=0 the displayed value must not jump.
-        for s in scenarios() {
-            let start = (s.value_fn)(0.0, s.duration_secs);
-            let end = (s.value_fn)(s.duration_secs, s.duration_secs);
-            match (&start, &end) {
+        // wraps back to t=0 the displayed value must not jump. Sub-value
+        // waveforms wrap on the same schedule, so they get the same check.
+        fn assert_loops(start: &MeasuredValue, end: &MeasuredValue, what: &str) {
+            match (start, end) {
                 (MeasuredValue::Normal(a), MeasuredValue::Normal(b)) => {
-                    assert!(
-                        (a - b).abs() < 1e-9,
-                        "{:?}: f(0)={a} but f(duration)={b}",
-                        s.id
-                    );
+                    assert!((a - b).abs() < 1e-9, "{what}: f(0)={a} but f(duration)={b}");
                 }
                 (MeasuredValue::Overload, MeasuredValue::Overload) => {}
                 (MeasuredValue::NcvLevel(a), MeasuredValue::NcvLevel(b)) => {
-                    assert_eq!(a, b, "{:?}: ncv level jumps at wrap", s.id);
+                    assert_eq!(a, b, "{what}: ncv level jumps at wrap");
                 }
-                _ => panic!("{:?}: variant differs at wrap: {start:?} vs {end:?}", s.id),
+                _ => panic!("{what}: variant differs at wrap: {start:?} vs {end:?}"),
             }
+        }
+
+        for s in scenarios() {
+            assert_loops(
+                &(s.value_fn)(0.0, s.duration_secs),
+                &(s.value_fn)(s.duration_secs, s.duration_secs),
+                &format!("{:?}", s.id),
+            );
+            for spec in s.aux {
+                assert_loops(
+                    &(spec.value_fn)(0.0, s.duration_secs),
+                    &(spec.value_fn)(s.duration_secs, s.duration_secs),
+                    &format!("{:?} aux {}", s.id, spec.label),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn acv_hz_emits_frequency_and_period_sub_values() {
+        let mut dmm = open_mock_mode(MockMode::AcVHz).unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert_eq!(m.mode, "AC V");
+        assert_eq!(m.unit, "V");
+        assert_eq!(m.aux_values.len(), 2);
+        assert_eq!(m.aux_values[0].label, "Frequency");
+        assert_eq!(m.aux_values[0].unit, "Hz");
+        assert_eq!(m.aux_values[1].label, "Period");
+        assert_eq!(m.aux_values[1].unit, "ms");
+        for a in &m.aux_values {
+            assert!(
+                a.display_raw.is_some(),
+                "{}: sub-values need display digits",
+                a.label
+            );
+        }
+        // Period must be the reciprocal of the frequency it sits next to.
+        let (hz, ms) = match (&m.aux_values[0].value, &m.aux_values[1].value) {
+            (MeasuredValue::Normal(hz), MeasuredValue::Normal(ms)) => (*hz, *ms),
+            other => panic!("expected Normal sub-values, got {other:?}"),
+        };
+        assert!(
+            (ms - 1000.0 / hz).abs() < 1e-9,
+            "period {ms} ms should be 1000/{hz}"
+        );
+    }
+
+    #[test]
+    fn temp_dual_emits_a_second_thermocouple() {
+        let mut dmm = open_mock_mode(MockMode::TempDual).unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert_eq!(m.unit, "\u{00B0}C");
+        assert_eq!(m.aux_values.len(), 1);
+        assert_eq!(m.aux_values[0].label, "T2");
+        assert_eq!(m.aux_values[0].unit, "\u{00B0}C");
+        assert!(m.aux_values[0].display_raw.is_some());
+
+        // T2 has its own shape, so it must actually leave T1 somewhere over a
+        // period — while staying in the same band, so one Y axis holds both.
+        let duration = scenario_duration(MockMode::TempDual);
+        const SAMPLES: usize = 16;
+        let mut differed = false;
+        for i in 0..SAMPLES {
+            let t = i as f64 / SAMPLES as f64 * duration;
+            let (t1, t2) = match (temp_value(t, duration), temp2_value(t, duration)) {
+                (MeasuredValue::Normal(t1), MeasuredValue::Normal(t2)) => (t1, t2),
+                other => panic!("expected Normal values, got {other:?}"),
+            };
+            assert!(
+                (20.0..=30.0).contains(&t2),
+                "T2 {t2} at t={t} left T1's 20-30 °C band"
+            );
+            differed |= (t1 - t2).abs() > 0.1;
+        }
+        assert!(differed, "T2 never departs from T1");
+    }
+
+    /// Duration of the scenario driving `mode`, for sampling its waveforms.
+    fn scenario_duration(mode: MockMode) -> f64 {
+        scenarios()
+            .into_iter()
+            .find(|s| s.id == mode)
+            .unwrap_or_else(|| panic!("no scenario for {mode:?}"))
+            .duration_secs
+    }
+
+    /// Assert `aux_fn` is not `a * main_fn + b`: fit the line through the two
+    /// samples whose main values are furthest apart, then require some other
+    /// sample to miss it by a visible fraction of the sub-value's own swing.
+    /// A sub-value that passed would be drawn as a parallel copy of the main
+    /// trace, which is exactly what these scenarios exist to avoid.
+    fn assert_not_affine_in_main(
+        main_fn: fn(f64, f64) -> MeasuredValue,
+        aux_fn: fn(f64, f64) -> MeasuredValue,
+        duration: f64,
+        label: &str,
+    ) {
+        const SAMPLES: usize = 32;
+        let points: Vec<(f64, f64)> = (0..SAMPLES)
+            .map(|i| {
+                let t = i as f64 / SAMPLES as f64 * duration;
+                match (main_fn(t, duration), aux_fn(t, duration)) {
+                    (MeasuredValue::Normal(m), MeasuredValue::Normal(a)) => (m, a),
+                    other => panic!("{label}: expected Normal values, got {other:?}"),
+                }
+            })
+            .collect();
+
+        let (x0, y0) = points[0];
+        let &(x1, y1) = points
+            .iter()
+            .max_by(|a, b| {
+                (a.0 - x0)
+                    .abs()
+                    .partial_cmp(&(b.0 - x0).abs())
+                    .expect("waveform produced NaN")
+            })
+            .expect("SAMPLES > 0");
+        assert!((x1 - x0).abs() > 1e-9, "{label}: main waveform is constant");
+        let slope = (y1 - y0) / (x1 - x0);
+        let offset = y0 - slope * x0;
+
+        let worst = points
+            .iter()
+            .map(|&(x, y)| (y - (slope * x + offset)).abs())
+            .fold(0.0_f64, f64::max);
+        let aux_span = points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max)
+            - points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+        assert!(
+            worst > 0.1 * aux_span,
+            "{label}: sub-value is an affine copy of the main value \
+             (worst deviation {worst}, sub-value swing {aux_span})"
+        );
+    }
+
+    #[test]
+    fn sub_values_are_not_affine_copies_of_the_main_waveform() {
+        assert_not_affine_in_main(
+            temp_value,
+            temp2_value,
+            scenario_duration(MockMode::TempDual),
+            "T2",
+        );
+        assert_not_affine_in_main(
+            acv_value,
+            acv_hz_freq_value,
+            scenario_duration(MockMode::AcVHz),
+            "Frequency",
+        );
+    }
+
+    #[test]
+    fn hold_freezes_sub_values_with_the_main_value() {
+        let mut proto = MockProtocol::with_mode(MockMode::AcVHz);
+        let transport = NullTransport;
+        let _ = proto.request_measurement(&transport).unwrap();
+        proto.send_command(&transport, "hold").unwrap();
+        let held1 = proto.request_measurement(&transport).unwrap();
+        // Advance the waveform by rewinding the origin, as the other
+        // time-travel tests do — well short of the 10 s scenario duration.
+        proto.scenario_started -= Duration::from_secs(2);
+        let held2 = proto.request_measurement(&transport).unwrap();
+        assert!(held2.flags.hold);
+        assert_eq!(held1.aux_values.len(), 2);
+        for (a, b) in held1.aux_values.iter().zip(&held2.aux_values) {
+            assert_eq!(a.label, b.label);
+            assert_eq!(a.value_str(), b.value_str(), "{} moved while held", a.label);
+        }
+
+        // Release: the same 2 s shift must move the sub-values again,
+        // otherwise the assertions above would pass on a frozen waveform.
+        proto.send_command(&transport, "hold").unwrap();
+        let live1 = proto.request_measurement(&transport).unwrap();
+        proto.scenario_started -= Duration::from_secs(2);
+        let live2 = proto.request_measurement(&transport).unwrap();
+        assert!(!live2.flags.hold);
+        assert_ne!(
+            live1.aux_values[0].value_str(),
+            live2.aux_values[0].value_str()
+        );
+    }
+
+    #[test]
+    fn single_display_scenarios_have_no_sub_values() {
+        for mode in MockMode::ALL {
+            if matches!(mode, MockMode::AcVHz | MockMode::TempDual) {
+                continue;
+            }
+            let mut dmm = open_mock_mode(*mode).unwrap();
+            let m = dmm.request_measurement().unwrap();
+            assert!(
+                m.aux_values.is_empty(),
+                "{mode:?} should not emit sub-values"
+            );
         }
     }
 

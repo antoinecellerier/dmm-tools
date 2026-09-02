@@ -5,6 +5,7 @@
 ### CLI
 
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
+- **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period) and `temp2` (second thermocouple) stand in for a UT181A in the CLI and GUI.
 
 ### Bug fixes
 

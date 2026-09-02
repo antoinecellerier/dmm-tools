@@ -32,11 +32,13 @@ verification issue on GitHub where you can report feedback.
 
 The **Mock (simulated)** device generates synthetic measurements without
 hardware, cycling through DC V, AC V, Ohms, Capacitance, Hz,
-Temperature, DC mA, Overload, and NCV modes. When Mock is selected, a
-**Mock mode** row appears in Settings with choices: **Auto (cycle)**
-(default) or a specific mode (dcv, acv, ohm, cap, hz, temp, dcma,
-ohm-ol, ncv). Selecting a specific mode pins the mock to that
-measurement type indefinitely. Remote control buttons (HOLD, REL,
+Temperature, DC mA, Overload, NCV, and two multi-display modes (AC V
+with frequency/period sub-readings, and dual-thermocouple temperature).
+When Mock is selected, a **Mock mode** row appears in Settings with
+choices: **Auto (cycle)** (default) or a specific mode (dcv, acv, ohm,
+cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2). Selecting a specific
+mode pins the mock to that measurement type indefinitely.
+Remote control buttons (HOLD, REL,
 RANGE, etc.) respond to toggle flags. The SELECT button advances to
 the next mode regardless of the auto-cycle setting.
 
@@ -292,7 +294,7 @@ do not modify the persisted `settings.json`.
 |--------|-------------|
 | `--device <ID>` | Device family to connect to (e.g., `ut61eplus`, `ut181a`, `mock`). Run `--help` for the full list with aliases. |
 | `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
-| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv. |
+| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
 | `-V`, `--version` | Print version and exit. |

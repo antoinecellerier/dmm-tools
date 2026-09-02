@@ -93,6 +93,8 @@ By default, the mock device cycles through all modes automatically. Use
 | `dcma` | DC mA (sine wave around 50mA) |
 | `ohm-ol` | Resistance overload (OL) |
 | `ncv` | NCV (cycling levels 0-4) |
+| `acv-hz` | AC Voltage with frequency and period sub-displays |
+| `temp2` | Temperature with a second thermocouple (T2) |
 
 **Examples:**
 
