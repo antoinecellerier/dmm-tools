@@ -180,8 +180,9 @@ Three components stacked vertically:
 ### Accessibility
 
 - All colors are theme-aware — darker variants on light backgrounds, brighter on dark
-- WCAG 2.1 AA contrast ratios verified: ≥4.5:1 for text, ≥3:1 for graphical elements
-- Minimum font size 11pt throughout (WCAG recommends ≥12px)
+- WCAG 2.1 AA contrast ratios verified: ≥4.5:1 for text, ≥3:1 for graphical elements. Secondary text (mode line, sub-value labels and timestamps, toolbar and hint captions) is pinned to a per-preset colour that clears 4.5:1 on the panel, the faint frame fill and the text-edit background, instead of egui's default 60 % dimming of the primary text colour — which measured ~2.7:1 dark / ~2.9:1 light
+- Dark-mode primary text is gray(180) rather than egui's gray(140): at 140 no dimmer secondary tone still clears 4.5:1, so lifting the primary keeps two visibly distinct text tiers (8.31:1 and 4.79:1 on the gray(27) panel). Light mode is unchanged at gray(80) / gray(112)
+- Minimum font size 11pt throughout (WCAG recommends ≥12px). egui's small text style ships at 9 pt, so it is raised to 11 pt once at startup rather than avoided per call site
 - Flag badges use bold text in addition to color for non-color distinction
 - Status dot uses text label alongside color indicator
 - Graph overlays use distinct line styles (solid, dashed-dense, dashed-loose) in addition to color

@@ -25,6 +25,29 @@ use dmm_lib::stats::{self, Integrator, RunningStats};
 /// How long a toast message stays visible (seconds).
 const TOAST_DURATION_SECS: u64 = 4;
 
+/// Size of `TextStyle::Small`, in points before zoom.
+///
+/// egui ships 9 pt, under the 11 pt floor in `.claude/rules/gui.md`. `.small()`
+/// is used across the app for real content — status line, hint captions,
+/// toolbar captions, the LIVE button — so the style is raised once here rather
+/// than at ~20 call sites. `apply_zoom` scales on top of this.
+const SMALL_TEXT_SIZE: f32 = 11.0;
+
+/// Raise egui's small text style to the 11 pt floor.
+///
+/// `all_styles_mut`, not `style_mut`: egui 0.34 keeps a separate `Style` per
+/// theme, and `apply_theme` switches between them with `set_visuals`, which
+/// replaces only `style.visuals` and leaves `text_styles` alone. Setting just
+/// the active theme's style would leave the other theme at 9 pt.
+fn install_text_styles(ctx: &egui::Context) {
+    ctx.all_styles_mut(|style| {
+        style.text_styles.insert(
+            egui::TextStyle::Small,
+            egui::FontId::new(SMALL_TEXT_SIZE, egui::FontFamily::Proportional),
+        );
+    });
+}
+
 /// Default height of the recording panel (logical pixels).
 const DEFAULT_RECORDING_HEIGHT: f32 = 120.0;
 
@@ -367,8 +390,9 @@ pub struct App {
     os_ppp: Option<f32>,
     /// Last applied theme (to avoid re-setting every frame).
     applied_theme: Option<ThemeMode>,
-    /// Last applied UI chrome colors (bg, text, button, plot_bg) to avoid per-frame Visuals mutation.
-    applied_ui_colors: Option<(Color32, Color32, Color32, Color32)>,
+    /// Last applied UI chrome colors (bg, text, weak_text, button, plot_bg) to
+    /// avoid per-frame Visuals mutation.
+    applied_ui_colors: Option<(Color32, Color32, Color32, Color32, Color32)>,
     /// Last minimum window size pushed to the windowing system, so the
     /// viewport command is only re-sent when it actually changes.
     applied_min_size: Option<egui::Vec2>,
@@ -414,7 +438,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(_cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
+        install_text_styles(&cc.egui_ctx);
         let mut settings = Settings::load();
         if let Some(device) = cli.device {
             settings.overrides.device_family = Some(settings.shared.device_family.clone());
@@ -551,9 +576,10 @@ impl App {
         let tc = self.theme_colors(dark);
         let bg = tc.background();
         let text = tc.text();
+        let weak_text = tc.weak_text();
         let button = tc.button();
         let plot_bg = tc.plot_background();
-        let key = (bg, text, button, plot_bg);
+        let key = (bg, text, weak_text, button, plot_bg);
 
         if self.applied_ui_colors == Some(key) {
             return;
@@ -569,6 +595,13 @@ impl App {
             v.extreme_bg_color = plot_bg;
             v.widgets.noninteractive.fg_stroke =
                 egui::Stroke::new(v.widgets.noninteractive.fg_stroke.width, text);
+            // Pin the secondary text colour instead of letting egui derive it.
+            // Unset, `weak_text_color()` is the text colour at
+            // `weak_text_alpha` = 0.6, which lands around 3.8:1 dark / 2.9:1
+            // light on the Default preset's panel — under the 4.5:1 AA bar,
+            // and it is used for real information (mode line, sub-value labels
+            // and timestamps, toolbar captions, hint captions).
+            v.weak_text_color = Some(weak_text);
             v.widgets.inactive.bg_fill = button;
             v.widgets.inactive.weak_bg_fill = button;
             v.widgets.hovered.bg_fill = hover;
@@ -2661,6 +2694,23 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Both themes, because egui keeps a `Style` per theme and `apply_theme`
+    /// swaps between them: raising only the active one would leave `.small()`
+    /// at egui's 9 pt after the first theme switch.
+    #[test]
+    fn small_text_style_meets_the_font_size_floor_in_both_themes() {
+        let ctx = egui::Context::default();
+        install_text_styles(&ctx);
+        for theme in [egui::Theme::Dark, egui::Theme::Light] {
+            let style = ctx.style_of(theme);
+            assert_eq!(
+                style.text_styles[&egui::TextStyle::Small].size,
+                SMALL_TEXT_SIZE,
+                "{theme:?} small text style is below the 11 pt floor"
+            );
+        }
+    }
 
     /// The adapter case used to be recovered at the render site with
     /// `error.contains("adapter not found")`, and "no adapter on the bus"

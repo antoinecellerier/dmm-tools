@@ -171,6 +171,8 @@ struct PresetColors {
     // -- UI chrome --
     background: ColorPair,
     text: ColorPair,
+    /// Secondary text. Not a `PaletteField` — see `ThemeColors::weak_text`.
+    weak_text: ColorPair,
     button: ColorPair,
     // -- Status indicators --
     status_ok: ColorPair,
@@ -197,11 +199,24 @@ struct PresetColors {
 
 // ── Preset definitions ──────────────────────────────────────────────────────
 
-/// Default preset — matches egui defaults for UI chrome, warm palette for data.
+/// Default preset — egui's UI chrome, warm palette for data. Dark-mode text
+/// is the one deliberate departure; see `text` below.
 const PRESET_DEFAULT: PresetColors = PresetColors {
-    // egui::Visuals::dark() / light() defaults
+    // egui::Visuals::dark() / light() background defaults
     background: ColorPair::new(Color32::from_gray(27), Color32::from_gray(248)),
-    text: ColorPair::new(Color32::from_gray(140), Color32::from_gray(80)),
+    // Light is egui's gray(80). Dark is *not* egui's gray(140): that sits
+    // 5.12:1 on gray(27), leaving no room for a secondary tier that still
+    // clears AA — 135 would be a tier in name only. gray(180) is 8.31:1, and
+    // it is the grey egui already uses for button text
+    // (`widgets.inactive.fg_stroke`), so labels now match the buttons beside
+    // them.
+    text: ColorPair::new(Color32::from_gray(180), Color32::from_gray(80)),
+    // Paired with the text above as the dimmer of two visible tiers: 135 vs
+    // 180 on gray(27) reads as secondary and still clears AA at 4.79:1
+    // (4.54:1 on the faint frame fill gray(32), 5.51:1 on the gray(10)
+    // text-edit background). Light: 112 vs 80, 4.66:1 on gray(248), 4.87:1 on
+    // gray(253), 4.95:1 on gray(255).
+    weak_text: ColorPair::new(Color32::from_gray(135), Color32::from_gray(112)),
     button: ColorPair::new(Color32::from_gray(60), Color32::from_gray(230)),
     status_ok: ColorPair::new(
         Color32::from_rgb(60, 180, 75),
@@ -284,6 +299,11 @@ const PRESET_DEFAULT: PresetColors = PresetColors {
 const PRESET_HIGH_CONTRAST: PresetColors = PresetColors {
     background: ColorPair::new(Color32::from_gray(0), Color32::from_gray(255)),
     text: ColorPair::new(Color32::from_gray(220), Color32::from_gray(20)),
+    // 5.46:1 on gray(0), 5.30:1 on the faint frame fill gray(5) / 5.10:1 on
+    // gray(255), which is also this preset's text-edit background. The wide
+    // gap to the gray(220)/gray(20) body text is the point: unlike Default,
+    // this preset has room for a visibly dimmer secondary tone.
+    weak_text: ColorPair::new(Color32::from_gray(130), Color32::from_gray(110)),
     button: ColorPair::new(Color32::from_gray(50), Color32::from_gray(215)),
     status_ok: ColorPair::new(Color32::from_rgb(0, 230, 0), Color32::from_rgb(0, 130, 0)),
     status_warning: ColorPair::new(
@@ -339,7 +359,11 @@ const PRESET_HIGH_CONTRAST: PresetColors = PresetColors {
 /// Colorblind-safe preset — avoids red-green confusion (deuteranopia/protanopia safe).
 const PRESET_COLORBLIND_SAFE: PresetColors = PresetColors {
     background: ColorPair::new(Color32::from_gray(27), Color32::from_gray(248)),
-    text: ColorPair::new(Color32::from_gray(140), Color32::from_gray(80)),
+    text: ColorPair::new(Color32::from_gray(180), Color32::from_gray(80)),
+    // Same greys and ratios as PRESET_DEFAULT, including its lifted gray(180)
+    // dark text — this preset shares that preset's text and background, and
+    // only the hues differ.
+    weak_text: ColorPair::new(Color32::from_gray(135), Color32::from_gray(112)),
     button: ColorPair::new(Color32::from_gray(60), Color32::from_gray(230)),
     status_ok: ColorPair::new(
         Color32::from_rgb(0, 180, 160),
@@ -453,6 +477,22 @@ impl ThemeColors {
     /// Primary text color for labels and values.
     pub(crate) fn text(&self) -> Color32 {
         self.resolve(self.overrides.text, &self.preset.text)
+    }
+
+    /// Secondary text: hint captions, the mode line, sub-value labels and
+    /// timestamps, toolbar group captions.
+    ///
+    /// No override slot and no `PaletteField`: this is derived for contrast,
+    /// not a colour a user picks. It is chosen per preset to clear WCAG AA on
+    /// that preset's backgrounds, and a free-form pick would quietly land
+    /// under 4.5:1 — which is what egui's default does. Unset, it dims the
+    /// text colour to 60% alpha: ~3.8:1 against the Default preset's dark
+    /// panel and ~2.9:1 against its light one, and it was 2.7:1 dark before
+    /// the primary text was lifted to gray(180). For the same reason it does
+    /// not follow a `text` or `background` override, just as the status
+    /// colours don't.
+    pub(crate) fn weak_text(&self) -> Color32 {
+        self.preset.weak_text.pick(self.dark)
     }
 
     /// Button/widget fill color.
@@ -1048,6 +1088,77 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Secondary text has to clear AA too. `apply_color_overrides` pins
+    /// `Visuals::weak_text_color` to this, replacing egui's default of the
+    /// text colour at 60% alpha (~2.9:1 light on the panel; ~2.7:1 dark
+    /// before the primary text was lifted, ~3.8:1 after).
+    ///
+    /// Three grounds, because weak text lands on all three:
+    /// - `background()` — panel and window fill, where most of it is drawn.
+    /// - the faint frame fill, which is `Visuals::faint_bg_color`
+    ///   (`Color32::from_additive_luminance(5)`) painted over the panel, so it
+    ///   composites to the background with 5 added to each channel. The
+    ///   toolbar group frames in `graph.rs` use it.
+    /// - `plot_background()` — the App assigns it to `extreme_bg_color`, which
+    ///   is also the `TextEdit` background, and egui draws `hint_text` in the
+    ///   weak colour (the Y-axis / envelope / reference fields).
+    ///
+    /// The plot *area* itself is not a case: `paint_plot_key` uses
+    /// `text_color()` and the cursor and overlay labels use theme colours, so
+    /// no weak text is painted there.
+    #[test]
+    fn weak_text_meets_wcag_aa_on_every_ground_it_lands_on() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let bg = tc.background();
+                let faint = Color32::from_rgb(
+                    bg.r().saturating_add(5),
+                    bg.g().saturating_add(5),
+                    bg.b().saturating_add(5),
+                );
+                let fg = tc.weak_text();
+                for (name, ground) in [
+                    ("panel background", bg),
+                    ("faint frame fill", faint),
+                    ("plot / text-edit background", tc.plot_background()),
+                ] {
+                    let ratio = contrast(fg, ground);
+                    assert!(
+                        ratio >= 4.5,
+                        "{preset:?} {} mode: weak_text {fg:?} on {name} {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1",
+                        if dark { "dark" } else { "light" },
+                    );
+                }
+            }
+        }
+    }
+
+    /// Weak text is a *derived* colour, not one the user picks: it has no
+    /// `PaletteField`, and overriding text or background must not drag it off
+    /// the value verified above — same rule as the status colours.
+    #[test]
+    fn weak_text_ignores_text_and_background_overrides() {
+        let overrides = PaletteOverrides {
+            background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
+            text: Some(HexColor(Color32::from_rgb(200, 210, 220))),
+            ..Default::default()
+        };
+        for &dark in &[true, false] {
+            let plain = ThemeColors::new(dark, ColorPreset::Default, &PaletteOverrides::default());
+            let overridden = ThemeColors::new(dark, ColorPreset::Default, &overrides);
+            assert_eq!(
+                overridden.weak_text(),
+                plain.weak_text(),
+                "weak_text followed an override (dark={dark})"
+            );
         }
     }
 

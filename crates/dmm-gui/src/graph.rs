@@ -420,13 +420,37 @@ fn group_frame(ui: &Ui) -> egui::Frame {
         .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
 }
 
-/// Caption naming one toolbar group. Body size, not `.small()` — egui's small
-/// style lands under the 11 pt floor in `.claude/rules/gui.md`, and these are
-/// group labels rather than annotations.
-fn group_caption(ui: &Ui, text: &str) -> egui::RichText {
-    egui::RichText::new(text)
+/// Caption naming one toolbar group, sitting on the same line as its chips.
+///
+/// Body size, not `.small()`: these name a group of controls rather than
+/// annotating one, so they sit at the same size as the labels inside it and
+/// are set apart by weight and colour instead.
+///
+/// `add_sized` at `interact_size.y` is what keeps the caption's text level
+/// with the chip text, and it is load-bearing rather than cosmetic. A plain
+/// `ui.label` here rendered ~2 logical px high. The group frame's content ui
+/// inherits the toolbar's `horizontal_wrapped` layout, and when the caption is
+/// added the row is only as tall as the space the frame started with.
+/// `Layout::next_frame_ignore_wrap` sizes each widget to
+/// `max(child_size.y, cursor.height())` and then force-translates it down to
+/// the row top ("we always want to expand down, or we will overlap the row
+/// above") — so the caption and the chips are both top-aligned, and egui never
+/// re-centres the caption once the taller chips grow the row. A
+/// `selectable_label` is a `Button`: it takes `interact_size.y` and centres
+/// its text in that box, while a bare label's text fills its own shorter box
+/// from the top. Giving the caption the chips' height and letting `add_sized`
+/// centre it inside closes the gap.
+///
+/// A plain `Label`, deliberately: the caption must stay `Role::Label` for
+/// AccessKit. Sizing it as a button would line it up too, but would announce a
+/// control that isn't one.
+fn group_caption(ui: &mut Ui, text: &str) {
+    let text = egui::RichText::new(text)
         .strong()
-        .color(ui.visuals().weak_text_color())
+        .color(ui.visuals().weak_text_color());
+    // Zero width: only the height is being imposed, the label keeps its own.
+    let height = ui.spacing().interact_size.y;
+    ui.add_sized(egui::vec2(0.0, height), egui::Label::new(text));
 }
 
 /// Accessible name for one **Plot:** chip. `None` is the main reading.
@@ -1255,7 +1279,7 @@ impl Graph {
 
         let frame = group_frame(ui);
         frame.show(ui, |ui| {
-            ui.label(group_caption(ui, "Plot:"));
+            group_caption(ui, "Plot:");
 
             // `Role::RadioButton` rather than the default button role: exactly
             // one chip is selected at a time, and egui maps its own radio
@@ -1323,7 +1347,7 @@ impl Graph {
 
         let frame = group_frame(ui);
         frame.show(ui, |ui| {
-            ui.label(group_caption(ui, "Show:"));
+            group_caption(ui, "Show:");
 
             for o in &self.overlays {
                 let label = o.label.as_str();

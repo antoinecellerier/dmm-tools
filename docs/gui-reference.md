@@ -434,6 +434,8 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 ### Visual
 
 - Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements). Minimum 11 pt font; status flags use bold text in addition to color so they don't rely on color alone.
+- Secondary text — the mode line under the reading, sub-value labels and their "@12s" timestamps, toolbar and hint captions — is a dedicated per-preset color that meets the same 4.5:1 bar as the primary text, rather than a dimmed shade of it. In the dark theme the primary text is a step brighter than egui's default so the two tiers stay visibly distinct; labels now match the brightness of the button text beside them.
+- The smallest captions in the app (status line, hints, toolbar captions, the graph's **LIVE** button) render at 11 pt, so nothing drops below the minimum font size. Zoom scales on top of that.
 - Every button, link, toggle, and setting has a hover tooltip explaining what it does — hover any control to learn it without leaving the GUI.
 
 ### Keyboard
