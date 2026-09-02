@@ -38,8 +38,8 @@ impl Ch9329 {
     /// we may need platform-specific code or a different HID library.
     ///
     /// This function is not called during normal operation (config init is
-    /// skipped). Kept as a diagnostic while CH9329 hardware validation is
-    /// pending (issue #5).
+    /// skipped), and the UT181A cables reported so far stream without it
+    /// (issue #5). Kept as a diagnostic for a cable that does not.
     #[allow(dead_code)]
     pub(crate) fn read_config(&self) -> Result<[u8; 128]> {
         let mut config = [0u8; 128];

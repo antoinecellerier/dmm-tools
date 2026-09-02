@@ -251,6 +251,12 @@ impl Ut181aProtocol {
             profile: DeviceProfile {
                 family_name: "UT181A",
                 model_name: "UNI-T UT181A",
+                // Two reporters have confirmed V DC, V AC + Hz and dual-thermocouple
+                // temperature on a real meter (issue #5), but the REL / MIN/MAX /
+                // Peak / COMP formats, the remote commands and the CP2110 cable have
+                // never run against one. Stays Experimental so the badge keeps
+                // linking to the verification issue; README and
+                // docs/supported-devices.md say the same.
                 stability: Stability::Experimental,
                 supported_commands: UT181A_COMMANDS,
                 // aux1 + aux2 + COMP High + COMP Low.

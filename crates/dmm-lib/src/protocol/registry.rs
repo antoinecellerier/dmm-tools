@@ -411,9 +411,10 @@ mod tests {
         }
     }
 
-    /// Only the UT61E+ has been checked against real hardware; everything else
-    /// must stay flagged so the GUI shows the EXPERIMENTAL badge and links to
-    /// the verification issue.
+    /// Only the UT61E+ is fully verified on real hardware. The UT181A has
+    /// partial hardware coverage but is held at Experimental on purpose (see
+    /// its profile); everything else must stay flagged so the GUI shows the
+    /// EXPERIMENTAL badge and links to the verification issue.
     #[test]
     fn only_ut61eplus_is_verified() {
         for device in DEVICES {
