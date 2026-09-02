@@ -98,6 +98,14 @@ fn live_region_label(measurement: Option<&Measurement>) -> String {
                     parts.push(' ');
                     parts.push_str(&unit);
                 }
+                // The visible row ends in "@12s"; spelling it out is the only
+                // way an AT user learns *when* a MIN/MAX extreme was caught,
+                // which is half of what those readings mean.
+                if let Some(secs) = aux.elapsed_secs {
+                    parts.push_str(" at ");
+                    parts.push_str(&secs.to_string());
+                    parts.push_str(if secs == 1 { " second" } else { " seconds" });
+                }
             }
             // Speak the same status flags that the visible badge row shows.
             // Without this, a screen reader user toggling HOLD/REL/MIN/MAX/
@@ -976,6 +984,31 @@ mod tests {
         let freq = label.find("Frequency").expect("sub-value announced");
         let auto = label.find("auto range").expect("flags still announced");
         assert!(mode < freq && freq < auto, "got {label:?}");
+    }
+
+    /// A MIN/MAX extreme is only half a reading without the moment it was
+    /// caught — the visible row says "@12s", so the spoken one has to say it
+    /// too. Singular for one second, since "at 1 seconds" is jarring read
+    /// aloud.
+    #[test]
+    fn live_region_label_speaks_extreme_capture_time() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(4.9871), "V", StatusFlags::default());
+        let mut max = aux("Max", "5.9010", "");
+        max.elapsed_secs = Some(12);
+        let mut min = aux("Min", "4.1200", "");
+        min.elapsed_secs = Some(1);
+        let plain = aux("Avg", "4.5000", "");
+        m.aux_values = vec![max, min, plain];
+
+        let label = live_region_label(Some(&m));
+        assert!(
+            label.contains("Max 5.9010 V at 12 seconds"),
+            "got {label:?}"
+        );
+        assert!(label.contains("Min 4.1200 V at 1 second,"), "got {label:?}");
+        // A sub-value without a timestamp must not grow a phantom one.
+        assert!(label.ends_with("Avg 4.5000 V"), "got {label:?}");
     }
 
     /// The unit falls back to the main reading's when the sub-value doesn't

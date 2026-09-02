@@ -404,6 +404,14 @@ struct OverlayLabelData {
 /// Both colours come from `Visuals`, so the box follows the theme. The fill is
 /// `faint_bg_color`, well clear of `selection.bg_fill`: the frame is only a
 /// container, and a selected chip inside it must still read as selected.
+///
+/// The border is decorative and deliberately left as-is. It is
+/// `widgets.noninteractive.bg_stroke` — the same stroke egui draws separators
+/// with — which lands around 1.6:1 against the panel in dark mode and 1.8:1 in
+/// light, under WCAG's 3:1 threshold for graphical elements. Nothing depends
+/// on seeing it: the grouping is carried by the **Plot:**/**Show:** caption
+/// text inside each box, and every chip states its own group in its
+/// accessible name.
 fn group_frame(ui: &Ui) -> egui::Frame {
     egui::Frame::new()
         .corner_radius(4)
@@ -419,6 +427,25 @@ fn group_caption(ui: &Ui, text: &str) -> egui::RichText {
     egui::RichText::new(text)
         .strong()
         .color(ui.visuals().weak_text_color())
+}
+
+/// Accessible name for one **Plot:** chip. `None` is the main reading.
+///
+/// The chips are `selectable_label`s whose visible text is just the
+/// sub-value's name, so a screen reader would otherwise announce a **Plot:**
+/// chip and a **Show:** chip identically ("T2, button"). egui 0.34 never
+/// calls AccessKit's `set_description`, so the hover text cannot carry the
+/// distinction — it has to be in the name.
+fn series_chip_label(series: Option<&str>) -> String {
+    match series {
+        Some(label) => format!("Plot {label}"),
+        None => "Plot main reading".to_string(),
+    }
+}
+
+/// Accessible name for one **Show:** chip. See [`series_chip_label`].
+fn overlay_chip_label(label: &str) -> String {
+    format!("Show {label} trace")
 }
 
 impl Graph {
@@ -1230,10 +1257,19 @@ impl Graph {
         frame.show(ui, |ui| {
             ui.label(group_caption(ui, "Plot:"));
 
+            // `Role::RadioButton` rather than the default button role: exactly
+            // one chip is selected at a time, and egui maps its own radio
+            // widgets to that role with a toggled state, so AT handling of the
+            // pairing is proven. `a11y_toggled` is still required — egui
+            // 0.34's `selectable_label` is a plain `Button` and reports
+            // `WidgetInfo::labeled`, never `WidgetInfo::selected`, so nothing
+            // sets the AccessKit toggle state for us.
             let main_selected = self.selected_series.is_none();
             if ui
                 .selectable_label(main_selected, "Main")
                 .on_hover_text("Plot the meter's main reading")
+                .a11y_label(&series_chip_label(None))
+                .a11y_role(egui::accesskit::Role::RadioButton)
                 .a11y_toggled(main_selected)
                 .clicked()
             {
@@ -1247,6 +1283,8 @@ impl Graph {
                     .on_hover_text(format!(
                         "Plot the {label} sub-value ({unit}) \u{2014} a different unit restarts the graph"
                     ))
+                    .a11y_label(&series_chip_label(Some(label)))
+                    .a11y_role(egui::accesskit::Role::RadioButton)
                     .a11y_toggled(selected)
                     .clicked()
                 {
@@ -1295,9 +1333,13 @@ impl Graph {
                 } else {
                     format!("Draw the {label} trace beside the plotted series")
                 };
+                // Toggle buttons, unlike the mutually exclusive **Plot:**
+                // chips — but with the same naming problem, so the group goes
+                // in the accessible name here too.
                 if ui
                     .selectable_label(shown, label)
                     .on_hover_text(hover)
+                    .a11y_label(&overlay_chip_label(label))
                     .a11y_toggled(shown)
                     .clicked()
                 {
@@ -4215,6 +4257,18 @@ mod tests {
     }
 
     // ── Plot key and Show: toggles ──────────────────────────────────────
+
+    /// The two chip rows show the same sub-value names, so their accessible
+    /// names have to say which group they belong to — otherwise a screen
+    /// reader announces the **Plot:** T2 chip and the **Show:** T2 chip
+    /// identically and the user cannot tell what a press will do.
+    #[test]
+    fn chip_labels_name_their_group() {
+        assert_eq!(series_chip_label(None), "Plot main reading");
+        assert_eq!(series_chip_label(Some("T2")), "Plot T2");
+        assert_eq!(overlay_chip_label("T2"), "Show T2 trace");
+        assert_ne!(series_chip_label(Some("T2")), overlay_chip_label("T2"));
+    }
 
     /// Names in the key, in the order they are painted.
     fn key_names(g: &Graph) -> Vec<String> {

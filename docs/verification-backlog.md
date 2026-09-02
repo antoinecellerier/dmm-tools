@@ -479,10 +479,25 @@ verification:
   the main reading updates are announced politely (not continuously).
   Confirm Orca's landmark-nav shortcut (Orca+Ctrl+Shift+L) lists
   Toolbar, Main, Status.
+  With a sub-value-capable meter (UT181A, or the mock), also confirm:
+  the graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio
+  buttons and the **Show:** chips as "Show \<name\> trace" toggles, each
+  with its selected/pressed state, so the two rows are told apart by
+  ear; the reading's live region speaks the sub-values (and a MIN/MAX
+  extreme's "at N seconds") after the mode without flooding while the
+  meter streams; and the plot summary's "Also showing …" phrase names
+  the drawn traces.
 - **NVDA or JAWS on Windows** (UI Automation): same checks, since
   AccessKit's Windows backend is separate from AT-SPI.
 - **VoiceOver on macOS** (NSAccessibility): same checks on the third
   backend.
+- **Hover tooltips are invisible to assistive tech.** egui 0.34 never
+  calls AccessKit's `set_description`, so `on_hover_text` reaches sighted
+  users only — any control whose meaning lives solely in its tooltip is
+  unexplained to a screen reader. The toolbar chips work around this by
+  folding the group into their accessible name. A follow-up could add an
+  `a11y_description` helper mirroring `on_hover_text` and apply it where
+  the tooltip carries real information.
 
 Report findings by opening a GitHub issue; the docs should be updated
 to reflect what is actually confirmed working and what still needs fixes.
