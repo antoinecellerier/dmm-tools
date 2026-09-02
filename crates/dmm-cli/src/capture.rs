@@ -1,4 +1,5 @@
 use console::style;
+use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::registry::SelectableDevice;
 use serde::{Deserialize, Serialize};
@@ -63,8 +64,9 @@ pub(crate) struct SampleData {
     pub progress: u16,
     pub flags: SampleFlags,
     /// Sub-values the meter reported alongside the main reading (UT181A
-    /// REL/MIN-MAX/peak, UT171 frequency aux). Empty for most families, and
-    /// omitted from the YAML when empty so their reports are unchanged.
+    /// secondary displays and REL/MIN-MAX/peak, UT171 frequency aux). Empty
+    /// for most families, and omitted from the YAML when empty so their
+    /// reports are unchanged.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub aux: Vec<AuxSample>,
 }
@@ -111,6 +113,33 @@ pub(crate) struct SampleFlags {
     pub loz: bool,
     #[serde(default)]
     pub void: bool,
+}
+
+/// Back to the library type, so the summary line can be rendered by the one
+/// `StatusFlags` `Display` every other output format already goes through.
+///
+/// Listed field by field with no `..Default::default()`: a flag added to
+/// `StatusFlags` must fail to compile here rather than silently read false.
+impl From<&SampleFlags> for StatusFlags {
+    fn from(f: &SampleFlags) -> Self {
+        StatusFlags {
+            hold: f.hold,
+            rel: f.rel,
+            min: f.min,
+            max: f.max,
+            auto_range: f.auto_range,
+            low_battery: f.low_battery,
+            hv_warning: f.hv_warning,
+            dc: f.dc,
+            peak_max: f.peak_max,
+            peak_min: f.peak_min,
+            lead_error: f.lead_error,
+            comp: f.comp,
+            record: f.record,
+            loz: f.loz,
+            void: f.void,
+        }
+    }
 }
 
 impl SampleData {
@@ -171,29 +200,21 @@ impl SampleData {
         }
     }
 
+    /// The one-line rendering the operator is asked to compare against the
+    /// meter's screen.
+    ///
+    /// Rendered through `StatusFlags`, the same way `dmm-cli read` prints a
+    /// reading: this used to list only AUTO/HOLD/REL/MIN/MAX, so a UT181A
+    /// sample taken on mains confirmed as `239.22 VAC [AUTO]` while the meter
+    /// — and the sample's own `flags:` map — showed the high-voltage warning.
     pub(crate) fn summary(&self) -> String {
-        let mut flag_parts = Vec::new();
-        if self.flags.auto_range {
-            flag_parts.push("AUTO");
+        let flags = StatusFlags::from(&self.flags).to_string();
+        let value = self.display_raw.trim();
+        if flags.is_empty() {
+            format!("{value} {}", self.unit)
+        } else {
+            format!("{value} {} [{flags}]", self.unit)
         }
-        if self.flags.hold {
-            flag_parts.push("HOLD");
-        }
-        if self.flags.rel {
-            flag_parts.push("REL");
-        }
-        if self.flags.min {
-            flag_parts.push("MIN");
-        }
-        if self.flags.max {
-            flag_parts.push("MAX");
-        }
-        format!(
-            "{} {} [{}]",
-            self.display_raw.trim(),
-            self.unit,
-            flag_parts.join(" ")
-        )
     }
 }
 
@@ -585,6 +606,39 @@ mod tests {
         let s = SampleData::from_measurement(&m);
         let summary = s.summary();
         assert!(summary.contains("[AUTO]"));
+    }
+
+    /// The summary is the line the operator confirms against the meter's
+    /// screen, so it has to name every flag the meter is showing. It listed
+    /// only AUTO/HOLD/REL/MIN/MAX: @diego351's UT181A mains capture (issue #5)
+    /// confirmed as `239.22 VAC [AUTO]` while the same sample recorded
+    /// `hv_warning: true`.
+    #[test]
+    fn summary_names_every_flag_the_meter_set() {
+        use dmm_lib::flags::StatusFlags;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"239.22 ", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.flags = StatusFlags {
+            auto_range: true,
+            hv_warning: true,
+            lead_error: true,
+            comp: true,
+            record: true,
+            loz: true,
+            void: true,
+            low_battery: true,
+            peak_max: true,
+            ..Default::default()
+        };
+        let summary = SampleData::from_measurement(&m).summary();
+        for expected in [
+            "AUTO", "LOW BAT", "HV!", "P-MAX", "LEAD ERR", "COMP", "REC", "LoZ", "VOID",
+        ] {
+            assert!(
+                summary.contains(expected),
+                "summary {summary:?} drops {expected}"
+            );
+        }
     }
 
     #[test]
