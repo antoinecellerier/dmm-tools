@@ -316,6 +316,13 @@ real hardware**. Every aspect needs end-to-end verification.
   (peak max/min parsed into main + aux_values)
 - COMP mode extension parsing — implemented, needs hardware verification
   (comp mode/result/limits parsed into aux_values)
+- Sub-value display end to end (2026-09-02) — the GUI reading panel,
+  recording log, graph selector/overlay and both CSV exports now consume
+  `aux_values`, so a capture in REL, MIN/MAX, Peak or COMP verifies the
+  parser and the display in one go. Ask for `read --format csv` runs in
+  V AC and dual-thermocouple modes (checks the `auxN_*` columns) and a
+  GUI screenshot in MIN/MAX (three same-unit overlays) alongside the
+  capture YAML
 - Range label lookup table — range byte 0x03 on V AC decodes to "600V",
   confirmed against a 239 V mains reading (2026-09-02), but the meter
   chose that range itself; **manual** range mode is still unverified,
@@ -425,11 +432,11 @@ be plotted — which makes this a correctness fix rather than a rendering one.
 
 ### Entering NCV leaves the previous mode's trace on the graph
 
-`Graph::push` is what detects a mode change and clears history, but in NCV
-mode every sample is `MeasuredValue::NcvLevel`, which never reaches it — the
-App's `drain_messages` drops those in a bare `_ => {}`. So switching to NCV
-leaves the previous mode's data on screen indefinitely, labelled with the old
-unit.
+`Graph::push_sample` is what detects a mode change and clears history, but in
+NCV mode every sample is `MeasuredValue::NcvLevel`, which never reaches it —
+the App's `resolve_plot_input` returns `None` for a level with no place on a
+value axis, so nothing is pushed. So switching to NCV leaves the previous
+mode's data on screen indefinitely, labelled with the old unit.
 
 Reproducible without hardware via the mock's `ncv` scenario. Fixing it means
 routing non-plottable samples through something that carries mode/unit, and
