@@ -269,7 +269,7 @@ fn resolve_plot_input<'a>(m: &'a Measurement, selected: Option<&str>) -> Option<
 
     let mut overlays: Vec<(&str, Option<f64>)> = Vec::new();
     for aux in &m.aux_values {
-        if overlays.len() > MAX_OVERLAYS {
+        if overlays.len() >= MAX_OVERLAYS {
             break;
         }
         if Some(aux.label.as_ref()) == series || aux.unit_or(main_unit) != unit {
@@ -284,7 +284,7 @@ fn resolve_plot_input<'a>(m: &'a Measurement, selected: Option<&str>) -> Option<
     // T1 next to it.
     if series.is_some()
         && main_unit == unit
-        && overlays.len() <= MAX_OVERLAYS
+        && overlays.len() < MAX_OVERLAYS
         && let Some(v) = plottable_value(&m.value)
     {
         overlays.push(("Main", v));
@@ -2831,6 +2831,52 @@ mod tests {
         assert_eq!(plot.value, Some(24.1));
         assert_eq!(plot.series, Some("T2"));
         assert_eq!(plot.overlays, vec![("Main", Some(23.5))]);
+    }
+
+    /// The App picks which series make the cut, so it must hand the graph no
+    /// more than the graph will register — `push_sample` drops the surplus
+    /// silently, which would show as a series vanishing from the key.
+    #[test]
+    fn same_unit_sub_values_past_the_cap_are_dropped_here_not_by_the_graph() {
+        let aux_values = ["A1", "A2", "A3", "A4", "A5", "A6"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, label)| aux(label, "V", MeasuredValue::Normal(i as f64)))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            aux_values.len(),
+            MAX_OVERLAYS + 2,
+            "fixture overfills the cap"
+        );
+        let m = meter(4.9, "V", aux_values);
+        let plot = resolve_plot_input(&m, None).expect("plottable");
+        assert_eq!(plot.overlays.len(), MAX_OVERLAYS, "got {:?}", plot.overlays);
+    }
+
+    /// "Main" is an overlay like any other: with the cap already full it has
+    /// to be left out, not appended past it.
+    #[test]
+    fn the_main_reading_is_not_overlaid_past_the_cap() {
+        let mut aux_values = vec![aux("Sel", "V", MeasuredValue::Normal(1.0))];
+        aux_values.extend(
+            ["A1", "A2", "A3", "A4"]
+                .into_iter()
+                .map(|label| aux(label, "V", MeasuredValue::Normal(2.0))),
+        );
+        assert_eq!(
+            aux_values.len() - 1,
+            MAX_OVERLAYS,
+            "fixture must fill the cap without the main reading"
+        );
+        let m = meter(4.9, "V", aux_values);
+        let plot = resolve_plot_input(&m, Some("Sel")).expect("plottable");
+        assert_eq!(plot.series, Some("Sel"));
+        assert_eq!(plot.overlays.len(), MAX_OVERLAYS, "got {:?}", plot.overlays);
+        assert!(
+            !plot.overlays.iter().any(|(label, _)| *label == "Main"),
+            "got {:?}",
+            plot.overlays
+        );
     }
 
     /// The meter left the mode that produced the selected sub-value: fall
