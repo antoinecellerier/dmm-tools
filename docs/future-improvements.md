@@ -72,6 +72,141 @@ Use cases: precision measurement, oscillator characterization, sensor evaluation
 
 ---
 
+## Software transforms
+
+Software-side transforms re-express or derive readings on the PC rather than in
+the meter. Research (2026-09) across bench DMM math menus (Keysight Truevolt:
+Null, dB/dBm, %, Mx-B, Statistics, Limits, Smoothing; Keithley DMM6500: mx+b,
+percent, reciprocal), community loggers (TestController's math channels,
+SmuView's six math channel types, PicoLog 6's equation builder) and handheld
+conventions (Fluke 287/289 REL, REL %, dBm and temperature offset; UT181A REL,
+dBV, dBm, LPF, COMP and T1−T2) found exactly one single-channel transform that
+every source shares and no supported meter can do for itself: a linear scale
+with a unit relabel (clamp mV/A, shunt, probe divider, sensor maps). That one
+shipped — the CLI's `--scale --offset --unit` and the GUI's **Scale** row; see
+[Scaling readings in software](cli-reference.md#scaling-readings-in-software)
+and [Scale](gui-reference.md#scale).
+
+A software REL was deliberately not added: every supported family already does
+REL in firmware, and the UT61E+ family, VC880/VC890 and UT181A take it as a
+remote command, so a client-side duplicate would confuse more than it adds.
+
+**Model.** A *frame* is one measurement's named series — Main plus sub-values
+by label. A derived series is a triple of (label, unit, op). An op that
+re-expresses the reading (Linear) replaces Main and keeps the meter's own value
+as `Raw`; an op that produces a new quantity is appended as a sub-value, which
+the graph's **Plot:** / **Show:** chips and the CSV aux columns already handle.
+Placement is explicit (a future `--as LABEL` flag / "as" combo box), never
+inferred. Variables in a future formula are named from series labels — `x` for
+the main reading in base units, then `frequency`, `t2`, … — with a second
+meter's series prefixed `m2_`.
+
+### Moving average / smoothing
+
+**Complexity:** Low
+
+Window-N average of the main reading, exposed as a derived series (Keysight
+"Smoothing", SmuView "Moving average", TestController Average/FilterLP). The
+graph already offers a mean line and a min/max envelope, so this is only worth
+building if users want the smoothed value itself in the statistics panel and
+the CSV.
+
+Use cases: noisy sensors, slow thermal drift.
+
+### dBV / dBm
+
+**Complexity:** Low-medium
+
+20·log10(V) and 10·log10(V² / R / 1 mW), the latter against a configurable
+reference impedance (UT181A presets 4–1200 Ω, Fluke defaults to 600 Ω).
+Offered only in voltage modes.
+
+Use cases: audio and RF level checks on meters without a dB function (UT61E+).
+
+### Percent deviation
+
+**Complexity:** Low
+
+(x − nominal) / nominal × 100 (Fluke REL %, Keysight %, Keithley percent).
+Overlaps the Pass/fail testing mode item above; worth considering as part of
+that item rather than a separate control.
+
+Use cases: tolerance checks.
+
+### Formula transform
+
+**Complexity:** Medium
+
+A free-form expression as a second mode of the same Scale control
+(`--formula '20*log10(x)' --unit dBV`, a **(Linear)(Formula)** chip pair in the
+GUI). The evaluator must live outside `dmm-lib`, which stays self-contained.
+Candidates checked 2026-09-02: exmex 0.21.0 (MIT OR Apache-2.0, maintained) is
+the recommendation; evalexpr is popular but AGPL-3.0-only after 11.3.1 and this
+workspace is GPL-3.0-or-later, so it is out; fasteval is unmaintained since
+2020; meval describes itself as a toy.
+
+Use cases: thermistor β equations, dB, anything non-linear.
+
+### Two-channel math
+
+**Complexity:** High
+
+V × I, A − B and similar across two meters. Depends on
+[Simultaneous dual-channel display](#simultaneous-dual-channel-display) for
+timestamp-aligned frames; given those, the model above needs no new concept to
+express it.
+
+Use cases: power, differential temperature with two single-input meters.
+
+### Per-mode transforms
+
+**Complexity:** Medium
+
+A transform is applied to every reading regardless of what the dial is on,
+so a clamp factor set up for mV DC also scales the ohms reading after a
+dial turn, and a `--unit` relabel hides the unit change that would otherwise
+reset the statistics. Binding a transform to the mode and base unit it was
+defined for — applying it only while the meter is in that mode, and showing
+it as armed but idle otherwise — is the prerequisite for any persistence or
+preset, since a stored factor is only safe once it cannot fire on the wrong
+quantity.
+
+Use cases: leaving a clamp factor configured while using the meter for other
+checks; presets that survive a dial turn.
+
+### Named transform presets
+
+**Complexity:** Low
+
+Explicitly applied presets (`--preset clamp10`, a preset combo box in the GUI)
+rather than persisting the last transform, so a stale factor is never silently
+applied at startup.
+
+Use cases: recurring bench setups.
+
+### Sources
+
+- [Issue #5 comment with the UT181A vendor-app screenshots](https://github.com/antoinecellerier/dmm-tools/issues/5#issuecomment-5507498410)
+- [UT181A operating manual](https://www.batronix.com/pdf/uni-t/UT181A-Manual-English.pdf)
+- [Fluke 287/289 users manual](https://assets.fluke.com/manuals/287_289_umeng0100.pdf)
+- [Fluke 52 II dual thermometer](https://www.fluke.com/en-us/product/temperature-measurement/ir-thermometers/fluke-52-ii)
+- [Keysight Truevolt math scaling](https://rfmw.em.keysight.com/bihelpfiles/Truevolt/WebHelp/US/Content/__E_Features%20and%20Functions/Math-Scaling.htm)
+- [Keysight 34401A math functions KB](https://docs.keysight.com/kkbopen/can-i-have-multiple-math-functions-null-min-max-db-dbm-limit-on-at-the-same-time-on-the-34401a-588262739.html)
+- [Keithley DMM6500 review (lygte-info)](https://lygte-info.dk/review/DMMKeithley%20DMM6500%20UK.html)
+- [TestController math channels](https://lygte-info.dk/project/TestControllerMath%20UK.html)
+- [TestController EEVblog thread](https://www.eevblog.com/forum/testgear/program-that-can-log-from-many-multimeters/)
+- [SmuView manual](https://knarfs.github.io/doc/smuview/0.0.4/manual.html)
+- [PicoLog 6 math channels](https://www.picotech.com/library/knowledge-bases/data-loggers/picolog-6-math-channels)
+- [Fluke: using accessory current clamps with DMMs](https://www.fluke.com/en-us/learn/blog/clamps/using-accessory-current-clamps-with-fluke-dmms)
+- [UNI-T UT61E software (lygte-info review)](https://lygte-info.dk/review/DMMUNI-T%20UT61E%20UK.html)
+- [curioustech UT181A Windows app](https://www.curioustech.net/ut181a.html)
+- [QtDMM](https://github.com/jhol/qtdmm)
+- [UT61E-Toolkit](https://github.com/Jakeler/UT61E-Toolkit)
+- [ut61e_plus_logger](https://github.com/kevontheweb/ut61e_plus_logger)
+- [FlukeView Forms](https://www.fluke.com/en-us/product/fluke-software/fluke-fvf-sc2-flukeview-forms-software)
+
+---
+
 ## Lab Integration & Automation
 
 ### Network measurement server
@@ -176,6 +311,20 @@ Use cases: verifying the meter is communicating at the expected rate, detecting 
 The UT181A has built-in recording and saved measurement features (protocol commands 0x07-0x0F) that aren't implemented yet. Download stored recordings and saved measurements from the meter, display in the GUI graph view, and export to CSV.
 
 Use cases: retrieving field measurements logged by the meter itself, longer recording sessions than USB-tethered capture allows.
+
+### UT181A primary/secondary display switching
+
+**Complexity:** Medium
+
+The vendor app's Setting panel switches the meter's primary and secondary
+display function — VAC / VAC,Hz / Peak / LowPass / dBV / dBm for voltage,
+T1,T2 / T2,T1 / T1−T2 / T2−T1 for temperature, and T1,T2 / REL for the
+secondary display — by sending set-function commands, and the reporter on
+issue #5 asked for the same here. The command bytes still have to be traced
+from the vendor software and verified on hardware; nothing is designed yet.
+
+Use cases: putting the meter in T1−T2 or dBm from the PC so the LCD and the
+software agree.
 
 ---
 
