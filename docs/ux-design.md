@@ -14,7 +14,7 @@
 
 - `dmm-cli list` — enumerate connected devices
 - `dmm-cli info` — connect and print device name (queried from meter)
-- `dmm-cli read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`
+- `dmm-cli read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`, `--scale`, `--offset`, `--unit`
 - `dmm-cli command` — send button presses: hold, min-max, exit-min-max, rel, range, auto, select, select2, light, peak-min-max, exit-peak
 - `dmm-cli debug` — raw hex dump mode for protocol development
 - `dmm-cli capture` — guided protocol capture wizard for bug reports. YAML output with raw bytes, structured flags, user screen confirmations. Supports `--steps` filter, auto-resume, and freeform captures.
@@ -98,6 +98,9 @@ Threshold at ~900px available width:
 - Mode, range label, and active flags below
 - Flags shown as subtle colored badges: AUTO, HOLD, REL, MIN, MAX
 - Low battery warning shown as orange "LOW BAT" badge
+- SCALE badge (same accent as AUTO/HOLD) whenever a software scale is active.
+  Drawn after the meter's own badges: it is the app's state, not the meter's,
+  and mixing it in among reported flags would misattribute it
 
 ### Remote Control Buttons
 
@@ -105,6 +108,28 @@ Row of buttons below the reading (only shown when connected and receiving data):
 - **HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK** — highlight blue when the corresponding protocol flag is active
 - **SELECT** — cycles sub-modes (no toggle state, mode change visible in reading)
 - **LIGHT** — toggles backlight (no protocol feedback for state)
+
+### Scale Row
+
+A **Scale** toggle on a row of its own under the remote controls, opening
+`× [scale] + [offset] → [unit] [Apply] [Off]` when clicked. Styled like the
+remote buttons (accent + bold while a scale is active) but deliberately
+**kept apart from them**: those buttons mirror and drive the meter's own
+state, whereas this changes nothing on the meter. Sitting them side by side
+would suggest the meter knows about the factor.
+
+- Commits on **Apply** or Enter in a field, never on keystroke — a
+  half-typed number would clear the graph and statistics on every character.
+- Bad input raises an error toast naming the field; nothing is applied.
+- Applying or clearing resets graph/stats/integral (the accumulated numbers
+  no longer describe the same quantity) but never the recording buffer,
+  matching the **Clear** button.
+- **Session-only, never persisted.** Same rationale as the graph's plotted-
+  series selection: a factor restored silently at the next launch would
+  corrupt readings the user has no reason to suspect. It does survive
+  disconnect/reconnect, a change of device and Ctrl+L, and the row stays
+  visible so an active scale can always be turned off.
+- Hidden in big-meter Minimal mode, like the remote buttons.
 
 ### Specifications Panel
 

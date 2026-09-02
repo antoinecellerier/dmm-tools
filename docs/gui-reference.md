@@ -83,6 +83,9 @@ success/failure) and expire after 4 seconds.
   - **REL** — relative/delta mode
   - **MIN**, **MAX** — min/max recording active
   - **LOW BAT** — low battery warning (orange)
+  - **SCALE** — a software [scale](#scale) is applied to the reading. Unlike
+    the others this is the app's own state, not something the meter reported,
+    so it is drawn after the meter's badges
 - Overload ("OL") rendered in warning red
 
 ## Remote Control
@@ -104,6 +107,52 @@ A row of buttons shown when connected and receiving data (visible in the
 Buttons highlight blue when the corresponding flag is active in the current
 measurement. LIGHT has no protocol feedback, so it does not highlight.
 
+## Scale
+
+**Scale**, on its own row under the remote controls, applies a software
+transform to the reading — a current clamp's 10 mV/A, a shunt, a probe
+divider, °C to °F. It changes nothing on the meter, which is why it sits
+apart from the buttons above it. Clicking it opens three fields:
+
+| Field | Meaning | Left empty |
+|---|---|---|
+| **×** (Scale factor) | multiply the reading by this | ×1 |
+| **+** (Offset) | add this afterwards | +0 |
+| **→** (Unit label) | show this unit instead of the base unit | no relabel |
+
+**Apply**, or Enter in a field, commits; nothing is applied while you type.
+A zero or non-numeric value is rejected with a toast naming the field.
+**Off** turns scaling off.
+
+The arithmetic runs on the reading converted to its base SI unit (V, A, Ω,
+F, Hz, S, W), so a factor survives auto-ranging: 123.4 mV and 0.1234 V are
+the same input. A 10 mV/A clamp is therefore `× 100 → A`. With no unit
+label the reading shows in the base unit (`× 10` on 123.4 mV gives 1.234 V).
+
+The meter's own reading is kept as a **Raw** sub-value: in the reading
+display, the graph's **Plot:**/**Show:** groups, the recording log and an
+extra `auxN_*` CSV group. Its **Show:** chip starts unlit — the unscaled
+reading is often a factor of a hundred away from the scaled one, and drawing
+both would flatten the scaled trace against the shared Y axis — so click the
+chip when you want the comparison. **Plot:** is unaffected: choosing **Raw**
+there plots it as the main series.
+
+Sub-values that measure the same quantity as the reading — a second
+thermocouple, a REL reference, the MIN/MAX extremes — are scaled with it and
+shown in the same unit, so they stay same-unit and keep overlaying the scaled
+trace in the graph; sub-values in another unit, such as a frequency beside a
+voltage, are left as the meter sent them.
+
+Applying or clearing a scale resets the graph,
+statistics and integral but not the recording buffer, like **Clear**; a
+recording in progress continues with scaled values. The Specifications
+panel keeps describing the meter's own range.
+
+The setting is session-only — never written to `settings.json`, since a
+stale factor silently corrupting a later session is worse than retyping it.
+It survives disconnect, a device change and `Ctrl+L`. `dmm-cli read` takes
+the same transform as `--scale`, `--offset` and `--unit`.
+
 ## Graph
 
 ![Graph with mean line, min/max envelope, reference lines, trigger markers, and cursors](../assets/gui-graph-overlays.png)
@@ -116,7 +165,8 @@ Laid out in rows: the view controls (time window, LIVE, Y axis, Reset Zoom)
 first, then — only for meters that send sub-values — a row of its own holding
 the boxed **Plot:** and **Show:** groups, then the analysis overlays (Mean,
 Min/Max, Ref, Cursors). A single-display meter shows only the first and last
-rows.
+rows, until a software [scale](#scale) is applied: its **Raw** sub-value
+brings the **Plot:**/**Show:** row up for those meters too.
 
 | Control | Description |
 |---|---|
@@ -124,8 +174,8 @@ rows.
 | **LIVE** | Auto-scroll to latest data (green when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171). Switching restarts the graph, and so does the meter dropping the chosen sub-value for a few readings in a row — the graph returns to **Main**. |
-| **Show:** | One chip per same-unit sub-value drawn beside the plotted series — click to draw or hide that trace. Only appears once there is such a sub-value. Hiding one stops it being drawn (and drops it from the key and the Y-axis fit) but not recorded, so turning it back on brings its history with it. Session-only; survives `Ctrl+L` and a change of plotted series. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171), or while a software [scale](#scale) is active (which adds **Raw**). Switching restarts the graph, and so does the meter dropping the chosen sub-value for a few readings in a row — the graph returns to **Main**. |
+| **Show:** | One chip per same-unit sub-value drawn beside the plotted series — click to draw or hide that trace. Only appears once there is such a sub-value — including the **Raw** reading a same-unit software [scale](#scale) adds, which is listed but starts hidden. Hiding one stops it being drawn (and drops it from the key and the Y-axis fit) but not recorded, so turning it back on brings its history with it. Session-only; survives `Ctrl+L` and a change of plotted series. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
@@ -234,6 +284,9 @@ UT61E+). Other devices show only the Manual link.
   plotting; the visible-window row follows the **plotted series** and is
   captioned with its unit, so selecting a Hz sub-value shows Hz there and V in
   the session block above
+- With a software [scale](#scale) active, all of these follow the *scaled*
+  reading, and ∫ follows its unit — a clamp relabelled to `A` gives charge in
+  Ah where the unscaled millivolts would have given V·s
 
 ## Recording
 
@@ -259,6 +312,15 @@ Meters that report sub-values add one `auxN_label,auxN_value,auxN_unit` group
 per slot the family can send (UT181A 4, UT171 1, mock 2), padded with empty
 fields when a reading uses fewer. Single-display meters keep the six-column
 file above.
+
+A software [scale](#scale) claims one more slot for its **Raw** group, so a
+single-display meter recorded with a scale on gets `aux1_label,aux1_value,
+aux1_unit` holding the meter's own reading. The **Raw** group is always the
+last one in the file, so it keeps the same columns even as the meter's own
+sub-value count changes with the mode. Turning a scale on after Record has
+started still gets the column, and the rows recorded before it simply leave
+that group empty; turning one off mid-recording leaves it empty for the rest
+of the file.
 
 ```
 # device: UNI-T UT181A
@@ -453,7 +515,8 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color. The clickable version label in the top bar announces "Show release notes" rather than the literal version string.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, and the graph's LIVE button announce whether they are currently on or off — you don't have to rely on the color change.
 - The graph toolbar's two chip rows name their group, so they are distinguishable by ear even though both list the same sub-value names: the **Plot:** chips announce as "Plot \<name\>" (and "Plot main reading") radio buttons, of which exactly one is selected, and the **Show:** chips as "Show \<name\> trace" toggles.
-- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode — including the time at which a MIN/MAX extreme was captured ("Max 5.9010 V at 12 seconds"), matching the "@12s" on screen. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation.
+- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode — including the time at which a MIN/MAX extreme was captured ("Max 5.9010 V at 12 seconds"), matching the "@12s" on screen. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled", matching the SCALE badge on screen.
+- The **Scale** button announces whether scaling is currently on or off, and its three fields announce as "Scale factor", "Offset" and "Unit label" from their hint text.
 - The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-values currently drawn beside it (traces hidden with **Show:** are left out, as they are off screen), whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 

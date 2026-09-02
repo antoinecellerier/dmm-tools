@@ -65,7 +65,7 @@ fn format_value_display(m: &Measurement) -> String {
 /// readers. Used as the live-region label on the primary reading. Uses the
 /// same value formatting as the visible display so AT users hear exactly
 /// what sighted users see.
-fn live_region_label(measurement: Option<&Measurement>) -> String {
+fn live_region_label(measurement: Option<&Measurement>, scaled: bool) -> String {
     match measurement {
         Some(m) => {
             let value = match &m.value {
@@ -112,6 +112,13 @@ fn live_region_label(measurement: Option<&Measurement>) -> String {
             // AUTO via the on-device buttons hears the value change but no
             // confirmation that the mode actually flipped.
             append_flags_phrase(&mut parts, &m.flags);
+            // Last, after the flags, so it reads as one more badge — which is
+            // exactly where the SCALE badge sits on screen. Without it a
+            // screen-reader user has no way to tell a software-scaled reading
+            // from one the meter produced.
+            if scaled {
+                parts.push_str(", software scaled");
+            }
             parts
         }
         None => "No reading".to_string(),
@@ -217,9 +224,13 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
 /// produce different output. Lets `set_live_region_cached` skip per-frame
 /// `format!`/`String` allocation when the measurement is unchanged.
-fn live_region_fingerprint(measurement: Option<&Measurement>) -> u64 {
+fn live_region_fingerprint(measurement: Option<&Measurement>, scaled: bool) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    // Toggling the transform changes the spoken label without necessarily
+    // changing the reading, so the bit has to be in the fingerprint or the
+    // cached announcement would never be rebuilt.
+    scaled.hash(&mut h);
     match measurement {
         None => 0u8.hash(&mut h),
         Some(m) => {
@@ -385,6 +396,7 @@ fn show_reading_sized(
     measurement: Option<&Measurement>,
     value_size: f32,
     tc: &ThemeColors,
+    scaled: bool,
 ) {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
@@ -394,8 +406,8 @@ fn show_reading_sized(
             let (value_text, value_color) = value_display(ui, m, tc);
 
             ui.live_region_horizontal(
-                live_region_fingerprint(Some(m)),
-                || live_region_label(Some(m)),
+                live_region_fingerprint(Some(m), scaled),
+                || live_region_label(Some(m), scaled),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.label(
@@ -427,7 +439,7 @@ fn show_reading_sized(
                             .color(ui.visuals().weak_text_color()),
                     );
                 }
-                show_flags(ui, m, mode_size, tc);
+                show_flags(ui, m, mode_size, tc, scaled);
             });
         }
         None => {
@@ -437,8 +449,8 @@ fn show_reading_sized(
             // overrides to set_value, not set_label, so attaching directly
             // to the label would silently drop the live-region label.
             ui.live_region_horizontal(
-                live_region_fingerprint(None),
-                || live_region_label(None),
+                live_region_fingerprint(None, scaled),
+                || live_region_label(None, scaled),
                 |ui| {
                     ui.label(
                         RichText::new(crate::NO_DATA)
@@ -458,6 +470,7 @@ fn show_reading_inline(
     measurement: Option<&Measurement>,
     value_size: f32,
     tc: &ThemeColors,
+    scaled: bool,
 ) {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
@@ -467,8 +480,8 @@ fn show_reading_inline(
             let (value_text, value_color) = value_display(ui, m, tc);
 
             ui.live_region_horizontal(
-                live_region_fingerprint(Some(m)),
-                || live_region_label(Some(m)),
+                live_region_fingerprint(Some(m), scaled),
+                || live_region_label(Some(m), scaled),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.label(
@@ -488,7 +501,7 @@ fn show_reading_inline(
                             .font(FontId::proportional(mode_size))
                             .color(ui.visuals().weak_text_color()),
                     );
-                    show_flags(ui, m, mode_size, tc);
+                    show_flags(ui, m, mode_size, tc, scaled);
                 },
             );
 
@@ -502,8 +515,8 @@ fn show_reading_inline(
             // in a horizontal scope: egui Role::Label silently swallows
             // accesskit set_label overrides.
             ui.live_region_horizontal(
-                live_region_fingerprint(None),
-                || live_region_label(None),
+                live_region_fingerprint(None, scaled),
+                || live_region_label(None, scaled),
                 |ui| {
                     ui.label(
                         RichText::new(format!("{} No reading", crate::NO_DATA))
@@ -517,14 +530,18 @@ fn show_reading_inline(
 }
 
 /// Render the large primary reading display.
+///
+/// `scaled` marks the reading as passed through a software transform, so the
+/// SCALE badge and the spoken label say so.
 pub fn show_reading(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
     preset: ColorPreset,
     overrides: &PaletteOverrides,
+    scaled: bool,
 ) {
     let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
-    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, &tc);
+    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, &tc, scaled);
 }
 
 /// Cached ratios of rendered reading dimensions to font size.
@@ -569,6 +586,7 @@ pub fn show_reading_large(
     ratios: &ReadingRatios,
     preset: ColorPreset,
     overrides: &PaletteOverrides,
+    scaled: bool,
 ) -> (f32, ReadingRatios) {
     let available_w = ui.available_width();
     let available_h = ui.available_height();
@@ -600,9 +618,9 @@ pub fn show_reading_large(
     let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
     let before = ui.cursor().top();
     if use_inline {
-        show_reading_inline(ui, measurement, size, &tc);
+        show_reading_inline(ui, measurement, size, &tc, scaled);
     } else {
-        show_reading_sized(ui, measurement, size, &tc);
+        show_reading_sized(ui, measurement, size, &tc, scaled);
     }
     let reading_w = ui.min_rect().width();
     let reading_h = ui.cursor().top() - before;
@@ -627,6 +645,7 @@ pub fn show_reading_compact(
     measurement: Option<&Measurement>,
     preset: ColorPreset,
     overrides: &PaletteOverrides,
+    scaled: bool,
 ) {
     match measurement {
         Some(m) => {
@@ -634,8 +653,8 @@ pub fn show_reading_compact(
             let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
 
             ui.live_region_horizontal(
-                live_region_fingerprint(Some(m)),
-                || live_region_label(Some(m)),
+                live_region_fingerprint(Some(m), scaled),
+                || live_region_label(Some(m), scaled),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.label(
@@ -651,7 +670,7 @@ pub fn show_reading_compact(
                             .color(ui.visuals().weak_text_color())
                             .small(),
                     );
-                    show_flags(ui, m, 0.0, &tc);
+                    show_flags(ui, m, 0.0, &tc, scaled);
                 },
             );
 
@@ -668,8 +687,8 @@ pub fn show_reading_compact(
             // in a horizontal scope: egui Role::Label silently swallows
             // accesskit set_label overrides.
             ui.live_region_horizontal(
-                live_region_fingerprint(None),
-                || live_region_label(None),
+                live_region_fingerprint(None, scaled),
+                || live_region_label(None, scaled),
                 |ui| {
                     ui.label(
                         RichText::new(format!("{} No reading", crate::NO_DATA))
@@ -756,7 +775,7 @@ mod tests {
         let mut m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
         m.display_raw = Some("    0".to_string());
         assert_eq!(format_value_display(&m).trim(), "OL");
-        assert!(live_region_label(Some(&m)).starts_with("overload"));
+        assert!(live_region_label(Some(&m), false).starts_with("overload"));
     }
 
     #[test]
@@ -770,7 +789,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         assert!(label.contains("V"), "got {label:?}");
         assert!(label.contains("DC V"), "got {label:?}");
         assert!(label.contains("auto range"), "got {label:?}");
@@ -790,7 +809,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         let hv = label.find("high voltage").expect("HV must be announced");
         let auto = label
             .find("auto range")
@@ -801,7 +820,7 @@ mod tests {
     #[test]
     fn live_region_label_no_flags_when_inactive() {
         let m = Measurement::test_fixture(MeasuredValue::Normal(0.0), "V", StatusFlags::default());
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         // StatusFlags::default() is all-false, so no flag phrases should
         // appear in the spoken label.
         assert!(!label.contains("hold"), "got {label:?}");
@@ -813,13 +832,13 @@ mod tests {
     fn live_region_fingerprint_changes_on_flag_toggle() {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
-        let fp1 = live_region_fingerprint(Some(&m));
+        let fp1 = live_region_fingerprint(Some(&m), false);
         m.flags.hold = true;
-        let fp2 = live_region_fingerprint(Some(&m));
+        let fp2 = live_region_fingerprint(Some(&m), false);
         assert_ne!(fp1, fp2, "toggling HOLD must change the fingerprint");
         m.flags.hold = false;
         m.flags.rel = true;
-        let fp3 = live_region_fingerprint(Some(&m));
+        let fp3 = live_region_fingerprint(Some(&m), false);
         assert_ne!(fp1, fp3, "toggling REL must change the fingerprint");
         assert_ne!(fp2, fp3, "REL and HOLD must produce distinct fingerprints");
     }
@@ -977,7 +996,7 @@ mod tests {
             aux("Period", "20.00", "ms"),
         ];
 
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         assert!(label.contains("Frequency 50.01 Hz"), "got {label:?}");
         assert!(label.contains("Period 20.00 ms"), "got {label:?}");
         let mode = label.find("DC V").expect("mode still announced");
@@ -1001,7 +1020,7 @@ mod tests {
         let plain = aux("Avg", "4.5000", "");
         m.aux_values = vec![max, min, plain];
 
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         assert!(
             label.contains("Max 5.9010 V at 12 seconds"),
             "got {label:?}"
@@ -1024,7 +1043,7 @@ mod tests {
         min.value = MeasuredValue::Overload;
         m.aux_values = vec![max, min];
 
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         assert!(label.contains("Max 5.0123 V"), "got {label:?}");
         assert!(label.contains("Min overload V"), "got {label:?}");
     }
@@ -1042,7 +1061,7 @@ mod tests {
         );
         m.display_raw = Some("   23.5".to_string());
         m.aux_values = vec![aux("T2", "24.10", "\u{00B0}C")];
-        let label = live_region_label(Some(&m));
+        let label = live_region_label(Some(&m), false);
         assert!(label.starts_with("23.5 degrees C"), "got {label:?}");
         assert!(label.contains("T2 24.10 degrees C"), "got {label:?}");
         assert!(
@@ -1064,7 +1083,7 @@ mod tests {
             },
         );
         assert!(m.aux_values.is_empty());
-        assert_eq!(live_region_label(Some(&m)), "5.678 V, DC V, hold");
+        assert_eq!(live_region_label(Some(&m), false), "5.678 V, DC V, hold");
     }
 
     /// A MIN/MAX extreme can move while the live reading is unchanged, so
@@ -1073,24 +1092,24 @@ mod tests {
     fn live_region_fingerprint_changes_on_sub_value_change() {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
-        let bare = live_region_fingerprint(Some(&m));
+        let bare = live_region_fingerprint(Some(&m), false);
 
         m.aux_values = vec![aux("Max", "5.0123", "")];
-        let with_aux = live_region_fingerprint(Some(&m));
+        let with_aux = live_region_fingerprint(Some(&m), false);
         assert_ne!(bare, with_aux, "a sub-value appearing must be noticed");
 
         m.aux_values[0] = aux("Max", "5.0456", "");
-        let moved = live_region_fingerprint(Some(&m));
+        let moved = live_region_fingerprint(Some(&m), false);
         assert_ne!(with_aux, moved, "a sub-value changing must be noticed");
 
         m.aux_values[0].elapsed_secs = Some(12);
-        let stamped = live_region_fingerprint(Some(&m));
+        let stamped = live_region_fingerprint(Some(&m), false);
         assert_ne!(moved, stamped, "the @Ns column changing must be noticed");
 
         m.aux_values[0].label = "Min".into();
         assert_ne!(
             stamped,
-            live_region_fingerprint(Some(&m)),
+            live_region_fingerprint(Some(&m), false),
             "a relabelled sub-value must be noticed"
         );
     }
@@ -1171,6 +1190,31 @@ mod tests {
         assert_eq!(format_aux_value(&over), "     OL");
     }
 
+    /// The SCALE badge is visual; the spoken label is how an AT user learns
+    /// the reading has been through a software transform.
+    #[test]
+    fn the_live_region_label_says_when_the_reading_is_software_scaled() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(12.34), "A", StatusFlags::default());
+        let plain = live_region_label(Some(&m), false);
+        assert!(!plain.contains("software scaled"), "{plain:?}");
+        let scaled = live_region_label(Some(&m), true);
+        assert!(scaled.ends_with(", software scaled"), "{scaled:?}");
+        assert!(scaled.starts_with(&plain), "{scaled:?} vs {plain:?}");
+    }
+
+    /// The cached announcement is only rebuilt when the fingerprint moves,
+    /// so toggling the transform has to move it.
+    #[test]
+    fn the_live_region_fingerprint_tracks_the_scaled_bit() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(12.34), "A", StatusFlags::default());
+        assert_ne!(
+            live_region_fingerprint(Some(&m), false),
+            live_region_fingerprint(Some(&m), true)
+        );
+    }
+
     #[test]
     fn format_display_raw_consistent_width() {
         // All outputs should be at least 7 chars wide
@@ -1185,7 +1229,7 @@ mod tests {
     }
 }
 
-fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) {
+fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors, scaled: bool) {
     let badge = |ui: &mut Ui, label: &str, color: Color32| {
         let mut text = RichText::new(label).strong().color(color);
         if font_size > 0.0 {
@@ -1238,5 +1282,11 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors) {
     }
     if m.flags.void {
         badge(ui, "VOID", warning);
+    }
+    // After the meter's own badges, in the same accent as AUTO/HOLD: this is
+    // the app's state, not the meter's, and it belongs at the end of the row
+    // rather than mixed in among the flags the meter reported.
+    if scaled {
+        badge(ui, "SCALE", accent);
     }
 }

@@ -11,15 +11,23 @@ use std::io::Write;
 /// `Sample`s, while the rendered CSV is a fraction of that and takes one pass
 /// instead of half a million allocations.
 ///
-/// `aux_slots` is the meter family's `max_aux_values`, not the count in any
+/// `family_slots` is the meter family's `max_aux_values`, not the count in any
 /// one reading: a CSV needs one fixed column layout for the whole file, so a
-/// mode that reports fewer sub-values leaves the trailing slots empty. Pass 0
-/// for single-display meters and the file keeps the six columns it always had.
+/// mode that reports fewer sub-values leaves the trailing slots empty.
+/// `extra_slots` reserves trailing columns for the sub-values software appends
+/// after the meter's own (a transform's `Raw`), so they stay in one place
+/// whatever the meter sent that frame — see [`Measurement::export_aux_slots`].
+/// It is the widest any sample needs; each row claims only as many as its own
+/// [`Sample::extra_aux`] says it carries, and leaves the rest empty. Pass 0
+/// and 0 for a single-display meter with no transform and the file keeps the
+/// six columns it always had.
 pub fn render_csv(
     samples: &[Sample],
     device_model: &str,
-    aux_slots: usize,
+    family_slots: usize,
+    extra_slots: usize,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let aux_slots = family_slots + extra_slots;
     // ~72 bytes covers a typical row (RFC3339 timestamp, mode, value, unit,
     // range, flags) without repeated growth on large buffers; each aux slot
     // adds roughly another 20.
@@ -50,15 +58,28 @@ pub fn render_csv(
             record.push(Cow::Borrowed(s.unit()));
             record.push(Cow::Borrowed(s.range_label()));
             record.push(Cow::Owned(s.flags_str()));
-            // Truncate rather than widen the row: a reading carrying more
-            // sub-values than the family's profile declares would otherwise
-            // desync every following column from the header.
+            // One fixed layout for the file: the helper pads the meter's own
+            // slots, pins the appended ones to the trailing group, and
+            // truncates a surplus rather than desyncing every column after it
+            // from the header.
+            //
+            // Only the extras *this* sample carries are claimed. A row
+            // recorded before a mid-recording scale has none, and letting the
+            // helper claim one anyway would read its last meter sub-value as
+            // the appended one — filing Frequency under the `Raw` column.
             let m = &s.measurement;
-            for aux in m.aux_values.iter().take(aux_slots) {
-                record.extend(aux.export_cells(&m.unit));
+            let extra = s.extra_aux.min(extra_slots);
+            for slot in m.export_aux_slots(family_slots, extra) {
+                match slot {
+                    Some(aux) => record.extend(aux.export_cells(&m.unit)),
+                    None => {
+                        for _ in 0..AUX_EXPORT_COLUMNS.len() {
+                            record.push(Cow::Borrowed(""));
+                        }
+                    }
+                }
             }
-            let missing = aux_slots.saturating_sub(m.aux_values.len());
-            for _ in 0..missing * AUX_EXPORT_COLUMNS.len() {
+            for _ in 0..(extra_slots - extra) * AUX_EXPORT_COLUMNS.len() {
                 record.push(Cow::Borrowed(""));
             }
             wtr.write_record(record.iter().map(|c| c.as_ref()))?;
@@ -86,10 +107,19 @@ const MAX_RECORDING_SAMPLES: usize = 500_000;
 pub struct Sample {
     pub wall_time: DateTime<Local>,
     pub measurement: Measurement,
+    /// How many trailing sub-values of `measurement` were appended by
+    /// software (a transform's `Raw`) rather than sent by the meter, as of
+    /// the moment this sample was recorded.
+    ///
+    /// Per-sample rather than per-file because a scale can be switched on
+    /// mid-recording: without it the export would read the last sub-value of
+    /// an earlier row as the appended one and file a meter's Frequency under
+    /// the `Raw` column.
+    pub extra_aux: usize,
 }
 
 impl Sample {
-    pub fn from_measurement(m: &Measurement, wall_clock: &WallClock) -> Self {
+    pub fn from_measurement(m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> Self {
         let mut measurement = m.clone();
         // Drop the debug-only wire bytes. Nothing in the GUI reads them, and
         // retaining a heap Vec per sample costs ~50 MB across a full buffer.
@@ -97,6 +127,7 @@ impl Sample {
         Self {
             wall_time: wall_clock.wall_time_for(m.timestamp).into(),
             measurement,
+            extra_aux,
         }
     }
 
@@ -206,10 +237,14 @@ impl Recording {
     }
 
     /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
-    pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock) -> bool {
+    ///
+    /// `extra_aux` is the caller's current [`Sample::extra_aux`]: how many of
+    /// this reading's trailing sub-values software appended.
+    pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> bool {
         if self.active && self.samples.len() < MAX_RECORDING_SAMPLES {
             self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
-            self.samples.push(Sample::from_measurement(m, wall_clock));
+            self.samples
+                .push(Sample::from_measurement(m, wall_clock, extra_aux));
             if self.samples.len() >= MAX_RECORDING_SAMPLES {
                 self.active = false;
                 return true;
@@ -275,11 +310,11 @@ mod tests {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         assert!(r.samples.is_empty());
 
         r.toggle(); // start
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         assert_eq!(r.samples.len(), 1);
     }
 
@@ -289,8 +324,8 @@ mod tests {
         let wc = WallClock::new();
         r.toggle();
         let m = make_measurement(b"  1.234");
-        r.push(&m, &wc);
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
+        r.push(&m, &wc, 0);
         assert_eq!(r.samples.len(), 2);
 
         r.toggle(); // stop
@@ -310,14 +345,14 @@ mod tests {
 
         r.toggle();
         for _ in 0..3 {
-            r.push(&m, &wc);
+            r.push(&m, &wc, 0);
         }
         assert_eq!(r.unexported_count(), 3);
 
         r.mark_exported(3);
         assert_eq!(r.unexported_count(), 0);
 
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1, "samples after an export count");
     }
 
@@ -330,11 +365,11 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle();
         for _ in 0..5 {
-            r.push(&m, &wc);
+            r.push(&m, &wc, 0);
         }
         // Export snapshots 5, two more arrive before it completes.
-        r.push(&m, &wc);
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
+        r.push(&m, &wc, 0);
         r.mark_exported(5);
         assert_eq!(r.unexported_count(), 2);
     }
@@ -345,12 +380,12 @@ mod tests {
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle();
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         r.mark_exported(1);
         r.toggle(); // stop
         r.toggle(); // start again — buffer cleared
         assert_eq!(r.unexported_count(), 0);
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1, "new samples are unexported again");
     }
 
@@ -361,10 +396,10 @@ mod tests {
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         r.toggle();
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         r.mark_exported(99);
         assert_eq!(r.unexported_count(), 0);
-        r.push(&m, &wc);
+        r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1);
     }
 
@@ -376,11 +411,11 @@ mod tests {
         let m = make_measurement(b"  1.234");
         // Fill to one below capacity
         for _ in 0..MAX_RECORDING_SAMPLES - 1 {
-            assert!(!r.push(&m, &wc));
+            assert!(!r.push(&m, &wc, 0));
             assert!(r.active);
         }
         // The push that hits capacity should auto-stop and return true
-        assert!(r.push(&m, &wc));
+        assert!(r.push(&m, &wc, 0));
         assert!(!r.active);
         assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
         assert!(r.is_full());
@@ -393,11 +428,11 @@ mod tests {
         r.toggle();
         let m = make_measurement(b"  1.234");
         for _ in 0..MAX_RECORDING_SAMPLES {
-            r.push(&m, &wc);
+            r.push(&m, &wc, 0);
         }
         assert!(!r.active);
         // Further pushes should be no-ops
-        assert!(!r.push(&m, &wc));
+        assert!(!r.push(&m, &wc, 0));
         assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
     }
 
@@ -405,7 +440,7 @@ mod tests {
     fn sample_from_measurement() {
         let m = make_measurement(b"  5.678");
         let wc = WallClock::new();
-        let s = Sample::from_measurement(&m, &wc);
+        let s = Sample::from_measurement(&m, &wc, 0);
         assert_eq!(s.mode(), "DC V");
         assert_eq!(s.value_str(), "5.678");
         assert_eq!(s.unit(), "V");
@@ -418,7 +453,7 @@ mod tests {
     fn sample_value_str_reports_overload_not_digits() {
         let mut m = make_measurement(b"      0");
         m.value = MeasuredValue::Overload;
-        let s = Sample::from_measurement(&m, &WallClock::new());
+        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
         assert_eq!(s.value_str(), "OL");
         assert_eq!(s.value_export_str(), "OL");
     }
@@ -427,7 +462,7 @@ mod tests {
     fn sample_value_str_reports_ncv_not_digits() {
         let mut m = make_measurement(b"  1.234");
         m.value = MeasuredValue::NcvLevel(2);
-        let s = Sample::from_measurement(&m, &WallClock::new());
+        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
         assert_eq!(s.value_str(), "NCV:2");
         assert_eq!(s.value_export_str(), "NCV:2");
     }
@@ -441,7 +476,7 @@ mod tests {
             !m.raw_payload.is_empty(),
             "fixture should carry wire bytes to begin with"
         );
-        let s = Sample::from_measurement(&m, &WallClock::new());
+        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
         assert!(s.measurement.raw_payload.is_empty());
     }
 
@@ -449,9 +484,11 @@ mod tests {
     fn render_csv_has_header_and_one_row_per_sample() {
         let wc = WallClock::new();
         let m = make_measurement(b"  5.678");
-        let samples: Vec<Sample> = (0..3).map(|_| Sample::from_measurement(&m, &wc)).collect();
+        let samples: Vec<Sample> = (0..3)
+            .map(|_| Sample::from_measurement(&m, &wc, 0))
+            .collect();
 
-        let bytes = render_csv(&samples, "UNI-T UT61E+", 0).unwrap();
+        let bytes = render_csv(&samples, "UNI-T UT61E+", 0, 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -464,7 +501,7 @@ mod tests {
 
     #[test]
     fn render_csv_of_an_empty_buffer_is_just_the_headers() {
-        let bytes = render_csv(&[], "mock", 0).unwrap();
+        let bytes = render_csv(&[], "mock", 0, 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(text.lines().count(), 2);
     }
@@ -491,9 +528,9 @@ mod tests {
             aux("Frequency", "50.01", "Hz"),
             aux("Period", "20.00", "ms"),
         ];
-        let s = Sample::from_measurement(&m, &WallClock::new());
+        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "UNI-T UT181A", 4).unwrap();
+        let bytes = render_csv(&[s], "UNI-T UT181A", 4, 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -524,9 +561,9 @@ mod tests {
         let mut max = aux("Max", "5.9010", "");
         max.elapsed_secs = Some(12);
         m.aux_values = vec![max];
-        let s = Sample::from_measurement(&m, &WallClock::new());
+        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "UNI-T UT181A", 1).unwrap();
+        let bytes = render_csv(&[s], "UNI-T UT181A", 1, 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let row = text.lines().nth(2).unwrap();
         assert!(row.ends_with(",Max,5.9010,V"), "got {row:?}");
@@ -541,9 +578,9 @@ mod tests {
             aux("Frequency", "50.01", "Hz"),
             aux("Period", "20.00", "ms"),
         ];
-        let s = Sample::from_measurement(&m, &WallClock::new());
+        let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "mock", 1).unwrap();
+        let bytes = render_csv(&[s], "mock", 1, 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert!(
@@ -552,6 +589,74 @@ mod tests {
             lines[2]
         );
         assert_eq!(lines[1].split(',').count(), lines[2].split(',').count());
+    }
+
+    /// A transform's `Raw` is appended after whatever sub-values the meter
+    /// sent, so with a single shared slot count it slid between `aux1` and
+    /// `aux3` as the meter changed mode mid-file — three quantities in one
+    /// column. The trailing extra group pins it.
+    ///
+    /// A row recorded before the scale was switched on carries no `Raw`, and
+    /// says so through its own `extra_aux`: its Frequency stays in `aux1`
+    /// rather than being mistaken for the appended sub-value and filed under
+    /// the `Raw` column.
+    #[test]
+    fn render_csv_pins_appended_sub_values_to_the_trailing_group() {
+        let wc = WallClock::new();
+
+        // Recorded before the scale: the meter's Frequency, no Raw.
+        let mut before = make_measurement(b"  5.678");
+        before.aux_values = vec![aux("Frequency", "50.01", "Hz")];
+
+        // Scale on, meter in a mode with no sub-values of its own.
+        let mut bare = make_measurement(b"  5.678");
+        bare.aux_values = vec![aux("Raw", "0.05678", "")];
+
+        // Scale on, meter sending both of its sub-values.
+        let mut wide = make_measurement(b"  5.678");
+        wide.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+            aux("Raw", "0.05678", ""),
+        ];
+
+        let samples: Vec<Sample> = [(&before, 0), (&bare, 1), (&wide, 1)]
+            .into_iter()
+            .map(|(m, extra)| Sample::from_measurement(m, &wc, extra))
+            .collect();
+
+        let bytes = render_csv(&samples, "UNI-T UT181A", 2, 1).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+
+        assert_eq!(
+            lines[1],
+            "timestamp,mode,value,unit,range,flags,\
+             aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,\
+             aux3_label,aux3_value,aux3_unit"
+        );
+        assert!(
+            lines[2].ends_with(",Frequency,50.01,Hz,,,,,,"),
+            "recorded before the scale — Frequency in aux1, Raw group empty: {:?}",
+            lines[2]
+        );
+        assert!(
+            lines[3].ends_with(",,,,,,,Raw,0.05678,V"),
+            "no meter sub-values, Raw still third: {:?}",
+            lines[3]
+        );
+        assert!(
+            lines[4].ends_with(",Frequency,50.01,Hz,Period,20.00,ms,Raw,0.05678,V"),
+            "two meter sub-values, Raw still third: {:?}",
+            lines[4]
+        );
+        for row in &lines[2..] {
+            assert_eq!(
+                lines[1].split(',').count(),
+                row.split(',').count(),
+                "every row must have as many fields as the header"
+            );
+        }
     }
 
     /// The export sizes its columns from the device profile, but a capture
@@ -570,11 +675,11 @@ mod tests {
 
         assert_eq!(r.max_aux_seen(), 0);
         r.toggle();
-        r.push(&plain, &wc);
+        r.push(&plain, &wc, 0);
         assert_eq!(r.max_aux_seen(), 0);
-        r.push(&wide, &wc);
+        r.push(&wide, &wc, 0);
         assert_eq!(r.max_aux_seen(), 2);
-        r.push(&plain, &wc);
+        r.push(&plain, &wc, 0);
         assert_eq!(r.max_aux_seen(), 2, "the widest sample wins, not the last");
 
         r.toggle(); // stop
@@ -597,8 +702,8 @@ mod tests {
         m1.timestamp = std::time::Instant::now();
         m2.timestamp = m1.timestamp + Duration::from_millis(500);
 
-        let s1 = Sample::from_measurement(&m1, &wc);
-        let s2 = Sample::from_measurement(&m2, &wc);
+        let s1 = Sample::from_measurement(&m1, &wc, 0);
+        let s2 = Sample::from_measurement(&m2, &wc, 0);
 
         let delta = s2.wall_time.signed_duration_since(s1.wall_time);
         assert_eq!(delta.num_milliseconds(), 500);

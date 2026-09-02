@@ -14,6 +14,7 @@ Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 
 - Real-time value display and time-series graph with minimap
 - Statistics, cursor measurements, reference lines with threshold triggers
+- Software scale, offset and unit relabel for clamps, shunts and sensor maps
 - Live specifications (resolution, accuracy) for the current range
 - Recording with CSV export and remote control buttons
 - Big meter mode for bench-mount use

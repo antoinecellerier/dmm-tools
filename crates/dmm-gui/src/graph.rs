@@ -1415,6 +1415,15 @@ impl Graph {
         }
     }
 
+    /// Switch one sub-value trace off, as if its **Show:** chip had been
+    /// clicked off. The chip still lists it, unlit, so the user can turn it
+    /// back on; unlike [`Graph::toggle_overlay_hidden`] this is idempotent,
+    /// which is what a caller reacting to a state change (rather than to a
+    /// click) needs.
+    pub(crate) fn hide_overlay(&mut self, label: &str) {
+        self.hidden_overlays.insert(label.to_string());
+    }
+
     /// Compute min/max Y over the visible slice, with 10% padding.
     ///
     /// `with_overlays` includes the sub-value traces drawn beside the plotted
@@ -4459,6 +4468,22 @@ mod tests {
         g.hidden_overlays.insert("T3".to_string());
         assert!(key_names(&g).is_empty());
         assert!(drawn_overlay_labels(&g).is_empty());
+    }
+
+    /// Applying a scale hides `Raw` without a click, and does so on every
+    /// change of transform — so unlike the chip's toggle it must not flip a
+    /// trace back on when it is already hidden.
+    #[test]
+    fn hide_overlay_switches_a_trace_off_and_is_idempotent() {
+        let mut g = graph_with_two_overlays();
+        assert_eq!(drawn_overlay_labels(&g), vec!["T2", "T3"]);
+
+        g.hide_overlay("T3");
+        assert!(g.hidden_overlays.contains("T3"));
+        assert_eq!(drawn_overlay_labels(&g), vec!["T2"]);
+
+        g.hide_overlay("T3");
+        assert_eq!(drawn_overlay_labels(&g), vec!["T2"], "still hidden");
     }
 
     /// The choice is about the sub-value, not about the buffer holding it:

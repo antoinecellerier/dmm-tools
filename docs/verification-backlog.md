@@ -487,6 +487,11 @@ verification:
   extreme's "at N seconds") after the mode without flooding while the
   meter streams; and the plot summary's "Also showing …" phrase names
   the drawn traces.
+  With a software scale applied (the **Scale** row), also confirm: the
+  reading's live region ends with ", software scaled" and drops the
+  phrase again when scaling is turned off; the **Scale** button
+  announces its on/off state; and the three fields announce as "Scale
+  factor", "Offset" and "Unit label" from their hint text.
 - **NVDA or JAWS on Windows** (UI Automation): same checks, since
   AccessKit's Windows backend is separate from AT-SPI.
 - **VoiceOver on macOS** (NSAccessibility): same checks on the third

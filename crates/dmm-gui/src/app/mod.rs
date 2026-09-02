@@ -1,10 +1,12 @@
 mod connection;
 mod controls;
+mod transform_ui;
 
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
+use dmm_lib::transform::Transform;
 use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info};
 use std::io::Write;
@@ -21,6 +23,7 @@ use crate::settings::{Settings, ThemeMode};
 use crate::specs;
 use crate::theme::ThemeColors;
 use dmm_lib::stats::{self, Integrator, RunningStats};
+use transform_ui::TransformEditor;
 
 /// How long a toast message stays visible (seconds).
 const TOAST_DURATION_SECS: u64 = 4;
@@ -46,6 +49,29 @@ fn install_text_styles(ctx: &egui::Context) {
             egui::FontId::new(SMALL_TEXT_SIZE, egui::FontFamily::Proportional),
         );
     });
+}
+
+/// Font definitions with the monospace face added to the proportional
+/// fallback chain.
+///
+/// egui's proportional chain is Ubuntu-Light, then the two emoji fonts, and
+/// Ubuntu-Light has no U+2192: the Scale row's arrow separator and the arrow
+/// in a transform's description both rendered as tofu boxes. Hack is already
+/// bundled (it is the monospace face the reading itself uses) and covers the
+/// arrows and the rest of the maths block.
+///
+/// It goes at the *end* of the chain, behind egui's emoji faces. Ahead of
+/// them it also re-resolved every other glyph Ubuntu-Light lacks — the Manual
+/// link's U+2197, Resume's U+25B6, Stop's U+25A0, the graph zoom's
+/// U+229E/U+229F — away from the emoji fonts that had been drawing them,
+/// changing their weight. The glyphs that actually need Hack (U+2192, U+25CF)
+/// are in no other bundled face, so last in the chain still reaches them.
+fn font_definitions() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    if let Some(proportional) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+        proportional.push("Hack".to_owned());
+    }
+    fonts
 }
 
 /// Default height of the recording panel (logical pixels).
@@ -351,6 +377,12 @@ pub struct App {
     /// Last reconnect failure message, if any.
     pub(super) reconnect_last_error: Option<String>,
     pub(super) last_measurement: Option<Measurement>,
+    /// Software transform applied to every incoming reading. Session-only:
+    /// see [`transform_ui`] for why it is never written to settings.
+    transform: Transform,
+    /// Draft text for the **Scale** row, separate from `transform` so a
+    /// half-typed number never reaches the reading.
+    transform_editor: TransformEditor,
 
     graph: Graph,
     stats: RunningStats,
@@ -371,11 +403,19 @@ pub struct App {
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.
     device_aux_slots: usize,
-    /// Sub-value slots the buffered recording was started with. Captured
-    /// alongside `recording_device` and for the same reason: the CSV column
-    /// layout has to describe the meter the samples came from, not whatever
-    /// is selected at export time.
+    /// Sub-value slots the meter itself can fill in the buffered recording,
+    /// taken when recording started. Captured alongside `recording_device`
+    /// and for the same reason: the CSV column layout has to describe the
+    /// meter the samples came from, not whatever is selected at export time.
     recording_aux_slots: usize,
+    /// Extra sub-value slots the export reserves *after* the meter's own, for
+    /// the ones software appends (a transform's `Raw`). Kept apart from
+    /// `recording_aux_slots` so `Raw` gets a fixed trailing column instead of
+    /// sliding forward whenever the meter sends fewer sub-values. Only ever
+    /// grows during a recording — turning a scale off mid-capture leaves the
+    /// trailing group empty rather than renumbering the columns already
+    /// written into the user's mental model of the file.
+    recording_extra_slots: usize,
     /// Profile of the selected device, refreshed only when the selection
     /// changes. Two render paths need it every frame, and building a protocol
     /// to read it allocates — the UT61E+ factory lowercases its model string,
@@ -450,6 +490,7 @@ pub struct App {
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
         install_text_styles(&cc.egui_ctx);
+        cc.egui_ctx.set_fonts(font_definitions());
         let mut settings = Settings::load();
         if let Some(device) = cli.device {
             settings.overrides.device_family = Some(settings.shared.device_family.clone());
@@ -482,6 +523,8 @@ impl App {
             reconnect_attempt: 0,
             reconnect_last_error: None,
             last_measurement: None,
+            transform: Transform::default(),
+            transform_editor: TransformEditor::default(),
             graph,
             stats: RunningStats::new(),
             integrator: Integrator::new(),
@@ -491,6 +534,7 @@ impl App {
             recording_device: None,
             device_aux_slots: 0,
             recording_aux_slots: 0,
+            recording_extra_slots: 0,
             selected_profile: *(initial_device.new_protocol)().profile(),
             selected_profile_id: initial_device.id,
             confirm_discard_open: false,
@@ -705,10 +749,7 @@ impl App {
         if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::L))
             && self.connection_state == ConnectionState::Connected
         {
-            self.graph.clear();
-            self.stats.reset();
-            self.integrator.reset();
-            self.last_measurement = None;
+            self.clear_session();
         }
 
         // Ctrl+R: Toggle recording
@@ -909,6 +950,20 @@ impl App {
         self.waiting_timeouts = 0;
     }
 
+    /// Drop everything derived from the sample stream: graph history,
+    /// session statistics, the integrator and the last reading.
+    ///
+    /// Shared by `Ctrl+L`, the Clear button and a change of software scale,
+    /// which all mean the same thing — the numbers accumulated so far no
+    /// longer describe what is being measured. The recording buffer is
+    /// deliberately not touched; Clear has never discarded a capture.
+    fn clear_session(&mut self) {
+        self.graph.clear();
+        self.stats.reset();
+        self.integrator.reset();
+        self.last_measurement = None;
+    }
+
     fn drain_messages(&mut self) {
         // Drain with `try_recv` rather than `try_iter` so a hung-up sender is
         // distinguishable from an empty queue: the acquisition thread dropping
@@ -986,6 +1041,15 @@ impl App {
                         continue;
                     }
 
+                    // The single point a software transform is applied. Every
+                    // consumer below — the mode/unit reset check, the
+                    // statistics, the integrator, the graph's series list and
+                    // plot input, the recording buffer and `last_measurement`
+                    // — then sees one already-scaled reading, and none of them
+                    // has to know transforms exist. No-op when identity.
+                    let mut m = m;
+                    self.transform.apply(&mut m);
+
                     // Reset the session accumulators on mode *or* unit change:
                     // units become incompatible, and the stats panel labels
                     // Min/Max/Avg with the *current* unit, so carrying
@@ -1052,7 +1116,10 @@ impl App {
                         None => {}
                     }
 
-                    if self.recording.push(&m, &self.wall_clock) {
+                    // `m` has already been through the transform, so the
+                    // count it appended is what this sample carries.
+                    let extra_aux = self.transform.extra_aux_count();
+                    if self.recording.push(&m, &self.wall_clock, extra_aux) {
                         self.toast = Some((
                             "Recording stopped \u{2014} buffer full (500K samples)".to_string(),
                             true,
@@ -1138,6 +1205,9 @@ impl App {
         if self.recording.active {
             self.recording_device = Some(self.selected_device().display_name);
             self.recording_aux_slots = self.device_aux_slots;
+            // The transform's Raw sub-value needs a fixed column of its own,
+            // after the meter's — see `recording_extra_slots`.
+            self.recording_extra_slots = self.transform.extra_aux_count();
         }
     }
 
@@ -1404,10 +1474,7 @@ impl App {
                         .on_hover_text("Clear graph history and statistics (Ctrl+L)")
                         .clicked()
                     {
-                        self.graph.clear();
-                        self.stats.reset();
-                        self.integrator.reset();
-                        self.last_measurement = None;
+                        self.clear_session();
                     }
                 }
                 ConnectionState::Reconnecting => {
@@ -2015,9 +2082,21 @@ impl App {
         let sample_count = self.recording.samples.len();
         // The profile's slot count fixes the layout, with the widest sample
         // actually buffered as a floor: a recording can outlive the
-        // connection that declared the profile.
-        let aux_slots = self.recording_aux_slots.max(self.recording.max_aux_seen());
-        let csv_bytes = match render_csv(&self.recording.samples, device_model, aux_slots) {
+        // connection that declared the profile. The floor counts the meter's
+        // own sub-values, so the appended ones come off it first — otherwise
+        // a transform would widen the meter's group by one as well as adding
+        // its own trailing column.
+        let family_slots = self.recording_aux_slots.max(
+            self.recording
+                .max_aux_seen()
+                .saturating_sub(self.recording_extra_slots),
+        );
+        let csv_bytes = match render_csv(
+            &self.recording.samples,
+            device_model,
+            family_slots,
+            self.recording_extra_slots,
+        ) {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("CSV export failed: {e}");
@@ -2241,6 +2320,11 @@ impl eframe::App for App {
                         self.settings.show_stats.hash(&mut h);
                         self.settings.show_specs.hash(&mut h);
                         self.big_meter_mode.hash(&mut h);
+                        // The Scale row adds a button row, and opening its
+                        // editor adds a second one — both change how much
+                        // room is left for the reading.
+                        self.transform_editor.open.hash(&mut h);
+                        self.transform.is_identity().hash(&mut h);
                         h.finish()
                     };
                     let needs_recalc = cache_key != self.meter_cache_key;
@@ -2263,11 +2347,13 @@ impl eframe::App for App {
                                 &self.meter_reading_ratios,
                                 self.settings.color_preset,
                                 self.settings.color_overrides.for_mode(dark),
+                                !self.transform.is_identity(),
                             );
                             let after_reading = ui.cursor().top();
 
                             if !minimal {
                                 self.show_remote_controls(ui, scale);
+                                self.show_transform_row(ui, scale);
                             }
                             self.show_connection_help(ui);
 
@@ -2335,6 +2421,7 @@ impl eframe::App for App {
                         self.last_measurement.as_ref(),
                         self.settings.color_preset,
                         self.settings.color_overrides.for_mode(dark),
+                        !self.transform.is_identity(),
                     );
                     let controls_top = ui.cursor().top();
                     self.show_remote_controls(ui, 1.0);
@@ -2345,6 +2432,7 @@ impl eframe::App for App {
                         egui::pos2(ui.max_rect().right(), controls_bottom),
                     );
                     self.show_big_meter_toggle_at(ui, toggle_rect);
+                    self.show_transform_row(ui, 1.0);
                     self.show_connection_help(ui);
                     ui.add_space(8.0);
 
@@ -2429,6 +2517,7 @@ impl eframe::App for App {
                         self.last_measurement.as_ref(),
                         self.settings.color_preset,
                         self.settings.color_overrides.for_mode(dark),
+                        !self.transform.is_identity(),
                     );
                     let controls_top = ui.cursor().top();
                     self.show_remote_controls(ui, 1.0);
@@ -2438,6 +2527,7 @@ impl eframe::App for App {
                         egui::pos2(ui.max_rect().right(), controls_bottom),
                     );
                     self.show_big_meter_toggle_at(ui, toggle_rect);
+                    self.show_transform_row(ui, 1.0);
                     self.show_connection_help(ui);
                     self.show_specs_section_compact(ui);
 
@@ -2707,6 +2797,33 @@ impl App {
 mod tests {
     use super::*;
 
+    /// Ubuntu-Light has no rightwards arrow, so without the monospace face in
+    /// the chain the Scale row and its toast render tofu boxes. It has to sit
+    /// *behind* the emoji fonts: ahead of them it also captured the symbols
+    /// they were already drawing (↗, ▶, ■, ⊞, ⊟) and changed their weight.
+    #[test]
+    fn the_proportional_family_falls_back_to_the_monospace_face_last() {
+        let fonts = font_definitions();
+        let proportional = fonts
+            .families
+            .get(&egui::FontFamily::Proportional)
+            .expect("egui always defines the proportional family");
+        let hack = proportional
+            .iter()
+            .position(|name| name == "Hack")
+            .expect("monospace face is in the chain");
+        let emoji = proportional
+            .iter()
+            .rposition(|name| name.contains("moji"))
+            .expect("egui's defaults include the emoji fonts");
+        assert!(hack > emoji, "got {proportional:?}");
+        assert_eq!(hack, proportional.len() - 1, "got {proportional:?}");
+        assert_eq!(
+            proportional.first().map(String::as_str),
+            Some("Ubuntu-Light")
+        );
+    }
+
     /// Both themes, because egui keeps a `Style` per theme and `apply_theme`
     /// swaps between them: raising only the active one would leave `.small()`
     /// at egui's 9 pt after the first theme switch.
@@ -2758,6 +2875,7 @@ mod tests {
 
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::AuxValue;
+    use dmm_lib::transform::RAW_LABEL;
 
     fn aux(label: &'static str, unit: &'static str, value: MeasuredValue) -> AuxValue {
         AuxValue {
@@ -2928,6 +3046,43 @@ mod tests {
         let plot = resolve_plot_input(&m, Some("Max")).expect("still a series");
         assert_eq!(plot.value, None);
         assert_eq!(plot.series, Some("Max"));
+    }
+
+    /// A software scale with no relabel leaves both readings in the same
+    /// unit, so plotting the meter's own `Raw` value still shows the scaled
+    /// reading beside it.
+    #[test]
+    fn a_same_unit_raw_sub_value_keeps_the_scaled_reading_beside_it() {
+        let mut m = meter(5.678, "V", vec![]);
+        Transform::linear(0.1, 0.0, None).apply(&mut m);
+        assert_eq!(m.unit, "V");
+
+        let plot = resolve_plot_input(&m, Some(RAW_LABEL)).expect("plottable");
+        assert_eq!(plot.series, Some(RAW_LABEL));
+        assert_eq!(plot.value, Some(5.678));
+        assert_eq!(plot.overlays.len(), 1, "got {:?}", plot.overlays);
+        assert_eq!(plot.overlays[0].0, "Main");
+        let main = plot.overlays[0].1.expect("the scaled reading is plottable");
+        assert!((main - 0.5678).abs() < 1e-9, "got {main}");
+    }
+
+    /// A 10 mV/A clamp relabelled to amps: `Raw` is still millivolts, so it
+    /// must not be drawn on the amp axis — but it stays selectable.
+    #[test]
+    fn a_relabelled_raw_sub_value_is_selectable_but_never_overlaid() {
+        let mut m = meter(123.4, "mV", vec![]);
+        Transform::linear(100.0, 0.0, Some("A".to_string())).apply(&mut m);
+        assert_eq!(m.unit, "A");
+
+        let plot = resolve_plot_input(&m, None).expect("plottable");
+        assert_eq!(plot.unit, "A");
+        assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
+
+        let raw = resolve_plot_input(&m, Some(RAW_LABEL)).expect("Raw is a series");
+        assert_eq!(raw.series, Some(RAW_LABEL));
+        assert_eq!(raw.unit, "mV");
+        assert_eq!(raw.value, Some(123.4));
+        assert!(raw.overlays.is_empty(), "got {:?}", raw.overlays);
     }
 
     /// NCV is a bar-graph level, not a quantity on a value axis.
