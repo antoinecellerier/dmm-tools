@@ -8,6 +8,7 @@ use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
+use dmm_lib::transform::Transform;
 use log::{error, info};
 use std::io::Write;
 use std::sync::Arc;
@@ -70,6 +71,8 @@ enum Cmd {
         /// Show cumulative time-integral (charge for current modes, V·s for voltage)
         #[arg(long)]
         integrate: bool,
+        #[command(flatten)]
+        transform: TransformArgs,
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, mock cycles through all modes automatically.
         #[arg(
@@ -123,6 +126,89 @@ Install completions for your shell:
         #[arg(long)]
         list_steps: bool,
     },
+}
+
+/// The `read` flags that build a software [`Transform`].
+///
+/// Flattened into `Cmd::Read` so the three flags stay one unit here and in
+/// `--help`, and so `read` keeps its identity behaviour when none are given.
+#[derive(clap::Args, Clone)]
+struct TransformArgs {
+    /// Multiply the reading, taken in base units (V, A, Ω, …), by FACTOR.
+    /// A 10 mV/A clamp is --scale 100; a 100:1 probe is --scale 100.
+    #[arg(long, value_name = "FACTOR", allow_negative_numbers = true, value_parser = parse_scale)]
+    scale: Option<f64>,
+    /// Add VALUE after scaling (32 with --scale 1.8 turns °C into °F)
+    #[arg(long, value_name = "VALUE", allow_negative_numbers = true, value_parser = parse_offset)]
+    offset: Option<f64>,
+    /// Label the scaled reading with this unit instead of the meter's base unit
+    #[arg(long, value_name = "LABEL")]
+    unit: Option<String>,
+}
+
+impl TransformArgs {
+    /// The transform these flags describe. With none given the result is the
+    /// identity, which `Transform::apply` skips entirely — so an unscaled
+    /// `read` is byte-for-byte what it always was.
+    fn to_transform(&self) -> Transform {
+        Transform::linear(
+            self.scale.unwrap_or(1.0),
+            self.offset.unwrap_or(0.0),
+            self.unit.clone(),
+        )
+    }
+}
+
+/// Parse a transform flag's number, rejecting NaN and infinity.
+///
+/// Neither is caught anywhere downstream: they propagate through every
+/// reading into the stats and the integral, whose summary then reads `NaN`
+/// with nothing to say where it came from. `flag` names the offending flag so
+/// `--scale` and `--offset` cannot word the same rejection two ways.
+fn parse_finite(flag: &str, s: &str) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+    if !value.is_finite() {
+        return Err(format!("{flag} must be a finite number, got `{s}`"));
+    }
+    Ok(value)
+}
+
+/// Reject the two scale factors that destroy the reading rather than
+/// re-express it: zero collapses every sample onto the offset, and NaN/inf
+/// poison the stats and the integral.
+fn parse_scale(s: &str) -> Result<f64, String> {
+    let value = parse_finite("scale", s)?;
+    if value == 0.0 {
+        return Err("scale must not be zero — it would flatten every reading to the offset".into());
+    }
+    Ok(value)
+}
+
+/// Any finite shift is a meaningful offset — zero and negatives included — so
+/// only NaN and infinity are rejected, on the same grounds as `--scale`.
+fn parse_offset(s: &str) -> Result<f64, String> {
+    parse_finite("offset", s)
+}
+
+/// The note to print when a reading starts a new statistics series, or `None`
+/// while it continues the current one.
+///
+/// Mode *and* unit, not the unit alone: `--unit` pins the label, so a dial
+/// turn from V to Ω would otherwise leave the unit identical and average
+/// volts with ohms in silence. Auto-range moves the unit without touching the
+/// mode (mV → V), so neither check subsumes the other. Same condition the GUI
+/// resets its stats and integrator on.
+fn series_change(
+    (prev_mode, prev_unit): (&str, &str),
+    (mode, unit): (&str, &str),
+) -> Option<String> {
+    if prev_mode != mode {
+        Some(format!("Mode changed ({prev_mode} \u{2192} {mode})"))
+    } else if prev_unit != unit {
+        Some(format!("Unit changed ({prev_unit} \u{2192} {unit})"))
+    } else {
+        None
+    }
 }
 
 #[derive(Clone, ValueEnum)]
@@ -235,10 +321,17 @@ fn main() {
             output,
             count,
             integrate,
+            transform,
             mock_mode,
-        } if !device.requires_hardware => {
-            cmd_read_mock(interval_ms, format, output, count, integrate, mock_mode)
-        }
+        } if !device.requires_hardware => cmd_read_mock(
+            interval_ms,
+            format,
+            output,
+            count,
+            integrate,
+            &transform.to_transform(),
+            mock_mode,
+        ),
         Cmd::Command { action } if !device.requires_hardware => cmd_command(device, None, action),
         Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
             eprintln!(
@@ -257,6 +350,7 @@ fn main() {
             output,
             count,
             integrate,
+            transform,
             mock_mode: _,
         } => cmd_read(
             device,
@@ -266,6 +360,7 @@ fn main() {
             output,
             count,
             integrate,
+            &transform.to_transform(),
         ),
         Cmd::Command { action } => cmd_command(device, adapter, action),
         Cmd::Debug { count, interval_ms } => cmd_debug(device, adapter, count, interval_ms),
@@ -524,6 +619,7 @@ fn cmd_info(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_read(
     device: &'static SelectableDevice,
     adapter: Option<&str>,
@@ -532,6 +628,7 @@ fn cmd_read(
     output_path: Option<String>,
     count: usize,
     integrate: bool,
+    transform: &Transform,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut dmm = open_with_help(device, adapter)?;
     let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
@@ -545,6 +642,7 @@ fn cmd_read(
         experimental,
         Some(device),
         integrate,
+        transform,
     )
 }
 
@@ -554,6 +652,7 @@ fn cmd_read_mock(
     output_path: Option<String>,
     count: usize,
     integrate: bool,
+    transform: &Transform,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut dmm = match mock_mode {
@@ -577,6 +676,7 @@ fn cmd_read_mock(
         false,
         None,
         integrate,
+        transform,
     )
 }
 
@@ -592,6 +692,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // When set, timeout warnings include device-specific activation instructions.
     device: Option<&'static SelectableDevice>,
     integrate: bool,
+    // Applied to every reading before anything else sees it; the identity
+    // transform (no --scale/--offset/--unit) is a no-op.
+    transform: &Transform,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
@@ -602,13 +705,32 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
     let model_name = dmm.profile().model_name;
     // Fixed for the whole run: the CSV column layout is per meter family, so
-    // a mode that reports fewer sub-values than the family can leaves the
-    // trailing slots empty rather than shortening the row.
-    let aux_slots = dmm.profile().max_aux_values;
+    // a mode that reports fewer sub-values than the family can leaves its own
+    // slots empty rather than shortening the row. A software transform adds
+    // one more group, kept trailing, for the meter's own reading — so `Raw`
+    // stays in the same columns whether or not the meter sent sub-values of
+    // its own that frame.
+    let aux = format::AuxLayout {
+        family: dmm.profile().max_aux_values,
+        extra: transform.extra_aux_count(),
+    };
+    if !transform.is_identity() {
+        // On stderr so a redirected CSV or JSON stream stays machine-readable,
+        // but visible: nothing in the output itself says the numbers are not
+        // what the meter displayed.
+        eprintln!(
+            "{}",
+            style(format!(
+                "Note: readings scaled in software ({})",
+                transform.describe()
+            ))
+            .dim()
+        );
+    }
     match format {
         OutputFormat::Csv => {
             writeln!(writer, "# device: {model_name}")?;
-            writeln!(writer, "{}", format::csv_header(integrate, aux_slots))?;
+            writeln!(writer, "{}", format::csv_header(integrate, aux.total()))?;
         }
         OutputFormat::Json => {
             writeln!(
@@ -625,9 +747,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let wall_clock = dmm_lib::WallClock::new();
     let mut stats = dmm_lib::stats::RunningStats::default();
     let mut integrator = dmm_lib::stats::Integrator::new();
-    // Unit the current stats/integral series accumulates in. A change resets
-    // both, so the closing summary only ever covers one unit.
-    let mut series_unit: Option<String> = None;
+    // Mode and unit the current stats/integral series accumulates in. A
+    // change to either resets both, so the closing summary only ever covers
+    // one comparable series.
+    let mut series: Option<(String, String)> = None;
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
     // Give the pacing sleep the same Ctrl-C flag the loop checks, so a long
@@ -639,29 +762,36 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
+                // Before everything else: the unit-change check, the stats,
+                // the integrator and the formatter must all see the same
+                // series, and after a transform that series is the scaled one.
+                // (`--integrate` on a relabelled clamp reading therefore
+                // integrates amps, not the millivolts the meter sent.)
+                let mut m = m;
+                transform.apply(&mut m);
+
                 // Min/Max/Avg and the integral are only meaningful within a
-                // single unit. Auto-range moves the unit a decade without
-                // touching the mode string, and turning the dial changes it
-                // outright — so without this the closing summary averages
-                // volts with milliamps. It prints bare numbers with no unit,
-                // so nothing on screen would reveal the mix.
+                // single mode and unit. Auto-range moves the unit a decade
+                // without touching the mode string, and turning the dial
+                // changes the mode — which `--unit` would otherwise hide, as
+                // it pins the label across the change. Without both checks the
+                // closing summary averages volts with ohms and prints bare
+                // numbers, so nothing on screen would reveal the mix.
                 let current_unit: &str = &m.unit;
-                if let Some(prev_unit) = &series_unit
-                    && prev_unit != current_unit
+                if let Some((prev_mode, prev_unit)) = &series
+                    && let Some(note) =
+                        series_change((prev_mode, prev_unit), (&m.mode, current_unit))
                 {
                     let what = if integrate {
                         "statistics and integral"
                     } else {
                         "statistics"
                     };
-                    eprintln!(
-                        "{} Unit changed ({prev_unit} \u{2192} {current_unit}), {what} reset",
-                        style("Note:").yellow(),
-                    );
+                    eprintln!("{} {note}, {what} reset", style("Note:").yellow());
                     stats.reset();
                     integrator.reset();
                 }
-                series_unit = Some(current_unit.to_string());
+                series = Some((m.mode.to_string(), current_unit.to_string()));
 
                 if let MeasuredValue::Normal(v) = &m.value {
                     stats.push(*v);
@@ -688,7 +818,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                     format,
                     experimental,
                     integral_display,
-                    aux_slots,
+                    aux,
                 )?;
                 writer.flush()?;
                 i += 1;
@@ -741,10 +871,12 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     }
 
     if let (Some(min), Some(max), Some(avg)) = (stats.min, stats.max, stats.avg()) {
-        // Name the unit the figures are in. They reset on a unit change, so
-        // this is the unit every sample behind them was measured in.
-        let unit_suffix = series_unit
-            .as_deref()
+        // Name the unit the figures are in. They reset whenever the mode or
+        // the unit moves, so this is the unit every sample behind them was
+        // measured in.
+        let unit_suffix = series
+            .as_ref()
+            .map(|(_, unit)| unit.as_str())
             .filter(|u| !u.is_empty())
             .map(|u| format!(" {u}"))
             .unwrap_or_default();
@@ -757,7 +889,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             style(format!("{avg:.4}")).cyan(),
         );
         if integrate
-            && let Some(unit_str) = &series_unit
+            && let Some((_, unit_str)) = &series
             && let Some((disp_unit, divisor)) = dmm_lib::stats::integral_unit_info(unit_str)
         {
             let dt_str = integrator
@@ -916,6 +1048,7 @@ mod tests {
                 output,
                 count,
                 integrate,
+                transform,
                 mock_mode,
             } => {
                 assert_eq!(interval_ms, 0);
@@ -923,6 +1056,10 @@ mod tests {
                 assert!(output.is_none());
                 assert_eq!(count, 0);
                 assert!(!integrate);
+                // No transform flags means the identity, so `read` keeps the
+                // reading and the column layout it always had.
+                assert_eq!(transform.to_transform(), Transform::default());
+                assert!(transform.to_transform().is_identity());
                 assert!(mock_mode.is_none());
             }
             _ => panic!("expected Read"),
@@ -952,6 +1089,7 @@ mod tests {
                 count,
                 mock_mode: _,
                 integrate: _,
+                transform: _,
             } => {
                 assert_eq!(interval_ms, 100);
                 assert!(matches!(format, OutputFormat::Csv));
@@ -960,6 +1098,121 @@ mod tests {
             }
             _ => panic!("expected Read"),
         }
+    }
+
+    fn read_transform(args: &[&str]) -> Transform {
+        let mut argv = vec!["dmm-cli", "read"];
+        argv.extend_from_slice(args);
+        match Cli::try_parse_from(argv).unwrap().command {
+            Cmd::Read { transform, .. } => transform.to_transform(),
+            _ => panic!("expected Read"),
+        }
+    }
+
+    /// `--unit` takes exactly one value, so a `--format` after it must still
+    /// be parsed as a flag rather than swallowed as part of the label.
+    #[test]
+    fn clap_parse_read_scale_and_unit() {
+        let cli = Cli::try_parse_from([
+            "dmm-cli", "read", "--scale", "100", "--unit", "A", "--format", "csv",
+        ])
+        .unwrap();
+        match cli.command {
+            Cmd::Read {
+                transform, format, ..
+            } => {
+                assert_eq!(
+                    transform.to_transform(),
+                    Transform::linear(100.0, 0.0, Some("A".to_string()))
+                );
+                assert!(matches!(format, OutputFormat::Csv));
+            }
+            _ => panic!("expected Read"),
+        }
+    }
+
+    /// Without `allow_negative_numbers` clap reads `-3` as an unknown flag.
+    #[test]
+    fn clap_parse_read_accepts_negative_scale_and_offset() {
+        assert_eq!(
+            read_transform(&["--offset", "-3"]),
+            Transform::linear(1.0, -3.0, None)
+        );
+        assert_eq!(
+            read_transform(&["--scale", "-1"]),
+            Transform::linear(-1.0, 0.0, None)
+        );
+    }
+
+    #[test]
+    fn clap_parse_read_celsius_to_fahrenheit() {
+        assert_eq!(
+            read_transform(&["--scale", "1.8", "--offset", "32", "--unit", "°F"]),
+            Transform::linear(1.8, 32.0, Some("°F".to_string()))
+        );
+    }
+
+    /// `Cli` is not `Debug`, so the rejection has to be matched rather than
+    /// unwrapped.
+    fn flag_error(flag: &str, value: &str) -> String {
+        match Cli::try_parse_from(["dmm-cli", "read", flag, value]) {
+            Ok(_) => panic!("{flag} {value} should have been rejected"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    /// A zero or non-finite factor would destroy the reading rather than
+    /// re-express it, and would poison the stats and the integral with NaN.
+    #[test]
+    fn clap_rejects_a_zero_or_non_finite_scale() {
+        for bad in ["0", "-0", "nan", "inf"] {
+            let msg = flag_error("--scale", bad);
+            assert!(msg.contains("scale must"), "--scale {bad} said: {msg}");
+        }
+        let msg = flag_error("--scale", "abc");
+        assert!(msg.contains("is not a number"), "got {msg}");
+    }
+
+    /// `--offset` had no parser at all, so NaN and infinity went straight
+    /// through into every reading and only surfaced as `NaN` in the closing
+    /// summary. Any *finite* shift stays legal, zero and negatives included.
+    #[test]
+    fn clap_rejects_a_non_finite_offset() {
+        for bad in ["nan", "inf"] {
+            let msg = flag_error("--offset", bad);
+            assert!(msg.contains("offset must"), "--offset {bad} said: {msg}");
+        }
+        let msg = flag_error("--offset", "abc");
+        assert!(msg.contains("is not a number"), "got {msg}");
+        assert_eq!(
+            read_transform(&["--offset", "-3"]),
+            Transform::linear(1.0, -3.0, None)
+        );
+        assert_eq!(
+            read_transform(&["--offset", "0"]),
+            Transform::linear(1.0, 0.0, None)
+        );
+    }
+
+    /// The stats/integral reset used to watch the unit alone. `--unit` pins
+    /// the label, so a dial turn from volts to ohms kept one series and
+    /// averaged the two quantities together in silence.
+    #[test]
+    fn series_change_watches_the_mode_as_well_as_the_unit() {
+        assert_eq!(series_change(("DC V", "V"), ("DC V", "V")), None);
+        assert_eq!(
+            series_change(("DC V", "A"), ("Resistance", "A")).as_deref(),
+            Some("Mode changed (DC V \u{2192} Resistance)")
+        );
+        assert_eq!(
+            series_change(("DC V", "mV"), ("DC V", "V")).as_deref(),
+            Some("Unit changed (mV \u{2192} V)")
+        );
+        // Both moved: name the mode, the change the user made.
+        assert_eq!(
+            series_change(("DC V", "mV"), ("Resistance", "k\u{3a9}")).as_deref(),
+            Some("Mode changed (DC V \u{2192} Resistance)")
+        );
     }
 
     #[test]
@@ -1042,7 +1295,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1061,7 +1314,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1096,7 +1349,10 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            2,
+            format::AuxLayout {
+                family: 2,
+                extra: 0,
+            },
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1124,7 +1380,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1145,7 +1401,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1169,7 +1425,7 @@ mod tests {
             &OutputFormat::Json,
             true,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1188,7 +1444,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1206,7 +1462,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1236,7 +1492,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1254,7 +1510,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1274,7 +1530,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1293,7 +1549,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            0,
+            format::AuxLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();

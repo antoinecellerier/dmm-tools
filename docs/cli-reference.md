@@ -165,6 +165,9 @@ dmm-cli read [OPTIONS]
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
+| `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
+| `--offset <VALUE>` | `0` | Add VALUE after scaling. |
+| `--unit <LABEL>` | | Label the scaled reading with LABEL instead of the meter's base unit. |
 
 CSV output begins with a `# device:` comment line identifying the meter model,
 followed by the column header. JSON output begins with a `_metadata` line
@@ -183,7 +186,9 @@ UT803/UT804, VC-880, VC-890) send none, so their files carry the six original
 columns and are unchanged. The count is per meter family, not per mode, so a
 reading that fills fewer slots leaves the rest empty and every row of a file
 lines up. With `--integrate`, the `integral` and `integral_unit` columns come
-first, ahead of the aux groups.
+first, ahead of the aux groups. Software scaling adds one more group, always
+the last one, for the meter's own reading, so a scaled run has family slots + 1
+— see [Scaling readings in software](#scaling-readings-in-software).
 
 ```
 # device: UNI-T UT181A
@@ -196,9 +201,11 @@ When the session ends, a summary line (sample count, min, max, average, each
 with its unit) is printed to stderr. When `--integrate` is active, the total
 integral is also shown.
 
-Statistics and the integral cover a single unit: if the unit changes mid-run —
-by turning the dial, or by auto-range crossing a decade — both reset and a note
-is printed to stderr, so the summary always describes one comparable series.
+Statistics and the integral cover a single mode and unit: if either changes
+mid-run — by turning the dial, or by auto-range crossing a decade — both reset
+and a note is printed to stderr, so the summary always describes one comparable
+series. Both are watched, not just the unit: `--unit` pins the label, so a dial
+turn would otherwise go unnoticed.
 
 **Examples:**
 
@@ -214,6 +221,36 @@ dmm-cli read --format json --interval-ms 1000
 
 # Measure battery discharge capacity (coulomb counter)
 dmm-cli read --integrate --format csv -o discharge.csv
+```
+
+#### Scaling readings in software
+
+`--scale`, `--offset` and `--unit` re-express the reading on the PC for
+sensors the meter knows nothing about — a current clamp's mV/A, a shunt, a
+probe divider, °C to °F. Nothing is sent to the meter.
+
+The factor is per **base unit**: the reading is converted to V, A, Ω, …
+before scaling, so a factor survives auto-ranging between mV and V. A
+10 mV/A clamp is `--scale 100` (0.010 V/A → 100 A per volt). Order: strip
+the SI prefix, multiply by `--scale`, add `--offset`, relabel with `--unit`;
+without `--unit` the reading is shown in the base unit.
+
+The meter's own reading rides along as a `Raw` sub-value — indented in text,
+in the JSON `aux` array, and in the last CSV aux group (family slots + 1).
+That group is reserved for it, so `Raw` stays in the same columns whether or
+not the meter sent sub-values of its own on a given frame. Sub-values that
+measure the same quantity as the reading — a second thermocouple, a REL
+reference, the MIN/MAX extremes — are scaled with it and shown in the same
+unit; sub-values in another unit, such as a frequency beside a voltage, are
+left as the meter sent them. `OL` and NCV rows pass through with only the
+unit relabelled. Statistics and `--integrate` use the scaled reading, so a
+clamp relabelled to `A` integrates to Ah. A dim note on stderr marks a
+scaled run; stdout is untouched.
+
+```bash
+dmm-cli read --scale 100 --unit A                 # 10 mV/A clamp → amps
+dmm-cli read --scale 100                          # 100:1 HV probe, stays in V
+dmm-cli read --scale 1.8 --offset 32 --unit °F    # °C → °F
 ```
 
 ### dmm-cli command

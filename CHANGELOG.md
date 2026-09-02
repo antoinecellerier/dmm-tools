@@ -14,6 +14,7 @@
 
 ### CLI
 
+- **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period) and `temp2` (second thermocouple) stand in for a UT181A in the CLI and GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.

@@ -21,6 +21,7 @@ Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 ## [CLI](docs/cli-reference.md)
 
 - Live measurement streaming with text, CSV, and JSON output
+- Software scaling (`--scale`, `--offset`, `--unit`) for clamps, shunts and sensor maps
 - Coulomb counting / energy integration (`--integrate`)
 - Remote control — send button presses over USB
 - Guided protocol capture wizard for bug reports
