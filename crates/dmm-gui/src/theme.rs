@@ -23,6 +23,9 @@ pub(crate) enum PaletteField {
     GraphCrossing,
     GraphCursor,
     GraphEnvelope,
+    GraphOverlay1,
+    GraphOverlay2,
+    GraphOverlay3,
     PlotBackground,
     GraphCrosshair,
     StatusOk,
@@ -46,6 +49,9 @@ impl PaletteField {
         PaletteField::GraphCrossing,
         PaletteField::GraphCursor,
         PaletteField::GraphEnvelope,
+        PaletteField::GraphOverlay1,
+        PaletteField::GraphOverlay2,
+        PaletteField::GraphOverlay3,
         PaletteField::PlotBackground,
         PaletteField::GraphCrosshair,
         PaletteField::StatusOk,
@@ -69,6 +75,9 @@ impl PaletteField {
             Self::GraphCrossing => "Crossing",
             Self::GraphCursor => "Cursor",
             Self::GraphEnvelope => "Envelope",
+            Self::GraphOverlay1 => "Overlay 1",
+            Self::GraphOverlay2 => "Overlay 2",
+            Self::GraphOverlay3 => "Overlay 3",
             Self::PlotBackground => "Plot bg",
             Self::GraphCrosshair => "Crosshair",
             Self::StatusOk => "Connected",
@@ -93,6 +102,15 @@ impl PaletteField {
             Self::GraphCrossing => "Trigger-crossing marker color",
             Self::GraphCursor => "Measurement cursor color",
             Self::GraphEnvelope => "Min/Max envelope fill color",
+            Self::GraphOverlay1 => {
+                "Line color of the first sub-value drawn beside the plotted series"
+            }
+            Self::GraphOverlay2 => {
+                "Line color of the second sub-value drawn beside the plotted series"
+            }
+            Self::GraphOverlay3 => {
+                "Line color of the third sub-value drawn beside the plotted series"
+            }
             Self::PlotBackground => "Graph plot area background color",
             Self::GraphCrosshair => "Hover crosshair color on the graph",
             Self::StatusOk => "\"Connected\" status color",
@@ -120,6 +138,9 @@ impl PaletteField {
             Self::GraphCrossing => &mut o.graph_crossing,
             Self::GraphCursor => &mut o.graph_cursor,
             Self::GraphEnvelope => &mut o.graph_envelope,
+            Self::GraphOverlay1 => &mut o.graph_overlay_1,
+            Self::GraphOverlay2 => &mut o.graph_overlay_2,
+            Self::GraphOverlay3 => &mut o.graph_overlay_3,
             Self::PlotBackground => &mut o.plot_background,
             Self::GraphCrosshair => &mut o.graph_crosshair,
             Self::StatusOk => &mut o.status_ok,
@@ -165,6 +186,9 @@ struct PresetColors {
     graph_crossing: ColorPair,
     graph_cursor: ColorPair,
     graph_envelope: ColorPair,
+    graph_overlay_1: ColorPair,
+    graph_overlay_2: ColorPair,
+    graph_overlay_3: ColorPair,
     plot_background: ColorPair,
     graph_crosshair: ColorPair,
     // -- Minimap --
@@ -230,6 +254,23 @@ const PRESET_DEFAULT: PresetColors = PresetColors {
         Color32::from_rgba_premultiplied(100, 150, 200, 80),
         Color32::from_rgb(0, 60, 160),
     ),
+    // Sub-value overlays. Deliberately not the mean/ref/cursor colours: those
+    // are also drawn dashed, so a sub-value sharing one would be
+    // indistinguishable from an overlay line. Contrast against the plot
+    // background is asserted in
+    // `overlay_colors_meet_graphical_contrast_on_the_plot_area`.
+    graph_overlay_1: ColorPair::new(
+        Color32::from_rgb(0, 200, 200),
+        Color32::from_rgb(0, 115, 125),
+    ),
+    graph_overlay_2: ColorPair::new(
+        Color32::from_rgb(190, 140, 255),
+        Color32::from_rgb(105, 40, 200),
+    ),
+    graph_overlay_3: ColorPair::new(
+        Color32::from_rgb(230, 230, 230),
+        Color32::from_rgb(75, 75, 75),
+    ),
     // egui extreme_bg_color defaults: dark=10, light=255
     plot_background: ColorPair::new(Color32::from_gray(10), Color32::from_gray(255)),
     graph_crosshair: ColorPair::new(Color32::from_gray(200), Color32::from_gray(60)),
@@ -277,6 +318,15 @@ const PRESET_HIGH_CONTRAST: PresetColors = PresetColors {
     graph_envelope: ColorPair::new(
         Color32::from_rgba_premultiplied(80, 160, 255, 100),
         Color32::from_rgb(0, 60, 180),
+    ),
+    graph_overlay_1: ColorPair::new(Color32::from_gray(255), Color32::from_gray(0)),
+    graph_overlay_2: ColorPair::new(
+        Color32::from_rgb(200, 140, 255),
+        Color32::from_rgb(100, 0, 200),
+    ),
+    graph_overlay_3: ColorPair::new(
+        Color32::from_rgb(255, 150, 120),
+        Color32::from_rgb(160, 50, 20),
     ),
     plot_background: ColorPair::new(Color32::from_gray(0), Color32::from_gray(255)),
     graph_crosshair: ColorPair::new(Color32::from_gray(240), Color32::from_gray(20)),
@@ -341,6 +391,12 @@ const PRESET_COLORBLIND_SAFE: PresetColors = PresetColors {
     graph_envelope: ColorPair::new(
         Color32::from_rgba_premultiplied(86, 150, 200, 80),
         Color32::from_rgb(0, 60, 140),
+    ),
+    graph_overlay_1: ColorPair::new(Color32::from_gray(240), Color32::from_gray(60)),
+    graph_overlay_2: ColorPair::new(Color32::from_rgb(213, 94, 0), Color32::from_rgb(170, 50, 0)),
+    graph_overlay_3: ColorPair::new(
+        Color32::from_rgb(150, 150, 255),
+        Color32::from_rgb(80, 60, 220),
     ),
     plot_background: ColorPair::new(Color32::from_gray(10), Color32::from_gray(255)),
     graph_crosshair: ColorPair::new(Color32::from_gray(200), Color32::from_gray(60)),
@@ -519,6 +575,21 @@ impl ThemeColors {
         self.resolve(self.overrides.graph_envelope, &self.preset.graph_envelope)
     }
 
+    /// Line colour of the `k`-th sub-value drawn beside the plotted series.
+    ///
+    /// Three colours cycle: the graph draws at most four overlays, and the
+    /// fourth is told apart by its line style (the non-colour cue every
+    /// overlay carries anyway) rather than by a fourth hue that would have to
+    /// stay distinct from the other three in all six preset/theme
+    /// combinations.
+    pub(crate) fn graph_overlay(&self, k: usize) -> Color32 {
+        match k % 3 {
+            0 => self.resolve(self.overrides.graph_overlay_1, &self.preset.graph_overlay_1),
+            1 => self.resolve(self.overrides.graph_overlay_2, &self.preset.graph_overlay_2),
+            _ => self.resolve(self.overrides.graph_overlay_3, &self.preset.graph_overlay_3),
+        }
+    }
+
     /// Border of an overload band — derives from status_error().
     ///
     /// Overload is the meter reporting a condition, not an absence of data, so
@@ -581,6 +652,9 @@ impl ThemeColors {
             PaletteField::GraphCrossing => self.graph_crossing(),
             PaletteField::GraphCursor => self.graph_cursor(),
             PaletteField::GraphEnvelope => self.graph_envelope(),
+            PaletteField::GraphOverlay1 => self.graph_overlay(0),
+            PaletteField::GraphOverlay2 => self.graph_overlay(1),
+            PaletteField::GraphOverlay3 => self.graph_overlay(2),
             PaletteField::PlotBackground => self.plot_background(),
             PaletteField::GraphCrosshair => self.graph_crosshair(),
             PaletteField::StatusOk => self.status_ok(),
@@ -625,7 +699,7 @@ mod tests {
         }
         // The settings panel slices ALL into four groups by index; if the
         // count changes those slices need revisiting.
-        assert_eq!(seen.len(), 18);
+        assert_eq!(seen.len(), 21);
     }
 
     /// An override must come back from the field it was written to — the
@@ -785,6 +859,72 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Overlay traces are graphical elements on the plot area, so
+    /// `.claude/rules/gui.md` asks for 3:1 against it — in every preset and
+    /// both themes, the case that historically broke light mode.
+    #[test]
+    fn overlay_colors_meet_graphical_contrast_on_the_plot_area() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for &dark in &[true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let bg = tc.plot_background();
+                for k in 0..3 {
+                    let c = tc.graph_overlay(k);
+                    let ratio = contrast(c, bg);
+                    assert!(
+                        ratio >= 3.0,
+                        "overlay {k} {c:?} on plot background {bg:?} is {ratio:.2}:1, below 3:1 ({preset:?}, dark={dark})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The overlays and the plotted series are drawn on the same axes at the
+    /// same time. Line style tells them apart without colour, but two traces
+    /// sharing a colour *and* differing only in dash length is a needlessly
+    /// hard read — so the four have to be four distinct colours.
+    #[test]
+    fn overlay_colors_differ_from_each_other_and_the_data_line() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for &dark in &[true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let line = tc.graph_line();
+                for k in 0..3 {
+                    assert_ne!(
+                        tc.graph_overlay(k),
+                        line,
+                        "overlay {k} matches the data line ({preset:?}, dark={dark})"
+                    );
+                    for j in 0..k {
+                        assert_ne!(
+                            tc.graph_overlay(k),
+                            tc.graph_overlay(j),
+                            "overlays {j} and {k} share a colour ({preset:?}, dark={dark})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Only three overlay colours are defined; a fourth overlay wraps back to
+    /// the first and is distinguished by its line style.
+    #[test]
+    fn overlay_colors_cycle_after_three() {
+        let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+        assert_eq!(tc.graph_overlay(3), tc.graph_overlay(0));
+        assert_eq!(tc.graph_overlay(4), tc.graph_overlay(1));
     }
 
     #[test]

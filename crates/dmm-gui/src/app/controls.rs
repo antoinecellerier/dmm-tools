@@ -517,9 +517,9 @@ impl App {
                 // another's tooltip or wired to the wrong override.
                 for (heading, fields) in [
                     ("UI:", &PaletteField::ALL[..3]),
-                    ("Graph:", &PaletteField::ALL[3..12]),
-                    ("Status:", &PaletteField::ALL[12..17]),
-                    ("Minimap:", &PaletteField::ALL[17..]),
+                    ("Graph:", &PaletteField::ALL[3..15]),
+                    ("Status:", &PaletteField::ALL[15..20]),
+                    ("Minimap:", &PaletteField::ALL[20..]),
                 ] {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(heading);

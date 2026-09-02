@@ -41,8 +41,8 @@ the full options table.
 ### Color Palette
 
 - Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
-- All 18 base colors customizable per-theme via UI color pickers or JSON overrides
-- Colors are split: UI chrome (3), graph (9), status indicators (5), minimap (1)
+- All 21 base colors customizable per-theme via UI color pickers or JSON overrides
+- Colors are split: UI chrome (3), graph (12), status indicators (5), minimap (1)
 - Derived colors auto-track their base (cursor dim/delta, minimap line, live indicator, recording warning, button hover/active)
 - UI chrome colors (background, text, button) modify egui Visuals — plot grid and axis labels follow automatically
 - Preset selection and per-color overrides persist to `settings.json`
@@ -129,6 +129,9 @@ Three components stacked vertically:
 - Time window presets: 5s, 10s, 30s, 1m, 5m, 10m
 - LIVE toggle button (green when active)
 - Y:Auto / Y:Fixed toggle — in fixed mode, shows min/max text input fields. Switching to fixed snapshots current auto range unless user previously edited values.
+- The **Plot:** and **Show:** groups below sit together on a row of their own, between the time-window row and the Mean/Min/Max/Ref/Cursors row, and appear only for meters that send sub-values — so the toolbar reads view → what is plotted → what is drawn over it. Each group is a faintly boxed caption plus its chips, so the two are not mistaken for the analysis toggles.
+- **Plot:** chips (only for meters that send sub-values) — pick the series the graph draws: the main reading, or any sub-value in the current frame. Session-only; a label the meter stops sending falls back to Main.
+- **Show:** chips (only once a same-unit sub-value is being overlaid) — pick which of those traces are drawn. Hidden ones keep being recorded, so re-showing one brings its history back; they leave the key, the plot and the Y-axis fit while off. Session-only, keyed by label, and kept across a clear or a change of plotted series.
 - **Mean** toggle — dashed horizontal line at visible window average, labeled with value
 - **Min/Max** toggle — sliding window envelope (configurable width in seconds), dashed boundary lines showing value range
 - **Ref** toggle — one or more horizontal reference lines at user-specified values (comma/space/semicolon separated), each labeled. When active, optional **Triggers** toggle shows diamond markers at threshold crossings.
@@ -142,6 +145,9 @@ Three components stacked vertically:
 - In browse mode (click LIVE to toggle, or click minimap): drag to pan X, scroll wheel to zoom X (centered on cursor). Y auto-scales to visible data.
 - Scroll while in LIVE mode exits to browse mode
 - Double-click to return to LIVE mode
+- Sub-values sharing the plotted series' unit are drawn as extra dashed/dotted lines (up to four). Different-unit sub-values (Hz, ms beside VAC) are never overlaid — a shared axis would imply a relationship that isn't there — and stay reachable through the **Plot:** selector. Line style, not just colour, distinguishes them.
+- A static key in the plot's top-left names each drawn line with its colour and dash pattern, painted only while something is overlaid. It is a key, not a control: `Plot::reset()` pins the view every frame and clears egui_plot's own legend state, so the show/hide affordance is the toolbar's **Show:** chips instead.
+- Cursors, Mean/Min/Max/Ref, the minimap and the visible-window stats all follow the plotted series; overlays are reference traces only
 - Disconnect gaps shown as dashed red vertical line pairs
 - Consistent line color across reconnects
 - Timeline is continuous across disconnects (data not cleared on reconnect)
@@ -153,7 +159,7 @@ Three components stacked vertically:
 - Clicking near the latest data re-enables LIVE mode
 - Time axis labels with smart interval selection
 
-**History:** ~10,000 points (VecDeque, oldest dropped). Mode *or* unit changes clear the graph (incompatible scales) — auto-range crossing a decade changes the unit while the mode stays put.
+**History:** ~10,000 points (VecDeque, oldest dropped). Mode *or* unit *or* plotted-series changes clear the graph (incompatible scales) — auto-range crossing a decade changes the unit while the mode stays put, and two sub-values can share both mode and unit (T1/T2). Overlay buffers run in lockstep with the history, back-filled when a sub-value first appears mid-session.
 
 ### Statistics Panel
 

@@ -100,6 +100,12 @@ pub struct PaletteOverrides {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graph_envelope: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_overlay_1: Option<HexColor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_overlay_2: Option<HexColor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_overlay_3: Option<HexColor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub plot_background: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graph_crosshair: Option<HexColor>,

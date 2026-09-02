@@ -15,7 +15,7 @@ use std::time::Instant;
 
 use crate::a11y::{ResponseA11yExt, UiA11yExt};
 use crate::display;
-use crate::graph::Graph;
+use crate::graph::{Graph, MAX_OVERLAYS, PlotSample};
 use crate::recording::{Recording, render_csv};
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
@@ -140,19 +140,25 @@ struct FormattedStats {
 }
 
 impl FormattedStats {
+    /// `unit` captions the session block, `visible_unit` the visible-window
+    /// block. They differ when the graph plots a sub-value: session stats
+    /// follow the meter's main reading, the visible window follows what is
+    /// drawn, and captioning Hz values with "V" would be simply wrong.
     fn new(
         stats: &RunningStats,
         visible: Option<(f64, f64, f64, usize)>,
         unit: &str,
+        visible_unit: &str,
         integral: Option<(f64, &str, f64, Option<f64>)>,
         visible_integral: Option<(f64, &str, f64, Option<f64>)>,
     ) -> Self {
-        let fmt = |v: Option<f64>| -> String {
+        let fmt_in = |unit: &str, v: Option<f64>| -> String {
             match v {
                 Some(val) => format!("{val:>10.4} {unit}"),
                 None => format!("{:>10} {unit}", crate::NO_DATA),
             }
         };
+        let fmt = |v: Option<f64>| fmt_in(unit, v);
         let fmt_integral = |info: Option<(f64, &str, f64, Option<f64>)>| -> Option<String> {
             info.map(|(raw, disp_unit, divisor, dt)| {
                 let val = raw / divisor;
@@ -169,14 +175,105 @@ impl FormattedStats {
             count: stats.count,
             integral: fmt_integral(integral),
             visible: visible.map(|(vmin, vmax, vavg, vcount)| FormattedStatsGroup {
-                min: fmt(Some(vmin)),
-                max: fmt(Some(vmax)),
-                avg: fmt(Some(vavg)),
+                min: fmt_in(visible_unit, Some(vmin)),
+                max: fmt_in(visible_unit, Some(vmax)),
+                avg: fmt_in(visible_unit, Some(vavg)),
                 count: vcount,
                 integral: fmt_integral(visible_integral),
             }),
         }
     }
+}
+
+/// One measurement reduced to what the graph should plot.
+///
+/// The graph never sees `dmm_lib` measurement types; this is where the
+/// selected series and its same-unit companions are picked out.
+pub(super) struct PlotInput<'a> {
+    /// The plotted series' value, or `None` when it is over range.
+    pub value: Option<f64>,
+    /// Unit of the plotted series — the meter's, or the sub-value's own.
+    pub unit: &'a str,
+    pub display_raw: Option<&'a str>,
+    /// Label of the plotted sub-value, or `None` for the main reading.
+    pub series: Option<&'a str>,
+    /// Same-unit sub-values to draw beside it.
+    pub overlays: Vec<(&'a str, Option<f64>)>,
+}
+
+/// What a measured value contributes to a plot: `Some(Some(v))` for a
+/// reading, `Some(None)` for an over-range one (a break in the trace, but
+/// still a measurement), `None` for something with no place on a value axis.
+fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
+    match v {
+        MeasuredValue::Normal(v) => Some(Some(*v)),
+        MeasuredValue::Overload => Some(None),
+        // NCV is a bar-graph level, not a quantity — plotting it against a
+        // volt axis would be meaningless.
+        MeasuredValue::NcvLevel(_) => None,
+    }
+}
+
+/// Decide what the graph plots for this measurement, given the toolbar's
+/// series selection.
+///
+/// Only sub-values sharing the plotted series' unit become overlays. A
+/// frequency in Hz beside an AC voltage measures something else entirely, and
+/// drawing it on the volt axis would invent a relationship that isn't there —
+/// it stays reachable through the selector instead.
+fn resolve_plot_input<'a>(m: &'a Measurement, selected: Option<&str>) -> Option<PlotInput<'a>> {
+    let main_unit: &str = &m.unit;
+    // A selection only holds while the meter still sends that sub-value;
+    // otherwise this frame falls back to the main reading.
+    let plotted = selected.and_then(|sel| m.aux_values.iter().find(|a| a.label.as_ref() == sel));
+
+    let (value, unit, display_raw, series) = match plotted {
+        Some(aux) => (
+            plottable_value(&aux.value)?,
+            aux.unit_or(main_unit),
+            aux.display_raw.as_deref(),
+            // Borrowed from the aux rather than from `selected`, so the
+            // caller's borrow of the graph ends at the call.
+            Some(aux.label.as_ref()),
+        ),
+        None => (
+            plottable_value(&m.value)?,
+            main_unit,
+            m.display_raw.as_deref(),
+            None,
+        ),
+    };
+
+    let mut overlays: Vec<(&str, Option<f64>)> = Vec::new();
+    for aux in &m.aux_values {
+        if overlays.len() > MAX_OVERLAYS {
+            break;
+        }
+        if Some(aux.label.as_ref()) == series || aux.unit_or(main_unit) != unit {
+            continue;
+        }
+        if let Some(v) = plottable_value(&aux.value) {
+            overlays.push((aux.label.as_ref(), v));
+        }
+    }
+    // Plotting a sub-value: the meter's own reading is the natural companion
+    // whenever it measures the same quantity — choosing T2 should still show
+    // T1 next to it.
+    if series.is_some()
+        && main_unit == unit
+        && overlays.len() <= MAX_OVERLAYS
+        && let Some(v) = plottable_value(&m.value)
+    {
+        overlays.push(("Main", v));
+    }
+
+    Some(PlotInput {
+        value,
+        unit,
+        display_raw,
+        series,
+        overlays,
+    })
 }
 
 /// Big meter display mode.
@@ -862,28 +959,52 @@ impl App {
                         self.stats.reset();
                     }
 
+                    // Stats and the integrator follow the meter's *main*
+                    // reading whatever the graph is plotting: they are session
+                    // statistics of the reading, not of the view.
                     match &m.value {
                         MeasuredValue::Normal(v) => {
-                            self.graph.push(
-                                *v,
-                                m.timestamp,
-                                &m.mode,
-                                &m.unit,
-                                m.display_raw.as_deref(),
-                            );
                             self.stats.push(*v);
                             self.integrator.push(*v, m.timestamp);
                         }
-                        MeasuredValue::Overload => {
-                            // An overload has no plottable value, so the graph
-                            // gets no point — tell it the series broke, or a
-                            // short excursion (one under the gap threshold)
-                            // would be drawn as a straight line through the
-                            // break and integrated across.
-                            self.integrator.push_overload();
-                            self.graph.push_break(m.timestamp);
-                        }
+                        // An overload has no plottable value — tell the
+                        // integrator, or a short excursion (one under the gap
+                        // threshold) would be integrated straight across.
+                        MeasuredValue::Overload => self.integrator.push_overload(),
                         _ => {}
+                    }
+
+                    // Offer this frame's sub-values before resolving what to
+                    // plot: a selection whose label just vanished has to fall
+                    // back to the main reading in the same frame that clears
+                    // the graph, not one frame later.
+                    let options: Vec<(&str, &str)> = m
+                        .aux_values
+                        .iter()
+                        .map(|aux| (aux.label.as_ref(), aux.unit_or(&m.unit)))
+                        .collect();
+                    self.graph.set_series_options(&options);
+                    match resolve_plot_input(&m, self.graph.selected_series()) {
+                        Some(PlotInput {
+                            value: Some(v),
+                            unit,
+                            display_raw,
+                            series,
+                            overlays,
+                        }) => self.graph.push_sample(PlotSample {
+                            value: v,
+                            timestamp: m.timestamp,
+                            mode: &m.mode,
+                            unit,
+                            display_raw,
+                            series,
+                            overlays: &overlays,
+                        }),
+                        // The plotted series is over range: no point, but the
+                        // trace has to break so it isn't drawn straight
+                        // through the excursion.
+                        Some(PlotInput { value: None, .. }) => self.graph.push_break(m.timestamp),
+                        None => {}
                     }
 
                     if self.recording.push(&m, &self.wall_clock) {
@@ -1440,15 +1561,20 @@ impl App {
                 self.integrator.elapsed_secs(),
             )
         });
-        let visible_integral = stats::integral_unit_info(unit).and_then(|(disp_unit, divisor)| {
-            self.graph
-                .visible_integral()
-                .map(|raw| (raw, disp_unit, divisor, self.graph.visible_data_span_secs()))
-        });
+        // The visible block reports what the graph draws, which is not the
+        // main reading's unit when a sub-value is plotted.
+        let visible_unit = self.graph.plotted_unit();
+        let visible_integral =
+            stats::integral_unit_info(visible_unit).and_then(|(disp_unit, divisor)| {
+                self.graph
+                    .visible_integral()
+                    .map(|raw| (raw, disp_unit, divisor, self.graph.visible_data_span_secs()))
+            });
         let formatted = FormattedStats::new(
             &self.stats,
             self.graph.visible_stats(),
             unit,
+            visible_unit,
             integral_info,
             visible_integral,
         );
@@ -2564,5 +2690,132 @@ mod tests {
         let issue =
             ConnectionIssue::from_message("meter reports adapter not found somewhere".to_string());
         assert!(matches!(issue, ConnectionIssue::Other(_)));
+    }
+
+    // ── resolve_plot_input ──────────────────────────────────────────────
+
+    use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::AuxValue;
+
+    fn aux(label: &'static str, unit: &'static str, value: MeasuredValue) -> AuxValue {
+        AuxValue {
+            label: label.into(),
+            value,
+            unit: unit.into(),
+            display_raw: None,
+            elapsed_secs: None,
+        }
+    }
+
+    fn meter(value: f64, unit: &'static str, aux_values: Vec<AuxValue>) -> Measurement {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(value), unit, StatusFlags::default());
+        m.aux_values = aux_values;
+        m
+    }
+
+    /// A UT181A in V AC + Hz sends the frequency and the period beside the
+    /// voltage. Neither measures volts, so neither belongs on the volt axis —
+    /// they are reachable only through the selector.
+    #[test]
+    fn different_unit_sub_values_are_never_overlaid() {
+        let m = meter(
+            239.22,
+            "VAC",
+            vec![
+                aux("Frequency", "Hz", MeasuredValue::Normal(50.01)),
+                aux("Period", "ms", MeasuredValue::Normal(20.0)),
+                aux("Max", "VAC", MeasuredValue::Normal(240.5)),
+            ],
+        );
+        let plot = resolve_plot_input(&m, None).expect("main reading is plottable");
+        assert_eq!(plot.value, Some(239.22));
+        assert_eq!(plot.unit, "VAC");
+        assert_eq!(plot.series, None);
+        assert_eq!(plot.overlays, vec![("Max", Some(240.5))]);
+    }
+
+    /// Protocols leave the unit empty when a sub-value shares the main
+    /// reading's — a relative reference or a MIN/MAX sample always measures
+    /// the same quantity as the value it tracks.
+    #[test]
+    fn an_empty_aux_unit_resolves_to_the_main_unit_and_is_overlaid() {
+        let m = meter(
+            4.9871,
+            "V",
+            vec![aux("Max", "", MeasuredValue::Normal(5.0123))],
+        );
+        let plot = resolve_plot_input(&m, None).expect("plottable");
+        assert_eq!(plot.overlays, vec![("Max", Some(5.0123))]);
+    }
+
+    /// Selecting a sub-value in a different unit rescales the whole plot to
+    /// it, and nothing else on the frame shares that unit.
+    #[test]
+    fn a_selected_different_unit_sub_value_is_plotted_alone() {
+        let m = meter(
+            239.22,
+            "VAC",
+            vec![
+                aux("Frequency", "Hz", MeasuredValue::Normal(50.01)),
+                aux("Period", "ms", MeasuredValue::Normal(20.0)),
+            ],
+        );
+        let plot = resolve_plot_input(&m, Some("Frequency")).expect("plottable");
+        assert_eq!(plot.value, Some(50.01));
+        assert_eq!(plot.unit, "Hz");
+        assert_eq!(plot.series, Some("Frequency"));
+        assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
+    }
+
+    /// Plotting T2 must still show T1 — the reading the meter calls its main
+    /// one measures the same quantity.
+    #[test]
+    fn a_selected_same_unit_sub_value_keeps_the_main_reading_beside_it() {
+        let m = meter(
+            23.5,
+            "\u{00B0}C",
+            vec![aux("T2", "\u{00B0}C", MeasuredValue::Normal(24.1))],
+        );
+        let plot = resolve_plot_input(&m, Some("T2")).expect("plottable");
+        assert_eq!(plot.value, Some(24.1));
+        assert_eq!(plot.series, Some("T2"));
+        assert_eq!(plot.overlays, vec![("Main", Some(23.5))]);
+    }
+
+    /// The meter left the mode that produced the selected sub-value: fall
+    /// back to the main reading rather than plotting nothing.
+    #[test]
+    fn an_absent_selection_falls_back_to_the_main_reading() {
+        let m = meter(4.9, "V", vec![]);
+        let plot = resolve_plot_input(&m, Some("T2")).expect("plottable");
+        assert_eq!(plot.value, Some(4.9));
+        assert_eq!(plot.series, None);
+    }
+
+    /// An over-range sub-value is still a measurement — it breaks its own
+    /// trace without removing it from the plot.
+    #[test]
+    fn an_overloaded_sub_value_overlays_as_a_break() {
+        let m = meter(4.9871, "V", vec![aux("Max", "", MeasuredValue::Overload)]);
+        let plot = resolve_plot_input(&m, None).expect("plottable");
+        assert_eq!(plot.overlays, vec![("Max", None)]);
+    }
+
+    /// An over-range *plotted* series yields no point at all; the App turns
+    /// this into a break in the trace.
+    #[test]
+    fn an_overloaded_selected_series_has_no_value() {
+        let m = meter(4.9871, "V", vec![aux("Max", "", MeasuredValue::Overload)]);
+        let plot = resolve_plot_input(&m, Some("Max")).expect("still a series");
+        assert_eq!(plot.value, None);
+        assert_eq!(plot.series, Some("Max"));
+    }
+
+    /// NCV is a bar-graph level, not a quantity on a value axis.
+    #[test]
+    fn an_ncv_reading_is_not_plotted() {
+        let m = Measurement::test_fixture(MeasuredValue::NcvLevel(3), "", StatusFlags::default());
+        assert!(resolve_plot_input(&m, None).is_none());
     }
 }

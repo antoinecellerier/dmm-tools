@@ -2,7 +2,7 @@ use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
     AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points, Span, VLine,
 };
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
 use crate::a11y::ResponseA11yExt;
@@ -11,6 +11,12 @@ use crate::theme::ThemeColors;
 
 /// Maximum number of points to keep in the history buffer.
 const MAX_POINTS: usize = 10_000;
+
+/// Maximum number of same-unit sub-values drawn beside the plotted series.
+///
+/// The protocols send at most four sub-values per frame (UT181A), so this is
+/// the ceiling the wire imposes rather than a display choice.
+pub(crate) const MAX_OVERLAYS: usize = 4;
 
 /// Default gap threshold multiplier: gap = max(interval * multiplier, minimum).
 const GAP_MULTIPLIER: f64 = 5.0;
@@ -38,6 +44,29 @@ pub(crate) enum GapKind {
 /// between them: (start_time, end_time, why).
 type SegmentsAndGaps = (Vec<Vec<[f64; 2]>>, Vec<(f64, f64, GapKind)>);
 
+/// One sub-value trace ready to draw: (overlay index, name, segments).
+///
+/// The index — not a colour — because it is what both the trace and its key
+/// row derive their colour and line style from, so the two cannot drift.
+type OverlayTrace = (usize, String, Vec<Vec<[f64; 2]>>);
+
+/// How one row of the plot key draws its line sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeyStyle {
+    /// The plotted series: solid, in the graph line colour.
+    Plotted,
+    /// A sub-value trace, identified by its overlay index — the same index
+    /// `overlay_color_and_style` uses for the line itself.
+    Overlay(usize),
+}
+
+/// Minimum font size for the plot key, per `.claude/rules/gui.md`. The body
+/// text style is normally larger; this only bites if a user's style shrinks it.
+const MIN_KEY_FONT_SIZE: f32 = 11.0;
+
+/// Width of the line sample drawn at the left of each key row.
+const KEY_SAMPLE_WIDTH: f32 = 24.0;
+
 /// A data point with an absolute timestamp.
 #[derive(Clone, Copy)]
 struct DataPoint {
@@ -57,6 +86,72 @@ struct DataPoint {
     /// The interruption included a genuine loss of data, as reported by the
     /// App — not merely a quiet meter. See `push_data_loss`.
     break_had_data_loss: bool,
+}
+
+/// One sub-value trace drawn beside the plotted series.
+///
+/// `values` runs in lockstep with `history`: index `i` holds the sub-value
+/// that arrived with `history[i]`, or `None` when that frame carried no such
+/// sub-value or reported it over range. Keeping them parallel rather than
+/// widening `DataPoint` costs nothing for the single-display meters that make
+/// up most of the device table, and lets `visible_index_range` index both.
+struct OverlaySeries {
+    label: String,
+    values: VecDeque<Option<f64>>,
+}
+
+/// One measurement as the graph should plot it.
+///
+/// Built by the App, which decides *which* series is plotted and which
+/// sub-values share its unit; the graph never sees `dmm_lib` measurement
+/// types.
+pub struct PlotSample<'a> {
+    pub value: f64,
+    pub timestamp: Instant,
+    pub mode: &'a str,
+    pub unit: &'a str,
+    pub display_raw: Option<&'a str>,
+    /// Label of the sub-value being plotted, or `None` for the meter's main
+    /// reading. A change here restarts the trace: two sub-values can share a
+    /// mode and a unit (T1 and T2), so nothing else would tell them apart.
+    pub series: Option<&'a str>,
+    /// Sub-values sharing the plotted series' unit, as (label, value).
+    /// `None` for an over-range sub-value — it breaks that trace without
+    /// breaking the others.
+    pub overlays: &'a [(&'a str, Option<f64>)],
+}
+
+/// Shapes for one key row's line sample, matching how `egui_plot` renders the
+/// same `LineStyle` on the plot — otherwise the key would promise a dash
+/// pattern the trace doesn't use.
+fn key_line_sample(
+    a: egui::Pos2,
+    b: egui::Pos2,
+    color: egui::Color32,
+    style: egui_plot::LineStyle,
+) -> Vec<egui::Shape> {
+    const WIDTH: f32 = 1.5;
+    match style {
+        egui_plot::LineStyle::Solid => {
+            vec![egui::Shape::line_segment(
+                [a, b],
+                egui::Stroke::new(WIDTH, color),
+            )]
+        }
+        egui_plot::LineStyle::Dotted { spacing } => {
+            egui::Shape::dotted_line(&[a, b], color, spacing, WIDTH)
+        }
+        egui_plot::LineStyle::Dashed { length } => {
+            // The same golden-ratio gap `egui_plot::LineStyle::style_line` uses.
+            const GOLDEN_RATIO: f32 = 0.618_034;
+            egui::Shape::dashed_line(
+                &[a, b],
+                egui::Stroke::new(WIDTH, color),
+                length,
+                length * GOLDEN_RATIO,
+            )
+        }
+    }
 }
 
 /// Quantize a `f64` to ~3 decimal digits before hashing so animated plot
@@ -165,8 +260,27 @@ enum MinimapDrag {
 /// Real-time scrolling graph with minimap navigation.
 pub struct Graph {
     history: VecDeque<DataPoint>,
+    /// Same-unit sub-value traces, in lockstep with `history`.
+    overlays: Vec<OverlaySeries>,
     current_mode: Option<String>,
     current_unit: String,
+    /// Label of the series `history` was recorded from; `None` for the main
+    /// reading. Distinct from `selected_series`: this one only moves when a
+    /// sample actually arrives for the new choice.
+    current_series: Option<String>,
+    /// Which series the toolbar is asking for. Session-only — a selection is
+    /// about the meter's current mode, so persisting it across restarts would
+    /// silently plot a sub-value the next session may not even have.
+    selected_series: Option<String>,
+    /// Sub-value labels the user has switched off in the toolbar's **Show:**
+    /// group. Session-only, and deliberately keyed by label rather than by
+    /// index so a choice survives `clear()`, a change of plotted series and a
+    /// sub-value that disappears and comes back. Hidden overlays are still
+    /// recorded in lockstep — re-showing one brings its history with it.
+    hidden_overlays: HashSet<String>,
+    /// Sub-values the latest sample offered, as (label, resolved unit).
+    /// Drives the toolbar's selector.
+    series_options: Vec<(String, String)>,
     /// Last `display_raw` string from the latest pushed measurement, kept
     /// for the a11y plot summary so screen readers hear the same digits the
     /// sighted user sees (e.g. "1.234 mV" instead of the raw f64 value
@@ -279,12 +393,45 @@ struct OverlayLabelData {
     cursor_color: egui::Color32,
 }
 
+/// Faint container for one labelled toolbar group (**Plot:**, **Show:**).
+///
+/// The two groups do different things — one picks the series the graph plots,
+/// the other picks which sub-value traces are drawn over it — and inline chips
+/// gave a first-time user nothing to tell them apart, or apart from the
+/// analysis toggles beside them. Boxing each group makes that grouping
+/// visible.
+///
+/// Both colours come from `Visuals`, so the box follows the theme. The fill is
+/// `faint_bg_color`, well clear of `selection.bg_fill`: the frame is only a
+/// container, and a selected chip inside it must still read as selected.
+fn group_frame(ui: &Ui) -> egui::Frame {
+    egui::Frame::new()
+        .corner_radius(4)
+        .inner_margin(egui::Margin::symmetric(6, 2))
+        .fill(ui.visuals().faint_bg_color)
+        .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+}
+
+/// Caption naming one toolbar group. Body size, not `.small()` — egui's small
+/// style lands under the 11 pt floor in `.claude/rules/gui.md`, and these are
+/// group labels rather than annotations.
+fn group_caption(ui: &Ui, text: &str) -> egui::RichText {
+    egui::RichText::new(text)
+        .strong()
+        .color(ui.visuals().weak_text_color())
+}
+
 impl Graph {
     pub fn new() -> Self {
         Self {
             history: VecDeque::with_capacity(MAX_POINTS),
+            overlays: Vec::new(),
             current_mode: None,
             current_unit: String::new(),
+            current_series: None,
+            selected_series: None,
+            hidden_overlays: HashSet::new(),
+            series_options: Vec::new(),
             last_display_raw: None,
             origin: None,
             time_window_secs: 60.0,
@@ -343,6 +490,13 @@ impl Graph {
         self.gap_threshold_secs = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
     }
 
+    /// Push a single-series sample.
+    ///
+    /// Test-only since the App began routing every sample through
+    /// `push_sample`: it keeps the graph's own tests expressing the
+    /// single-display case — by far the common one — without restating the
+    /// two sub-value fields each time.
+    #[cfg(test)]
     pub fn push(
         &mut self,
         value: f64,
@@ -351,6 +505,26 @@ impl Graph {
         unit: &str,
         display_raw: Option<&str>,
     ) {
+        self.push_sample(PlotSample {
+            value,
+            timestamp,
+            mode,
+            unit,
+            display_raw,
+            series: None,
+            overlays: &[],
+        });
+    }
+
+    /// Push a sample together with the sub-values drawn beside it.
+    pub fn push_sample(&mut self, sample: PlotSample<'_>) {
+        let (value, timestamp, mode, unit, display_raw) = (
+            sample.value,
+            sample.timestamp,
+            sample.mode,
+            sample.unit,
+            sample.display_raw,
+        );
         let now = timestamp;
 
         if self.origin.is_none() {
@@ -361,10 +535,19 @@ impl Graph {
         // keeps the mode string fixed while the unit moves a decade (Ω→kΩ,
         // mV→V, nF→µF), so comparing only the mode let the trace collapse by
         // 1000x mid-plot with the axis relabelled and no gap to show why.
-        if self.current_mode.as_deref() != Some(mode) || self.current_unit != unit {
+        // A change of plotted series restarts the trace for the same reason:
+        // two sub-values can share a mode *and* a unit (T1 and T2 are both
+        // "DC V"/"°C"), so switching from one to the other would otherwise
+        // append onto the previous one's trace with nothing to mark the join.
+        if self.current_mode.as_deref() != Some(mode)
+            || self.current_unit != unit
+            || self.current_series.as_deref() != sample.series
+        {
             self.history.clear();
+            self.overlays.clear();
             self.current_mode = Some(mode.to_string());
             self.current_unit = unit.to_string();
+            self.current_series = sample.series.map(str::to_owned);
             self.origin = Some(now);
             self.live = true;
             self.view_center = 0.0;
@@ -398,6 +581,26 @@ impl Graph {
 
         if self.history.len() >= MAX_POINTS {
             self.history.pop_front();
+            for o in &mut self.overlays {
+                o.values.pop_front();
+            }
+        }
+
+        // Register sub-values seen for the first time, back-filled with
+        // `None` for every point already in history — a COMP High/Low that
+        // appears mid-session must line up with the trace it accompanies, not
+        // start at index 0.
+        for &(label, _) in sample.overlays {
+            if self.overlays.len() >= MAX_OVERLAYS {
+                break;
+            }
+            if self.overlays.iter().any(|o| o.label == label) {
+                continue;
+            }
+            self.overlays.push(OverlaySeries {
+                label: label.to_string(),
+                values: vec![None; self.history.len()].into(),
+            });
         }
 
         self.history.push_back(DataPoint {
@@ -407,7 +610,61 @@ impl Graph {
             break_last_sample: self.pending_break_since.take(),
             break_had_data_loss: std::mem::take(&mut self.pending_data_loss),
         });
+        for o in &mut self.overlays {
+            let v = sample
+                .overlays
+                .iter()
+                .find(|(label, _)| *label == o.label)
+                .and_then(|(_, v)| *v);
+            o.values.push_back(v);
+        }
+        debug_assert!(
+            self.overlays
+                .iter()
+                .all(|o| o.values.len() == self.history.len()),
+            "overlay series out of lockstep with history"
+        );
         self.history_version += 1;
+    }
+
+    /// Offer the sub-values the meter is currently sending, as
+    /// (label, resolved unit), for the toolbar's series selector.
+    ///
+    /// A selection whose label is no longer offered falls back to the main
+    /// reading — the meter left the mode that produced it.
+    pub fn set_series_options(&mut self, options: &[(&str, &str)]) {
+        if let Some(sel) = &self.selected_series
+            && !options.iter().any(|(label, _)| *label == sel.as_str())
+        {
+            self.selected_series = None;
+        }
+        // Called on every sample; only pay for the strings when the offer
+        // actually changed.
+        let unchanged = self.series_options.len() == options.len()
+            && self
+                .series_options
+                .iter()
+                .zip(options)
+                .all(|((l, u), (nl, nu))| l.as_str() == *nl && u.as_str() == *nu);
+        if !unchanged {
+            self.series_options = options
+                .iter()
+                .map(|(l, u)| ((*l).to_string(), (*u).to_string()))
+                .collect();
+        }
+    }
+
+    /// The sub-value label currently selected for plotting, or `None` for the
+    /// meter's main reading.
+    pub fn selected_series(&self) -> Option<&str> {
+        self.selected_series.as_deref()
+    }
+
+    /// Unit of the series being plotted. The stats panel captions its
+    /// visible-window block with this, which is not the meter's main unit
+    /// when a sub-value is plotted.
+    pub fn plotted_unit(&self) -> &str {
+        &self.current_unit
     }
 
     /// Record that the series was interrupted — the meter reported a value
@@ -419,6 +676,11 @@ impl Graph {
     /// the timestamps, so the trace would be drawn straight through it and
     /// the visible-range stats and integral would run across a value the
     /// meter never measured.
+    ///
+    /// The frame's sub-values are dropped with it: overlays are indexed by
+    /// history position, and an over-range plotted series adds no position.
+    /// They resume at the next plotted point, split by this break like the
+    /// main trace.
     pub fn push_break(&mut self, timestamp: Instant) {
         // Updated on every overload sample, not just the first: it is what
         // advances the live view for as long as the meter stays over range.
@@ -452,6 +714,12 @@ impl Graph {
 
     pub fn clear(&mut self) {
         self.history.clear();
+        // `selected_series` deliberately survives: Ctrl+L clears the data, not
+        // the user's choice of what to plot. `series_options` and
+        // `hidden_overlays` survive too — the meter is still sending, and the
+        // next sample refreshes the offer.
+        self.overlays.clear();
+        self.current_series = None;
         self.pending_break = None;
         self.pending_data_loss = false;
         self.pending_break_since = None;
@@ -678,9 +946,24 @@ impl Graph {
         (elapsed > self.gap_threshold_secs).then_some(GapKind::NoData)
     }
 
-    /// Render toolbar as two rows. Row 1: time presets, LIVE, Y-axis.
-    /// Row 2: overlay toggles (Mean, Min/Max, Ref, Cursors).
-    /// Both use `horizontal_wrapped` so items wrap instead of clipping.
+    /// Whether the toolbar's series row has anything to show: a sub-value to
+    /// pick from (**Plot:**) or a trace to draw beside the plotted series
+    /// (**Show:**). False for single-display meters, which keep the two-row
+    /// toolbar they had before sub-values existed.
+    fn has_series_row(&self) -> bool {
+        !self.series_options.is_empty() || !self.overlays.is_empty()
+    }
+
+    /// Render the toolbar. Row 1: time presets, LIVE, Y-axis, Reset Zoom.
+    /// Row 2, present only for meters that send sub-values: the boxed
+    /// **Plot:** series selector and **Show:** trace toggles. Row 3: the
+    /// analysis overlays (Mean, Min/Max, Ref, Cursors).
+    ///
+    /// The series controls get a row of their own rather than sharing one
+    /// with the analysis toggles: inline, nothing distinguished the two kinds
+    /// of control for a user who didn't already know them. The rows now read
+    /// view → what is plotted → what is drawn over it. Each uses
+    /// `horizontal_wrapped` so items wrap instead of clipping.
     pub fn show_toolbar(&mut self, ui: &mut Ui) {
         // Row 1: time windows + LIVE + Y-axis
         ui.horizontal_wrapped(|ui| {
@@ -736,7 +1019,10 @@ impl Graph {
             {
                 if !self.y_axis_fixed && !self.y_user_set {
                     let (view_min, view_max) = self.view_bounds();
-                    if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max) {
+                    // Snapshot with the overlays included, so pinning the axis
+                    // doesn't jump the view the moment Y:Fixed is pressed.
+                    if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true)
+                    {
                         self.y_fixed_min = y_lo;
                         self.y_fixed_max = y_hi;
                         self.y_min_text = format!("{y_lo:.4}");
@@ -791,7 +1077,17 @@ impl Graph {
             }
         });
 
-        // Row 2: overlay toggles
+        // Row 2: what is plotted, and what is drawn beside it. Skipped
+        // entirely for single-display meters, which keep the two-row toolbar.
+        if self.has_series_row() {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                self.show_series_selector(ui);
+                self.show_overlay_toggles(ui);
+            });
+        }
+
+        // Row 3: analysis overlays
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             let dark = ui.visuals().dark_mode;
@@ -913,8 +1209,125 @@ impl Graph {
         });
     }
 
+    /// Chips choosing which series the graph plots: the meter's main reading
+    /// or any sub-value it is currently sending.
+    ///
+    /// Only rendered when the meter sends sub-values, so single-display
+    /// meters see the toolbar exactly as before. `selectable_label` rather
+    /// than a combo box because that is the toolbar's idiom throughout — and
+    /// with at most five choices the chips stay readable.
+    fn show_series_selector(&mut self, ui: &mut Ui) {
+        if self.series_options.is_empty() {
+            return;
+        }
+
+        // `None` = the main reading, `Some(i)` = `series_options[i]`. Applied
+        // after the loop so the click handler doesn't need a mutable borrow
+        // while the option list is being read.
+        let mut choice: Option<Option<usize>> = None;
+
+        let frame = group_frame(ui);
+        frame.show(ui, |ui| {
+            ui.label(group_caption(ui, "Plot:"));
+
+            let main_selected = self.selected_series.is_none();
+            if ui
+                .selectable_label(main_selected, "Main")
+                .on_hover_text("Plot the meter's main reading")
+                .a11y_toggled(main_selected)
+                .clicked()
+            {
+                choice = Some(None);
+            }
+
+            for (i, (label, unit)) in self.series_options.iter().enumerate() {
+                let selected = self.selected_series.as_deref() == Some(label.as_str());
+                if ui
+                    .selectable_label(selected, label.as_str())
+                    .on_hover_text(format!(
+                        "Plot the {label} sub-value ({unit}) \u{2014} a different unit restarts the graph"
+                    ))
+                    .a11y_toggled(selected)
+                    .clicked()
+                {
+                    choice = Some(Some(i));
+                }
+            }
+        });
+
+        // The switch takes effect at the next sample: `push_sample` sees the
+        // new series and clears through the same branch a mode change uses,
+        // releasing the pinned Y range, the cursors and any bbox state.
+        match choice {
+            Some(None) => self.selected_series = None,
+            Some(Some(i)) => self.selected_series = Some(self.series_options[i].0.clone()),
+            None => {}
+        }
+
+        ui.add_space(6.0);
+    }
+
+    /// Chips choosing which same-unit sub-value traces are drawn beside the
+    /// plotted series.
+    ///
+    /// The plot key is a key, not a control (`Plot::reset()` wipes egui_plot's
+    /// own legend state every frame), so the show/hide affordance lives here
+    /// in the toolbar with the rest of them. Hiding a trace stops it being
+    /// drawn but not recorded — turning it back on brings its history with it.
+    fn show_overlay_toggles(&mut self, ui: &mut Ui) {
+        if self.overlays.is_empty() {
+            return;
+        }
+
+        // Applied after the loop: the click handler would otherwise need a
+        // mutable borrow while the overlay list is being read.
+        let mut toggled: Option<String> = None;
+
+        let frame = group_frame(ui);
+        frame.show(ui, |ui| {
+            ui.label(group_caption(ui, "Show:"));
+
+            for o in &self.overlays {
+                let label = o.label.as_str();
+                let shown = !self.hidden_overlays.contains(&o.label);
+                let hover = if shown {
+                    format!("Hide the {label} trace")
+                } else {
+                    format!("Draw the {label} trace beside the plotted series")
+                };
+                if ui
+                    .selectable_label(shown, label)
+                    .on_hover_text(hover)
+                    .a11y_toggled(shown)
+                    .clicked()
+                {
+                    toggled = Some(o.label.clone());
+                }
+            }
+        });
+
+        if let Some(label) = toggled {
+            self.toggle_overlay_hidden(label);
+        }
+
+        ui.add_space(6.0);
+    }
+
+    /// Flip one sub-value trace between drawn and hidden.
+    fn toggle_overlay_hidden(&mut self, label: String) {
+        if !self.hidden_overlays.remove(&label) {
+            self.hidden_overlays.insert(label);
+        }
+    }
+
     /// Compute min/max Y over the visible slice, with 10% padding.
-    fn y_min_max_padded(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
+    ///
+    /// `with_overlays` includes the sub-value traces drawn beside the plotted
+    /// series, so they are framed rather than clipped. The minimap passes
+    /// `false`: it is a main-series overview, and its scan already covers the
+    /// whole history — multiplying it by the overlay count is the O(n) budget
+    /// the two-tier rendering contract exists to protect.
+    fn y_min_max_padded(&self, x_min: f64, x_max: f64, with_overlays: bool) -> Option<(f64, f64)> {
         let (start, end) = self.visible_index_range(x_min, x_max);
         let mut y_min = f64::INFINITY;
         let mut y_max = f64::NEG_INFINITY;
@@ -922,6 +1335,18 @@ impl Graph {
             let v = self.history[i].value;
             y_min = y_min.min(v);
             y_max = y_max.max(v);
+        }
+        if with_overlays {
+            // Hidden overlays are excluded: an axis stretched to frame a trace
+            // the user switched off would flatten the one they are looking at.
+            for o in self.shown_overlays().map(|(_, o)| o) {
+                for i in start..end {
+                    if let Some(v) = o.values.get(i).copied().flatten() {
+                        y_min = y_min.min(v);
+                        y_max = y_max.max(v);
+                    }
+                }
+            }
         }
         if y_min.is_infinite() {
             return None;
@@ -933,16 +1358,21 @@ impl Graph {
 
     /// Auto-scaled Y range (ignoring fixed mode setting). Used to snapshot
     /// current auto range when switching to fixed mode.
-    fn y_range_for_view_auto(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
-        self.y_min_max_padded(x_min, x_max)
+    fn y_range_for_view_auto(
+        &self,
+        x_min: f64,
+        x_max: f64,
+        with_overlays: bool,
+    ) -> Option<(f64, f64)> {
+        self.y_min_max_padded(x_min, x_max, with_overlays)
     }
 
     /// Compute Y range from data points visible in the given X range, with padding.
-    fn y_range_for_view(&self, x_min: f64, x_max: f64) -> Option<(f64, f64)> {
+    fn y_range_for_view(&self, x_min: f64, x_max: f64, with_overlays: bool) -> Option<(f64, f64)> {
         if self.y_axis_fixed {
             return Some((self.y_fixed_min, self.y_fixed_max));
         }
-        self.y_min_max_padded(x_min, x_max)
+        self.y_min_max_padded(x_min, x_max, with_overlays)
     }
 
     /// Build segment and gap data for a slice of history, suitable for
@@ -989,6 +1419,192 @@ impl Graph {
         (segments, gaps)
     }
 
+    /// Build the drawable segments of one overlay over `[start, end)`.
+    ///
+    /// Deliberately separate from `build_segments_for_range` rather than
+    /// generalising it: that one also derives the gap ranges the bands and
+    /// dropout markers are drawn from, and its data-loss split is subtle and
+    /// tested. Overlays draw no bands and no markers — they only need to stop
+    /// wherever the main trace stops (time gap, overload, data loss) plus
+    /// wherever the sub-value itself is missing.
+    fn build_overlay_segments_for_range(
+        &self,
+        o: &OverlaySeries,
+        start: usize,
+        end: usize,
+    ) -> Vec<Vec<[f64; 2]>> {
+        let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
+        let mut current: Vec<[f64; 2]> = Vec::new();
+        let mut prev_time: Option<Instant> = None;
+
+        for i in start..end {
+            let point = &self.history[i];
+            if let Some(prev) = prev_time
+                && self.breaks_before(prev, point).is_some()
+                && !current.is_empty()
+            {
+                segments.push(std::mem::take(&mut current));
+            }
+            prev_time = Some(point.time);
+
+            match o.values.get(i).copied().flatten() {
+                Some(v) => current.push([self.elapsed_secs(point.time), v]),
+                None if !current.is_empty() => segments.push(std::mem::take(&mut current)),
+                None => {}
+            }
+        }
+
+        if !current.is_empty() {
+            segments.push(current);
+        }
+        segments
+    }
+
+    /// The overlays the user has not switched off, paired with their index.
+    ///
+    /// The index is the overlay's position in `self.overlays`, which is what
+    /// keys its colour and line style — stable for the life of the session, so
+    /// hiding one does not reshuffle the palette of the others.
+    fn shown_overlays(&self) -> impl Iterator<Item = (usize, &OverlaySeries)> {
+        self.overlays
+            .iter()
+            .enumerate()
+            .filter(|(_, o)| !self.hidden_overlays.contains(&o.label))
+    }
+
+    /// The sub-value traces actually drawn over `[start, end)`.
+    ///
+    /// Leaves out the ones the user switched off, and the ones with no points
+    /// in this window — an overlay that isn't drawn must not appear in the key
+    /// either.
+    fn visible_overlay_traces(&self, start: usize, end: usize) -> Vec<OverlayTrace> {
+        self.shown_overlays()
+            .filter_map(|(k, o)| {
+                let segments = self.build_overlay_segments_for_range(o, start, end);
+                (!segments.is_empty()).then(|| (k, o.label.clone(), segments))
+            })
+            .collect()
+    }
+
+    /// Colour and line style of one overlay trace.
+    ///
+    /// Keyed on the overlay's index — never on a hash of its label, which
+    /// would reshuffle the palette when a sub-value appears or disappears
+    /// mid-capture. The line style carries the same information without
+    /// colour, as `.claude/rules/gui.md` requires.
+    fn overlay_color_and_style(
+        tc: &ThemeColors,
+        index: usize,
+    ) -> (egui::Color32, egui_plot::LineStyle) {
+        let style = match index % 4 {
+            0 => egui_plot::LineStyle::dashed_loose(),
+            1 => egui_plot::LineStyle::dotted_loose(),
+            2 => egui_plot::LineStyle::dashed_dense(),
+            _ => egui_plot::LineStyle::dotted_dense(),
+        };
+        (tc.graph_overlay(index), style)
+    }
+
+    /// Name the plotted series goes by on the plot and in the key.
+    fn plotted_series_name(&self) -> String {
+        self.current_series
+            .clone()
+            .unwrap_or_else(|| "Main".to_string())
+    }
+
+    /// Rows of the plot key: the plotted series, then each drawn overlay in
+    /// `self.overlays` order.
+    ///
+    /// Empty when nothing is overlaid — a single-series graph gets no key, and
+    /// looks exactly as it did before sub-values existed. Takes the traces
+    /// `show_main` is about to draw rather than recomputing them, so the key
+    /// cannot list a line that isn't there.
+    fn key_entries(&self, drawn: &[OverlayTrace]) -> Vec<(String, KeyStyle)> {
+        if drawn.is_empty() {
+            return Vec::new();
+        }
+        let mut entries = Vec::with_capacity(drawn.len() + 1);
+        entries.push((self.plotted_series_name(), KeyStyle::Plotted));
+        entries.extend(
+            drawn
+                .iter()
+                .map(|(k, label, _)| (label.clone(), KeyStyle::Overlay(*k))),
+        );
+        entries
+    }
+
+    /// Paint the plot key in the top-left of the plot area.
+    ///
+    /// A key, not a control: egui_plot's own `Legend` renders show/hide
+    /// checkboxes, but `Plot::reset()` — which pins the view every frame while
+    /// keeping pointer events — also clears the plot's `hidden_items`, so a
+    /// click on one had no effect past the frame it happened in. The **Show:**
+    /// chips in the toolbar are the control instead.
+    fn paint_plot_key(
+        ui: &Ui,
+        plot_rect: egui::Rect,
+        entries: &[(String, KeyStyle)],
+        tc: &ThemeColors,
+    ) {
+        if entries.is_empty() {
+            return;
+        }
+        let mut font = egui::TextStyle::Body.resolve(ui.style());
+        font.size = font.size.max(MIN_KEY_FONT_SIZE);
+
+        const PAD: f32 = 6.0;
+        const GAP: f32 = 6.0;
+        let text_color = ui.visuals().text_color();
+        let painter = ui.painter_at(plot_rect);
+
+        // Measure first so the panel is exactly as wide as its widest row.
+        let galleys: Vec<_> = entries
+            .iter()
+            .map(|(name, _)| painter.layout_no_wrap(name.clone(), font.clone(), text_color))
+            .collect();
+        let text_width = galleys.iter().map(|g| g.size().x).fold(0.0_f32, f32::max);
+        let row_height = galleys.iter().map(|g| g.size().y).fold(font.size, f32::max);
+        let width = PAD * 2.0 + KEY_SAMPLE_WIDTH + GAP + text_width;
+        let height = PAD * 2.0 + row_height * entries.len() as f32;
+        let rect = egui::Rect::from_min_size(
+            plot_rect.left_top() + egui::vec2(PAD, PAD),
+            egui::vec2(width, height),
+        );
+        // `window_fill`, not `extreme_bg_color`: the App assigns the latter
+        // the plot's own background, so a key painted in it would be invisible
+        // apart from its border. `window_fill` is the panel ground either
+        // theme pairs with `text_color`, so the names keep their normal
+        // contrast, and 85% alpha keeps the grid faintly readable underneath
+        // instead of punching a hole in the plot.
+        painter.rect_filled(rect, 4.0, ui.visuals().window_fill.gamma_multiply(0.85));
+        painter.rect_stroke(
+            rect,
+            4.0,
+            ui.visuals().widgets.noninteractive.bg_stroke,
+            egui::StrokeKind::Inside,
+        );
+
+        for (i, ((_, style), galley)) in entries.iter().zip(&galleys).enumerate() {
+            let top = rect.top() + PAD + row_height * i as f32;
+            let mid = top + row_height / 2.0;
+            let (color, line_style) = match style {
+                KeyStyle::Plotted => (tc.graph_line(), egui_plot::LineStyle::Solid),
+                KeyStyle::Overlay(k) => Self::overlay_color_and_style(tc, *k),
+            };
+            painter.extend(key_line_sample(
+                egui::pos2(rect.left() + PAD, mid),
+                egui::pos2(rect.left() + PAD + KEY_SAMPLE_WIDTH, mid),
+                color,
+                line_style,
+            ));
+            painter.galley(
+                egui::pos2(rect.left() + PAD + KEY_SAMPLE_WIDTH + GAP, top),
+                galley.clone(),
+                text_color,
+            );
+        }
+    }
+
     /// Render the main graph.
     pub fn show_main(&mut self, ui: &mut Ui) {
         let (view_min, view_max) = self.view_bounds();
@@ -1023,6 +1639,16 @@ impl Graph {
         let cursor_color_dim = tc.graph_cursor_dim();
         let env_color = tc.graph_envelope();
 
+        // Sub-value traces over the same visible slice as the main series,
+        // minus any the user switched off in the toolbar's Show: group.
+        let overlay_traces = self.visible_overlay_traces(ext_start, ext_end);
+        let key_entries = self.key_entries(&overlay_traces);
+        let multi_series = !overlay_traces.is_empty();
+        // Every drawn line carries the name of its series, which is what the
+        // hover label reports; every helper item is named "" and falls through
+        // to the plain form.
+        let main_name = self.plotted_series_name();
+
         let can_interact = !self.live;
         let shift_held = ui.input(|i| i.modifiers.shift);
         let bbox_active = self.bbox_zoom_start_px.is_some();
@@ -1035,7 +1661,7 @@ impl Graph {
 
         // Compute Y bounds from visible data
         let (y_min, y_max) = self
-            .y_range_for_view(view_min, view_max)
+            .y_range_for_view(view_min, view_max, true)
             .unwrap_or((-1.0, 1.0));
 
         let unit = self.current_unit.clone();
@@ -1089,7 +1715,7 @@ impl Graph {
             .custom_y_axes(vec![y_axis])
             .y_axis_min_width(60.0)
             .cursor_color(tc.graph_crosshair())
-            .label_formatter(move |_name, point| {
+            .label_formatter(move |name, point| {
                 let t = point.x;
                 let time_label = if t < 60.0 {
                     format!("{t:.1} s")
@@ -1105,9 +1731,14 @@ impl Graph {
                 if tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b) {
                     return format!("{time_label}\noverload");
                 }
+                // With several traces on the same axes the number alone is
+                // ambiguous, so name the one being hovered. Helper items carry
+                // an empty name and fall through to the plain form.
+                if multi_series && !name.is_empty() {
+                    return format!("{time_label}\n{name}: {:.4} {cursor_unit}", point.y);
+                }
                 format!("{time_label}\n{:.4} {}", point.y, cursor_unit)
             });
-
         let response = plot.show(ui, |plot_ui| {
             // Set exact bounds: our X view range + computed Y range
             plot_ui.set_plot_bounds(PlotBounds::from_min_max(
@@ -1140,19 +1771,33 @@ impl Graph {
             // Min/max envelope (drawn first so it's behind the data line)
             if show_envelope && !env_min.is_empty() {
                 plot_ui.line(
-                    Line::new("env_max", PlotPoints::new(env_max.clone()))
+                    Line::new("", PlotPoints::new(env_max.clone()))
                         .color(env_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
                 plot_ui.line(
-                    Line::new("env_min", PlotPoints::new(env_min.clone()))
+                    Line::new("", PlotPoints::new(env_min.clone()))
                         .color(env_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
             }
 
+            // Sub-values first: the plotted series goes on top of them.
+            for (k, label, segments) in &overlay_traces {
+                let (color, style) = Self::overlay_color_and_style(&tc, *k);
+                for seg in segments {
+                    plot_ui.line(
+                        Line::new(label.clone(), PlotPoints::new(seg.clone()))
+                            .color(color)
+                            .style(style),
+                    );
+                }
+            }
+
             for seg in &visible_segments {
-                plot_ui.line(Line::new("data", PlotPoints::new(seg.clone())).color(line_color));
+                plot_ui.line(
+                    Line::new(main_name.clone(), PlotPoints::new(seg.clone())).color(line_color),
+                );
             }
 
             // No data: two dashed edges, no fill.
@@ -1161,12 +1806,12 @@ impl Graph {
                     continue;
                 }
                 plot_ui.vline(
-                    VLine::new("gap_start", gap_start)
+                    VLine::new("", gap_start)
                         .color(gap_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
                 plot_ui.vline(
-                    VLine::new("gap_end", gap_end)
+                    VLine::new("", gap_end)
                         .color(gap_color)
                         .style(egui_plot::LineStyle::dashed_dense()),
                 );
@@ -1175,7 +1820,7 @@ impl Graph {
             // Mean line overlay
             if show_mean && let Some((_, _, avg, _)) = visible_stats {
                 plot_ui.hline(
-                    HLine::new("mean", avg)
+                    HLine::new("", avg)
                         .color(mean_color)
                         .style(egui_plot::LineStyle::dashed_loose()),
                 );
@@ -1185,7 +1830,7 @@ impl Graph {
             if show_ref {
                 for &v in &ref_values {
                     plot_ui.hline(
-                        HLine::new("ref", v)
+                        HLine::new("", v)
                             .color(ref_color)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );
@@ -1195,7 +1840,7 @@ impl Graph {
             // Trigger crossing markers (where data crosses reference lines)
             if !crossings.is_empty() {
                 plot_ui.points(
-                    Points::new("crossings", PlotPoints::new(crossings.clone()))
+                    Points::new("", PlotPoints::new(crossings.clone()))
                         .color(cross_color)
                         .radius(4.0_f32)
                         .shape(egui_plot::MarkerShape::Diamond),
@@ -1205,21 +1850,21 @@ impl Graph {
             // Measurement cursors (vertical + horizontal Y-value lines)
             if cursors_active {
                 if let Some(t) = cursor_a {
-                    plot_ui.vline(VLine::new("cursor_a", t).color(cursor_color));
+                    plot_ui.vline(VLine::new("", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_va {
                     plot_ui.hline(
-                        HLine::new("cursor_va", v)
+                        HLine::new("", v)
                             .color(cursor_color_dim)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );
                 }
                 if let Some(t) = cursor_b {
-                    plot_ui.vline(VLine::new("cursor_b", t).color(cursor_color));
+                    plot_ui.vline(VLine::new("", t).color(cursor_color));
                 }
                 if let Some(v) = cursor_vb {
                     plot_ui.hline(
-                        HLine::new("cursor_vb", v)
+                        HLine::new("", v)
                             .color(cursor_color_dim)
                             .style(egui_plot::LineStyle::dashed_dense()),
                     );
@@ -1244,6 +1889,9 @@ impl Graph {
             cursor_color,
         };
         Self::paint_overlay_labels(ui, &response.response, &response.transform, &overlay);
+        // Top-left, where `paint_overlay_labels` never draws — the Mean/Ref
+        // and cursor labels are anchored to the right edge.
+        Self::paint_plot_key(ui, response.response.rect, &key_entries, &tc);
         self.handle_interaction(ui, &response.response, &response.transform, can_interact);
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max);
         // Draw a focus ring on the main plot body when it's keyboard-focused.
@@ -1259,6 +1907,13 @@ impl Graph {
     fn update_plot_a11y_label(&mut self, ui: &Ui, plot_id: egui::Id, y_min: f64, y_max: f64) {
         use std::hash::{Hash, Hasher};
         let last_value = self.history.back().map(|p| p.value);
+        // Only the traces actually drawn are spoken: a sub-value the user
+        // switched off is not on screen, so announcing it would describe a
+        // graph that isn't there.
+        let shown_labels: Vec<&str> = self
+            .shown_overlays()
+            .map(|(_, o)| o.label.as_str())
+            .collect();
         let sig = {
             let mut h = std::collections::hash_map::DefaultHasher::new();
             self.time_window_secs.to_bits().hash(&mut h);
@@ -1272,6 +1927,10 @@ impl Graph {
             self.live.hash(&mut h);
             last_value.map(f64::to_bits).hash(&mut h);
             self.current_unit.hash(&mut h);
+            // Which series is plotted, and what is drawn beside it, are both
+            // spoken below — so both have to bust the cache.
+            self.current_series.as_deref().unwrap_or("").hash(&mut h);
+            shown_labels.hash(&mut h);
             // Mode + display_raw drive the spoken last-reading; if either
             // changes (e.g. mode switch during paused playback) the label
             // must follow.
@@ -1283,6 +1942,11 @@ impl Graph {
             h.finish()
         };
         if sig != self.a11y_label_sig {
+            let also = if shown_labels.is_empty() {
+                String::new()
+            } else {
+                format!(" Also showing {}.", shown_labels.join(", "))
+            };
             self.a11y_label_sig = sig;
             let unit = if self.current_unit.is_empty() {
                 ""
@@ -1307,8 +1971,15 @@ impl Graph {
                 (None, Some(v)) => format!("last reading {v:.4} {unit}"),
                 (None, None) => "no data".to_string(),
             };
+            // The plot draws several traces at once for a multi-display
+            // meter, and which one the axis belongs to is otherwise purely
+            // visual — the key painted in its corner.
+            let of_series = match self.current_series.as_deref() {
+                Some(label) => format!(" of {label}"),
+                None => String::new(),
+            };
             self.a11y_label = format!(
-                "Measurement plot. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples. {}. {}.",
+                "Measurement plot{of_series}. {:.0} second window. Y axis {:.3} to {:.3} {unit}. {} samples.{also} {}. {}.",
                 self.time_window_secs,
                 y_min,
                 y_max,
@@ -1698,7 +2369,7 @@ impl Graph {
         // minimap exists to give disappears exactly when zooming in makes it
         // most useful.
         let y_map = self
-            .y_range_for_view_auto(data_min, data_max)
+            .y_range_for_view_auto(data_min, data_max, false)
             .map(|(lo, hi)| {
                 let range = (hi - lo).max(1e-10);
                 (lo, range)
@@ -2209,6 +2880,35 @@ impl Graph {
     #[cfg(test)]
     fn is_empty(&self) -> bool {
         self.history.is_empty()
+    }
+
+    /// Full-history segments of one overlay, through the same builder the
+    /// main graph renders from.
+    #[cfg(test)]
+    fn overlay_segments(&self, label: &str) -> Vec<Vec<[f64; 2]>> {
+        let o = self
+            .overlays
+            .iter()
+            .find(|o| o.label == label)
+            .unwrap_or_else(|| panic!("no overlay {label:?}"));
+        self.build_overlay_segments_for_range(o, 0, self.history.len())
+    }
+
+    #[cfg(test)]
+    fn overlay_values(&self, label: &str) -> Vec<Option<f64>> {
+        self.overlays
+            .iter()
+            .find(|o| o.label == label)
+            .unwrap_or_else(|| panic!("no overlay {label:?}"))
+            .values
+            .iter()
+            .copied()
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn overlay_labels(&self) -> Vec<&str> {
+        self.overlays.iter().map(|o| o.label.as_str()).collect()
     }
 }
 
@@ -2771,9 +3471,9 @@ mod tests {
         // Pin a narrow band, as a Shift-drag box zoom does.
         g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
         assert!(g.y_axis_fixed);
-        assert_eq!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+        assert_eq!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
 
-        let (lo, hi) = g.y_range_for_view_auto(0.0, 1.0).expect("auto range");
+        let (lo, hi) = g.y_range_for_view_auto(0.0, 1.0, true).expect("auto range");
         assert!(
             lo <= 0.0 && hi >= 10.0,
             "minimap range {lo}..{hi} must cover the full 0..10 data span"
@@ -2788,7 +3488,7 @@ mod tests {
         g.push(5.0, Instant::now(), "DC V", "V", None);
         g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
         assert!(g.y_axis_fixed);
-        assert_eq!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+        assert_eq!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
 
         g.push(1000.0, Instant::now(), "Ohm", "Ω", None);
         assert!(
@@ -2796,7 +3496,7 @@ mod tests {
             "mode change must release the fixed Y range"
         );
         assert!(!g.y_user_set);
-        assert_ne!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+        assert_ne!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
     }
 
     /// Staying in the same mode must keep the user's zoom — otherwise every
@@ -2808,7 +3508,7 @@ mod tests {
         g.apply_bbox_zoom((0.0, 5.1), (10.0, 4.9));
         g.push(5.05, Instant::now(), "DC V", "V", None);
         assert!(g.y_axis_fixed);
-        assert_eq!(g.y_range_for_view(0.0, 1.0), Some((4.9, 5.1)));
+        assert_eq!(g.y_range_for_view(0.0, 1.0, true), Some((4.9, 5.1)));
     }
 
     #[test]
@@ -3233,5 +3933,466 @@ mod tests {
         g.live = true;
         g.y_axis_fixed = true;
         assert!(g.is_view_zoomed());
+    }
+
+    // ── Sub-value overlays ──────────────────────────────────────────────
+
+    /// Push a sample carrying sub-values. Everything but the parts under
+    /// test matches the single-series `push` helper.
+    fn push_aux(
+        g: &mut Graph,
+        value: f64,
+        t: Instant,
+        series: Option<&str>,
+        overlays: &[(&str, Option<f64>)],
+    ) {
+        g.push_sample(PlotSample {
+            value,
+            timestamp: t,
+            mode: "Temp",
+            unit: "\u{00B0}C",
+            display_raw: None,
+            series,
+            overlays,
+        });
+    }
+
+    /// The overlay buffers are indexed by history position, so every push has
+    /// to extend them by exactly one — including the pushes that arrive
+    /// before the sub-value is first seen.
+    #[test]
+    fn overlays_stay_in_lockstep_with_history() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..3 {
+            push_aux(
+                &mut g,
+                20.0 + i as f64,
+                t0 + Duration::from_secs(i),
+                None,
+                &[("T2", Some(30.0 + i as f64))],
+            );
+        }
+        assert_eq!(g.len(), 3);
+        assert_eq!(
+            g.overlay_values("T2"),
+            vec![Some(30.0), Some(31.0), Some(32.0)]
+        );
+    }
+
+    /// Eviction has to drop the overlay's oldest value with the point it
+    /// belongs to, or every overlay would drift one sample later than the
+    /// trace it accompanies.
+    #[test]
+    fn max_points_evicts_overlay_values_too() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..MAX_POINTS + 100 {
+            push_aux(
+                &mut g,
+                i as f64,
+                t0 + Duration::from_millis(i as u64 * 10),
+                None,
+                &[("T2", Some(i as f64 + 0.5))],
+            );
+        }
+        let values = g.overlay_values("T2");
+        assert_eq!(values.len(), MAX_POINTS);
+        assert_eq!(g.len(), MAX_POINTS);
+        assert_eq!(values.first().copied().flatten(), Some(100.5));
+    }
+
+    /// A COMP High/Low or a MIN/MAX sub-value can start mid-session. Without
+    /// the back-fill its first value would land at index 0 and the whole
+    /// trace would be drawn shifted back in time.
+    #[test]
+    fn a_late_overlay_is_back_filled_with_nothing() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        push_aux(&mut g, 20.0, t0, None, &[]);
+        push_aux(&mut g, 21.0, t0 + Duration::from_secs(1), None, &[]);
+        push_aux(
+            &mut g,
+            22.0,
+            t0 + Duration::from_secs(2),
+            None,
+            &[("Max", Some(22.0))],
+        );
+        assert_eq!(g.overlay_values("Max"), vec![None, None, Some(22.0)]);
+        assert_eq!(g.overlay_segments("Max"), vec![vec![[2.0, 22.0]]]);
+    }
+
+    /// An over-range sub-value breaks its own trace and nothing else: the
+    /// plotted series still has a value for that frame, so it stays whole.
+    #[test]
+    fn a_missing_overlay_value_splits_only_that_overlay() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        push_aux(&mut g, 20.0, t0, None, &[("T2", Some(30.0))]);
+        push_aux(
+            &mut g,
+            21.0,
+            t0 + Duration::from_secs(1),
+            None,
+            &[("T2", None)],
+        );
+        push_aux(
+            &mut g,
+            22.0,
+            t0 + Duration::from_secs(2),
+            None,
+            &[("T2", Some(32.0))],
+        );
+
+        assert_eq!(
+            g.overlay_segments("T2"),
+            vec![vec![[0.0, 30.0]], vec![[2.0, 32.0]]]
+        );
+        assert_eq!(g.all_segments().len(), 1, "main trace must stay whole");
+        assert!(g.visible_gaps().is_empty());
+    }
+
+    /// Overlays have to split wherever the main trace splits, or they would
+    /// be drawn straight across an overload the meter reported.
+    #[test]
+    fn a_break_in_the_plotted_series_splits_the_overlays() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        push_aux(&mut g, 20.0, t0, None, &[("T2", Some(30.0))]);
+        g.push_break(t0 + Duration::from_millis(500));
+        push_aux(
+            &mut g,
+            22.0,
+            t0 + Duration::from_secs(1),
+            None,
+            &[("T2", Some(32.0))],
+        );
+        assert_eq!(
+            g.overlay_segments("T2"),
+            vec![vec![[0.0, 30.0]], vec![[1.0, 32.0]]]
+        );
+    }
+
+    /// T1 and T2 share a mode *and* a unit, so nothing but the series label
+    /// distinguishes them — switching would otherwise append onto the
+    /// previous sub-value's trace.
+    #[test]
+    fn a_series_change_restarts_the_trace() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        push_aux(&mut g, 20.0, t0, None, &[("T2", Some(30.0))]);
+        push_aux(
+            &mut g,
+            21.0,
+            t0 + Duration::from_secs(1),
+            None,
+            &[("T2", Some(31.0))],
+        );
+        assert_eq!(g.len(), 2);
+
+        push_aux(
+            &mut g,
+            31.5,
+            t0 + Duration::from_secs(2),
+            Some("T2"),
+            &[("Main", Some(21.5))],
+        );
+        assert_eq!(g.len(), 1, "switching series must clear the history");
+        assert_eq!(g.overlay_labels(), vec!["Main"]);
+        assert_eq!(g.current_series.as_deref(), Some("T2"));
+    }
+
+    /// Same series, same mode, same unit: nothing to reset.
+    #[test]
+    fn a_steady_series_keeps_its_history() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        push_aux(&mut g, 30.0, t0, Some("T2"), &[]);
+        push_aux(&mut g, 31.0, t0 + Duration::from_secs(1), Some("T2"), &[]);
+        assert_eq!(g.len(), 2);
+    }
+
+    /// The toolbar selection survives as long as the meter keeps offering
+    /// that sub-value, and falls back to the main reading when it stops —
+    /// the meter left the mode that produced it.
+    #[test]
+    fn a_selection_is_dropped_once_its_label_is_no_longer_offered() {
+        let mut g = Graph::new();
+        g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")]);
+        g.selected_series = Some("T2".to_string());
+
+        g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")]);
+        assert_eq!(g.selected_series(), Some("T2"));
+
+        g.set_series_options(&[("Frequency", "Hz")]);
+        assert_eq!(g.selected_series(), None);
+    }
+
+    /// A single-display meter keeps the two-row toolbar: the series row only
+    /// appears once there is a sub-value to select or a trace to draw.
+    #[test]
+    fn the_series_row_appears_only_once_there_is_something_in_it() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        g.push(20.0, t0, "DC V", "V", None);
+        assert!(!g.has_series_row());
+
+        // A selectable sub-value alone is enough...
+        g.set_series_options(&[("Frequency", "Hz")]);
+        assert!(g.has_series_row());
+
+        // ...and so is a same-unit trace with nothing to select.
+        let mut g = Graph::new();
+        push_aux(&mut g, 20.0, t0, None, &[("T2", Some(50.0))]);
+        assert!(g.series_options.is_empty());
+        assert!(g.has_series_row());
+    }
+
+    /// A sub-value drawn outside the auto Y range would be clipped to the
+    /// plot edge, which reads as a flat line rather than as data.
+    #[test]
+    fn the_y_range_frames_the_visible_overlays() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..3 {
+            push_aux(
+                &mut g,
+                20.0,
+                t0 + Duration::from_secs(i),
+                None,
+                &[("T2", Some(50.0))],
+            );
+        }
+        let (lo, hi) = g.y_min_max_padded(0.0, 2.0, true).expect("range");
+        assert!(lo <= 20.0 && hi >= 50.0, "overlay not framed: {lo}..{hi}");
+
+        // Off-view overlay points must not stretch the axis.
+        let (lo, hi) = g.y_min_max_padded(0.0, 0.5, true).expect("range");
+        assert!(
+            hi < 60.0,
+            "range {lo}..{hi} reached beyond the visible slice"
+        );
+    }
+
+    /// The minimap is a main-series overview and scans the whole history, so
+    /// it must not multiply that scan by the overlay count.
+    #[test]
+    fn the_minimap_y_range_ignores_overlays() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..3 {
+            push_aux(
+                &mut g,
+                20.0,
+                t0 + Duration::from_secs(i),
+                None,
+                &[("T2", Some(50.0))],
+            );
+        }
+        let (lo, hi) = g.y_min_max_padded(0.0, 2.0, false).expect("range");
+        assert!(hi < 30.0, "minimap range {lo}..{hi} followed the overlay");
+    }
+
+    /// The protocols send at most four sub-values per frame; anything beyond
+    /// that is a bug upstream and must not grow the buffers unbounded.
+    #[test]
+    fn a_fifth_overlay_label_is_ignored() {
+        let mut g = Graph::new();
+        push_aux(
+            &mut g,
+            20.0,
+            Instant::now(),
+            None,
+            &[
+                ("A", Some(1.0)),
+                ("B", Some(2.0)),
+                ("C", Some(3.0)),
+                ("D", Some(4.0)),
+                ("E", Some(5.0)),
+            ],
+        );
+        assert_eq!(g.overlay_labels(), vec!["A", "B", "C", "D"]);
+    }
+
+    // ── Plot key and Show: toggles ──────────────────────────────────────
+
+    /// Names in the key, in the order they are painted.
+    fn key_names(g: &Graph) -> Vec<String> {
+        let drawn = g.visible_overlay_traces(0, g.len());
+        g.key_entries(&drawn)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect()
+    }
+
+    /// Labels of the traces that are actually drawn.
+    fn drawn_overlay_labels(g: &Graph) -> Vec<String> {
+        g.visible_overlay_traces(0, g.len())
+            .into_iter()
+            .map(|(_, label, _)| label)
+            .collect()
+    }
+
+    /// Fill a graph with a main trace plus two same-unit sub-values.
+    fn graph_with_two_overlays() -> Graph {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..3 {
+            push_aux(
+                &mut g,
+                20.0,
+                t0 + Duration::from_secs(i),
+                None,
+                &[("T2", Some(50.0)), ("T3", Some(60.0))],
+            );
+        }
+        g
+    }
+
+    /// A single-display meter must look exactly as it did before sub-values
+    /// existed: no key painted over the plot at all.
+    #[test]
+    fn no_key_without_overlays() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        for i in 0..3 {
+            g.push(20.0, t0 + Duration::from_secs(i), "DC V", "V", None);
+        }
+        assert!(key_names(&g).is_empty());
+    }
+
+    /// The key names the plotted series first, then each drawn overlay in
+    /// the order the meter offered them.
+    #[test]
+    fn the_key_names_the_plotted_series_then_its_overlays() {
+        let g = graph_with_two_overlays();
+        assert_eq!(key_names(&g), vec!["Main", "T2", "T3"]);
+
+        let drawn = g.visible_overlay_traces(0, g.len());
+        let styles: Vec<KeyStyle> = g
+            .key_entries(&drawn)
+            .into_iter()
+            .map(|(_, style)| style)
+            .collect();
+        assert_eq!(
+            styles,
+            vec![
+                KeyStyle::Plotted,
+                KeyStyle::Overlay(0),
+                KeyStyle::Overlay(1)
+            ]
+        );
+    }
+
+    /// Hiding a trace from the Show: chips must take it off the plot, out of
+    /// the key, and out of the Y range — the axis stretching to frame a trace
+    /// that isn't drawn would flatten the one that is.
+    #[test]
+    fn hiding_an_overlay_drops_it_from_the_key_the_plot_and_the_y_range() {
+        let mut g = graph_with_two_overlays();
+        let (_, hi) = g.y_min_max_padded(0.0, 2.0, true).expect("range");
+        assert!(hi >= 60.0, "both overlays framed to start with: {hi}");
+
+        g.toggle_overlay_hidden("T3".to_string());
+
+        assert_eq!(key_names(&g), vec!["Main", "T2"]);
+        assert_eq!(drawn_overlay_labels(&g), vec!["T2"]);
+        let (_, hi) = g.y_min_max_padded(0.0, 2.0, true).expect("range");
+        assert!(hi < 60.0, "hidden overlay still stretching the axis: {hi}");
+    }
+
+    /// Hidden means not drawn, not not-recorded: turning a trace back on has
+    /// to bring its history with it. The chip flips both ways.
+    #[test]
+    fn a_hidden_overlay_is_still_recorded() {
+        let mut g = graph_with_two_overlays();
+        g.toggle_overlay_hidden("T3".to_string());
+        assert_eq!(g.overlay_values("T3"), vec![Some(60.0); 3]);
+        assert!(drawn_overlay_labels(&g).iter().all(|l| l != "T3"));
+
+        g.toggle_overlay_hidden("T3".to_string());
+        assert_eq!(g.overlay_segments("T3").len(), 1);
+        assert_eq!(drawn_overlay_labels(&g), vec!["T2", "T3"]);
+    }
+
+    /// Every overlay hidden is the same as no overlay drawn: no key.
+    #[test]
+    fn hiding_every_overlay_removes_the_key() {
+        let mut g = graph_with_two_overlays();
+        g.hidden_overlays.insert("T2".to_string());
+        g.hidden_overlays.insert("T3".to_string());
+        assert!(key_names(&g).is_empty());
+        assert!(drawn_overlay_labels(&g).is_empty());
+    }
+
+    /// The choice is about the sub-value, not about the buffer holding it:
+    /// clearing the data or switching the plotted series must not silently
+    /// bring a hidden trace back.
+    #[test]
+    fn hidden_overlays_survive_clear_and_a_series_change() {
+        let mut g = graph_with_two_overlays();
+        g.hidden_overlays.insert("T3".to_string());
+
+        g.clear();
+        assert!(g.hidden_overlays.contains("T3"));
+
+        let t0 = Instant::now();
+        push_aux(&mut g, 50.0, t0, Some("T2"), &[("T3", Some(60.0))]);
+        assert!(g.hidden_overlays.contains("T3"));
+        assert!(drawn_overlay_labels(&g).is_empty(), "T3 must stay hidden");
+    }
+
+    /// A sub-value can stop and start again (a COMP limit, a MIN/MAX reset).
+    /// The hidden set is keyed by label so the user's choice outlives the
+    /// buffer, rather than the trace reappearing the moment the meter re-sends
+    /// it.
+    #[test]
+    fn a_label_that_vanishes_and_returns_is_still_hidden() {
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        push_aux(&mut g, 20.0, t0, None, &[("T2", Some(50.0))]);
+        g.hidden_overlays.insert("T2".to_string());
+        assert!(drawn_overlay_labels(&g).is_empty());
+
+        // The meter leaves the mode: the graph resets and T2 goes away.
+        g.push(1.0, t0 + Duration::from_secs(1), "DC V", "V", None);
+        assert!(g.overlay_labels().is_empty());
+
+        // It comes back later.
+        push_aux(
+            &mut g,
+            20.0,
+            t0 + Duration::from_secs(2),
+            None,
+            &[("T2", Some(50.0))],
+        );
+        assert_eq!(g.overlay_labels(), vec!["T2"]);
+        assert!(
+            drawn_overlay_labels(&g).is_empty(),
+            "the user hid T2; it must not come back on its own"
+        );
+    }
+
+    /// Ctrl+L clears the data, not the user's choice of what to plot — the
+    /// meter is still in the same mode and still sending the same sub-value.
+    #[test]
+    fn clear_drops_the_overlays_but_keeps_the_selection() {
+        let mut g = Graph::new();
+        g.set_series_options(&[("T2", "\u{00B0}C")]);
+        g.selected_series = Some("T2".to_string());
+        push_aux(
+            &mut g,
+            30.0,
+            Instant::now(),
+            Some("T2"),
+            &[("Main", Some(20.0))],
+        );
+        assert_eq!(g.overlay_labels(), vec!["Main"]);
+
+        g.clear();
+        assert!(g.is_empty());
+        assert!(g.overlay_labels().is_empty());
+        assert_eq!(g.current_series, None);
+        assert_eq!(g.selected_series(), Some("T2"));
     }
 }

@@ -112,12 +112,20 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 
 ### Toolbar
 
+Laid out in rows: the view controls (time window, LIVE, Y axis, Reset Zoom)
+first, then — only for meters that send sub-values — a row of its own holding
+the boxed **Plot:** and **Show:** groups, then the analysis overlays (Mean,
+Min/Max, Ref, Cursors). A single-display meter shows only the first and last
+rows.
+
 | Control | Description |
 |---|---|
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
 | **LIVE** | Auto-scroll to latest data (green when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171). Switching restarts the graph. |
+| **Show:** | One chip per same-unit sub-value drawn beside the plotted series — click to draw or hide that trace. Only appears once there is such a sub-value. Hiding one stops it being drawn (and drops it from the key and the Y-axis fit) but not recorded, so turning it back on brings its history with it. Session-only; survives `Ctrl+L` and a change of plotted series. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
@@ -135,7 +143,22 @@ Three components stacked vertically: toolbar, main plot, and minimap.
   duration; the crosshair reports `overload` inside one
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds ~10,000 points (oldest dropped). A change of mode or
-  unit clears the graph — including auto-range crossing a decade (Ω→kΩ)
+  unit clears the graph — including auto-range crossing a decade (Ω→kΩ), and
+  including a change of plotted series
+- Sub-values sharing the plotted series' unit are drawn beside it as extra
+  dashed/dotted lines, up to four. Selecting a sub-value adds the meter's main
+  reading as one of them when the units match, so choosing T2 still shows T1.
+  Sub-values in a *different* unit (the Hz and ms beside an AC voltage) are
+  never overlaid — plotting them against the same axis would invent a
+  relationship that isn't there; reach them through **Plot:** instead
+- Whenever at least one such trace is drawn, a key in the plot's top-left
+  corner names every line and shows its colour and dash pattern. The key is a
+  key, not a control — use the toolbar's **Show:** chips to pick which
+  sub-value traces are drawn
+- The crosshair tooltip names the series it is over while overlays are shown
+- The minimap, the measurement cursors, the Mean/Min/Max/Ref overlays and the
+  visible-window statistics all follow the *plotted* series — the overlays are
+  reference traces only
 
 Two cases the graph does not draw faithfully: a connection loss entirely
 inside a continuing overload is absorbed into the band instead of splitting
@@ -207,6 +230,10 @@ UT61E+). Other devices show only the Manual link.
 - Stats persist across reconnects (use Clear for full reset)
 - In wide layout, a second row shows **visible window stats** — min/max/avg
   computed only over the current graph viewport
+- Min/Max/Avg/Count/∫ track the meter's **main reading** whatever the graph is
+  plotting; the visible-window row follows the **plotted series** and is
+  captioned with its unit, so selecting a Hz sub-value shows Hz there and V in
+  the session block above
 
 ## Recording
 
@@ -270,7 +297,7 @@ Three color presets are available:
 
 Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
 
-**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 18 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
+**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 21 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
 
 **JSON overrides:** Colors can also be edited directly in `settings.json` using hex strings:
 
@@ -292,7 +319,7 @@ Select a preset from the "Colors" row in the settings panel. Switching presets r
 Available color fields:
 
 - **UI chrome:** `background`, `text`, `button`
-- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `plot_background`, `graph_crosshair`
+- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
 - **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`, `accent`
 - **Minimap:** `minimap_viewport`
 
@@ -424,7 +451,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color. The clickable version label in the top bar announces "Show release notes" rather than the literal version string.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, and the graph's LIVE button announce whether they are currently on or off — you don't have to rely on the color change.
 - The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation.
-- The graph announces a one-line summary of what it's showing: time window, Y-axis range, number of samples, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
+- The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-values currently drawn beside it (traces hidden with **Show:** are left out, as they are off screen), whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 
 ### Known limitations
