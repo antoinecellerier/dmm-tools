@@ -237,6 +237,15 @@ pub struct App {
     /// started. Outlives disconnect so a capture can still be exported with
     /// the right provenance after the meter is unplugged.
     recording_device: Option<&'static str>,
+    /// Sub-value slots the connected meter family can report, from its
+    /// profile. 0 until the first `Connected`, and kept on disconnect so a
+    /// capture stays exportable with its full column layout.
+    device_aux_slots: usize,
+    /// Sub-value slots the buffered recording was started with. Captured
+    /// alongside `recording_device` and for the same reason: the CSV column
+    /// layout has to describe the meter the samples came from, not whatever
+    /// is selected at export time.
+    recording_aux_slots: usize,
     /// Profile of the selected device, refreshed only when the selection
     /// changes. Two render paths need it every frame, and building a protocol
     /// to read it allocates — the UT61E+ factory lowercases its model string,
@@ -348,6 +357,8 @@ impl App {
             wall_clock: dmm_lib::WallClock::new(),
             rx: None,
             recording_device: None,
+            device_aux_slots: 0,
+            recording_aux_slots: 0,
             selected_profile: *(initial_device.new_protocol)().profile(),
             selected_profile_id: initial_device.id,
             confirm_discard_open: false,
@@ -786,9 +797,17 @@ impl App {
                     experimental: exp,
                     feedback_url,
                     supported_commands: cmds,
+                    max_aux_values,
                 } => {
                     self.connection_state = ConnectionState::Connected;
                     self.experimental = exp;
+                    self.device_aux_slots = max_aux_values;
+                    // A reconnect mid-recording is the same meter, so the
+                    // in-flight capture picks the slot count back up — it was
+                    // 0 before the first Connected of the session.
+                    if self.recording.active {
+                        self.recording_aux_slots = max_aux_values;
+                    }
                     self.feedback_url = feedback_url;
                     self.supported_commands = cmds;
                     self.device_name = if name.is_empty() {
@@ -952,6 +971,7 @@ impl App {
         self.recording.toggle();
         if self.recording.active {
             self.recording_device = Some(self.selected_device().display_name);
+            self.recording_aux_slots = self.device_aux_slots;
         }
     }
 
@@ -1706,9 +1726,18 @@ impl App {
                         } else {
                             format!(" [{flags_str}]")
                         };
+                        // Sub-values trail the flags so the timestamp, value
+                        // and unit columns stay where they are for meters
+                        // that don't report any.
+                        let summary = s.measurement.aux_summary();
+                        let aux = if summary.is_empty() {
+                            String::new()
+                        } else {
+                            format!("  {summary}")
+                        };
                         ui.label(
                             RichText::new(format!(
-                                "{time}  {val:>10} {unit}{flags}",
+                                "{time}  {val:>10} {unit}{flags}{aux}",
                                 val = s.value_str(),
                                 unit = s.unit(),
                             ))
@@ -1813,7 +1842,11 @@ impl App {
         // 500K cap. The rendered CSV is a fraction of that size, and building
         // it is cheaper than 500K allocations.
         let sample_count = self.recording.samples.len();
-        let csv_bytes = match render_csv(&self.recording.samples, device_model) {
+        // The profile's slot count fixes the layout, with the widest sample
+        // actually buffered as a floor: a recording can outlive the
+        // connection that declared the profile.
+        let aux_slots = self.recording_aux_slots.max(self.recording.max_aux_seen());
+        let csv_bytes = match render_csv(&self.recording.samples, device_model, aux_slots) {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("CSV export failed: {e}");
@@ -2026,6 +2059,13 @@ impl eframe::App for App {
                         self.last_measurement
                             .as_ref()
                             .map_or(0u16, |m| m.mode_raw)
+                            .hash(&mut h);
+                        // Sub-value rows change the reading's height without
+                        // changing the mode word (a UT181A entering MIN/MAX),
+                        // so the fitted font has to be re-measured.
+                        self.last_measurement
+                            .as_ref()
+                            .map_or(0usize, |m| m.aux_values.len())
                             .hash(&mut h);
                         self.settings.show_stats.hash(&mut h);
                         self.settings.show_specs.hash(&mut h);

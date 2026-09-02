@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### GUI
+
+- **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were parsed but never shown.
+- **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
+
 ### CLI
 
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".

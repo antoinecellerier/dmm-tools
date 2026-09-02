@@ -72,6 +72,10 @@ success/failure) and expire after 4 seconds.
 - Primary value in large monospace font, using the meter's raw 7-character
   display string for stable width (no jitter between readings)
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
+- Sub-value rows under the reading for meters that send them (UT181A, UT171):
+  one row per sub-value with its label, value and unit, plus `@Ns` for the
+  MIN/MAX timestamps. Shown in every layout — the narrow layout condenses them
+  to a single summary line. Single-display meters show nothing extra.
 - Mode and range label below in smaller text
 - Active flags shown as colored badges:
   - **AUTO** — auto-range active
@@ -211,8 +215,8 @@ UT61E+). Other devices show only the Manual link.
 - **Export CSV** button — opens a file save dialog (runs on a background
   thread, does not freeze the UI)
 - Sample counter and duration shown while recording
-- Scrollable log of the last 500 samples showing timestamp, value, unit, mode,
-  range, and flags
+- Scrollable log of the last 500 samples showing timestamp, value, unit, flags
+  and any sub-values
 - Buffer holds up to 500K samples (~14 hours at 10 Hz). Recording
   auto-stops when the buffer is full and shows a toast notification.
 
@@ -222,6 +226,17 @@ UT61E+). Other devices show only the Manual link.
 # device: UT61E+
 timestamp,mode,value,unit,range,flags
 2026-03-19T10:15:30.123+01:00,DC V,3.3042,V,22V,AUTO
+```
+
+Meters that report sub-values add one `auxN_label,auxN_value,auxN_unit` group
+per slot the family can send (UT181A 4, UT171 1, mock 2), padded with empty
+fields when a reading uses fewer. Single-display meters keep the six-column
+file above.
+
+```
+# device: UNI-T UT181A
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
+2026-09-02T09:33:56.123+02:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
 ```
 
 ## Settings

@@ -1,6 +1,8 @@
 use dmm_lib::flags::StatusFlags;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
-use eframe::egui::{Color32, FontId, RichText, Ui};
+use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+use eframe::egui::text::LayoutJob;
+use eframe::egui::{Color32, FontId, Grid, Rect, RichText, TextFormat, Ui};
+use std::borrow::Cow;
 
 use crate::a11y::UiA11yExt;
 use crate::settings::{ColorPreset, PaletteOverrides};
@@ -15,6 +17,12 @@ pub(crate) const MIN_BIG_METER_FONT_SIZE: f32 = 12.0;
 
 /// Font size for the primary reading in the compact (narrow) layout.
 const COMPACT_READING_FONT_SIZE: f32 = 28.0;
+
+/// Floor for the sub-value rows. They derive their size from the caller's
+/// reading size, which shrinks to `MIN_BIG_METER_FONT_SIZE` in a tiny big-meter
+/// window; without this floor the derived size would fall under the 11 pt
+/// minimum `.claude/rules/gui.md` sets.
+const MIN_AUX_FONT_SIZE: f32 = 11.0;
 
 /// Format the meter's raw 7-char display string for stable rendering.
 ///
@@ -69,11 +77,27 @@ fn live_region_label(measurement: Option<&Measurement>) -> String {
             parts.push_str(&value);
             if !m.unit.is_empty() {
                 parts.push(' ');
-                parts.push_str(&m.unit);
+                parts.push_str(&spoken_unit(&m.unit));
             }
             if !m.mode.is_empty() {
                 parts.push_str(", ");
                 parts.push_str(&m.mode);
+            }
+            // Sub-values sit between the mode and the flags, matching the
+            // visible order: the rows are drawn under the reading and above
+            // the mode/flags line. Without them a UT181A user in MIN/MAX
+            // hears only the live value and never the extremes the meter is
+            // actually displaying.
+            for aux in &m.aux_values {
+                parts.push_str(", ");
+                parts.push_str(&aux.label);
+                parts.push(' ');
+                parts.push_str(&spoken_aux_value(aux));
+                let unit = spoken_unit(aux.unit_or(&m.unit));
+                if !unit.is_empty() {
+                    parts.push(' ');
+                    parts.push_str(&unit);
+                }
             }
             // Speak the same status flags that the visible badge row shows.
             // Without this, a screen reader user toggling HOLD/REL/MIN/MAX/
@@ -83,6 +107,29 @@ fn live_region_label(measurement: Option<&Measurement>) -> String {
             parts
         }
         None => "No reading".to_string(),
+    }
+}
+
+/// Spoken form of a sub-value: the parsed value decides, so an overloaded
+/// sub-value is announced as "overload" rather than the letters "O L".
+fn spoken_aux_value(aux: &AuxValue) -> Cow<'_, str> {
+    match &aux.value {
+        MeasuredValue::Overload => Cow::Borrowed("overload"),
+        _ => aux.value_str(),
+    }
+}
+
+/// Spoken form of a unit string.
+///
+/// Only the degree symbol is rewritten: screen readers differ on whether they
+/// read "°" at all, so a temperature sub-value could otherwise be announced as
+/// a bare "24.1 C". The substitution is confined to the spoken label — the
+/// visible rows keep the symbol.
+fn spoken_unit(unit: &str) -> Cow<'_, str> {
+    match unit {
+        "\u{00B0}C" => Cow::Borrowed("degrees C"),
+        "\u{00B0}F" => Cow::Borrowed("degrees F"),
+        other => Cow::Borrowed(other),
     }
 }
 
@@ -186,10 +233,133 @@ fn live_region_fingerprint(measurement: Option<&Measurement>) -> u64 {
             }
             m.unit.hash(&mut h);
             m.mode.hash(&mut h);
+            // Sub-values are part of both the spoken label and the visible
+            // rows, so a MIN/MAX extreme moving (or its timestamp advancing)
+            // has to invalidate the cached announcement even though the live
+            // value may be unchanged.
+            m.aux_values.len().hash(&mut h);
+            for aux in &m.aux_values {
+                aux.label.hash(&mut h);
+                match &aux.value {
+                    MeasuredValue::Normal(v) => {
+                        0u8.hash(&mut h);
+                        v.to_bits().hash(&mut h);
+                        aux.display_raw.as_deref().unwrap_or("").hash(&mut h);
+                    }
+                    MeasuredValue::Overload => 1u8.hash(&mut h),
+                    MeasuredValue::NcvLevel(l) => {
+                        2u8.hash(&mut h);
+                        l.hash(&mut h);
+                    }
+                }
+                aux.unit.hash(&mut h);
+                aux.elapsed_secs.hash(&mut h);
+            }
             flags_bits(&m.flags).hash(&mut h);
         }
     }
     h.finish()
+}
+
+/// Right-align a sub-value to the primary reading's 7-character width.
+///
+/// Same reasoning as [`format_display_raw`]: every caller draws this with
+/// `FontId::monospace`, so a fixed width keeps the digits from shifting
+/// sideways between frames and lines the sub-value rows up with each other.
+fn format_aux_value(aux: &AuxValue) -> String {
+    format!("{:>7}", aux.value_str())
+}
+
+/// Screen rects of one sub-value row: (label, value+unit).
+///
+/// Returned by [`show_aux_rows`] so a test can assert the two are on the same
+/// baseline. Production callers drop it — the rows are laid out by the grid,
+/// not by their caller.
+type AuxRowRects = (Rect, Rect);
+
+/// Render one row per sub-value beneath the primary reading.
+///
+/// Draws nothing at all when the measurement has none, so single-display
+/// meters keep the layout they had before sub-values existed.
+///
+/// `font_size` is the caller's mode-line size, floored at
+/// [`MIN_AUX_FONT_SIZE`]: the rows are secondary information and should not
+/// compete with the main value, but they still have to stay readable.
+///
+/// Returns one [`AuxRowRects`] per row, which production callers drop — it
+/// exists so a test can assert the label and its value stay on one line.
+fn show_aux_rows(
+    ui: &mut Ui,
+    m: &Measurement,
+    font_size: f32,
+    tc: &ThemeColors,
+) -> Vec<AuxRowRects> {
+    if m.aux_values.is_empty() {
+        return Vec::new();
+    }
+    let size = font_size.max(MIN_AUX_FONT_SIZE);
+    let mut rects: Vec<AuxRowRects> = Vec::with_capacity(m.aux_values.len());
+    // A grid rather than a stack of horizontal rows so labels, digits and
+    // timestamps line up in columns however long the individual strings are.
+    Grid::new(ui.id().with("aux_rows"))
+        .num_columns(3)
+        .spacing([(size * 0.5).max(4.0), 2.0])
+        .show(ui, |ui| {
+            for aux in &m.aux_values {
+                let label = ui.label(
+                    RichText::new(&*aux.label)
+                        .font(FontId::proportional(size))
+                        .color(ui.visuals().weak_text_color()),
+                );
+                // Overload in the error color, as the main value is — and
+                // the text still reads "OL", so the state is never signalled
+                // by color alone.
+                let value_color = match aux.value {
+                    MeasuredValue::Overload => tc.status_error(),
+                    _ => ui.visuals().text_color(),
+                };
+                // Value and unit are one label, not a nested `ui.horizontal`.
+                // A horizontal scope allocates its child `Ui` at
+                // `interact_size.y` (~18 px) and then expands downwards, so
+                // taller content lands half a line below the grid row it
+                // belongs to: 12 px out at the side panel's 36 px, 66 px out
+                // at the big meter's 130 px. With every cell a plain label,
+                // the grid's own `LEFT_CENTER` alignment does the work.
+                let mut job = LayoutJob::default();
+                job.append(
+                    &format_aux_value(aux),
+                    0.0,
+                    TextFormat {
+                        font_id: FontId::monospace(size),
+                        color: value_color,
+                        ..Default::default()
+                    },
+                );
+                let unit = aux.unit_or(&m.unit);
+                if !unit.is_empty() {
+                    job.append(
+                        unit,
+                        2.0,
+                        TextFormat {
+                            font_id: FontId::monospace(size),
+                            color: ui.visuals().text_color(),
+                            ..Default::default()
+                        },
+                    );
+                }
+                let value = ui.label(job);
+                rects.push((label.rect, value.rect));
+                if let Some(secs) = aux.elapsed_secs {
+                    ui.label(
+                        RichText::new(format!("@{secs}s"))
+                            .font(FontId::proportional(size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                }
+                ui.end_row();
+            }
+        });
+    rects
 }
 
 /// Prepare the value text and color from a measurement.
@@ -232,6 +402,8 @@ fn show_reading_sized(
                     );
                 },
             );
+
+            let _ = show_aux_rows(ui, m, mode_size, tc);
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
@@ -311,6 +483,11 @@ fn show_reading_inline(
                     show_flags(ui, m, mode_size, tc);
                 },
             );
+
+            // Sub-values still get their own rows in the inline layout: the
+            // single line is already the widest thing on screen, and folding
+            // four UT181A sub-values into it would force the value font down.
+            let _ = show_aux_rows(ui, m, mode_size, tc);
         }
         None => {
             // See `show_reading_sized` for why the placeholder is wrapped
@@ -469,6 +646,14 @@ pub fn show_reading_compact(
                     show_flags(ui, m, 0.0, &tc);
                 },
             );
+
+            // One summary line rather than the grid: the compact layout is
+            // the narrow-window one, where a label/value/unit grid would
+            // squeeze the reading itself.
+            let summary = m.aux_summary();
+            if !summary.is_empty() {
+                ui.label(RichText::new(summary).font(FontId::monospace(MIN_AUX_FONT_SIZE)));
+            }
         }
         None => {
             // See `show_reading_sized` for why the placeholder is wrapped
@@ -751,6 +936,206 @@ mod tests {
             );
             assert!(seen.insert(bits), "{name} collides with another flag bit");
         }
+    }
+
+    /// Build a sub-value the way the protocols do: digits in `display_raw`,
+    /// unit empty when it matches the main reading's.
+    fn aux(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
+        AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(display.trim().parse().unwrap_or(0.0)),
+            unit: unit.into(),
+            display_raw: Some(display.to_string()),
+            elapsed_secs: None,
+        }
+    }
+
+    /// A UT181A in V AC + Hz shows the frequency and period next to the
+    /// voltage; a screen reader user has to hear them too, and hear them
+    /// where they are drawn — after the mode, before the flags.
+    #[test]
+    fn live_region_label_lists_sub_values() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(239.22),
+            "VAC",
+            StatusFlags {
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        m.display_raw = Some(" 239.22".to_string());
+        m.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+        ];
+
+        let label = live_region_label(Some(&m));
+        assert!(label.contains("Frequency 50.01 Hz"), "got {label:?}");
+        assert!(label.contains("Period 20.00 ms"), "got {label:?}");
+        let mode = label.find("DC V").expect("mode still announced");
+        let freq = label.find("Frequency").expect("sub-value announced");
+        let auto = label.find("auto range").expect("flags still announced");
+        assert!(mode < freq && freq < auto, "got {label:?}");
+    }
+
+    /// The unit falls back to the main reading's when the sub-value doesn't
+    /// carry its own (MIN/MAX), and an overloaded sub-value is spoken as a
+    /// word rather than as the letters "O L".
+    #[test]
+    fn live_region_label_speaks_aux_fallback_unit_and_overload() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(4.9871), "V", StatusFlags::default());
+        let mut max = aux("Max", "5.0123", "");
+        max.elapsed_secs = Some(12);
+        let mut min = aux("Min", "0", "");
+        min.value = MeasuredValue::Overload;
+        m.aux_values = vec![max, min];
+
+        let label = live_region_label(Some(&m));
+        assert!(label.contains("Max 5.0123 V"), "got {label:?}");
+        assert!(label.contains("Min overload V"), "got {label:?}");
+    }
+
+    /// Degree symbols are spelled out only in the spoken string — screen
+    /// readers differ on whether they voice "°" at all, and "24.1 C" is not
+    /// a temperature. The main reading and its sub-values get the same
+    /// treatment, so a dual-thermocouple reading is voiced consistently.
+    #[test]
+    fn live_region_label_spells_out_degrees() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(23.5),
+            "\u{00B0}C",
+            StatusFlags::default(),
+        );
+        m.display_raw = Some("   23.5".to_string());
+        m.aux_values = vec![aux("T2", "24.10", "\u{00B0}C")];
+        let label = live_region_label(Some(&m));
+        assert!(label.starts_with("23.5 degrees C"), "got {label:?}");
+        assert!(label.contains("T2 24.10 degrees C"), "got {label:?}");
+        assert!(
+            !label.contains('\u{00B0}'),
+            "the symbol must not survive into the spoken label, got {label:?}"
+        );
+    }
+
+    /// Single-display meters must be announced exactly as before sub-values
+    /// existed.
+    #[test]
+    fn live_region_label_unchanged_without_sub_values() {
+        let m = Measurement::test_fixture(
+            MeasuredValue::Normal(1.234),
+            "V",
+            StatusFlags {
+                hold: true,
+                ..Default::default()
+            },
+        );
+        assert!(m.aux_values.is_empty());
+        assert_eq!(live_region_label(Some(&m)), "5.678 V, DC V, hold");
+    }
+
+    /// A MIN/MAX extreme can move while the live reading is unchanged, so
+    /// the cached announcement has to be invalidated by the sub-values too.
+    #[test]
+    fn live_region_fingerprint_changes_on_sub_value_change() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        let bare = live_region_fingerprint(Some(&m));
+
+        m.aux_values = vec![aux("Max", "5.0123", "")];
+        let with_aux = live_region_fingerprint(Some(&m));
+        assert_ne!(bare, with_aux, "a sub-value appearing must be noticed");
+
+        m.aux_values[0] = aux("Max", "5.0456", "");
+        let moved = live_region_fingerprint(Some(&m));
+        assert_ne!(with_aux, moved, "a sub-value changing must be noticed");
+
+        m.aux_values[0].elapsed_secs = Some(12);
+        let stamped = live_region_fingerprint(Some(&m));
+        assert_ne!(moved, stamped, "the @Ns column changing must be noticed");
+
+        m.aux_values[0].label = "Min".into();
+        assert_ne!(
+            stamped,
+            live_region_fingerprint(Some(&m)),
+            "a relabelled sub-value must be noticed"
+        );
+    }
+
+    /// Lay out the sub-value rows in a headless egui context and return the
+    /// (label rect, value rect) pairs of the last frame.
+    ///
+    /// Several frames are run because `egui::Grid` sizes a row from the
+    /// heights it recorded on the *previous* frame — on the very first pass
+    /// every cell is still its own natural height, so vertical alignment
+    /// only becomes meaningful once the grid has settled.
+    fn layout_aux_rows(m: &Measurement, font_size: f32) -> Vec<AuxRowRects> {
+        let ctx = eframe::egui::Context::default();
+        let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+        let mut rects = Vec::new();
+        for _ in 0..3 {
+            rects.clear();
+            let _ = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
+                rects = show_aux_rows(ui, m, font_size, &tc);
+            });
+        }
+        rects
+    }
+
+    /// The label and its value must sit on the same line.
+    ///
+    /// Regression test for the big-meter offset: wrapping the value in a
+    /// nested `ui.horizontal` made egui allocate the cell at
+    /// `interact_size.y` (~18 px) and then push the taller content down, so
+    /// at a 130 px reading font the value hung roughly half a line below its
+    /// label. Every cell is a plain label now, and the grid's own
+    /// `LEFT_CENTER` alignment lines them up at any size.
+    #[test]
+    fn aux_label_and_value_share_a_baseline() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(23.5),
+            "\u{00B0}C",
+            StatusFlags::default(),
+        );
+        m.display_raw = Some("   23.5".to_string());
+        m.aux_values = vec![aux("T2", "24.10", "\u{00B0}C"), aux("T1", "23.50", "")];
+
+        // 36.0 is the side-panel reading size, 130.0 a big-meter one.
+        for size in [36.0_f32, 130.0] {
+            let rows = layout_aux_rows(&m, size);
+            assert_eq!(rows.len(), 2, "one row per sub-value at {size} px");
+            for (i, (label, value)) in rows.iter().enumerate() {
+                let delta = (label.center().y - value.center().y).abs();
+                assert!(
+                    delta <= 1.0,
+                    "row {i} at {size} px: label centre {} vs value centre {} (delta {delta} px)",
+                    label.center().y,
+                    value.center().y
+                );
+            }
+        }
+    }
+
+    /// Single-display meters must draw nothing at all — no grid, no row.
+    #[test]
+    fn aux_rows_draw_nothing_without_sub_values() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.234), "V", StatusFlags::default());
+        assert!(m.aux_values.is_empty());
+        assert!(layout_aux_rows(&m, 130.0).is_empty());
+    }
+
+    /// The sub-value rows are monospace, so a fixed width keeps the digits
+    /// from shifting sideways as the reading changes.
+    #[test]
+    fn format_aux_value_pads_to_the_reading_width() {
+        assert_eq!(
+            format_aux_value(&aux("Frequency", "50.01", "Hz")),
+            "  50.01"
+        );
+        let mut over = aux("Max", "0", "");
+        over.value = MeasuredValue::Overload;
+        assert_eq!(format_aux_value(&over), "     OL");
     }
 
     #[test]

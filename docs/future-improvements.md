@@ -177,14 +177,6 @@ The UT181A has built-in recording and saved measurement features (protocol comma
 
 Use cases: retrieving field measurements logged by the meter itself, longer recording sessions than USB-tethered capture allows.
 
-### Auxiliary value display
-
-**Complexity:** Low-medium
-
-Surface the `aux_values` field in the GUI for meters that report multiple simultaneous values. When the meter is in REL or MIN/MAX mode, show both the live reading and the stored reference/min/max values.
-
-Use cases: seeing both relative and absolute values at a glance, monitoring min/max without exiting the mode.
-
 ---
 
 ## Usability

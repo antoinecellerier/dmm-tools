@@ -92,6 +92,9 @@ Threshold at ~900px available width:
 
 - Primary value uses meter's raw 7-char display string in monospace font for stable formatting
 - Unit adjacent in monospace ("V")
+- Sub-value rows below the value for meters that send them (UT181A, UT171):
+  label, value, unit, and `@Ns` for MIN/MAX timestamps. Nothing is drawn for
+  single-display meters.
 - Mode, range label, and active flags below
 - Flags shown as subtle colored badges: AUTO, HOLD, REL, MIN, MAX
 - Low battery warning shown as orange "LOW BAT" badge
@@ -166,7 +169,7 @@ Three components stacked vertically:
 - Export CSV button (opens file dialog on separate thread — no UI freeze)
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand
-- Scrollable sample log showing recent samples (timestamp, value, unit, flags) in monospace. Auto-scrolls to bottom, caps at last 500 entries.
+- Scrollable sample log showing recent samples (timestamp, value, unit, flags, and any sub-values) in monospace. Auto-scrolls to bottom, caps at last 500 entries.
 
 ### Accessibility
 

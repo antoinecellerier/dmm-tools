@@ -77,6 +77,9 @@ pub(crate) enum DmmMessage {
         /// URL for reporting feedback on experimental protocols.
         feedback_url: String,
         supported_commands: Vec<String>,
+        /// Sub-value slots this meter family can report, from its profile.
+        /// Fixes the CSV export's aux column count for the whole recording.
+        max_aux_values: usize,
     },
     Disconnected {
         reason: String,
@@ -111,6 +114,8 @@ fn establish_connection<T: Transport>(
         .iter()
         .map(|s| s.to_string())
         .collect();
+    // Read before `get_name`, which borrows the device mutably.
+    let max_aux_values = profile.max_aux_values;
     let name = if query_name {
         dmm.get_name().ok().flatten().unwrap_or_default()
     } else {
@@ -121,6 +126,7 @@ fn establish_connection<T: Transport>(
         experimental,
         feedback_url,
         supported_commands: cmds,
+        max_aux_values,
     });
     ctx.request_repaint();
 }

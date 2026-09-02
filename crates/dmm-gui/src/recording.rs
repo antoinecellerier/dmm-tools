@@ -1,7 +1,14 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
+use std::borrow::Cow;
 use std::io::Write;
+
+/// Columns one aux slot contributes: label, value, unit.
+///
+/// Shared by the header and the rows so a slot can never be named with a
+/// different number of columns than it writes.
+const AUX_COLUMNS_PER_SLOT: usize = 3;
 
 /// Render samples as a CSV document, provenance header included.
 ///
@@ -9,26 +16,60 @@ use std::io::Write;
 /// without duplicating the sample buffer — a full buffer is ~140 MB of
 /// `Sample`s, while the rendered CSV is a fraction of that and takes one pass
 /// instead of half a million allocations.
+///
+/// `aux_slots` is the meter family's `max_aux_values`, not the count in any
+/// one reading: a CSV needs one fixed column layout for the whole file, so a
+/// mode that reports fewer sub-values leaves the trailing slots empty. Pass 0
+/// for single-display meters and the file keeps the six columns it always had.
 pub fn render_csv(
     samples: &[Sample],
     device_model: &str,
+    aux_slots: usize,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // ~72 bytes covers a typical row (RFC3339 timestamp, mode, value, unit,
-    // range, flags) without repeated growth on large buffers.
-    let mut buf: Vec<u8> = Vec::with_capacity(samples.len() * 72 + 128);
+    // range, flags) without repeated growth on large buffers; each aux slot
+    // adds roughly another 20.
+    let row_bytes = 72 + aux_slots * 20;
+    let mut buf: Vec<u8> = Vec::with_capacity(samples.len() * row_bytes + 128);
     writeln!(buf, "# device: {device_model}")?;
     {
         let mut wtr = csv::Writer::from_writer(&mut buf);
-        wtr.write_record(["timestamp", "mode", "value", "unit", "range", "flags"])?;
+        let mut header: Vec<Cow<'static, str>> =
+            ["timestamp", "mode", "value", "unit", "range", "flags"]
+                .into_iter()
+                .map(Cow::Borrowed)
+                .collect();
+        for i in 1..=aux_slots {
+            header.push(Cow::Owned(format!("aux{i}_label")));
+            header.push(Cow::Owned(format!("aux{i}_value")));
+            header.push(Cow::Owned(format!("aux{i}_unit")));
+        }
+        wtr.write_record(header.iter().map(|c| c.as_ref()))?;
+
+        let mut record: Vec<Cow<'_, str>> =
+            Vec::with_capacity(6 + aux_slots * AUX_COLUMNS_PER_SLOT);
         for s in samples {
-            wtr.write_record([
-                s.wall_time.to_rfc3339().as_str(),
-                s.mode(),
-                s.value_export_str().as_ref(),
-                s.unit(),
-                s.range_label(),
-                s.flags_str().as_str(),
-            ])?;
+            record.clear();
+            record.push(Cow::Owned(s.wall_time.to_rfc3339()));
+            record.push(Cow::Borrowed(s.mode()));
+            record.push(s.value_export_str());
+            record.push(Cow::Borrowed(s.unit()));
+            record.push(Cow::Borrowed(s.range_label()));
+            record.push(Cow::Owned(s.flags_str()));
+            // Truncate rather than widen the row: a reading carrying more
+            // sub-values than the family's profile declares would otherwise
+            // desync every following column from the header.
+            let m = &s.measurement;
+            for aux in m.aux_values.iter().take(aux_slots) {
+                record.push(Cow::Borrowed(aux.label.as_ref()));
+                record.push(aux.value_str());
+                record.push(Cow::Borrowed(aux.unit_or(&m.unit)));
+            }
+            let missing = aux_slots.saturating_sub(m.aux_values.len());
+            for _ in 0..missing * AUX_COLUMNS_PER_SLOT {
+                record.push(Cow::Borrowed(""));
+            }
+            wtr.write_record(record.iter().map(|c| c.as_ref()))?;
         }
         wtr.flush()?;
     }
@@ -122,6 +163,11 @@ pub struct Recording {
     /// against `samples.len()` to tell whether discarding the buffer would
     /// lose anything the user hasn't saved.
     exported_count: usize,
+    /// Most sub-values any buffered sample carries. The export sizes its aux
+    /// columns from the device profile, but a profile is only known while
+    /// connected — this is the floor that keeps a capture exportable in full
+    /// after the meter is unplugged.
+    max_aux_seen: usize,
 }
 
 impl Recording {
@@ -131,6 +177,7 @@ impl Recording {
             samples: Vec::new(),
             start_time: None,
             exported_count: 0,
+            max_aux_seen: 0,
         }
     }
 
@@ -139,8 +186,14 @@ impl Recording {
         if self.active {
             self.samples.clear();
             self.exported_count = 0;
+            self.max_aux_seen = 0;
             self.start_time = Some(Local::now());
         }
+    }
+
+    /// Most sub-values any buffered sample carries — see `max_aux_seen`.
+    pub fn max_aux_seen(&self) -> usize {
+        self.max_aux_seen
     }
 
     /// Samples captured since the last successful export.
@@ -163,6 +216,7 @@ impl Recording {
     /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
     pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock) -> bool {
         if self.active && self.samples.len() < MAX_RECORDING_SAMPLES {
+            self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
             self.samples.push(Sample::from_measurement(m, wall_clock));
             if self.samples.len() >= MAX_RECORDING_SAMPLES {
                 self.active = false;
@@ -192,6 +246,7 @@ impl Default for Recording {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmm_lib::measurement::AuxValue;
     use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 
     fn make_measurement(display: &[u8; 7]) -> Measurement {
@@ -404,7 +459,7 @@ mod tests {
         let m = make_measurement(b"  5.678");
         let samples: Vec<Sample> = (0..3).map(|_| Sample::from_measurement(&m, &wc)).collect();
 
-        let bytes = render_csv(&samples, "UNI-T UT61E+").unwrap();
+        let bytes = render_csv(&samples, "UNI-T UT61E+", 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -417,9 +472,123 @@ mod tests {
 
     #[test]
     fn render_csv_of_an_empty_buffer_is_just_the_headers() {
-        let bytes = render_csv(&[], "mock").unwrap();
+        let bytes = render_csv(&[], "mock", 0).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(text.lines().count(), 2);
+    }
+
+    /// Sub-value fixture in the shape the protocols produce: digits in
+    /// `display_raw`, unit left empty when it matches the main reading's.
+    fn aux(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
+        AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(display.trim().parse().unwrap_or(0.0)),
+            unit: unit.into(),
+            display_raw: Some(display.to_string()),
+            elapsed_secs: None,
+        }
+    }
+
+    /// The column layout is fixed for the whole file, so a reading with
+    /// fewer sub-values than the family can send has to leave the trailing
+    /// slots empty rather than shortening the row.
+    #[test]
+    fn render_csv_pads_missing_aux_slots() {
+        let mut m = make_measurement(b"  5.678");
+        m.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+        ];
+        let s = Sample::from_measurement(&m, &WallClock::new());
+
+        let bytes = render_csv(&[s], "UNI-T UT181A", 4).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+
+        assert_eq!(
+            lines[1],
+            "timestamp,mode,value,unit,range,flags,\
+             aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,\
+             aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit"
+        );
+        assert!(
+            lines[2].ends_with(",Frequency,50.01,Hz,Period,20.00,ms,,,,,,"),
+            "got {:?}",
+            lines[2]
+        );
+        assert_eq!(
+            lines[1].split(',').count(),
+            lines[2].split(',').count(),
+            "every row must have as many fields as the header"
+        );
+    }
+
+    /// Protocols leave a sub-value's unit empty when it measures the same
+    /// quantity as the main reading (MIN/MAX). The export has to fill it in,
+    /// or the column reads as unitless.
+    #[test]
+    fn render_csv_resolves_empty_aux_unit_to_main() {
+        let mut m = make_measurement(b"  5.678");
+        let mut max = aux("Max", "5.9010", "");
+        max.elapsed_secs = Some(12);
+        m.aux_values = vec![max];
+        let s = Sample::from_measurement(&m, &WallClock::new());
+
+        let bytes = render_csv(&[s], "UNI-T UT181A", 1).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let row = text.lines().nth(2).unwrap();
+        assert!(row.ends_with(",Max,5.9010,V"), "got {row:?}");
+    }
+
+    /// A row carrying more sub-values than the declared slot count must be
+    /// truncated, not allowed to push extra fields past the header.
+    #[test]
+    fn render_csv_truncates_extra_aux_values() {
+        let mut m = make_measurement(b"  5.678");
+        m.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+        ];
+        let s = Sample::from_measurement(&m, &WallClock::new());
+
+        let bytes = render_csv(&[s], "mock", 1).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        assert!(
+            lines[2].ends_with(",Frequency,50.01,Hz"),
+            "got {:?}",
+            lines[2]
+        );
+        assert_eq!(lines[1].split(',').count(), lines[2].split(',').count());
+    }
+
+    /// The export sizes its columns from the device profile, but a capture
+    /// outlives the connection — this floor keeps an unplugged meter's
+    /// sub-values in the file, and must not leak into the next recording.
+    #[test]
+    fn max_aux_seen_tracks_the_widest_sample_and_resets_on_start() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let plain = make_measurement(b"  1.234");
+        let mut wide = make_measurement(b"  1.234");
+        wide.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+        ];
+
+        assert_eq!(r.max_aux_seen(), 0);
+        r.toggle();
+        r.push(&plain, &wc);
+        assert_eq!(r.max_aux_seen(), 0);
+        r.push(&wide, &wc);
+        assert_eq!(r.max_aux_seen(), 2);
+        r.push(&plain, &wc);
+        assert_eq!(r.max_aux_seen(), 2, "the widest sample wins, not the last");
+
+        r.toggle(); // stop
+        assert_eq!(r.max_aux_seen(), 2, "still exportable after stopping");
+        r.toggle(); // start again — buffer cleared
+        assert_eq!(r.max_aux_seen(), 0);
     }
 
     #[test]
