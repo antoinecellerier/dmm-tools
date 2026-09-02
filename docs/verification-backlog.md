@@ -281,10 +281,10 @@ real hardware**. Every aspect needs end-to-end verification.
   Precision byte decimal places (bits 4-7) confirmed to produce sane
   display formatting.
 - ~~Normal-format value layout (main + aux1 + aux2 + bargraph)~~ —
-  **VERIFIED** 2026-09-02 by @diego351 on real UT181A. A 57-byte V AC
-  payload (`0x1121`, mains) consumes exactly as 6-byte header +
-  13 + 13 + 13 + **12**: main, aux1 and aux2 each carry a precision
-  byte and the bargraph does not (spec §5.3, previously
+  **VERIFIED** 2026-09-02 by @diego351 on real UT181A (CH9329 cable).
+  A 57-byte V AC payload (`0x1121`, mains) consumes exactly as a 6-byte
+  header + 13 + 13 + 13 + **12**: main, aux1 and aux2 each carry a
+  precision byte and the bargraph does not (spec §5.3, previously
   community-sourced only). A 32-byte temperature payload (`0x4211`,
   two thermocouples) consumes exactly as 6 + 13 + 13. Confirms `misc`
   bits 1/2/3 (aux1 / aux2 / bargraph present) and `misc2` bits 0/1
@@ -329,6 +329,11 @@ real hardware**. Every aspect needs end-to-end verification.
   it is the bargraph pointer or the meter's fast (10 Sa/s) sample is
   unresolved; the value is parsed over but not exposed. Needs a capture
   with a deliberately changing input to tell the two apart
+- CP2110 cable on a UT181A — both hardware reports so far used the
+  CH9329 (UT-D09). The CP2110 transport itself is well exercised by the
+  UT61E+, but nobody has run the two together, and @diego351's older
+  CP2110-equipped unit was never detected on macOS at all (with other
+  software, before dmm-tools existed). Unverified, not known-broken
 - **Not implemented**: recording protocol (0x0A-0x0F), saved measurement
   retrieval (0x07-0x09), SET_MODE/SET_REFERENCE commands, timestamp
   decoding, response types 0x03/0x04/0x05/0x72

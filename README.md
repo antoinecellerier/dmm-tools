@@ -70,7 +70,7 @@ WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware)
 | VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 
-🧪 = reverse-engineered from vendor software; most have not yet been tested on real hardware — click to help verify. The UT181A has been run on real hardware by two reporters, on both the CP2110 and CH9329 cables, with V DC, V AC + Hz and dual-probe temperature confirmed against a meter; MIN/MAX, REL, Peak, COMP and the remote commands are still untested, so the binaries keep labelling it experimental until they are.
+🧪 = reverse-engineered from vendor software; most have not yet been tested on real hardware — click to help verify. The UT181A has been run on real hardware by two reporters, both with the CH9329 (UT-D09) cable, with V DC, V AC + Hz and dual-probe temperature confirmed against a meter; MIN/MAX, REL, Peak, COMP, the remote commands and the older CP2110 cable are still untested, so the binaries keep labelling it experimental until they are.
 
 See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list and reference implementations.
 
