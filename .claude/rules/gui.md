@@ -27,6 +27,7 @@ paths:
 
 - `set_plot_bounds()` overrides both axes — use `set_plot_bounds_x()` / `_y()` (egui_plot 0.33+) to constrain one axis.
 - `allow_drag(false)` also suppresses pointer position events; use `plot.reset()` per frame to pin the view while keeping events.
+- `plot.reset()` also clears egui_plot's `hidden_items`, so its `Legend` cannot act as a show/hide control while the view is pinned — paint a static key and put the toggles in the toolbar (the graph's **Show:** chips).
 - After mode changes or data clears, call `plot.reset()` to avoid stale bounds from the previous state.
 - `set_pixels_per_point()` and `set_visuals()` called every frame reset egui's internal panel state (resize positions, scroll offsets). Only call when the value changes.
 - egui API naming is inconsistent — verify method names against docs (`fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
