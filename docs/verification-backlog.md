@@ -280,18 +280,34 @@ real hardware**. Every aspect needs end-to-end verification.
   2026-04-07 by @alexander-magon: VDC mode returns valid float32 values.
   Precision byte decimal places (bits 4-7) confirmed to produce sane
   display formatting.
-- Mode word decoding (79 nibble-encoded uint16 modes) — only 0x3111
-  (V DC) verified so far. **Corrections from the 2026-06 review** (per
+- ~~Normal-format value layout (main + aux1 + aux2 + bargraph)~~ —
+  **VERIFIED** 2026-09-02 by @diego351 on real UT181A. A 57-byte V AC
+  payload (`0x1121`, mains) consumes exactly as 6-byte header +
+  13 + 13 + 13 + **12**: main, aux1 and aux2 each carry a precision
+  byte and the bargraph does not (spec §5.3, previously
+  community-sourced only). A 32-byte temperature payload (`0x4211`,
+  two thermocouples) consumes exactly as 6 + 13 + 13. Confirms `misc`
+  bits 1/2/3 (aux1 / aux2 / bargraph present) and `misc2` bits 0/1
+  (auto-range, HV warning) alongside it. Regression frames in
+  `crates/dmm-lib/src/protocol/ut181a/mod.rs`.
+- Mode word decoding (79 nibble-encoded uint16 modes) — `0x3111`
+  (V DC), `0x4211` (°C) and `0x1121` (V AC Hz) verified on hardware;
+  the rest still need a meter. **Corrections from the 2026-06 review** (per
   sigrok + antage, hardware pending): DC-current n1=2 codes
   (0x8121/0x9121/0xA121) are AC+DC, not Hz; 0x4121 = mV DC Peak (sigrok
   notes 0x4131 as a possible alternative — check on hardware); 0x5212 =
   Continuity open-beeper and 0x6112 = Diode Alarm (not REL variants);
   temperature n1 selects the display arrangement (T1(T2)/T2(T1)/
-  T1-T2/T2-T1). HOLD command now sends `[0x12, 0x5A]` (antage's
-  button-code form) — confirm it toggles HOLD. COMP digits read from
-  the low nibble unshifted. Need at least one mode per family to confirm
-  the nibble decoder works broadly.
-- Device-sent unit string parsing — only "VDC" verified so far
+  T1-T2/T2-T1) — the n1=1 arrangement is now hardware-confirmed to put
+  one probe on the main display and the other in aux1; the other three
+  are still community-sourced. HOLD command now sends `[0x12, 0x5A]`
+  (antage's button-code form) — confirm it toggles HOLD. COMP digits
+  read from the low nibble unshifted. Need at least one mode per family
+  to confirm the nibble decoder works broadly.
+- Device-sent unit string parsing — "VDC", "VAC", "Hz", "ms" and
+  Latin-1 "°C" (`0xB0 0x43`) verified on hardware; the remaining unit
+  strings in spec §8 (`~`, `k~`, `M~`, `nS`, `nF`, `uF`, `dBV`, `dBm`,
+  `%`, "°F" …) still need a meter
 - Relative format (0x10) parsing — implemented, needs hardware verification
   (delta/reference/absolute values parsed into main + aux_values)
 - Min/Max format (0x20) parsing — implemented, needs hardware verification
@@ -300,10 +316,19 @@ real hardware**. Every aspect needs end-to-end verification.
   (peak max/min parsed into main + aux_values)
 - COMP mode extension parsing — implemented, needs hardware verification
   (comp mode/result/limits parsed into aux_values)
-- Range label lookup table — implemented, needs verification that range
-  byte values match expected labels in manual range mode
+- Range label lookup table — range byte 0x03 on V AC decodes to "600V",
+  confirmed against a 239 V mains reading (2026-09-02), but the meter
+  chose that range itself; **manual** range mode is still unverified,
+  as are the other families' ladders
 - Misc2 flags: lead_error (bit 3), comp (bit 4), record (bit 5) — now
-  parsed but not yet verified on real hardware
+  parsed but not yet verified on real hardware. Bits 0 (auto-range) and
+  1 (HV warning) confirmed 2026-09-02
+- Bargraph value meaning — the misc bit 3 field carries a float32 plus
+  its own unit, and in the mains capture it read 241.02 VAC against a
+  239.22 VAC main reading, so it is *not* the displayed value. Whether
+  it is the bargraph pointer or the meter's fast (10 Sa/s) sample is
+  unresolved; the value is parsed over but not exposed. Needs a capture
+  with a deliberately changing input to tell the two apart
 - **Not implemented**: recording protocol (0x0A-0x0F), saved measurement
   retrieval (0x07-0x09), SET_MODE/SET_REFERENCE commands, timestamp
   decoding, response types 0x03/0x04/0x05/0x72

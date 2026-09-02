@@ -204,7 +204,15 @@ The checksum covers the length field and all payload bytes. It does
 - Main value: 13 bytes (float32 + precision + unit)
 - Aux1: 13 bytes (optional, if misc bit 1 set)
 - Aux2: 13 bytes (optional, if misc bit 2 set)
-- Bargraph: float32 + 8-byte unit (optional, if misc bit 3 set)
+- Bargraph: float32 + 8-byte unit (optional, if misc bit 3 set) --
+  **12 bytes, no precision byte**
+
+Hardware-confirmed 2026-09-02 (issue #5): a V AC frame with all three
+optional fields present has a 57-byte payload, which only accounts as
+6 + 13 + 13 + 13 + 12. The bargraph's missing precision byte is what
+makes the arithmetic close. What its float32 *means* is still open --
+it read 241.02 VAC against a 239.22 VAC main reading in the same frame,
+so it is not the displayed value.
 
 **Relative (format 0x10)**:
 - Relative value: 13 bytes
@@ -245,24 +253,26 @@ The mode word is uint16 LE with structured nibble encoding:
 - Nibble 1: variant (1=normal, 2=Hz/peak/ACDC, 3=peak, 4=LPF, etc.)
 - Nibble 0 (LSB): 1=standard, 2=REL variant
 
-79 total modes (count corrected 2026-06: both sigrok and antage define 79). Selected examples:
+79 total modes (count corrected 2026-06: both sigrok and antage define 79).
+Three are hardware-confirmed (marked ✓): 0x3111 (2026-04-07), 0x4211 and
+0x1121 (2026-09-02, issue #5). Selected examples:
 
 | Mode | Code | Description |
 |------|------|-------------|
 | V AC | 0x1111 | V AC |
 | V AC REL | 0x1112 | V AC relative |
-| V AC Hz | 0x1121 | V AC frequency |
+| V AC Hz | 0x1121 | V AC frequency ✓ (aux1 = Hz, aux2 = period) |
 | V AC Peak | 0x1131 | V AC peak |
 | V AC LPF | 0x1141 | V AC low-pass filter |
 | V AC dBV | 0x1151 | V AC dBV |
 | V AC dBm | 0x1161 | V AC dBm |
 | mV AC | 0x2111 | mV AC |
 | mV AC+DC | 0x2141 | mV AC+DC coupled |
-| V DC | 0x3111 | V DC |
+| V DC | 0x3111 | V DC ✓ |
 | V DC AC+DC | 0x3121 | V DC AC+DC coupled |
 | V DC Peak | 0x3131 | V DC peak |
 | mV DC | 0x4111 | mV DC |
-| Temp C T1(T2) | 0x4211 | Temperature C, T1 main, T2 aux |
+| Temp C T1(T2) | 0x4211 | Temperature C, T1 main, T2 aux ✓ |
 | Temp C T2(T1) | 0x4221 | Temperature C, T2 main, T1 aux |
 | Temp C T1-T2 | 0x4231 | Temperature C, differential |
 | Temp F T1(T2) | 0x4311 | Temperature F, T1 main |
@@ -314,7 +324,7 @@ null-terminated). The device determines the unit, not the host.
 | `mVDC` | millivolt DC | |
 | `VDC` | volt DC | |
 | `mVAC` | millivolt AC | |
-| `VAC` | volt AC | |
+| `VAC` | volt AC | Hardware-confirmed 2026-09-02 |
 | `mVac+dc` | millivolt AC+DC | |
 | `Vac+dc` | volt AC+DC | |
 | `uADC` | microampere DC | |
@@ -333,14 +343,14 @@ null-terminated). The device determines the unit, not the host.
 | `nF` | nanofarad | |
 | `uF` | microfarad | |
 | `mF` | millifarad | |
-| `Hz` | hertz | |
+| `Hz` | hertz | Hardware-confirmed 2026-09-02 |
 | `kHz` | kilohertz | |
 | `MHz` | megahertz | |
 | `%` | percent | Duty cycle |
-| `ms` | millisecond | Pulse width |
+| `ms` | millisecond | Pulse width; also the period on V AC Hz (hardware-confirmed 2026-09-02) |
 | `dBV` | decibel-volt | |
 | `dBm` | decibel-milliwatt | |
-| `\xB0C` | degrees Celsius | 0xB0 = degree symbol (Latin-1) |
+| `\xB0C` | degrees Celsius | 0xB0 = degree symbol (Latin-1); hardware-confirmed 2026-09-02 |
 | `\xB0F` | degrees Fahrenheit | 0xB0 = degree symbol (Latin-1) |
 
 ---

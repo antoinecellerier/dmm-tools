@@ -141,15 +141,18 @@ UT804.exe confirmed the data nibbles carry **proprietary structured data**
 (mode codes, range codes, digit values) rather than raw LCD segments.
 See [research/ut803/reverse-engineered-protocol.md](research/ut803/reverse-engineered-protocol.md).
 
-## 🧪 Experimental: UT171 and UT181A
+## ✅ UT181A (confirmed working) and 🧪 UT171
 
 Use `--device ut171` or `--device ut181a`. Requires manual "Communication
 ON" in the meter's SETUP menu.
 
+The UT181A has been run on real hardware by two reporters, on both the
+CP2110 and CH9329 cables. The UT171 has not been tried on a meter at all.
+
 | Model | Brand | Type | VID:PID | Status | Notes |
 |-------|-------|------|---------|--------|-------|
 | **UT171A/B/C** | UNI-T | Industrial DMM | `10C4:EA80` | 🧪 [help verify](https://github.com/antoinecellerier/dmm-tools/issues/4) | 1-byte length, LE float32, 26 modes |
-| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | 🧪 [partial hardware verification](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 79 modes. Init, framing, and VDC parsing confirmed on real hardware ([details](verification-backlog.md)); other modes pending. |
+| **UT181A** | UNI-T | Logging DMM | `10C4:EA80` | ✅ [confirmed working](https://github.com/antoinecellerier/dmm-tools/issues/5) | 2-byte LE length, float32 + unit strings, 79 modes. Init, framing, V DC, V AC + Hz and dual-probe temperature confirmed on real hardware with both cable types ([details](verification-backlog.md)); MIN/MAX, REL, Peak, COMP and the remote commands still pending. |
 
 ### Independent research findings
 

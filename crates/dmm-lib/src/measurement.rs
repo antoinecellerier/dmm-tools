@@ -17,7 +17,8 @@ pub enum MeasuredValue {
 /// An auxiliary value associated with a measurement.
 ///
 /// Used by protocols that report multiple related values per reading:
-/// UT181A relative mode (delta/reference/absolute), min/max mode
+/// UT181A secondary displays (a second thermocouple, a frequency and its
+/// period), relative mode (delta/reference/absolute), min/max mode
 /// (current/max/avg/min with timestamps), peak mode (max/min).
 #[derive(Debug, Clone)]
 pub struct AuxValue {

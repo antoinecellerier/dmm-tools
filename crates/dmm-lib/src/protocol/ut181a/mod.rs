@@ -25,7 +25,8 @@
 //! - Reply data parsing (response type 0x72)
 //! - Timestamp decoding (packed 32-bit format, protocol spec Section 9)
 //! - Bargraph value extraction (detected but not exposed)
-//! - Aux1/Aux2 display in normal format (parsed but not yet rendered in GUI)
+//! - Secondary displays in the GUI or in any CSV (they are parsed, and
+//!   `dmm-cli` prints them in text, JSON and capture output)
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
@@ -168,6 +169,42 @@ fn parse_unit_string(bytes: &[u8]) -> String {
         .take_while(|&&b| b != 0)
         .map(|&b| b as char)
         .collect()
+}
+
+/// Labels for the two aux slots of a normal-format measurement.
+///
+/// The meter sends each sub-value's own unit but never says what the value
+/// *is*, so the label has to come from the mode word. Two arrangements are
+/// pinned by a real UT181A capture (@diego351, issue #5, 2026-09-02):
+/// `0x4211` puts one thermocouple on the main display and the other in aux1,
+/// and `0x1121` puts the frequency in aux1 with its period in aux2
+/// (1/50.00875 Hz = 19.9965 ms, exactly the aux2 reading in that frame). The
+/// remaining modes follow the same nibble rule with no frame behind them; any
+/// slot whose meaning is unknown keeps its positional label.
+fn aux_labels(mode: u16) -> (&'static str, &'static str) {
+    let n3 = (mode >> 12) & 0xF;
+    let n2 = (mode >> 8) & 0xF;
+    let n1 = (mode >> 4) & 0xF;
+
+    // Temperature: n1 selects the display arrangement, so the aux slot holds
+    // the other probe. The differential arrangements (n1 = 3/4) put a
+    // difference on the main display and no source says which probe lands in
+    // the aux slot — those stay positional.
+    if n3 == 0x4 && (n2 == 0x2 || n2 == 0x3) {
+        return match n1 {
+            0x1 => ("T2", "Aux2"),
+            0x2 => ("T1", "Aux2"),
+            _ => ("Aux1", "Aux2"),
+        };
+    }
+
+    // The same n1 = 2 codes `decode_mode_word` suffixes with " Hz": the
+    // frequency display, with the period alongside it.
+    if n1 == 0x2 && matches!((n3, n2), (0x1 | 0x2, _) | (0x8..=0xA, 0x2)) {
+        return ("Frequency", "Period");
+    }
+
+    ("Aux1", "Aux2")
 }
 
 const UT181A_COMMANDS: &[&str] = &[
@@ -669,17 +706,18 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             let (val, disp, unit) = parse_full_value(data)?;
             let mut aux = Vec::new();
             let mut offset = 13;
+            let (aux1_label, aux2_label) = aux_labels(mode_word);
 
             // Aux1 (optional, misc bit 1)
             if misc & 0x02 != 0 && data.len() >= offset + 13 {
                 let (av, ad, au) = parse_full_value(&data[offset..])?;
-                aux.push(make_aux("Aux1", av, &au, ad, None));
+                aux.push(make_aux(aux1_label, av, &au, ad, None));
                 offset += 13;
             }
             // Aux2 (optional, misc bit 2)
             if misc & 0x04 != 0 && data.len() >= offset + 13 {
                 let (av, ad, au) = parse_full_value(&data[offset..])?;
-                aux.push(make_aux("Aux2", av, &au, ad, None));
+                aux.push(make_aux(aux2_label, av, &au, ad, None));
                 offset += 13;
             }
             // Bargraph (optional, misc bit 3) — skip for now, just advance offset
@@ -992,6 +1030,108 @@ mod tests {
         // 0xB0 = '°' in Latin-1; from_utf8_lossy would produce U+FFFD.
         assert_eq!(parse_unit_string(&[0xB0, b'C', 0, 0, 0, 0, 0, 0]), "°C");
         assert_eq!(parse_unit_string(&[0xB0, b'F', 0, 0, 0, 0, 0, 0]), "°F");
+    }
+
+    #[test]
+    fn aux_labels_by_mode() {
+        // One probe on the main display, the other in aux1. The n1 = 1
+        // arrangement is hardware-confirmed (issue #5); n1 = 2 is its
+        // documented mirror.
+        assert_eq!(aux_labels(0x4211).0, "T2");
+        assert_eq!(aux_labels(0x4221).0, "T1");
+        assert_eq!(aux_labels(0x4311).0, "T2");
+        // Differential arrangements: no source says which probe feeds the aux
+        // slot, so the label stays positional.
+        assert_eq!(aux_labels(0x4231).0, "Aux1");
+        assert_eq!(aux_labels(0x4241).0, "Aux1");
+        // The modes decode_mode_word suffixes with " Hz" carry the frequency
+        // and its period.
+        assert_eq!(aux_labels(0x1121), ("Frequency", "Period"));
+        assert_eq!(aux_labels(0x2121), ("Frequency", "Period"));
+        assert_eq!(aux_labels(0x8221), ("Frequency", "Period"));
+        // Everything else keeps the positional labels.
+        assert_eq!(aux_labels(0x3111), ("Aux1", "Aux2"));
+        assert_eq!(aux_labels(0x8121), ("Aux1", "Aux2"));
+    }
+
+    /// Hex as a capture report writes it in `raw_hex` (spaces optional).
+    fn hex(s: &str) -> Vec<u8> {
+        let clean: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+        assert!(clean.len().is_multiple_of(2), "odd-length hex: {clean}");
+        (0..clean.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&clean[i..i + 2], 16).expect("valid hex"))
+            .collect()
+    }
+
+    /// Real UT181A frame: temperature with two thermocouples connected
+    /// (@diego351, issue #5, 2026-09-02 — the first hardware confirmation of
+    /// a UT181A mode other than V DC).
+    ///
+    /// Reaches the normal-format aux walk that the synthetic `make_payload`
+    /// frames never do: 26 payload bytes after the 6-byte header = 2 x 13, so
+    /// the aux1 slot is what makes the frame add up.
+    #[test]
+    fn parse_real_frame_temp_dual_probe() {
+        let payload = hex(
+            "02 02 01 11 42 01 F0 ED CA 41 10 B0 43 00 43 00 00 00 00 26 FC C4 41 \
+             10 B0 43 00 00 00 00 00 5A",
+        );
+        assert_eq!(payload.len(), 32);
+
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.mode_raw, 0x4211);
+        assert_eq!(m.mode, "°C");
+        // Latin-1: the meter sends 0xB0 for the degree sign.
+        assert_eq!(m.unit, "°C");
+        // Precision byte 0x10 => 1 decimal place, matching the LCD.
+        assert_eq!(m.display_raw.as_deref(), Some("25.4"));
+        // Fixed-range family, so no label even though the meter sent range 0x01.
+        assert_eq!(m.range_label, "");
+        assert!(m.flags.auto_range);
+        assert!(!m.flags.hv_warning);
+
+        assert_eq!(m.aux_values.len(), 1);
+        let t2 = &m.aux_values[0];
+        assert_eq!(t2.label, "T2");
+        assert_eq!(t2.unit, "°C");
+        assert_eq!(t2.display_raw.as_deref(), Some("24.6"));
+    }
+
+    /// Real UT181A frame: V AC with the Hz secondary display, mains on the
+    /// 600 V range (@diego351, issue #5, 2026-09-02).
+    ///
+    /// The 51 payload bytes after the header only add up as 13 + 13 + 13 + 12:
+    /// main, aux1 and aux2 each carry a precision byte, the bargraph does not
+    /// (spec §5.3). Get the bargraph field's size wrong and this frame
+    /// desynchronises.
+    #[test]
+    fn parse_real_frame_vac_hz_bargraph() {
+        let payload = hex(
+            "02 0E 03 21 11 03 52 38 6F 43 20 56 41 43 00 00 00 00 00 F6 08 48 42 \
+             20 48 7A 00 00 00 00 00 5A D5 F8 9F 41 20 6D 73 00 43 00 00 00 00 3D \
+             06 71 43 56 41 43 00 00 00 00 00",
+        );
+        assert_eq!(payload.len(), 57);
+
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(m.mode_raw, 0x1121);
+        assert_eq!(m.mode, "V AC Hz");
+        assert_eq!(m.unit, "VAC");
+        assert_eq!(m.display_raw.as_deref(), Some("239.22"));
+        // misc2 bit 1: the meter was flagging mains voltage.
+        assert!(m.flags.hv_warning);
+        assert!(m.flags.auto_range);
+        // Auto-range settled on 600V (range byte 0x03).
+        assert_eq!(m.range_label, "600V");
+
+        assert_eq!(m.aux_values.len(), 2);
+        assert_eq!(m.aux_values[0].label, "Frequency");
+        assert_eq!(m.aux_values[0].unit, "Hz");
+        assert_eq!(m.aux_values[0].display_raw.as_deref(), Some("50.01"));
+        assert_eq!(m.aux_values[1].label, "Period");
+        assert_eq!(m.aux_values[1].unit, "ms");
+        assert_eq!(m.aux_values[1].display_raw.as_deref(), Some("20.00"));
     }
 
     #[test]
@@ -1414,7 +1554,7 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode, "\u{00B0}C");
         assert_eq!(m.aux_values.len(), 1);
-        assert_eq!(m.aux_values[0].label, "Aux1");
+        assert_eq!(m.aux_values[0].label, "T2");
         if let MeasuredValue::Normal(v) = m.aux_values[0].value {
             assert!((v - 21.0).abs() < 0.01);
         } else {

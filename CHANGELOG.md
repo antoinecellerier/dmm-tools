@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### CLI
+
+- **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
+
 ## v0.6.0 — Display Fidelity and Connection Fixes
 
 Overloads are shaded instead of breaking the graph line, and readings show what the meter shows (OL, digits, unit magnitudes, HV, model names). Pause, reconnect and corrupted-frame handling are fixed; CLI output carries every sub-value and flag.

@@ -63,14 +63,14 @@ WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware)
 |--------|--------|--------|
 | UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
 | UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
-| UT181A | UT181A | [🧪 Experimental — partial hardware verification](https://github.com/antoinecellerier/dmm-tools/issues/5) |
+| UT181A | UT181A | [✅ Confirmed working — some modes still unverified](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | UT803/UT804 | UT803, UT804 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | UT8802 | UT8802, UT8802N | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/12) |
 | UT8803 | UT8803, UT8803E | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/3) |
 | VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 
-🧪 = reverse-engineered from vendor software; most have not yet been tested on real hardware — click to help verify. UT181A has been partially verified on real hardware (init, framing, and VDC parsing); other modes still need testing.
+🧪 = reverse-engineered from vendor software; most have not yet been tested on real hardware — click to help verify. The UT181A has been run on real hardware by two reporters, on both the CP2110 and CH9329 cables, with V DC, V AC + Hz and dual-probe temperature confirmed against a meter; MIN/MAX, REL, Peak, COMP and the remote commands are still untested, so the binaries keep labelling it experimental until they are.
 
 See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list and reference implementations.
 
