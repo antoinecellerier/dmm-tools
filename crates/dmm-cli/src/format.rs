@@ -42,12 +42,7 @@ pub fn format_measurement(
                 .max()
                 .unwrap_or(0);
             for aux in &m.aux_values {
-                // An empty aux unit means "same as the main reading".
-                let unit = if aux.unit.is_empty() {
-                    &m.unit
-                } else {
-                    &aux.unit
-                };
+                let unit = aux.unit_or(&m.unit);
                 let elapsed = aux
                     .elapsed_secs
                     .map(|s| format!(" @{s}s"))
@@ -129,11 +124,7 @@ pub fn format_measurement(
                     m.aux_values
                         .iter()
                         .map(|aux| {
-                            let unit = if aux.unit.is_empty() {
-                                m.unit.as_ref()
-                            } else {
-                                aux.unit.as_ref()
-                            };
+                            let unit = aux.unit_or(&m.unit);
                             serde_json::json!({
                                 "label": aux.label,
                                 "value": aux.value_str(),

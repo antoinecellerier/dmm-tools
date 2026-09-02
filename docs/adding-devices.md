@@ -154,6 +154,7 @@ Follow the code-level steps in `docs/development.md`:
 
 **Key rules:**
 - Set `Stability::Experimental` in `DeviceProfile` until verified against real hardware
+- Set `max_aux_values` in `DeviceProfile` to the most sub-values one frame can carry (0 for single-display meters) — the CLI and GUI size their fixed sub-value columns from it
 - Add `SelectableDevice` entry in `protocol/registry.rs` — CLI/GUI pick it up automatically
 - Implement `capture_steps()` on the `Protocol` trait — this defines the guided verification workflow for the device. Each step has an `id`, a user-facing `instruction` (e.g., "Set meter to DC V mode"), an optional remote `command` to send, and a `samples` count. The default implementation returns an empty list, so the capture tool will have nothing to walk through unless you define steps. Cover all measurement modes, flag states, and remote commands the device supports. This decouples implementation from testing — someone without the device can define exactly what needs verifying, and someone with the device can run `capture` and walk through it without needing to understand the protocol.
 - Write unit tests using `MockTransport` with byte sequences from the RE phase

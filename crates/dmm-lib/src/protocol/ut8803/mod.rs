@@ -136,6 +136,7 @@ impl Ut8803Protocol {
                 model_name: "UNI-T UT8803",
                 stability: Stability::Experimental,
                 supported_commands: UT8803_COMMANDS,
+                max_aux_values: 0,
                 verification_issue: Some(3),
             },
         }

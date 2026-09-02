@@ -187,13 +187,9 @@ impl SampleData {
                 .map(|a| AuxSample {
                     label: a.label.to_string(),
                     value: a.value_str().into_owned(),
-                    // An empty aux unit means "same as the main reading";
-                    // resolve it here so the report stands on its own.
-                    unit: if a.unit.is_empty() {
-                        m.unit.to_string()
-                    } else {
-                        a.unit.to_string()
-                    },
+                    // Resolve the "empty means main unit" convention here so
+                    // the report stands on its own.
+                    unit: a.unit_or(&m.unit).to_string(),
                     elapsed_secs: a.elapsed_secs,
                 })
                 .collect(),

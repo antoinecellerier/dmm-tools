@@ -36,6 +36,9 @@ pub struct DeviceProfile {
     pub model_name: &'static str,
     pub stability: Stability,
     pub supported_commands: &'static [&'static str],
+    /// Most sub-values one frame can carry (`Measurement::aux_values`). Sizes the
+    /// fixed CSV slot columns in the CLI and GUI; 0 for single-display meters.
+    pub max_aux_values: usize,
     /// GitHub issue number for verification tracking (e.g. `Some(3)` → issue #3).
     pub verification_issue: Option<u16>,
 }

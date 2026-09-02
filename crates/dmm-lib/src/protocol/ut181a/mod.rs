@@ -253,6 +253,8 @@ impl Ut181aProtocol {
                 model_name: "UNI-T UT181A",
                 stability: Stability::Experimental,
                 supported_commands: UT181A_COMMANDS,
+                // aux1 + aux2 + COMP High + COMP Low.
+                max_aux_values: 4,
                 verification_issue: Some(5),
             },
         }

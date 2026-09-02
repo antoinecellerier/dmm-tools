@@ -127,6 +127,7 @@ impl Ut61PlusProtocol {
                 model_name,
                 stability,
                 supported_commands: UT61EPLUS_COMMANDS,
+                max_aux_values: 0,
                 verification_issue,
             },
         }

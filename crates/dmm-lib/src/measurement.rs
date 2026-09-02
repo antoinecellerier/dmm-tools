@@ -50,6 +50,21 @@ impl AuxValue {
             MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
         }
     }
+
+    /// The unit to show for this sub-value, given the main reading's unit.
+    ///
+    /// Protocols leave `unit` empty when the sub-value shares the main
+    /// reading's unit — a relative-mode reference or a min/max sample always
+    /// measures the same quantity as the value it tracks, so the wire never
+    /// repeats the unit. Only genuinely different units (the UT181A's
+    /// "Hz"/"ms" frequency pair, a second thermocouple) are spelled out.
+    pub fn unit_or<'a>(&'a self, main_unit: &'a str) -> &'a str {
+        if self.unit.is_empty() {
+            main_unit
+        } else {
+            &self.unit
+        }
+    }
 }
 
 /// A fully parsed measurement from the meter.
@@ -132,6 +147,40 @@ impl Measurement {
             MeasuredValue::Overload => Cow::Borrowed("OL"),
             MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
         }
+    }
+
+    /// The sub-values as one line, for status bars and log messages.
+    ///
+    /// Each entry reads `"{label} {value} {unit}"`, with the main reading's
+    /// unit substituted where the sub-value doesn't carry its own (see
+    /// [`AuxValue::unit_or`]), and `" @{n}s"` appended when the sub-value
+    /// carries a timestamp. Entries are joined by `", "`:
+    ///
+    /// - `"Frequency 50.01 Hz, Period 20.00 ms"`
+    /// - `"Max 5.0123 V @12s, Average 4.9902 V @12s, Min 4.9654 V @3s"`
+    ///
+    /// Empty when the measurement has no sub-values, so callers can print it
+    /// unconditionally and get nothing for single-display meters.
+    pub fn aux_summary(&self) -> String {
+        let mut out = String::new();
+        for aux in &self.aux_values {
+            if !out.is_empty() {
+                out.push_str(", ");
+            }
+            out.push_str(&aux.label);
+            out.push(' ');
+            out.push_str(&aux.value_str());
+            // Unitless modes (NCV) would otherwise leave a trailing space.
+            let unit = aux.unit_or(&self.unit);
+            if !unit.is_empty() {
+                out.push(' ');
+                out.push_str(unit);
+            }
+            if let Some(secs) = aux.elapsed_secs {
+                out.push_str(&format!(" @{secs}s"));
+            }
+        }
+        out
     }
 }
 
@@ -246,6 +295,72 @@ mod tests {
     fn display_ncv() {
         let m = Measurement::test_fixture(MeasuredValue::NcvLevel(3), "", StatusFlags::default());
         assert!(m.to_string().contains("NCV:3"));
+    }
+
+    fn aux(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
+        AuxValue {
+            label: label.into(),
+            value: MeasuredValue::Normal(display.trim().parse().unwrap_or(0.0)),
+            unit: unit.into(),
+            display_raw: Some(display.to_string()),
+            elapsed_secs: None,
+        }
+    }
+
+    #[test]
+    fn aux_unit_falls_back_to_the_main_unit() {
+        // Empty on the wire means "same unit as the main reading".
+        assert_eq!(aux("Reference", "5.0000", "").unit_or("V"), "V");
+    }
+
+    #[test]
+    fn aux_unit_keeps_its_own_when_set() {
+        assert_eq!(aux("Period", "20.00", "ms").unit_or("V"), "ms");
+    }
+
+    #[test]
+    fn aux_summary_is_empty_without_sub_values() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        assert_eq!(m.aux_summary(), "");
+    }
+
+    #[test]
+    fn aux_summary_joins_labelled_sub_values() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(230.0), "V", StatusFlags::default());
+        m.aux_values = vec![
+            aux("Frequency", "50.01", "Hz"),
+            aux("Period", "20.00", "ms"),
+        ];
+        assert_eq!(m.aux_summary(), "Frequency 50.01 Hz, Period 20.00 ms");
+    }
+
+    #[test]
+    fn aux_summary_uses_the_main_unit_and_timestamps() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.0), "V", StatusFlags::default());
+        let mut max = aux("Max", "5.0123", "");
+        max.elapsed_secs = Some(12);
+        let mut avg = aux("Average", "4.9902", "");
+        avg.elapsed_secs = Some(12);
+        let mut min = aux("Min", "4.9654", "");
+        min.elapsed_secs = Some(3);
+        m.aux_values = vec![max, avg, min];
+        assert_eq!(
+            m.aux_summary(),
+            "Max 5.0123 V @12s, Average 4.9902 V @12s, Min 4.9654 V @3s"
+        );
+    }
+
+    #[test]
+    fn aux_summary_reads_overload_from_the_value() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        let mut over = aux("Max", "9.9999", "");
+        over.value = MeasuredValue::Overload;
+        m.aux_values = vec![over];
+        assert_eq!(m.aux_summary(), "Max OL V");
     }
 
     #[test]

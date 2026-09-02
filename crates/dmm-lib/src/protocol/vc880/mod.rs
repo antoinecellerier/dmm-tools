@@ -270,6 +270,7 @@ impl Vc880Protocol {
                 model_name,
                 stability: Stability::Experimental,
                 supported_commands: VC880_COMMANDS,
+                max_aux_values: 0,
                 verification_issue: Some(13),
             },
         }

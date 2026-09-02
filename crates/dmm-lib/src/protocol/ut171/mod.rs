@@ -160,6 +160,7 @@ impl Ut171Protocol {
                 model_name: "UNI-T UT171",
                 stability: Stability::Experimental,
                 supported_commands: UT171_COMMANDS,
+                max_aux_values: 1,
                 verification_issue: Some(4),
             },
         }
