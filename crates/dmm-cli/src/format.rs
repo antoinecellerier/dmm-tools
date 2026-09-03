@@ -1,52 +1,10 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
-use dmm_lib::measurement::{AUX_EXPORT_COLUMNS, MeasuredValue, Measurement};
-use std::borrow::Cow;
+use dmm_lib::export::CsvLayout;
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 use std::io::Write;
 
 use crate::OutputFormat;
-
-/// How many sub-value groups a CSV run writes, and what fills them.
-///
-/// The first `family` groups hold the meter's own sub-values (the family's
-/// `max_aux_values`); the `extra` groups that follow hold the ones software
-/// appended — a transform's `Raw` — so those keep fixed columns whatever the
-/// meter sent that frame. Both counts are fixed for the whole file.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AuxLayout {
-    pub family: usize,
-    pub extra: usize,
-}
-
-impl AuxLayout {
-    /// The total group count, which is what [`csv_header`] names.
-    pub fn total(&self) -> usize {
-        self.family + self.extra
-    }
-}
-
-/// The CSV header for a run, matching what [`format_measurement`] writes for
-/// the same `integrate` flag and the same total slot count.
-///
-/// `aux_slots` is the total the rows lay out — the meter family's
-/// `max_aux_values` plus any slots software appends (a transform's `Raw`) —
-/// not the count in any one reading: the column layout has to be fixed for
-/// the whole file, so a mode that reports fewer sub-values leaves its slots
-/// empty. The aux groups come last, after the integral columns, so
-/// `--integrate` consumers keep the positions they had before sub-values were
-/// exported.
-pub fn csv_header(integrate: bool, aux_slots: usize) -> String {
-    let mut header = String::from("timestamp,mode,value,unit,range,flags");
-    if integrate {
-        header.push_str(",integral,integral_unit");
-    }
-    for i in 1..=aux_slots {
-        for suffix in AUX_EXPORT_COLUMNS {
-            header.push_str(&format!(",aux{i}_{suffix}"));
-        }
-    }
-    header
-}
 
 /// Derive a wall-clock RFC3339 string from the measurement's monotonic
 /// timestamp using the session's `WallClock` origin. Keeps exported
@@ -65,9 +23,9 @@ pub fn format_measurement(
     format: &OutputFormat,
     experimental: bool,
     integral: Option<(f64, &str)>,
-    // Sub-value columns to write in CSV. Ignored by the text and JSON arms,
-    // which size themselves per reading.
-    aux: AuxLayout,
+    // Column layout for CSV. Ignored by the text and JSON arms, which size
+    // themselves per reading.
+    layout: CsvLayout,
 ) -> std::io::Result<()> {
     match format {
         OutputFormat::Text => {
@@ -110,49 +68,18 @@ pub fn format_measurement(
             // validation, and an unrecognised mode byte becomes
             // `Unknown(0x..)`. One comma or quote in there and every
             // downstream column shifts.
-            let value_str = m.value_export_str();
             let ts = timestamp_rfc3339(m, wall_clock);
-            let flags = m.flags.to_string();
-            // Resolved ahead of the record so the borrowed cells outlive it.
-            // The slot layout is `export_aux_slots`' business, not the
-            // formatter's: it pins a software-appended sub-value to the
-            // trailing group whether or not the meter filled its own slots
-            // this frame, and truncates a reading carrying more sub-values
-            // than the profile promised rather than shifting every later
-            // column (or panicking) mid-file.
-            let aux_cells: Vec<Option<[Cow<'_, str>; AUX_EXPORT_COLUMNS.len()]>> = m
-                .export_aux_slots(aux.family, aux.extra)
-                .into_iter()
-                .map(|slot| slot.map(|aux| aux.export_cells(&m.unit)))
-                .collect();
+            // Cells resolved ahead of the writer so the borrowed ones outlive
+            // the record. `--scale` is fixed for the run, so every row carries
+            // the full extra count the layout reserves.
+            let cells = layout.row(m, &ts, integral, layout.extra_slots);
             let mut wtr = csv::WriterBuilder::new()
                 // One row per call, so the default 8 KiB buffer is dead
                 // weight — a row is well under this.
                 .buffer_capacity(256)
                 .from_writer(w);
-            let mut record: Vec<&str> = vec![
-                &ts,
-                &m.mode,
-                value_str.as_ref(),
-                &m.unit,
-                &m.range_label,
-                &flags,
-            ];
-            let integral_str;
-            if let Some((val, unit)) = integral {
-                integral_str = format!("{val:.6}");
-                record.push(&integral_str);
-                record.push(unit);
-            }
-            // Every slot is written whether or not this reading filled it —
-            // the file's column layout is fixed for the whole run.
-            for cells in &aux_cells {
-                match cells {
-                    Some(cells) => record.extend(cells.iter().map(|c| c.as_ref())),
-                    None => record.extend(std::iter::repeat_n("", AUX_EXPORT_COLUMNS.len())),
-                }
-            }
-            wtr.write_record(&record).map_err(std::io::Error::other)?;
+            wtr.write_record(cells.iter().map(|c| c.as_ref()))
+                .map_err(std::io::Error::other)?;
             wtr.flush()
         }
         OutputFormat::Json => {
@@ -229,7 +156,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            AuxLayout::default(),
+            CsvLayout::default(),
         )
         .unwrap();
         serde_json::from_slice(&buf).unwrap()
@@ -295,7 +222,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            AuxLayout::default(),
+            CsvLayout::default(),
         )
         .unwrap();
         let out = String::from_utf8(buf).unwrap();
@@ -321,7 +248,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            AuxLayout::default(),
+            CsvLayout::default(),
         )
         .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();
@@ -347,7 +274,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            AuxLayout::default(),
+            CsvLayout::default(),
         )
         .unwrap();
         assert_eq!(String::from_utf8(buf).unwrap().lines().count(), 1);
@@ -363,7 +290,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            AuxLayout::default(),
+            CsvLayout::default(),
         )
         .unwrap();
         String::from_utf8(buf).unwrap()
@@ -415,6 +342,14 @@ mod tests {
         assert!(line.contains(",DC V,5.678,V,22V,"), "got {line}");
     }
 
+    fn layout_of(integral: bool, family: usize, extra: usize) -> CsvLayout {
+        CsvLayout {
+            family_slots: family,
+            extra_slots: extra,
+            integral,
+        }
+    }
+
     fn csv_with(
         m: &Measurement,
         integral: Option<(f64, &str)>,
@@ -429,7 +364,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             integral,
-            AuxLayout { family, extra },
+            layout_of(integral.is_some(), family, extra),
         )
         .unwrap();
         String::from_utf8(buf).unwrap()
@@ -469,18 +404,20 @@ mod tests {
         ];
     }
 
+    /// The header `run_read_loop` writes at the top of the file, for the
+    /// layouts the CLI's own options produce.
     #[test]
     fn csv_header_names_one_group_per_aux_slot() {
         assert_eq!(
-            csv_header(false, 0),
+            layout_of(false, 0, 0).header().join(","),
             "timestamp,mode,value,unit,range,flags"
         );
         assert_eq!(
-            csv_header(true, 0),
+            layout_of(true, 0, 0).header().join(","),
             "timestamp,mode,value,unit,range,flags,integral,integral_unit"
         );
         assert_eq!(
-            csv_header(false, 4),
+            layout_of(false, 4, 0).header().join(","),
             "timestamp,mode,value,unit,range,flags,\
              aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,\
              aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit"
@@ -488,14 +425,14 @@ mod tests {
         // Integral columns first, so existing --integrate consumers keep
         // their column positions.
         assert_eq!(
-            csv_header(true, 1),
+            layout_of(true, 0, 1).header().join(","),
             "timestamp,mode,value,unit,range,flags,integral,integral_unit,\
              aux1_label,aux1_value,aux1_unit"
         );
     }
 
-    /// The header is written once at the top of the file and the rows by a
-    /// different function; a mismatch would silently misalign every column.
+    /// The header is written once at the top of the file and the rows one at a
+    /// time; a mismatch would silently misalign every column.
     #[test]
     fn csv_header_and_row_have_the_same_field_count() {
         let mut m =
@@ -505,7 +442,7 @@ mod tests {
             for slots in [0usize, 1, 4] {
                 let integral = integrate.then_some((1.5, "Vs"));
                 let row = csv_fields(&csv_with(&m, integral, slots, 0));
-                let header = csv_fields(&csv_header(integrate, slots));
+                let header = layout_of(integrate, slots, 0).header();
                 assert_eq!(
                     header.len(),
                     row.len(),
@@ -586,7 +523,7 @@ mod tests {
         let extra = t.extra_aux_count();
 
         let row = csv_fields(&csv_with(&m, None, 2, extra));
-        assert_eq!(csv_fields(&csv_header(false, 2 + extra)).len(), row.len());
+        assert_eq!(layout_of(false, 2, extra).header().len(), row.len());
         assert_eq!(&row[2..4], ["12.34", "A"]);
         assert_eq!(
             &row[6..12],
@@ -608,7 +545,7 @@ mod tests {
         let extra = t.extra_aux_count();
 
         let row = csv_fields(&csv_with(&m, None, 2, extra));
-        assert_eq!(csv_fields(&csv_header(false, 2 + extra)).len(), row.len());
+        assert_eq!(layout_of(false, 2, extra).header().len(), row.len());
         // The meter's two groups stay empty...
         assert_eq!(&row[6..12], ["", "", "", "", "", ""]);
         // ...and Raw keeps the same columns it had on the frame above.
@@ -628,10 +565,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            AuxLayout {
-                family: 0,
-                extra: 1,
-            },
+            layout_of(false, 0, 1),
         )
         .unwrap();
         let out = String::from_utf8(buf).unwrap();
@@ -657,7 +591,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            AuxLayout::default(),
+            CsvLayout::default(),
         )
         .unwrap();
         assert!(String::from_utf8(buf).unwrap().contains("VOID"));

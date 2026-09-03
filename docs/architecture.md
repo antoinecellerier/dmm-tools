@@ -34,7 +34,8 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
 | `protocol/vc880/` | VC-880/VC650BT: `Vc880Protocol` — streaming, AB CD framing (reuses UT61E+ extractor), ASCII display values |
 | `protocol/vc890/` | VC-890: `Vc890Protocol` — polled (0x5E request), AB CD framing, 60K counts, 66-byte frames |
-| `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic); `AuxValue` sub-values, with `AUX_EXPORT_COLUMNS` + `AuxValue::export_cells` + `Measurement::export_aux_slots` defining the aux CSV column layout once for both the CLI and GUI exporters (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
+| `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic); `AuxValue` sub-values, with `AuxValue::export_cells` + `Measurement::export_aux_slots` supplying the cells and slot order `export.rs` lays out (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
+| `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
 | `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |
 | `stats.rs` | `RunningStats` (min/max/avg), `Integrator` (trapezoidal time-integral with gap handling), and `SeriesStats` — the mode/unit-keyed session both the CLI read loop and the GUI drain accumulate into, so the two agree on what starts a new series |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max, Low Battery |

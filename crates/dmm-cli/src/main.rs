@@ -688,9 +688,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // one more group, kept trailing, for the meter's own reading — so `Raw`
     // stays in the same columns whether or not the meter sent sub-values of
     // its own that frame.
-    let aux = format::AuxLayout {
-        family: dmm.profile().max_aux_values,
-        extra: transform.extra_aux_count(),
+    let layout = dmm_lib::export::CsvLayout {
+        family_slots: dmm.profile().max_aux_values,
+        extra_slots: transform.extra_aux_count(),
+        integral: integrate,
     };
     if !transform.is_identity() {
         // On stderr so a redirected CSV or JSON stream stays machine-readable,
@@ -707,8 +708,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     }
     match format {
         OutputFormat::Csv => {
-            writeln!(writer, "# device: {model_name}")?;
-            writeln!(writer, "{}", format::csv_header(integrate, aux.total()))?;
+            writeln!(writer, "{}", dmm_lib::export::device_comment(model_name))?;
+            writeln!(writer, "{}", layout.header().join(","))?;
         }
         OutputFormat::Json => {
             writeln!(
@@ -769,7 +770,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                     format,
                     experimental,
                     integral_display,
-                    aux,
+                    layout,
                 )?;
                 writer.flush()?;
                 i += 1;
@@ -1225,7 +1226,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1244,7 +1245,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1279,9 +1280,9 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            format::AuxLayout {
-                family: 2,
-                extra: 0,
+            dmm_lib::export::CsvLayout {
+                family_slots: 2,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -1292,7 +1293,12 @@ mod tests {
         // The unused second slot is present but empty.
         assert_eq!(&fields[9..12], ["", "", ""]);
         assert_eq!(
-            format::csv_header(false, 2).split(',').count(),
+            dmm_lib::export::CsvLayout {
+                family_slots: 2,
+                ..Default::default()
+            }
+            .header()
+            .len(),
             fields.len()
         );
     }
@@ -1310,7 +1316,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1331,7 +1337,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1355,7 +1361,7 @@ mod tests {
             &OutputFormat::Json,
             true,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1374,7 +1380,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1392,7 +1398,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1422,7 +1428,7 @@ mod tests {
             &OutputFormat::Csv,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1440,7 +1446,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1460,7 +1466,7 @@ mod tests {
             &OutputFormat::Text,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();
@@ -1479,7 +1485,7 @@ mod tests {
             &OutputFormat::Json,
             false,
             None,
-            format::AuxLayout::default(),
+            dmm_lib::export::CsvLayout::default(),
         )
         .unwrap();
         let output = String::from_utf8(buf).unwrap();

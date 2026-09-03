@@ -25,6 +25,7 @@
 
 - **Capture reports' confirmation line names every flag** — a sample taken with HV, LOW BAT, LEAD ERR, COMP or REC showed only "[AUTO]".
 - **Peak MIN/MAX badges show in the reading display** — screen readers announced them but the badge row left them out; badges now follow the CSV flags column order.
+- **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked the two integral cells the header named, shifting every sub-value column.
 
 ## v0.6.0 — Display Fidelity and Connection Fixes
 

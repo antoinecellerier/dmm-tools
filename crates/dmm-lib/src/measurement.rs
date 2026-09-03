@@ -111,16 +111,11 @@ pub struct AuxValue {
 /// The columns one sub-value slot contributes to a tabular (CSV) export, as
 /// header suffixes: `aux1_label,aux1_value,aux1_unit`.
 ///
-/// The CLI and the GUI write the same file format from two different
-/// functions. Both name their columns from this list and fill their rows from
-/// [`AuxValue::export_cells`], whose array is exactly this long, so a column
-/// cannot be added to one side's header without the other side's rows failing
-/// to compile.
-///
-/// Which sub-value goes in which slot is not the writers' business either:
-/// they must take the slots from [`Measurement::export_aux_slots`], which
-/// keeps a software-appended sub-value (a transform's `Raw`) in a fixed column
-/// even as the meter's own sub-value count changes from frame to frame.
+/// This only names the per-slot suffixes; where the groups sit in a file, and
+/// which sub-value fills each one, belongs to `crate::export::CsvLayout`,
+/// which builds both the header and the rows so the CLI and GUI writers cannot
+/// disagree. [`AuxValue::export_cells`] returns an array exactly this long, so
+/// a column cannot be added here without the row builder failing to compile.
 pub const AUX_EXPORT_COLUMNS: [&str; 3] = ["label", "value", "unit"];
 
 impl AuxValue {
