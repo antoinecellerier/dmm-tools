@@ -1,3 +1,91 @@
+/// One status flag, so consumers can enumerate flags instead of hand-listing fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Flag {
+    Hold,
+    Rel,
+    AutoRange,
+    Min,
+    Max,
+    LowBattery,
+    HvWarning,
+    PeakMax,
+    PeakMin,
+    LeadError,
+    Comp,
+    Record,
+    LoZ,
+    Void,
+    Dc,
+}
+
+impl Flag {
+    /// Every flag, in the order [`StatusFlags`]'s `Display` prints them; `Dc`
+    /// last because it has no label and is never printed.
+    pub const ALL: [Flag; StatusFlags::COUNT] = [
+        Flag::Hold,
+        Flag::Rel,
+        Flag::AutoRange,
+        Flag::Min,
+        Flag::Max,
+        Flag::LowBattery,
+        Flag::HvWarning,
+        Flag::PeakMax,
+        Flag::PeakMin,
+        Flag::LeadError,
+        Flag::Comp,
+        Flag::Record,
+        Flag::LoZ,
+        Flag::Void,
+        Flag::Dc,
+    ];
+
+    /// Machine-readable snake_case name — the JSON/YAML key for this flag.
+    /// Renaming one is a breaking change for downstream consumers.
+    pub fn name(self) -> &'static str {
+        match self {
+            Flag::Hold => "hold",
+            Flag::Rel => "rel",
+            Flag::AutoRange => "auto_range",
+            Flag::Min => "min",
+            Flag::Max => "max",
+            Flag::LowBattery => "low_battery",
+            Flag::HvWarning => "hv_warning",
+            Flag::PeakMax => "peak_max",
+            Flag::PeakMin => "peak_min",
+            Flag::LeadError => "lead_error",
+            Flag::Comp => "comp",
+            Flag::Record => "record",
+            Flag::LoZ => "loz",
+            Flag::Void => "void",
+            Flag::Dc => "dc",
+        }
+    }
+
+    /// Short label as printed by [`StatusFlags`]'s `Display`.
+    ///
+    /// `None` for `Dc`: the DC/AC distinction is carried by the measurement
+    /// mode, so it is never printed as a flag.
+    pub fn label(self) -> Option<&'static str> {
+        Some(match self {
+            Flag::Hold => "HOLD",
+            Flag::Rel => "REL",
+            Flag::AutoRange => "AUTO",
+            Flag::Min => "MIN",
+            Flag::Max => "MAX",
+            Flag::LowBattery => "LOW BAT",
+            Flag::HvWarning => "HV!",
+            Flag::PeakMax => "P-MAX",
+            Flag::PeakMin => "P-MIN",
+            Flag::LeadError => "LEAD ERR",
+            Flag::Comp => "COMP",
+            Flag::Record => "REC",
+            Flag::LoZ => "LoZ",
+            Flag::Void => "VOID",
+            Flag::Dc => return None,
+        })
+    }
+}
+
 /// Status flags parsed from payload bytes 11-13 (after & 0x0F masking).
 ///
 /// Bit mapping verified against real device captures and cross-checked
@@ -51,7 +139,34 @@ impl StatusFlags {
     /// Number of flags in [`StatusFlags::as_pairs`] — i.e. every field.
     pub const COUNT: usize = 15;
 
-    /// Every flag as a `(machine-readable name, value)` pair.
+    /// Value of a single flag. Exhaustive, so a new field fails to compile
+    /// until it is wired into [`Flag`].
+    pub fn get(&self, flag: Flag) -> bool {
+        match flag {
+            Flag::Hold => self.hold,
+            Flag::Rel => self.rel,
+            Flag::AutoRange => self.auto_range,
+            Flag::Min => self.min,
+            Flag::Max => self.max,
+            Flag::LowBattery => self.low_battery,
+            Flag::HvWarning => self.hv_warning,
+            Flag::PeakMax => self.peak_max,
+            Flag::PeakMin => self.peak_min,
+            Flag::LeadError => self.lead_error,
+            Flag::Comp => self.comp,
+            Flag::Record => self.record,
+            Flag::LoZ => self.loz,
+            Flag::Void => self.void,
+            Flag::Dc => self.dc,
+        }
+    }
+
+    /// The flags that are currently set, in [`Flag::ALL`] order.
+    pub fn active(&self) -> impl Iterator<Item = Flag> + '_ {
+        Flag::ALL.into_iter().filter(|&flag| self.get(flag))
+    }
+
+    /// Every flag as a `(machine-readable name, value)` pair, from [`Flag::ALL`].
     ///
     /// Exists so consumers that need to enumerate the flags — the CLI's JSON
     /// output, the capture report — don't each hand-maintain their own list.
@@ -61,79 +176,55 @@ impl StatusFlags {
     ///
     /// Names are snake_case and are part of those output formats; renaming one
     /// is a breaking change for downstream consumers.
+    ///
+    /// The element order is [`Flag::ALL`]'s, not the struct field order, and no
+    /// consumer observes it: the CLI's JSON arm collects the pairs into a
+    /// `serde_json::Map` (a `BTreeMap`, which re-sorts by key), and the tests
+    /// only check that names are present.
     pub fn as_pairs(&self) -> [(&'static str, bool); Self::COUNT] {
-        [
-            ("hold", self.hold),
-            ("rel", self.rel),
-            ("min", self.min),
-            ("max", self.max),
-            ("auto_range", self.auto_range),
-            ("low_battery", self.low_battery),
-            ("hv_warning", self.hv_warning),
-            ("dc", self.dc),
-            ("peak_max", self.peak_max),
-            ("peak_min", self.peak_min),
-            ("lead_error", self.lead_error),
-            ("comp", self.comp),
-            ("record", self.record),
-            ("loz", self.loz),
-            ("void", self.void),
-        ]
+        Flag::ALL.map(|flag| (flag.name(), self.get(flag)))
     }
 }
 
 impl std::fmt::Display for StatusFlags {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut parts = Vec::new();
-        if self.hold {
-            parts.push("HOLD");
+        let mut first = true;
+        for label in self.active().filter_map(Flag::label) {
+            if !first {
+                f.write_str(" ")?;
+            }
+            f.write_str(label)?;
+            first = false;
         }
-        if self.rel {
-            parts.push("REL");
-        }
-        if self.auto_range {
-            parts.push("AUTO");
-        }
-        if self.min {
-            parts.push("MIN");
-        }
-        if self.max {
-            parts.push("MAX");
-        }
-        if self.low_battery {
-            parts.push("LOW BAT");
-        }
-        if self.hv_warning {
-            parts.push("HV!");
-        }
-        if self.peak_max {
-            parts.push("P-MAX");
-        }
-        if self.peak_min {
-            parts.push("P-MIN");
-        }
-        if self.lead_error {
-            parts.push("LEAD ERR");
-        }
-        if self.comp {
-            parts.push("COMP");
-        }
-        if self.record {
-            parts.push("REC");
-        }
-        if self.loz {
-            parts.push("LoZ");
-        }
-        if self.void {
-            parts.push("VOID");
-        }
-        write!(f, "{}", parts.join(" "))
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every field set, spelled out as a full struct literal so that adding a
+    /// field to `StatusFlags` breaks this helper until the flag is wired up.
+    fn all_set() -> StatusFlags {
+        StatusFlags {
+            hold: true,
+            rel: true,
+            min: true,
+            max: true,
+            auto_range: true,
+            low_battery: true,
+            hv_warning: true,
+            dc: true,
+            peak_max: true,
+            peak_min: true,
+            lead_error: true,
+            comp: true,
+            record: true,
+            loz: true,
+            void: true,
+        }
+    }
 
     #[test]
     fn parse_no_flags_auto_on() {
@@ -247,5 +338,51 @@ mod tests {
         let s = flags.to_string();
         assert!(s.contains("COMP"));
         assert!(s.contains("REC"));
+    }
+
+    #[test]
+    fn all_flags_set_prints_every_label_in_order() {
+        assert_eq!(
+            all_set().to_string(),
+            "HOLD REL AUTO MIN MAX LOW BAT HV! P-MAX P-MIN LEAD ERR COMP REC LoZ VOID"
+        );
+    }
+
+    #[test]
+    fn active_covers_every_field() {
+        assert_eq!(all_set().active().count(), StatusFlags::COUNT);
+
+        let mut names: Vec<&str> = Flag::ALL.iter().map(|flag| flag.name()).collect();
+        let total = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), total, "duplicate flag names in Flag::ALL");
+    }
+
+    #[test]
+    fn as_pairs_names_match_flag_names() {
+        let pairs = StatusFlags::default().as_pairs();
+        let names = Flag::ALL.map(Flag::name);
+        for (pair, name) in pairs.iter().zip(names.iter()) {
+            assert_eq!(pair.0, *name);
+        }
+
+        for name in names {
+            assert!(
+                !name.is_empty()
+                    && !name.starts_with('_')
+                    && !name.ends_with('_')
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
+                "{name} is not snake_case ASCII"
+            );
+        }
+    }
+
+    #[test]
+    fn dc_has_no_label_and_is_last() {
+        assert!(Flag::Dc.label().is_none());
+        assert_eq!(Flag::ALL.last(), Some(&Flag::Dc));
     }
 }
