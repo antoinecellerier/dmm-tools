@@ -46,6 +46,52 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
     Cow::Owned(format!("Unknown({code:#06x})"))
 }
 
+/// Helpers shared by the per-family parser tests.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use crate::measurement::Measurement;
+
+    /// Render a parsed [`Measurement`] as deterministic `key=value` lines.
+    ///
+    /// Every field a parser decides is printed, so a test that pins this
+    /// string fails on *any* change to the parsed reading rather than only
+    /// on the handful of fields the test thought to assert. The timestamp is
+    /// excluded (it is `Instant::now()`), and the sub-value list and raw
+    /// payload appear as lengths — the payload is the test's own input, and
+    /// no family covered by this helper produces sub-values.
+    pub(crate) fn snapshot(m: &Measurement) -> String {
+        let flags: Vec<&str> = m
+            .flags
+            .as_pairs()
+            .iter()
+            .filter(|(_, set)| *set)
+            .map(|(name, _)| *name)
+            .collect();
+        format!(
+            "mode={}\n\
+             mode_raw={:#04x}\n\
+             range_raw={:#04x}\n\
+             value={:?}\n\
+             unit={}\n\
+             range_label={}\n\
+             display_raw={:?}\n\
+             flags={}\n\
+             aux={}\n\
+             raw_payload={}",
+            m.mode,
+            m.mode_raw,
+            m.range_raw,
+            m.value,
+            m.unit,
+            m.range_label,
+            m.display_raw,
+            flags.join(","),
+            m.aux_values.len(),
+            m.raw_payload.len(),
+        )
+    }
+}
+
 /// Protocol stability level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {

@@ -586,6 +586,7 @@ impl Protocol for Fs9721Protocol {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     /// Build a 14-nibble UT804 payload.
     /// digits = MSD-first nibbles 0-4; then range, mode, acdc, status.
@@ -846,5 +847,533 @@ mod tests {
     fn invalid_digit_nibble_errors() {
         let p = ut804_payload(&[1, 0xF, 0, 0, 0xA], 1, 0x1, 2, 0x0);
         assert!(parse_measurement_ut804(&p).is_err());
+    }
+
+    /// DC V range 2 (39.99 full scale): a plain positive reading.
+    #[test]
+    fn ut804_snapshot_normal_positive() {
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x02
+value=Normal(12.34)
+unit=V
+range_label=
+display_raw=Some("12.34")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// The same frame with the status nibble's sign bit set.
+    #[test]
+    fn ut804_snapshot_negative() {
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0x1, 2, 0x4);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x02
+value=Normal(-12.34)
+unit=V
+range_label=
+display_raw=Some("-12.34")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Overload: digit 1 = 0xA and digit 2 = 0xC.
+    #[test]
+    fn ut804_snapshot_overload_positive() {
+        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x4, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x04
+range_raw=0x01
+value=Overload
+unit=Ω
+range_label=
+display_raw=Some("0L")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// The same overload with the sign bit: the digits read "-0L".
+    #[test]
+    fn ut804_snapshot_overload_negative() {
+        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x1, 2, 0x4);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Overload
+unit=V
+range_label=
+display_raw=Some("-0L")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Digit 1 = 0xA with digit 2 != 0xC: the vendor's "L0" display, which
+    /// we report as a zero reading rather than an overload.
+    #[test]
+    fn ut804_snapshot_l0() {
+        let p = ut804_payload(&[0xA, 0x1, 2, 3, 4], 1, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Normal(0.0)
+unit=V
+range_label=
+display_raw=Some("L0")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Digit 4 = 0xB is the idle frame: all displays zero.
+    #[test]
+    fn ut804_snapshot_idle() {
+        let p = ut804_payload(&[0, 0, 0, 0xB, 0], 1, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Normal(0.0)
+unit=V
+range_label=
+display_raw=Some("0")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Mode code 0 is not in the table: `Unknown(..)`, no unit, and the
+    /// fallback decimal position.
+    #[test]
+    fn ut804_snapshot_unknown_mode() {
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 0, 0x0, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x00)
+mode_raw=0x00
+range_raw=0x00
+value=Normal(1234.0)
+unit=
+range_label=
+display_raw=Some("1234")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// A known mode (V) with a range its table doesn't list: `ut804_mode_info`
+    /// returns None, so the reading takes the same fallback as an unknown mode.
+    #[test]
+    fn ut804_snapshot_range_outside_the_mode_table() {
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 9, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x01)
+mode_raw=0x01
+range_raw=0x09
+value=Normal(1234.0)
+unit=
+range_label=
+display_raw=Some("1234")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// In frequency mode the sign bit selects the duty-cycle display instead
+    /// of a negative value.
+    #[test]
+    fn ut804_snapshot_duty() {
+        let p = ut804_payload(&[5, 0, 0, 0, 0xA], 2, 0xC, 0, 0x4);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Duty %
+mode_raw=0x0c
+range_raw=0x02
+value=Normal(500.0)
+unit=%
+range_label=
+display_raw=Some("500.0")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// AC/DC nibble 0 on V: the vendor's default DC label.
+    #[test]
+    fn ut804_snapshot_acdc_default() {
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, 0, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x03
+value=Normal(230.0)
+unit=V
+range_label=
+display_raw=Some("230.0")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// AC/DC nibble 1 on V.
+    #[test]
+    fn ut804_snapshot_acdc_ac() {
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, 1, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC V
+mode_raw=0x01
+range_raw=0x03
+value=Normal(230.0)
+unit=V
+range_label=
+display_raw=Some("230.0")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// AC/DC nibble 2 on V.
+    #[test]
+    fn ut804_snapshot_acdc_dc() {
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, 2, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x03
+value=Normal(230.0)
+unit=V
+range_label=
+display_raw=Some("230.0")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// AC/DC nibble 3 on V.
+    #[test]
+    fn ut804_snapshot_acdc_ac_plus_dc() {
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, 3, 0x0);
+        let m = parse_measurement_ut804(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC+DC V
+mode_raw=0x01
+range_raw=0x03
+value=Normal(230.0)
+unit=V
+range_label=
+display_raw=Some("230.0")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// DC V range 0 (5.999 full scale), DC bit set in nibble 10.
+    #[test]
+    fn ut803_snapshot_normal_positive() {
+        let p = ut803_payload(&[5, 9, 9, 9], 0, 0xB, 0x0, 0x0, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x0b
+range_raw=0x00
+value=Normal(5.999)
+unit=V
+range_label=
+display_raw=Some("5.999")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Nibble 8 bit 2 is the sign.
+    #[test]
+    fn ut803_snapshot_negative() {
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x4, 0x0, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x0b
+range_raw=0x01
+value=Normal(-12.34)
+unit=V
+range_label=
+display_raw=Some("-12.34")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Nibble 8 bit 0 is overload; the digits are ignored.
+    #[test]
+    fn ut803_snapshot_overload_positive() {
+        let p = ut803_payload(&[0, 0, 0, 0], 0, 0x3, 0x1, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x03
+range_raw=0x00
+value=Overload
+unit=Ω
+range_label=
+display_raw=Some("0L")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Overload with the sign bit: the digits read "-0L".
+    #[test]
+    fn ut803_snapshot_overload_negative() {
+        let p = ut803_payload(&[0, 0, 0, 0], 0, 0x3, 0x5, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x03
+range_raw=0x00
+value=Overload
+unit=Ω
+range_label=
+display_raw=Some("-0L")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Mode code 7 is not in the UT803 table.
+    #[test]
+    fn ut803_snapshot_unknown_mode() {
+        let p = ut803_payload(&[1, 0, 0, 0], 0, 0x7, 0x0, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x07)
+mode_raw=0x07
+range_raw=0x00
+value=Normal(1000.0)
+unit=
+range_label=
+display_raw=Some("1000")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// A known mode (V) with a range its table doesn't list: `ut803_mode_info`
+    /// returns None, so the reading takes the unknown-mode fallback.
+    #[test]
+    fn ut803_snapshot_range_outside_the_mode_table() {
+        let p = ut803_payload(&[1, 2, 3, 4], 9, 0xB, 0x0, 0x0, 0x8);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x0b)
+mode_raw=0x0b
+range_raw=0x09
+value=Normal(1234.0)
+unit=
+range_label=
+display_raw=Some("1234")
+flags=dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Temperature with the alt bit clear reads °F.
+    #[test]
+    fn ut803_snapshot_temperature_alt_clear() {
+        let p = ut803_payload(&[0, 0, 7, 7], 0, 0x4, 0x0, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Temperature
+mode_raw=0x04
+range_raw=0x00
+value=Normal(77.0)
+unit=°F
+range_label=
+display_raw=Some("0077")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// The same frame with nibble 8 bit 3 set reads °C.
+    #[test]
+    fn ut803_snapshot_temperature_alt_set() {
+        let p = ut803_payload(&[0, 0, 2, 5], 0, 0x4, 0x8, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Temperature
+mode_raw=0x04
+range_raw=0x00
+value=Normal(25.0)
+unit=°C
+range_label=
+display_raw=Some("0025")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Mode 2 with the alt bit clear is a frequency.
+    #[test]
+    fn ut803_snapshot_frequency_alt_clear() {
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Frequency
+mode_raw=0x02
+range_raw=0x01
+value=Normal(12.34)
+unit=kHz
+range_label=
+display_raw=Some("12.34")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// The same frame with the alt bit set is a tachometer reading in RPM.
+    #[test]
+    fn ut803_snapshot_tachometer_alt_set() {
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Tachometer
+mode_raw=0x02
+range_raw=0x01
+value=Normal(12.34)
+unit=kRPM
+range_label=
+display_raw=Some("12.34")
+flags=
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// Nibble 9 bit 3 = HOLD, nibble 10 bit 3 = DC, nibble 10 bit 1 = AUTO.
+    #[test]
+    fn ut803_snapshot_hold_dc_and_auto() {
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x0, 0x8, 0xA);
+        let m = parse_measurement_ut803(&p).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x0b
+range_raw=0x01
+value=Normal(12.34)
+unit=V
+range_label=
+display_raw=Some("12.34")
+flags=hold,auto_range,dc
+aux=0
+raw_payload=14"#
+        );
+    }
+
+    /// The message a short payload produces, pinned so the wording survives
+    /// the shared length guard.
+    #[test]
+    fn ut804_error_payload_too_short() {
+        let err = parse_measurement_ut804(&[0x1, 0x2]).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid response: fs9721 payload too short: 2 nibbles"
+        );
+    }
+
+    /// As `ut804_error_payload_too_short`, for the UT803 layout.
+    #[test]
+    fn ut803_error_payload_too_short() {
+        let err = parse_measurement_ut803(&[0x1, 0x2]).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid response: fs9721 payload too short: 2 nibbles"
+        );
+    }
+
+    /// A digit nibble outside 0x0-0xA is rejected by `assemble_value`.
+    #[test]
+    fn ut804_error_invalid_digit_nibble() {
+        let p = ut804_payload(&[1, 0xF, 0, 0, 0xA], 1, 0x1, 2, 0x0);
+        let err = parse_measurement_ut804(&p).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid response: fs9721 invalid digit nibble 0x0f"
+        );
+    }
+
+    /// As `ut804_error_invalid_digit_nibble`, for the UT803 layout.
+    #[test]
+    fn ut803_error_invalid_digit_nibble() {
+        let p = ut803_payload(&[1, 0xF, 0, 0], 0, 0xB, 0x0, 0x0, 0x8);
+        let err = parse_measurement_ut803(&p).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "invalid response: fs9721 invalid digit nibble 0x0f"
+        );
     }
 }

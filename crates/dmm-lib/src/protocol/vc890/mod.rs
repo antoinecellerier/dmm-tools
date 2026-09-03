@@ -508,6 +508,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     /// Build a minimal VC890 live data payload for testing.
     fn make_payload(function: u8, range: u8, main_display: &[u8; 7], status: [u8; 8]) -> Vec<u8> {
@@ -754,5 +755,380 @@ mod tests {
         for w in writes.iter() {
             assert_eq!(w.as_slice(), &ACK_FRAME);
         }
+    }
+
+    /// Every status byte 0xFF: OL1 forces Overload, the manual bit clears
+    /// AUTO, hold/rel/min/max/HV/LoZ/VOID light — and low_battery stays off,
+    /// because the battery nibble reads 0xF (full), not 0 (empty).
+    #[test]
+    fn snapshot_every_status_bit_set() {
+        let payload = make_payload(0x00, b'1', b"-1.2345", [0xFF; 8]);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC V
+mode_raw=0x00
+range_raw=0x31
+value=Overload
+unit=V
+range_label=60V
+display_raw=Some("-1.2345")
+flags=hold,rel,min,max,hv_warning,loz,void
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Every status byte clear: AUTO on, and low_battery ON because the
+    /// battery nibble is 0.
+    #[test]
+    fn snapshot_zero_status() {
+        let payload = make_payload(0x00, b'1', b"-1.2345", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC V
+mode_raw=0x00
+range_raw=0x31
+value=Normal(-1.2345)
+unit=V
+range_label=60V
+display_raw=Some("-1.2345")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Overload spelled out in the digits rather than flagged by OL1.
+    #[test]
+    fn snapshot_overload_display_string() {
+        let payload = make_payload(0x07, b'0', b"     OL", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x07
+range_raw=0x30
+value=Overload
+unit=Ω
+range_label=600Ω
+display_raw=Some("     OL")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// The meter's "---" blank-reading form also reads as overload.
+    #[test]
+    fn snapshot_dashes_display() {
+        let payload = make_payload(0x07, b'0', b"    ---", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x07
+range_raw=0x30
+value=Overload
+unit=Ω
+range_label=600Ω
+display_raw=Some("    ---")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// An all-spaces display falls back to Overload.
+    #[test]
+    fn snapshot_blank_display() {
+        let payload = make_payload(0x00, b'1', b"       ", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC V
+mode_raw=0x00
+range_raw=0x31
+value=Overload
+unit=V
+range_label=60V
+display_raw=Some("       ")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Digits that are not a number: same Overload fallback as a blank one.
+    #[test]
+    fn snapshot_unparsable_display() {
+        let payload = make_payload(0x00, b'1', b"1.2.3.4", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC V
+mode_raw=0x00
+range_raw=0x31
+value=Overload
+unit=V
+range_label=60V
+display_raw=Some("1.2.3.4")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// A function code outside FUNCTION_TABLE.
+    #[test]
+    fn snapshot_unknown_function_code() {
+        let payload = make_payload(0x7F, b'0', b"  1.234", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x7f)
+mode_raw=0x7f
+range_raw=0x30
+value=Normal(1.234)
+unit=
+range_label=
+display_raw=Some("  1.234")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Range byte b'9' indexes past the 4-entry voltage table.
+    #[test]
+    fn snapshot_range_index_past_the_table() {
+        let payload = make_payload(0x00, b'9', b"  1.234", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=AC V
+mode_raw=0x00
+range_raw=0x39
+value=Normal(1.234)
+unit=V
+range_label=
+display_raw=Some("  1.234")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// DC mV has a one-entry range table.
+    #[test]
+    fn snapshot_single_range_function() {
+        let payload = make_payload(0x04, b'0', b" 123.45", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC mV
+mode_raw=0x04
+range_raw=0x30
+value=Normal(123.45)
+unit=mV
+range_label=600mV
+display_raw=Some(" 123.45")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Status byte 3 bit 2 alone: LoZ set, VOID clear.
+    #[test]
+    fn snapshot_loz_only() {
+        let mut status = zero_status();
+        status[3] = 0x04;
+        let payload = make_payload(0x02, b'0', b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x30
+value=Normal(1.234)
+unit=V
+range_label=6V
+display_raw=Some("  1.234")
+flags=auto_range,low_battery,loz
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Status byte 3 bit 3 alone: VOID set, LoZ clear.
+    #[test]
+    fn snapshot_void_only() {
+        let mut status = zero_status();
+        status[3] = 0x08;
+        let payload = make_payload(0x02, b'0', b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x30
+value=Normal(1.234)
+unit=V
+range_label=6V
+display_raw=Some("  1.234")
+flags=auto_range,low_battery,void
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Battery nibble 0x0 is the only value we report as low battery.
+    #[test]
+    fn snapshot_battery_nibble_empty() {
+        let mut status = zero_status();
+        status[6] = 0x00;
+        let payload = make_payload(0x02, b'0', b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x30
+value=Normal(1.234)
+unit=V
+range_label=6V
+display_raw=Some("  1.234")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Battery nibble 0x1 — the lowest non-empty level — is not reported as
+    /// low battery: the vendor's threshold is unknown (see the VC-890 entry
+    /// in docs/verification-backlog.md).
+    #[test]
+    fn snapshot_battery_nibble_one() {
+        let mut status = zero_status();
+        status[6] = 0x01;
+        let payload = make_payload(0x02, b'0', b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x30
+value=Normal(1.234)
+unit=V
+range_label=6V
+display_raw=Some("  1.234")
+flags=auto_range
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// Battery nibble 0xF: not low.
+    #[test]
+    fn snapshot_battery_nibble_full() {
+        let mut status = zero_status();
+        status[6] = 0x0F;
+        let payload = make_payload(0x02, b'0', b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x30
+value=Normal(1.234)
+unit=V
+range_label=6V
+display_raw=Some("  1.234")
+flags=auto_range
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// ACV LPF ignores the range byte and is fixed at 1000V.
+    #[test]
+    fn snapshot_acv_lpf_low_range_byte() {
+        let payload = make_payload(0x01, b'0', b" 230.45", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=ACV LPF
+mode_raw=0x01
+range_raw=0x30
+value=Normal(230.45)
+unit=V
+range_label=1000V
+display_raw=Some(" 230.45")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// The same, with a range byte no other function's table would accept.
+    #[test]
+    fn snapshot_acv_lpf_high_range_byte() {
+        let payload = make_payload(0x01, b'7', b" 230.45", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=ACV LPF
+mode_raw=0x01
+range_raw=0x37
+value=Normal(230.45)
+unit=V
+range_label=1000V
+display_raw=Some(" 230.45")
+flags=auto_range,low_battery
+aux=0
+raw_payload=61"#
+        );
+    }
+
+    /// The whole range table as one string: every function code crossed with
+    /// every range index, rendered `unit|range_label` (`-` where the lookup
+    /// returns None). Pins both the labels and the unit-override fallback.
+    #[test]
+    fn range_table_snapshot() {
+        let table: Vec<String> = (0x00u8..=0x12)
+            .map(|function| {
+                let cells: Vec<String> = (0u8..=8)
+                    .map(|range_idx| match lookup_range(function, range_idx) {
+                        Some((unit, label)) => format!("{unit}|{label}"),
+                        None => "-".to_string(),
+                    })
+                    .collect();
+                format!("{function:#04x}: {}", cells.join(" "))
+            })
+            .collect();
+        assert_eq!(
+            table.join("\n"),
+            r#"0x00: V|6V V|60V V|600V V|1000V - - - - -
+0x01: V|1000V V|1000V V|1000V V|1000V V|1000V V|1000V V|1000V V|1000V V|1000V
+0x02: V|6V V|60V V|600V V|1000V - - - - -
+0x03: V|6V V|60V V|600V V|1000V - - - - -
+0x04: mV|600mV - - - - - - - -
+0x05: Hz|60Hz Hz|600Hz kHz|6kHz kHz|60kHz kHz|600kHz MHz|6MHz MHz|60MHz MHz|600MHz -
+0x06: - - - - - - - - -
+0x07: Ω|600Ω kΩ|6kΩ kΩ|60kΩ kΩ|600kΩ MΩ|6MΩ MΩ|60MΩ - - -
+0x08: - - - - - - - - -
+0x09: - - - - - - - - -
+0x0a: nF|60nF nF|600nF µF|6µF µF|60µF µF|600µF µF|6000µF mF|60mF - -
+0x0b: - - - - - - - - -
+0x0c: - - - - - - - - -
+0x0d: µA|600µA µA|6000µA - - - - - - -
+0x0e: µA|600µA µA|6000µA - - - - - - -
+0x0f: mA|60mA mA|600mA - - - - - - -
+0x10: mA|60mA mA|600mA - - - - - - -
+0x11: A|10A - - - - - - - -
+0x12: A|10A - - - - - - - -"#
+        );
     }
 }

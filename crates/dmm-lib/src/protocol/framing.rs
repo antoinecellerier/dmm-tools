@@ -523,6 +523,38 @@ mod tests {
         frame
     }
 
+    /// Build a valid 21-byte UT8803 frame; `body` becomes bytes 2..19, so
+    /// `body[1]` is the frame-type byte the extractor requires to be 0x02.
+    fn make_frame_ut8803(body: &[u8; 17]) -> Vec<u8> {
+        let mut frame = vec![0xAB, 0xCD];
+        frame.extend_from_slice(body);
+        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
+        frame.push((sum >> 8) as u8);
+        frame.push((sum & 0xFF) as u8);
+        frame
+    }
+
+    /// Build a valid UT181A/UT171 frame (2-byte LE length, LE checksum).
+    fn make_frame_le16(payload: &[u8]) -> Vec<u8> {
+        let len_val = (payload.len() + 2) as u16;
+        let mut frame = vec![0xAB, 0xCD];
+        frame.extend_from_slice(&len_val.to_le_bytes());
+        frame.extend_from_slice(payload);
+        let sum: u16 = frame[2..].iter().map(|&b| b as u16).sum();
+        frame.extend_from_slice(&sum.to_le_bytes());
+        frame
+    }
+
+    /// A UT8803 body whose type byte is set; the rest is filler.
+    fn ut8803_body() -> [u8; 17] {
+        let mut body = [0u8; 17];
+        body[1] = 0x02; // frame type = measurement
+        body[2] = 0x01; // mode
+        body[3] = 0x31; // range
+        body[6..11].copy_from_slice(b"12.34");
+        body
+    }
+
     #[test]
     fn extract_valid_frame() {
         let payload = vec![0x01, 0x02, 0x03];
@@ -549,12 +581,30 @@ mod tests {
         assert!(extract_frame_abcd_be16(&frame).unwrap().is_none());
     }
 
+    /// A corrupted checksum reports the frame's own value as `expected` and
+    /// the sum we computed as `actual` — both pinned, because a swap makes
+    /// every bug report read backwards.
     #[test]
     fn extract_bad_checksum() {
         let mut frame = make_frame_be16(&[0x01, 0x02, 0x03]);
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
-        assert!(extract_frame_abcd_be16(&frame).is_err());
+        assert!(matches!(
+            extract_frame_abcd_be16(&frame),
+            Err(Error::ChecksumMismatch {
+                expected: 380,
+                actual: 387,
+            })
+        ));
+    }
+
+    /// A frame that is complete except for its last byte is incomplete, not
+    /// an error: the extractor must wait for the rest rather than consume it.
+    #[test]
+    fn abcd_be16_one_byte_short_is_incomplete() {
+        let frame = make_frame_be16(&[0x01, 0x02, 0x03]);
+        let truncated = &frame[..frame.len() - 1];
+        assert!(extract_frame_abcd_be16(truncated).unwrap().is_none());
     }
 
     #[test]
@@ -645,6 +695,41 @@ mod tests {
         assert!(extract_frame_ut8803(&buf).unwrap().is_none());
     }
 
+    /// 20 of the 21 bytes: still incomplete, and `consumed` stays 0.
+    #[test]
+    fn ut8803_one_byte_short_is_incomplete() {
+        let frame = make_frame_ut8803(&ut8803_body());
+        let truncated = &frame[..frame.len() - 1];
+        assert!(extract_frame_ut8803(truncated).unwrap().is_none());
+    }
+
+    /// The UT8803 header can arrive mid-stream; `consumed` has to cover the
+    /// bytes before it, or the read loop re-scans them forever.
+    #[test]
+    fn ut8803_leading_garbage() {
+        let frame = make_frame_ut8803(&ut8803_body());
+        let mut buf = vec![0xFF, 0xFE, 0xFD];
+        buf.extend_from_slice(&frame);
+        let (payload, consumed) = extract_frame_ut8803(&buf).unwrap().unwrap();
+        assert_eq!(consumed, 3 + frame.len());
+        assert_eq!(payload, frame[2..19].to_vec());
+    }
+
+    /// As `extract_bad_checksum`, for the UT8803's own sum.
+    #[test]
+    fn ut8803_bad_checksum() {
+        let mut frame = make_frame_ut8803(&ut8803_body());
+        let last = frame.len() - 1;
+        frame[last] ^= 0xFF;
+        assert!(matches!(
+            extract_frame_ut8803(&frame),
+            Err(Error::ChecksumMismatch {
+                expected: 603,
+                actual: 676,
+            })
+        ));
+    }
+
     #[test]
     fn le16_frame_ut181a() {
         // Build a valid UT181A frame (2-byte LE length = payload + 2)
@@ -672,6 +757,42 @@ mod tests {
         let (p, consumed) = extract_frame_abcd_2byte_le16(&frame).unwrap().unwrap();
         assert_eq!(p, vec![0x0A, 0x01]);
         assert_eq!(consumed, frame.len());
+    }
+
+    /// As `ut8803_leading_garbage`, for the 2-byte-length framing.
+    #[test]
+    fn le16_leading_garbage() {
+        let payload = vec![0x02, 0x00, 0x11, 0x31];
+        let frame = make_frame_le16(&payload);
+        let mut buf = vec![0xFF, 0xFE, 0xFD];
+        buf.extend_from_slice(&frame);
+        let (p, consumed) = extract_frame_abcd_2byte_le16(&buf).unwrap().unwrap();
+        assert_eq!(p, payload);
+        assert_eq!(consumed, 3 + frame.len());
+    }
+
+    /// As `extract_bad_checksum`, for the LE checksum. `expected` is the
+    /// little-endian read of the corrupted trailer, not a byte-swap of it.
+    #[test]
+    fn le16_bad_checksum() {
+        let mut frame = make_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
+        let last = frame.len() - 1;
+        frame[last] ^= 0xFF;
+        assert!(matches!(
+            extract_frame_abcd_2byte_le16(&frame),
+            Err(Error::ChecksumMismatch {
+                expected: 65354,
+                actual: 74,
+            })
+        ));
+    }
+
+    /// As `abcd_be16_one_byte_short_is_incomplete`, for the 2-byte length.
+    #[test]
+    fn le16_one_byte_short_is_incomplete() {
+        let frame = make_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
+        let truncated = &frame[..frame.len() - 1];
+        assert!(extract_frame_abcd_2byte_le16(truncated).unwrap().is_none());
     }
 
     // --- read_frame tests ---

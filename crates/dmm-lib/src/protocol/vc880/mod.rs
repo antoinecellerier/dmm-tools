@@ -430,6 +430,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     /// Build a minimal 34-byte VC880 live data payload for testing.
     fn make_payload(function: u8, range: u8, main_display: &[u8; 7], status: [u8; 7]) -> Vec<u8> {
@@ -670,5 +671,230 @@ mod tests {
         let sum: u16 = frame[..4].iter().map(|&b| b as u16).sum();
         assert_eq!(frame[4], (sum >> 8) as u8);
         assert_eq!(frame[5], (sum & 0xFF) as u8);
+    }
+
+    /// Every status byte 0xFF: the OL1 bit forces Overload, the manual-range
+    /// bit clears AUTO, and hold/rel/min/max/HV/low-battery all light.
+    #[test]
+    fn snapshot_every_status_bit_set() {
+        let payload = make_payload(0x00, b'1', b"-1.2345", [0xFF; 7]);
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x00
+range_raw=0x31
+value=Overload
+unit=V
+range_label=40V
+display_raw=Some("-1.2345")
+flags=hold,rel,min,max,low_battery,hv_warning
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// The same frame with every status byte clear: AUTO on (the manual bit
+    /// is inverted), nothing else set, and the digits parsed as a value.
+    #[test]
+    fn snapshot_zero_status() {
+        let payload = make_payload(0x00, b'1', b"-1.2345", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x00
+range_raw=0x31
+value=Normal(-1.2345)
+unit=V
+range_label=40V
+display_raw=Some("-1.2345")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// Overload spelled out in the digits rather than flagged by OL1.
+    #[test]
+    fn snapshot_overload_display_string() {
+        let payload = make_payload(0x06, b'0', b"     OL", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x06
+range_raw=0x30
+value=Overload
+unit=Ω
+range_label=400Ω
+display_raw=Some("     OL")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// The meter's "---" blank-reading form also reads as overload.
+    #[test]
+    fn snapshot_dashes_display() {
+        let payload = make_payload(0x06, b'0', b"    ---", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x06
+range_raw=0x30
+value=Overload
+unit=Ω
+range_label=400Ω
+display_raw=Some("    ---")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// An all-spaces display: nothing to parse, so the reading falls back to
+    /// Overload.
+    #[test]
+    fn snapshot_blank_display() {
+        let payload = make_payload(0x00, b'1', b"       ", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x00
+range_raw=0x31
+value=Overload
+unit=V
+range_label=40V
+display_raw=Some("       ")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// Digits that are not a number: same Overload fallback as a blank one.
+    #[test]
+    fn snapshot_unparsable_display() {
+        let payload = make_payload(0x00, b'1', b"1.2.3.4", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x00
+range_raw=0x31
+value=Overload
+unit=V
+range_label=40V
+display_raw=Some("1.2.3.4")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// A function code outside FUNCTION_TABLE: mode falls back to
+    /// `Unknown(..)` and the unit is empty.
+    #[test]
+    fn snapshot_unknown_function_code() {
+        let payload = make_payload(0x7F, b'0', b"  1.234", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x7f)
+mode_raw=0x7f
+range_raw=0x30
+value=Normal(1.234)
+unit=
+range_label=
+display_raw=Some("  1.234")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// Range byte b'9' indexes past the 4-entry voltage table: the range
+    /// label goes empty and the unit falls back to the function's base unit.
+    #[test]
+    fn snapshot_range_index_past_the_table() {
+        let payload = make_payload(0x00, b'9', b"  1.234", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x00
+range_raw=0x39
+value=Normal(1.234)
+unit=V
+range_label=
+display_raw=Some("  1.234")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// DC mV has a one-entry range table.
+    #[test]
+    fn snapshot_single_range_function() {
+        let payload = make_payload(0x02, b'0', b" 123.45", zero_status());
+        let m = parse_measurement(&payload).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC mV
+mode_raw=0x02
+range_raw=0x30
+value=Normal(123.45)
+unit=mV
+range_label=400mV
+display_raw=Some(" 123.45")
+flags=auto_range
+aux=0
+raw_payload=34"#
+        );
+    }
+
+    /// The whole range table as one string: every function code crossed with
+    /// every range index, rendered `unit|range_label` (`-` where the lookup
+    /// returns None). Pins both the labels and the unit-override fallback.
+    #[test]
+    fn range_table_snapshot() {
+        let table: Vec<String> = (0x00u8..=0x12)
+            .map(|function| {
+                let cells: Vec<String> = (0u8..=8)
+                    .map(|range_idx| match lookup_range(function, range_idx) {
+                        Some((unit, label)) => format!("{unit}|{label}"),
+                        None => "-".to_string(),
+                    })
+                    .collect();
+                format!("{function:#04x}: {}", cells.join(" "))
+            })
+            .collect();
+        assert_eq!(
+            table.join("\n"),
+            r#"0x00: V|4V V|40V V|400V V|1000V - - - - -
+0x01: V|4V V|40V V|400V V|1000V - - - - -
+0x02: mV|400mV - - - - - - - -
+0x03: Hz|40Hz Hz|400Hz kHz|4kHz kHz|40kHz kHz|400kHz MHz|4MHz MHz|40MHz MHz|400MHz -
+0x04: - - - - - - - - -
+0x05: V|4V V|40V V|400V V|1000V - - - - -
+0x06: Ω|400Ω kΩ|4kΩ kΩ|40kΩ kΩ|400kΩ MΩ|4MΩ MΩ|40MΩ - - -
+0x07: - - - - - - - - -
+0x08: - - - - - - - - -
+0x09: nF|40nF nF|400nF µF|4µF µF|40µF µF|400µF µF|4000µF mF|40mF - -
+0x0a: - - - - - - - - -
+0x0b: - - - - - - - - -
+0x0c: µA|400µA µA|4000µA - - - - - - -
+0x0d: µA|400µA µA|4000µA - - - - - - -
+0x0e: mA|40mA mA|400mA - - - - - - -
+0x0f: mA|40mA mA|400mA - - - - - - -
+0x10: A|10A - - - - - - - -
+0x11: A|10A - - - - - - - -
+0x12: V|4V V|40V V|400V V|1000V - - - - -"#
+        );
     }
 }
