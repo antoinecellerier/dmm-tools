@@ -2444,8 +2444,10 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.heading("Keyboard & Mouse");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // U+00D7: none of egui's bundled fonts has U+2715
+                        // (MULTIPLICATION X), which drew a missing-glyph box.
                         let close_btn =
-                            ui.button("\u{2715}").a11y_label("Close keyboard shortcuts");
+                            ui.button("\u{00D7}").a11y_label("Close keyboard shortcuts");
                         // First focus stop: the close button. Tab/Shift+Tab
                         // walks from here through the (non-interactive) grid
                         // labels.
