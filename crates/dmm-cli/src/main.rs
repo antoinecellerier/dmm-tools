@@ -509,8 +509,7 @@ fn open_with_help(
             }
             Ok(dmm)
         }
-        Err(dmm_lib::error::Error::DeviceNotFound { .. })
-        | Err(dmm_lib::error::Error::NoTransportFound) => {
+        Err(dmm_lib::error::Error::NoTransportFound) => {
             eprintln!("{}", style("USB cable not found.").yellow().bold());
             print_transport_setup_help();
             let proto = (device.new_protocol)();

@@ -81,19 +81,21 @@ pub(crate) enum DmmMessage {
         /// Fixes the CSV export's aux column count for the whole recording.
         max_aux_values: usize,
     },
-    Disconnected {
-        reason: String,
-        kind: ErrorKind,
-    },
+    /// Link lost mid-acquisition; the thread is about to start reconnecting.
+    Disconnected(dmm_lib::error::Error),
     /// Reconnect attempt in progress — `attempt` is 1-based.
     /// `last_error` is the most recent reconnect failure, if any.
     Reconnecting {
         attempt: u32,
         last_error: Option<String>,
     },
-    Error(String),
-    /// USB cable/adapter not detected on the bus.
-    DeviceNotFound,
+    /// A library failure, carried whole rather than pre-formatted: the UI
+    /// classifies it by [`ErrorKind`] and by variant, which a message string
+    /// can only be string-matched back into.
+    Error(dmm_lib::error::Error),
+    /// A failure the GUI itself diagnosed — a panicking thread, or a meter
+    /// that stopped answering. No library error stands behind these.
+    ErrorText(String),
     /// Waiting for meter response (consecutive timeout count).
     WaitingForMeter(u32),
 }
@@ -165,12 +167,7 @@ where
             d
         }
         Err(e) => {
-            let msg = if e.is_device_not_found() {
-                DmmMessage::DeviceNotFound
-            } else {
-                DmmMessage::Error(e.to_string())
-            };
-            let _ = msg_tx.send(msg);
+            let _ = msg_tx.send(DmmMessage::Error(e));
             ctx.request_repaint();
             return;
         }
@@ -232,7 +229,7 @@ where
                 let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive));
                 ctx.request_repaint();
                 if consecutive == NO_RESPONSE_TIMEOUTS {
-                    let _ = msg_tx.send(DmmMessage::Error(
+                    let _ = msg_tx.send(DmmMessage::ErrorText(
                         "No response from meter \u{2014} check device selection and USB mode"
                             .to_string(),
                     ));
@@ -255,17 +252,13 @@ where
                 if protocol_errors == 1
                     || protocol_errors.is_multiple_of(PROTOCOL_ERROR_REPORT_INTERVAL)
                 {
-                    let _ = msg_tx.send(DmmMessage::Error(e.to_string()));
+                    let _ = msg_tx.send(DmmMessage::Error(e));
                     ctx.request_repaint();
                 }
             }
             Err(e) => {
                 error!("background thread: device error: {e}");
-                let kind = e.kind();
-                let _ = msg_tx.send(DmmMessage::Disconnected {
-                    reason: e.to_string(),
-                    kind,
-                });
+                let _ = msg_tx.send(DmmMessage::Disconnected(e));
                 ctx.request_repaint();
 
                 // Reconnection loop. Waits on the stop channel so disconnects
@@ -336,7 +329,7 @@ pub(super) fn handle_thread_panic(
         "unknown panic".to_string()
     };
     error!("background thread panicked: {msg}");
-    let _ = tx.send(DmmMessage::Error(format!("internal error: {msg}")));
+    let _ = tx.send(DmmMessage::ErrorText(format!("internal error: {msg}")));
     ctx.request_repaint();
 }
 

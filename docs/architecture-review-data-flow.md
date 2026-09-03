@@ -108,6 +108,12 @@ bridges. Noted for awareness only.
 errors before crossing the channel. The UI can't distinguish USB disconnect from protocol
 error without string matching.
 
+**2026-09-03:** resolved. `DmmMessage::Error` and `DmmMessage::Disconnected` carry a
+`dmm_lib::Error` whole, and `ConnectionIssue::from_error` classifies it by
+`Error::kind()` — no message is parsed back apart. `DmmMessage::ErrorText` remains for
+the two notices the GUI itself writes (thread panic, meter not answering), which have no
+library error behind them.
+
 ### F6. Reconnection loop is blocking and opaque
 
 **Severity: Medium** | **Verified**

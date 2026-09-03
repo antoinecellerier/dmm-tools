@@ -5,9 +5,6 @@ pub enum Error {
     #[error("HID error: {0}")]
     Hid(#[from] hidapi::HidError),
 
-    #[error("device not found (VID={vid:#06x}, PID={pid:#06x})")]
-    DeviceNotFound { vid: u16, pid: u16 },
-
     #[error("invalid response: {message}")]
     InvalidResponse {
         message: String,
@@ -65,11 +62,6 @@ impl Error {
         }
     }
 
-    /// True when the error means no USB adapter was found on the bus.
-    pub fn is_device_not_found(&self) -> bool {
-        matches!(self, Self::DeviceNotFound { .. } | Self::NoTransportFound)
-    }
-
     /// True when the underlying cause is an interrupted system call (EINTR),
     /// which typically means a signal (e.g. Ctrl-C) arrived mid-read.
     pub fn is_interrupted(&self) -> bool {
@@ -116,7 +108,7 @@ impl Error {
             return ErrorKind::Interrupted;
         }
         match self {
-            Self::DeviceNotFound { .. } | Self::NoTransportFound => ErrorKind::DeviceNotFound,
+            Self::NoTransportFound => ErrorKind::DeviceNotFound,
             Self::Hid(_) => ErrorKind::Transport,
             Self::Timeout => ErrorKind::Timeout,
             Self::InvalidResponse { .. } | Self::ChecksumMismatch { .. } | Self::UnknownMode(_) => {
@@ -140,11 +132,16 @@ mod tests {
 
     #[test]
     fn kind_maps_not_found() {
-        assert_eq!(
-            Error::DeviceNotFound { vid: 0, pid: 0 }.kind(),
-            ErrorKind::DeviceNotFound
-        );
         assert_eq!(Error::NoTransportFound.kind(), ErrorKind::DeviceNotFound);
+    }
+
+    /// The GUI hands whole errors from the acquisition thread to the UI
+    /// thread, so a variant that isn't `Send` would break that channel at a
+    /// call site far from here.
+    #[test]
+    fn error_is_send() {
+        fn assert_send<T: Send>() {}
+        assert_send::<Error>();
     }
 
     #[test]

@@ -112,18 +112,21 @@ pub(super) enum ConnectionIssue {
 }
 
 impl ConnectionIssue {
-    /// Classify an error string from the acquisition thread.
+    /// Classify an error the acquisition thread hands over whole.
     ///
-    /// The adapter case has to be recovered from text because it originates
-    /// in `dmm_lib::Error::AdapterNotFound`, which crosses the channel as a
-    /// formatted message. Matching the prefix once here beats probing the
-    /// string at the render site on every repaint.
-    fn from_message(message: String) -> Self {
-        match message.strip_prefix("adapter not found: ") {
-            Some(selector) => Self::AdapterNotFound {
+    /// `ErrorKind` decides the not-found case; the adapter case matches its
+    /// variant instead, because the help text needs the selector the user
+    /// typed and the coarse kind cannot carry it. Classified once when the
+    /// error arrives, not at the render site on every repaint.
+    fn from_error(err: &dmm_lib::error::Error) -> Self {
+        if let dmm_lib::error::Error::AdapterNotFound(selector) = err {
+            return Self::AdapterNotFound {
                 help: adapter_not_found_help(selector),
-            },
-            None => Self::Other(message),
+            };
+        }
+        match err.kind() {
+            dmm_lib::error::ErrorKind::DeviceNotFound => Self::DeviceNotFound,
+            _ => Self::Other(err.to_string()),
         }
     }
 }
@@ -1007,8 +1010,8 @@ impl App {
                     // last_measurement.spec / .mode_spec is what render code reads.
                     self.last_measurement = Some(m);
                 }
-                DmmMessage::Disconnected { reason, kind } => {
-                    info!("UI: disconnected: {reason} ({kind:?})");
+                DmmMessage::Disconnected(err) => {
+                    info!("UI: disconnected: {err} ({:?})", err.kind());
                     self.connection_state = ConnectionState::Reconnecting;
                     // Tell the graph this was a real loss of data. It can't
                     // infer that from timestamps — the meter goes quiet for
@@ -1016,16 +1019,16 @@ impl App {
                     // as an unplugged cable.
                     self.graph.push_data_loss();
                 }
-                DmmMessage::DeviceNotFound => {
-                    error!("UI: USB cable not found");
-                    self.last_error = Some(ConnectionIssue::DeviceNotFound);
+                DmmMessage::Error(e) => {
+                    error!("UI: error: {e}");
+                    self.last_error = Some(ConnectionIssue::from_error(&e));
                     if self.connection_state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
                 }
-                DmmMessage::Error(e) => {
-                    error!("UI: error: {e}");
-                    self.last_error = Some(ConnectionIssue::from_message(e));
+                DmmMessage::ErrorText(msg) => {
+                    error!("UI: error: {msg}");
+                    self.last_error = Some(ConnectionIssue::Other(msg));
                     if self.connection_state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
@@ -2633,16 +2636,28 @@ mod tests {
     /// travelled as the sentinel string "__device_not_found__".
     #[test]
     fn adapter_error_is_classified_with_its_selector() {
-        let issue = ConnectionIssue::from_message("adapter not found: ABC123".to_string());
+        let issue = ConnectionIssue::from_error(&dmm_lib::error::Error::AdapterNotFound(
+            "ABC123".to_string(),
+        ));
         let ConnectionIssue::AdapterNotFound { help } = issue else {
             panic!("expected AdapterNotFound, got {issue:?}");
         };
         assert!(help.contains("ABC123"), "got {help}");
     }
 
+    /// The USB-cable help used to be selected on the thread side, before the
+    /// error crossed the channel; it now falls out of the error's kind.
+    #[test]
+    fn a_missing_adapter_is_the_device_not_found_case() {
+        assert_eq!(
+            ConnectionIssue::from_error(&dmm_lib::error::Error::NoTransportFound),
+            ConnectionIssue::DeviceNotFound
+        );
+    }
+
     #[test]
     fn other_errors_keep_their_message() {
-        let issue = ConnectionIssue::from_message("timeout waiting for response".to_string());
+        let issue = ConnectionIssue::from_error(&dmm_lib::error::Error::Timeout);
         assert_eq!(
             issue,
             ConnectionIssue::Other("timeout waiting for response".to_string())
@@ -2650,11 +2665,14 @@ mod tests {
     }
 
     /// A message that merely mentions the phrase must not be mistaken for
-    /// the adapter case — the old `contains` probe would have matched it.
+    /// the adapter case — the old `contains` probe would have matched it,
+    /// and the prefix probe that replaced it would have matched the same
+    /// text arriving with an "adapter not found: " prefix from elsewhere.
     #[test]
     fn a_mention_of_the_phrase_is_not_the_adapter_case() {
-        let issue =
-            ConnectionIssue::from_message("meter reports adapter not found somewhere".to_string());
+        let issue = ConnectionIssue::from_error(&dmm_lib::error::Error::UnknownDevice(
+            "meter reports adapter not found somewhere".to_string(),
+        ));
         assert!(matches!(issue, ConnectionIssue::Other(_)));
     }
 
