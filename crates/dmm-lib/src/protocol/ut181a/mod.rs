@@ -32,11 +32,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode16};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
-use std::time::Instant;
 
 /// Decode a UT181A mode word (uint16 LE) into a human-readable string.
 ///
@@ -83,41 +82,41 @@ fn decode_mode_word(mode: u16) -> Cow<'static, str> {
             0x1 => "mV DC",
             0x2 => "°C",
             0x3 => "°F",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
         0x5 => match n2 {
             0x1 => "Ω",
             0x2 => "Continuity",
             0x3 => "nS",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
         0x6 => match n2 {
             0x1 => "Diode",
             0x2 => "Capacitance",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
         0x7 => match n2 {
             0x1 => "Hz",
             0x2 => "Duty %",
             0x3 => "Pulse Width",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
         0x8 => match n2 {
             0x1 => "µA DC",
             0x2 => "µA AC",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
         0x9 => match n2 {
             0x1 => "mA DC",
             0x2 => "mA AC",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
         0xA => match n2 {
             0x1 => "A DC",
             0x2 => "A AC",
-            _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+            _ => return unknown_mode16(mode),
         },
-        _ => return Cow::Owned(format!("Unknown({:#06x})", mode)),
+        _ => return unknown_mode16(mode),
     };
 
     let variant = match n1 {
@@ -676,15 +675,7 @@ fn make_aux(
 
 pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // Minimum header: type(1) + misc(1) + misc2(1) + mode(2) + range(1) = 6
-    if payload.len() < 6 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut181a payload too short: {} bytes, expected >= 6",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len("ut181a", payload, 6)?;
 
     let misc = payload[1];
     let misc2 = payload[2];
@@ -900,20 +891,16 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: mode_word,
         range_raw: range,
         value,
         unit: Cow::Owned(unit),
         range_label: Cow::Borrowed(lookup_range_label(mode_word, range)),
-        progress: None,
         display_raw,
         flags,
         aux_values,
-        raw_payload: payload.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(payload)
     })
 }
 

@@ -16,11 +16,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
-use std::time::Instant;
 
 /// Look up the human-readable range label for a (mode, range) pair.
 ///
@@ -110,7 +109,7 @@ fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
         0x24 => (Cow::Borrowed("NCV"), ""),
         _ => {
             debug!("ut171: unknown mode byte {:#04x}", byte);
-            (Cow::Owned(format!("Unknown({:#04x})", byte)), "")
+            (unknown_mode(byte), "")
         }
     }
 }
@@ -359,15 +358,7 @@ impl Protocol for Ut171Protocol {
 /// - bytes 11-14: aux value (float32 LE)
 /// - extended frames continue with a third float at bytes 17-20 (unparsed)
 pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < 15 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut171 payload too short: {} bytes, expected >= 15",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len("ut171", payload, 15)?;
 
     let flags_byte = payload[1];
     let mode_byte = payload[3];
@@ -442,20 +433,16 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     }
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: mode_byte as u16,
         range_raw: range_byte,
         value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
-        progress: None,
         display_raw,
         flags,
         aux_values,
-        raw_payload: payload.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(payload)
     })
 }
 

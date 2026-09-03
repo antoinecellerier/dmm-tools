@@ -13,15 +13,14 @@
 //! Based on ILSpy decompilation of Voltsoft DMSShare.dll.
 //! See docs/research/vc880/reverse-engineered-protocol.md
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
-use std::time::Instant;
 
 /// Live data message type byte.
 const MSG_TYPE_LIVE_DATA: u8 = 0x01;
@@ -334,16 +333,7 @@ impl Protocol for Vc880Protocol {
 ///   payload[24..27] = bar graph / sub display 3 (3 bytes)
 ///   payload[27..34] = status flag bytes (7 bytes)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < LIVE_DATA_PAYLOAD_LEN {
-        return Err(Error::invalid_response(
-            format!(
-                "vc880 payload too short: {} bytes, expected {}",
-                payload.len(),
-                LIVE_DATA_PAYLOAD_LEN
-            ),
-            payload,
-        ));
-    }
+    check_len("vc880", payload, LIVE_DATA_PAYLOAD_LEN)?;
 
     let function_code = payload[1];
     let range_raw = payload[2];
@@ -357,7 +347,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         (Cow::Borrowed(name), unit)
     } else {
         debug!("vc880: unknown function code {function_code:#04x}");
-        (Cow::Owned(format!("Unknown({function_code:#04x})")), "")
+        (unknown_mode(function_code), "")
     };
 
     // Decode range byte (0x30-based ASCII)
@@ -425,20 +415,15 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: function_code as u16,
         range_raw,
         value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
-        progress: None,
         display_raw: Some(display_str),
         flags,
-        aux_values: vec![],
-        raw_payload: payload.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(payload)
     })
 }
 

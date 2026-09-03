@@ -39,11 +39,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{CaptureStep, DeviceProfile, Protocol, Stability};
+use crate::protocol::{CaptureStep, DeviceProfile, Protocol, Stability, unknown_mode};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
-use std::time::Instant;
 
 /// Which meter model the frames come from — the two share framing but
 /// not payload layout.
@@ -302,12 +301,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
         if mode_code == 0xC && sign_bit {
             (Cow::Borrowed("Duty %"), false, 2, "%")
         } else if mode_name == "?" {
-            (
-                Cow::Owned(format!("Unknown({mode_code:#04x})")),
-                sign_bit,
-                dp_pos,
-                unit,
-            )
+            (unknown_mode(mode_code), sign_bit, dp_pos, unit)
         } else {
             // AC/DC labeling comes from nibble 7 for the V/mV/current
             // modes (0 = default DC); other modes keep their plain name.
@@ -379,20 +373,14 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: mode_code as u16,
         range_raw: range,
         value,
         unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(""),
-        progress: None,
         display_raw,
         flags,
-        aux_values: vec![],
-        raw_payload: nibbles.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(nibbles)
     })
 }
 
@@ -429,7 +417,7 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     };
 
     let mode: Cow<'static, str> = if mode_name == "?" {
-        Cow::Owned(format!("Unknown({mode_code:#04x})"))
+        unknown_mode(mode_code)
     } else if mode_name == "V" || mode_name == "mV" {
         Cow::Borrowed(match (mode_name, dc) {
             ("V", true) => "DC V",
@@ -463,20 +451,14 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: mode_code as u16,
         range_raw: range,
         value,
         unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(""),
-        progress: None,
         display_raw,
         flags,
-        aux_values: vec![],
-        raw_payload: nibbles.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(nibbles)
     })
 }
 

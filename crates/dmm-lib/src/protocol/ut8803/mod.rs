@@ -13,11 +13,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
-use std::time::Instant;
 
 /// UT8803 position coding → (mode_name, acdc, unit_type, unit_mag).
 /// From the programming manual section 4.2.
@@ -319,15 +318,7 @@ impl Protocol for Ut8803Protocol {
 /// - bytes 14-15: flags2 (2 bytes)
 /// - byte 16:   flags3 (1 byte)
 pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < 17 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut8803 payload too short: {} bytes, expected 17",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len("ut8803", payload, 17)?;
 
     let mode_byte = payload[2];
     let range_raw = payload[3];
@@ -343,7 +334,7 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         Cow::Borrowed(POSITION_TABLE[mode_byte as usize].1)
     } else {
         debug!("ut8803: unknown mode byte {:#04x}", mode_byte);
-        Cow::Owned(format!("Unknown({:#04x})", mode_byte))
+        unknown_mode(mode_byte)
     };
 
     // Parse display value: 5 raw ASCII bytes appended by the vendor parser
@@ -442,20 +433,16 @@ pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: mode_byte as u16,
         range_raw,
         value,
         unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(""), // UT8803 range label would need the full range table
-        progress: None,
         display_raw: Some(display_str),
         flags,
-        aux_values: vec![],
-        raw_payload: payload.to_vec(),
-        spec: None,
-        mode_spec: None,
+        // `range_label` keeps the default empty string: labelling a UT8803
+        // range would need the full range table, which we don't have.
+        ..Measurement::from_payload(payload)
     })
 }
 

@@ -6,13 +6,12 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len};
 use crate::transport::Transport;
 use command::Command;
 use log::debug;
 use mode::Mode;
 use std::borrow::Cow;
-use std::time::Instant;
 use tables::DeviceTable;
 
 const UT61EPLUS_COMMANDS: &[&str] = &[
@@ -425,16 +424,7 @@ impl Protocol for Ut61PlusProtocol {
 /// - byte 12:   flag2  (& 0x0F — has 0x30 prefix)
 /// - byte 13:   flag3  (& 0x0F — has 0x30 prefix)
 pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
-    if payload.len() < UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
-        return Err(Error::invalid_response(
-            format!(
-                "payload too short: {} bytes, expected {}",
-                payload.len(),
-                UT61EPLUS_MEASUREMENT_PAYLOAD_LEN
-            ),
-            payload,
-        ));
-    }
+    check_len("ut61eplus", payload, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN)?;
 
     // Mode byte is raw (no 0x30 prefix), range byte has 0x30 prefix
     let mode_byte = payload[0];
@@ -482,7 +472,6 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode: Cow::Borrowed(mode.as_static_str()),
         mode_raw: mode_byte as u16,
         range_raw: range_byte,
@@ -492,10 +481,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
         progress: Some(progress),
         display_raw: Some(display_raw),
         flags,
-        aux_values: vec![],
-        raw_payload: payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN].to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(&payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN])
     })
 }
 

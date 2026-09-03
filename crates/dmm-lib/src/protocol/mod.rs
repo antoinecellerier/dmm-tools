@@ -12,10 +12,39 @@ pub(crate) mod vc880;
 pub(crate) mod vc890;
 mod vc8x0_common;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::specs::{ModeSpecInfo, SpecInfo};
 use crate::transport::Transport;
+use std::borrow::Cow;
+
+/// The length guard every parser opens with: a payload shorter than the frame
+/// its family defines cannot be indexed, so reject it before any field read.
+///
+/// `family` prefixes the message as each parser did.
+pub(crate) fn check_len(family: &str, payload: &[u8], expected: usize) -> Result<()> {
+    if payload.len() < expected {
+        return Err(Error::invalid_response(
+            format!(
+                "{family} payload too short: {} bytes, expected {expected}",
+                payload.len()
+            ),
+            payload,
+        ));
+    }
+    Ok(())
+}
+
+/// The `Unknown(0x..)` mode string a parser falls back to for a one-byte code
+/// its table doesn't list.
+pub(crate) fn unknown_mode(code: u8) -> Cow<'static, str> {
+    Cow::Owned(format!("Unknown({code:#04x})"))
+}
+
+/// Same as [`unknown_mode`], for families whose mode code is two bytes wide.
+pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
+    Cow::Owned(format!("Unknown({code:#06x})"))
+}
 
 /// Protocol stability level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -14,16 +14,16 @@
 //! VC890Reading classes).
 //! See docs/research/vc890/reverse-engineered-protocol.md
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Ack frame sent as both a pre-clear (before each command) and a
 /// post-confirm (after each received frame). Decoded from
@@ -407,16 +407,7 @@ impl Protocol for Vc890Protocol {
 ///   payload[60]    = misplug warning (low nibble: 0=none, 1=mA err, 2=A err,
 ///     3=V err — DMSShare_decompiled.cs:23649-23665)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < LIVE_DATA_PAYLOAD_LEN {
-        return Err(Error::invalid_response(
-            format!(
-                "vc890 payload too short: {} bytes, expected {}",
-                payload.len(),
-                LIVE_DATA_PAYLOAD_LEN
-            ),
-            payload,
-        ));
-    }
+    check_len("vc890", payload, LIVE_DATA_PAYLOAD_LEN)?;
 
     let function_code = payload[1];
     let range_raw = payload[2];
@@ -432,7 +423,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         (Cow::Borrowed(name), unit)
     } else {
         debug!("vc890: unknown function code {function_code:#04x}");
-        (Cow::Owned(format!("Unknown({function_code:#04x})")), "")
+        (unknown_mode(function_code), "")
     };
 
     // Decode range
@@ -502,20 +493,15 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: function_code as u16,
         range_raw,
         value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
-        progress: None,
         display_raw: Some(display_str),
         flags,
-        aux_values: vec![],
-        raw_payload: payload.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(payload)
     })
 }
 

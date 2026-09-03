@@ -731,7 +731,6 @@ impl Protocol for MockProtocol {
         };
 
         let measurement = Measurement {
-            timestamp: Instant::now(),
             mode,
             mode_raw,
             range_raw,
@@ -742,9 +741,8 @@ impl Protocol for MockProtocol {
             display_raw,
             flags,
             aux_values,
-            raw_payload: vec![],
-            spec: None,
-            mode_spec: None,
+            // The mock has no wire bytes to report.
+            ..Measurement::from_payload(&[])
         };
 
         if elapsed >= duration_secs {

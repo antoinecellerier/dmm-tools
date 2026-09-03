@@ -16,11 +16,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
-use std::time::Instant;
 
 /// UT8802 position code table: (code, mode_name, unit, range_label).
 ///
@@ -300,15 +299,7 @@ fn bcd_to_char(nibble: u8) -> char {
 /// - byte 5: status/bargraph byte [UNVERIFIED purpose]
 /// - byte 6: sign (bit 7) + status flags (bits 0-6)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    if payload.len() < 7 {
-        return Err(Error::invalid_response(
-            format!(
-                "ut8802 payload too short: {} bytes, expected 7",
-                payload.len()
-            ),
-            payload,
-        ));
-    }
+    check_len("ut8802", payload, 7)?;
 
     let position = payload[0];
     let dp_pos = payload[4] & 0x0F;
@@ -329,7 +320,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             (Cow::Borrowed(m), u, r)
         } else {
             debug!("ut8802: unknown position code {position:#04x}");
-            (Cow::Owned(format!("Unknown({position:#04x})")), "", "")
+            (unknown_mode(position), "", "")
         };
 
     // Decode the 5 display nibbles, MSD first. The vendor parser fills its
@@ -449,20 +440,15 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     Ok(Measurement {
-        timestamp: Instant::now(),
         mode,
         mode_raw: position as u16,
         range_raw: position, // UT8802 combines mode+range in position code
         value,
         unit: Cow::Borrowed(unit),
         range_label: Cow::Borrowed(range_label),
-        progress: None,
         display_raw: Some(display_str),
         flags,
-        aux_values: vec![],
-        raw_payload: payload.to_vec(),
-        spec: None,
-        mode_spec: None,
+        ..Measurement::from_payload(payload)
     })
 }
 
