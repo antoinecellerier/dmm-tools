@@ -479,6 +479,36 @@ fn overlay_chip_label(label: &str) -> String {
     format!("Show {label} trace")
 }
 
+/// One toolbar toggle chip: a `selectable_label` showing `on`'s state, with
+/// hover text, flipping the flag when clicked.
+///
+/// Returns whether it was clicked, so a caller with extra work to do on the
+/// transition can see it — the flag is already flipped by then, so such a
+/// caller tests the *new* state.
+fn toggle_chip(ui: &mut Ui, on: &mut bool, label: &str, hover: &str) -> bool {
+    let clicked = ui
+        .selectable_label(*on, label)
+        .on_hover_text(hover)
+        .clicked();
+    if clicked {
+        *on = !*on;
+    }
+    clicked
+}
+
+/// One toolbar text entry: a fixed-width single-line edit with hint and hover
+/// text, returning `changed()`. Parsing stays at the call site — each field
+/// accepts a different shape of value.
+fn text_field(ui: &mut Ui, text: &mut String, width: f32, hint: &str, hover: &str) -> bool {
+    ui.add(
+        egui::TextEdit::singleline(text)
+            .desired_width(width)
+            .hint_text(hint),
+    )
+    .on_hover_text(hover)
+    .changed()
+}
+
 impl Graph {
     pub fn new() -> Self {
         Self {
@@ -1068,48 +1098,43 @@ impl Graph {
                     "Auto-scaling Y to visible data — click to enter fixed bounds",
                 )
             };
-            if ui
-                .selectable_label(self.y_axis_fixed, y_label)
-                .on_hover_text(y_tooltip)
-                .clicked()
+            // The chip has already flipped the flag, so `self.y_axis_fixed`
+            // below reads "fixed mode was just switched on".
+            if toggle_chip(ui, &mut self.y_axis_fixed, y_label, y_tooltip)
+                && self.y_axis_fixed
+                && !self.y_user_set
             {
-                if !self.y_axis_fixed && !self.y_user_set {
-                    let (view_min, view_max) = self.view_bounds();
-                    // Snapshot with the overlays included, so pinning the axis
-                    // doesn't jump the view the moment Y:Fixed is pressed.
-                    if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true)
-                    {
-                        self.y_fixed_min = y_lo;
-                        self.y_fixed_max = y_hi;
-                        self.y_min_text = format!("{y_lo:.4}");
-                        self.y_max_text = format!("{y_hi:.4}");
-                    }
+                let (view_min, view_max) = self.view_bounds();
+                // Snapshot with the overlays included, so pinning the axis
+                // doesn't jump the view the moment Y:Fixed is pressed.
+                if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true) {
+                    self.y_fixed_min = y_lo;
+                    self.y_fixed_max = y_hi;
+                    self.y_min_text = format!("{y_lo:.4}");
+                    self.y_max_text = format!("{y_hi:.4}");
                 }
-                self.y_axis_fixed = !self.y_axis_fixed;
             }
             if self.y_axis_fixed {
                 let field_width = 50.0;
-                let changed_min = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.y_min_text)
-                            .desired_width(field_width)
-                            .hint_text("Y axis minimum"),
-                    )
-                    .on_hover_text("Lower bound of the fixed Y axis")
-                    .changed();
+                let changed_min = text_field(
+                    ui,
+                    &mut self.y_min_text,
+                    field_width,
+                    "Y axis minimum",
+                    "Lower bound of the fixed Y axis",
+                );
                 ui.label(
                     egui::RichText::new("..")
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );
-                let changed_max = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.y_max_text)
-                            .desired_width(field_width)
-                            .hint_text("Y axis maximum"),
-                    )
-                    .on_hover_text("Upper bound of the fixed Y axis")
-                    .changed();
+                let changed_max = text_field(
+                    ui,
+                    &mut self.y_max_text,
+                    field_width,
+                    "Y axis maximum",
+                    "Upper bound of the fixed Y axis",
+                );
                 if changed_min && let Ok(v) = self.y_min_text.parse::<f64>() {
                     self.y_fixed_min = v;
                     self.y_user_set = true;
@@ -1147,29 +1172,26 @@ impl Graph {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
 
-            if ui
-                .selectable_label(self.show_mean, "Mean")
-                .on_hover_text("Draw a horizontal line at the mean of visible samples")
-                .clicked()
-            {
-                self.show_mean = !self.show_mean;
-            }
-            if ui
-                .selectable_label(self.show_envelope, "Min/Max")
-                .on_hover_text("Draw a shaded band between the rolling min and max")
-                .clicked()
-            {
-                self.show_envelope = !self.show_envelope;
-            }
+            toggle_chip(
+                ui,
+                &mut self.show_mean,
+                "Mean",
+                "Draw a horizontal line at the mean of visible samples",
+            );
+            toggle_chip(
+                ui,
+                &mut self.show_envelope,
+                "Min/Max",
+                "Draw a shaded band between the rolling min and max",
+            );
             if self.show_envelope {
-                let changed = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.envelope_window_text)
-                            .desired_width(30.0)
-                            .hint_text("Min/Max window, seconds"),
-                    )
-                    .on_hover_text("Window size (seconds) used to compute the Min/Max envelope")
-                    .changed();
+                let changed = text_field(
+                    ui,
+                    &mut self.envelope_window_text,
+                    30.0,
+                    "Min/Max window, seconds",
+                    "Window size (seconds) used to compute the Min/Max envelope",
+                );
                 if changed
                     && let Ok(v) = self.envelope_window_text.parse::<f64>()
                     && v > 0.0
@@ -1182,24 +1204,20 @@ impl Graph {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
-            if ui
-                .selectable_label(self.show_ref_line, "Ref")
-                .on_hover_text("Draw horizontal reference lines at the values in the next field")
-                .clicked()
-            {
-                self.show_ref_line = !self.show_ref_line;
-            }
+            toggle_chip(
+                ui,
+                &mut self.show_ref_line,
+                "Ref",
+                "Draw horizontal reference lines at the values in the next field",
+            );
             if self.show_ref_line {
-                let changed = ui
-                    .add(
-                        egui::TextEdit::singleline(&mut self.ref_line_text)
-                            .desired_width(80.0)
-                            .hint_text("Reference values"),
-                    )
-                    .on_hover_text(
-                        "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
-                    )
-                    .changed();
+                let changed = text_field(
+                    ui,
+                    &mut self.ref_line_text,
+                    80.0,
+                    "Reference values",
+                    "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
+                );
                 if changed {
                     self.ref_line_values = self
                         .ref_line_text
@@ -1207,25 +1225,23 @@ impl Graph {
                         .filter_map(|s| s.trim().parse::<f64>().ok())
                         .collect();
                 }
-                if ui
-                    .selectable_label(self.show_crossings, "Triggers")
-                    .on_hover_text("Mark the points where the signal crosses a reference line")
-                    .clicked()
-                {
-                    self.show_crossings = !self.show_crossings;
-                }
+                toggle_chip(
+                    ui,
+                    &mut self.show_crossings,
+                    "Triggers",
+                    "Mark the points where the signal crosses a reference line",
+                );
             }
-            if ui
-                .selectable_label(self.cursors_active, "Cursors")
-                .on_hover_text("Click the graph to place two cursors and read Δt / Δv / integral")
-                .clicked()
+            if toggle_chip(
+                ui,
+                &mut self.cursors_active,
+                "Cursors",
+                "Click the graph to place two cursors and read Δt / Δv / integral",
+            ) && !self.cursors_active
             {
-                self.cursors_active = !self.cursors_active;
-                if !self.cursors_active {
-                    self.cursor_a = None;
-                    self.cursor_b = None;
-                    self.cursor_next_is_b = false;
-                }
+                self.cursor_a = None;
+                self.cursor_b = None;
+                self.cursor_next_is_b = false;
             }
             if self.cursors_active {
                 if let (Some(ta), Some(tb)) = (self.cursor_a, self.cursor_b) {
@@ -2940,15 +2956,15 @@ impl Graph {
         Some((start, end.max(start)))
     }
 
-    /// Gap ranges across the whole history, through the same builder the main
-    /// graph renders from — so these tests exercise the path that actually
-    /// draws the gap markers.
     /// Full-history segments, through the same builder the minimap caches.
     #[cfg(test)]
     fn all_segments(&self) -> Vec<Vec<[f64; 2]>> {
         self.build_segments_for_range(0, self.history.len()).0
     }
 
+    /// Gap ranges across the whole history, through the same builder the main
+    /// graph renders from — so these tests exercise the path that actually
+    /// draws the gap markers.
     #[cfg(test)]
     fn visible_gaps(&self) -> Vec<(f64, f64, GapKind)> {
         self.build_segments_for_range(0, self.history.len()).1
