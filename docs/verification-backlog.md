@@ -168,6 +168,12 @@ real hardware**. Every aspect needs end-to-end verification.
     positions; which of modes 1/2 each V dial sends
   - UT803 frequency range 0 decimal position; tachometer (RPM) frames
   - Whether 0x5A trigger byte helps/hurts; streaming rate
+  - Three parser behaviours surfaced by the 2026-09 snapshot tests, to
+    settle against real frames rather than change blind: `range_label`
+    is never set for either model although the per-mode tables know the
+    range; a UT804 "L0" frame (digit 1 = 0xA, digit 2 != 0xC) is reported
+    as `Normal(0.0)` with the display text "L0", which CSV/JSON export as
+    the string `L0`; and UT804 `acdc == 3` (AC+DC) sets the DC flag.
 - See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
