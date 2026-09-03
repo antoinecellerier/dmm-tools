@@ -313,6 +313,12 @@ per slot the family can send (UT181A 4, UT171 1, mock 2), padded with empty
 fields when a reading uses fewer. Single-display meters keep the six-column
 file above.
 
+```
+# device: UNI-T UT181A
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
+2026-09-02T09:33:56.123+02:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
+```
+
 A software [scale](#scale) claims one more slot for its **Raw** group, so a
 single-display meter recorded with a scale on gets `aux1_label,aux1_value,
 aux1_unit` holding the meter's own reading. The **Raw** group is always the
@@ -321,12 +327,6 @@ sub-value count changes with the mode. Turning a scale on after Record has
 started still gets the column, and the rows recorded before it simply leave
 that group empty; turning one off mid-recording leaves it empty for the rest
 of the file.
-
-```
-# device: UNI-T UT181A
-timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
-2026-09-02T09:33:56.123+02:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
-```
 
 ## Settings
 
