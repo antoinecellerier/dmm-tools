@@ -50,7 +50,7 @@ pub enum Error {
 
 impl Error {
     /// Convenience constructor for InvalidResponse with raw bytes.
-    pub fn invalid_response(message: impl Into<String>, raw: &[u8]) -> Self {
+    pub(crate) fn invalid_response(message: impl Into<String>, raw: &[u8]) -> Self {
         Self::InvalidResponse {
             message: message.into(),
             raw: raw.to_vec(),
@@ -58,7 +58,7 @@ impl Error {
     }
 
     /// Convenience constructor for InvalidResponse without raw bytes.
-    pub fn invalid_response_msg(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_response_msg(message: impl Into<String>) -> Self {
         Self::InvalidResponse {
             message: message.into(),
             raw: Vec::new(),

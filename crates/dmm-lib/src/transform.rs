@@ -3,7 +3,7 @@
 //! A transform re-expresses the main reading — a current clamp's 100 mV/A, a
 //! pressure transducer's V/PSI, °C to °F — without the meter knowing anything
 //! about it. The arithmetic runs on the reading converted to its **base SI
-//! unit** ([`si_prefix`]), because meters auto-range mid-run: a factor typed
+//! unit** (`si_prefix`), because meters auto-range mid-run: a factor typed
 //! against a reading in mV would be wrong by 1000× the moment the meter
 //! switched to V.
 //!
@@ -52,7 +52,7 @@ const BASE_UNITS: &[&str] = &[
 ///
 /// Unknown strings, and units that carry no prefix, pass through with a
 /// multiplier of 1.0 — "°C", "ms" and "" all return themselves.
-pub fn si_prefix(unit: &str) -> (&str, f64) {
+pub(crate) fn si_prefix(unit: &str) -> (&str, f64) {
     let mut chars = unit.chars();
     let Some(first) = chars.next() else {
         return (unit, 1.0);

@@ -96,7 +96,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub mod mock {
     use super::*;
     use std::cell::RefCell;

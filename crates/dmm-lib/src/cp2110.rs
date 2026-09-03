@@ -65,17 +65,6 @@ impl Cp2110 {
         Ok(())
     }
 
-    /// Get the product string from the HID device.
-    pub fn product_string(&self) -> Result<Option<String>> {
-        Ok(self.device.get_product_string()?)
-    }
-
-    /// Get the HID device path.
-    pub fn path(&self) -> String {
-        // HidDevice doesn't expose path after open, return placeholder
-        String::from("<connected>")
-    }
-
     /// Query CP2110 version information (report 0x46, AN434 §5.7).
     ///
     /// Returns the part number (0x0A for CP2110) and device firmware version.
@@ -145,7 +134,11 @@ impl Cp2110 {
     /// likely because UNI-T locked it out in the device's HID descriptor.
     /// This method is provided for completeness but will return `Err` on
     /// UT61E+ hardware.
-    pub fn reset(&self) -> Result<()> {
+    ///
+    /// This function is not called during normal operation; kept as a
+    /// diagnostic for a bridge left in a bad state by an interrupted session.
+    #[allow(dead_code)]
+    pub(crate) fn reset(&self) -> Result<()> {
         debug!("CP2110: resetting device");
         self.device
             .send_feature_report(&[0x40, 0x00])
