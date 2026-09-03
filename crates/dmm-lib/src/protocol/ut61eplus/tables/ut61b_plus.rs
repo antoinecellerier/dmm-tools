@@ -1,5 +1,5 @@
 use super::specs_ut61b_plus as specs;
-use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_range};
+use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_range, r};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61B+ (and UT161B).
@@ -39,335 +39,66 @@ impl Ut61bPlusTable {
         Self {
             // 6 ranges: 60mV, 600mV, 6V, 60V, 600V, 1000V
             dc_v: [
-                RangeInfo {
-                    label: "60mV",
-                    unit: "mV",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600mV",
-                    unit: "mV",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-                RangeInfo {
-                    label: "6V",
-                    unit: "V",
-                    overload_pos: 6.0,
-                    overload_neg: -6.0,
-                },
-                RangeInfo {
-                    label: "60V",
-                    unit: "V",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600V",
-                    unit: "V",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-                RangeInfo {
-                    label: "1000V",
-                    unit: "V",
-                    overload_pos: 1000.0,
-                    overload_neg: -1000.0,
-                },
+                r("60mV", "mV"),
+                r("600mV", "mV"),
+                r("6V", "V"),
+                r("60V", "V"),
+                r("600V", "V"),
+                r("1000V", "V"),
             ],
             // Same structure as DC voltage for AC
             ac_v: [
-                RangeInfo {
-                    label: "60mV",
-                    unit: "mV",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600mV",
-                    unit: "mV",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-                RangeInfo {
-                    label: "6V",
-                    unit: "V",
-                    overload_pos: 6.0,
-                    overload_neg: -6.0,
-                },
-                RangeInfo {
-                    label: "60V",
-                    unit: "V",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600V",
-                    unit: "V",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-                RangeInfo {
-                    label: "750V",
-                    unit: "V",
-                    overload_pos: 750.0,
-                    overload_neg: -750.0,
-                },
+                r("60mV", "mV"),
+                r("600mV", "mV"),
+                r("6V", "V"),
+                r("60V", "V"),
+                r("600V", "V"),
+                r("750V", "V"),
             ],
             // mV modes: same as range 0-1 of the V tables
-            dc_mv: [
-                RangeInfo {
-                    label: "60mV",
-                    unit: "mV",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600mV",
-                    unit: "mV",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-            ],
-            ac_mv: [
-                RangeInfo {
-                    label: "60mV",
-                    unit: "mV",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600mV",
-                    unit: "mV",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-            ],
+            dc_mv: [r("60mV", "mV"), r("600mV", "mV")],
+            ac_mv: [r("60mV", "mV"), r("600mV", "mV")],
             // 6 ranges: 600Ω, 6kΩ, 60kΩ, 600kΩ, 6MΩ, 60MΩ
             ohm: [
-                RangeInfo {
-                    label: "600Ω",
-                    unit: "Ω",
-                    overload_pos: 600.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "6kΩ",
-                    unit: "kΩ",
-                    overload_pos: 6.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "60kΩ",
-                    unit: "kΩ",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "600kΩ",
-                    unit: "kΩ",
-                    overload_pos: 600.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "6MΩ",
-                    unit: "MΩ",
-                    overload_pos: 6.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "60MΩ",
-                    unit: "MΩ",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
+                r("600Ω", "Ω"),
+                r("6kΩ", "kΩ"),
+                r("60kΩ", "kΩ"),
+                r("600kΩ", "kΩ"),
+                r("6MΩ", "MΩ"),
+                r("60MΩ", "MΩ"),
             ],
             // 7 ranges: 60nF, 600nF, 6µF, 60µF, 600µF, 6mF, 60mF
             capacitance: [
-                RangeInfo {
-                    label: "60nF",
-                    unit: "nF",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "600nF",
-                    unit: "nF",
-                    overload_pos: 600.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "6µF",
-                    unit: "µF",
-                    overload_pos: 6.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "60µF",
-                    unit: "µF",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "600µF",
-                    unit: "µF",
-                    overload_pos: 600.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "6mF",
-                    unit: "mF",
-                    overload_pos: 6.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "60mF",
-                    unit: "mF",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
+                r("60nF", "nF"),
+                r("600nF", "nF"),
+                r("6µF", "µF"),
+                r("60µF", "µF"),
+                r("600µF", "µF"),
+                r("6mF", "mF"),
+                r("60mF", "mF"),
             ],
             // Hz: 6,000-count models max out at 10 MHz (manual)
             // Using same 5-range structure, scaled to 6000-count values
             hz: [
-                RangeInfo {
-                    label: "60Hz",
-                    unit: "Hz",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "600Hz",
-                    unit: "Hz",
-                    overload_pos: 600.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "6kHz",
-                    unit: "kHz",
-                    overload_pos: 6.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "60kHz",
-                    unit: "kHz",
-                    overload_pos: 60.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "600kHz",
-                    unit: "kHz",
-                    overload_pos: 600.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
+                r("60Hz", "Hz"),
+                r("600Hz", "Hz"),
+                r("6kHz", "kHz"),
+                r("60kHz", "kHz"),
+                r("600kHz", "kHz"),
             ],
-            duty_cycle: [RangeInfo {
-                label: "Duty",
-                unit: "%",
-                overload_pos: 100.0,
-                overload_neg: 0.0,
-            }],
-            diode: [RangeInfo {
-                label: "Diode",
-                unit: "V",
-                overload_pos: 3.0,
-                overload_neg: 0.0,
-            }],
+            duty_cycle: [r("Duty", "%")],
+            diode: [r("Diode", "V")],
             // Continuity: 600Ω range for 6,000-count models
-            continuity: [RangeInfo {
-                label: "Cont",
-                unit: "Ω",
-                overload_pos: 600.0,
-                overload_neg: f64::NEG_INFINITY,
-            }],
+            continuity: [r("Cont", "Ω")],
             // µA: 600µA, 6000µA
-            dc_ua: [
-                RangeInfo {
-                    label: "600µA",
-                    unit: "µA",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-                RangeInfo {
-                    label: "6000µA",
-                    unit: "µA",
-                    overload_pos: 6000.0,
-                    overload_neg: -6000.0,
-                },
-            ],
-            ac_ua: [
-                RangeInfo {
-                    label: "600µA",
-                    unit: "µA",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-                RangeInfo {
-                    label: "6000µA",
-                    unit: "µA",
-                    overload_pos: 6000.0,
-                    overload_neg: -6000.0,
-                },
-            ],
+            dc_ua: [r("600µA", "µA"), r("6000µA", "µA")],
+            ac_ua: [r("600µA", "µA"), r("6000µA", "µA")],
             // mA: 60mA, 600mA
-            dc_ma: [
-                RangeInfo {
-                    label: "60mA",
-                    unit: "mA",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600mA",
-                    unit: "mA",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-            ],
-            ac_ma: [
-                RangeInfo {
-                    label: "60mA",
-                    unit: "mA",
-                    overload_pos: 60.0,
-                    overload_neg: -60.0,
-                },
-                RangeInfo {
-                    label: "600mA",
-                    unit: "mA",
-                    overload_pos: 600.0,
-                    overload_neg: -600.0,
-                },
-            ],
+            dc_ma: [r("60mA", "mA"), r("600mA", "mA")],
+            ac_ma: [r("60mA", "mA"), r("600mA", "mA")],
             // A: 6A and 10A (UT61B+ has lower max than D+/E+)
-            dc_a: [
-                RangeInfo {
-                    label: "6A",
-                    unit: "A",
-                    overload_pos: 6.0,
-                    overload_neg: -6.0,
-                },
-                RangeInfo {
-                    label: "10A",
-                    unit: "A",
-                    overload_pos: 10.0,
-                    overload_neg: -10.0,
-                },
-            ],
-            ac_a: [
-                RangeInfo {
-                    label: "6A",
-                    unit: "A",
-                    overload_pos: 6.0,
-                    overload_neg: -6.0,
-                },
-                RangeInfo {
-                    label: "10A",
-                    unit: "A",
-                    overload_pos: 10.0,
-                    overload_neg: -10.0,
-                },
-            ],
+            dc_a: [r("6A", "A"), r("10A", "A")],
+            ac_a: [r("6A", "A"), r("10A", "A")],
         }
     }
 }
@@ -486,7 +217,6 @@ mod tests {
         // 6 ranges: 60mV, 600mV, 6V, 60V, 600V, 1000V
         assert_eq!(t.range_info(Mode::DcV, 0).unwrap().label, "60mV");
         assert_eq!(t.range_info(Mode::DcV, 0).unwrap().unit, "mV");
-        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().overload_pos, 60.0);
 
         assert_eq!(t.range_info(Mode::DcV, 1).unwrap().label, "600mV");
         assert_eq!(t.range_info(Mode::DcV, 2).unwrap().label, "6V");
@@ -496,7 +226,6 @@ mod tests {
         let last = t.range_info(Mode::DcV, 5).unwrap();
         assert_eq!(last.label, "1000V");
         assert_eq!(last.unit, "V");
-        assert_eq!(last.overload_pos, 1000.0);
 
         // Out of range
         assert!(t.range_info(Mode::DcV, 6).is_none());
@@ -508,7 +237,6 @@ mod tests {
         let t = table();
         assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "60mV");
         assert_eq!(t.range_info(Mode::AcV, 5).unwrap().label, "750V");
-        assert_eq!(t.range_info(Mode::AcV, 5).unwrap().overload_pos, 750.0);
         assert!(t.range_info(Mode::AcV, 6).is_none());
     }
 
@@ -517,22 +245,17 @@ mod tests {
     fn ohm_ranges() {
         let t = table();
         let cases = [
-            (0, "600Ω", "Ω", 600.0),
-            (1, "6kΩ", "kΩ", 6.0),
-            (2, "60kΩ", "kΩ", 60.0),
-            (3, "600kΩ", "kΩ", 600.0),
-            (4, "6MΩ", "MΩ", 6.0),
-            (5, "60MΩ", "MΩ", 60.0),
+            (0, "600Ω", "Ω"),
+            (1, "6kΩ", "kΩ"),
+            (2, "60kΩ", "kΩ"),
+            (3, "600kΩ", "kΩ"),
+            (4, "6MΩ", "MΩ"),
+            (5, "60MΩ", "MΩ"),
         ];
-        for (range, label, unit, overload) in cases {
+        for (range, label, unit) in cases {
             let r = t.range_info(Mode::Ohm, range).unwrap();
             assert_eq!(r.label, label, "Ohm range {range}");
             assert_eq!(r.unit, unit, "Ohm range {range}");
-            assert_eq!(r.overload_pos, overload, "Ohm range {range}");
-            assert!(
-                r.overload_neg.is_infinite(),
-                "Ohm overload_neg should be -inf"
-            );
         }
         assert!(t.range_info(Mode::Ohm, 6).is_none());
     }
@@ -584,9 +307,7 @@ mod tests {
         let t = table();
         for mode in [Mode::DcA, Mode::AcA] {
             assert_eq!(t.range_info(mode, 0).unwrap().label, "6A");
-            assert_eq!(t.range_info(mode, 0).unwrap().overload_pos, 6.0);
             assert_eq!(t.range_info(mode, 1).unwrap().label, "10A");
-            assert_eq!(t.range_info(mode, 1).unwrap().overload_pos, 10.0);
             assert!(t.range_info(mode, 2).is_none());
         }
     }

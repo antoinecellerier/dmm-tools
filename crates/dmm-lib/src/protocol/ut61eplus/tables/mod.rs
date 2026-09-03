@@ -14,8 +14,12 @@ pub use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 pub struct RangeInfo {
     pub label: &'static str,
     pub unit: &'static str,
-    pub overload_pos: f64,
-    pub overload_neg: f64,
+}
+
+/// One range table entry. The manuals' full-scale limits are recorded in
+/// `docs/research/ut61-family/reverse-engineered-protocol.md`, section 9.
+pub(crate) const fn r(label: &'static str, unit: &'static str) -> RangeInfo {
+    RangeInfo { label, unit }
 }
 
 /// Look up a range entry by index. Shared by all device table implementations.

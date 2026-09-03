@@ -322,7 +322,8 @@ possible from the vendor software.
 section IX.2 and the UT61B+/UT61D+ equivalents). These are the values the
 `RangeInfo.overload_pos`/`overload_neg` fields carried in
 `crates/dmm-lib/src/protocol/ut61eplus/tables/` from the first commit until
-they were removed from the code, where nothing ever read them. They are kept
+they were removed from the code; no production code ever read them, only the
+table files' own tests. They are kept
 here so the numbers stay findable if a software overload check or bar-graph
 scaling is built later. Which range *index* maps to which row is [DEDUCED]
 (section 7, item 1).

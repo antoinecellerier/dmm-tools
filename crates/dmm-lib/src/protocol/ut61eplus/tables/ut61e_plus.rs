@@ -1,5 +1,5 @@
 use super::specs_ut61e_plus as specs;
-use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_range};
+use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_range, r};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61E+.
@@ -30,345 +30,64 @@ impl Ut61ePlusTable {
     pub fn new() -> Self {
         Self {
             dc_v: [
-                RangeInfo {
-                    label: "2.2V",
-                    unit: "V",
-                    overload_pos: 2.2,
-                    overload_neg: -2.2,
-                },
-                RangeInfo {
-                    label: "22V",
-                    unit: "V",
-                    overload_pos: 22.0,
-                    overload_neg: -22.0,
-                },
-                RangeInfo {
-                    label: "220V",
-                    unit: "V",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-                RangeInfo {
-                    label: "1000V",
-                    unit: "V",
-                    overload_pos: 1000.0,
-                    overload_neg: -1000.0,
-                },
-                RangeInfo {
-                    label: "220mV",
-                    unit: "mV",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
+                r("2.2V", "V"),
+                r("22V", "V"),
+                r("220V", "V"),
+                r("1000V", "V"),
+                r("220mV", "mV"),
             ],
             ac_v: [
-                RangeInfo {
-                    label: "2.2V",
-                    unit: "V",
-                    overload_pos: 2.2,
-                    overload_neg: -2.2,
-                },
-                RangeInfo {
-                    label: "22V",
-                    unit: "V",
-                    overload_pos: 22.0,
-                    overload_neg: -22.0,
-                },
-                RangeInfo {
-                    label: "220V",
-                    unit: "V",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-                RangeInfo {
-                    label: "750V",
-                    unit: "V",
-                    overload_pos: 750.0,
-                    overload_neg: -750.0,
-                },
-                RangeInfo {
-                    label: "220mV",
-                    unit: "mV",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
+                r("2.2V", "V"),
+                r("22V", "V"),
+                r("220V", "V"),
+                r("750V", "V"),
+                r("220mV", "mV"),
             ],
-            dc_mv: [
-                RangeInfo {
-                    label: "220mV",
-                    unit: "mV",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-                RangeInfo {
-                    label: "2.2V",
-                    unit: "mV",
-                    overload_pos: 2200.0,
-                    overload_neg: -2200.0,
-                },
-            ],
-            ac_mv: [
-                RangeInfo {
-                    label: "220mV",
-                    unit: "mV",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-                RangeInfo {
-                    label: "2.2V",
-                    unit: "mV",
-                    overload_pos: 2200.0,
-                    overload_neg: -2200.0,
-                },
-            ],
+            dc_mv: [r("220mV", "mV"), r("2.2V", "mV")],
+            ac_mv: [r("220mV", "mV"), r("2.2V", "mV")],
             ohm: [
-                RangeInfo {
-                    label: "220Ω",
-                    unit: "Ω",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "2.2kΩ",
-                    unit: "kΩ",
-                    overload_pos: 2.2,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "22kΩ",
-                    unit: "kΩ",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220kΩ",
-                    unit: "kΩ",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "2.2MΩ",
-                    unit: "MΩ",
-                    overload_pos: 2.2,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "22MΩ",
-                    unit: "MΩ",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220MΩ",
-                    unit: "MΩ",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
+                r("220Ω", "Ω"),
+                r("2.2kΩ", "kΩ"),
+                r("22kΩ", "kΩ"),
+                r("220kΩ", "kΩ"),
+                r("2.2MΩ", "MΩ"),
+                r("22MΩ", "MΩ"),
+                r("220MΩ", "MΩ"),
             ],
             capacitance: [
-                RangeInfo {
-                    label: "22nF",
-                    unit: "nF",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220nF",
-                    unit: "nF",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "2.2µF",
-                    unit: "µF",
-                    overload_pos: 2.2,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "22µF",
-                    unit: "µF",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220µF",
-                    unit: "µF",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "2.2mF",
-                    unit: "mF",
-                    overload_pos: 2.2,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "22mF",
-                    unit: "mF",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220mF",
-                    unit: "mF",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
+                r("22nF", "nF"),
+                r("220nF", "nF"),
+                r("2.2µF", "µF"),
+                r("22µF", "µF"),
+                r("220µF", "µF"),
+                r("2.2mF", "mF"),
+                r("22mF", "mF"),
+                r("220mF", "mF"),
             ],
             hz: [
-                RangeInfo {
-                    label: "22Hz",
-                    unit: "Hz",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220Hz",
-                    unit: "Hz",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "2.2kHz",
-                    unit: "kHz",
-                    overload_pos: 2.2,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "22kHz",
-                    unit: "kHz",
-                    overload_pos: 22.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
-                RangeInfo {
-                    label: "220kHz",
-                    unit: "kHz",
-                    overload_pos: 220.0,
-                    overload_neg: f64::NEG_INFINITY,
-                },
+                r("22Hz", "Hz"),
+                r("220Hz", "Hz"),
+                r("2.2kHz", "kHz"),
+                r("22kHz", "kHz"),
+                r("220kHz", "kHz"),
             ],
-            duty_cycle: [RangeInfo {
-                label: "Duty",
-                unit: "%",
-                overload_pos: 100.0,
-                overload_neg: 0.0,
-            }],
-            temp_c: [RangeInfo {
-                label: "Temp",
-                unit: "°C",
-                overload_pos: 1200.0,
-                overload_neg: -40.0,
-            }],
-            temp_f: [RangeInfo {
-                label: "Temp",
-                unit: "°F",
-                overload_pos: 2192.0,
-                overload_neg: -40.0,
-            }],
-            diode: [RangeInfo {
-                label: "Diode",
-                unit: "V",
-                overload_pos: 2.2,
-                overload_neg: 0.0,
-            }],
-            continuity: [RangeInfo {
-                label: "Cont",
-                unit: "Ω",
-                overload_pos: 220.0,
-                overload_neg: f64::NEG_INFINITY,
-            }],
-            dc_ua: [
-                RangeInfo {
-                    label: "220µA",
-                    unit: "µA",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-                RangeInfo {
-                    label: "2200µA",
-                    unit: "µA",
-                    overload_pos: 2200.0,
-                    overload_neg: -2200.0,
-                },
-            ],
-            ac_ua: [
-                RangeInfo {
-                    label: "220µA",
-                    unit: "µA",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-                RangeInfo {
-                    label: "2200µA",
-                    unit: "µA",
-                    overload_pos: 2200.0,
-                    overload_neg: -2200.0,
-                },
-            ],
-            dc_ma: [
-                RangeInfo {
-                    label: "22mA",
-                    unit: "mA",
-                    overload_pos: 22.0,
-                    overload_neg: -22.0,
-                },
-                RangeInfo {
-                    label: "220mA",
-                    unit: "mA",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-            ],
-            ac_ma: [
-                RangeInfo {
-                    label: "22mA",
-                    unit: "mA",
-                    overload_pos: 22.0,
-                    overload_neg: -22.0,
-                },
-                RangeInfo {
-                    label: "220mA",
-                    unit: "mA",
-                    overload_pos: 220.0,
-                    overload_neg: -220.0,
-                },
-            ],
+            duty_cycle: [r("Duty", "%")],
+            temp_c: [r("Temp", "°C")],
+            temp_f: [r("Temp", "°F")],
+            diode: [r("Diode", "V")],
+            continuity: [r("Cont", "Ω")],
+            dc_ua: [r("220µA", "µA"), r("2200µA", "µA")],
+            ac_ua: [r("220µA", "µA"), r("2200µA", "µA")],
+            dc_ma: [r("22mA", "mA"), r("220mA", "mA")],
+            ac_ma: [r("22mA", "mA"), r("220mA", "mA")],
             dc_a: [
                 // Range 0x00 unknown — may not be used. Placeholder.
-                RangeInfo {
-                    label: "20A",
-                    unit: "A",
-                    overload_pos: 20.0,
-                    overload_neg: -20.0,
-                },
+                r("20A", "A"),
                 // Range 0x01 verified: 20A range (confirmed with bench PSU at 100mA)
-                RangeInfo {
-                    label: "20A",
-                    unit: "A",
-                    overload_pos: 20.0,
-                    overload_neg: -20.0,
-                },
+                r("20A", "A"),
             ],
-            ac_a: [
-                RangeInfo {
-                    label: "20A",
-                    unit: "A",
-                    overload_pos: 20.0,
-                    overload_neg: -20.0,
-                },
-                RangeInfo {
-                    label: "20A",
-                    unit: "A",
-                    overload_pos: 20.0,
-                    overload_neg: -20.0,
-                },
-            ],
-            hfe: [RangeInfo {
-                label: "1000\u{03B2}",
-                unit: "\u{03B2}",
-                overload_pos: 1000.0,
-                overload_neg: 0.0,
-            }],
+            ac_a: [r("20A", "A"), r("20A", "A")],
+            hfe: [r("1000\u{03B2}", "\u{03B2}")],
         }
     }
 }
@@ -503,8 +222,6 @@ mod tests {
         let r0 = t.range_info(Mode::DcV, 0).unwrap();
         assert_eq!(r0.label, "2.2V");
         assert_eq!(r0.unit, "V");
-        assert_eq!(r0.overload_pos, 2.2);
-        assert_eq!(r0.overload_neg, -2.2);
 
         let r1 = t.range_info(Mode::DcV, 1).unwrap();
         assert_eq!(r1.label, "22V");
@@ -528,7 +245,6 @@ mod tests {
         let t = table();
         assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "2.2V");
         assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "750V");
-        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().overload_pos, 750.0);
         assert_eq!(t.range_info(Mode::AcV, 4).unwrap().label, "220mV");
         assert!(t.range_info(Mode::AcV, 5).is_none());
     }
@@ -544,7 +260,6 @@ mod tests {
 
             let r1 = t.range_info(mode, 1).unwrap();
             assert_eq!(r1.label, "2.2V");
-            assert_eq!(r1.overload_pos, 2200.0);
 
             assert!(t.range_info(mode, 2).is_none());
         }
@@ -555,23 +270,18 @@ mod tests {
     fn ohm_ranges() {
         let t = table();
         let cases = [
-            (0, "220Ω", "Ω", 220.0),
-            (1, "2.2kΩ", "kΩ", 2.2),
-            (2, "22kΩ", "kΩ", 22.0),
-            (3, "220kΩ", "kΩ", 220.0),
-            (4, "2.2MΩ", "MΩ", 2.2),
-            (5, "22MΩ", "MΩ", 22.0),
-            (6, "220MΩ", "MΩ", 220.0),
+            (0, "220Ω", "Ω"),
+            (1, "2.2kΩ", "kΩ"),
+            (2, "22kΩ", "kΩ"),
+            (3, "220kΩ", "kΩ"),
+            (4, "2.2MΩ", "MΩ"),
+            (5, "22MΩ", "MΩ"),
+            (6, "220MΩ", "MΩ"),
         ];
-        for (range, label, unit, overload) in cases {
+        for (range, label, unit) in cases {
             let r = t.range_info(Mode::Ohm, range).unwrap();
             assert_eq!(r.label, label, "Ohm range {range}");
             assert_eq!(r.unit, unit, "Ohm range {range}");
-            assert_eq!(r.overload_pos, overload, "Ohm range {range}");
-            assert!(
-                r.overload_neg.is_infinite(),
-                "Ohm overload_neg should be -inf"
-            );
         }
         assert!(t.range_info(Mode::Ohm, 7).is_none());
     }
@@ -616,7 +326,6 @@ mod tests {
         let t = table();
         let r = t.range_info(Mode::DutyCycle, 0).unwrap();
         assert_eq!(r.unit, "%");
-        assert_eq!(r.overload_pos, 100.0);
         assert!(t.range_info(Mode::DutyCycle, 1).is_none());
     }
 
@@ -625,12 +334,9 @@ mod tests {
         let t = table();
         let tc = t.range_info(Mode::TempC, 0).unwrap();
         assert_eq!(tc.unit, "°C");
-        assert_eq!(tc.overload_pos, 1200.0);
-        assert_eq!(tc.overload_neg, -40.0);
 
         let tf = t.range_info(Mode::TempF, 0).unwrap();
         assert_eq!(tf.unit, "°F");
-        assert_eq!(tf.overload_pos, 2192.0);
     }
 
     #[test]
@@ -638,7 +344,6 @@ mod tests {
         let t = table();
         let r = t.range_info(Mode::Diode, 0).unwrap();
         assert_eq!(r.unit, "V");
-        assert_eq!(r.overload_pos, 2.2);
     }
 
     #[test]
@@ -646,7 +351,6 @@ mod tests {
         let t = table();
         let r = t.range_info(Mode::Continuity, 0).unwrap();
         assert_eq!(r.unit, "Ω");
-        assert_eq!(r.overload_pos, 220.0);
     }
 
     // --- Current ranges ---
