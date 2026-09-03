@@ -1319,7 +1319,7 @@ impl App {
                 ConnectionState::Disconnected => {
                     if ui
                         .button("Connect")
-                        .on_hover_text("Open USB connection to the selected meter (Ctrl+Shift+C)")
+                        .on_hover_text("Open USB connection to the selected meter (Ctrl+O)")
                         .clicked()
                     {
                         self.connect(ctx);
@@ -1328,7 +1328,7 @@ impl App {
                 ConnectionState::Connected => {
                     if ui
                         .button("Disconnect")
-                        .on_hover_text("Close the active meter connection (Ctrl+Shift+C)")
+                        .on_hover_text("Close the active meter connection (Ctrl+O)")
                         .clicked()
                     {
                         self.disconnect();
@@ -1373,7 +1373,7 @@ impl App {
                     // app — the status tooltip above tells them to click it.
                     if ui
                         .button("Disconnect")
-                        .on_hover_text("Stop retrying and close the connection (Ctrl+Shift+C)")
+                        .on_hover_text("Stop retrying and close the connection (Ctrl+O)")
                         .clicked()
                     {
                         self.disconnect();

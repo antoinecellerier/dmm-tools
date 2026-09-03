@@ -412,7 +412,7 @@ Press `?` or click the `?` button in the top bar to open an in-app reference of 
 
 | Shortcut | Action |
 |---|---|
-| `Ctrl+Shift+C` | Connect / Disconnect |
+| `Ctrl+O` | Connect / Disconnect |
 | `Space` | Pause / Resume (when connected) |
 | `Ctrl+L` | Clear graph & statistics |
 | `Ctrl+R` | Toggle recording |
@@ -489,7 +489,7 @@ Shown automatically when connection fails:
   (insert module, turn on, long-press USB/Hz until S icon appears)
 
 Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
-(or press `Ctrl+Shift+C`) while it is retrying to stop the loop.
+(or press `Ctrl+O`) while it is retrying to stop the loop.
 
 ## Accessibility
 

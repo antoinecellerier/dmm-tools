@@ -12,6 +12,7 @@
 - **Screen readers speak when a MIN/MAX extreme was captured** — the "@12s" beside the value was left out of the spoken reading.
 - **Dark labels are brighter and secondary text meets AA** — the mode line, sub-value labels and hint captions sat near 2.7:1 dark and 2.9:1 light, below AA.
 - **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.
+- **`Ctrl+O` connects and disconnects** — the documented `Ctrl+Shift+C` was taken as a clipboard copy and never fired.
 
 ### CLI
 

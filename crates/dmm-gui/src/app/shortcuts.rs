@@ -39,25 +39,24 @@ struct Binding {
     shortcut: Shortcut,
 }
 
-/// Ctrl on Windows/Linux, ⌘ on macOS — plus Shift.
-const COMMAND_SHIFT: Modifiers = Modifiers::COMMAND.plus(Modifiers::SHIFT);
-
-/// Handler order — Ctrl+Shift first, then Ctrl, then bare keys, exactly as
-/// before this table existed.
+/// Handler order — Ctrl shortcuts first, then bare keys, exactly as before
+/// this table existed.
 ///
 /// `consume_key` matches modifiers *logically*: an extra Shift or Alt on the
-/// pressed key is ignored, so Ctrl+Shift+C would also satisfy a plain Ctrl+C
-/// pattern and Shift+Space would satisfy a bare Space one. Most specific
-/// first is what keeps that from mis-firing. The help modal reads in a
-/// different order — see `Shortcut::HELP_ORDER`.
+/// pressed key is ignored, so Shift+Space would satisfy a bare Space
+/// pattern. Most specific first is what keeps that from mis-firing. The help
+/// modal reads in a different order — see `Shortcut::HELP_ORDER`.
 const BINDINGS: &[Binding] = &[
-    // --- Ctrl+Shift shortcuts (most specific first) ---
+    // --- Ctrl shortcuts ---
+    // Not a Ctrl+C chord: egui-winit turns Ctrl+C (Shift held or not),
+    // Ctrl+X and Ctrl+V into clipboard events before egui sees a key, so no
+    // binding on them can ever fire. Ctrl+O also stays clear of TextEdit's
+    // Ctrl+H/K/U/W and Ctrl+Z/Y.
     Binding {
-        modifiers: COMMAND_SHIFT,
-        key: Key::C,
+        modifiers: Modifiers::COMMAND,
+        key: Key::O,
         shortcut: Shortcut::ConnectToggle,
     },
-    // --- Ctrl shortcuts ---
     Binding {
         modifiers: Modifiers::COMMAND,
         key: Key::Q,
@@ -162,7 +161,7 @@ impl Shortcut {
     /// into another row.
     fn help_row(self) -> Option<(&'static str, &'static str)> {
         Some(match self {
-            Self::ConnectToggle => ("Ctrl+Shift+C", "Connect / Disconnect"),
+            Self::ConnectToggle => ("Ctrl+O", "Connect / Disconnect"),
             Self::TogglePause => ("Space", "Pause / Resume"),
             Self::ClearSession => ("Ctrl+L", "Clear graph & statistics"),
             Self::ToggleRecording => ("Ctrl+R", "Toggle recording"),
@@ -335,7 +334,7 @@ mod tests {
         assert_eq!(
             help_rows().collect::<Vec<_>>(),
             vec![
-                ("Ctrl+Shift+C", "Connect / Disconnect"),
+                ("Ctrl+O", "Connect / Disconnect"),
                 ("Space", "Pause / Resume"),
                 ("Ctrl+L", "Clear graph & statistics"),
                 ("Ctrl+R", "Toggle recording"),
