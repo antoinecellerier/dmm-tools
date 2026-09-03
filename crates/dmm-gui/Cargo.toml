@@ -11,15 +11,15 @@ dmm-settings = { path = "../dmm-settings" }
 eframe = { version = "0.34", features = ["glow", "wgpu"] }
 egui_commonmark = "0.23"
 egui_plot = "0.35"
-chrono = "0.4"
-csv = "1"
+chrono.workspace = true
+csv.workspace = true
 rfd = "0.17"
-clap = { version = "4", features = ["derive"] }
-env_logger = "0.11"
-log = "0.4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-directories = "6"
+clap.workspace = true
+env_logger.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+directories.workspace = true
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }

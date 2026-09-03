@@ -12,17 +12,17 @@ path = "src/main.rs"
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
 dmm-settings = { path = "../dmm-settings" }
-clap = { version = "4", features = ["derive"] }
+clap.workspace = true
 clap_complete = "4"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-chrono = { version = "0.4", features = ["serde"] }
-env_logger = "0.11"
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+env_logger.workspace = true
 ctrlc = "3"
-log = "0.4"
+log.workspace = true
 console = "0.16"
-serde_yaml_ng = "0.10"
-csv = "1"
+serde_yaml_ng.workspace = true
+csv.workspace = true
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
