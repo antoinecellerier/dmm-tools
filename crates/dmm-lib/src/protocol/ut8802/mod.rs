@@ -159,96 +159,21 @@ impl Protocol for Ut8802Protocol {
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::protocol::CaptureStep;
         vec![
-            CaptureStep {
-                id: "dcv",
-                instruction: "Set meter to DC V",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "acv",
-                instruction: "Set meter to AC V",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "dcua",
-                instruction: "Set meter to DC µA",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "dcma",
-                instruction: "Set meter to DC mA",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "dca",
-                instruction: "Set meter to DC A",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "acma",
-                instruction: "Set meter to AC mA",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "aca",
-                instruction: "Set meter to AC A",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "ohm",
-                instruction: "Set meter to Resistance (Ω)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "cont",
-                instruction: "Set meter to Continuity",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "diode",
-                instruction: "Set meter to Diode",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "cap",
-                instruction: "Set meter to Capacitance",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "hz",
-                instruction: "Set meter to Frequency (Hz)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "duty",
-                instruction: "Set meter to Duty Cycle (%)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "hfe",
-                instruction: "Set meter to hFE (transistor test)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "scr",
-                instruction: "Set meter to SCR (thyristor test)",
-                command: None,
-                samples: 5,
-            },
+            CaptureStep::basic("dcv", "Set meter to DC V"),
+            CaptureStep::basic("acv", "Set meter to AC V"),
+            CaptureStep::basic("dcua", "Set meter to DC µA"),
+            CaptureStep::basic("dcma", "Set meter to DC mA"),
+            CaptureStep::basic("dca", "Set meter to DC A"),
+            CaptureStep::basic("acma", "Set meter to AC mA"),
+            CaptureStep::basic("aca", "Set meter to AC A"),
+            CaptureStep::basic("ohm", "Set meter to Resistance (Ω)"),
+            CaptureStep::basic("cont", "Set meter to Continuity"),
+            CaptureStep::basic("diode", "Set meter to Diode"),
+            CaptureStep::basic("cap", "Set meter to Capacitance"),
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)"),
+            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)"),
+            CaptureStep::basic("hfe", "Set meter to hFE (transistor test)"),
+            CaptureStep::basic("scr", "Set meter to SCR (thyristor test)"),
         ]
     }
 }

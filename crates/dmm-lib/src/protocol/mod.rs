@@ -146,6 +146,35 @@ pub struct CaptureStep {
     pub samples: usize,
 }
 
+impl CaptureStep {
+    /// A plain measurement-mode step: no command sent first, five samples — what
+    /// most steps are.
+    pub const fn basic(id: &'static str, instruction: &'static str) -> Self {
+        Self {
+            id,
+            instruction,
+            command: None,
+            samples: 5,
+        }
+    }
+
+    /// A step that sends `command` before sampling (hold, rel, range…);
+    /// `samples` as given.
+    pub const fn with_command(
+        id: &'static str,
+        instruction: &'static str,
+        command: &'static str,
+        samples: usize,
+    ) -> Self {
+        Self {
+            id,
+            instruction,
+            command: Some(command),
+            samples,
+        }
+    }
+}
+
 /// Each device family implements this trait. Object-safe.
 ///
 /// The Protocol owns its internal state (rx buffer, streaming trigger state, etc).

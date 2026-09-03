@@ -352,42 +352,22 @@ impl Protocol for Ut61PlusProtocol {
                 samples: 3,
             },
             // Flags & commands
-            CaptureStep {
-                id: "hold",
-                instruction: "DC V mode: press HOLD on the meter, or we will send the command.",
-                command: Some("hold"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "hold_off",
-                instruction: "Press HOLD again to turn it off.",
-                command: Some("hold"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "rel",
-                instruction: "DC V mode: we will send REL.",
-                command: Some("rel"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "rel_off",
-                instruction: "We will send REL again to turn it off.",
-                command: Some("rel"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "minmax",
-                instruction: "We will send MIN/MAX.",
-                command: Some("minmax"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "minmax_off",
-                instruction: "We will exit MIN/MAX.",
-                command: Some("exit_minmax"),
-                samples: 3,
-            },
+            CaptureStep::with_command(
+                "hold",
+                "DC V mode: press HOLD on the meter, or we will send the command.",
+                "hold",
+                3,
+            ),
+            CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3),
+            CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3),
+            CaptureStep::with_command(
+                "rel_off",
+                "We will send REL again to turn it off.",
+                "rel",
+                3,
+            ),
+            CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3),
+            CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3),
             // A single RANGE press, not a sweep. A six-step sweep was tried
             // and removed: on hardware it produced range indices 0, 2, 0, 0,
             // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
@@ -396,18 +376,18 @@ impl Protocol for Ut61PlusProtocol {
             // Until what 0x46 actually does is known, stepping it repeatedly
             // just files misleading data. See the UT61E+ section of
             // docs/verification-backlog.md.
-            CaptureStep {
-                id: "range",
-                instruction: "We will send RANGE to switch to manual.",
-                command: Some("range"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "auto",
-                instruction: "We will send AUTO to return to auto-range.",
-                command: Some("auto"),
-                samples: 3,
-            },
+            CaptureStep::with_command(
+                "range",
+                "We will send RANGE to switch to manual.",
+                "range",
+                3,
+            ),
+            CaptureStep::with_command(
+                "auto",
+                "We will send AUTO to return to auto-range.",
+                "auto",
+                3,
+            ),
         ]
     }
 }

@@ -338,174 +338,55 @@ impl Protocol for Ut181aProtocol {
         use crate::protocol::CaptureStep;
         // Core UT181A modes
         vec![
-            CaptureStep {
-                id: "vdc",
-                instruction: "Set meter to V DC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "vac",
-                instruction: "Set meter to V AC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "mvdc",
-                instruction: "Set meter to mV DC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "mvac",
-                instruction: "Set meter to mV AC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "ohm",
-                instruction: "Set meter to Resistance",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "cont",
-                instruction: "Set meter to Continuity",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "ns",
-                instruction: "Set meter to Conductance (nS)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "diode",
-                instruction: "Set meter to Diode",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "cap",
-                instruction: "Set meter to Capacitance",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "hz",
-                instruction: "Set meter to Frequency (Hz)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "duty",
-                instruction: "Set meter to Duty Cycle (%)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "uadc",
-                instruction: "Set meter to uA DC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "uaac",
-                instruction: "Set meter to uA AC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "madc",
-                instruction: "Set meter to mA DC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "maac",
-                instruction: "Set meter to mA AC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "adc",
-                instruction: "Set meter to A DC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "aac",
-                instruction: "Set meter to A AC",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "tempc",
-                instruction: "Set meter to Temperature C",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "tempf",
-                instruction: "Set meter to Temperature F",
-                command: None,
-                samples: 5,
-            },
+            CaptureStep::basic("vdc", "Set meter to V DC"),
+            CaptureStep::basic("vac", "Set meter to V AC"),
+            CaptureStep::basic("mvdc", "Set meter to mV DC"),
+            CaptureStep::basic("mvac", "Set meter to mV AC"),
+            CaptureStep::basic("ohm", "Set meter to Resistance"),
+            CaptureStep::basic("cont", "Set meter to Continuity"),
+            CaptureStep::basic("ns", "Set meter to Conductance (nS)"),
+            CaptureStep::basic("diode", "Set meter to Diode"),
+            CaptureStep::basic("cap", "Set meter to Capacitance"),
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)"),
+            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)"),
+            CaptureStep::basic("uadc", "Set meter to uA DC"),
+            CaptureStep::basic("uaac", "Set meter to uA AC"),
+            CaptureStep::basic("madc", "Set meter to mA DC"),
+            CaptureStep::basic("maac", "Set meter to mA AC"),
+            CaptureStep::basic("adc", "Set meter to A DC"),
+            CaptureStep::basic("aac", "Set meter to A AC"),
+            CaptureStep::basic("tempc", "Set meter to Temperature C"),
+            CaptureStep::basic("tempf", "Set meter to Temperature F"),
             // Remote command steps
-            CaptureStep {
-                id: "hold",
-                instruction: "V DC mode: we will send HOLD.",
-                command: Some("hold"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "hold_off",
-                instruction: "We will send HOLD again to turn it off.",
-                command: Some("hold"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "minmax",
-                instruction: "We will enable MIN/MAX.",
-                command: Some("minmax"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "minmax_off",
-                instruction: "We will disable MIN/MAX.",
-                command: Some("exit_minmax"),
-                samples: 3,
-            },
-            CaptureStep {
-                id: "auto",
-                instruction: "We will set auto-range.",
-                command: Some("auto"),
-                samples: 3,
-            },
+            CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3),
+            CaptureStep::with_command(
+                "hold_off",
+                "We will send HOLD again to turn it off.",
+                "hold",
+                3,
+            ),
+            CaptureStep::with_command("minmax", "We will enable MIN/MAX.", "minmax", 3),
+            CaptureStep::with_command("minmax_off", "We will disable MIN/MAX.", "exit_minmax", 3),
+            CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3),
             // Format variant verification steps
-            CaptureStep {
-                id: "rel",
-                instruction: "V DC mode: long-press REL to enable relative. \
+            CaptureStep::basic(
+                "rel",
+                "V DC mode: long-press REL to enable relative. \
                               The report should list Reference and Absolute \
                               sub-values under each sample.",
-                command: None,
-                samples: 5,
-            },
+            ),
             CaptureStep {
                 id: "rel_off",
                 instruction: "Long-press REL again to disable relative mode.",
                 command: None,
                 samples: 3,
             },
-            CaptureStep {
-                id: "peak",
-                instruction: "V AC mode: enable Peak mode (FUNC button). \
+            CaptureStep::basic(
+                "peak",
+                "V AC mode: enable Peak mode (FUNC button). \
                               The report should list a Peak Min sub-value \
                               under each sample.",
-                command: None,
-                samples: 5,
-            },
+            ),
             CaptureStep {
                 id: "peak_off",
                 instruction: "Disable Peak mode.",

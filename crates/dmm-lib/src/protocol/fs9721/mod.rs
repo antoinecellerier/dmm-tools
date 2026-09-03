@@ -560,66 +560,25 @@ impl Protocol for Fs9721Protocol {
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
         vec![
-            CaptureStep {
-                id: "dcv",
-                instruction: "Set meter to DC V",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "dcv_negative",
-                instruction: "Set meter to DC V with leads reversed (negative reading)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "acv",
-                instruction: "Set meter to AC V",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "ohm",
-                instruction: "Set meter to Resistance (Ω)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "ohm_ol",
-                instruction: "Set meter to Resistance (Ω) with open leads (overload)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "cap",
-                instruction: "Set meter to Capacitance",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "hz",
-                instruction: "Set meter to Frequency (Hz)",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "diode",
-                instruction: "Set meter to Diode",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "cont",
-                instruction: "Set meter to Continuity",
-                command: None,
-                samples: 5,
-            },
-            CaptureStep {
-                id: "hold",
-                instruction: "Press HOLD (wire encoding unknown — capture needed)",
-                command: None,
-                samples: 5,
-            },
+            CaptureStep::basic("dcv", "Set meter to DC V"),
+            CaptureStep::basic(
+                "dcv_negative",
+                "Set meter to DC V with leads reversed (negative reading)",
+            ),
+            CaptureStep::basic("acv", "Set meter to AC V"),
+            CaptureStep::basic("ohm", "Set meter to Resistance (Ω)"),
+            CaptureStep::basic(
+                "ohm_ol",
+                "Set meter to Resistance (Ω) with open leads (overload)",
+            ),
+            CaptureStep::basic("cap", "Set meter to Capacitance"),
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)"),
+            CaptureStep::basic("diode", "Set meter to Diode"),
+            CaptureStep::basic("cont", "Set meter to Continuity"),
+            CaptureStep::basic(
+                "hold",
+                "Press HOLD (wire encoding unknown — capture needed)",
+            ),
         ]
     }
 }
