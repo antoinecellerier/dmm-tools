@@ -11,7 +11,7 @@
 //! disconnect/reconnect, a change of device and `Ctrl+L`, and the row is
 //! always on screen so an active transform can always be turned back off.
 
-use dmm_lib::transform::{RAW_LABEL, Transform};
+use dmm_lib::transform::{FactorError, RAW_LABEL, Transform};
 use eframe::egui::{self, RichText, Ui};
 use std::time::Instant;
 
@@ -49,34 +49,42 @@ const FIELD_WIDTH: f32 = 50.0;
 /// Turn the three draft strings into a [`Transform`].
 ///
 /// Empty means "leave this alone": no scale is ×1, no offset is +0, no unit
-/// is no relabel. A zero scale is rejected rather than accepted as a flat
-/// line — it destroys the reading and is far more likely a half-typed
-/// "0.01" than a deliberate choice.
+/// is no relabel. What counts as a usable factor is [`Transform`]'s rule, not
+/// this row's — a zero scale is rejected rather than accepted as a flat line,
+/// because it destroys the reading and is far more likely a half-typed "0.01"
+/// than a deliberate choice.
 fn parse_transform_fields(scale: &str, offset: &str, unit: &str) -> Result<Transform, String> {
-    let scale = parse_field(scale, "scale", 1.0)?;
-    if scale == 0.0 {
-        return Err("Invalid scale: a scale of zero would erase the reading".to_string());
-    }
-    let offset = parse_field(offset, "offset", 0.0)?;
+    let scale = parse_field(scale, "scale", 1.0, Transform::check_scale)?;
+    let offset = parse_field(offset, "offset", 0.0, Transform::check_offset)?;
     Ok(Transform::linear(scale, offset, Some(unit.to_string())))
 }
 
-/// Parse one numeric field, naming it in any error so the toast says which
-/// box to go back to. `empty` is what a blank field means.
-fn parse_field(text: &str, name: &str, empty: f64) -> Result<f64, String> {
+/// Parse one numeric field and put it through `check`, naming the field in
+/// any error so the toast says which box to go back to. `empty` is what a
+/// blank field means, and is taken as-is: it is this row's own default, not
+/// something the user typed.
+fn parse_field(
+    text: &str,
+    name: &str,
+    empty: f64,
+    check: fn(f64) -> Result<f64, FactorError>,
+) -> Result<f64, String> {
     let text = text.trim();
     if text.is_empty() {
         return Ok(empty);
     }
-    match text.parse::<f64>() {
-        // Rejects "inf" and "nan" as well as overflowing literals: either one
-        // turns every reading into a non-number with no way to tell why.
-        Ok(v) if v.is_finite() => Ok(v),
-        Ok(_) => Err(format!("Invalid {name}: must be a finite number")),
-        Err(_) => Err(format!(
-            "Invalid {name}: \u{201c}{text}\u{201d} is not a number"
-        )),
-    }
+    // "inf" and "nan" parse, as do overflowing literals; `check` is what
+    // turns them away — either one makes every reading a non-number with no
+    // way to tell why.
+    let value = text
+        .parse::<f64>()
+        .map_err(|_| format!("Invalid {name}: \u{201c}{text}\u{201d} is not a number"))?;
+    check(value).map_err(|e| match e {
+        FactorError::NotFinite => format!("Invalid {name}: must be a finite number"),
+        FactorError::ZeroScale => {
+            format!("Invalid {name}: a scale of zero would erase the reading")
+        }
+    })
 }
 
 impl App {

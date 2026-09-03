@@ -10,6 +10,7 @@
 //! rather than read here: `env!` would capture *this* crate's values, not the
 //! binary's.
 
+use crate::list_devices;
 use crate::protocol::{Stability, registry};
 
 /// Version text for `--version`, with the git hash appended on dev builds.
@@ -57,6 +58,36 @@ pub fn device_help(intro: &str) -> String {
          Quote names with special characters: --device 'ut61e+'",
     );
     help
+}
+
+/// The lines both binaries print under an "adapter not found" error: what is
+/// actually on the bus, or how to find out.
+///
+/// No styling and no trailing hint — the CLI tells the user to re-run with a
+/// different `--adapter`, the GUI to restart with one, and only the list of
+/// what is plugged in is common to both.
+///
+/// Walks every HID device on the system, so call it once when the error
+/// arrives rather than from a render path. The answer is a snapshot either
+/// way: acting on it means restarting with a different selector.
+pub fn connected_adapters_lines() -> Vec<String> {
+    match list_devices() {
+        Ok(devices) if devices.is_empty() => vec!["No devices currently connected.".to_string()],
+        Ok(devices) => {
+            let mut lines = Vec::with_capacity(devices.len() + 1);
+            lines.push("Connected devices:".to_string());
+            lines.extend(
+                devices
+                    .iter()
+                    .enumerate()
+                    .map(|(i, dev)| format!("  [{i}] {dev}")),
+            );
+            lines
+        }
+        // The HID API itself failed, so there is nothing to list; `list` says
+        // the same thing with the setup help attached.
+        Err(_) => vec!["Run 'dmm-cli list' to see connected devices.".to_string()],
+    }
 }
 
 #[cfg(test)]

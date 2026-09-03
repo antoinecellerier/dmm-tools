@@ -81,6 +81,22 @@ pub enum Op {
     Linear { scale: f64, offset: f64 },
 }
 
+/// Why a scale or offset value is unusable.
+///
+/// The rules are the same wherever a factor is typed — the `--scale` and
+/// `--offset` flags, the GUI's Scale row — but the wording of the complaint
+/// is not, so this names the reason and leaves the message to the caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactorError {
+    /// NaN or infinity. Nothing downstream catches either: they propagate
+    /// through every reading into the stats and the integral, whose summary
+    /// then reads `NaN` with nothing to say where it came from.
+    NotFinite,
+    /// A zero scale, which collapses every reading onto the offset — it
+    /// destroys the reading rather than re-expressing it.
+    ZeroScale,
+}
+
 /// A user-supplied transform over the main reading.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Transform {
@@ -110,6 +126,31 @@ impl Transform {
             op: Op::Linear { scale, offset },
             unit: unit.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()),
         }
+    }
+
+    /// Rules for `--scale` and the GUI's Scale field: finite and non-zero.
+    ///
+    /// Returns the value so a caller can chain it; the rejection carries only
+    /// the reason, because each binary words it in its own voice.
+    pub fn check_scale(scale: f64) -> Result<f64, FactorError> {
+        Self::check_offset(scale)?;
+        // Catches `-0` too: it compares equal to zero and flattens the
+        // reading just as thoroughly.
+        if scale == 0.0 {
+            return Err(FactorError::ZeroScale);
+        }
+        Ok(scale)
+    }
+
+    /// Rules for `--offset` and the GUI's Offset field: finite.
+    ///
+    /// Any finite shift is meaningful — zero and negatives included — so only
+    /// NaN and infinity are rejected.
+    pub fn check_offset(offset: f64) -> Result<f64, FactorError> {
+        if !offset.is_finite() {
+            return Err(FactorError::NotFinite);
+        }
+        Ok(offset)
     }
 
     /// Whether this transform would leave a reading exactly as it is.
@@ -807,5 +848,45 @@ mod tests {
         for unit in ["ms", "°C", "°F", "%", "dBm", "dBV", "", "m", "M", "µ"] {
             assert_eq!(si_prefix(unit), (unit, 1.0), "unit {unit}");
         }
+    }
+
+    /// A zero scale flattens every reading onto the offset, and NaN or
+    /// infinity poisons the stats and the integral. Both binaries reject the
+    /// same values, so the rule lives here rather than in either of them.
+    #[test]
+    fn check_scale_rejects_zero_and_non_finite_factors() {
+        assert_eq!(Transform::check_scale(0.0), Err(FactorError::ZeroScale));
+        assert_eq!(Transform::check_scale(-0.0), Err(FactorError::ZeroScale));
+        assert_eq!(
+            Transform::check_scale(f64::NAN),
+            Err(FactorError::NotFinite)
+        );
+        assert_eq!(
+            Transform::check_scale(f64::INFINITY),
+            Err(FactorError::NotFinite)
+        );
+        assert_eq!(
+            Transform::check_scale(f64::NEG_INFINITY),
+            Err(FactorError::NotFinite)
+        );
+        // A negative scale is a legitimate probe-polarity flip.
+        assert_eq!(Transform::check_scale(-2.5), Ok(-2.5));
+        assert_eq!(Transform::check_scale(1e-9), Ok(1e-9));
+    }
+
+    /// Zero is a meaningful offset — it is what "no offset" means — so only
+    /// NaN and infinity are rejected.
+    #[test]
+    fn check_offset_rejects_only_non_finite_values() {
+        assert_eq!(Transform::check_offset(0.0), Ok(0.0));
+        assert_eq!(Transform::check_offset(-3.0), Ok(-3.0));
+        assert_eq!(
+            Transform::check_offset(f64::NAN),
+            Err(FactorError::NotFinite)
+        );
+        assert_eq!(
+            Transform::check_offset(f64::INFINITY),
+            Err(FactorError::NotFinite)
+        );
     }
 }

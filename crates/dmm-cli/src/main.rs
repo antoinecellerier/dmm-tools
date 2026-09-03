@@ -7,7 +7,7 @@ use console::style;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
-use dmm_lib::transform::Transform;
+use dmm_lib::transform::{FactorError, Transform};
 use log::{error, info};
 use std::io::Write;
 use std::sync::Arc;
@@ -158,35 +158,38 @@ impl TransformArgs {
     }
 }
 
-/// Parse a transform flag's number, rejecting NaN and infinity.
+/// Parse a transform flag's number and check it against the rules
+/// [`Transform`] sets for that flag.
 ///
-/// Neither is caught anywhere downstream: they propagate through every
-/// reading into the stats and the integral, whose summary then reads `NaN`
-/// with nothing to say where it came from. `flag` names the offending flag so
-/// `--scale` and `--offset` cannot word the same rejection two ways.
-fn parse_finite(flag: &str, s: &str) -> Result<f64, String> {
+/// The rules are shared with the GUI's Scale row; the wording is not, so
+/// each [`FactorError`] is turned into a message here. `flag` names the
+/// offending flag so `--scale` and `--offset` cannot word the same rejection
+/// two ways.
+fn parse_factor(
+    flag: &str,
+    s: &str,
+    check: fn(f64) -> Result<f64, FactorError>,
+) -> Result<f64, String> {
     let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
-    if !value.is_finite() {
-        return Err(format!("{flag} must be a finite number, got `{s}`"));
-    }
-    Ok(value)
+    check(value).map_err(|e| match e {
+        FactorError::NotFinite => format!("{flag} must be a finite number, got `{s}`"),
+        FactorError::ZeroScale => {
+            "scale must not be zero — it would flatten every reading to the offset".to_string()
+        }
+    })
 }
 
 /// Reject the two scale factors that destroy the reading rather than
 /// re-express it: zero collapses every sample onto the offset, and NaN/inf
 /// poison the stats and the integral.
 fn parse_scale(s: &str) -> Result<f64, String> {
-    let value = parse_finite("scale", s)?;
-    if value == 0.0 {
-        return Err("scale must not be zero — it would flatten every reading to the offset".into());
-    }
-    Ok(value)
+    parse_factor("scale", s, Transform::check_scale)
 }
 
 /// Any finite shift is a meaningful offset — zero and negatives included — so
 /// only NaN and infinity are rejected, on the same grounds as `--scale`.
 fn parse_offset(s: &str) -> Result<f64, String> {
-    parse_finite("offset", s)
+    parse_factor("offset", s, Transform::check_offset)
 }
 
 #[derive(Clone, ValueEnum)]
@@ -529,26 +532,23 @@ fn open_with_help(
                 "{} adapter not found: {detail}",
                 style("Error:").red().bold()
             );
-            match dmm_lib::list_devices() {
-                Ok(devices) if devices.is_empty() => {
-                    eprintln!("{}", style("No devices currently connected.").yellow());
-                }
-                Ok(devices) => {
-                    eprintln!("\n{}:", style("Connected devices").yellow());
-                    for (i, dev) in devices.iter().enumerate() {
-                        eprintln!("  {} {dev}", style(format!("[{i}]")).cyan());
-                    }
-                    eprintln!(
-                        "\n{}",
-                        style("Use --adapter <serial-or-path> to select one.").dim()
-                    );
-                }
-                Err(_) => {
-                    eprintln!(
-                        "{}",
-                        style("Run 'dmm-cli list' to see connected devices.").yellow()
-                    );
-                }
+            // More than one line means devices were listed: a header plus one
+            // per device. Only that answer is worth setting apart and worth a
+            // hint — "nothing is connected" and "couldn't look" are complete
+            // on their own.
+            let lines = dmm_lib::binary_help::connected_adapters_lines();
+            let listed = lines.len() > 1;
+            if listed {
+                eprintln!();
+            }
+            for line in &lines {
+                eprintln!("{}", style(line).yellow());
+            }
+            if listed {
+                eprintln!(
+                    "\n{}",
+                    style("Use --adapter <serial-or-path> to select one.").dim()
+                );
             }
             Err("adapter not found".into())
         }
