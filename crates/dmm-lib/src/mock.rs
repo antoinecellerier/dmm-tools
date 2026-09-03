@@ -41,56 +41,120 @@ pub enum MockMode {
     TempDual,
 }
 
+/// One row of the mode table: everything `MockMode` exposes for a variant.
+struct MockModeInfo {
+    mode: MockMode,
+    /// Short string label for CLI and display.
+    label: &'static str,
+    description: &'static str,
+    /// Extra spellings `FromStr` accepts, beyond `label`.
+    aliases: &'static [&'static str],
+}
+
+/// Every mode, in auto-cycle order. The order of the first nine entries is
+/// load-bearing for the GUI demo and several tests; the multi-display modes
+/// were appended so it stayed unchanged.
+const MODES: [MockModeInfo; 11] = [
+    MockModeInfo {
+        mode: MockMode::DcV,
+        label: "dcv",
+        description: "DC Voltage (sine wave around 5V)",
+        aliases: &["dc-v", "dc_v"],
+    },
+    MockModeInfo {
+        mode: MockMode::AcV,
+        label: "acv",
+        description: "AC Voltage (sine wave around 120V)",
+        aliases: &["ac-v", "ac_v"],
+    },
+    MockModeInfo {
+        mode: MockMode::Ohm,
+        label: "ohm",
+        description: "Resistance (step 1-10 kΩ)",
+        aliases: &["ohms", "resistance"],
+    },
+    MockModeInfo {
+        mode: MockMode::Capacitance,
+        label: "cap",
+        description: "Capacitance (ramp 1-20 µF)",
+        aliases: &["capacitance"],
+    },
+    MockModeInfo {
+        mode: MockMode::Hz,
+        label: "hz",
+        description: "Frequency (sine wave around 60Hz)",
+        aliases: &["freq", "frequency"],
+    },
+    MockModeInfo {
+        mode: MockMode::Temp,
+        label: "temp",
+        description: "Temperature (ramp 20-30°C)",
+        aliases: &["temperature"],
+    },
+    MockModeInfo {
+        mode: MockMode::DcMa,
+        label: "dcma",
+        description: "DC mA (sine wave around 50mA)",
+        aliases: &["dc-ma", "dc_ma", "ma"],
+    },
+    MockModeInfo {
+        mode: MockMode::OhmOl,
+        label: "ohm-ol",
+        description: "Resistance overload (OL)",
+        aliases: &["ohm_ol", "ol", "overload"],
+    },
+    MockModeInfo {
+        mode: MockMode::Ncv,
+        label: "ncv",
+        description: "NCV (cycling levels 0-4)",
+        aliases: &[],
+    },
+    MockModeInfo {
+        mode: MockMode::AcVHz,
+        label: "acv-hz",
+        description: "AC Voltage with frequency and period sub-displays",
+        aliases: &["acvhz", "acv_hz"],
+    },
+    MockModeInfo {
+        mode: MockMode::TempDual,
+        label: "temp2",
+        description: "Temperature with a second thermocouple (T2)",
+        aliases: &["temp-dual", "temp_dual"],
+    },
+];
+
+/// `MODES` projected to bare variants, so `ALL` can't drift from the table.
+const fn all_modes() -> [MockMode; MODES.len()] {
+    let mut out = [MockMode::DcV; MODES.len()];
+    let mut i = 0;
+    while i < MODES.len() {
+        out[i] = MODES[i].mode;
+        i += 1;
+    }
+    out
+}
+
 impl MockMode {
     /// All available modes in scenario order.
-    pub const ALL: &[MockMode] = &[
-        MockMode::DcV,
-        MockMode::AcV,
-        MockMode::Ohm,
-        MockMode::Capacitance,
-        MockMode::Hz,
-        MockMode::Temp,
-        MockMode::DcMa,
-        MockMode::OhmOl,
-        MockMode::Ncv,
-        // Appended: the auto-cycle order of the modes above is load-bearing
-        // for the GUI demo and several tests.
-        MockMode::AcVHz,
-        MockMode::TempDual,
-    ];
+    pub const ALL: &[MockMode] = &all_modes();
+
+    /// This mode's table row. `every_mode_has_exactly_one_table_entry`
+    /// guarantees the lookup finds one.
+    fn info(self) -> &'static MockModeInfo {
+        MODES
+            .iter()
+            .find(|info| info.mode == self)
+            .expect("MODES must contain every MockMode variant")
+    }
 
     /// Short string label for CLI and display.
     pub fn label(self) -> &'static str {
-        match self {
-            MockMode::DcV => "dcv",
-            MockMode::AcV => "acv",
-            MockMode::Ohm => "ohm",
-            MockMode::Capacitance => "cap",
-            MockMode::Hz => "hz",
-            MockMode::Temp => "temp",
-            MockMode::DcMa => "dcma",
-            MockMode::OhmOl => "ohm-ol",
-            MockMode::Ncv => "ncv",
-            MockMode::AcVHz => "acv-hz",
-            MockMode::TempDual => "temp2",
-        }
+        self.info().label
     }
 
     /// Human-readable description.
     pub fn description(self) -> &'static str {
-        match self {
-            MockMode::DcV => "DC Voltage (sine wave around 5V)",
-            MockMode::AcV => "AC Voltage (sine wave around 120V)",
-            MockMode::Ohm => "Resistance (step 1-10 kΩ)",
-            MockMode::Capacitance => "Capacitance (ramp 1-20 µF)",
-            MockMode::Hz => "Frequency (sine wave around 60Hz)",
-            MockMode::Temp => "Temperature (ramp 20-30°C)",
-            MockMode::DcMa => "DC mA (sine wave around 50mA)",
-            MockMode::OhmOl => "Resistance overload (OL)",
-            MockMode::Ncv => "NCV (cycling levels 0-4)",
-            MockMode::AcVHz => "AC Voltage with frequency and period sub-displays",
-            MockMode::TempDual => "Temperature with a second thermocouple (T2)",
-        }
+        self.info().description
     }
 }
 
@@ -98,26 +162,17 @@ impl std::str::FromStr for MockMode {
     type Err = String;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "dcv" | "dc-v" | "dc_v" => Ok(MockMode::DcV),
-            "acv" | "ac-v" | "ac_v" => Ok(MockMode::AcV),
-            "ohm" | "ohms" | "resistance" => Ok(MockMode::Ohm),
-            "cap" | "capacitance" => Ok(MockMode::Capacitance),
-            "hz" | "freq" | "frequency" => Ok(MockMode::Hz),
-            "temp" | "temperature" => Ok(MockMode::Temp),
-            "dcma" | "dc-ma" | "dc_ma" | "ma" => Ok(MockMode::DcMa),
-            "ohm-ol" | "ohm_ol" | "ol" | "overload" => Ok(MockMode::OhmOl),
-            "ncv" => Ok(MockMode::Ncv),
-            "acv-hz" | "acvhz" | "acv_hz" => Ok(MockMode::AcVHz),
-            "temp2" | "temp-dual" | "temp_dual" => Ok(MockMode::TempDual),
-            _ => {
-                let valid: Vec<&str> = MockMode::ALL.iter().map(|m| m.label()).collect();
-                Err(format!(
-                    "unknown mock mode: {s}\nValid modes: {}",
-                    valid.join(", ")
-                ))
+        let needle = s.to_lowercase();
+        for info in &MODES {
+            if info.label == needle || info.aliases.contains(&needle.as_str()) {
+                return Ok(info.mode);
             }
         }
+        let valid: Vec<&str> = MockMode::ALL.iter().map(|m| m.label()).collect();
+        Err(format!(
+            "unknown mock mode: {s}\nValid modes: {}",
+            valid.join(", ")
+        ))
     }
 }
 
@@ -905,6 +960,37 @@ pub fn open_mock_mode(mode: MockMode) -> Result<Dmm<NullTransport>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The table is the single source of truth for `ALL`, `label()`,
+    /// `description()` and `FromStr`; `info()` looks a mode up there instead of
+    /// matching, so a missing or duplicated row must fail here.
+    #[test]
+    fn every_mode_has_exactly_one_table_entry() {
+        assert_eq!(MODES.len(), MockMode::ALL.len());
+        for mode in MockMode::ALL {
+            let matches = MODES.iter().filter(|info| info.mode == *mode).count();
+            assert_eq!(matches, 1, "{mode:?} has {matches} table entries");
+        }
+    }
+
+    #[test]
+    fn labels_and_aliases_are_unique_and_round_trip() {
+        let mut seen: Vec<&str> = Vec::new();
+        for info in &MODES {
+            for name in std::iter::once(&info.label).chain(info.aliases) {
+                assert!(!seen.contains(name), "'{name}' appears twice in MODES");
+                seen.push(name);
+                assert_eq!(
+                    name.parse::<MockMode>().unwrap(),
+                    info.mode,
+                    "'{name}' should parse as {:?}",
+                    info.mode
+                );
+            }
+            assert_eq!(info.mode.label(), info.label);
+            assert_eq!(info.mode.to_string(), info.label);
+        }
+    }
 
     #[test]
     fn test_produces_measurements() {
