@@ -2,6 +2,9 @@ use crate::Dmm;
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::protocol::ut61eplus::mode::Mode;
+use crate::protocol::ut61eplus::tables::DeviceTable;
+use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use crate::protocol::{DeviceProfile, Protocol, Stability};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
@@ -478,6 +481,9 @@ pub struct MockProtocol {
     stored_peak_min: Option<f64>,
     stored_peak_max: Option<f64>,
     profile: DeviceProfile,
+    /// The mock stands in for a UT61E+, so it answers spec lookups from the
+    /// UT61E+ table rather than carrying a second copy that can drift.
+    table: Ut61ePlusTable,
 }
 
 impl MockProtocol {
@@ -511,6 +517,7 @@ impl MockProtocol {
                 max_aux_values: 2,
                 verification_issue: None,
             },
+            table: Ut61ePlusTable::new(),
         }
     }
 
@@ -866,18 +873,22 @@ impl Protocol for MockProtocol {
         &self.profile
     }
 
-    // The mock emits UT61E+ mode and range bytes, and the spec tables already
-    // map "mock" to the UT61E+ table (with `mock_delegates_to_ut61eplus`
+    // The mock emits UT61E+ mode and range bytes, so it answers spec lookups
+    // from the UT61E+ table (with `mock_specs_match_the_ut61eplus_table`
     // asserting it). Without these overrides the trait defaults returned None,
     // so `Measurement::spec` was never populated and the GUI's Specifications
     // panel stayed empty for the whole mock session — the path used for demos,
     // screenshots and UI development.
     fn spec_info(&self, mode_raw: u16, range_raw: u8) -> Option<&'static crate::specs::SpecInfo> {
-        crate::protocol::ut61eplus::tables::lookup_spec("mock", mode_raw, range_raw)
+        Mode::from_byte(mode_raw as u8)
+            .ok()
+            .and_then(|mode| self.table.spec_info(mode, range_raw))
     }
 
     fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static crate::specs::ModeSpecInfo> {
-        crate::protocol::ut61eplus::tables::lookup_mode_spec("mock", mode_raw)
+        Mode::from_byte(mode_raw as u8)
+            .ok()
+            .and_then(|mode| self.table.mode_spec_info(mode))
     }
 }
 
@@ -929,8 +940,8 @@ mod tests {
     fn mock_specs_match_the_ut61eplus_table() {
         let mut dmm = open_mock().unwrap();
         let m = dmm.request_measurement().unwrap();
-        let direct =
-            crate::protocol::ut61eplus::tables::lookup_spec("ut61eplus", m.mode_raw, m.range_raw);
+        let mode = Mode::from_byte(m.mode_raw as u8).expect("mock emits valid UT61E+ mode bytes");
+        let direct = Ut61ePlusTable::new().spec_info(mode, m.range_raw);
         assert_eq!(
             m.spec.map(|s| s.resolution),
             direct.map(|s| s.resolution),

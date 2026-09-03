@@ -148,7 +148,7 @@ Document discrepancies. When our independent analysis disagrees with community w
 **Goal:** Working protocol support with tests.
 
 Follow the code-level steps in `docs/development.md`:
-- **Same protocol family:** Add a `DeviceTable` implementation in `tables/`
+- **Same protocol family:** Add a table in `tables/` implementing `ModeTables` (one `entry` match per mode; `DeviceTable` comes from the blanket impl)
 - **New protocol family:** Implement the `Protocol` trait in `protocol/<family>/mod.rs`
 - **New transport:** Implement the `Transport` trait (only if the device doesn't use CP2110)
 

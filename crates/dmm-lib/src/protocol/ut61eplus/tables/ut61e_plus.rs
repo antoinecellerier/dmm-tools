@@ -1,5 +1,5 @@
 use super::specs_ut61e_plus as specs;
-use super::{DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_range, r};
+use super::{ModeEntry, ModeTables, RangeInfo, r};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61E+.
@@ -98,118 +98,59 @@ impl Default for Ut61ePlusTable {
     }
 }
 
-impl DeviceTable for Ut61ePlusTable {
-    fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo> {
+impl ModeTables for Ut61ePlusTable {
+    const MODEL_NAME: &'static str = "UNI-T UT61E+";
+
+    fn entry(&self, mode: Mode) -> ModeEntry<'_> {
         match mode {
-            Mode::DcV => lookup_range(&self.dc_v, range),
-            Mode::AcV => lookup_range(&self.ac_v, range),
-            Mode::DcMv => lookup_range(&self.dc_mv, range),
-            Mode::AcMv => lookup_range(&self.ac_mv, range),
-            Mode::Ohm => lookup_range(&self.ohm, range),
-            Mode::Capacitance => lookup_range(&self.capacitance, range),
-            Mode::Hz => lookup_range(&self.hz, range),
-            Mode::DutyCycle => lookup_range(&self.duty_cycle, range),
-            Mode::TempC => lookup_range(&self.temp_c, range),
-            Mode::TempF => lookup_range(&self.temp_f, range),
-            Mode::Diode => lookup_range(&self.diode, range),
-            Mode::Continuity => lookup_range(&self.continuity, range),
-            Mode::DcUa => lookup_range(&self.dc_ua, range),
-            Mode::AcUa => lookup_range(&self.ac_ua, range),
-            Mode::DcMa => lookup_range(&self.dc_ma, range),
-            Mode::AcMa => lookup_range(&self.ac_ma, range),
-            Mode::DcA => lookup_range(&self.dc_a, range),
-            Mode::AcA => lookup_range(&self.ac_a, range),
-            // Derived modes share tables with their base mode
-            Mode::AcDcV | Mode::LpfV | Mode::LozV => lookup_range(&self.dc_v, range),
-            Mode::AcDcMv | Mode::LpfMv => lookup_range(&self.dc_mv, range),
-            Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => lookup_range(&self.dc_a, range),
-            Mode::Hfe => lookup_range(&self.hfe, range),
-            // Modes without range tables
-            Mode::Ncv | Mode::Live | Mode::Inrush => None,
+            Mode::DcV => ModeEntry::full(&self.dc_v, specs::DC_V_SPECS, &specs::DC_V_MODE),
+            Mode::AcV => ModeEntry::full(&self.ac_v, specs::AC_V_SPECS, &specs::AC_V_MODE),
+            Mode::DcMv => ModeEntry::full(&self.dc_mv, specs::DC_MV_SPECS, &specs::DC_MV_MODE),
+            Mode::AcMv => ModeEntry::full(&self.ac_mv, specs::AC_MV_SPECS, &specs::AC_MV_MODE),
+            Mode::Ohm => ModeEntry::full(&self.ohm, specs::OHM_SPECS, &specs::OHM_MODE),
+            Mode::Capacitance => {
+                ModeEntry::full(&self.capacitance, specs::CAP_SPECS, &specs::CAP_MODE)
+            }
+            Mode::Hz => ModeEntry::full(&self.hz, specs::HZ_SPECS, &specs::HZ_MODE),
+            Mode::DutyCycle => {
+                ModeEntry::full(&self.duty_cycle, specs::DUTY_SPECS, &specs::DUTY_MODE)
+            }
+            Mode::TempC => ModeEntry::full(&self.temp_c, specs::TEMP_C_SPECS, &specs::TEMP_MODE),
+            Mode::TempF => ModeEntry::full(&self.temp_f, specs::TEMP_F_SPECS, &specs::TEMP_MODE),
+            Mode::Diode => ModeEntry::full(&self.diode, specs::DIODE_SPECS, &specs::DIODE_MODE),
+            Mode::Continuity => ModeEntry::full(
+                &self.continuity,
+                specs::CONTINUITY_SPECS,
+                &specs::CONTINUITY_MODE,
+            ),
+            Mode::DcUa => ModeEntry::full(&self.dc_ua, specs::DC_UA_SPECS, &specs::DC_UA_MODE),
+            Mode::AcUa => ModeEntry::full(&self.ac_ua, specs::AC_UA_SPECS, &specs::AC_UA_MODE),
+            Mode::DcMa => ModeEntry::full(&self.dc_ma, specs::DC_MA_SPECS, &specs::DC_MA_MODE),
+            Mode::AcMa => ModeEntry::full(&self.ac_ma, specs::AC_MA_SPECS, &specs::AC_MA_MODE),
+            Mode::DcA => ModeEntry::full(&self.dc_a, specs::DC_A_SPECS, &specs::DC_A_MODE),
+            Mode::AcA => ModeEntry::full(&self.ac_a, specs::AC_A_SPECS, &specs::AC_A_MODE),
+            Mode::Hfe => ModeEntry::full(&self.hfe, specs::HFE_SPECS, &specs::HFE_MODE),
+            // Derived modes share their base mode's range table, and have specs
+            // of their own wherever the manual publishes them.
+            Mode::AcDcV => ModeEntry::full(&self.dc_v, specs::ACDC_V_SPECS, &specs::ACDC_V_MODE),
+            Mode::LpfV => ModeEntry::full(&self.dc_v, specs::LPF_V_SPECS, &specs::LPF_V_MODE),
+            Mode::LpfMv => ModeEntry::full(&self.dc_mv, specs::LPF_MV_SPECS, &specs::LPF_MV_MODE),
+            // Derived modes the manual gives no specs for.
+            Mode::LozV => ModeEntry::ranges_only(&self.dc_v),
+            Mode::AcDcMv => ModeEntry::ranges_only(&self.dc_mv),
+            Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => {
+                ModeEntry::ranges_only(&self.dc_a)
+            }
+            // Modes without range tables or specs.
+            Mode::Ncv | Mode::Live | Mode::Inrush => ModeEntry::none(),
         }
-    }
-
-    fn model_name(&self) -> &'static str {
-        "UNI-T UT61E+"
-    }
-
-    fn spec_info(&self, mode: Mode, range: u8) -> Option<&'static SpecInfo> {
-        let table: &[SpecInfo] = match mode {
-            Mode::DcV => specs::DC_V_SPECS,
-            Mode::AcV => specs::AC_V_SPECS,
-            Mode::DcMv => specs::DC_MV_SPECS,
-            Mode::AcMv => specs::AC_MV_SPECS,
-            Mode::Ohm => specs::OHM_SPECS,
-            Mode::Continuity => specs::CONTINUITY_SPECS,
-            Mode::Diode => specs::DIODE_SPECS,
-            Mode::Capacitance => specs::CAP_SPECS,
-            Mode::TempC => specs::TEMP_C_SPECS,
-            Mode::TempF => specs::TEMP_F_SPECS,
-            Mode::DcUa => specs::DC_UA_SPECS,
-            Mode::AcUa => specs::AC_UA_SPECS,
-            Mode::DcMa => specs::DC_MA_SPECS,
-            Mode::AcMa => specs::AC_MA_SPECS,
-            Mode::DcA => specs::DC_A_SPECS,
-            Mode::AcA => specs::AC_A_SPECS,
-            Mode::Hz => specs::HZ_SPECS,
-            Mode::DutyCycle => specs::DUTY_SPECS,
-            Mode::AcDcV => specs::ACDC_V_SPECS,
-            Mode::LpfV => specs::LPF_V_SPECS,
-            Mode::LpfMv => specs::LPF_MV_SPECS,
-            Mode::Hfe => specs::HFE_SPECS,
-            // No published specs for these modes on UT61E+
-            Mode::LozV
-            | Mode::LozV2
-            | Mode::Lpf
-            | Mode::AcDcMv
-            | Mode::LpfA
-            | Mode::AcDcA2
-            | Mode::Ncv
-            | Mode::Live
-            | Mode::Inrush => return None,
-        };
-        table.get(range as usize)
-    }
-
-    fn mode_spec_info(&self, mode: Mode) -> Option<&'static ModeSpecInfo> {
-        Some(match mode {
-            Mode::DcV => &specs::DC_V_MODE,
-            Mode::AcV => &specs::AC_V_MODE,
-            Mode::DcMv => &specs::DC_MV_MODE,
-            Mode::AcMv => &specs::AC_MV_MODE,
-            Mode::Ohm => &specs::OHM_MODE,
-            Mode::Continuity => &specs::CONTINUITY_MODE,
-            Mode::Diode => &specs::DIODE_MODE,
-            Mode::Capacitance => &specs::CAP_MODE,
-            Mode::TempC | Mode::TempF => &specs::TEMP_MODE,
-            Mode::DcUa => &specs::DC_UA_MODE,
-            Mode::AcUa => &specs::AC_UA_MODE,
-            Mode::DcMa => &specs::DC_MA_MODE,
-            Mode::AcMa => &specs::AC_MA_MODE,
-            Mode::DcA => &specs::DC_A_MODE,
-            Mode::AcA => &specs::AC_A_MODE,
-            Mode::Hz => &specs::HZ_MODE,
-            Mode::DutyCycle => &specs::DUTY_MODE,
-            Mode::AcDcV => &specs::ACDC_V_MODE,
-            Mode::LpfV => &specs::LPF_V_MODE,
-            Mode::LpfMv => &specs::LPF_MV_MODE,
-            Mode::Hfe => &specs::HFE_MODE,
-            Mode::LozV
-            | Mode::LozV2
-            | Mode::Lpf
-            | Mode::AcDcMv
-            | Mode::LpfA
-            | Mode::AcDcA2
-            | Mode::Ncv
-            | Mode::Live
-            | Mode::Inrush => return None,
-        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::ut61eplus::tables::DeviceTable;
 
     fn table() -> Ut61ePlusTable {
         Ut61ePlusTable::new()

@@ -26,7 +26,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/framing.rs` | Message framing: find `AB CD`, `0xAC`, or FS9721 index-nibble header, extract payload, validate checksum (or position/index validation) |
-| `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `DeviceTable` impls with range info and spec data) |
+| `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `ModeTables` impls — one match per mode returning ranges and specs — behind the `DeviceTable` trait) |
 | `protocol/ut8802/` | UT8802 family: `Ut8802Protocol` — streaming protocol with 0x5A trigger, 0xAC 8-byte BCD frames |
 | `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming protocol with 0x5A trigger |
 | `protocol/fs9721/` | UT803/UT804: `Fs9721Protocol` — streaming, proprietary structured data in FS9721 14-byte framing (CH9325 HID) |
@@ -123,7 +123,7 @@ sample log, persistent settings.
 3. **hidraw backend** — required for HID feature reports on Linux (libusb backend doesn't support them).
 4. **Transport trait** — enables `MockTransport` for testing without hardware.
 5. **Protocol trait** — each device family implements `Protocol` (object-safe, `Send`). `Dmm` dispatches through `Box<dyn Protocol>`, so callers don't need to know the family at compile time.
-6. **Device tables via trait** — within the UT61E+ family, adding a new meter model = adding one file implementing `DeviceTable`.
+6. **Device tables via trait** — within the UT61E+ family, adding a new meter model = adding one file implementing `ModeTables` (`DeviceTable` is derived from it).
 7. **No nom** — payload is a fixed 14-byte struct. Direct indexing is clearer.
 8. **Measurement fields use `&'static str`** — `unit` and `range_label` reference static table data, avoiding heap allocation per measurement.
 9. **Graph two-tier rendering** — the minimap needs the full history, so it uses a segment/gap cache that auto-rebuilds when a monotonic `history_version` counter changes. The main graph skips the full cache entirely: it binary-searches the history for the visible time window (`visible_index_range`), then builds segments from that ~150-point slice each frame. All per-frame helpers (Y-bounds, statistics, envelope, crossings, nearest-point) also operate on the visible slice only, keeping frame cost independent of total history size. Sub-value overlay traces are stored as `VecDeque<Option<f64>>` running in lockstep with the history, so the same visible slice indexes them and the single-display case pays nothing; the minimap stays main-series-only so its whole-history scan is not multiplied by the overlay count.

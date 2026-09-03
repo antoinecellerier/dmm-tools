@@ -189,6 +189,10 @@ which protocol family is connected. For non-UT61E+ devices, `lookup_spec()` retu
 Only `ut61eplus/tables/mod.rs` has `lookup_spec` / `lookup_mode_spec` functions. No other
 protocol family provides spec data through this path.
 
+**2026-09-03:** resolved. Specs reach the GUI through `Protocol::spec_info`, filled in
+by `Dmm::request_measurement` for every family; the string-keyed `lookup_spec` /
+`lookup_mode_spec` registry is gone.
+
 ### F13. Measurement Clone copies raw_payload
 
 **Severity: Low (downgraded)** | **Verified**

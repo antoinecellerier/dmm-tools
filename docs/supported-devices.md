@@ -14,7 +14,7 @@ Future candidates include devices using Bluetooth LE and USB serial.
 
 These meters share the same 0xABCD-framed request/response protocol and
 differ only in their mode/range/unit tables. Adding support requires
-implementing a `DeviceTable` with the correct tables — no protocol changes.
+implementing `ModeTables` with the correct tables — no protocol changes.
 
 | Model | Brand | Counts | Status | Notes |
 |-------|-------|--------|--------|-------|

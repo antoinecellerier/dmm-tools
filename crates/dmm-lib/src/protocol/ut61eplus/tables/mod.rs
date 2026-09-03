@@ -43,111 +43,122 @@ pub trait DeviceTable: Send {
     }
 }
 
-/// Look up per-range specs for a device. Takes `device_id` (registry ID),
-/// `mode_raw` (protocol mode byte), and `range_raw` (protocol range byte).
-/// Returns `None` for unsupported devices or modes.
-pub fn lookup_spec(device_id: &str, mode_raw: u16, range_raw: u8) -> Option<&'static SpecInfo> {
-    let mode = Mode::from_byte(mode_raw as u8).ok()?;
-    let table = table_for_device(device_id)?;
-    table.spec_info(mode, range_raw)
+/// Everything a device table knows about one mode.
+pub(crate) struct ModeEntry<'a> {
+    pub(crate) ranges: Option<&'a [RangeInfo]>,
+    pub(crate) specs: Option<&'static [SpecInfo]>,
+    pub(crate) mode_spec: Option<&'static ModeSpecInfo>,
 }
 
-/// Look up per-mode specs (input impedance, notes) for a device.
-pub fn lookup_mode_spec(device_id: &str, mode_raw: u16) -> Option<&'static ModeSpecInfo> {
-    let mode = Mode::from_byte(mode_raw as u8).ok()?;
-    let table = table_for_device(device_id)?;
-    table.mode_spec_info(mode)
+impl<'a> ModeEntry<'a> {
+    /// A mode with range labels, per-range specs and mode-level specs.
+    pub(crate) fn full(
+        ranges: &'a [RangeInfo],
+        specs: &'static [SpecInfo],
+        mode_spec: &'static ModeSpecInfo,
+    ) -> Self {
+        Self {
+            ranges: Some(ranges),
+            specs: Some(specs),
+            mode_spec: Some(mode_spec),
+        }
+    }
+
+    /// A mode with range labels but no published specification data.
+    pub(crate) fn ranges_only(ranges: &'a [RangeInfo]) -> Self {
+        Self {
+            ranges: Some(ranges),
+            specs: None,
+            mode_spec: None,
+        }
+    }
+
+    /// A mode this model does not have.
+    pub(crate) fn none() -> Self {
+        Self {
+            ranges: None,
+            specs: None,
+            mode_spec: None,
+        }
+    }
 }
 
-/// Get a static DeviceTable reference for spec lookups.
-fn table_for_device(device_id: &str) -> Option<&'static dyn DeviceTable> {
-    // Use thread-local statics to avoid repeated allocations.
-    // These tables are tiny and immortal.
-    use std::sync::LazyLock;
-    static UT61E: LazyLock<ut61e_plus::Ut61ePlusTable> =
-        LazyLock::new(ut61e_plus::Ut61ePlusTable::new);
-    static UT61B: LazyLock<ut61b_plus::Ut61bPlusTable> =
-        LazyLock::new(ut61b_plus::Ut61bPlusTable::new);
-    static UT61D: LazyLock<ut61d_plus::Ut61dPlusTable> =
-        LazyLock::new(ut61d_plus::Ut61dPlusTable::new);
+/// Per-model data behind `DeviceTable`: one match per mode instead of three.
+///
+/// Keeping ranges, per-range specs and the mode-level spec in a single match
+/// arm is what stops the three from drifting apart when a mode is added.
+pub(crate) trait ModeTables: Send {
+    /// Model name reported by `DeviceTable::model_name`. An associated const
+    /// rather than a method so it cannot collide with the trait method the
+    /// blanket impl below derives from it.
+    const MODEL_NAME: &'static str;
 
-    match device_id {
-        "ut61eplus" | "ut161e" | "mock" => Some(&*UT61E),
-        "ut61b+" | "ut161b" => Some(&*UT61B),
-        "ut61d+" | "ut161d" => Some(&*UT61D),
-        _ => None,
+    fn entry(&self, mode: Mode) -> ModeEntry<'_>;
+}
+
+impl<T: ModeTables> DeviceTable for T {
+    fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo> {
+        self.entry(mode)
+            .ranges
+            .and_then(|table| lookup_range(table, range))
+    }
+
+    fn model_name(&self) -> &'static str {
+        T::MODEL_NAME
+    }
+
+    fn spec_info(&self, mode: Mode, range: u8) -> Option<&'static SpecInfo> {
+        self.entry(mode)
+            .specs
+            .and_then(|table| table.get(range as usize))
+    }
+
+    fn mode_spec_info(&self, mode: Mode) -> Option<&'static ModeSpecInfo> {
+        self.entry(mode).mode_spec
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::ut61b_plus::Ut61bPlusTable;
+    use super::ut61d_plus::Ut61dPlusTable;
+    use super::ut61e_plus::Ut61ePlusTable;
     use super::*;
 
     #[test]
-    fn lookup_spec_ut61eplus_dcv() {
-        // DcV = 0x02, range 0 = 2.2V → resolution "0.1mV"
-        let spec = lookup_spec("ut61eplus", 0x02, 0).unwrap();
-        assert_eq!(spec.resolution, "0.1mV");
-        assert!(!spec.accuracy.is_empty());
+    fn spec_lookup_rejects_an_out_of_bounds_range() {
+        // DC V has 5 ranges on the UT61E+; range 99 is not one of them.
+        assert!(Ut61ePlusTable::new().spec_info(Mode::DcV, 99).is_none());
     }
 
     #[test]
-    fn lookup_mode_spec_ut61eplus_dcv() {
-        let ms = lookup_mode_spec("ut61eplus", 0x02).unwrap();
-        assert!(ms.input_impedance.is_some());
+    fn ut61b_plus_dcv_specs() {
+        // Range 0 = 60mV on the 6,000-count UT61B+.
+        let spec = Ut61bPlusTable::new().spec_info(Mode::DcV, 0).unwrap();
+        assert_eq!(spec.resolution, "0.01mV");
     }
 
+    /// UT161B has no table of its own — `Ut61PlusProtocol::for_model` hands it
+    /// the UT61B+'s, so these are the specs a UT161B reports.
     #[test]
-    fn lookup_spec_unknown_device() {
-        assert!(lookup_spec("ut8803", 0x02, 0).is_none());
-    }
-
-    #[test]
-    fn lookup_spec_invalid_mode() {
-        assert!(lookup_spec("ut61eplus", 0xFF, 0).is_none());
-    }
-
-    #[test]
-    fn lookup_spec_invalid_range() {
-        // DcV with range 99 → None
-        assert!(lookup_spec("ut61eplus", 0x02, 99).is_none());
-    }
-
-    #[test]
-    fn mock_delegates_to_ut61eplus() {
-        let mock_spec = lookup_spec("mock", 0x02, 0);
-        let eplus_spec = lookup_spec("ut61eplus", 0x02, 0);
+    fn ut161b_uses_the_ut61b_plus_table() {
+        let t = Ut61bPlusTable::new();
+        assert_eq!(t.model_name(), "UNI-T UT61B+");
         assert_eq!(
-            mock_spec.map(|s| s.resolution),
-            eplus_spec.map(|s| s.resolution)
+            t.spec_info(Mode::DcV, 0).map(|s| s.resolution),
+            Some("0.01mV")
         );
     }
 
     #[test]
-    fn lookup_ut61b_plus() {
-        // DcV = 0x02, range 0 = 60mV on UT61B+
-        let spec = lookup_spec("ut61b+", 0x02, 0).unwrap();
-        assert_eq!(spec.resolution, "0.01mV");
-    }
-
-    #[test]
-    fn lookup_ut61d_plus_temp() {
-        // TempC = 0x0A
-        let spec = lookup_spec("ut61d+", 0x0A, 0).unwrap();
+    fn ut61d_plus_temperature_specs() {
+        let spec = Ut61dPlusTable::new().spec_info(Mode::TempC, 0).unwrap();
         assert!(spec.resolution.contains('°'));
     }
 
     #[test]
-    fn ut161_delegates() {
-        let ut161b = lookup_spec("ut161b", 0x02, 0);
-        let ut61b = lookup_spec("ut61b+", 0x02, 0);
-        assert_eq!(ut161b.map(|s| s.resolution), ut61b.map(|s| s.resolution));
-    }
-
-    #[test]
     fn acv_has_multiple_accuracy_bands() {
-        // AcV = 0x00, range 0 on UT61E+ should have 2+ frequency bands
-        let spec = lookup_spec("ut61eplus", 0x00, 0).unwrap();
+        let spec = Ut61ePlusTable::new().spec_info(Mode::AcV, 0).unwrap();
         assert!(
             spec.accuracy.len() >= 2,
             "AC V should have multiple frequency bands"

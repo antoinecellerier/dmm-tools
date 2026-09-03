@@ -11,7 +11,8 @@
 
 use dmm_lib::protocol::ut61eplus::mode::Mode;
 use dmm_lib::protocol::ut61eplus::tables::{
-    AccuracyBand, DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, lookup_mode_spec, lookup_spec,
+    AccuracyBand, DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, ut61b_plus::Ut61bPlusTable,
+    ut61d_plus::Ut61dPlusTable, ut61e_plus::Ut61ePlusTable,
 };
 
 /// (range byte, spec, optional (range info, range label)) for one mode in the dump.
@@ -61,6 +62,17 @@ const DEVICES: &[(&str, &str)] = &[
 
 /// Inner width between left and right box borders.
 const W: usize = 72;
+
+/// The table backing each id in `DEVICES`. `None` for anything else, so an
+/// unrecognized argument prints an empty device section instead of failing.
+fn table_for(device_id: &str) -> Option<Box<dyn DeviceTable>> {
+    match device_id {
+        "ut61eplus" => Some(Box::new(Ut61ePlusTable::new())),
+        "ut61b+" => Some(Box::new(Ut61bPlusTable::new())),
+        "ut61d+" => Some(Box::new(Ut61dPlusTable::new())),
+        _ => None,
+    }
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -122,17 +134,26 @@ fn dump_device(device_id: &str, device_name: &str) {
     );
     println!("└{}┘", "─".repeat(W));
 
+    let Some(table) = table_for(device_id) else {
+        println!();
+        println!("  (no specification data available for this device)");
+        return;
+    };
+
     let mut any_mode = false;
 
     for &(mode_byte, mode_label) in ALL_MODES {
-        let mode_spec = lookup_mode_spec(device_id, mode_byte as u16);
+        let Ok(mode) = Mode::from_byte(mode_byte) else {
+            continue;
+        };
+        let mode_spec = table.mode_spec_info(mode);
 
         let mut ranges: Vec<RangeRow> = Vec::new();
         for r in 0..20u8 {
-            if let Some(spec) = lookup_spec(device_id, mode_byte as u16, r) {
+            if let Some(spec) = table.spec_info(mode, r) {
                 // Skip placeholder entries that have no range label AND no accuracy
                 // (e.g. LPF mV 220mV — range exists in protocol but not in manual).
-                let range_label = get_range_label(device_id, mode_byte, r);
+                let range_label = get_range_label(table.as_ref(), mode, r);
                 if spec.accuracy.is_empty() && range_label.is_none() {
                     continue;
                 }
@@ -272,28 +293,7 @@ fn label_sort_key(label: &str) -> f64 {
 }
 
 /// Get the RangeInfo for a given mode+range from the device table.
-fn get_range_label(
-    device_id: &str,
-    mode_byte: u8,
-    range: u8,
-) -> Option<(&'static RangeInfo, &'static str)> {
-    use dmm_lib::protocol::ut61eplus::tables::{
-        ut61b_plus::Ut61bPlusTable, ut61d_plus::Ut61dPlusTable, ut61e_plus::Ut61ePlusTable,
-    };
-    use std::sync::LazyLock;
-
-    static UT61E: LazyLock<Ut61ePlusTable> = LazyLock::new(Ut61ePlusTable::new);
-    static UT61B: LazyLock<Ut61bPlusTable> = LazyLock::new(Ut61bPlusTable::new);
-    static UT61D: LazyLock<Ut61dPlusTable> = LazyLock::new(Ut61dPlusTable::new);
-
-    let table: &dyn DeviceTable = match device_id {
-        "ut61eplus" | "ut161e" | "mock" => &*UT61E,
-        "ut61b+" | "ut161b" => &*UT61B,
-        "ut61d+" | "ut161d" => &*UT61D,
-        _ => return None,
-    };
-
-    let mode = Mode::from_byte(mode_byte).ok()?;
+fn get_range_label(table: &dyn DeviceTable, mode: Mode, range: u8) -> Option<(&RangeInfo, &str)> {
     let ri = table.range_info(mode, range)?;
     Some((ri, ri.unit))
 }
