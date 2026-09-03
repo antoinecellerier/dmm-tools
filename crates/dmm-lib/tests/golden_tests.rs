@@ -9,33 +9,19 @@
 //! - Numeric: `"5.678"`, `"-12.345"`
 //! - Overload: `"OL"`
 //! - NCV: `"NCV:3"`
+//!
+//! `flags` is a map of snake_case flag name (the names [`Flag::name`] returns)
+//! to the expected bool. A fixture may list only the flags it cares about:
+//! every name it omits is expected to be false. An unknown name fails the
+//! test rather than being ignored, so a typo can't silently check nothing.
 
+use dmm_lib::flags::Flag;
 use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::protocol::ut61eplus::parse_measurement;
 use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::Path;
-
-/// Expected flag state (same field names as capture SampleFlags).
-#[derive(Debug, Deserialize)]
-struct ExpectedFlags {
-    hold: bool,
-    rel: bool,
-    auto_range: bool,
-    min: bool,
-    max: bool,
-    low_battery: bool,
-    hv_warning: bool,
-    dc: bool,
-    peak_min: bool,
-    peak_max: bool,
-    #[serde(default)]
-    lead_error: bool,
-    #[serde(default)]
-    comp: bool,
-    #[serde(default)]
-    record: bool,
-}
 
 /// A golden test case in capture-compatible YAML format.
 #[derive(Debug, Deserialize)]
@@ -47,7 +33,8 @@ struct GoldenTestCase {
     value: String,
     unit: String,
     range_label: String,
-    flags: ExpectedFlags,
+    /// Expected flags by snake_case name; omitted names expect false.
+    flags: BTreeMap<String, bool>,
 }
 
 /// Decode a hex string (with optional spaces) into bytes.
@@ -73,6 +60,19 @@ fn format_value(v: &MeasuredValue) -> String {
         MeasuredValue::Normal(v) => format!("{v}"),
         MeasuredValue::Overload => "OL".to_string(),
         MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
+    }
+}
+
+/// Fail on a fixture flag name no `Flag` answers to.
+///
+/// Omitted names expect false, so without this a misspelled key would just be
+/// ignored — the fixture would look like it checked a flag it never did.
+fn assert_known_flag_names(stem: &str, flags: &BTreeMap<String, bool>) {
+    for key in flags.keys() {
+        assert!(
+            Flag::ALL.iter().any(|f| f.name() == key),
+            "golden {stem}: unknown flag name {key:?}"
+        );
     }
 }
 
@@ -130,36 +130,37 @@ fn golden_ut61eplus() {
             "golden {stem}: range_label mismatch"
         );
 
-        let f = &measurement.flags;
-        let ef = &case.flags;
-        assert_eq!(f.hold, ef.hold, "golden {stem}: flags.hold");
-        assert_eq!(f.rel, ef.rel, "golden {stem}: flags.rel");
-        assert_eq!(
-            f.auto_range, ef.auto_range,
-            "golden {stem}: flags.auto_range"
-        );
-        assert_eq!(f.min, ef.min, "golden {stem}: flags.min");
-        assert_eq!(f.max, ef.max, "golden {stem}: flags.max");
-        assert_eq!(
-            f.low_battery, ef.low_battery,
-            "golden {stem}: flags.low_battery"
-        );
-        assert_eq!(
-            f.hv_warning, ef.hv_warning,
-            "golden {stem}: flags.hv_warning"
-        );
-        assert_eq!(f.dc, ef.dc, "golden {stem}: flags.dc");
-        assert_eq!(f.peak_min, ef.peak_min, "golden {stem}: flags.peak_min");
-        assert_eq!(f.peak_max, ef.peak_max, "golden {stem}: flags.peak_max");
-        assert_eq!(
-            f.lead_error, ef.lead_error,
-            "golden {stem}: flags.lead_error"
-        );
-        assert_eq!(f.comp, ef.comp, "golden {stem}: flags.comp");
-        assert_eq!(f.record, ef.record, "golden {stem}: flags.record");
+        // Driven by `as_pairs`, so a flag added to `StatusFlags` is checked by
+        // every fixture from the moment it exists — the hand-written list this
+        // replaced had never gained `loz` or `void`.
+        for (name, actual) in measurement.flags.as_pairs() {
+            assert_eq!(
+                actual,
+                case.flags.get(name).copied().unwrap_or(false),
+                "golden {stem}: flags.{name}"
+            );
+        }
+        assert_known_flag_names(&stem, &case.flags);
 
         passed += 1;
     }
 
     eprintln!("golden_ut61eplus: {passed}/{} tests passed", files.len());
+}
+
+/// A fixture that misspells a flag name must fail rather than quietly expect
+/// nothing.
+#[test]
+#[should_panic(expected = "unknown flag name \"auto_rnage\"")]
+fn unknown_fixture_flag_names_fail() {
+    let case: GoldenTestCase = serde_yaml_ng::from_str(
+        "raw_hex: \"02 31 20 20 35 2E 36 37 38 00 00 30 30 30\"\n\
+         mode: DC V\n\
+         value: \"5.678\"\n\
+         unit: V\n\
+         range_label: 22V\n\
+         flags:\n  auto_rnage: true\n",
+    )
+    .expect("synthetic case must parse");
+    assert_known_flag_names("typo", &case.flags);
 }

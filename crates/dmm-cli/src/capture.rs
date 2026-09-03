@@ -115,6 +115,33 @@ pub(crate) struct SampleFlags {
     pub void: bool,
 }
 
+/// From the library type, so a captured sample's flags are copied in one
+/// place instead of field by field at the call site.
+///
+/// Listed field by field with no `..Default::default()`: a flag added to
+/// `StatusFlags` must fail to compile here rather than silently read false.
+impl From<&StatusFlags> for SampleFlags {
+    fn from(f: &StatusFlags) -> Self {
+        SampleFlags {
+            hold: f.hold,
+            rel: f.rel,
+            auto_range: f.auto_range,
+            min: f.min,
+            max: f.max,
+            low_battery: f.low_battery,
+            hv_warning: f.hv_warning,
+            dc: f.dc,
+            peak_min: f.peak_min,
+            peak_max: f.peak_max,
+            lead_error: f.lead_error,
+            comp: f.comp,
+            record: f.record,
+            loz: f.loz,
+            void: f.void,
+        }
+    }
+}
+
 /// Back to the library type, so the summary line can be rendered by the one
 /// `StatusFlags` `Display` every other output format already goes through.
 ///
@@ -164,23 +191,7 @@ impl SampleData {
             unit: m.unit.to_string(),
             range_label: m.range_label.to_string(),
             progress: m.progress.unwrap_or(0),
-            flags: SampleFlags {
-                hold: m.flags.hold,
-                rel: m.flags.rel,
-                auto_range: m.flags.auto_range,
-                min: m.flags.min,
-                max: m.flags.max,
-                low_battery: m.flags.low_battery,
-                hv_warning: m.flags.hv_warning,
-                dc: m.flags.dc,
-                peak_min: m.flags.peak_min,
-                peak_max: m.flags.peak_max,
-                lead_error: m.flags.lead_error,
-                comp: m.flags.comp,
-                record: m.flags.record,
-                loz: m.flags.loz,
-                void: m.flags.void,
-            },
+            flags: SampleFlags::from(&m.flags),
             aux: m
                 .aux_values
                 .iter()
@@ -589,6 +600,33 @@ mod tests {
                 "capture report drops or clears {name}"
             );
         }
+    }
+
+    /// Neither conversion may drop a flag: a set flag that reads false again
+    /// after the round-trip is a capture report — and the summary line the
+    /// operator confirms — quietly disagreeing with the meter.
+    #[test]
+    fn sample_flags_round_trip_through_status_flags() {
+        // Every field spelled out, so a new flag has to be added here too.
+        let f = StatusFlags {
+            hold: true,
+            rel: true,
+            min: true,
+            max: true,
+            auto_range: true,
+            low_battery: true,
+            hv_warning: true,
+            dc: true,
+            peak_max: true,
+            peak_min: true,
+            lead_error: true,
+            comp: true,
+            record: true,
+            loz: true,
+            void: true,
+        };
+        let s = SampleFlags::from(&f);
+        assert_eq!(StatusFlags::from(&s), f);
     }
 
     /// Reports written before the five extra flags existed must still load,
