@@ -186,7 +186,7 @@ impl FormattedStats {
     /// [`stats::integral_display`]) as `(value, display_unit, elapsed_secs)`.
     fn new(
         stats: &RunningStats,
-        visible: Option<(f64, f64, f64, usize)>,
+        visible: Option<&RunningStats>,
         unit: &str,
         visible_unit: &str,
         integral: Option<(f64, &str, Option<f64>)>,
@@ -198,28 +198,26 @@ impl FormattedStats {
                 None => format!("{:>10} {unit}", crate::NO_DATA),
             }
         };
-        let fmt = |v: Option<f64>| fmt_in(unit, v);
         let fmt_integral = |info: Option<(f64, &str, Option<f64>)>| -> Option<String> {
             info.map(|(val, disp_unit, dt)| match dt {
                 Some(secs) => format!("{val:>10.4} {disp_unit} ({secs:.0}s)"),
                 None => format!("{val:>10.4} {disp_unit}"),
             })
         };
-        Self {
-            session: FormattedStatsGroup {
-                min: fmt(stats.min),
-                max: fmt(stats.max),
-                avg: fmt(stats.avg()),
-                count: stats.count,
+        // One accumulator type on both sides, so the two groups cannot drift
+        // apart in how an absent figure is rendered.
+        let group = |unit: &str, s: &RunningStats, integral: Option<(f64, &str, Option<f64>)>| {
+            FormattedStatsGroup {
+                min: fmt_in(unit, s.min),
+                max: fmt_in(unit, s.max),
+                avg: fmt_in(unit, s.avg()),
+                count: s.count,
                 integral: fmt_integral(integral),
-            },
-            visible: visible.map(|(vmin, vmax, vavg, vcount)| FormattedStatsGroup {
-                min: fmt_in(visible_unit, Some(vmin)),
-                max: fmt_in(visible_unit, Some(vmax)),
-                avg: fmt_in(visible_unit, Some(vavg)),
-                count: vcount as u64,
-                integral: fmt_integral(visible_integral),
-            }),
+            }
+        };
+        Self {
+            session: group(unit, stats, integral),
+            visible: visible.map(|v| group(visible_unit, v, visible_integral)),
         }
     }
 }
@@ -1559,9 +1557,10 @@ impl App {
             .visible_integral()
             .and_then(|raw| stats::integral_display(raw, visible_unit))
             .map(|(value, unit)| (value, unit, self.graph.visible_data_span_secs()));
+        let visible_stats = self.graph.visible_stats();
         let formatted = FormattedStats::new(
             &self.session.stats,
-            self.graph.visible_stats(),
+            visible_stats.as_ref(),
             unit,
             visible_unit,
             integral_info,

@@ -421,8 +421,7 @@ impl Graph {
         let cursor_b = self.cursor_b;
         let cursor_va = cursor_a.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
         let cursor_vb = cursor_b.and_then(|t| self.nearest_point(t).map(|(_, v)| v));
-        let visible_stats = self.visible_stats();
-        let mean_value = visible_stats.map(|(_, _, avg, _)| avg);
+        let mean_value = self.visible_stats().and_then(|s| s.avg());
 
         let cursor_unit = self.current_unit.clone();
         // Moved into the label_formatter closure, which is rebuilt each frame.
@@ -541,7 +540,7 @@ impl Graph {
             }
 
             // Mean line overlay
-            if show_mean && let Some((_, _, avg, _)) = visible_stats {
+            if show_mean && let Some(avg) = mean_value {
                 plot_ui.hline(
                     HLine::new("", avg)
                         .color(mean_color)

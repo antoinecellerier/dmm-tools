@@ -3,6 +3,8 @@
 
 use std::collections::VecDeque;
 
+use dmm_lib::stats::RunningStats;
+
 use super::{GapKind, Graph};
 
 impl Graph {
@@ -29,23 +31,20 @@ impl Graph {
         }
     }
 
-    pub fn visible_stats(&self) -> Option<(f64, f64, f64, usize)> {
+    /// Min/max/avg over the visible window, or `None` when no point is
+    /// visible. The same accumulator the session block uses, so both stats
+    /// groups are computed and formatted identically.
+    pub fn visible_stats(&self) -> Option<RunningStats> {
         let (x_min, x_max) = self.view_bounds();
         let (start, end) = self.visible_index_range(x_min, x_max);
         if start >= end {
             return None;
         }
-        let mut min = f64::INFINITY;
-        let mut max = f64::NEG_INFINITY;
-        let mut sum = 0.0;
-        let count = end - start;
+        let mut stats = RunningStats::new();
         for i in start..end {
-            let v = self.history[i].value;
-            min = min.min(v);
-            max = max.max(v);
-            sum += v;
+            stats.push(self.history[i].value);
         }
-        Some((min, max, sum / count as f64, count))
+        Some(stats)
     }
 
     /// Build min/max envelope using a trailing sliding window.
@@ -194,6 +193,10 @@ impl Graph {
     /// rule. Returns the raw integral in unit·seconds, or `None` if fewer than 2
     /// data points exist in the range. Skips intervals exceeding
     /// `gap_threshold_secs`, and intervals interrupted by an overload.
+    ///
+    /// Deliberately not `dmm_lib::stats::Integrator`: this recomputes from
+    /// scratch every frame over an arbitrary window, and the integrator warns
+    /// the first time it skips an interval — which would fire once per frame.
     pub(super) fn cursor_integral(&self, ta: f64, tb: f64) -> Option<f64> {
         let (t_start, t_end) = if ta <= tb { (ta, tb) } else { (tb, ta) };
         let (start, end) = self.visible_index_range(t_start, t_end);

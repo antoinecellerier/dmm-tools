@@ -654,6 +654,34 @@ fn manual_view_bounds() {
 }
 
 #[test]
+fn visible_stats_cover_only_the_visible_window() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for (i, v) in [1.0, 2.0, 3.0, 10.0].iter().enumerate() {
+        g.push(*v, t0 + Duration::from_secs(i as u64), "DC V", "V", None);
+    }
+    g.live = false;
+    g.time_window_secs = 2.0;
+    g.view_center = 2.5; // window [1.5, 3.5]: the 3.0 and 10.0 samples
+    let s = g.visible_stats().expect("window holds two samples");
+    assert_eq!(s.min, Some(3.0));
+    assert_eq!(s.max, Some(10.0));
+    assert_eq!(s.avg(), Some(6.5));
+    assert_eq!(s.count, 2);
+}
+
+#[test]
+fn visible_stats_none_when_window_holds_no_sample() {
+    let mut g = Graph::new();
+    assert!(g.visible_stats().is_none());
+    g.push(1.0, Instant::now(), "DC V", "V", None);
+    g.live = false;
+    g.time_window_secs = 2.0;
+    g.view_center = 100.0;
+    assert!(g.visible_stats().is_none());
+}
+
+#[test]
 fn time_window_presets_exist() {
     assert!(TIME_WINDOWS.len() >= 3);
     assert_eq!(TIME_WINDOWS[0].1, "5s");
