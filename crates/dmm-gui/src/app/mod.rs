@@ -173,18 +173,15 @@ struct FormattedStatsGroup {
     min: String,
     max: String,
     avg: String,
-    count: usize,
+    count: u64,
+    /// Formatted integral string (e.g. "   0.2925 mAh"), or None if not integrable.
     integral: Option<String>,
 }
 
 /// Pre-formatted statistics for the stats section, shared by both layout modes.
 struct FormattedStats {
-    min: String,
-    max: String,
-    avg: String,
-    count: u64,
-    /// Formatted integral string (e.g. "   0.2925 mAh"), or None if not integrable.
-    integral: Option<String>,
+    /// Since-reset stats over the meter's main reading.
+    session: FormattedStatsGroup,
     /// Visible-window stats, if available.
     visible: Option<FormattedStatsGroup>,
 }
@@ -219,19 +216,53 @@ impl FormattedStats {
             })
         };
         Self {
-            min: fmt(stats.min),
-            max: fmt(stats.max),
-            avg: fmt(stats.avg()),
-            count: stats.count,
-            integral: fmt_integral(integral),
+            session: FormattedStatsGroup {
+                min: fmt(stats.min),
+                max: fmt(stats.max),
+                avg: fmt(stats.avg()),
+                count: stats.count,
+                integral: fmt_integral(integral),
+            },
             visible: visible.map(|(vmin, vmax, vavg, vcount)| FormattedStatsGroup {
                 min: fmt_in(visible_unit, Some(vmin)),
                 max: fmt_in(visible_unit, Some(vmax)),
                 avg: fmt_in(visible_unit, Some(vavg)),
-                count: vcount,
+                count: vcount as u64,
                 integral: fmt_integral(visible_integral),
             }),
         }
+    }
+}
+
+/// Draw one stats group as the wide layout's stacked rows.
+///
+/// `color` tints every row — the visible block is drawn in the weak text
+/// colour, the session block in the default one. The integral's gap warning
+/// is not drawn here: it belongs to the session block only, and the caller
+/// emits it right after this returns.
+fn show_stat_rows(
+    ui: &mut Ui,
+    group: &FormattedStatsGroup,
+    font_size: f32,
+    color: Option<Color32>,
+) {
+    let styled = |text: String, font: egui::FontId| {
+        let rich = RichText::new(text).font(font);
+        match color {
+            Some(c) => rich.color(c),
+            None => rich,
+        }
+    };
+    let mono = egui::FontId::monospace(font_size);
+    ui.label(styled(format!("Min:{}", group.min), mono.clone()));
+    ui.label(styled(format!("Max:{}", group.max), mono.clone()));
+    ui.label(styled(format!("Avg:{}", group.avg), mono.clone()));
+    ui.label(styled(
+        format!("Count: {}", group.count),
+        egui::FontId::proportional(font_size),
+    ));
+    if let Some(int) = &group.integral {
+        ui.label(styled(format!("\u{222b}:{int}"), mono));
     }
 }
 
@@ -1551,22 +1582,15 @@ impl App {
 
         if compact {
             ui.horizontal_wrapped(|ui| {
+                let session = &formatted.session;
                 ui.label(
                     RichText::new(format!(
                         "Min:{}  Max:{}  Avg:{}  ({})",
-                        formatted.min, formatted.max, formatted.avg, formatted.count,
+                        session.min, session.max, session.avg, session.count,
                     ))
                     .font(egui::FontId::monospace(main_font)),
                 );
-                if ui
-                    .add(egui::Button::new(
-                        RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
-                    ))
-                    .on_hover_text("Reset Min / Max / Avg / integral counters")
-                    .clicked()
-                {
-                    self.session.reset();
-                }
+                self.reset_button(ui, sub_font);
             });
 
             if let Some(vis) = &formatted.visible {
@@ -1587,7 +1611,7 @@ impl App {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
-            if let Some(int) = &formatted.integral {
+            if let Some(int) = &formatted.session.integral {
                 ui.label(
                     RichText::new(format!("\u{222b}:{int}"))
                         .font(egui::FontId::monospace(main_font)),
@@ -1600,38 +1624,11 @@ impl App {
                     .strong()
                     .font(egui::FontId::proportional(sub_font)),
             );
-            ui.label(
-                RichText::new(format!("Min:{}", formatted.min))
-                    .font(egui::FontId::monospace(main_font)),
-            );
-            ui.label(
-                RichText::new(format!("Max:{}", formatted.max))
-                    .font(egui::FontId::monospace(main_font)),
-            );
-            ui.label(
-                RichText::new(format!("Avg:{}", formatted.avg))
-                    .font(egui::FontId::monospace(main_font)),
-            );
-            ui.label(
-                RichText::new(format!("Count: {}", formatted.count))
-                    .font(egui::FontId::proportional(main_font)),
-            );
-            if let Some(int) = &formatted.integral {
-                ui.label(
-                    RichText::new(format!("\u{222b}:{int}"))
-                        .font(egui::FontId::monospace(main_font)),
-                );
+            show_stat_rows(ui, &formatted.session, main_font, None);
+            if formatted.session.integral.is_some() {
                 self.show_integral_gap_warning(ui, sub_font);
             }
-            if ui
-                .add(egui::Button::new(
-                    RichText::new("Reset").font(egui::FontId::proportional(sub_font)),
-                ))
-                .on_hover_text("Reset Min / Max / Avg / integral counters")
-                .clicked()
-            {
-                self.session.reset();
-            }
+            self.reset_button(ui, sub_font);
 
             // Windowed stats for visible graph interval
             if let Some(vis) = &formatted.visible {
@@ -1643,34 +1640,21 @@ impl App {
                         .font(egui::FontId::proportional(sub_font))
                         .color(weak),
                 );
-                ui.label(
-                    RichText::new(format!("Min:{}", vis.min))
-                        .font(egui::FontId::monospace(sub_font))
-                        .color(weak),
-                );
-                ui.label(
-                    RichText::new(format!("Max:{}", vis.max))
-                        .font(egui::FontId::monospace(sub_font))
-                        .color(weak),
-                );
-                ui.label(
-                    RichText::new(format!("Avg:{}", vis.avg))
-                        .font(egui::FontId::monospace(sub_font))
-                        .color(weak),
-                );
-                ui.label(
-                    RichText::new(format!("Count: {}", vis.count))
-                        .font(egui::FontId::proportional(sub_font))
-                        .color(weak),
-                );
-                if let Some(vint) = &vis.integral {
-                    ui.label(
-                        RichText::new(format!("\u{222b}:{vint}"))
-                            .font(egui::FontId::monospace(sub_font))
-                            .color(weak),
-                    );
-                }
+                show_stat_rows(ui, vis, sub_font, Some(weak));
             }
+        }
+    }
+
+    /// The session-stats reset control, identical in both layout modes.
+    fn reset_button(&mut self, ui: &mut Ui, font_size: f32) {
+        if ui
+            .add(egui::Button::new(
+                RichText::new("Reset").font(egui::FontId::proportional(font_size)),
+            ))
+            .on_hover_text("Reset Min / Max / Avg / integral counters")
+            .clicked()
+        {
+            self.session.reset();
         }
     }
 
