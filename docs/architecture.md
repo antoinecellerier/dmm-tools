@@ -34,6 +34,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
 | `protocol/vc880/` | VC-880/VC650BT: `Vc880Protocol` — streaming, AB CD framing (reuses UT61E+ extractor), ASCII display values |
 | `protocol/vc890/` | VC-890: `Vc890Protocol` — polled (0x5E request), AB CD framing, 60K counts, 66-byte frames |
+| `protocol/vc8x0_common.rs` | Shared by VC-880 and VC-890: command frames and names, DeviceID read, capture steps, and the parsing skeleton (`RangeEntry`/`re`/`resolve_range`, `resolve_function`, `main_display`, `common_flags`, `parse_value`). Each family keeps its own frame layout, function/range tables and extra status flags |
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic); `AuxValue` sub-values, with `AuxValue::export_cells` + `Measurement::export_aux_slots` supplying the cells and slot order `export.rs` lays out (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
 | `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |

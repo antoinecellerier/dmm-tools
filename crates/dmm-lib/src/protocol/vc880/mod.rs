@@ -14,12 +14,14 @@
 //! See docs/research/vc880/reverse-engineered-protocol.md
 
 use crate::error::Result;
-use crate::flags::StatusFlags;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
+use crate::protocol::vc8x0_common::{
+    RangeEntry, common_flags, main_display, parse_value, re, resolve_function, resolve_range,
+};
+use crate::protocol::{DeviceProfile, Protocol, Stability, check_len};
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 
 /// Live data message type byte.
@@ -59,13 +61,6 @@ const FUNCTION_TABLE: &[(u8, &str, &str)] = &[
     (0x12, "ACV LPF", "V"),
 ];
 
-/// Range table entry: unit_override replaces the function's base unit
-/// when non-empty. range_label is a human-readable string like "40kΩ".
-struct RangeEntry {
-    unit_override: &'static str,
-    range_label: &'static str,
-}
-
 /// Look up range info for a given function code and range index.
 /// Returns (unit, range_label) or None if the range index is out of bounds.
 ///
@@ -74,167 +69,52 @@ struct RangeEntry {
 fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
     let table: &[RangeEntry] = match function {
         // DCV, ACV, AC+DC V, ACV LPF — all share voltage ranges
-        0x00 | 0x01 | 0x05 | 0x12 => &[
-            RangeEntry {
-                unit_override: "",
-                range_label: "4V",
-            },
-            RangeEntry {
-                unit_override: "",
-                range_label: "40V",
-            },
-            RangeEntry {
-                unit_override: "",
-                range_label: "400V",
-            },
-            RangeEntry {
-                unit_override: "",
-                range_label: "1000V",
-            },
-        ],
+        0x00 | 0x01 | 0x05 | 0x12 => {
+            &[re("", "4V"), re("", "40V"), re("", "400V"), re("", "1000V")]
+        }
         // DC mV
-        0x02 => &[RangeEntry {
-            unit_override: "",
-            range_label: "400mV",
-        }],
+        0x02 => &[re("", "400mV")],
         // Frequency
         0x03 => &[
-            RangeEntry {
-                unit_override: "Hz",
-                range_label: "40Hz",
-            },
-            RangeEntry {
-                unit_override: "Hz",
-                range_label: "400Hz",
-            },
-            RangeEntry {
-                unit_override: "kHz",
-                range_label: "4kHz",
-            },
-            RangeEntry {
-                unit_override: "kHz",
-                range_label: "40kHz",
-            },
-            RangeEntry {
-                unit_override: "kHz",
-                range_label: "400kHz",
-            },
-            RangeEntry {
-                unit_override: "MHz",
-                range_label: "4MHz",
-            },
-            RangeEntry {
-                unit_override: "MHz",
-                range_label: "40MHz",
-            },
-            RangeEntry {
-                unit_override: "MHz",
-                range_label: "400MHz",
-            },
+            re("Hz", "40Hz"),
+            re("Hz", "400Hz"),
+            re("kHz", "4kHz"),
+            re("kHz", "40kHz"),
+            re("kHz", "400kHz"),
+            re("MHz", "4MHz"),
+            re("MHz", "40MHz"),
+            re("MHz", "400MHz"),
         ],
         // Impedance (Resistance)
         0x06 => &[
-            RangeEntry {
-                unit_override: "Ω",
-                range_label: "400Ω",
-            },
-            RangeEntry {
-                unit_override: "kΩ",
-                range_label: "4kΩ",
-            },
-            RangeEntry {
-                unit_override: "kΩ",
-                range_label: "40kΩ",
-            },
-            RangeEntry {
-                unit_override: "kΩ",
-                range_label: "400kΩ",
-            },
-            RangeEntry {
-                unit_override: "MΩ",
-                range_label: "4MΩ",
-            },
-            RangeEntry {
-                unit_override: "MΩ",
-                range_label: "40MΩ",
-            },
+            re("Ω", "400Ω"),
+            re("kΩ", "4kΩ"),
+            re("kΩ", "40kΩ"),
+            re("kΩ", "400kΩ"),
+            re("MΩ", "4MΩ"),
+            re("MΩ", "40MΩ"),
         ],
         // Capacitance
         0x09 => &[
-            RangeEntry {
-                unit_override: "nF",
-                range_label: "40nF",
-            },
-            RangeEntry {
-                unit_override: "nF",
-                range_label: "400nF",
-            },
-            RangeEntry {
-                unit_override: "µF",
-                range_label: "4µF",
-            },
-            RangeEntry {
-                unit_override: "µF",
-                range_label: "40µF",
-            },
-            RangeEntry {
-                unit_override: "µF",
-                range_label: "400µF",
-            },
-            RangeEntry {
-                unit_override: "µF",
-                range_label: "4000µF",
-            },
-            RangeEntry {
-                unit_override: "mF",
-                range_label: "40mF",
-            },
+            re("nF", "40nF"),
+            re("nF", "400nF"),
+            re("µF", "4µF"),
+            re("µF", "40µF"),
+            re("µF", "400µF"),
+            re("µF", "4000µF"),
+            re("mF", "40mF"),
         ],
         // DC/AC µA
-        0x0C | 0x0D => &[
-            RangeEntry {
-                unit_override: "",
-                range_label: "400µA",
-            },
-            RangeEntry {
-                unit_override: "",
-                range_label: "4000µA",
-            },
-        ],
+        0x0C | 0x0D => &[re("", "400µA"), re("", "4000µA")],
         // DC/AC mA
-        0x0E | 0x0F => &[
-            RangeEntry {
-                unit_override: "",
-                range_label: "40mA",
-            },
-            RangeEntry {
-                unit_override: "",
-                range_label: "400mA",
-            },
-        ],
+        0x0E | 0x0F => &[re("", "40mA"), re("", "400mA")],
         // DC/AC A
-        0x10 | 0x11 => &[RangeEntry {
-            unit_override: "",
-            range_label: "10A",
-        }],
+        0x10 | 0x11 => &[re("", "10A")],
         // Single-range functions (duty, diode, continuity, temp, LPF)
         _ => return None,
     };
 
-    let idx = range_idx as usize;
-    table.get(idx).map(|e| {
-        let unit = if e.unit_override.is_empty() {
-            // Use the function's base unit
-            FUNCTION_TABLE
-                .iter()
-                .find(|(c, _, _)| *c == function)
-                .map(|(_, _, u)| *u)
-                .unwrap_or("")
-        } else {
-            e.unit_override
-        };
-        (unit, e.range_label)
-    })
+    resolve_range(table, range_idx, FUNCTION_TABLE, function)
 }
 
 use super::vc8x0_common::COMMANDS as VC880_COMMANDS;
@@ -337,18 +217,10 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     let function_code = payload[1];
     let range_raw = payload[2];
-    let main_display = &payload[3..10];
+    let main_bytes = &payload[3..10];
     let status_bytes = &payload[27..34];
 
-    // Look up function code
-    let (mode, base_unit): (Cow<'static, str>, &'static str) = if let Some((_, name, unit)) =
-        FUNCTION_TABLE.iter().find(|(c, _, _)| *c == function_code)
-    {
-        (Cow::Borrowed(name), unit)
-    } else {
-        debug!("vc880: unknown function code {function_code:#04x}");
-        (unknown_mode(function_code), "")
-    };
+    let (mode, base_unit) = resolve_function(FUNCTION_TABLE, function_code, "vc880");
 
     // Decode range byte (0x30-based ASCII)
     let range_idx = range_raw.wrapping_sub(0x30);
@@ -360,59 +232,14 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     // Parse main display value (7 ASCII bytes)
-    let display_str = String::from_utf8_lossy(main_display).to_string();
-    let display_trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
+    let (display_str, display_trimmed) = main_display(main_bytes);
 
-    // Extract status flags
-    // Status byte 2 (payload[29]): bit2 = OL1 (primary overload)
-    let ol1 = status_bytes[2] & 0x04 != 0;
+    // Extract status flags. Status bytes 1-3 here are payload[28..31].
+    let (mut flags, ol1) = common_flags(status_bytes);
+    // Status byte 3 (payload[30]): bit3=LowBatt
+    flags.low_battery = status_bytes[3] & 0x08 != 0;
 
-    // Status byte 1 (payload[28]): bit0=Rel, bit1=Avg, bit2=Min, bit3=Max
-    let rel = status_bytes[1] & 0x01 != 0;
-    let min_flag = status_bytes[1] & 0x04 != 0;
-    let max_flag = status_bytes[1] & 0x08 != 0;
-
-    // Status byte 2 (payload[29]): bit0=Hold, bit1=Manual
-    let hold = status_bytes[2] & 0x01 != 0;
-    let auto_range = status_bytes[2] & 0x02 == 0; // Manual bit: 0=auto, 1=manual
-
-    // Status byte 3 (payload[30]): bit1=Warning, bit3=LowBatt
-    let hv_warning = status_bytes[3] & 0x02 != 0;
-    let low_battery = status_bytes[3] & 0x08 != 0;
-
-    let flags = StatusFlags {
-        hold,
-        rel,
-        min: min_flag,
-        max: max_flag,
-        auto_range,
-        low_battery,
-        hv_warning,
-        dc: false,
-        peak_max: false,
-        peak_min: false,
-        ..Default::default()
-    };
-
-    // Parse numeric value
-    let value = if ol1 || display_trimmed.contains("OL") || display_trimmed.contains("---") {
-        MeasuredValue::Overload
-    } else {
-        match display_trimmed.parse::<f64>() {
-            Ok(v) => {
-                // Sign is in the ASCII string itself (leading '-')
-                MeasuredValue::Normal(v)
-            }
-            Err(_) => {
-                if display_trimmed.is_empty() {
-                    warn!("vc880: empty display value");
-                } else {
-                    warn!("vc880: could not parse display value: {display_str:?}");
-                }
-                MeasuredValue::Overload
-            }
-        }
-    };
+    let value = parse_value("vc880", ol1, &display_trimmed, &display_str);
 
     Ok(Measurement {
         mode,
@@ -430,6 +257,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::measurement::MeasuredValue;
     use crate::protocol::test_support::snapshot;
 
     /// Build a minimal 34-byte VC880 live data payload for testing.
