@@ -32,6 +32,50 @@ pub(crate) fn paint_focus_ring(ui: &Ui, response: &Response) {
     }
 }
 
+/// Axis a keyboard-resizable divider moves along.
+pub(crate) enum ResizeAxis {
+    /// Left/Right arrows; Right yields a positive delta.
+    Horizontal,
+    /// Up/Down arrows; Up yields a positive delta.
+    Vertical,
+}
+
+/// Keyboard resizing for a focusable divider egui gives no keyboard action to
+/// (panel resize handles, split separators).
+///
+/// Returns the signed delta in points — `0.0` when `handle_id` does not hold
+/// keyboard focus or no arrow on `axis` was pressed. The caller applies it,
+/// since dividers keep their size in different places (a struct field, an
+/// [`egui::PanelState`], ...) and each has its own clamp.
+pub(crate) fn arrow_resize(
+    ctx: &egui::Context,
+    handle_id: egui::Id,
+    axis: ResizeAxis,
+    step: f32,
+) -> f32 {
+    if ctx.memory(|m| m.focused()) != Some(handle_id) {
+        return 0.0;
+    }
+    // Unconditional reset every frame the handle is focused — even on the
+    // arrows this axis doesn't handle. egui's `Focus::begin_pass` snapshots
+    // ALL arrow events into `focus_direction` before our code runs, and
+    // `end_pass` would Tab-jump off the handle via `find_widget_in_direction`
+    // on the unhandled axis.
+    ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+    let (shrink, grow) = match axis {
+        ResizeAxis::Horizontal => (egui::Key::ArrowLeft, egui::Key::ArrowRight),
+        ResizeAxis::Vertical => (egui::Key::ArrowDown, egui::Key::ArrowUp),
+    };
+    let mut delta = 0.0;
+    if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, shrink)) {
+        delta -= step;
+    }
+    if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, grow)) {
+        delta += step;
+    }
+    delta
+}
+
 /// Mark `id` as a polite ARIA-style live region. Screen readers announce
 /// updates to polite live regions at the next pause rather than interrupting
 /// the user. Intended for streaming readouts (e.g. the primary measurement
@@ -180,5 +224,54 @@ impl UiA11yExt for Ui {
         let row = self.horizontal(add_contents);
         set_live_region_cached(self, row.response.id, fingerprint, make_label);
         row
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn arrow(key: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// Focused handle: the axis arrows produce ±step, off-axis arrows produce 0.
+    #[test]
+    fn arrow_resize_deltas() {
+        let id = egui::Id::new("handle");
+        for (axis, key, want) in [
+            (ResizeAxis::Vertical, egui::Key::ArrowUp, 20.0),
+            (ResizeAxis::Vertical, egui::Key::ArrowDown, -20.0),
+            (ResizeAxis::Vertical, egui::Key::ArrowLeft, 0.0),
+            (ResizeAxis::Horizontal, egui::Key::ArrowRight, 20.0),
+            (ResizeAxis::Horizontal, egui::Key::ArrowLeft, -20.0),
+            (ResizeAxis::Horizontal, egui::Key::ArrowUp, 0.0),
+        ] {
+            let ctx = egui::Context::default();
+            ctx.begin_pass(egui::RawInput {
+                events: vec![arrow(key)],
+                ..Default::default()
+            });
+            ctx.memory_mut(|m| m.request_focus(id));
+            assert_eq!(arrow_resize(&ctx, id, axis, 20.0), want);
+        }
+    }
+
+    /// Unfocused handle never resizes, whatever is pressed.
+    #[test]
+    fn arrow_resize_ignores_unfocused_handle() {
+        let ctx = egui::Context::default();
+        ctx.begin_pass(egui::RawInput {
+            events: vec![arrow(egui::Key::ArrowUp)],
+            ..Default::default()
+        });
+        let delta = arrow_resize(&ctx, egui::Id::new("handle"), ResizeAxis::Vertical, 20.0);
+        assert_eq!(delta, 0.0);
     }
 }

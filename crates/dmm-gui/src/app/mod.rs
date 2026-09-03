@@ -1992,37 +1992,16 @@ impl App {
             }
             // Keyboard resize when focused: Up moves the divider up
             // (grows the recording panel), Down moves it down. Matches
-            // mouse-drag direction. We also reset `focus_direction` after
-            // consuming the arrow key — `Focus::begin_pass` already
-            // observed the event and set `focus_direction = Up/Down`, and
-            // without the reset `end_pass` would call
-            // `find_widget_in_direction` and Tab-jump off the divider on
-            // every key press.
-            if sep_response.has_focus() {
-                // Unconditional reset every frame the divider is focused —
-                // even on Left/Right which we don't handle. egui's
-                // begin_pass snapshots ALL arrow events into
-                // focus_direction before our code runs, and end_pass would
-                // Tab-jump off via find_widget_in_direction otherwise.
-                ui.ctx()
-                    .memory_mut(|m| m.move_focus(egui::FocusDirection::None));
-                let mut delta = 0.0;
-                if ui
-                    .ctx()
-                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp))
-                {
-                    delta += 20.0;
-                }
-                if ui
-                    .ctx()
-                    .input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown))
-                {
-                    delta -= 20.0;
-                }
-                if delta != 0.0 {
-                    self.recording_height =
-                        (self.recording_height + delta).clamp(40.0, (total - 80.0).max(40.0));
-                }
+            // mouse-drag direction.
+            let delta = crate::a11y::arrow_resize(
+                ui.ctx(),
+                sep_id,
+                crate::a11y::ResizeAxis::Vertical,
+                20.0,
+            );
+            if delta != 0.0 {
+                self.recording_height =
+                    (self.recording_height + delta).clamp(40.0, (total - 80.0).max(40.0));
             }
             crate::a11y::paint_focus_ring(ui, &sep_response);
             if sep_response.hovered() || sep_response.dragged() {
@@ -2412,20 +2391,12 @@ impl eframe::App for App {
                 "Resize reading panel (Left/Right to adjust)",
             );
             if ctx.memory(|m| m.focused()) == Some(reading_panel_resize_id) {
-                // Unconditional reset every frame the handle is focused —
-                // even on Up/Down which we don't handle. egui's
-                // `Focus::begin_pass` snapshots ALL arrow events into
-                // `focus_direction` before my code runs, and `end_pass`
-                // would Tab-jump off the handle via
-                // `find_widget_in_direction` on the unhandled axis.
-                ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
-                let mut delta = 0.0;
-                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft)) {
-                    delta -= 20.0;
-                }
-                if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight)) {
-                    delta += 20.0;
-                }
+                let delta = crate::a11y::arrow_resize(
+                    &ctx,
+                    reading_panel_resize_id,
+                    crate::a11y::ResizeAxis::Horizontal,
+                    20.0,
+                );
                 if delta != 0.0
                     && let Some(mut state) = egui::PanelState::load(&ctx, reading_panel_id)
                 {
