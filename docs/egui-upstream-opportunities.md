@@ -201,7 +201,7 @@ bypassing `widget_info` entirely.
 extension (`ResponseA11yExt` in `crates/dmm-gui/src/a11y.rs`) which
 calls `ctx.accesskit_node_builder(id, |b| b.set_toggled(...))`
 directly, bypassing `widget_info`. Call sites:
-`crates/dmm-gui/src/app/controls.rs` and `crates/dmm-gui/src/graph.rs`.
+`crates/dmm-gui/src/app/controls.rs` and `crates/dmm-gui/src/graph/toolbar.rs`.
 The chainable signature `Response::a11y_toggled(bool) -> Response`
 prefigures the proposed upstream `Button::toggled(bool) -> Self`.
 
@@ -337,7 +337,7 @@ calling `accesskit_node_builder` on the plot response id after
 `plot.show()` returns, but the axis Tab stops remain unlabelled —
 their ids are not exposed to the caller.
 
-**Workaround.** See `crates/dmm-gui/src/graph.rs` (search for
+**Workaround.** See `crates/dmm-gui/src/graph/render.rs` (search for
 `a11y_label`).
 
 **Suggested fix (against `egui_plot`).**
@@ -373,7 +373,7 @@ check `text_edit_focused()` or its own widget-id equality.
 prevented arrow-key panning while the minimap was focused — because
 the minimap *itself* counts as "any focused widget". We had to put
 the minimap-focused branch *before* the guard. See
-`crates/dmm-gui/src/graph.rs` `handle_keyboard`.
+`crates/dmm-gui/src/graph/view.rs` `handle_keyboard`.
 
 **Suggested fix.**
 - Rename `egui_wants_keyboard_input` to `wants_focus` /
