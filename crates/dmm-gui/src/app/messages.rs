@@ -84,10 +84,10 @@ impl App {
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
         let (cmd_tx, cmd_rx) = mpsc::channel::<String>();
         let stop_flag = Arc::new(AtomicBool::new(false));
-        self.rx = Some(msg_rx);
-        self.ctrl_tx = Some(ctrl_tx);
-        self.stop_flag = Some(Arc::clone(&stop_flag));
-        self.cmd_tx = Some(cmd_tx);
+        self.connection.rx = Some(msg_rx);
+        self.connection.ctrl_tx = Some(ctrl_tx);
+        self.connection.stop_flag = Some(Arc::clone(&stop_flag));
+        self.connection.cmd_tx = Some(cmd_tx);
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
         let sample_interval_ms = self.settings.sample_interval_ms;
@@ -159,26 +159,26 @@ impl App {
         self.graph.push_data_loss();
         // Raise the flag before the message: the thread may be mid-sleep, and
         // the flag is what cuts that short.
-        if let Some(flag) = self.stop_flag.take() {
+        if let Some(flag) = self.connection.stop_flag.take() {
             flag.store(true, Ordering::Relaxed);
         }
-        if let Some(tx) = self.ctrl_tx.take() {
+        if let Some(tx) = self.connection.ctrl_tx.take() {
             let _ = tx.send(ThreadControl::Stop);
         }
-        self.rx = None;
-        self.cmd_tx = None;
-        self.connection_state = ConnectionState::Disconnected;
-        self.device_name = None;
-        self.experimental = false;
-        self.feedback_url.clear();
-        self.supported_commands.clear();
-        self.paused = false;
-        self.reconnect_attempt = 0;
-        self.reconnect_last_error = None;
+        self.connection.rx = None;
+        self.connection.cmd_tx = None;
+        self.connection.state = ConnectionState::Disconnected;
+        self.connection.device_name = None;
+        self.connection.experimental = false;
+        self.connection.feedback_url.clear();
+        self.connection.supported_commands.clear();
+        self.connection.paused = false;
+        self.connection.reconnect_attempt = 0;
+        self.connection.reconnect_last_error = None;
         // Otherwise only an incoming measurement clears this, and there won't
         // be one — a meter that went quiet before the user disconnected left
         // "Waiting for meter…" on screen for the whole disconnected session.
-        self.waiting_timeouts = 0;
+        self.connection.waiting_timeouts = 0;
     }
 
     /// Drop everything derived from the sample stream: graph history,
@@ -200,7 +200,7 @@ impl App {
         // its sender is the only signal that it has died.
         let mut messages: Vec<DmmMessage> = Vec::new();
         let mut thread_gone = false;
-        if let Some(rx) = self.rx.as_ref() {
+        if let Some(rx) = self.connection.rx.as_ref() {
             loop {
                 match rx.try_recv() {
                     Ok(msg) => messages.push(msg),
@@ -224,29 +224,29 @@ impl App {
                     supported_commands: cmds,
                     max_aux_values,
                 } => {
-                    self.connection_state = ConnectionState::Connected;
-                    self.experimental = exp;
-                    self.device_aux_slots = max_aux_values;
+                    self.connection.state = ConnectionState::Connected;
+                    self.connection.experimental = exp;
+                    self.capture_layout.device_aux_slots = max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
                     // in-flight capture picks the slot count back up — it was
                     // 0 before the first Connected of the session.
                     if self.recording.active {
-                        self.recording_aux_slots = max_aux_values;
+                        self.capture_layout.aux_slots = max_aux_values;
                     }
-                    self.feedback_url = feedback_url;
-                    self.supported_commands = cmds;
-                    self.device_name = if name.is_empty() {
+                    self.connection.feedback_url = feedback_url;
+                    self.connection.supported_commands = cmds;
+                    self.connection.device_name = if name.is_empty() {
                         None
                     } else {
                         Some(name.clone())
                     };
-                    self.last_error = None;
-                    self.reconnect_attempt = 0;
-                    self.reconnect_last_error = None;
+                    self.connection.last_error = None;
+                    self.connection.reconnect_attempt = 0;
+                    self.connection.reconnect_last_error = None;
                     info!("UI: connected to {name}");
                 }
                 DmmMessage::WaitingForMeter(count) => {
-                    self.waiting_timeouts = count;
+                    self.connection.waiting_timeouts = count;
                     // A timeout never raises Disconnected — the bridge is
                     // still enumerated, the meter just isn't answering (auto
                     // power-off, or unplugged at the meter end). Without this
@@ -261,13 +261,13 @@ impl App {
                     attempt,
                     last_error,
                 } => {
-                    self.reconnect_attempt = attempt;
-                    self.reconnect_last_error = last_error;
+                    self.connection.reconnect_attempt = attempt;
+                    self.connection.reconnect_last_error = last_error;
                 }
                 DmmMessage::Measurement(m) => {
-                    self.last_error = None;
-                    self.waiting_timeouts = 0;
-                    if self.paused {
+                    self.connection.last_error = None;
+                    self.connection.waiting_timeouts = 0;
+                    if self.connection.paused {
                         continue;
                     }
 
@@ -343,7 +343,7 @@ impl App {
                 }
                 DmmMessage::Disconnected(err) => {
                     info!("UI: disconnected: {err} ({:?})", err.kind());
-                    self.connection_state = ConnectionState::Reconnecting;
+                    self.connection.state = ConnectionState::Reconnecting;
                     // Tell the graph this was a real loss of data. It can't
                     // infer that from timestamps — the meter goes quiet for
                     // over a second while auto-ranging, which looks the same
@@ -352,15 +352,15 @@ impl App {
                 }
                 DmmMessage::Error(e) => {
                     error!("UI: error: {e}");
-                    self.last_error = Some(ConnectionIssue::from_error(&e));
-                    if self.connection_state == ConnectionState::Disconnected {
+                    self.connection.last_error = Some(ConnectionIssue::from_error(&e));
+                    if self.connection.state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
                 }
                 DmmMessage::ErrorText(msg) => {
                     error!("UI: error: {msg}");
-                    self.last_error = Some(ConnectionIssue::Other(msg));
-                    if self.connection_state == ConnectionState::Disconnected {
+                    self.connection.last_error = Some(ConnectionIssue::Other(msg));
+                    if self.connection.state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
                 }
@@ -373,8 +373,8 @@ impl App {
             // channel, so drop the connection instead of leaving a green
             // "Connected" dot and enabled controls in front of a dead thread.
             error!("UI: acquisition thread exited unexpectedly");
-            if self.last_error.is_none() {
-                self.last_error = Some(ConnectionIssue::Other(
+            if self.connection.last_error.is_none() {
+                self.connection.last_error = Some(ConnectionIssue::Other(
                     "Acquisition stopped unexpectedly \u{2014} reconnect to resume".to_string(),
                 ));
             }
@@ -394,9 +394,9 @@ impl App {
             .status_warning();
 
         // Show waiting indicator before error threshold
-        if self.waiting_timeouts > 0 && self.last_error.is_none() {
+        if self.connection.waiting_timeouts > 0 && self.connection.last_error.is_none() {
             ui.add_space(4.0);
-            let dots = ".".repeat((self.waiting_timeouts as usize % 4) + 1);
+            let dots = ".".repeat((self.connection.waiting_timeouts as usize % 4) + 1);
             ui.label(RichText::new(format!("Waiting for meter{dots}")).color(warn_color));
             ui.label(
                 RichText::new("Check that the correct device is selected in Settings (\u{2699})")
@@ -406,7 +406,7 @@ impl App {
             return;
         }
 
-        let Some(issue) = &self.last_error else {
+        let Some(issue) = &self.connection.last_error else {
             return;
         };
 

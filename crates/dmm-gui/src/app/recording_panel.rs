@@ -4,8 +4,29 @@
 
 use eframe::egui::{self, RichText, Ui};
 
-use super::App;
+use super::{App, DEFAULT_RECORDING_HEIGHT};
 use crate::a11y::ResponseA11yExt;
+
+/// The recording panel's own state: how tall the user dragged it, and the
+/// discard prompt that guards an unexported capture.
+pub(super) struct RecordingPanel {
+    /// User-resizable recording panel height.
+    height: f32,
+    /// Record was pressed while the buffer held unexported samples; waiting
+    /// for the user to confirm discarding them.
+    confirm_discard_open: bool,
+    confirm_discard_focus_pending: bool,
+}
+
+impl Default for RecordingPanel {
+    fn default() -> Self {
+        Self {
+            height: DEFAULT_RECORDING_HEIGHT,
+            confirm_discard_open: false,
+            confirm_discard_focus_pending: false,
+        }
+    }
+}
 
 impl App {
     /// Start or stop recording.
@@ -16,8 +37,8 @@ impl App {
     /// toast, and nothing in the log.
     pub(super) fn toggle_recording(&mut self) {
         if !self.recording.active && self.recording.unexported_count() > 0 {
-            self.confirm_discard_open = true;
-            self.confirm_discard_focus_pending = true;
+            self.recording_panel.confirm_discard_open = true;
+            self.recording_panel.confirm_discard_focus_pending = true;
             return;
         }
         self.apply_recording_toggle();
@@ -34,30 +55,30 @@ impl App {
     fn apply_recording_toggle(&mut self) {
         self.recording.toggle();
         if self.recording.active {
-            self.recording_device = Some(self.selected_device().display_name);
-            self.recording_aux_slots = self.device_aux_slots;
+            self.capture_layout.device = Some(self.selected_device().display_name);
+            self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
-            // after the meter's — see `recording_extra_slots`.
-            self.recording_extra_slots = self.transform.extra_aux_count();
+            // after the meter's — see `extra_slots`.
+            self.capture_layout.extra_slots = self.transform.extra_aux_count();
         }
     }
 
     /// Confirmation shown when starting a recording would discard samples
     /// that have not been written to a CSV.
     pub(super) fn show_discard_confirmation(&mut self, ctx: &egui::Context) {
-        if !self.confirm_discard_open {
+        if !self.recording_panel.confirm_discard_open {
             return;
         }
         let unexported = self.recording.unexported_count();
         if unexported == 0 {
             // The buffer emptied under us (Clear, or an export completing
             // while the prompt was up) — nothing left to warn about.
-            self.confirm_discard_open = false;
+            self.recording_panel.confirm_discard_open = false;
             self.apply_recording_toggle();
             return;
         }
 
-        let focus_pending = std::mem::take(&mut self.confirm_discard_focus_pending);
+        let focus_pending = std::mem::take(&mut self.recording_panel.confirm_discard_focus_pending);
         let mut discard = false;
         let mut cancel = false;
         // egui::Modal rather than Window: it sets the modal layer, which traps
@@ -88,10 +109,10 @@ impl App {
         });
 
         if discard {
-            self.confirm_discard_open = false;
+            self.recording_panel.confirm_discard_open = false;
             self.apply_recording_toggle();
         } else if cancel || modal.should_close() {
-            self.confirm_discard_open = false;
+            self.recording_panel.confirm_discard_open = false;
         }
     }
 
@@ -183,7 +204,7 @@ impl App {
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         if self.settings.show_graph && self.settings.show_recording {
             let total = ui.available_height();
-            let graph_height = (total - self.recording_height).max(80.0);
+            let graph_height = (total - self.recording_panel.height).max(80.0);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 self.graph.show(ui, &tc);
@@ -199,7 +220,8 @@ impl App {
                 )
                 .a11y_label("Resize recording panel (Up/Down to adjust)");
             if sep_response.dragged() {
-                self.recording_height = (self.recording_height - sep_response.drag_delta().y)
+                self.recording_panel.height = (self.recording_panel.height
+                    - sep_response.drag_delta().y)
                     .clamp(40.0, (total - 80.0).max(40.0));
             }
             // Keyboard resize when focused: Up moves the divider up
@@ -212,8 +234,8 @@ impl App {
                 20.0,
             );
             if delta != 0.0 {
-                self.recording_height =
-                    (self.recording_height + delta).clamp(40.0, (total - 80.0).max(40.0));
+                self.recording_panel.height =
+                    (self.recording_panel.height + delta).clamp(40.0, (total - 80.0).max(40.0));
             }
             crate::a11y::paint_focus_ring(ui, &sep_response);
             if sep_response.hovered() || sep_response.dragged() {

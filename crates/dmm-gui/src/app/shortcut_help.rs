@@ -10,11 +10,11 @@ use crate::a11y::ResponseA11yExt;
 
 impl App {
     pub(super) fn show_shortcut_help(&mut self, ctx: &egui::Context) {
-        if !self.shortcut_help_open {
+        if !self.shortcut_help.open {
             return;
         }
 
-        let focus_pending = std::mem::take(&mut self.shortcut_help_focus_pending);
+        let focus_pending = std::mem::take(&mut self.shortcut_help.focus_pending);
         let mut close_clicked = false;
         // egui::Modal (vs. egui::Window) calls `set_modal_layer`, which makes
         // Tab navigation skip widgets in the layers below — i.e. it actually
@@ -110,7 +110,7 @@ impl App {
         // Modal::should_close, or (c) Ctrl+W (still consumed in
         // handle_keyboard_shortcuts so it works while focus is in the modal).
         if close_clicked || modal_response.should_close() {
-            self.shortcut_help_open = false;
+            self.shortcut_help.open = false;
             // Defer focus restoration. On this frame `top_modal_layer` is
             // still set, and egui's `create_widget` will call
             // `surrender_focus` on every top-bar widget below the modal
@@ -118,7 +118,7 @@ impl App {
             // silently wipes any focus we set here. The deferred restore
             // fires once `top_modal_layer` has actually cleared, so the
             // target widget can keep the focus it's given.
-            self.shortcut_help_restore_focus = self.shortcut_help_opener.take();
+            self.shortcut_help.restore_focus = self.shortcut_help.opener.take();
         }
     }
 }

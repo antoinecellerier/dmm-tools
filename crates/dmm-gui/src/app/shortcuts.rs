@@ -202,7 +202,7 @@ impl App {
             // Ctrl+W must fall through while the help modal is closed.
             let ours = match binding.shortcut {
                 Shortcut::TogglePause | Shortcut::ToggleHelp => !wants_keyboard_input,
-                Shortcut::CloseHelp => self.shortcut_help_open,
+                Shortcut::CloseHelp => self.shortcut_help.open,
                 _ => true,
             };
             if !ours || !ctx.input_mut(|i| i.consume_key(binding.modifiers, binding.key)) {
@@ -211,10 +211,10 @@ impl App {
 
             // Guards below run *after* the key is consumed: the shortcut is
             // ours either way, it just does nothing while disconnected.
-            let connected = self.connection_state == ConnectionState::Connected;
+            let connected = self.connection.state == ConnectionState::Connected;
 
             match binding.shortcut {
-                Shortcut::ConnectToggle => match self.connection_state {
+                Shortcut::ConnectToggle => match self.connection.state {
                     ConnectionState::Disconnected => self.connect(ctx),
                     // Reconnecting cancels the retry loop, matching the
                     // Disconnect button shown in that state.
@@ -247,20 +247,20 @@ impl App {
                 Shortcut::ZoomOut => self.zoom_out(),
                 Shortcut::ZoomReset => self.zoom_reset(),
                 Shortcut::CloseHelp => {
-                    self.shortcut_help_open = false;
+                    self.shortcut_help.open = false;
                     // Defer focus restoration until after top_modal_layer
                     // clears — same reason as the in-modal close path in
                     // `show_shortcut_help`.
-                    self.shortcut_help_restore_focus = self.shortcut_help_opener.take();
+                    self.shortcut_help.restore_focus = self.shortcut_help.opener.take();
                 }
                 Shortcut::TogglePause => {
                     if connected {
-                        self.set_paused(!self.paused);
+                        self.set_paused(!self.connection.paused);
                     }
                 }
                 Shortcut::ToggleHelp => {
-                    let will_open = !self.shortcut_help_open;
-                    self.shortcut_help_open = will_open;
+                    let will_open = !self.shortcut_help.open;
+                    self.shortcut_help.open = will_open;
                     if will_open {
                         // Capture whatever widget currently has focus so we
                         // can restore to it when the modal closes. Can't rely
@@ -269,8 +269,8 @@ impl App {
                         // Escape, so without an explicit opener the next Tab
                         // lands on the first widget in the top bar instead of
                         // the one the user was on.
-                        self.shortcut_help_opener = ctx.memory(|m| m.focused());
-                        self.shortcut_help_focus_pending = true;
+                        self.shortcut_help.opener = ctx.memory(|m| m.focused());
+                        self.shortcut_help.focus_pending = true;
                     }
                 }
             }

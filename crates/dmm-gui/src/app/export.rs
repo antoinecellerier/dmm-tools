@@ -33,7 +33,8 @@ impl App {
         }
         // The meter these samples came from, not whatever is selected now.
         let device_model = self
-            .recording_device
+            .capture_layout
+            .device
             .unwrap_or_else(|| self.selected_device().display_name);
 
         // Render here and hand the bytes to the writer thread. Cloning the
@@ -49,14 +50,14 @@ impl App {
         // own sub-values, so the appended ones come off it first — otherwise
         // a transform would widen the meter's group by one as well as adding
         // its own trailing column.
-        let family_slots = self.recording_aux_slots.max(
+        let family_slots = self.capture_layout.aux_slots.max(
             self.recording
                 .max_aux_seen()
-                .saturating_sub(self.recording_extra_slots),
+                .saturating_sub(self.capture_layout.extra_slots),
         );
         let layout = CsvLayout {
             family_slots,
-            extra_slots: self.recording_extra_slots,
+            extra_slots: self.capture_layout.extra_slots,
             integral: false,
         };
         let csv_bytes = match render_csv(&self.recording.samples, device_model, layout) {

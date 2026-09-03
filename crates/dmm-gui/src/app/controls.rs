@@ -30,14 +30,14 @@ impl App {
         use super::ConnectionState;
 
         // Only show controls when connected with measurement data and supported commands
-        if self.connection_state != ConnectionState::Connected
+        if self.connection.state != ConnectionState::Connected
             || self.last_measurement.is_none()
-            || self.supported_commands.is_empty()
+            || self.connection.supported_commands.is_empty()
         {
             return;
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
-        let has_cmd = |cmd: &str| self.supported_commands.iter().any(|c| c == cmd);
+        let has_cmd = |cmd: &str| self.connection.supported_commands.iter().any(|c| c == cmd);
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let active_color = tc.accent();
 
@@ -243,7 +243,7 @@ impl App {
                     self.settings.color_preset = preset;
                     // Clear all overrides when switching presets.
                     self.settings.color_overrides = ColorOverrides::default();
-                    self.applied_ui_colors = None; // force reapply
+                    self.applied.ui_colors = None; // force reapply
                     changed = true;
                 }
             }
@@ -355,8 +355,8 @@ impl App {
             if changed {
                 self.settings.save();
                 // Auto-reconnect if currently connected
-                if self.connection_state != super::ConnectionState::Disconnected {
-                    self.needs_reconnect = true;
+                if self.connection.state != super::ConnectionState::Disconnected {
+                    self.connection.needs_reconnect = true;
                 }
             }
         });
@@ -404,8 +404,8 @@ impl App {
                     // Clear the override — user explicitly chose a mock mode
                     self.settings.overrides.mock_mode = None;
                     self.settings.save();
-                    if self.connection_state != super::ConnectionState::Disconnected {
-                        self.needs_reconnect = true;
+                    if self.connection.state != super::ConnectionState::Disconnected {
+                        self.connection.needs_reconnect = true;
                     }
                 }
             });
@@ -530,7 +530,7 @@ impl App {
                 });
 
                 if changed {
-                    self.applied_ui_colors = None; // force reapply
+                    self.applied.ui_colors = None; // force reapply
                     self.settings.save();
                 }
             });

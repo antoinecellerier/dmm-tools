@@ -10,23 +10,23 @@ use super::App;
 
 impl App {
     pub(super) fn open_whats_new(&mut self) {
-        self.whats_new_open = true;
+        self.whats_new.open = true;
         self.settings.last_seen_version = Some(env!("CARGO_PKG_VERSION").to_string());
         self.settings.save();
     }
 
     pub(super) fn show_whats_new(&mut self, ctx: &egui::Context) {
         // The viewport callback signals close via an AtomicBool.
-        if self.whats_new_closed.swap(false, Ordering::Relaxed) {
-            self.whats_new_open = false;
+        if self.whats_new.closed.swap(false, Ordering::Relaxed) {
+            self.whats_new.open = false;
             // Restore focus to the widget that opened the viewport so the
             // user's Tab position is preserved across the modal round-trip.
-            if let Some(opener) = self.whats_new_opener.take() {
+            if let Some(opener) = self.whats_new.opener.take() {
                 ctx.memory_mut(|m| m.request_focus(opener));
             }
         }
 
-        if !self.whats_new_open {
+        if !self.whats_new.open {
             return;
         }
 
@@ -37,8 +37,8 @@ impl App {
             format!("What's New in v{version}")
         };
 
-        let closed = Arc::clone(&self.whats_new_closed);
-        let cache = Arc::clone(&self.whats_new_cache);
+        let closed = Arc::clone(&self.whats_new.closed);
+        let cache = Arc::clone(&self.whats_new.cache);
         let viewport_id = egui::ViewportId::from_hash_of("whats_new");
         let viewport_builder = egui::ViewportBuilder::default()
             .with_title(title)

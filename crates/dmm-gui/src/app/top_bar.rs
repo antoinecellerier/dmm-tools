@@ -57,7 +57,7 @@ impl App {
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
-            match &self.connection_state {
+            match &self.connection.state {
                 ConnectionState::Disconnected => {
                     if ui
                         .button("Connect")
@@ -75,7 +75,7 @@ impl App {
                     {
                         self.disconnect();
                     }
-                    let (pause_label, pause_tooltip) = if self.paused {
+                    let (pause_label, pause_tooltip) = if self.connection.paused {
                         ("\u{25B6} Resume", "Resume acquisition (Space)")
                     } else {
                         (
@@ -88,7 +88,7 @@ impl App {
                         .on_hover_text(pause_tooltip)
                         .clicked()
                     {
-                        self.set_paused(!self.paused);
+                        self.set_paused(!self.connection.paused);
                     }
                     if ui
                         .button("Clear")
@@ -100,7 +100,7 @@ impl App {
                 }
                 ConnectionState::Reconnecting => {
                     let label = self.reconnecting_label();
-                    let hover = if let Some(err) = &self.reconnect_last_error {
+                    let hover = if let Some(err) = &self.connection.reconnect_last_error {
                         format!(
                             "Retrying the connection automatically — click Disconnect to stop.\nLast error: {err}",
                         )
@@ -123,10 +123,10 @@ impl App {
                 }
             }
 
-            let (dot_color, status_text) = match &self.connection_state {
+            let (dot_color, status_text) = match &self.connection.state {
                 ConnectionState::Connected => {
-                    let name = self.device_name.as_deref().unwrap_or("Connected");
-                    if self.paused {
+                    let name = self.connection.device_name.as_deref().unwrap_or("Connected");
+                    if self.connection.paused {
                         (orange, format!("{name} (paused)"))
                     } else {
                         (green, name.to_string())
@@ -156,16 +156,16 @@ impl App {
 
                 // Show EXPERIMENTAL badge based on connected state or selected device.
                 let profile = &self.selected_profile;
-                let is_experimental = if self.connection_state == ConnectionState::Connected {
-                    self.experimental
+                let is_experimental = if self.connection.state == ConnectionState::Connected {
+                    self.connection.experimental
                 } else {
                     profile.stability == dmm_lib::protocol::Stability::Experimental
                 };
                 if is_experimental {
-                    let url = if self.connection_state == ConnectionState::Connected
-                        && !self.feedback_url.is_empty()
+                    let url = if self.connection.state == ConnectionState::Connected
+                        && !self.connection.feedback_url.is_empty()
                     {
-                        self.feedback_url.clone()
+                        self.connection.feedback_url.clone()
                     } else {
                         profile.feedback_url()
                     };
@@ -235,10 +235,10 @@ impl App {
             )
             .a11y_label("Show release notes");
         if version_resp.clicked() {
-            if self.whats_new_open {
-                self.whats_new_open = false;
+            if self.whats_new.open {
+                self.whats_new.open = false;
             } else {
-                self.whats_new_opener = Some(version_resp.id);
+                self.whats_new.opener = Some(version_resp.id);
                 self.open_whats_new();
             }
         }
@@ -255,11 +255,11 @@ impl App {
             .on_hover_text("Show keyboard shortcuts and mouse gestures (?)")
             .a11y_label("Keyboard shortcuts and mouse gestures");
         if shortcuts_btn.clicked() {
-            let will_open = !self.shortcut_help_open;
-            self.shortcut_help_open = will_open;
+            let will_open = !self.shortcut_help.open;
+            self.shortcut_help.open = will_open;
             if will_open {
-                self.shortcut_help_opener = Some(shortcuts_btn.id);
-                self.shortcut_help_focus_pending = true;
+                self.shortcut_help.opener = Some(shortcuts_btn.id);
+                self.shortcut_help.focus_pending = true;
             }
         }
 

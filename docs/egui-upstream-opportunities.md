@@ -540,7 +540,7 @@ close requires a deferred one-shot that waits until
 `top_modal_layer.is_none()` before calling `request_focus`.
 
 **Workaround.** See `crates/dmm-gui/src/app/mod.rs` —
-`shortcut_help_restore_focus: Option<Id>` field plus a check at the
+`ShortcutHelp::restore_focus: Option<Id>` field plus a check at the
 start of `ui()` that fires once the modal layer is gone.
 
 **Suggested fix.** Either:
@@ -595,7 +595,7 @@ focus on a designated "initial focus" widget when the modal first
 appears. Every consumer reinvents a `focus_pending: bool` flag and a
 manual `request_focus` on the first frame.
 
-**Symptom.** Boilerplate. See `shortcut_help_focus_pending` in
+**Symptom.** Boilerplate. See `ShortcutHelp::focus_pending` in
 `crates/dmm-gui/src/app/mod.rs`.
 
 **Suggested fix.** Add:

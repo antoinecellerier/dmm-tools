@@ -42,6 +42,7 @@ use dmm_lib::stats::SeriesStats;
 use export::ExportOutcome;
 use layout::ContentLayout;
 use messages::ConnectionIssue;
+use recording_panel::RecordingPanel;
 use transform_ui::TransformEditor;
 
 /// How long a toast message stays visible (seconds).
@@ -81,11 +82,104 @@ pub(super) enum ConnectionState {
     Reconnecting,
 }
 
-pub struct App {
-    pub(super) settings: Settings,
-    pub(super) settings_open: bool,
+/// Keyboard shortcut help overlay: whether it is showing, and the focus
+/// bookkeeping that returns the keyboard where it came from.
+#[derive(Default)]
+struct ShortcutHelp {
+    /// Whether the keyboard shortcut help overlay is open.
+    open: bool,
+    /// Widget id that opened the shortcut help window — focus is restored to
+    /// this widget when the window closes so keyboard users don't lose place.
+    opener: Option<egui::Id>,
+    /// Pending focus target to restore after the shortcut help modal closes.
+    /// The restore is deferred until `top_modal_layer` has actually cleared —
+    /// otherwise egui's `create_widget` calls `surrender_focus` on widgets
+    /// below the modal layer (still committed from the close frame) and
+    /// wipes any focus we set in the close path.
+    restore_focus: Option<egui::Id>,
+    /// Set on the frame the shortcut help window is opened so the next frame
+    /// can focus the first widget inside it (one-shot trigger).
+    focus_pending: bool,
+}
 
-    pub(super) connection_state: ConnectionState,
+/// The "What's New" changelog viewport: whether it is showing, the focus to
+/// return on close, and the state shared with the viewport callback.
+#[derive(Default)]
+struct WhatsNew {
+    /// Whether the "What's New" changelog window is open.
+    open: bool,
+    /// Widget id that opened the What's New viewport — focus is restored to
+    /// this widget when the viewport closes.
+    opener: Option<egui::Id>,
+    /// Set by the viewport callback when the user closes the changelog window.
+    closed: Arc<AtomicBool>,
+    /// Shared commonmark cache for the changelog viewport.
+    cache: Arc<Mutex<egui_commonmark::CommonMarkCache>>,
+}
+
+/// Cached inputs of the big-meter fit solver, which sizes the reading to the
+/// window and re-measures only when one of its inputs changes.
+struct MeterFit {
+    /// Cached height of non-reading content at scale=1 for big meter mode.
+    content_height: f32,
+    /// Cached reading dimension ratios for big meter mode.
+    reading_ratios: display::ReadingRatios,
+    /// Cache key for big meter scale. Recalculate when any input changes.
+    cache_key: u64,
+    /// Number of recalculation passes since last cache key change.
+    recalc_passes: u8,
+}
+
+/// Last-applied window chrome, kept so the per-frame paths can skip work that
+/// egui and the windowing system charge for on every call.
+#[derive(Default)]
+struct AppliedChrome {
+    /// OS default pixels_per_point, captured on first frame.
+    os_ppp: Option<f32>,
+    /// Last applied theme (to avoid re-setting every frame).
+    theme: Option<ThemeMode>,
+    /// Last applied UI chrome colors (bg, text, weak_text, button, plot_bg) to
+    /// avoid per-frame Visuals mutation.
+    ui_colors: Option<(Color32, Color32, Color32, Color32, Color32)>,
+    /// Last minimum window size pushed to the windowing system, so the
+    /// viewport command is only re-sent when it actually changes.
+    min_size: Option<egui::Vec2>,
+}
+
+/// Provenance and column layout the buffered capture is exported with. Taken
+/// when recording starts and kept across disconnect, so a capture describes
+/// the meter its samples came from rather than whatever is selected at export
+/// time.
+#[derive(Default)]
+struct CaptureLayout {
+    /// Meter the buffered recording was captured from, taken when recording
+    /// started. Outlives disconnect so a capture can still be exported with
+    /// the right provenance after the meter is unplugged.
+    device: Option<&'static str>,
+    /// Sub-value slots the connected meter family can report, from its
+    /// profile. 0 until the first `Connected`, and kept on disconnect so a
+    /// capture stays exportable with its full column layout.
+    device_aux_slots: usize,
+    /// Sub-value slots the meter itself can fill in the buffered recording,
+    /// taken when recording started. Captured alongside `device` and for the
+    /// same reason: the CSV column layout has to describe the meter the
+    /// samples came from, not whatever is selected at export time.
+    aux_slots: usize,
+    /// Extra sub-value slots the export reserves *after* the meter's own, for
+    /// the ones software appends (a transform's `Raw`). Kept apart from
+    /// `aux_slots` so `Raw` gets a fixed trailing column instead of sliding
+    /// forward whenever the meter sends fewer sub-values. Only ever grows
+    /// during a recording — turning a scale off mid-capture leaves the
+    /// trailing group empty rather than renumbering the columns already
+    /// written into the user's mental model of the file.
+    extra_slots: usize,
+}
+
+/// The live link to a meter: its state, what the connected protocol told us
+/// about itself, and the channels and flags shared with the acquisition
+/// thread.
+pub(super) struct Connection {
+    pub(super) state: ConnectionState,
     pub(super) device_name: Option<String>,
     /// Whether the connected protocol is experimental (unverified).
     pub(super) experimental: bool,
@@ -103,6 +197,44 @@ pub struct App {
     pub(super) reconnect_attempt: u32,
     /// Last reconnect failure message, if any.
     pub(super) reconnect_last_error: Option<String>,
+    rx: Option<mpsc::Receiver<DmmMessage>>,
+    ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
+    /// Stop request, readable without consuming a channel message so the
+    /// acquisition thread's pacing sleep can bail out on it mid-tick.
+    /// `ctrl_tx` stays the control path; this is the wake signal.
+    stop_flag: Option<Arc<AtomicBool>>,
+    pub(super) cmd_tx: Option<mpsc::Sender<String>>,
+    /// Reconnect on next frame (device selection changed while connected).
+    pub(super) needs_reconnect: bool,
+}
+
+impl Default for Connection {
+    fn default() -> Self {
+        Self {
+            state: ConnectionState::Disconnected,
+            device_name: None,
+            experimental: false,
+            feedback_url: String::new(),
+            supported_commands: Vec::new(),
+            paused: false,
+            last_error: None,
+            waiting_timeouts: 0,
+            reconnect_attempt: 0,
+            reconnect_last_error: None,
+            rx: None,
+            ctrl_tx: None,
+            stop_flag: None,
+            cmd_tx: None,
+            needs_reconnect: false,
+        }
+    }
+}
+
+pub struct App {
+    pub(super) settings: Settings,
+    pub(super) settings_open: bool,
+
+    pub(super) connection: Connection,
     pub(super) last_measurement: Option<Measurement>,
     /// Software transform applied to every incoming reading. Session-only:
     /// see [`transform_ui`] for why it is never written to settings.
@@ -123,28 +255,7 @@ pub struct App {
     /// session is translated against the same origin.
     wall_clock: dmm_lib::WallClock,
 
-    rx: Option<mpsc::Receiver<DmmMessage>>,
-    /// Meter the buffered recording was captured from, taken when recording
-    /// started. Outlives disconnect so a capture can still be exported with
-    /// the right provenance after the meter is unplugged.
-    recording_device: Option<&'static str>,
-    /// Sub-value slots the connected meter family can report, from its
-    /// profile. 0 until the first `Connected`, and kept on disconnect so a
-    /// capture stays exportable with its full column layout.
-    device_aux_slots: usize,
-    /// Sub-value slots the meter itself can fill in the buffered recording,
-    /// taken when recording started. Captured alongside `recording_device`
-    /// and for the same reason: the CSV column layout has to describe the
-    /// meter the samples came from, not whatever is selected at export time.
-    recording_aux_slots: usize,
-    /// Extra sub-value slots the export reserves *after* the meter's own, for
-    /// the ones software appends (a transform's `Raw`). Kept apart from
-    /// `recording_aux_slots` so `Raw` gets a fixed trailing column instead of
-    /// sliding forward whenever the meter sends fewer sub-values. Only ever
-    /// grows during a recording — turning a scale off mid-capture leaves the
-    /// trailing group empty rather than renumbering the columns already
-    /// written into the user's mental model of the file.
-    recording_extra_slots: usize,
+    capture_layout: CaptureLayout,
     /// Profile of the selected device, refreshed only when the selection
     /// changes. Two render paths need it every frame, and building a protocol
     /// to read it allocates — the UT61E+ factory lowercases its model string,
@@ -152,68 +263,18 @@ pub struct App {
     selected_profile: dmm_lib::protocol::DeviceProfile,
     /// Device id the cached profile belongs to.
     selected_profile_id: &'static str,
-    /// Record was pressed while the buffer held unexported samples; waiting
-    /// for the user to confirm discarding them.
-    confirm_discard_open: bool,
-    confirm_discard_focus_pending: bool,
-    ctrl_tx: Option<mpsc::Sender<ThreadControl>>,
-    /// Stop request, readable without consuming a channel message so the
-    /// acquisition thread's pacing sleep can bail out on it mid-tick.
-    /// `ctrl_tx` stays the control path; this is the wake signal.
-    stop_flag: Option<Arc<AtomicBool>>,
-    pub(super) cmd_tx: Option<mpsc::Sender<String>>,
+    recording_panel: RecordingPanel,
     first_frame: bool,
-    /// Reconnect on next frame (device selection changed while connected).
-    pub(super) needs_reconnect: bool,
-    /// OS default pixels_per_point, captured on first frame.
-    os_ppp: Option<f32>,
-    /// Last applied theme (to avoid re-setting every frame).
-    applied_theme: Option<ThemeMode>,
-    /// Last applied UI chrome colors (bg, text, weak_text, button, plot_bg) to
-    /// avoid per-frame Visuals mutation.
-    applied_ui_colors: Option<(Color32, Color32, Color32, Color32, Color32)>,
-    /// Last minimum window size pushed to the windowing system, so the
-    /// viewport command is only re-sent when it actually changes.
-    applied_min_size: Option<egui::Vec2>,
-    /// User-resizable recording panel height.
-    recording_height: f32,
+    applied: AppliedChrome,
     /// Transient status toast (message, is_error, timestamp).
     toast: Option<(String, bool, Instant)>,
     /// One-shot receiver for CSV export result.
     export_result_rx: Option<mpsc::Receiver<ExportOutcome>>,
-    /// Cached height of non-reading content at scale=1 for big meter mode.
-    meter_content_height: f32,
-    /// Cached reading dimension ratios for big meter mode.
-    meter_reading_ratios: display::ReadingRatios,
-    /// Cache key for big meter scale. Recalculate when any input changes.
-    meter_cache_key: u64,
-    /// Number of recalculation passes since last cache key change.
-    meter_recalc_passes: u8,
+    meter_fit: MeterFit,
     /// Transient big meter mode (not persisted to settings).
     big_meter_mode: BigMeterMode,
-    /// Whether the keyboard shortcut help overlay is open.
-    shortcut_help_open: bool,
-    /// Widget id that opened the shortcut help window — focus is restored to
-    /// this widget when the window closes so keyboard users don't lose place.
-    shortcut_help_opener: Option<egui::Id>,
-    /// Pending focus target to restore after the shortcut help modal closes.
-    /// The restore is deferred until `top_modal_layer` has actually cleared —
-    /// otherwise egui's `create_widget` calls `surrender_focus` on widgets
-    /// below the modal layer (still committed from the close frame) and
-    /// wipes any focus we set in the close path.
-    shortcut_help_restore_focus: Option<egui::Id>,
-    /// Set on the frame the shortcut help window is opened so the next frame
-    /// can focus the first widget inside it (one-shot trigger).
-    shortcut_help_focus_pending: bool,
-    /// Whether the "What's New" changelog window is open.
-    whats_new_open: bool,
-    /// Widget id that opened the What's New viewport — focus is restored to
-    /// this widget when the viewport closes.
-    whats_new_opener: Option<egui::Id>,
-    /// Set by the viewport callback when the user closes the changelog window.
-    whats_new_closed: Arc<AtomicBool>,
-    /// Shared commonmark cache for the changelog viewport.
-    whats_new_cache: Arc<Mutex<egui_commonmark::CommonMarkCache>>,
+    shortcut_help: ShortcutHelp,
+    whats_new: WhatsNew,
 }
 
 impl App {
@@ -240,16 +301,7 @@ impl App {
         Self {
             settings,
             settings_open: false,
-            connection_state: ConnectionState::Disconnected,
-            device_name: None,
-            experimental: false,
-            feedback_url: String::new(),
-            supported_commands: Vec::new(),
-            paused: false,
-            last_error: None,
-            waiting_timeouts: 0,
-            reconnect_attempt: 0,
-            reconnect_last_error: None,
+            connection: Connection::default(),
             last_measurement: None,
             transform: Transform::default(),
             transform_editor: TransformEditor::default(),
@@ -257,40 +309,23 @@ impl App {
             session: SeriesStats::new(true),
             recording: Recording::new(),
             wall_clock: dmm_lib::WallClock::new(),
-            rx: None,
-            recording_device: None,
-            device_aux_slots: 0,
-            recording_aux_slots: 0,
-            recording_extra_slots: 0,
+            capture_layout: CaptureLayout::default(),
             selected_profile: *(initial_device.new_protocol)().profile(),
             selected_profile_id: initial_device.id,
-            confirm_discard_open: false,
-            confirm_discard_focus_pending: false,
-            ctrl_tx: None,
-            stop_flag: None,
-            cmd_tx: None,
+            recording_panel: RecordingPanel::default(),
             first_frame: true,
-            needs_reconnect: false,
-            os_ppp: None,
-            applied_theme: None,
-            applied_ui_colors: None,
-            applied_min_size: None,
-            recording_height: DEFAULT_RECORDING_HEIGHT,
+            applied: AppliedChrome::default(),
             toast: None,
             export_result_rx: None,
-            meter_content_height: DEFAULT_METER_CONTENT_HEIGHT,
-            meter_reading_ratios: display::ReadingRatios::default(),
-            meter_cache_key: 0,
-            meter_recalc_passes: 0,
+            meter_fit: MeterFit {
+                content_height: DEFAULT_METER_CONTENT_HEIGHT,
+                reading_ratios: display::ReadingRatios::default(),
+                cache_key: 0,
+                recalc_passes: 0,
+            },
             big_meter_mode: BigMeterMode::Off,
-            shortcut_help_open: false,
-            shortcut_help_opener: None,
-            shortcut_help_restore_focus: None,
-            shortcut_help_focus_pending: false,
-            whats_new_open: false,
-            whats_new_opener: None,
-            whats_new_closed: Arc::new(AtomicBool::new(false)),
-            whats_new_cache: Arc::new(Mutex::new(egui_commonmark::CommonMarkCache::default())),
+            shortcut_help: ShortcutHelp::default(),
+            whats_new: WhatsNew::default(),
         }
     }
 
@@ -313,20 +348,20 @@ impl App {
     /// live-view toggle is the separate scroll-lock that freezes the view
     /// while data keeps arriving.
     pub(super) fn set_paused(&mut self, paused: bool) {
-        self.paused = paused;
+        self.connection.paused = paused;
         if paused {
             // Acquisition stops, so the samples that would have covered this
             // stretch never exist — a data gap the graph should show even if
             // the pause is shorter than its elapsed-time threshold.
             self.graph.push_data_loss();
         }
-        if let Some(tx) = &self.ctrl_tx {
+        if let Some(tx) = &self.connection.ctrl_tx {
             let _ = tx.send(ThreadControl::SetPaused(paused));
         }
     }
 
     pub(super) fn send_command(&self, cmd: &str) {
-        if let Some(tx) = &self.cmd_tx {
+        if let Some(tx) = &self.connection.cmd_tx {
             let _ = tx.send(cmd.to_string());
         }
     }
@@ -346,8 +381,11 @@ impl App {
     /// show this, and they were two independent formattings of the same
     /// user-facing string.
     fn reconnecting_label(&self) -> String {
-        if self.reconnect_attempt > 0 {
-            format!("Reconnecting (attempt {})...", self.reconnect_attempt)
+        if self.connection.reconnect_attempt > 0 {
+            format!(
+                "Reconnecting (attempt {})...",
+                self.connection.reconnect_attempt
+            )
         } else {
             "Reconnecting...".to_string()
         }
@@ -362,11 +400,11 @@ impl eframe::App for App {
         // otherwise egui's `create_widget` would `surrender_focus` the
         // target widget while rendering the top bar, because it's below
         // the still-committed modal layer.
-        if let Some(target) = self.shortcut_help_restore_focus
+        if let Some(target) = self.shortcut_help.restore_focus
             && ctx.memory(|m| m.top_modal_layer()).is_none()
         {
             ctx.memory_mut(|m| m.request_focus(target));
-            self.shortcut_help_restore_focus = None;
+            self.shortcut_help.restore_focus = None;
         }
         self.refresh_selected_profile();
         self.apply_theme(&ctx);
@@ -377,8 +415,8 @@ impl eframe::App for App {
         self.poll_export_result();
 
         // Auto-reconnect after device selection change
-        if self.needs_reconnect {
-            self.needs_reconnect = false;
+        if self.connection.needs_reconnect {
+            self.connection.needs_reconnect = false;
             self.connect(&ctx);
         }
 
@@ -430,10 +468,10 @@ impl eframe::App for App {
         // Reading dimensions come from cached ratios × minimum big meter
         // font size; top bar widths come from previous-frame measurements.
         let min_font = display::MIN_BIG_METER_FONT_SIZE;
-        let ratios = &self.meter_reading_ratios;
+        let ratios = &self.meter_fit.reading_ratios;
         let min_scale = min_font / display::BASE_READING_FONT_SIZE;
         let reading_w = ratios.w * min_font;
-        let reading_h = ratios.h * min_font + self.meter_content_height * min_scale;
+        let reading_h = ratios.h * min_font + self.meter_fit.content_height * min_scale;
         let bar_left_w: f32 =
             ctx.data(|d| d.get_temp(egui::Id::new("top_bar_left_w")).unwrap_or(300.0));
         let bar_right_w: f32 = ctx.data(|d| {
@@ -459,11 +497,12 @@ impl eframe::App for App {
         // set_pixels_per_point(). Half a pixel of tolerance keeps sub-pixel
         // jitter in the cached widths from re-triggering it.
         if self
-            .applied_min_size
+            .applied
+            .min_size
             .is_none_or(|prev| (prev - min_size).abs().max_elem() > 0.5)
         {
             ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(min_size));
-            self.applied_min_size = Some(min_size);
+            self.applied.min_size = Some(min_size);
         }
         // If the window is smaller than the new minimum (e.g. after exiting
         // minimal mode), grow it to fit.
@@ -515,7 +554,7 @@ impl eframe::App for App {
                         self.transform.is_identity().hash(&mut h);
                         h.finish()
                     };
-                    let needs_recalc = cache_key != self.meter_cache_key;
+                    let needs_recalc = cache_key != self.meter_fit.cache_key;
 
                     let panel_rect = ui.max_rect();
                     let mut add_content = |ui: &mut egui::Ui| {
@@ -525,14 +564,14 @@ impl eframe::App for App {
                             let content_h = if minimal {
                                 0.0
                             } else {
-                                self.meter_content_height
+                                self.meter_fit.content_height
                             };
                             let tc = self.settings.theme_colors(ui.visuals().dark_mode);
                             let (scale, measured_ratios) = display::show_reading_large(
                                 ui,
                                 self.last_measurement.as_ref(),
                                 content_h,
-                                &self.meter_reading_ratios,
+                                &self.meter_fit.reading_ratios,
                                 &tc,
                                 !self.transform.is_identity(),
                             );
@@ -560,21 +599,21 @@ impl eframe::App for App {
                             if needs_recalc && scale > 0.0 {
                                 let total_below_reading = ui.cursor().top() - after_reading;
                                 let measured = total_below_reading / scale;
-                                if (self.meter_content_height - measured).abs() < 1.0
-                                    || self.meter_recalc_passes >= 4
+                                if (self.meter_fit.content_height - measured).abs() < 1.0
+                                    || self.meter_fit.recalc_passes >= 4
                                 {
                                     // Converged, or max passes reached (e.g. button
                                     // row wrapping oscillation). Use the larger height
                                     // so everything fits.
-                                    self.meter_content_height =
-                                        self.meter_content_height.max(measured);
-                                    self.meter_cache_key = cache_key;
-                                    self.meter_recalc_passes = 0;
+                                    self.meter_fit.content_height =
+                                        self.meter_fit.content_height.max(measured);
+                                    self.meter_fit.cache_key = cache_key;
+                                    self.meter_fit.recalc_passes = 0;
                                 } else {
-                                    self.meter_content_height = measured;
-                                    self.meter_recalc_passes += 1;
+                                    self.meter_fit.content_height = measured;
+                                    self.meter_fit.recalc_passes += 1;
                                 }
-                                self.meter_reading_ratios = measured_ratios;
+                                self.meter_fit.reading_ratios = measured_ratios;
                             }
                         });
                     };
@@ -666,7 +705,7 @@ impl eframe::App for App {
         self.show_discard_confirmation(&ctx);
         self.show_whats_new(&ctx);
 
-        if self.connection_state == ConnectionState::Connected {
+        if self.connection.state == ConnectionState::Connected {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
     }

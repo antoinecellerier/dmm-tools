@@ -67,7 +67,7 @@ impl App {
     }
 
     pub(super) fn apply_theme(&mut self, ctx: &egui::Context) {
-        // `applied_theme` holds the *resolved* mode, never `System`. That way
+        // `applied.theme` holds the *resolved* mode, never `System`. That way
         // an OS theme flip while set to System changes the target here and
         // repaints, instead of comparing System to System and doing nothing.
         let dark = self.resolve_dark(ctx);
@@ -76,7 +76,7 @@ impl App {
         } else {
             ThemeMode::Light
         };
-        if self.applied_theme != Some(target) {
+        if self.applied.theme != Some(target) {
             // Only on change: set_visuals every frame resets egui's internal
             // panel state (resize positions, scroll offsets).
             ctx.set_visuals(if dark {
@@ -84,8 +84,8 @@ impl App {
             } else {
                 egui::Visuals::light()
             });
-            self.applied_theme = Some(target);
-            self.applied_ui_colors = None; // force reapply on top of new base
+            self.applied.theme = Some(target);
+            self.applied.ui_colors = None; // force reapply on top of new base
         }
     }
 
@@ -100,10 +100,10 @@ impl App {
         let plot_bg = tc.plot_background();
         let key = (bg, text, weak_text, button, plot_bg);
 
-        if self.applied_ui_colors == Some(key) {
+        if self.applied.ui_colors == Some(key) {
             return;
         }
-        self.applied_ui_colors = Some(key);
+        self.applied.ui_colors = Some(key);
 
         let (hover, active) = tc.button_hover_active();
         ctx.global_style_mut(|style| {
@@ -136,10 +136,12 @@ impl App {
 
     pub(super) fn apply_zoom(&mut self, ctx: &egui::Context) {
         // Capture OS default pixels_per_point on first call
-        if self.os_ppp.is_none() {
-            self.os_ppp = Some(ctx.pixels_per_point());
+        if self.applied.os_ppp.is_none() {
+            self.applied.os_ppp = Some(ctx.pixels_per_point());
         }
-        let Some(os_ppp) = self.os_ppp else { return };
+        let Some(os_ppp) = self.applied.os_ppp else {
+            return;
+        };
         let target_ppp = os_ppp * self.settings.zoom_pct as f32 / 100.0;
         // Only update when changed — setting ppp every frame resets panel resize state
         if (ctx.pixels_per_point() - target_ppp).abs() > 0.001 {

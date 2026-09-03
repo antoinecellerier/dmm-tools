@@ -217,8 +217,9 @@ impl App {
             // A scale switched on mid-capture still needs its trailing CSV
             // column. Only grows: switching back off leaves the group empty
             // rather than shifting every column the file already promised.
-            self.recording_extra_slots = self
-                .recording_extra_slots
+            self.capture_layout.extra_slots = self
+                .capture_layout
+                .extra_slots
                 .max(self.transform.extra_aux_count());
         }
         self.toast = Some((message, false, Instant::now()));
