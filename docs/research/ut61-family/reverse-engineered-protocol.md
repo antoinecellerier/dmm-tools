@@ -312,3 +312,198 @@ possible from the vendor software.
 | Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
 | Range index → full-scale mapping | **DEDUCED** | Ascending order assumed |
 | Commands beyond 0x5E/0x4A/0x46 | **DEDUCED** | UT61E+ device testing |
+
+---
+
+## 9. Per-Range Full-Scale Limits
+
+**MANUAL** — transcribed from the UT61+ Series specification tables (see the
+`specs_*.rs` provenance headers: `references/ut61eplus/ut61e_manual.pdf`
+section IX.2 and the UT61B+/UT61D+ equivalents). These are the values the
+`RangeInfo.overload_pos`/`overload_neg` fields carried in
+`crates/dmm-lib/src/protocol/ut61eplus/tables/` from the first commit until
+they were removed from the code, where nothing ever read them. They are kept
+here so the numbers stay findable if a software overload check or bar-graph
+scaling is built later. Which range *index* maps to which row is [DEDUCED]
+(section 7, item 1).
+
+Columns: `Table` is the range table name in the source file; `Modes` lists
+the `Mode` variants that share it (derived modes reuse their base mode's
+table); `Idx` is the range byte (`payload[1] & 0x0F`); `Full scale (−)` of
+`—` means the quantity has no negative range, `0` means the lower limit is
+zero (duty cycle, diode, hFE). Generated from the source tables, not retyped.
+
+### UT61E+ (22,000 counts)
+
+Source: `ut61e_plus.rs` (52 ranges).
+
+| Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
+|---|---|---|---|---|---|---|
+| `dc_v` | DcV, AcDcV, LpfV, LozV | 0 | 2.2V | V | 2.2 | -2.2 |
+| `dc_v` | DcV, AcDcV, LpfV, LozV | 1 | 22V | V | 22 | -22 |
+| `dc_v` | DcV, AcDcV, LpfV, LozV | 2 | 220V | V | 220 | -220 |
+| `dc_v` | DcV, AcDcV, LpfV, LozV | 3 | 1000V | V | 1000 | -1000 |
+| `dc_v` | DcV, AcDcV, LpfV, LozV | 4 | 220mV | mV | 220 | -220 |
+| `ac_v` | AcV | 0 | 2.2V | V | 2.2 | -2.2 |
+| `ac_v` | AcV | 1 | 22V | V | 22 | -22 |
+| `ac_v` | AcV | 2 | 220V | V | 220 | -220 |
+| `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
+| `ac_v` | AcV | 4 | 220mV | mV | 220 | -220 |
+| `dc_mv` | DcMv, AcDcMv, LpfMv | 0 | 220mV | mV | 220 | -220 |
+| `dc_mv` | DcMv, AcDcMv, LpfMv | 1 | 2.2V | mV | 2200 | -2200 |
+| `ac_mv` | AcMv | 0 | 220mV | mV | 220 | -220 |
+| `ac_mv` | AcMv | 1 | 2.2V | mV | 2200 | -2200 |
+| `ohm` | Ohm | 0 | 220Ω | Ω | 220 | — |
+| `ohm` | Ohm | 1 | 2.2kΩ | kΩ | 2.2 | — |
+| `ohm` | Ohm | 2 | 22kΩ | kΩ | 22 | — |
+| `ohm` | Ohm | 3 | 220kΩ | kΩ | 220 | — |
+| `ohm` | Ohm | 4 | 2.2MΩ | MΩ | 2.2 | — |
+| `ohm` | Ohm | 5 | 22MΩ | MΩ | 22 | — |
+| `ohm` | Ohm | 6 | 220MΩ | MΩ | 220 | — |
+| `capacitance` | Capacitance | 0 | 22nF | nF | 22 | — |
+| `capacitance` | Capacitance | 1 | 220nF | nF | 220 | — |
+| `capacitance` | Capacitance | 2 | 2.2µF | µF | 2.2 | — |
+| `capacitance` | Capacitance | 3 | 22µF | µF | 22 | — |
+| `capacitance` | Capacitance | 4 | 220µF | µF | 220 | — |
+| `capacitance` | Capacitance | 5 | 2.2mF | mF | 2.2 | — |
+| `capacitance` | Capacitance | 6 | 22mF | mF | 22 | — |
+| `capacitance` | Capacitance | 7 | 220mF | mF | 220 | — |
+| `hz` | Hz | 0 | 22Hz | Hz | 22 | — |
+| `hz` | Hz | 1 | 220Hz | Hz | 220 | — |
+| `hz` | Hz | 2 | 2.2kHz | kHz | 2.2 | — |
+| `hz` | Hz | 3 | 22kHz | kHz | 22 | — |
+| `hz` | Hz | 4 | 220kHz | kHz | 220 | — |
+| `duty_cycle` | DutyCycle | 0 | Duty | % | 100 | 0 |
+| `temp_c` | TempC | 0 | Temp | °C | 1200 | -40 |
+| `temp_f` | TempF | 0 | Temp | °F | 2192 | -40 |
+| `diode` | Diode | 0 | Diode | V | 2.2 | 0 |
+| `continuity` | Continuity | 0 | Cont | Ω | 220 | — |
+| `dc_ua` | DcUa | 0 | 220µA | µA | 220 | -220 |
+| `dc_ua` | DcUa | 1 | 2200µA | µA | 2200 | -2200 |
+| `ac_ua` | AcUa | 0 | 220µA | µA | 220 | -220 |
+| `ac_ua` | AcUa | 1 | 2200µA | µA | 2200 | -2200 |
+| `dc_ma` | DcMa | 0 | 22mA | mA | 22 | -22 |
+| `dc_ma` | DcMa | 1 | 220mA | mA | 220 | -220 |
+| `ac_ma` | AcMa | 0 | 22mA | mA | 22 | -22 |
+| `ac_ma` | AcMa | 1 | 220mA | mA | 220 | -220 |
+| `dc_a` | DcA, LozV2, Lpf, AcDcA2, LpfA | 0 | 20A | A | 20 | -20 |
+| `dc_a` | DcA, LozV2, Lpf, AcDcA2, LpfA | 1 | 20A | A | 20 | -20 |
+| `ac_a` | AcA | 0 | 20A | A | 20 | -20 |
+| `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
+| `hfe` | Hfe | 0 | 1000β | β | 1000 | 0 |
+
+### UT61B+ (6,000 counts)
+
+Source: `ut61b_plus.rs` (49 ranges).
+
+| Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
+|---|---|---|---|---|---|---|
+| `dc_v` | DcV | 0 | 60mV | mV | 60 | -60 |
+| `dc_v` | DcV | 1 | 600mV | mV | 600 | -600 |
+| `dc_v` | DcV | 2 | 6V | V | 6 | -6 |
+| `dc_v` | DcV | 3 | 60V | V | 60 | -60 |
+| `dc_v` | DcV | 4 | 600V | V | 600 | -600 |
+| `dc_v` | DcV | 5 | 1000V | V | 1000 | -1000 |
+| `ac_v` | AcV | 0 | 60mV | mV | 60 | -60 |
+| `ac_v` | AcV | 1 | 600mV | mV | 600 | -600 |
+| `ac_v` | AcV | 2 | 6V | V | 6 | -6 |
+| `ac_v` | AcV | 3 | 60V | V | 60 | -60 |
+| `ac_v` | AcV | 4 | 600V | V | 600 | -600 |
+| `ac_v` | AcV | 5 | 750V | V | 750 | -750 |
+| `dc_mv` | DcMv | 0 | 60mV | mV | 60 | -60 |
+| `dc_mv` | DcMv | 1 | 600mV | mV | 600 | -600 |
+| `ac_mv` | AcMv | 0 | 60mV | mV | 60 | -60 |
+| `ac_mv` | AcMv | 1 | 600mV | mV | 600 | -600 |
+| `ohm` | Ohm | 0 | 600Ω | Ω | 600 | — |
+| `ohm` | Ohm | 1 | 6kΩ | kΩ | 6 | — |
+| `ohm` | Ohm | 2 | 60kΩ | kΩ | 60 | — |
+| `ohm` | Ohm | 3 | 600kΩ | kΩ | 600 | — |
+| `ohm` | Ohm | 4 | 6MΩ | MΩ | 6 | — |
+| `ohm` | Ohm | 5 | 60MΩ | MΩ | 60 | — |
+| `capacitance` | Capacitance | 0 | 60nF | nF | 60 | — |
+| `capacitance` | Capacitance | 1 | 600nF | nF | 600 | — |
+| `capacitance` | Capacitance | 2 | 6µF | µF | 6 | — |
+| `capacitance` | Capacitance | 3 | 60µF | µF | 60 | — |
+| `capacitance` | Capacitance | 4 | 600µF | µF | 600 | — |
+| `capacitance` | Capacitance | 5 | 6mF | mF | 6 | — |
+| `capacitance` | Capacitance | 6 | 60mF | mF | 60 | — |
+| `hz` | Hz | 0 | 60Hz | Hz | 60 | — |
+| `hz` | Hz | 1 | 600Hz | Hz | 600 | — |
+| `hz` | Hz | 2 | 6kHz | kHz | 6 | — |
+| `hz` | Hz | 3 | 60kHz | kHz | 60 | — |
+| `hz` | Hz | 4 | 600kHz | kHz | 600 | — |
+| `duty_cycle` | DutyCycle | 0 | Duty | % | 100 | 0 |
+| `diode` | Diode | 0 | Diode | V | 3 | 0 |
+| `continuity` | Continuity | 0 | Cont | Ω | 600 | — |
+| `dc_ua` | DcUa | 0 | 600µA | µA | 600 | -600 |
+| `dc_ua` | DcUa | 1 | 6000µA | µA | 6000 | -6000 |
+| `ac_ua` | AcUa | 0 | 600µA | µA | 600 | -600 |
+| `ac_ua` | AcUa | 1 | 6000µA | µA | 6000 | -6000 |
+| `dc_ma` | DcMa | 0 | 60mA | mA | 60 | -60 |
+| `dc_ma` | DcMa | 1 | 600mA | mA | 600 | -600 |
+| `ac_ma` | AcMa | 0 | 60mA | mA | 60 | -60 |
+| `ac_ma` | AcMa | 1 | 600mA | mA | 600 | -600 |
+| `dc_a` | DcA | 0 | 6A | A | 6 | -6 |
+| `dc_a` | DcA | 1 | 10A | A | 10 | -10 |
+| `ac_a` | AcA | 0 | 6A | A | 6 | -6 |
+| `ac_a` | AcA | 1 | 10A | A | 10 | -10 |
+
+### UT61D+ (6,000 counts)
+
+Source: `ut61d_plus.rs` (53 ranges).
+
+| Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
+|---|---|---|---|---|---|---|
+| `dc_v` | DcV | 0 | 60mV | mV | 60 | -60 |
+| `dc_v` | DcV | 1 | 600mV | mV | 600 | -600 |
+| `dc_v` | DcV | 2 | 6V | V | 6 | -6 |
+| `dc_v` | DcV | 3 | 60V | V | 60 | -60 |
+| `dc_v` | DcV | 4 | 600V | V | 600 | -600 |
+| `dc_v` | DcV | 5 | 1000V | V | 1000 | -1000 |
+| `ac_v` | AcV | 0 | 60mV | mV | 60 | -60 |
+| `ac_v` | AcV | 1 | 600mV | mV | 600 | -600 |
+| `ac_v` | AcV | 2 | 6V | V | 6 | -6 |
+| `ac_v` | AcV | 3 | 60V | V | 60 | -60 |
+| `ac_v` | AcV | 4 | 600V | V | 600 | -600 |
+| `ac_v` | AcV | 5 | 750V | V | 750 | -750 |
+| `dc_mv` | DcMv | 0 | 60mV | mV | 60 | -60 |
+| `dc_mv` | DcMv | 1 | 600mV | mV | 600 | -600 |
+| `ac_mv` | AcMv | 0 | 60mV | mV | 60 | -60 |
+| `ac_mv` | AcMv | 1 | 600mV | mV | 600 | -600 |
+| `ohm` | Ohm | 0 | 600Ω | Ω | 600 | — |
+| `ohm` | Ohm | 1 | 6kΩ | kΩ | 6 | — |
+| `ohm` | Ohm | 2 | 60kΩ | kΩ | 60 | — |
+| `ohm` | Ohm | 3 | 600kΩ | kΩ | 600 | — |
+| `ohm` | Ohm | 4 | 6MΩ | MΩ | 6 | — |
+| `ohm` | Ohm | 5 | 60MΩ | MΩ | 60 | — |
+| `capacitance` | Capacitance | 0 | 60nF | nF | 60 | — |
+| `capacitance` | Capacitance | 1 | 600nF | nF | 600 | — |
+| `capacitance` | Capacitance | 2 | 6µF | µF | 6 | — |
+| `capacitance` | Capacitance | 3 | 60µF | µF | 60 | — |
+| `capacitance` | Capacitance | 4 | 600µF | µF | 600 | — |
+| `capacitance` | Capacitance | 5 | 6mF | mF | 6 | — |
+| `capacitance` | Capacitance | 6 | 60mF | mF | 60 | — |
+| `hz` | Hz | 0 | 60Hz | Hz | 60 | — |
+| `hz` | Hz | 1 | 600Hz | Hz | 600 | — |
+| `hz` | Hz | 2 | 6kHz | kHz | 6 | — |
+| `hz` | Hz | 3 | 60kHz | kHz | 60 | — |
+| `hz` | Hz | 4 | 600kHz | kHz | 600 | — |
+| `duty_cycle` | DutyCycle | 0 | Duty | % | 100 | 0 |
+| `temp_c` | TempC | 0 | Temp | °C | 1000 | -40 |
+| `temp_f` | TempF | 0 | Temp | °F | 1832 | -40 |
+| `diode` | Diode | 0 | Diode | V | 3 | 0 |
+| `continuity` | Continuity | 0 | Cont | Ω | 600 | — |
+| `dc_ua` | DcUa | 0 | 600µA | µA | 600 | -600 |
+| `dc_ua` | DcUa | 1 | 6000µA | µA | 6000 | -6000 |
+| `ac_ua` | AcUa | 0 | 600µA | µA | 600 | -600 |
+| `ac_ua` | AcUa | 1 | 6000µA | µA | 6000 | -6000 |
+| `dc_ma` | DcMa | 0 | 60mA | mA | 60 | -60 |
+| `dc_ma` | DcMa | 1 | 600mA | mA | 600 | -600 |
+| `ac_ma` | AcMa | 0 | 60mA | mA | 60 | -60 |
+| `ac_ma` | AcMa | 1 | 600mA | mA | 600 | -600 |
+| `dc_a` | DcA | 0 | 20A | A | 20 | -20 |
+| `dc_a` | DcA | 1 | 20A | A | 20 | -20 |
+| `ac_a` | AcA | 0 | 20A | A | 20 | -20 |
+| `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
+| `loz_v` | LozV, LozV2 | 0 | 600V | V | 600 | -600 |
+| `loz_v` | LozV, LozV2 | 1 | 1000V | V | 1000 | -1000 |
