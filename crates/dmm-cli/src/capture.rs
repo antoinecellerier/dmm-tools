@@ -352,15 +352,10 @@ pub(crate) fn save_report(
     report: &CaptureReport,
     path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::Write;
     let yaml = serde_yaml_ng::to_string(report)?;
-    // Atomic write: write to temp file then rename, so a crash mid-write
-    // doesn't corrupt the existing report.
-    let tmp_path = format!("{path}.tmp");
-    let mut f = std::fs::File::create(&tmp_path)?;
-    f.write_all(yaml.as_bytes())?;
-    f.sync_all()?;
-    std::fs::rename(&tmp_path, path)?;
+    // Atomic write (.tmp + fsync + rename), so a crash mid-write doesn't
+    // corrupt the existing report.
+    dmm_settings::write_atomic(std::path::Path::new(path), yaml.as_bytes())?;
     Ok(())
 }
 

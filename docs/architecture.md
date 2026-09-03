@@ -80,7 +80,7 @@ Adding a new device requires only a registry entry and a `Protocol` implementati
 
 ### dmm-settings
 
-Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` only; no UI, no device, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location) and `SharedSettings::load_if_exists()` for reading the file.
+Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` only; no UI, no device, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location), `SharedSettings::load_if_exists()` for reading the file, and `write_atomic()` — the `.tmp` + fsync + rename helper both binaries use to persist user data (settings, capture reports, CSV exports) without risking a torn file.
 
 The GUI's full `Settings` struct includes `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON stays flat (`device_family` at the top level alongside `theme`, `show_graph`, etc.). The CLI deserializes the same file directly into `SharedSettings`, silently ignoring any GUI-only fields. Because both sides reference exactly one Rust type for the shared fields, renaming or retyping `device_family` breaks both compilations simultaneously — the contract is compile-enforced.
 

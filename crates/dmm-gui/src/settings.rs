@@ -281,9 +281,6 @@ impl Settings {
 
     pub fn save(&self) {
         if let Some(path) = Self::config_path() {
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
             // Restore original values for CLI-overridden fields before saving.
             let mut to_save = self.clone();
             if let Some(ref original) = self.overrides.device_family {
@@ -296,11 +293,9 @@ impl Settings {
                 to_save.theme = original;
             }
             if let Ok(json) = serde_json::to_string_pretty(&to_save) {
-                // Write atomically (.tmp + rename) so a kill or disk-full
+                // Atomic (.tmp + fsync + rename) so a kill or disk-full
                 // mid-write can't corrupt the existing config file.
-                let tmp = path.with_extension("json.tmp");
-                let result = std::fs::write(&tmp, json).and_then(|()| std::fs::rename(&tmp, &path));
-                if let Err(e) = result {
+                if let Err(e) = dmm_settings::write_atomic(&path, json.as_bytes()) {
                     log::warn!("failed to save settings to {}: {e}", path.display());
                 }
             }

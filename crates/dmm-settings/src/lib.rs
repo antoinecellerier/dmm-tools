@@ -9,9 +9,16 @@
 //! The canonical on-disk location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform-specific path on macOS and Windows (computed via `directories`).
+//!
+//! It also owns [`write_atomic`]: both binaries persist user data (settings,
+//! capture reports, CSV exports) and all of it must survive a crash mid-write,
+//! so the one durable write helper lives here rather than being reimplemented
+//! per crate.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::fs;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
 /// Settings fields shared between `dmm-cli` and `dmm-gui`.
 ///
@@ -36,6 +43,53 @@ pub fn config_path() -> Option<PathBuf> {
         .map(|dirs| dirs.config_dir().join("settings.json"))
 }
 
+/// Write `bytes` to `path` so that a crash, kill or full disk mid-write leaves
+/// either the old file or the new one, never a torn file: the bytes go to
+/// `<path>.tmp` (same directory, same filesystem), are synced, then renamed
+/// over `path`.
+///
+/// The parent directory is created if missing. If anything fails after the
+/// temp file was created it is removed on a best-effort basis, so a failed
+/// save doesn't litter the directory with `.tmp` files.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let Some(file_name) = path.file_name() else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} has no file name to write to", path.display()),
+        ));
+    };
+
+    // Skip the empty parent of a bare file name ("settings.json"), which
+    // `create_dir_all` would reject.
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)?;
+    }
+
+    // `settings.json` -> `settings.json.tmp`: append rather than replace the
+    // extension, so a name that already has one keeps it (and two different
+    // files in the same directory can't collide on a shared temp name).
+    let mut tmp_name = file_name.to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = path.with_file_name(tmp_name);
+
+    fn write_and_sync(tmp: &Path, bytes: &[u8]) -> io::Result<()> {
+        let mut file = fs::File::create(tmp)?;
+        file.write_all(bytes)?;
+        // sync_all before the rename: without it the rename can land while the
+        // new contents are still only in the page cache, so a power loss would
+        // leave an empty or truncated file where the old one used to be.
+        file.sync_all()
+    }
+
+    match write_and_sync(&tmp, bytes).and_then(|()| fs::rename(&tmp, path)) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
+}
+
 impl SharedSettings {
     /// Load just the shared fields from the config file.
     ///
@@ -54,6 +108,71 @@ impl SharedSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A private scratch directory for one test, removed on drop so a failing
+    /// assertion doesn't leave files behind. Named per-process and per-test so
+    /// concurrently running test binaries can't collide.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(label: &str) -> Self {
+            let dir = std::env::temp_dir()
+                .join(format!("dmm-settings-test-{}-{label}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("create temp dir");
+            TempDir(dir)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn write_atomic_round_trips() {
+        let dir = TempDir::new("round-trip");
+        let path = dir.path().join("settings.json");
+
+        write_atomic(&path, br#"{"device_family":"ut61eplus"}"#).unwrap();
+
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            br#"{"device_family":"ut61eplus"}"#
+        );
+        // The temp file must be gone: the rename consumed it.
+        assert!(
+            !dir.path().join("settings.json.tmp").exists(),
+            "temp file should not survive a successful write"
+        );
+    }
+
+    #[test]
+    fn write_atomic_replaces_an_existing_file() {
+        let dir = TempDir::new("replace");
+        let path = dir.path().join("report.yaml");
+
+        write_atomic(&path, b"old contents, longer than the new ones").unwrap();
+        write_atomic(&path, b"new").unwrap();
+
+        assert_eq!(fs::read(&path).unwrap(), b"new");
+        assert!(!dir.path().join("report.yaml.tmp").exists());
+    }
+
+    #[test]
+    fn write_atomic_creates_missing_parent_dirs() {
+        let dir = TempDir::new("parents");
+        let path = dir.path().join("nested/deeper/settings.json");
+
+        write_atomic(&path, b"{}").unwrap();
+
+        assert_eq!(fs::read(&path).unwrap(), b"{}");
+    }
 
     #[test]
     fn defaults_to_empty_device_family() {
