@@ -22,7 +22,7 @@ use crate::recording::{Recording, render_csv};
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
 use crate::theme::ThemeColors;
-use dmm_lib::stats::{self, Integrator, RunningStats};
+use dmm_lib::stats::{self, RunningStats, SeriesStats};
 use transform_ui::TransformEditor;
 
 /// How long a toast message stays visible (seconds).
@@ -193,13 +193,16 @@ impl FormattedStats {
     /// block. They differ when the graph plots a sub-value: session stats
     /// follow the meter's main reading, the visible window follows what is
     /// drawn, and captioning Hz values with "V" would be simply wrong.
+    ///
+    /// The integrals arrive already scaled to their display unit (see
+    /// [`stats::integral_display`]) as `(value, display_unit, elapsed_secs)`.
     fn new(
         stats: &RunningStats,
         visible: Option<(f64, f64, f64, usize)>,
         unit: &str,
         visible_unit: &str,
-        integral: Option<(f64, &str, f64, Option<f64>)>,
-        visible_integral: Option<(f64, &str, f64, Option<f64>)>,
+        integral: Option<(f64, &str, Option<f64>)>,
+        visible_integral: Option<(f64, &str, Option<f64>)>,
     ) -> Self {
         let fmt_in = |unit: &str, v: Option<f64>| -> String {
             match v {
@@ -208,13 +211,10 @@ impl FormattedStats {
             }
         };
         let fmt = |v: Option<f64>| fmt_in(unit, v);
-        let fmt_integral = |info: Option<(f64, &str, f64, Option<f64>)>| -> Option<String> {
-            info.map(|(raw, disp_unit, divisor, dt)| {
-                let val = raw / divisor;
-                match dt {
-                    Some(secs) => format!("{val:>10.4} {disp_unit} ({secs:.0}s)"),
-                    None => format!("{val:>10.4} {disp_unit}"),
-                }
+        let fmt_integral = |info: Option<(f64, &str, Option<f64>)>| -> Option<String> {
+            info.map(|(val, disp_unit, dt)| match dt {
+                Some(secs) => format!("{val:>10.4} {disp_unit} ({secs:.0}s)"),
+                None => format!("{val:>10.4} {disp_unit}"),
             })
         };
         Self {
@@ -385,8 +385,10 @@ pub struct App {
     transform_editor: TransformEditor,
 
     graph: Graph,
-    stats: RunningStats,
-    integrator: Integrator,
+    /// Min/max/avg and the running integral of the current series. The GUI
+    /// always integrates: the stats panel shows the integral whenever the
+    /// current unit has a meaningful one.
+    session: SeriesStats,
     recording: Recording,
     /// Session-long `(Instant, SystemTime)` origin pair used to map
     /// `m.timestamp` (monotonic) onto wall-clock timestamps for recording and
@@ -526,8 +528,7 @@ impl App {
             transform: Transform::default(),
             transform_editor: TransformEditor::default(),
             graph,
-            stats: RunningStats::new(),
-            integrator: Integrator::new(),
+            session: SeriesStats::new(true),
             recording: Recording::new(),
             wall_clock: dmm_lib::WallClock::new(),
             rx: None,
@@ -959,8 +960,7 @@ impl App {
     /// deliberately not touched; Clear has never discarded a capture.
     fn clear_session(&mut self) {
         self.graph.clear();
-        self.stats.reset();
-        self.integrator.reset();
+        self.session.reset();
         self.last_measurement = None;
     }
 
@@ -1042,44 +1042,24 @@ impl App {
                     }
 
                     // The single point a software transform is applied. Every
-                    // consumer below — the mode/unit reset check, the
-                    // statistics, the integrator, the graph's series list and
-                    // plot input, the recording buffer and `last_measurement`
-                    // — then sees one already-scaled reading, and none of them
-                    // has to know transforms exist. No-op when identity.
+                    // consumer below — the session statistics, the graph's
+                    // series list and plot input, the recording buffer and
+                    // `last_measurement` — then sees one already-scaled
+                    // reading, and none of them has to know transforms exist.
+                    // No-op when identity.
                     let mut m = m;
                     self.transform.apply(&mut m);
 
-                    // Reset the session accumulators on mode *or* unit change:
-                    // units become incompatible, and the stats panel labels
-                    // Min/Max/Avg with the *current* unit, so carrying
-                    // volt-scale numbers into an ohms reading presents them as
-                    // ohms. Auto-range moves the unit a decade without touching
-                    // the mode string (Ω→kΩ, mV→V, nF→µF), which is how a max
-                    // three orders of magnitude out reached the panel.
-                    // `Graph::push` clears its own history on the same
-                    // condition; dmm-cli resets its integrator on the same one.
-                    if let Some(prev) = &self.last_measurement
-                        && (prev.mode != m.mode || prev.unit != m.unit)
-                    {
-                        self.integrator.reset();
-                        self.stats.reset();
-                    }
-
-                    // Stats and the integrator follow the meter's *main*
-                    // reading whatever the graph is plotting: they are session
-                    // statistics of the reading, not of the view.
-                    match &m.value {
-                        MeasuredValue::Normal(v) => {
-                            self.stats.push(*v);
-                            self.integrator.push(*v, m.timestamp);
-                        }
-                        // An overload has no plottable value — tell the
-                        // integrator, or a short excursion (one under the gap
-                        // threshold) would be integrated straight across.
-                        MeasuredValue::Overload => self.integrator.push_overload(),
-                        _ => {}
-                    }
+                    // Session stats follow the meter's *main* reading whatever
+                    // the graph plots: they describe the reading, not the view.
+                    // `SeriesStats` resets them on a mode *or* unit change —
+                    // a dial turn, or an auto-range step that moves the unit a
+                    // decade (mV→V) without touching the mode — so the panel
+                    // never labels volt-scale numbers with an ohms unit.
+                    // `Graph::push_sample` clears its history on the same
+                    // condition, and the GUI resets silently, so the returned
+                    // `SeriesChange` is not needed here.
+                    self.session.push(&m);
 
                     // Offer this frame's sub-values before resolving what to
                     // plot, so that the frame the graph finally gives the
@@ -1665,25 +1645,21 @@ impl App {
             .as_ref()
             .map(|m| &*m.unit)
             .unwrap_or("");
-        let integral_info = stats::integral_unit_info(unit).map(|(disp_unit, divisor)| {
-            (
-                self.integrator.value(),
-                disp_unit,
-                divisor,
-                self.integrator.elapsed_secs(),
-            )
-        });
+        // Keyed on the caption unit rather than the session's: `clear_session`
+        // drops `last_measurement` but `SeriesStats::reset` keeps its series,
+        // and the row should vanish with the reading it describes.
+        let integral_info = stats::integral_display(self.session.integrator.value(), unit)
+            .map(|(value, unit)| (value, unit, self.session.integrator.elapsed_secs()));
         // The visible block reports what the graph draws, which is not the
         // main reading's unit when a sub-value is plotted.
         let visible_unit = self.graph.plotted_unit();
-        let visible_integral =
-            stats::integral_unit_info(visible_unit).and_then(|(disp_unit, divisor)| {
-                self.graph
-                    .visible_integral()
-                    .map(|raw| (raw, disp_unit, divisor, self.graph.visible_data_span_secs()))
-            });
+        let visible_integral = self
+            .graph
+            .visible_integral()
+            .and_then(|raw| stats::integral_display(raw, visible_unit))
+            .map(|(value, unit)| (value, unit, self.graph.visible_data_span_secs()));
         let formatted = FormattedStats::new(
-            &self.stats,
+            &self.session.stats,
             self.graph.visible_stats(),
             unit,
             visible_unit,
@@ -1709,8 +1685,7 @@ impl App {
                     .on_hover_text("Reset Min / Max / Avg / integral counters")
                     .clicked()
                 {
-                    self.stats.reset();
-                    self.integrator.reset();
+                    self.session.reset();
                 }
             });
 
@@ -1775,8 +1750,7 @@ impl App {
                 .on_hover_text("Reset Min / Max / Avg / integral counters")
                 .clicked()
             {
-                self.stats.reset();
-                self.integrator.reset();
+                self.session.reset();
             }
 
             // Windowed stats for visible graph interval
@@ -1890,13 +1864,13 @@ impl App {
     /// text were duplicated character-for-character between them, which
     /// CLAUDE.md warns about precisely because the two copies drift.
     fn show_integral_gap_warning(&self, ui: &mut Ui, font_size: f32) {
-        if self.integrator.skipped_intervals == 0 {
+        if self.session.integrator.skipped_intervals == 0 {
             return;
         }
         ui.label(
             RichText::new(format!(
                 "\u{26A0} {} gaps >2s skipped",
-                self.integrator.skipped_intervals
+                self.session.integrator.skipped_intervals
             ))
             .font(egui::FontId::proportional(font_size))
             .color(ui.visuals().warn_fg_color),

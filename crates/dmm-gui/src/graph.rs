@@ -1258,11 +1258,10 @@ impl Graph {
                     let unit = &self.current_unit;
                     let delta_color = self.theme_colors(dark).graph_cursor_delta();
 
-                    let integral_str = dmm_lib::stats::integral_unit_info(unit)
-                        .and_then(|(disp_unit, divisor)| {
-                            self.cursor_integral(ta, tb)
-                                .map(|raw| format!("  \u{222b}={:.4} {disp_unit}", raw / divisor))
-                        })
+                    let integral_str = self
+                        .cursor_integral(ta, tb)
+                        .and_then(|raw| dmm_lib::stats::integral_display(raw, unit))
+                        .map(|(value, disp_unit)| format!("  \u{222b}={value:.4} {disp_unit}"))
                         .unwrap_or_default();
 
                     ui.label(

@@ -162,6 +162,13 @@ Both consumers implement their own:
 CLI: `main.rs:603-730`. GUI: `connection.rs:91-163` + `mod.rs:625-676`.
 Improvements to one don't benefit the other.
 
+**2026-09-03:** largely addressed. Acquisition (pacing, timeout counting, stop
+signal) is shared through `dmm_lib::stream::MeasurementStream`, and the
+per-reading bookkeeping — min/max/avg, the integral, and the mode/unit change
+that resets both — through `dmm_lib::stats::SeriesStats`, which the CLI read
+loop and the GUI message drain now both own. The line numbers above are
+historical.
+
 ### F11. WallClock drift on clock adjustment
 
 **Severity: Low** | **Verified**
