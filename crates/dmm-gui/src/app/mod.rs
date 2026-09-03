@@ -2,6 +2,7 @@ mod connection;
 mod controls;
 mod transform_ui;
 
+use dmm_lib::export::CsvLayout;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
@@ -2065,12 +2066,12 @@ impl App {
                 .max_aux_seen()
                 .saturating_sub(self.recording_extra_slots),
         );
-        let csv_bytes = match render_csv(
-            &self.recording.samples,
-            device_model,
+        let layout = CsvLayout {
             family_slots,
-            self.recording_extra_slots,
-        ) {
+            extra_slots: self.recording_extra_slots,
+            integral: false,
+        };
+        let csv_bytes = match render_csv(&self.recording.samples, device_model, layout) {
             Ok(bytes) => bytes,
             Err(e) => {
                 error!("CSV export failed: {e}");

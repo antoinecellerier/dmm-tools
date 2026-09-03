@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
-use dmm_lib::measurement::{AUX_EXPORT_COLUMNS, Measurement};
-use std::borrow::Cow;
+use dmm_lib::export::{CsvLayout, device_comment};
+use dmm_lib::measurement::Measurement;
 use std::io::Write;
 
 /// Render samples as a CSV document, provenance header included.
@@ -11,78 +11,28 @@ use std::io::Write;
 /// `Sample`s, while the rendered CSV is a fraction of that and takes one pass
 /// instead of half a million allocations.
 ///
-/// `family_slots` is the meter family's `max_aux_values`, not the count in any
-/// one reading: a CSV needs one fixed column layout for the whole file, so a
-/// mode that reports fewer sub-values leaves the trailing slots empty.
-/// `extra_slots` reserves trailing columns for the sub-values software appends
-/// after the meter's own (a transform's `Raw`), so they stay in one place
-/// whatever the meter sent that frame — see [`Measurement::export_aux_slots`].
-/// It is the widest any sample needs; each row claims only as many as its own
-/// [`Sample::extra_aux`] says it carries, and leaves the rest empty. Pass 0
-/// and 0 for a single-display meter with no transform and the file keeps the
-/// six columns it always had.
+/// `layout` fixes the columns for the whole file — see [`CsvLayout`] for what
+/// the slot counts mean. Each row claims only as many of the reserved trailing
+/// groups as its own [`Sample::extra_aux`] says it carries, because a scale
+/// switched on mid-recording leaves the earlier samples without one.
 pub fn render_csv(
     samples: &[Sample],
     device_model: &str,
-    family_slots: usize,
-    extra_slots: usize,
+    layout: CsvLayout,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let aux_slots = family_slots + extra_slots;
     // ~72 bytes covers a typical row (RFC3339 timestamp, mode, value, unit,
     // range, flags) without repeated growth on large buffers; each aux slot
     // adds roughly another 20.
-    let row_bytes = 72 + aux_slots * 20;
+    let row_bytes = 72 + layout.aux_slots() * 20;
     let mut buf: Vec<u8> = Vec::with_capacity(samples.len() * row_bytes + 128);
-    writeln!(buf, "# device: {device_model}")?;
+    writeln!(buf, "{}", device_comment(device_model))?;
     {
         let mut wtr = csv::Writer::from_writer(&mut buf);
-        let mut header: Vec<Cow<'static, str>> =
-            ["timestamp", "mode", "value", "unit", "range", "flags"]
-                .into_iter()
-                .map(Cow::Borrowed)
-                .collect();
-        for i in 1..=aux_slots {
-            for suffix in AUX_EXPORT_COLUMNS {
-                header.push(Cow::Owned(format!("aux{i}_{suffix}")));
-            }
-        }
-        wtr.write_record(header.iter().map(|c| c.as_ref()))?;
-
-        let mut record: Vec<Cow<'_, str>> =
-            Vec::with_capacity(6 + aux_slots * AUX_EXPORT_COLUMNS.len());
+        wtr.write_record(layout.header().iter().map(|c| c.as_ref()))?;
         for s in samples {
-            record.clear();
-            record.push(Cow::Owned(s.wall_time.to_rfc3339()));
-            record.push(Cow::Borrowed(s.mode()));
-            record.push(s.value_export_str());
-            record.push(Cow::Borrowed(s.unit()));
-            record.push(Cow::Borrowed(s.range_label()));
-            record.push(Cow::Owned(s.flags_str()));
-            // One fixed layout for the file: the helper pads the meter's own
-            // slots, pins the appended ones to the trailing group, and
-            // truncates a surplus rather than desyncing every column after it
-            // from the header.
-            //
-            // Only the extras *this* sample carries are claimed. A row
-            // recorded before a mid-recording scale has none, and letting the
-            // helper claim one anyway would read its last meter sub-value as
-            // the appended one — filing Frequency under the `Raw` column.
-            let m = &s.measurement;
-            let extra = s.extra_aux.min(extra_slots);
-            for slot in m.export_aux_slots(family_slots, extra) {
-                match slot {
-                    Some(aux) => record.extend(aux.export_cells(&m.unit)),
-                    None => {
-                        for _ in 0..AUX_EXPORT_COLUMNS.len() {
-                            record.push(Cow::Borrowed(""));
-                        }
-                    }
-                }
-            }
-            for _ in 0..(extra_slots - extra) * AUX_EXPORT_COLUMNS.len() {
-                record.push(Cow::Borrowed(""));
-            }
-            wtr.write_record(record.iter().map(|c| c.as_ref()))?;
+            let ts = s.wall_time.to_rfc3339();
+            let cells = layout.row(&s.measurement, &ts, None, s.extra_aux);
+            wtr.write_record(cells.iter().map(|c| c.as_ref()))?;
         }
         wtr.flush()?;
     }
@@ -134,28 +84,15 @@ impl Sample {
     /// Display form of the measured value — see
     /// [`Measurement::value_display_str`], which this delegates to.
     ///
-    /// Keeps the meter's own spacing for a steady on-screen width. Use
-    /// [`Sample::value_export_str`] for CSV, where that spacing would make the
-    /// column non-numeric.
+    /// Keeps the meter's own spacing for a steady on-screen width. CSV export
+    /// goes through [`Measurement::value_export_str`] instead, where that
+    /// spacing would make the column non-numeric.
     pub fn value_str(&self) -> String {
         self.measurement.value_display_str().into_owned()
     }
 
-    /// Value formatted for CSV export — see [`Measurement::value_export_str`].
-    pub fn value_export_str(&self) -> std::borrow::Cow<'_, str> {
-        self.measurement.value_export_str()
-    }
-
-    pub fn mode(&self) -> &str {
-        &self.measurement.mode
-    }
-
     pub fn unit(&self) -> &str {
         &self.measurement.unit
-    }
-
-    pub fn range_label(&self) -> &str {
-        &self.measurement.range_label
     }
 
     pub fn flags_str(&self) -> String {
@@ -273,6 +210,15 @@ mod tests {
         ];
         let table = Ut61ePlusTable::new();
         dmm_lib::protocol::ut61eplus::parse_measurement(&payload, &table).unwrap()
+    }
+
+    /// The GUI's export never integrates — that is a CLI-only run mode.
+    fn layout(family_slots: usize, extra_slots: usize) -> CsvLayout {
+        CsvLayout {
+            family_slots,
+            extra_slots,
+            integral: false,
+        }
     }
 
     #[test]
@@ -428,7 +374,7 @@ mod tests {
         let m = make_measurement(b"  5.678");
         let wc = WallClock::new();
         let s = Sample::from_measurement(&m, &wc, 0);
-        assert_eq!(s.mode(), "DC V");
+        assert_eq!(s.measurement.mode, "DC V");
         assert_eq!(s.value_str(), "5.678");
         assert_eq!(s.unit(), "V");
     }
@@ -442,7 +388,7 @@ mod tests {
         m.value = MeasuredValue::Overload;
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
         assert_eq!(s.value_str(), "OL");
-        assert_eq!(s.value_export_str(), "OL");
+        assert_eq!(s.measurement.value_export_str(), "OL");
     }
 
     #[test]
@@ -451,7 +397,7 @@ mod tests {
         m.value = MeasuredValue::NcvLevel(2);
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
         assert_eq!(s.value_str(), "NCV:2");
-        assert_eq!(s.value_export_str(), "NCV:2");
+        assert_eq!(s.measurement.value_export_str(), "NCV:2");
     }
 
     /// The wire bytes are debug-only and nothing in the GUI reads them;
@@ -475,7 +421,7 @@ mod tests {
             .map(|_| Sample::from_measurement(&m, &wc, 0))
             .collect();
 
-        let bytes = render_csv(&samples, "UNI-T UT61E+", 0, 0).unwrap();
+        let bytes = render_csv(&samples, "UNI-T UT61E+", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -488,9 +434,23 @@ mod tests {
 
     #[test]
     fn render_csv_of_an_empty_buffer_is_just_the_headers() {
-        let bytes = render_csv(&[], "mock", 0, 0).unwrap();
+        let bytes = render_csv(&[], "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(text.lines().count(), 2);
+    }
+
+    /// A single-display export is the one file both binaries write, so its
+    /// header line is pinned to the same string the CLI asserts in
+    /// `csv_header_names_one_group_per_aux_slot` — renaming a column in one
+    /// exporter alone breaks a test.
+    #[test]
+    fn gui_and_cli_single_display_headers_agree() {
+        let bytes = render_csv(&[], "mock", layout(0, 0)).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert_eq!(
+            text.lines().nth(1).unwrap(),
+            "timestamp,mode,value,unit,range,flags"
+        );
     }
 
     /// Sub-value fixture in the shape the protocols produce: digits in
@@ -517,7 +477,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "UNI-T UT181A", 4, 0).unwrap();
+        let bytes = render_csv(&[s], "UNI-T UT181A", layout(4, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -550,7 +510,7 @@ mod tests {
         m.aux_values = vec![max];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "UNI-T UT181A", 1, 0).unwrap();
+        let bytes = render_csv(&[s], "UNI-T UT181A", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let row = text.lines().nth(2).unwrap();
         assert!(row.ends_with(",Max,5.9010,V"), "got {row:?}");
@@ -567,7 +527,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "mock", 1, 0).unwrap();
+        let bytes = render_csv(&[s], "mock", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert!(
@@ -612,7 +572,7 @@ mod tests {
             .map(|(m, extra)| Sample::from_measurement(m, &wc, extra))
             .collect();
 
-        let bytes = render_csv(&samples, "UNI-T UT181A", 2, 1).unwrap();
+        let bytes = render_csv(&samples, "UNI-T UT181A", layout(2, 1)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
