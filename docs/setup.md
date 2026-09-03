@@ -12,16 +12,31 @@ Requires the [Rust toolchain](https://rustup.rs/) (stable, 2024 edition).
 
 **Linux** also needs `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi.
 
+### Clone and build
+
 ```sh
-cargo build --workspace
+git clone https://github.com/antoinecellerier/dmm-tools.git
+cd dmm-tools
+cargo build --release --workspace
 ```
 
-Or install directly:
+The binaries are `target/release/dmm-cli` and `target/release/dmm-gui`. Run them from there, e.g. `./target/release/dmm-cli read`, or let cargo build and run in one step:
+
+```sh
+cargo run --release -p dmm-cli -- read
+cargo run --release -p dmm-gui
+```
+
+### Install with cargo
 
 ```sh
 cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-cli
 cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-gui
 ```
+
+This builds the binaries and copies them to `~/.cargo/bin`. If that directory is not on your `PATH`, run them from there, e.g. `~/.cargo/bin/dmm-cli read`.
+
+See the [CLI reference](cli-reference.md) and [GUI reference](gui-reference.md) for command-line options.
 
 ## Platform setup
 
