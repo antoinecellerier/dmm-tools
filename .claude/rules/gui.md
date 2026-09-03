@@ -8,6 +8,7 @@ paths:
 ## Correctness
 
 - **Test every visual change in both dark and light themes.** Colors tuned for dark mode routinely fail WCAG contrast on light backgrounds — the single largest source of rework in this project.
+- **Verify visual and interaction changes on a private display via the `verify-gui` skill.** Never launch `dmm-gui` on the live desktop and never inject input into it.
 - All colors must be theme-aware (`ui.visuals().dark_mode`).
 - WCAG 2.1 AA contrast: ≥4.5:1 for text, ≥3:1 for graphical elements. Verify numerically when adding/changing colors.
 - Never rely on color alone — add line style, text, or bold as a secondary indicator.

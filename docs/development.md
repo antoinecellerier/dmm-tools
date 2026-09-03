@@ -18,6 +18,21 @@ cargo test --workspace
 
 All tests use `MockTransport` and run without hardware connected.
 
+### Headless GUI checks
+
+`.claude/skills/verify-gui/scripts/gui-display.sh` runs `dmm-gui` against the
+mock device on a private Xvfb display, so screenshots, contrast measurements and
+keyboard/click tests never touch your live desktop session or your
+`settings.json`. Check the setup with:
+
+```sh
+.claude/skills/verify-gui/scripts/gui-display.sh selftest
+```
+
+It needs `xvfb`, `xdotool` and `imagemagick` (plus `python3-pil` for pixel
+measurement). `start`, `run`, `key`, `click`, `shot`, `status` and `stop` are the
+individual steps; always finish with `stop`.
+
 ## Linting
 
 ```sh
@@ -165,4 +180,5 @@ Alongside `CLAUDE.md`, `.claude/rules/` holds path-scoped rules that load
 when their files are touched (`protocol.md` for `crates/dmm-lib/`, `gui.md`
 for `crates/dmm-gui/`, `changelog.md` for `CHANGELOG.md`), and
 `.claude/skills/` holds on-demand checklists: `add-device` (new-meter
-onboarding) and `issue-replies` (issue triage and GitHub reply drafting).
+onboarding), `issue-replies` (issue triage and GitHub reply drafting) and
+`verify-gui` (headless GUI checks, above).
