@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
-use dmm_lib::measurement::{AUX_EXPORT_COLUMNS, MeasuredValue, Measurement};
+use dmm_lib::measurement::{AUX_EXPORT_COLUMNS, Measurement};
 use std::borrow::Cow;
 use std::io::Write;
 
@@ -131,27 +131,14 @@ impl Sample {
         }
     }
 
-    /// Display form of the measured value: trimmed `display_raw` when the
-    /// protocol provides it, or a numeric / OL / NCV fallback otherwise.
-    ///
-    /// Overload and NCV are decided by the parsed `MeasuredValue`, not by
-    /// `display_raw` — protocols that flag overload out-of-band still fill the
-    /// display field with digits, and showing those would turn an out-of-range
-    /// reading into a plausible number. Matches [`Measurement::value_export_str`]
-    /// so the panel and the CSV never disagree.
+    /// Display form of the measured value — see
+    /// [`Measurement::value_display_str`], which this delegates to.
     ///
     /// Keeps the meter's own spacing for a steady on-screen width. Use
     /// [`Sample::value_export_str`] for CSV, where that spacing would make the
     /// column non-numeric.
     pub fn value_str(&self) -> String {
-        match &self.measurement.value {
-            MeasuredValue::Normal(v) => match self.measurement.display_raw.as_deref() {
-                Some(raw) => raw.trim().to_string(),
-                None => format!("{v}"),
-            },
-            MeasuredValue::Overload => "OL".to_string(),
-            MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
-        }
+        self.measurement.value_display_str().into_owned()
     }
 
     /// Value formatted for CSV export — see [`Measurement::value_export_str`].
@@ -273,7 +260,7 @@ impl Default for Recording {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmm_lib::measurement::AuxValue;
+    use dmm_lib::measurement::{AuxValue, MeasuredValue};
     use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 
     fn make_measurement(display: &[u8; 7]) -> Measurement {

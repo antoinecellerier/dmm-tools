@@ -1,6 +1,6 @@
 use console::style;
 use dmm_lib::flags::StatusFlags;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -171,11 +171,9 @@ impl From<&SampleFlags> for StatusFlags {
 
 impl SampleData {
     pub(crate) fn from_measurement(m: &Measurement) -> Self {
-        let value = match &m.value {
-            MeasuredValue::Normal(v) => format!("{v}"),
-            MeasuredValue::Overload => "OL".to_string(),
-            MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
-        };
+        // The parsed value, not `display_raw`: the report stores both, and
+        // this column is the one a golden fixture is compared against.
+        let value = m.value.to_string();
         let raw_hex = m
             .raw_payload
             .iter()
@@ -500,6 +498,7 @@ pub(crate) fn run_capture_step(
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+    use dmm_lib::measurement::MeasuredValue;
     // `capture_steps` is a Protocol method; the trait has to be in scope to
     // call it on a concrete protocol type (not needed for `dyn Protocol`).
     use dmm_lib::protocol::Protocol;

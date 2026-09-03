@@ -16,7 +16,6 @@
 //! test rather than being ignored, so a typo can't silently check nothing.
 
 use dmm_lib::flags::Flag;
-use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::protocol::ut61eplus::parse_measurement;
 use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use serde::Deserialize;
@@ -52,15 +51,6 @@ fn decode_hex(hex: &str) -> Vec<u8> {
                 .unwrap_or_else(|e| panic!("invalid hex at offset {i}: {e}\n  hex: {clean}"))
         })
         .collect()
-}
-
-/// Format a MeasuredValue as a string matching capture output.
-fn format_value(v: &MeasuredValue) -> String {
-    match v {
-        MeasuredValue::Normal(v) => format!("{v}"),
-        MeasuredValue::Overload => "OL".to_string(),
-        MeasuredValue::NcvLevel(l) => format!("NCV:{l}"),
-    }
 }
 
 /// Fail on a fixture flag name no `Flag` answers to.
@@ -121,7 +111,7 @@ fn golden_ut61eplus() {
 
         assert_eq!(measurement.mode, case.mode, "golden {stem}: mode mismatch");
 
-        let actual_value = format_value(&measurement.value);
+        let actual_value = measurement.value.to_string();
         assert_eq!(actual_value, case.value, "golden {stem}: value mismatch");
 
         assert_eq!(measurement.unit, case.unit, "golden {stem}: unit mismatch");

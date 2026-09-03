@@ -14,6 +14,24 @@ pub enum MeasuredValue {
     NcvLevel(u8),
 }
 
+/// The parsed value's canonical string — the form the capture report and the
+/// golden fixtures store, so a fixture reads back as what the parser produced
+/// and nothing else.
+///
+/// Deliberately ignores the meter's own digits, which live on the
+/// [`Measurement`], not here. [`Measurement::value_display_str`] and
+/// [`Measurement::value_export_str`] prefer those digits for
+/// [`MeasuredValue::Normal`] and fall back to this.
+impl std::fmt::Display for MeasuredValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MeasuredValue::Normal(v) => write!(f, "{v}"),
+            MeasuredValue::Overload => write!(f, "OL"),
+            MeasuredValue::NcvLevel(level) => write!(f, "NCV:{level}"),
+        }
+    }
+}
+
 /// Format a measured value as a string that reads back as a number.
 ///
 /// Shared by [`Measurement::value_export_str`] and [`AuxValue::value_str`] so
@@ -23,7 +41,7 @@ pub enum MeasuredValue {
 /// digits is removed.
 fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) -> Cow<'a, str> {
     match value {
-        MeasuredValue::Normal(v) => match display_raw {
+        MeasuredValue::Normal(_) => match display_raw {
             Some(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.contains(' ') {
@@ -32,10 +50,10 @@ fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) 
                     Cow::Borrowed(trimmed)
                 }
             }
-            None => Cow::Owned(v.to_string()),
+            None => Cow::Owned(value.to_string()),
         },
         MeasuredValue::Overload => Cow::Borrowed("OL"),
-        MeasuredValue::NcvLevel(level) => Cow::Owned(format!("NCV:{level}")),
+        MeasuredValue::NcvLevel(_) => Cow::Owned(value.to_string()),
     }
 }
 
@@ -203,6 +221,23 @@ pub struct Measurement {
 }
 
 impl Measurement {
+    /// The measured value formatted for on-screen display.
+    ///
+    /// Prefers the meter's own display digits with the padding trimmed off,
+    /// but keeps any space the meter puts between the sign and the digits —
+    /// the UT61E+ sends `"- 55.79"` on some ranges, and that space is part of
+    /// how the reading looks on the meter. Overload, NCV, and protocols that
+    /// provide no digits fall back to the parsed value's canonical string.
+    ///
+    /// For CSV use [`Measurement::value_export_str`], which applies the same
+    /// rules but strips that inner space so the column stays numeric.
+    pub fn value_display_str(&self) -> Cow<'_, str> {
+        match (&self.value, self.display_raw.as_deref()) {
+            (MeasuredValue::Normal(_), Some(raw)) => Cow::Borrowed(raw.trim()),
+            _ => Cow::Owned(self.value.to_string()),
+        }
+    }
+
     /// The measured value formatted for machine-readable export (CSV).
     ///
     /// Prefers the meter's own display digits so the exported precision
@@ -310,19 +345,7 @@ impl Measurement {
 
 impl std::fmt::Display for Measurement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let value_str = match &self.value {
-            MeasuredValue::Normal(_) => self
-                .display_raw
-                .as_deref()
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|| match &self.value {
-                    MeasuredValue::Normal(v) => format!("{v}"),
-                    _ => unreachable!(),
-                }),
-            MeasuredValue::Overload => "OL".to_string(),
-            MeasuredValue::NcvLevel(level) => format!("NCV:{level}"),
-        };
-        write!(f, "{value_str} {}", self.unit)?;
+        write!(f, "{} {}", self.value_display_str(), self.unit)?;
         let flags_str = self.flags.to_string();
         if !flags_str.is_empty() {
             write!(f, " [{flags_str}]")?;
@@ -348,6 +371,25 @@ mod tests {
     fn display_overload() {
         let m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
         assert!(m.to_string().contains("OL"));
+    }
+
+    #[test]
+    fn measured_value_display_is_the_canonical_form() {
+        assert_eq!(MeasuredValue::Normal(5.678).to_string(), "5.678");
+        assert_eq!(MeasuredValue::Overload.to_string(), "OL");
+        assert_eq!(MeasuredValue::NcvLevel(3).to_string(), "NCV:3");
+    }
+
+    /// The display form keeps the UT61E+'s sign space, the export form drops
+    /// it (see `export_str_strips_the_sign_space`) — the one difference
+    /// between the two.
+    #[test]
+    fn value_display_str_keeps_the_sign_space() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(-55.79), "V", StatusFlags::default());
+        m.display_raw = Some("- 55.79".to_string());
+        assert_eq!(m.value_display_str(), "- 55.79");
+        assert_eq!(m.value_export_str(), "-55.79");
     }
 
     #[test]
