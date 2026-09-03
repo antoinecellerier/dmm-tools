@@ -116,6 +116,35 @@ a series selector plus same-unit sub-value traces for multi-display meters,
 remote control buttons, UI zoom (Ctrl+/-), CSV recording/export with scrollable
 sample log, persistent settings.
 
+`App` is declared once in `app/mod.rs`; every module under `app/` adds `impl App`
+methods to it, so no panel owns state of its own.
+
+| Module | Responsibility |
+|--------|---------------|
+| `app/mod.rs` | The `App` struct, `ConnectionState`, construction, and the per-frame `update` that lays the panels out |
+| `app/appearance.rs` | Font chain and text styles, theme and colour overrides, zoom levels, always-on-top and decoration commands |
+| `app/connection.rs` | The background acquisition thread: open, poll, reconnect, and the `DmmMessage`/`ThreadControl` channel types |
+| `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and the connection-help text |
+| `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and same-unit overlays |
+| `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/Help/shortcuts/settings group |
+| `app/controls.rs` | The settings panel and the meter's remote-command buttons |
+| `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
+| `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
+| `app/recording_panel.rs` | Record/Export row, sample log, discard prompt, and the graph/recording split |
+| `app/export.rs` | CSV export: rendering the buffer, the save dialog and write off the UI thread, and the result toast |
+| `app/transform_ui.rs` | The **Scale** row and its editor for the software transform |
+| `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |
+| `app/shortcut_help.rs` | The keyboard and mouse help modal |
+| `app/whats_new.rs` | The "What's New" release-notes viewport |
+| `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
+| `display.rs` | The reading itself in its three sizes, with the mode line and sub-value rows |
+| `recording.rs` | The bounded sample buffer and its CSV rendering |
+| `settings.rs` | Persisted settings and the colour presets |
+| `specs.rs` | Per-range specification rendering |
+| `theme.rs` | Theme colour tables (WCAG-checked in both modes) |
+| `a11y.rs` | AccessKit label/role extension traits, focus rings, arrow-key resize |
+| `changelog.rs` | The embedded `CHANGELOG.md` shown in the What's New viewport |
+
 ## Key Design Decisions
 
 1. **Sync, not async** — 9600 baud, single device, request/response. No benefit to async complexity.

@@ -144,7 +144,8 @@ the role doesn't expose as the accessible name.
 
 **Workaround we used.** Switched the version label from `Label` to
 `Button` with `frame_when_inactive(false)`, which gives `Role::Button`
-where `set_label` works. See `crates/dmm-gui/src/app/mod.rs:1010`.
+where `set_label` works. See `show_top_bar_right` in
+`crates/dmm-gui/src/app/top_bar.rs`.
 
 **Suggested fix.** Either:
 - honour `set_label` on `Role::Label` nodes (route to both `value` and

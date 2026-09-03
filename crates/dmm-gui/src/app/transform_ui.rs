@@ -17,7 +17,8 @@ use std::time::Instant;
 
 use crate::a11y::ResponseA11yExt;
 
-use super::{App, SMALL_TEXT_SIZE};
+use super::App;
+use super::appearance::SMALL_TEXT_SIZE;
 
 /// Draft text for the three fields, kept apart from the applied
 /// [`Transform`]: the row commits on Apply or Enter only, so a half-typed

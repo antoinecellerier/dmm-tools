@@ -70,7 +70,7 @@ Android:
 
 - `install_desktop_integration()` at `crates/dmm-gui/src/main.rs:191-252`
   (already gated to `target_os = "linux"`, no change needed).
-- `rfd` file dialog at `crates/dmm-gui/src/app/mod.rs:1491` (CSV export).
+- `rfd` file dialog in `crates/dmm-gui/src/app/export.rs` (CSV export).
 - `directories` crate used to resolve the settings path (`dmm-settings`
   would need an Android branch).
 - The `eframe::run_native()` entry at `crates/dmm-gui/src/main.rs:254`
