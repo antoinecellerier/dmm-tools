@@ -1,3 +1,4 @@
+use crate::measurement::{MeasuredValue, Measurement};
 use log::warn;
 use std::time::Instant;
 
@@ -182,6 +183,157 @@ pub fn integral_unit_info(unit: &str) -> Option<(&'static str, f64)> {
         "mV" => Some(("mV\u{00b7}s", 1.0)),
         _ => None,
     }
+}
+
+/// Why the accumulators were reset: the reading started a new series.
+///
+/// Mode *and* unit, because neither check subsumes the other: auto-range
+/// moves the unit a decade without touching the mode (mV → V), while a
+/// `--unit` relabel pins the unit across a dial turn that changes the mode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SeriesChange {
+    /// The meter's mode string changed — typically the dial was turned.
+    Mode { prev: String, new: String },
+    /// The unit changed within the same mode — typically an auto-range step.
+    Unit { prev: String, new: String },
+}
+
+impl std::fmt::Display for SeriesChange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SeriesChange::Mode { prev, new } => write!(f, "Mode changed ({prev} \u{2192} {new})"),
+            SeriesChange::Unit { prev, new } => write!(f, "Unit changed ({prev} \u{2192} {new})"),
+        }
+    }
+}
+
+/// Session statistics of one comparable series of readings: min/max/avg and
+/// the time integral, reset together whenever the mode or the unit changes.
+///
+/// Min/Max/Avg and an integral are only meaningful within a single mode and
+/// unit. Auto-range moves the unit a decade without touching the mode string,
+/// and turning the dial changes the mode — which `--unit` would otherwise
+/// hide, as it pins the label across the change. Without both checks a run
+/// that spans a dial turn averages volts with ohms and prints bare numbers,
+/// so nothing on screen would reveal the mix.
+///
+/// Owned by the CLI read loop and the GUI message drain alike, so the two
+/// cannot drift apart on what starts a new series.
+#[derive(Debug, Clone)]
+pub struct SeriesStats {
+    pub stats: RunningStats,
+    pub integrator: Integrator,
+    integrate: bool,
+    /// `(mode, unit)` the current series accumulates in; `None` until the
+    /// first reading.
+    series: Option<(String, String)>,
+}
+
+impl SeriesStats {
+    /// Create an empty session.
+    ///
+    /// With `integrate == false` the integrator is never touched: pushing into
+    /// it anyway would log its skipped-interval warning for a feature the user
+    /// never asked for (the CLI only integrates under `--integrate`).
+    pub fn new(integrate: bool) -> Self {
+        Self {
+            stats: RunningStats::new(),
+            integrator: Integrator::new(),
+            integrate,
+            series: None,
+        }
+    }
+
+    /// Record one reading, returning the [`SeriesChange`] that reset the
+    /// accumulators, or `None` while the reading continues the current series.
+    ///
+    /// The first reading only stores the series — it starts one rather than
+    /// changing it. When both mode and unit moved, the mode is reported: it
+    /// names the change the user made.
+    pub fn push(&mut self, m: &Measurement) -> Option<SeriesChange> {
+        let change = self.series.as_ref().and_then(|(prev_mode, prev_unit)| {
+            if prev_mode.as_str() != m.mode.as_ref() {
+                Some(SeriesChange::Mode {
+                    prev: prev_mode.clone(),
+                    new: m.mode.to_string(),
+                })
+            } else if prev_unit.as_str() != m.unit.as_ref() {
+                Some(SeriesChange::Unit {
+                    prev: prev_unit.clone(),
+                    new: m.unit.to_string(),
+                })
+            } else {
+                None
+            }
+        });
+        if change.is_some() {
+            self.stats.reset();
+            self.integrator.reset();
+        }
+        // Only re-store on a change: an unchanged series would otherwise
+        // allocate two strings for every sample of the run.
+        if change.is_some() || self.series.is_none() {
+            self.series = Some((m.mode.to_string(), m.unit.to_string()));
+        }
+
+        match &m.value {
+            MeasuredValue::Normal(v) => {
+                self.stats.push(*v);
+                if self.integrate {
+                    self.integrator.push(*v, m.timestamp);
+                }
+            }
+            // Breaks the integration interval; contributes nothing to min/max.
+            MeasuredValue::Overload => {
+                if self.integrate {
+                    self.integrator.push_overload();
+                }
+            }
+            // A detection level is not a measured quantity — neither
+            // accumulator has anything to do with it.
+            MeasuredValue::NcvLevel(_) => {}
+        }
+        change
+    }
+
+    /// Clear both accumulators, keeping the current series: the CLI's Ctrl+L
+    /// and the GUI's Reset button clear the numbers, they don't forget what is
+    /// being measured.
+    pub fn reset(&mut self) {
+        self.stats.reset();
+        self.integrator.reset();
+    }
+
+    /// Mode the accumulated figures were measured in, or `None` before the
+    /// first reading.
+    pub fn mode(&self) -> Option<&str> {
+        self.series.as_ref().map(|(mode, _)| mode.as_str())
+    }
+
+    /// Unit the accumulated figures were measured in, or `None` before the
+    /// first reading.
+    pub fn unit(&self) -> Option<&str> {
+        self.series.as_ref().map(|(_, unit)| unit.as_str())
+    }
+
+    /// The integral scaled to its display unit, or `None` when this session
+    /// does not integrate, no reading has arrived yet, or the current unit has
+    /// no meaningful time-integral (see [`integral_unit_info`]).
+    pub fn integral_display(&self) -> Option<(f64, &'static str)> {
+        if !self.integrate {
+            return None;
+        }
+        integral_display(self.integrator.value(), self.unit()?)
+    }
+}
+
+/// Raw unit·seconds integral scaled to its display unit:
+/// `(value / divisor, display_unit)`.
+///
+/// `None` for units where integration is not meaningful — see
+/// [`integral_unit_info`].
+pub fn integral_display(raw: f64, unit: &str) -> Option<(f64, &'static str)> {
+    integral_unit_info(unit).map(|(display_unit, divisor)| (raw / divisor, display_unit))
 }
 
 #[cfg(test)]
@@ -409,5 +561,165 @@ mod tests {
         assert!(integral_unit_info("°F").is_none());
         assert!(integral_unit_info("%").is_none());
         assert!(integral_unit_info("").is_none());
+    }
+    // --- SeriesStats tests ---
+
+    fn reading(mode: &'static str, unit: &'static str, value: f64, t: Instant) -> Measurement {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(value),
+            unit,
+            crate::flags::StatusFlags::default(),
+        );
+        m.mode = mode.into();
+        m.timestamp = t;
+        m
+    }
+
+    #[test]
+    fn first_reading_starts_the_series_without_a_change() {
+        let mut s = SeriesStats::new(true);
+        assert_eq!(s.push(&reading("DC V", "V", 1.0, Instant::now())), None);
+        assert_eq!(s.mode(), Some("DC V"));
+        assert_eq!(s.unit(), Some("V"));
+        assert_eq!(s.stats.count, 1);
+    }
+
+    #[test]
+    fn unit_change_resets_and_reports() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("DC V", "mV", 100.0, t0));
+        s.push(&reading(
+            "DC V",
+            "mV",
+            200.0,
+            t0 + Duration::from_millis(100),
+        ));
+        assert_eq!(s.stats.count, 2);
+
+        let change = s.push(&reading("DC V", "V", 1.0, t0 + Duration::from_millis(200)));
+        assert_eq!(
+            change,
+            Some(SeriesChange::Unit {
+                prev: "mV".to_string(),
+                new: "V".to_string(),
+            })
+        );
+        // Reset, then the triggering reading itself is counted.
+        assert_eq!(s.stats.count, 1);
+        assert_eq!(s.stats.min, Some(1.0));
+        assert_eq!(s.integrator.count, 1);
+        assert_eq!(s.integrator.value(), 0.0);
+        assert_eq!(s.unit(), Some("V"));
+    }
+
+    /// The reset used to watch the unit alone. `--unit` pins the label, so
+    /// a dial turn from volts to ohms kept one series and averaged the two
+    /// quantities together in silence. When both moved, name the mode: it is
+    /// the change the user made.
+    #[test]
+    fn mode_change_takes_precedence_over_unit() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(false);
+        s.push(&reading("DC V", "V", 1.0, t0));
+        let change = s.push(&reading(
+            "\u{3a9}",
+            "k\u{3a9}",
+            4.7,
+            t0 + Duration::from_millis(100),
+        ));
+        assert_eq!(
+            change,
+            Some(SeriesChange::Mode {
+                prev: "DC V".to_string(),
+                new: "\u{3a9}".to_string(),
+            })
+        );
+        assert_eq!(s.mode(), Some("\u{3a9}"));
+        assert_eq!(s.unit(), Some("k\u{3a9}"));
+    }
+
+    #[test]
+    fn overload_breaks_the_integral_but_not_the_series() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("DC A", "A", 1.0, t0));
+
+        let mut ol = Measurement::test_fixture(
+            MeasuredValue::Overload,
+            "A",
+            crate::flags::StatusFlags::default(),
+        );
+        ol.mode = "DC A".into();
+        ol.timestamp = t0 + Duration::from_millis(100);
+        assert_eq!(s.push(&ol), None);
+
+        assert_eq!(
+            s.push(&reading("DC A", "A", 1.0, t0 + Duration::from_millis(200))),
+            None
+        );
+        assert_eq!(s.integrator.overload_gaps, 1);
+        // Overload is not a number: it never reaches min/max/avg.
+        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.unit(), Some("A"));
+    }
+
+    #[test]
+    fn not_integrating_leaves_the_integrator_untouched() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(false);
+        s.push(&reading("DC A", "A", 1.0, t0));
+        s.push(&reading("DC A", "A", 1.0, t0 + Duration::from_millis(100)));
+        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.integrator.count, 0);
+        assert_eq!(s.integral_display(), None);
+    }
+
+    #[test]
+    fn integral_display_scales_by_the_unit() {
+        // 7200 mA·s = 2 mAh.
+        assert_eq!(integral_display(7200.0, "mA"), Some((2.0, "mAh")));
+        assert_eq!(integral_display(1.0, "\u{3a9}"), None);
+    }
+
+    #[test]
+    fn reset_keeps_the_series() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("DC V", "V", 1.0, t0));
+        s.push(&reading("DC V", "V", 3.0, t0 + Duration::from_millis(100)));
+        s.reset();
+        assert_eq!(s.stats.count, 0);
+        assert_eq!(s.integrator.count, 0);
+        assert_eq!(s.unit(), Some("V"));
+
+        // Same series as before the reset: no spurious change note.
+        assert_eq!(
+            s.push(&reading("DC V", "V", 2.0, t0 + Duration::from_millis(200))),
+            None
+        );
+        assert_eq!(s.stats.count, 1);
+    }
+
+    /// The CLI prints these verbatim; the wording predates `SeriesChange` and
+    /// must survive the move into the library.
+    #[test]
+    fn series_change_display_matches_the_cli_wording() {
+        assert_eq!(
+            SeriesChange::Mode {
+                prev: "DC V".to_string(),
+                new: "Resistance".to_string(),
+            }
+            .to_string(),
+            "Mode changed (DC V \u{2192} Resistance)"
+        );
+        assert_eq!(
+            SeriesChange::Unit {
+                prev: "mV".to_string(),
+                new: "V".to_string(),
+            }
+            .to_string(),
+            "Unit changed (mV \u{2192} V)"
+        );
     }
 }

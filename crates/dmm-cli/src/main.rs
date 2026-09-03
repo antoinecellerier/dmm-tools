@@ -5,7 +5,6 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
 use dmm_lib::error::ErrorKind;
-use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transform::Transform;
@@ -188,27 +187,6 @@ fn parse_scale(s: &str) -> Result<f64, String> {
 /// only NaN and infinity are rejected, on the same grounds as `--scale`.
 fn parse_offset(s: &str) -> Result<f64, String> {
     parse_finite("offset", s)
-}
-
-/// The note to print when a reading starts a new statistics series, or `None`
-/// while it continues the current one.
-///
-/// Mode *and* unit, not the unit alone: `--unit` pins the label, so a dial
-/// turn from V to Ω would otherwise leave the unit identical and average
-/// volts with ohms in silence. Auto-range moves the unit without touching the
-/// mode (mV → V), so neither check subsumes the other. Same condition the GUI
-/// resets its stats and integrator on.
-fn series_change(
-    (prev_mode, prev_unit): (&str, &str),
-    (mode, unit): (&str, &str),
-) -> Option<String> {
-    if prev_mode != mode {
-        Some(format!("Mode changed ({prev_mode} \u{2192} {mode})"))
-    } else if prev_unit != unit {
-        Some(format!("Unit changed ({prev_unit} \u{2192} {unit})"))
-    } else {
-        None
-    }
 }
 
 #[derive(Clone, ValueEnum)]
@@ -745,12 +723,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
     let tick = Duration::from_millis(interval_ms);
     let wall_clock = dmm_lib::WallClock::new();
-    let mut stats = dmm_lib::stats::RunningStats::default();
-    let mut integrator = dmm_lib::stats::Integrator::new();
-    // Mode and unit the current stats/integral series accumulates in. A
-    // change to either resets both, so the closing summary only ever covers
-    // one comparable series.
-    let mut series: Option<(String, String)> = None;
+    // Min/Max/Avg and the integral are only meaningful within a single mode
+    // and unit; `SeriesStats` resets both whenever either moves, so the
+    // closing summary only ever covers one comparable series.
+    let mut session = dmm_lib::stats::SeriesStats::new(integrate);
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
     // Give the pacing sleep the same Ctrl-C flag the loop checks, so a long
@@ -771,45 +747,20 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 transform.apply(&mut m);
 
                 // Min/Max/Avg and the integral are only meaningful within a
-                // single mode and unit. Auto-range moves the unit a decade
-                // without touching the mode string, and turning the dial
-                // changes the mode — which `--unit` would otherwise hide, as
-                // it pins the label across the change. Without both checks the
-                // closing summary averages volts with ohms and prints bare
-                // numbers, so nothing on screen would reveal the mix.
-                let current_unit: &str = &m.unit;
-                if let Some((prev_mode, prev_unit)) = &series
-                    && let Some(note) =
-                        series_change((prev_mode, prev_unit), (&m.mode, current_unit))
-                {
+                // single mode and unit, and neither check subsumes the other —
+                // see `SeriesStats`, which resets both accumulators and reports
+                // the change.
+                if let Some(change) = session.push(&m) {
                     let what = if integrate {
                         "statistics and integral"
                     } else {
                         "statistics"
                     };
-                    eprintln!("{} {note}, {what} reset", style("Note:").yellow());
-                    stats.reset();
-                    integrator.reset();
-                }
-                series = Some((m.mode.to_string(), current_unit.to_string()));
-
-                if let MeasuredValue::Normal(v) = &m.value {
-                    stats.push(*v);
+                    eprintln!("{} {change}, {what} reset", style("Note:").yellow());
                 }
 
-                // Integration tracking
-                let integral_display = if integrate {
-                    match &m.value {
-                        MeasuredValue::Normal(v) => integrator.push(*v, m.timestamp),
-                        MeasuredValue::Overload => integrator.push_overload(),
-                        _ => {}
-                    }
-
-                    dmm_lib::stats::integral_unit_info(current_unit)
-                        .map(|(disp_unit, divisor)| (integrator.value() / divisor, disp_unit))
-                } else {
-                    None
-                };
+                // Already `None` unless --integrate was given.
+                let integral_display = session.integral_display();
 
                 format::format_measurement(
                     &mut writer,
@@ -870,41 +821,40 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         );
     }
 
-    if let (Some(min), Some(max), Some(avg)) = (stats.min, stats.max, stats.avg()) {
+    if let (Some(min), Some(max), Some(avg)) =
+        (session.stats.min, session.stats.max, session.stats.avg())
+    {
         // Name the unit the figures are in. They reset whenever the mode or
         // the unit moves, so this is the unit every sample behind them was
         // measured in.
-        let unit_suffix = series
-            .as_ref()
-            .map(|(_, unit)| unit.as_str())
+        let unit_suffix = session
+            .unit()
             .filter(|u| !u.is_empty())
             .map(|u| format!(" {u}"))
             .unwrap_or_default();
         eprintln!(
             "\n{} {} samples | Min: {}{unit_suffix} | Max: {}{unit_suffix} | Avg: {}{unit_suffix}",
             style("---").dim(),
-            stats.count,
+            session.stats.count,
             style(format!("{min:.4}")).cyan(),
             style(format!("{max:.4}")).cyan(),
             style(format!("{avg:.4}")).cyan(),
         );
-        if integrate
-            && let Some((_, unit_str)) = &series
-            && let Some((disp_unit, divisor)) = dmm_lib::stats::integral_unit_info(unit_str)
-        {
-            let dt_str = integrator
+        if let Some((value, disp_unit)) = session.integral_display() {
+            let dt_str = session
+                .integrator
                 .elapsed_secs()
                 .map(|s| format!(" ({}s)", style(format!("{s:.1}")).cyan()))
                 .unwrap_or_default();
             eprintln!(
                 "    Integral: {} {disp_unit}{dt_str}",
-                style(format!("{:.4}", integrator.value() / divisor)).cyan(),
+                style(format!("{value:.4}")).cyan(),
             );
-            if integrator.skipped_intervals > 0 {
+            if session.integrator.skipped_intervals > 0 {
                 eprintln!(
                     "    {} {} intervals skipped (sample spacing exceeds the 2 s integrator limit \u{2014} lower --interval-ms for more frequent samples or expect a partial integral)",
                     style("Note:").yellow(),
-                    integrator.skipped_intervals,
+                    session.integrator.skipped_intervals,
                 );
             }
         }
@@ -1030,6 +980,7 @@ fn cmd_debug(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmm_lib::measurement::MeasuredValue;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;
 
     #[test]
@@ -1191,27 +1142,6 @@ mod tests {
         assert_eq!(
             read_transform(&["--offset", "0"]),
             Transform::linear(1.0, 0.0, None)
-        );
-    }
-
-    /// The stats/integral reset used to watch the unit alone. `--unit` pins
-    /// the label, so a dial turn from volts to ohms kept one series and
-    /// averaged the two quantities together in silence.
-    #[test]
-    fn series_change_watches_the_mode_as_well_as_the_unit() {
-        assert_eq!(series_change(("DC V", "V"), ("DC V", "V")), None);
-        assert_eq!(
-            series_change(("DC V", "A"), ("Resistance", "A")).as_deref(),
-            Some("Mode changed (DC V \u{2192} Resistance)")
-        );
-        assert_eq!(
-            series_change(("DC V", "mV"), ("DC V", "V")).as_deref(),
-            Some("Unit changed (mV \u{2192} V)")
-        );
-        // Both moved: name the mode, the change the user made.
-        assert_eq!(
-            series_change(("DC V", "mV"), ("Resistance", "k\u{3a9}")).as_deref(),
-            Some("Mode changed (DC V \u{2192} Resistance)")
         );
     }
 
