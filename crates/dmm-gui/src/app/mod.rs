@@ -3,6 +3,7 @@ mod controls;
 mod shortcuts;
 mod transform_ui;
 
+use dmm_lib::binary_help::{ConnectedAdapters, connected_adapters};
 use dmm_lib::export::CsvLayout;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::mock::MockMode;
@@ -11,7 +12,6 @@ use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
 use dmm_lib::transform::Transform;
 use eframe::egui::{self, Color32, RichText, Ui};
 use log::{error, info};
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -131,29 +131,19 @@ impl ConnectionIssue {
 /// Build the "adapter not found" help, listing what is actually on the bus.
 ///
 /// Called once when the error arrives, not from the render path:
-/// `list_devices()` constructs a fresh `HidApi` and walks every HID device
+/// `connected_adapters()` constructs a fresh `HidApi` and walks every HID device
 /// on the system, and this help stays on screen across every repaint until
 /// the user reconnects. The list is a snapshot either way — the user has to
 /// restart with a different `--adapter` to act on it.
 fn adapter_not_found_help(selector: &str) -> String {
+    let adapters = connected_adapters();
     let mut msg = format!("No device matched --adapter '{selector}'.");
-    match dmm_lib::list_devices() {
-        Ok(devices) if devices.is_empty() => {
-            msg.push_str("\n\nNo devices currently connected.");
-        }
-        Ok(devices) => {
-            msg.push_str("\n\nConnected devices:");
-            for (i, dev) in devices.iter().enumerate() {
-                msg.push_str(&format!("\n  [{i}] {dev}"));
-            }
-            msg.push_str("\n\nRestart with the correct --adapter value.");
-        }
-        Err(_) => {
-            msg.push_str(
-                "\n\nRun 'dmm-cli list' to see connected devices,\n\
-                 then restart with the correct --adapter value.",
-            );
-        }
+    msg.push_str("\n\n");
+    msg.push_str(&adapters.lines().join("\n"));
+    // An empty bus is a complete answer on its own; the other two leave the
+    // user with a choice to make.
+    if !matches!(adapters, ConnectedAdapters::None) {
+        msg.push_str("\n\nRestart with the correct --adapter value.");
     }
     msg
 }
@@ -1934,19 +1924,10 @@ impl App {
                 .add_filter("CSV", &["csv"])
                 .save_file()
             {
-                let result = (|| -> Result<(), Box<dyn std::error::Error>> {
-                    // Write to a sibling .tmp and rename into place so a
-                    // crash mid-export can't leave a truncated file at the
-                    // user-chosen path.
-                    let tmp = path.with_extension("csv.tmp");
-                    let mut file = std::fs::File::create(&tmp)?;
-                    file.write_all(&csv_bytes)?;
-                    file.flush()?;
-                    drop(file);
-                    std::fs::rename(&tmp, &path)?;
-                    Ok(())
-                })();
-                match result {
+                // Writes a sibling .tmp and renames it into place, so a crash
+                // mid-export can't leave a truncated file at the user-chosen
+                // path.
+                match dmm_settings::write_atomic(&path, &csv_bytes) {
                     Ok(()) => {
                         info!("exported {sample_count} samples to {}", path.display());
                         let file_name = path

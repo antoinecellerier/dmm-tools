@@ -4,6 +4,7 @@ mod format;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
+use dmm_lib::binary_help::ConnectedAdapters;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
@@ -532,16 +533,15 @@ fn open_with_help(
                 "{} adapter not found: {detail}",
                 style("Error:").red().bold()
             );
-            // More than one line means devices were listed: a header plus one
-            // per device. Only that answer is worth setting apart and worth a
-            // hint — "nothing is connected" and "couldn't look" are complete
-            // on their own.
-            let lines = dmm_lib::binary_help::connected_adapters_lines();
-            let listed = lines.len() > 1;
+            // Only a real list is worth setting apart and worth a hint —
+            // "nothing is connected" and "couldn't look" are complete on
+            // their own.
+            let adapters = dmm_lib::binary_help::connected_adapters();
+            let listed = matches!(adapters, ConnectedAdapters::Listed(_));
             if listed {
                 eprintln!();
             }
-            for line in &lines {
+            for line in adapters.lines() {
                 eprintln!("{}", style(line).yellow());
             }
             if listed {

@@ -60,33 +60,60 @@ pub fn device_help(intro: &str) -> String {
     help
 }
 
-/// The lines both binaries print under an "adapter not found" error: what is
-/// actually on the bus, or how to find out.
+/// What the bus held when an `--adapter` selector matched nothing.
 ///
-/// No styling and no trailing hint — the CLI tells the user to re-run with a
-/// different `--adapter`, the GUI to restart with one, and only the list of
-/// what is plugged in is common to both.
+/// Both binaries print the same lines but only attach their "pick another
+/// adapter" hint when devices were actually listed. Naming the three answers
+/// keeps that decision off a line count.
+pub enum ConnectedAdapters {
+    /// Nothing is plugged in.
+    None,
+    /// One `  [i] dev` line per device, without the header.
+    Listed(Vec<String>),
+    /// HID enumeration itself failed, so there is nothing to list.
+    Unavailable,
+}
+
+/// What is on the bus, for the "adapter not found" error both binaries print.
 ///
 /// Walks every HID device on the system, so call it once when the error
 /// arrives rather than from a render path. The answer is a snapshot either
 /// way: acting on it means restarting with a different selector.
-pub fn connected_adapters_lines() -> Vec<String> {
+pub fn connected_adapters() -> ConnectedAdapters {
     match list_devices() {
-        Ok(devices) if devices.is_empty() => vec!["No devices currently connected.".to_string()],
-        Ok(devices) => {
-            let mut lines = Vec::with_capacity(devices.len() + 1);
-            lines.push("Connected devices:".to_string());
-            lines.extend(
-                devices
-                    .iter()
-                    .enumerate()
-                    .map(|(i, dev)| format!("  [{i}] {dev}")),
-            );
-            lines
-        }
+        Ok(devices) if devices.is_empty() => ConnectedAdapters::None,
+        Ok(devices) => ConnectedAdapters::Listed(
+            devices
+                .iter()
+                .enumerate()
+                .map(|(i, dev)| format!("  [{i}] {dev}"))
+                .collect(),
+        ),
         // The HID API itself failed, so there is nothing to list; `list` says
         // the same thing with the setup help attached.
-        Err(_) => vec!["Run 'dmm-cli list' to see connected devices.".to_string()],
+        Err(_) => ConnectedAdapters::Unavailable,
+    }
+}
+
+impl ConnectedAdapters {
+    /// The lines both binaries print, header included.
+    ///
+    /// No styling and no trailing hint — the CLI tells the user to re-run with
+    /// a different `--adapter`, the GUI to restart with one, and only the list
+    /// of what is plugged in is common to both.
+    pub fn lines(&self) -> Vec<String> {
+        match self {
+            Self::None => vec!["No devices currently connected.".to_string()],
+            Self::Listed(devices) => {
+                let mut lines = Vec::with_capacity(devices.len() + 1);
+                lines.push("Connected devices:".to_string());
+                lines.extend(devices.iter().cloned());
+                lines
+            }
+            Self::Unavailable => {
+                vec!["Run 'dmm-cli list' to see connected devices.".to_string()]
+            }
+        }
     }
 }
 
@@ -121,6 +148,25 @@ mod tests {
             assert!(help.contains(d.display_name), "missing {}", d.display_name);
         }
         assert!(help.contains("Also accepts aliases"));
+    }
+
+    /// Both binaries render these lines verbatim, so the header and the empty
+    /// and unavailable wordings are part of their output, not an internal
+    /// detail.
+    #[test]
+    fn connected_adapter_lines_match_each_outcome() {
+        assert_eq!(
+            ConnectedAdapters::None.lines(),
+            ["No devices currently connected."]
+        );
+        assert_eq!(
+            ConnectedAdapters::Listed(vec!["  [0] one".into(), "  [1] two".into()]).lines(),
+            ["Connected devices:", "  [0] one", "  [1] two"]
+        );
+        assert_eq!(
+            ConnectedAdapters::Unavailable.lines(),
+            ["Run 'dmm-cli list' to see connected devices."]
+        );
     }
 
     /// The mock needs no hardware and several families are experimental; both
