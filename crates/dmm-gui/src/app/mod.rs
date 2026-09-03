@@ -1,5 +1,6 @@
 mod connection;
 mod controls;
+mod shortcuts;
 mod transform_ui;
 
 use dmm_lib::export::CsvLayout;
@@ -721,129 +722,6 @@ impl App {
         ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(
             !self.settings.hide_decorations,
         ));
-    }
-
-    fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        use egui::{Key, Modifiers};
-
-        // --- Ctrl+Shift shortcuts (most specific first) ---
-
-        // Ctrl+Shift+C: Connect/Disconnect
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND | Modifiers::SHIFT, Key::C)) {
-            match self.connection_state {
-                ConnectionState::Disconnected => self.connect(ctx),
-                // Reconnecting cancels the retry loop, matching the
-                // Disconnect button shown in that state.
-                ConnectionState::Connected | ConnectionState::Reconnecting => self.disconnect(),
-            }
-        }
-
-        // --- Ctrl shortcuts ---
-
-        // Ctrl+Q: Quit
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Q)) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-        }
-
-        // Ctrl+L: Clear graph & statistics
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::L))
-            && self.connection_state == ConnectionState::Connected
-        {
-            self.clear_session();
-        }
-
-        // Ctrl+R: Toggle recording
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::R))
-            && self.connection_state == ConnectionState::Connected
-        {
-            self.toggle_recording();
-        }
-
-        // Ctrl+B: Cycle big meter mode (off -> full -> minimal -> off)
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::B)) {
-            self.cycle_big_meter();
-        }
-
-        // Ctrl+T: Toggle always on top
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::T)) {
-            self.settings.always_on_top = !self.settings.always_on_top;
-            self.apply_always_on_top(ctx);
-            self.settings.save();
-        }
-
-        // Ctrl+D: Toggle window decorations
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::D)) {
-            self.settings.hide_decorations = !self.settings.hide_decorations;
-            self.apply_decorations(ctx);
-            self.settings.save();
-        }
-
-        // Ctrl+E: Export CSV
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::E)) {
-            self.export_csv();
-        }
-
-        // Ctrl+= or Ctrl++: Zoom in
-        if ctx.input_mut(|i| {
-            i.consume_key(Modifiers::COMMAND, Key::Plus)
-                || i.consume_key(Modifiers::COMMAND, Key::Equals)
-        }) {
-            self.zoom_in();
-        }
-
-        // Ctrl+-: Zoom out
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Minus)) {
-            self.zoom_out();
-        }
-
-        // Ctrl+0: Reset zoom
-        if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Num0)) {
-            self.zoom_reset();
-        }
-
-        // Ctrl+W: Close shortcut help overlay (if open). Escape is handled
-        // natively by `egui::Modal::should_close()` inside `show_shortcut_help`,
-        // so we only consume Ctrl+W here. The What's New window is a separate
-        // OS viewport and handles its own close.
-        if self.shortcut_help_open && ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::W)) {
-            self.shortcut_help_open = false;
-            // Defer focus restoration until after top_modal_layer clears —
-            // same reason as the in-modal close path in `show_shortcut_help`.
-            self.shortcut_help_restore_focus = self.shortcut_help_opener.take();
-        }
-
-        // --- Bare-key shortcuts (only when nothing holds keyboard focus) ---
-        //
-        // `egui_wants_keyboard_input()` is any focused widget, not just a
-        // TextEdit — and that is what we want: Space has to activate the
-        // focused button rather than also toggling pause, and arrow keys have
-        // to drive the focused widget rather than panning the graph.
-        // `text_edit_focused()` would be the text-only predicate.
-        if !ctx.egui_wants_keyboard_input() {
-            // Space: Pause/Resume
-            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Space))
-                && self.connection_state == ConnectionState::Connected
-            {
-                self.set_paused(!self.paused);
-            }
-
-            // ?: Toggle shortcut help
-            if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Questionmark)) {
-                let will_open = !self.shortcut_help_open;
-                self.shortcut_help_open = will_open;
-                if will_open {
-                    // Capture whatever widget currently has focus so we can
-                    // restore to it when the modal closes. Can't rely on
-                    // "egui will retain focus" — Focus::begin_pass clears
-                    // focused_widget unconditionally when it sees Escape, so
-                    // without an explicit opener the next Tab lands on the
-                    // first widget in the top bar instead of the one the
-                    // user was on.
-                    self.shortcut_help_opener = ctx.memory(|m| m.focused());
-                    self.shortcut_help_focus_pending = true;
-                }
-            }
-        }
     }
 
     fn connect(&mut self, ctx: &egui::Context) {
@@ -2601,20 +2479,9 @@ impl App {
                     .show(ui, |ui| {
                         ui.label(RichText::new("General").strong());
                         ui.end_row();
-                        for (key, action) in [
-                            ("Ctrl+Shift+C", "Connect / Disconnect"),
-                            ("Space", "Pause / Resume"),
-                            ("Ctrl+L", "Clear graph & statistics"),
-                            ("Ctrl+R", "Toggle recording"),
-                            ("Ctrl+B", "Cycle big meter (off / full / minimal)"),
-                            ("Ctrl+T", "Toggle always on top"),
-                            ("Ctrl+D", "Toggle window decorations"),
-                            ("Ctrl+E", "Export CSV"),
-                            ("Ctrl+Plus/Minus", "Zoom in / out"),
-                            ("Ctrl+0", "Reset zoom to 100%"),
-                            ("Esc / Ctrl+W", "Close this help"),
-                            ("Ctrl+Q", "Quit"),
-                        ] {
+                        // Rendered from the same table `handle_keyboard_shortcuts`
+                        // dispatches, so the two cannot drift.
+                        for (key, action) in shortcuts::help_rows() {
                             ui.label(RichText::new(key).monospace());
                             ui.label(action);
                             ui.end_row();
