@@ -346,6 +346,15 @@ enum BigMeterMode {
     Minimal,
 }
 
+/// Which of the two multi-panel layouts the reading column is rendered in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ContentLayout {
+    /// Reading column is a left side panel; the graph lives beside it.
+    Wide,
+    /// Reading column is the whole window and stacks the graph below it.
+    Narrow,
+}
+
 /// Connection state.
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum ConnectionState {
@@ -2386,40 +2395,7 @@ impl eframe::App for App {
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
                 .show_inside(ui, |ui| {
-                    let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                    display::show_reading(
-                        ui,
-                        self.last_measurement.as_ref(),
-                        &tc,
-                        !self.transform.is_identity(),
-                    );
-                    let controls_top = ui.cursor().top();
-                    self.show_remote_controls(ui, 1.0);
-                    let controls_bottom = ui.cursor().top();
-                    // Overlay toggle on the last controls row, right-aligned.
-                    let toggle_rect = egui::Rect::from_min_max(
-                        egui::pos2(ui.max_rect().left(), controls_top),
-                        egui::pos2(ui.max_rect().right(), controls_bottom),
-                    );
-                    self.show_big_meter_toggle_at(ui, toggle_rect);
-                    self.show_transform_row(ui, 1.0);
-                    self.show_connection_help(ui);
-                    ui.add_space(8.0);
-
-                    let has_spec = self
-                        .last_measurement
-                        .as_ref()
-                        .map(|m| m.spec.is_some())
-                        .unwrap_or(false);
-                    if has_spec || self.manual_url().is_some() {
-                        ui.separator();
-                        self.show_specs_section(ui, 1.0);
-                    }
-
-                    if self.settings.show_stats {
-                        ui.separator();
-                        self.show_stats_section(ui, false, 1.0);
-                    }
+                    self.show_reading_column(ui, ContentLayout::Wide);
                 });
             // egui's `Panel::left(..).resizable(true)` allocates a
             // drag-sense resize handle at its right edge, which is focusable
@@ -2481,34 +2457,7 @@ impl eframe::App for App {
             // Narrow: single column
             egui::CentralPanel::default()
                 .show_inside(ui, |ui| {
-                    let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                    display::show_reading_compact(
-                        ui,
-                        self.last_measurement.as_ref(),
-                        &tc,
-                        !self.transform.is_identity(),
-                    );
-                    let controls_top = ui.cursor().top();
-                    self.show_remote_controls(ui, 1.0);
-                    let controls_bottom = ui.cursor().top();
-                    let toggle_rect = egui::Rect::from_min_max(
-                        egui::pos2(ui.max_rect().left(), controls_top),
-                        egui::pos2(ui.max_rect().right(), controls_bottom),
-                    );
-                    self.show_big_meter_toggle_at(ui, toggle_rect);
-                    self.show_transform_row(ui, 1.0);
-                    self.show_connection_help(ui);
-                    self.show_specs_section_compact(ui);
-
-                    if self.settings.show_stats {
-                        ui.separator();
-                        self.show_stats_section(ui, true, 1.0);
-                    }
-
-                    if self.settings.show_graph || self.settings.show_recording {
-                        ui.separator();
-                        self.show_graph_recording_split(ui, true);
-                    }
+                    self.show_reading_column(ui, ContentLayout::Narrow);
                 })
                 .response
                 .a11y_role(egui::accesskit::Role::Main);
@@ -2525,6 +2474,71 @@ impl eframe::App for App {
 }
 
 impl App {
+    /// Reading, controls, specs and stats — the column shared by the wide and
+    /// narrow multi-panel layouts. The two differ only in the reading widget,
+    /// the specs section, the stats section's compact flag, and whether the
+    /// graph/recording split is stacked below (narrow) or lives in its own
+    /// centre panel (wide).
+    fn show_reading_column(&mut self, ui: &mut Ui, layout: ContentLayout) {
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+        match layout {
+            ContentLayout::Wide => display::show_reading(
+                ui,
+                self.last_measurement.as_ref(),
+                &tc,
+                !self.transform.is_identity(),
+            ),
+            ContentLayout::Narrow => display::show_reading_compact(
+                ui,
+                self.last_measurement.as_ref(),
+                &tc,
+                !self.transform.is_identity(),
+            ),
+        }
+        let controls_top = ui.cursor().top();
+        self.show_remote_controls(ui, 1.0);
+        let controls_bottom = ui.cursor().top();
+        // Overlay toggle on the last controls row, right-aligned.
+        let toggle_rect = egui::Rect::from_min_max(
+            egui::pos2(ui.max_rect().left(), controls_top),
+            egui::pos2(ui.max_rect().right(), controls_bottom),
+        );
+        self.show_big_meter_toggle_at(ui, toggle_rect);
+        self.show_transform_row(ui, 1.0);
+        self.show_connection_help(ui);
+
+        match layout {
+            ContentLayout::Wide => {
+                ui.add_space(8.0);
+
+                let has_spec = self
+                    .last_measurement
+                    .as_ref()
+                    .map(|m| m.spec.is_some())
+                    .unwrap_or(false);
+                if has_spec || self.manual_url().is_some() {
+                    ui.separator();
+                    self.show_specs_section(ui, 1.0);
+                }
+            }
+            ContentLayout::Narrow => self.show_specs_section_compact(ui),
+        }
+
+        if self.settings.show_stats {
+            ui.separator();
+            let compact = matches!(layout, ContentLayout::Narrow);
+            self.show_stats_section(ui, compact, 1.0);
+        }
+
+        // Wide keeps the graph in its own centre panel next to this column.
+        if let ContentLayout::Narrow = layout
+            && (self.settings.show_graph || self.settings.show_recording)
+        {
+            ui.separator();
+            self.show_graph_recording_split(ui, true);
+        }
+    }
+
     /// Paint the big meter toggle button at a given rect (overlay, no layout impact).
     fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
         let (icon, tooltip) = match self.big_meter_mode {
