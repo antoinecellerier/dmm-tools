@@ -1,4 +1,4 @@
-use dmm_lib::flags::StatusFlags;
+use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{Color32, FontId, Grid, Rect, RichText, TextFormat, Ui};
@@ -148,77 +148,79 @@ fn spoken_unit(unit: &str) -> Cow<'_, str> {
     }
 }
 
-/// Append a phrase listing the active status flags, in the same order as
-/// `show_flags` paints them. Each flag is prefixed with ", " so it reads
-/// naturally after the mode field. No-op if all flags are inactive.
-fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
-    let push = |label: &str, out: &mut String| {
-        out.push_str(", ");
-        out.push_str(label);
-    };
-    if flags.hv_warning {
-        push("high voltage warning", out);
-    }
-    if flags.auto_range {
-        push("auto range", out);
-    }
-    if flags.hold {
-        push("hold", out);
-    }
-    if flags.rel {
-        push("relative", out);
-    }
-    if flags.min {
-        push("minimum", out);
-    }
-    if flags.max {
-        push("maximum", out);
-    }
-    if flags.peak_min {
-        push("peak minimum", out);
-    }
-    if flags.peak_max {
-        push("peak maximum", out);
-    }
-    if flags.low_battery {
-        push("low battery", out);
-    }
-    if flags.lead_error {
-        push("lead error", out);
-    }
-    if flags.comp {
-        push("compare", out);
-    }
-    if flags.record {
-        push("recording", out);
-    }
-    if flags.loz {
-        push("low impedance", out);
-    }
-    if flags.void {
-        push("void", out);
+/// The single order the flags are presented in: `show_flags` paints the
+/// badges in it and `append_flags_phrase` speaks them in it, so the two cannot
+/// drift apart the way three hand-written lists did.
+///
+/// `Flag::HvWarning` leads — see the hazard-first comment in `show_flags`.
+/// Everything else keeps [`Flag::ALL`] order, which is what the recording
+/// panel and the CSV flags column already use.
+fn badge_order() -> impl Iterator<Item = Flag> {
+    std::iter::once(Flag::HvWarning).chain(Flag::ALL.into_iter().filter(|f| *f != Flag::HvWarning))
+}
+
+/// Spoken form of a flag for the screen-reader label.
+///
+/// `None` where [`Flag::label`] is `None`: the DC/AC distinction rides on the
+/// mode field, so announcing it again would be noise.
+fn spoken(flag: Flag) -> Option<&'static str> {
+    Some(match flag {
+        Flag::HvWarning => "high voltage warning",
+        Flag::AutoRange => "auto range",
+        Flag::Hold => "hold",
+        Flag::Rel => "relative",
+        Flag::Min => "minimum",
+        Flag::Max => "maximum",
+        Flag::PeakMin => "peak minimum",
+        Flag::PeakMax => "peak maximum",
+        Flag::LowBattery => "low battery",
+        Flag::LeadError => "lead error",
+        Flag::Comp => "compare",
+        Flag::Record => "recording",
+        Flag::LoZ => "low impedance",
+        Flag::Void => "void",
+        Flag::Dc => return None,
+    })
+}
+
+/// Badge color for a flag: hazard in the error color, the conditions that
+/// cast doubt on the reading in the warning color, the rest in accent.
+fn badge_tone(flag: Flag, tc: &ThemeColors) -> Color32 {
+    match flag {
+        Flag::HvWarning => tc.status_error(),
+        Flag::LowBattery | Flag::LeadError | Flag::Void => tc.recording_full_warning(),
+        Flag::Hold
+        | Flag::Rel
+        | Flag::AutoRange
+        | Flag::Min
+        | Flag::Max
+        | Flag::PeakMax
+        | Flag::PeakMin
+        | Flag::Comp
+        | Flag::Record
+        | Flag::LoZ
+        | Flag::Dc => tc.accent(),
     }
 }
 
-/// Pack a `StatusFlags` into a u16 bitfield for fingerprint hashing. Stable
-/// across runs because we list each flag explicitly rather than relying on
-/// struct field order.
+/// Append a phrase listing the active status flags, in `badge_order()` — the
+/// same iterator `show_flags` paints from, so what is heard and what is seen
+/// are the same flags in the same order. Each flag is prefixed with ", " so it
+/// reads naturally after the mode field. No-op if all flags are inactive.
+fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
+    for phrase in badge_order().filter(|f| flags.get(*f)).filter_map(spoken) {
+        out.push_str(", ");
+        out.push_str(phrase);
+    }
+}
+
+/// Pack a `StatusFlags` into a u16 bitfield for fingerprint hashing. Bit `i`
+/// is `Flag::ALL[i]`, so the packing stays stable and stays complete as flags
+/// are added rather than relying on struct field order.
 fn flags_bits(flags: &StatusFlags) -> u16 {
-    (flags.hold as u16)
-        | ((flags.rel as u16) << 1)
-        | ((flags.min as u16) << 2)
-        | ((flags.max as u16) << 3)
-        | ((flags.auto_range as u16) << 4)
-        | ((flags.low_battery as u16) << 5)
-        | ((flags.hv_warning as u16) << 6)
-        | ((flags.dc as u16) << 7)
-        | ((flags.peak_max as u16) << 8)
-        | ((flags.peak_min as u16) << 9)
-        | ((flags.lead_error as u16) << 10)
-        | ((flags.comp as u16) << 11)
-        | ((flags.record as u16) << 12)
-        | ((flags.loz as u16) << 13)
-        | ((flags.void as u16) << 14)
+    Flag::ALL.iter().enumerate().fold(0u16, |bits, (i, &flag)| {
+        bits | ((flags.get(flag) as u16) << i)
+    })
 }
 
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
@@ -965,6 +967,55 @@ mod tests {
         }
     }
 
+    #[test]
+    fn badge_order_starts_with_hv_and_covers_every_flag_once() {
+        let order: Vec<Flag> = badge_order().collect();
+        assert_eq!(
+            order.first(),
+            Some(&Flag::HvWarning),
+            "the hazard badge must lead the row"
+        );
+        assert_eq!(order.len(), StatusFlags::COUNT);
+
+        let mut seen = std::collections::HashSet::new();
+        for flag in &order {
+            assert!(seen.insert(*flag), "{flag:?} appears twice in badge_order");
+        }
+    }
+
+    /// The badge row and the spoken label are built from the same iterator, so
+    /// anything with a badge must have a phrase and vice versa — the drift
+    /// that had screen readers announcing peak flags the row never painted.
+    #[test]
+    fn every_labelled_flag_is_spoken() {
+        for flag in Flag::ALL {
+            assert_eq!(
+                spoken(flag).is_some(),
+                flag.label().is_some(),
+                "{flag:?} must be either both labelled and spoken, or neither"
+            );
+        }
+    }
+
+    #[test]
+    fn spoken_phrase_lists_peak_flags_the_badges_show() {
+        let flags = StatusFlags {
+            peak_max: true,
+            peak_min: true,
+            ..Default::default()
+        };
+        let mut phrase = String::new();
+        append_flags_phrase(&mut phrase, &flags);
+        assert!(phrase.contains("peak maximum"), "got {phrase:?}");
+        assert!(phrase.contains("peak minimum"), "got {phrase:?}");
+
+        let badges: Vec<&str> = badge_order()
+            .filter(|f| flags.get(*f))
+            .filter_map(Flag::label)
+            .collect();
+        assert_eq!(badges, ["P-MAX", "P-MIN"]);
+    }
+
     /// Build a sub-value the way the protocols do: digits in `display_raw`,
     /// unit empty when it matches the main reading's.
     fn aux(label: &'static str, display: &str, unit: &'static str) -> AuxValue {
@@ -1240,53 +1291,22 @@ fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors, sc
         ui.label(text);
     };
 
-    let accent = tc.accent();
-    let warning = tc.recording_full_warning();
-
-    // Hazard first, and in the error color rather than the generic warning
-    // one — this is the meter telling the user the probes are on a dangerous
-    // potential. The "HV!" text matches `StatusFlags::Display`, so the badge,
-    // the recording panel and the CSV flags column all say the same thing.
-    if m.flags.hv_warning {
-        badge(ui, "HV!", tc.status_error());
-    }
-    if m.flags.auto_range {
-        badge(ui, "AUTO", accent);
-    }
-    if m.flags.hold {
-        badge(ui, "HOLD", accent);
-    }
-    if m.flags.rel {
-        badge(ui, "REL", accent);
-    }
-    if m.flags.min {
-        badge(ui, "MIN", accent);
-    }
-    if m.flags.max {
-        badge(ui, "MAX", accent);
-    }
-    if m.flags.low_battery {
-        badge(ui, "LOW BAT", warning);
-    }
-    if m.flags.lead_error {
-        badge(ui, "LEAD ERR", warning);
-    }
-    if m.flags.comp {
-        badge(ui, "COMP", accent);
-    }
-    if m.flags.record {
-        badge(ui, "REC", accent);
-    }
-    if m.flags.loz {
-        badge(ui, "LoZ", accent);
-    }
-    if m.flags.void {
-        badge(ui, "VOID", warning);
+    // `badge_order()` puts the hazard first, and `badge_tone` paints it in the
+    // error color rather than the generic warning one — this is the meter
+    // telling the user the probes are on a dangerous potential. Labels come
+    // from `Flag::label()`, the same source as `StatusFlags::Display`, so the
+    // badge, the recording panel and the CSV flags column all say "HV!".
+    // `Flag::Dc` has no label and so paints no badge.
+    for (flag, label) in badge_order()
+        .filter(|f| m.flags.get(*f))
+        .filter_map(|f| f.label().map(|l| (f, l)))
+    {
+        badge(ui, label, badge_tone(flag, tc));
     }
     // After the meter's own badges, in the same accent as AUTO/HOLD: this is
     // the app's state, not the meter's, and it belongs at the end of the row
     // rather than mixed in among the flags the meter reported.
     if scaled {
-        badge(ui, "SCALE", accent);
+        badge(ui, "SCALE", tc.accent());
     }
 }

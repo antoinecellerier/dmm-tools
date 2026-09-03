@@ -24,6 +24,7 @@
 ### Bug fixes
 
 - **Capture reports' confirmation line names every flag** — a sample taken with HV, LOW BAT, LEAD ERR, COMP or REC showed only "[AUTO]".
+- **Peak MIN/MAX badges show in the reading display** — screen readers announced them but the badge row left them out; badges now follow the CSV flags column order.
 
 ## v0.6.0 — Display Fidelity and Connection Fixes
 
