@@ -256,14 +256,46 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
     Ok((trimmed, value))
 }
 
-/// Parse a UT804 measurement payload (14 data nibbles).
-pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
-    if nibbles.len() < 11 {
+/// Reject payloads with fewer than `min` data nibbles.
+///
+/// Says "nibbles" where `protocol::check_len` says "bytes": these payloads
+/// are 4-bit data nibbles, so the byte wording would mislead.
+fn check_nibbles(nibbles: &[u8], min: usize) -> Result<()> {
+    if nibbles.len() < min {
         return Err(Error::invalid_response(
             format!("fs9721 payload too short: {} nibbles", nibbles.len()),
             nibbles,
         ));
     }
+    Ok(())
+}
+
+/// Mode name, unit and decimal point position, falling back to an unnamed
+/// mode when the (mode, range) pair is absent from the per-model table.
+fn mode_info_or_unknown(
+    model: &str,
+    info: Option<(&'static str, &'static str, u8)>,
+    mode_code: u8,
+    range: u8,
+) -> (&'static str, &'static str, u8) {
+    info.unwrap_or_else(|| {
+        debug!("{model}: unknown mode/range {mode_code:#04x}/{range}");
+        ("?", "", 3)
+    })
+}
+
+/// The vendor's overload LCD text, signed when the sign bit is set.
+fn overload_display(negative: bool) -> Option<String> {
+    Some(if negative {
+        "-0L".to_string()
+    } else {
+        "0L".to_string()
+    })
+}
+
+/// Parse a UT804 measurement payload (14 data nibbles).
+pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
+    check_nibbles(nibbles, 11)?;
 
     // Format markers (vendor chars 'D'/'A' = low nibbles of CR/LF).
     if nibbles[9] != 0x0D || nibbles[10] != 0x0A {
@@ -286,13 +318,8 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     let sign_bit = status & 0x4 != 0;
     let auto_range = status & 0x3 == 0x1;
 
-    let (mode_name, unit, dp_pos) = match ut804_mode_info(mode_code, range) {
-        Some(info) => info,
-        None => {
-            debug!("ut804: unknown mode/range {mode_code:#04x}/{range}");
-            ("?", "", 3)
-        }
-    };
+    let (mode_name, unit, dp_pos) =
+        mode_info_or_unknown("ut804", ut804_mode_info(mode_code, range), mode_code, range);
 
     // In frequency mode the sign bit selects the duty-cycle display
     // (ut804-decompiled.txt:224271-224283) — a negative frequency is
@@ -348,14 +375,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     // 224361-224391). An idle frame (digit 4 == 0xB) shows all zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
         if nibbles[1] == 0xC {
-            (
-                MeasuredValue::Overload,
-                Some(if negative {
-                    "-0L".to_string()
-                } else {
-                    "0L".to_string()
-                }),
-            )
+            (MeasuredValue::Overload, overload_display(negative))
         } else {
             (MeasuredValue::Normal(0.0), Some("L0".to_string()))
         }
@@ -386,12 +406,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
 
 /// Parse a UT803 measurement payload (14 data nibbles).
 pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
-    if nibbles.len() < 10 {
-        return Err(Error::invalid_response(
-            format!("fs9721 payload too short: {} nibbles", nibbles.len()),
-            nibbles,
-        ));
-    }
+    check_nibbles(nibbles, 10)?;
 
     let range = nibbles[1];
     let mode_code = nibbles[6];
@@ -408,13 +423,12 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     let dc = nib10 & 0x8 != 0;
     let auto_range = nib10 & 0x2 != 0;
 
-    let (mode_name, unit, dp_pos) = match ut803_mode_info(mode_code, range, alt) {
-        Some(info) => info,
-        None => {
-            debug!("ut803: unknown mode/range {mode_code:#04x}/{range}");
-            ("?", "", 3)
-        }
-    };
+    let (mode_name, unit, dp_pos) = mode_info_or_unknown(
+        "ut803",
+        ut803_mode_info(mode_code, range, alt),
+        mode_code,
+        range,
+    );
 
     let mode: Cow<'static, str> = if mode_name == "?" {
         unknown_mode(mode_code)
@@ -430,14 +444,7 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     };
 
     let (value, display_raw) = if overload {
-        (
-            MeasuredValue::Overload,
-            Some(if negative {
-                "-0L".to_string()
-            } else {
-                "0L".to_string()
-            }),
-        )
+        (MeasuredValue::Overload, overload_display(negative))
     } else {
         let (display, v) = assemble_value(&nibbles[2..6], dp_pos, negative)?;
         (MeasuredValue::Normal(v), Some(display))
