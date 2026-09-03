@@ -22,7 +22,6 @@ use crate::graph::{Graph, MAX_OVERLAYS, PlotSample};
 use crate::recording::{Recording, render_csv};
 use crate::settings::{Settings, ThemeMode};
 use crate::specs;
-use crate::theme::ThemeColors;
 use dmm_lib::stats::{self, RunningStats, SeriesStats};
 use transform_ui::TransformEditor;
 
@@ -508,8 +507,7 @@ impl App {
             settings.theme = theme;
         }
         settings.overrides.adapter = cli.adapter;
-        let mut graph = Graph::new();
-        graph.set_color_config(settings.color_preset, settings.color_overrides.clone());
+        let graph = Graph::new();
         let initial_device = registry::resolve_device(&settings.shared.device_family)
             .unwrap_or_else(registry::default_device);
         Self {
@@ -569,15 +567,6 @@ impl App {
         }
     }
 
-    /// Build a ThemeColors instance from current settings and dark mode state.
-    fn theme_colors(&self, dark: bool) -> ThemeColors {
-        ThemeColors::new(
-            dark,
-            self.settings.color_preset,
-            self.settings.color_overrides.for_mode(dark),
-        )
-    }
-
     /// Re-read the selected device's profile if the selection changed.
     ///
     /// Called once per frame instead of at each use: the two render paths
@@ -629,7 +618,7 @@ impl App {
     /// Apply background, text, and button color overrides to egui Visuals.
     fn apply_color_overrides(&mut self, ctx: &egui::Context) {
         let dark = self.resolve_dark(ctx);
-        let tc = self.theme_colors(dark);
+        let tc = self.settings.theme_colors(dark);
         let bg = tc.background();
         let text = tc.text();
         let weak_text = tc.weak_text();
@@ -1270,7 +1259,10 @@ impl App {
     }
 
     fn show_connection_help(&self, ui: &mut Ui) {
-        let warn_color = self.theme_colors(ui.visuals().dark_mode).status_warning();
+        let warn_color = self
+            .settings
+            .theme_colors(ui.visuals().dark_mode)
+            .status_warning();
 
         // Show waiting indicator before error threshold
         if self.waiting_timeouts > 0 && self.last_error.is_none() {
@@ -1391,7 +1383,7 @@ impl App {
     }
 
     fn show_top_bar_inner(&mut self, ui: &mut Ui, ctx: &egui::Context) {
-        let tc = self.theme_colors(ui.visuals().dark_mode);
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let green = tc.status_ok();
         let orange = tc.status_warning();
         let gray = tc.status_inactive();
@@ -1908,6 +1900,7 @@ impl App {
                 let status = format!("{count} smp | {:.0}s", self.recording.duration_secs());
                 if self.recording.is_full() {
                     let warn = self
+                        .settings
                         .theme_colors(ui.visuals().dark_mode)
                         .recording_full_warning();
                     ui.label(RichText::new(format!("{status} (buffer full)")).color(warn));
@@ -1963,12 +1956,16 @@ impl App {
 
     /// Render the graph+recording area with a resizable drag separator between them.
     fn show_graph_recording_split(&mut self, ui: &mut Ui, compact: bool) {
+        // Built before `self.graph` is borrowed mutably below: the palette
+        // reads `self.settings`, which the borrow checker would otherwise
+        // see as overlapping.
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         if self.settings.show_graph && self.settings.show_recording {
             let total = ui.available_height();
             let graph_height = (total - self.recording_height).max(80.0);
 
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
-                self.graph.show(ui);
+                self.graph.show(ui, &tc);
             });
 
             let sep = ui.separator();
@@ -2025,7 +2022,7 @@ impl App {
 
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
-            self.graph.show(ui);
+            self.graph.show(ui, &tc);
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }
@@ -2314,14 +2311,13 @@ impl eframe::App for App {
                             } else {
                                 self.meter_content_height
                             };
-                            let dark = ui.visuals().dark_mode;
+                            let tc = self.settings.theme_colors(ui.visuals().dark_mode);
                             let (scale, measured_ratios) = display::show_reading_large(
                                 ui,
                                 self.last_measurement.as_ref(),
                                 content_h,
                                 &self.meter_reading_ratios,
-                                self.settings.color_preset,
-                                self.settings.color_overrides.for_mode(dark),
+                                &tc,
                                 !self.transform.is_identity(),
                             );
                             let after_reading = ui.cursor().top();
@@ -2390,12 +2386,11 @@ impl eframe::App for App {
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
                 .show_inside(ui, |ui| {
-                    let dark = ui.visuals().dark_mode;
+                    let tc = self.settings.theme_colors(ui.visuals().dark_mode);
                     display::show_reading(
                         ui,
                         self.last_measurement.as_ref(),
-                        self.settings.color_preset,
-                        self.settings.color_overrides.for_mode(dark),
+                        &tc,
                         !self.transform.is_identity(),
                     );
                     let controls_top = ui.cursor().top();
@@ -2486,12 +2481,11 @@ impl eframe::App for App {
             // Narrow: single column
             egui::CentralPanel::default()
                 .show_inside(ui, |ui| {
-                    let dark = ui.visuals().dark_mode;
+                    let tc = self.settings.theme_colors(ui.visuals().dark_mode);
                     display::show_reading_compact(
                         ui,
                         self.last_measurement.as_ref(),
-                        self.settings.color_preset,
-                        self.settings.color_overrides.for_mode(dark),
+                        &tc,
                         !self.transform.is_identity(),
                     );
                     let controls_top = ui.cursor().top();

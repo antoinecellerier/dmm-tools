@@ -16,7 +16,6 @@ use eframe::egui::{self, RichText, Ui};
 use std::time::Instant;
 
 use crate::a11y::ResponseA11yExt;
-use crate::theme::ThemeColors;
 
 use super::{App, SMALL_TEXT_SIZE};
 
@@ -83,12 +82,7 @@ fn parse_field(text: &str, name: &str, empty: f64) -> Result<f64, String> {
 impl App {
     pub(super) fn show_transform_row(&mut self, ui: &mut Ui, scale: f32) {
         let active = !self.transform.is_identity();
-        let dark = ui.visuals().dark_mode;
-        let tc = ThemeColors::new(
-            dark,
-            self.settings.color_preset,
-            self.settings.color_overrides.for_mode(dark),
-        );
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         // Floored at the 11 pt minimum: unlike the remote buttons this row
         // holds text the user has to type into, and the big meter's scale
         // factor goes below 0.4 in a small window.

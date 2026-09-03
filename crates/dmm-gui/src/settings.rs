@@ -1,3 +1,4 @@
+use crate::theme::ThemeColors;
 use dmm_settings::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
@@ -250,6 +251,16 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Build the palette for one theme mode from the preset and that mode's
+    /// overrides.
+    ///
+    /// The single place those three fields meet: every widget that needs a
+    /// color goes through here, so a preset switch or an override edit can't
+    /// reach one part of the UI and miss another.
+    pub fn theme_colors(&self, dark: bool) -> ThemeColors {
+        ThemeColors::new(dark, self.color_preset, self.color_overrides.for_mode(dark))
+    }
+
     fn config_path() -> Option<PathBuf> {
         dmm_settings::config_path()
     }

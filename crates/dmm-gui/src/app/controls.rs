@@ -38,12 +38,7 @@ impl App {
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
         let has_cmd = |cmd: &str| self.supported_commands.iter().any(|c| c == cmd);
-        let dark = ui.visuals().dark_mode;
-        let tc = ThemeColors::new(
-            dark,
-            self.settings.color_preset,
-            self.settings.color_overrides.for_mode(dark),
-        );
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let active_color = tc.accent();
 
         let font_size = 12.0 * scale;
@@ -253,7 +248,6 @@ impl App {
                 }
             }
             if changed {
-                self.sync_graph_colors();
                 self.settings.save();
             }
             if has_overrides {
@@ -485,14 +479,6 @@ impl App {
         ui.separator();
     }
 
-    /// Sync graph color config from settings.
-    fn sync_graph_colors(&mut self) {
-        self.graph.set_color_config(
-            self.settings.color_preset,
-            self.settings.color_overrides.clone(),
-        );
-    }
-
     /// Show the collapsible color customization section.
     fn show_color_customization(&mut self, ui: &mut Ui) {
         let dark = ui.visuals().dark_mode;
@@ -544,7 +530,6 @@ impl App {
                 });
 
                 if changed {
-                    self.sync_graph_colors();
                     self.applied_ui_colors = None; // force reapply
                     self.settings.save();
                 }

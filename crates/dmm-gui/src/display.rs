@@ -5,7 +5,6 @@ use eframe::egui::{Color32, FontId, Grid, Rect, RichText, TextFormat, Ui};
 use std::borrow::Cow;
 
 use crate::a11y::UiA11yExt;
-use crate::settings::{ColorPreset, PaletteOverrides};
 use crate::theme::ThemeColors;
 
 /// Base font size for the primary reading in the wide (side panel) layout.
@@ -538,12 +537,10 @@ fn show_reading_inline(
 pub fn show_reading(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
-    preset: ColorPreset,
-    overrides: &PaletteOverrides,
+    tc: &ThemeColors,
     scaled: bool,
 ) {
-    let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
-    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, &tc, scaled);
+    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, tc, scaled);
 }
 
 /// Cached ratios of rendered reading dimensions to font size.
@@ -586,8 +583,7 @@ pub fn show_reading_large(
     measurement: Option<&Measurement>,
     base_content_height: f32,
     ratios: &ReadingRatios,
-    preset: ColorPreset,
-    overrides: &PaletteOverrides,
+    tc: &ThemeColors,
     scaled: bool,
 ) -> (f32, ReadingRatios) {
     let available_w = ui.available_width();
@@ -617,12 +613,11 @@ pub fn show_reading_large(
     .max(MIN_BIG_METER_FONT_SIZE);
 
     // Render and measure actual dimensions.
-    let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
     let before = ui.cursor().top();
     if use_inline {
-        show_reading_inline(ui, measurement, size, &tc, scaled);
+        show_reading_inline(ui, measurement, size, tc, scaled);
     } else {
-        show_reading_sized(ui, measurement, size, &tc, scaled);
+        show_reading_sized(ui, measurement, size, tc, scaled);
     }
     let reading_w = ui.min_rect().width();
     let reading_h = ui.cursor().top() - before;
@@ -645,14 +640,12 @@ pub fn show_reading_large(
 pub fn show_reading_compact(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
-    preset: ColorPreset,
-    overrides: &PaletteOverrides,
+    tc: &ThemeColors,
     scaled: bool,
 ) {
     match measurement {
         Some(m) => {
             let value_text = format_value_display(m);
-            let tc = ThemeColors::new(ui.visuals().dark_mode, preset, overrides);
 
             ui.live_region_horizontal(
                 live_region_fingerprint(Some(m), scaled),
@@ -672,7 +665,7 @@ pub fn show_reading_compact(
                             .color(ui.visuals().weak_text_color())
                             .small(),
                     );
-                    show_flags(ui, m, 0.0, &tc, scaled);
+                    show_flags(ui, m, 0.0, tc, scaled);
                 },
             );
 
@@ -1174,7 +1167,7 @@ mod tests {
     /// only becomes meaningful once the grid has settled.
     fn layout_aux_rows(m: &Measurement, font_size: f32) -> Vec<AuxRowRects> {
         let ctx = eframe::egui::Context::default();
-        let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+        let tc = crate::settings::Settings::default().theme_colors(true);
         let mut rects = Vec::new();
         for _ in 0..3 {
             rects.clear();

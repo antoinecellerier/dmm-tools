@@ -6,7 +6,6 @@ use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
 use crate::a11y::ResponseA11yExt;
-use crate::settings::{ColorOverrides, ColorPreset};
 use crate::theme::ThemeColors;
 
 /// Maximum number of points to keep in the history buffer.
@@ -368,10 +367,6 @@ pub struct Graph {
     history_version: u64,
     /// Version when the cache was last rebuilt.
     cache_version: u64,
-    /// Color preset for graph rendering.
-    color_preset: ColorPreset,
-    /// Per-theme color overrides for graph rendering.
-    color_overrides: ColorOverrides,
     /// Current minimap drag state.
     minimap_drag: MinimapDrag,
     /// Press origin (screen pixels) when a Shift+drag bbox-zoom is in progress.
@@ -527,25 +522,12 @@ impl Graph {
             cached_gaps: Vec::new(),
             history_version: 0,
             cache_version: 0,
-            color_preset: ColorPreset::Default,
-            color_overrides: ColorOverrides::default(),
             minimap_drag: MinimapDrag::None,
             bbox_zoom_start_px: None,
             bbox_zoom_current_px: None,
             a11y_label: String::new(),
             a11y_label_sig: 0,
         }
-    }
-
-    /// Update color configuration from settings.
-    pub fn set_color_config(&mut self, preset: ColorPreset, overrides: ColorOverrides) {
-        self.color_preset = preset;
-        self.color_overrides = overrides;
-    }
-
-    /// Build a ThemeColors instance using this graph's color config.
-    fn theme_colors(&self, dark: bool) -> ThemeColors {
-        ThemeColors::new(dark, self.color_preset, self.color_overrides.for_mode(dark))
     }
 
     /// Update gap detection threshold based on sample interval.
@@ -1038,7 +1020,7 @@ impl Graph {
     /// of control for a user who didn't already know them. The rows now read
     /// view → what is plotted → what is drawn over it. Each uses
     /// `horizontal_wrapped` so items wrap instead of clipping.
-    pub fn show_toolbar(&mut self, ui: &mut Ui) {
+    pub fn show_toolbar(&mut self, ui: &mut Ui, tc: &ThemeColors) {
         // Row 1: time windows + LIVE + Y-axis
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
@@ -1057,7 +1039,7 @@ impl Graph {
             ui.add_space(6.0);
 
             let live_color = if self.live {
-                self.theme_colors(ui.visuals().dark_mode).live_green()
+                tc.live_green()
             } else {
                 ui.visuals().weak_text_color()
             };
@@ -1164,7 +1146,6 @@ impl Graph {
         // Row 3: analysis overlays
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            let dark = ui.visuals().dark_mode;
 
             if ui
                 .selectable_label(self.show_mean, "Mean")
@@ -1256,7 +1237,7 @@ impl Graph {
                         _ => crate::NO_DATA.to_string(),
                     };
                     let unit = &self.current_unit;
-                    let delta_color = self.theme_colors(dark).graph_cursor_delta();
+                    let delta_color = tc.graph_cursor_delta();
 
                     let integral_str = self
                         .cursor_integral(ta, tb)
@@ -1709,7 +1690,7 @@ impl Graph {
     }
 
     /// Render the main graph.
-    pub fn show_main(&mut self, ui: &mut Ui) {
+    pub fn show_main(&mut self, ui: &mut Ui, tc: &ThemeColors) {
         let (view_min, view_max) = self.view_bounds();
 
         // Build segments and gaps for the visible slice only, plus one
@@ -1730,7 +1711,6 @@ impl Graph {
             .collect();
 
         // Theme-aware colors from shared palette
-        let tc = self.theme_colors(ui.visuals().dark_mode);
         let line_color = tc.graph_line();
         let gap_color = tc.graph_gap();
         let overload_edge = tc.graph_overload();
@@ -1887,7 +1867,7 @@ impl Graph {
 
             // Sub-values first: the plotted series goes on top of them.
             for (k, label, segments) in &overlay_traces {
-                let (color, style) = Self::overlay_color_and_style(&tc, *k);
+                let (color, style) = Self::overlay_color_and_style(tc, *k);
                 for seg in segments {
                     plot_ui.line(
                         Line::new(label.clone(), PlotPoints::new(seg.clone()))
@@ -1994,7 +1974,7 @@ impl Graph {
         Self::paint_overlay_labels(ui, &response.response, &response.transform, &overlay);
         // Top-left, where `paint_overlay_labels` never draws — the Mean/Ref
         // and cursor labels are anchored to the right edge.
-        Self::paint_plot_key(ui, response.response.rect, &key_entries, &tc);
+        Self::paint_plot_key(ui, response.response.rect, &key_entries, tc);
         self.handle_interaction(ui, &response.response, &response.transform, can_interact);
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max);
         // Draw a focus ring on the main plot body when it's keyboard-focused.
@@ -2384,7 +2364,7 @@ impl Graph {
     }
 
     /// Render the minimap showing full history with viewport indicator.
-    pub fn show_minimap(&mut self, ui: &mut Ui) {
+    pub fn show_minimap(&mut self, ui: &mut Ui, tc: &ThemeColors) {
         if self.history.len() < 2 {
             ui.allocate_space(egui::vec2(ui.available_width(), MINIMAP_HEIGHT));
             return;
@@ -2395,7 +2375,6 @@ impl Graph {
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
-        let tc = self.theme_colors(ui.visuals().dark_mode);
         let line_color = tc.minimap_line();
         let overload_fill = tc.graph_overload_fill();
         // Same spans the main plot bands, including one still open.
@@ -2717,16 +2696,16 @@ impl Graph {
     }
 
     /// Combined render: toolbar + main graph + minimap.
-    pub fn show(&mut self, ui: &mut Ui) {
+    pub fn show(&mut self, ui: &mut Ui, tc: &ThemeColors) {
         self.handle_keyboard(ui.ctx());
-        self.show_toolbar(ui);
+        self.show_toolbar(ui, tc);
         let minimap_reserve = MINIMAP_HEIGHT + 30.0;
         let main_height = (ui.available_height() - minimap_reserve).max(60.0);
         ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-            self.show_main(ui);
+            self.show_main(ui, tc);
         });
         ui.add_space(4.0);
-        self.show_minimap(ui);
+        self.show_minimap(ui, tc);
     }
 
     /// Compute the time-integral over the visible window, in unit·seconds.
