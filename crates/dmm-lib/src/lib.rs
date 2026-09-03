@@ -340,14 +340,7 @@ mod tests {
             flags.1 | 0x30, // has 0x30 prefix
             flags.2 | 0x30, // has 0x30 prefix
         ];
-        // Length byte = payload + 2 checksum bytes (matches real wire format)
-        let len_byte = (payload.len() + 2) as u8;
-        let mut frame = vec![0xAB, 0xCD, len_byte];
-        frame.extend_from_slice(&payload);
-        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-        frame.push((sum >> 8) as u8);
-        frame.push((sum & 0xFF) as u8);
-        frame
+        crate::protocol::framing::test_frame_be16(&payload)
     }
 
     #[test]

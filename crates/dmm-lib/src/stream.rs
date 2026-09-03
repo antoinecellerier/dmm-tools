@@ -191,13 +191,7 @@ mod tests {
             0x31, display[0], display[1], display[2], display[3], display[4], display[5],
             display[6], 0x00, 0x00, 0x30, 0x30, 0x30,
         ];
-        let len_byte = (payload.len() + 2) as u8;
-        let mut frame = vec![0xAB, 0xCD, len_byte];
-        frame.extend_from_slice(&payload);
-        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-        frame.push((sum >> 8) as u8);
-        frame.push((sum & 0xFF) as u8);
-        frame
+        crate::protocol::framing::test_frame_be16(&payload)
     }
 
     fn new_dmm(responses: Vec<Vec<u8>>) -> Dmm<MockTransport> {

@@ -153,6 +153,50 @@ pub const HEADER: [u8; 2] = [0xAB, 0xCD];
 /// (length byte value must be >= 2 to hold at least the checksum)
 const MIN_RESPONSE_LEN: usize = 5;
 
+/// Find `header` in `buf` and return `(start, remaining)` — the offset of the
+/// header and the slice from it to the end — but only once at least `min_len`
+/// bytes are available from that offset.
+///
+/// `None` covers both "no header yet" and "header found but the frame is still
+/// arriving"; every caller turns it into `Ok(None)`, i.e. "read more".
+fn locate<'a>(buf: &'a [u8], header: &[u8], min_len: usize) -> Option<(usize, &'a [u8])> {
+    let start = buf.windows(header.len()).position(|w| w == header)?;
+    let remaining = &buf[start..];
+    (remaining.len() >= min_len).then_some((start, remaining))
+}
+
+/// 16-bit sum of `bytes`, the shape every AB CD checksum takes.
+///
+/// `wrapping_add` rather than `Iterator::sum`: for the 2-byte-length framing
+/// the summed range can be ~4 KiB of attacker-controlled bytes, and a plain
+/// `u16` sum would overflow-panic in debug builds on malformed input. The
+/// be16 and ut8803 frames cannot overflow (a 1-byte length caps the range at
+/// 256 bytes), so wrapping changes nothing there.
+fn sum16(bytes: &[u8]) -> u16 {
+    bytes
+        .iter()
+        .fold(0u16, |acc, &b| acc.wrapping_add(b as u16))
+}
+
+/// Compare a frame's computed checksum against the one it carries, logging
+/// and erroring on a mismatch.
+///
+/// `expected` is the value read off the wire and `actual` the one we computed
+/// — pinned by tests, because swapping them makes every bug report read
+/// backwards.
+fn checksum_ok(label: &str, computed: u16, received: u16, frame: &[u8]) -> Result<()> {
+    if computed != received {
+        debug!(
+            "framing: {label} checksum mismatch: computed={computed:#06x}, received={received:#06x}, frame={frame:02X?}"
+        );
+        return Err(Error::ChecksumMismatch {
+            expected: received,
+            actual: computed,
+        });
+    }
+    Ok(())
+}
+
 /// Extract a frame using UT61E+ format: AB CD len payload checksum_BE.
 ///
 /// Length byte counts everything after itself (payload + 2-byte checksum).
@@ -161,14 +205,9 @@ const MIN_RESPONSE_LEN: usize = 5;
 /// Returns `Ok(Some((payload, consumed)))` if a valid frame is found,
 /// `Ok(None)` if incomplete, `Err` on checksum mismatch.
 pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
-    let Some(start) = buf.windows(2).position(|w| w == HEADER) else {
+    let Some((start, remaining)) = locate(buf, &HEADER, MIN_RESPONSE_LEN) else {
         return Ok(None);
     };
-
-    let remaining = &buf[start..];
-    if remaining.len() < MIN_RESPONSE_LEN {
-        return Ok(None);
-    }
 
     // Byte after header is the "length" — counts everything after itself,
     // i.e. payload + 2-byte checksum. Verified against real device traces.
@@ -194,19 +233,9 @@ pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     trace!("framing: raw frame: {:02X?}", frame);
 
     // Checksum: 16-bit BE sum of all bytes except the last two
-    let data_bytes = &frame[..frame_len - 2];
-    let computed: u16 = data_bytes.iter().map(|&b| b as u16).sum();
+    let computed = sum16(&frame[..frame_len - 2]);
     let received = u16::from_be_bytes([frame[frame_len - 2], frame[frame_len - 1]]);
-
-    if computed != received {
-        debug!(
-            "framing: checksum mismatch: computed={computed:#06x}, received={received:#06x}, frame={frame:02X?}"
-        );
-        return Err(Error::ChecksumMismatch {
-            expected: received,
-            actual: computed,
-        });
-    }
+    checksum_ok("abcd_be16", computed, received, frame)?;
 
     let payload = frame[3..3 + payload_len].to_vec();
     let consumed = start + frame_len;
@@ -227,14 +256,9 @@ pub const UT61EPLUS_MEASUREMENT_PAYLOAD_LEN: usize = 14;
 pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     const FRAME_LEN: usize = 21;
 
-    let Some(start) = buf.windows(2).position(|w| w == HEADER) else {
+    let Some((start, remaining)) = locate(buf, &HEADER, FRAME_LEN) else {
         return Ok(None);
     };
-
-    let remaining = &buf[start..];
-    if remaining.len() < FRAME_LEN {
-        return Ok(None);
-    }
 
     // Byte 3 must be 0x02 (measurement response type). Error out rather
     // than returning Ok(None): Ok(None) means "need more data" and never
@@ -255,21 +279,9 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // Checksum: sum of bytes 0..19, stored BE at bytes 19-20.
     // The RE spec describes this as an "alternating-byte sum" (even/odd
     // accumulators), but that's equivalent to a straight sequential sum.
-    let mut sum: u16 = 0;
-    for &b in &frame[..19] {
-        sum = sum.wrapping_add(b as u16);
-    }
+    let computed = sum16(&frame[..19]);
     let received = u16::from_be_bytes([frame[19], frame[20]]);
-
-    if sum != received {
-        debug!(
-            "framing: ut8803 checksum mismatch: computed={sum:#06x}, received={received:#06x}, frame={frame:02X?}"
-        );
-        return Err(Error::ChecksumMismatch {
-            expected: received,
-            actual: sum,
-        });
-    }
+    checksum_ok("ut8803", computed, received, frame)?;
 
     // Payload = bytes 2..19 (everything between header and checksum)
     let payload = frame[2..19].to_vec();
@@ -318,14 +330,9 @@ fn is_valid_ut8802_position(pos: u8) -> bool {
 ///
 /// See docs/research/uci-bench-family/reverse-engineered-protocol.md section 3.
 pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
-    let Some(start) = buf.iter().position(|&b| b == UT8802_HEADER[0]) else {
+    let Some((start, remaining)) = locate(buf, &UT8802_HEADER, UT8802_FRAME_LEN) else {
         return Ok(None);
     };
-
-    let remaining = &buf[start..];
-    if remaining.len() < UT8802_FRAME_LEN {
-        return Ok(None);
-    }
 
     let frame = &remaining[..UT8802_FRAME_LEN];
     trace!("framing: ut8802 raw frame: {:02X?}", frame);
@@ -391,15 +398,10 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
 /// Checksum is 16-bit LE sum of bytes from offset 2 through end of payload
 /// (covers length field + payload, excludes header and checksum).
 pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
-    let Some(start) = buf.windows(2).position(|w| w == HEADER) else {
+    // 6 = header(2) + length(2) + checksum(2) minimum
+    let Some((start, remaining)) = locate(buf, &HEADER, 6) else {
         return Ok(None);
     };
-
-    let remaining = &buf[start..];
-    if remaining.len() < 6 {
-        // header(2) + length(2) + checksum(2) minimum
-        return Ok(None);
-    }
 
     let len_val = u16::from_le_bytes([remaining[2], remaining[3]]) as usize;
     if len_val < 2 {
@@ -422,24 +424,10 @@ pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usiz
     trace!("framing: 2byte_le16 raw frame: {:02X?}", frame);
 
     // Checksum: 16-bit LE sum of bytes[2..frame_len-2] (length field +
-    // payload), mod 2^16. wrapping_add: the range can be ~4 KiB of
-    // attacker-controlled bytes, and a plain u16 Sum would overflow-panic
-    // in debug builds on malformed input.
-    let checksum_range = &frame[2..frame_len - 2];
-    let computed: u16 = checksum_range
-        .iter()
-        .fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
+    // payload), mod 2^16.
+    let computed = sum16(&frame[2..frame_len - 2]);
     let received = u16::from_le_bytes([frame[frame_len - 2], frame[frame_len - 1]]);
-
-    if computed != received {
-        debug!(
-            "framing: 2byte_le16 checksum mismatch: computed={computed:#06x}, received={received:#06x}, frame={frame:02X?}"
-        );
-        return Err(Error::ChecksumMismatch {
-            expected: received,
-            actual: computed,
-        });
-    }
+    checksum_ok("2byte_le16", computed, received, frame)?;
 
     let payload = frame[4..4 + payload_len].to_vec();
     let consumed = start + frame_len;
@@ -507,21 +495,26 @@ pub fn extract_frame_fs9721(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     }
 }
 
+/// Build a valid AB CD BE16 frame (UT61E+ wire format) around `payload`:
+/// length byte = payload + 2 checksum bytes, checksum = 16-bit BE sum.
+///
+/// Shared with the `lib` and `stream` tests, which drive the same framing
+/// through `Dmm`.
+#[cfg(test)]
+pub(crate) fn test_frame_be16(payload: &[u8]) -> Vec<u8> {
+    let len_byte = (payload.len() + 2) as u8;
+    let mut frame = vec![0xAB, 0xCD, len_byte];
+    frame.extend_from_slice(payload);
+    let sum = sum16(&frame);
+    frame.push((sum >> 8) as u8);
+    frame.push((sum & 0xFF) as u8);
+    frame
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::transport::mock::MockTransport;
-
-    /// Build a valid UT61E+ frame from a payload.
-    fn make_frame_be16(payload: &[u8]) -> Vec<u8> {
-        let len_byte = (payload.len() + 2) as u8;
-        let mut frame = vec![0xAB, 0xCD, len_byte];
-        frame.extend_from_slice(payload);
-        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-        frame.push((sum >> 8) as u8);
-        frame.push((sum & 0xFF) as u8);
-        frame
-    }
 
     /// Build a valid 21-byte UT8803 frame; `body` becomes bytes 2..19, so
     /// `body[1]` is the frame-type byte the extractor requires to be 0x02.
@@ -558,7 +551,7 @@ mod tests {
     #[test]
     fn extract_valid_frame() {
         let payload = vec![0x01, 0x02, 0x03];
-        let frame = make_frame_be16(&payload);
+        let frame = test_frame_be16(&payload);
         let result = extract_frame_abcd_be16(&frame).unwrap().unwrap();
         assert_eq!(result.0, payload);
         assert_eq!(result.1, frame.len());
@@ -567,7 +560,7 @@ mod tests {
     #[test]
     fn extract_with_leading_garbage() {
         let payload = vec![0x01, 0x02, 0x03];
-        let frame = make_frame_be16(&payload);
+        let frame = test_frame_be16(&payload);
         let mut buf = vec![0xFF, 0xFE, 0xFD];
         buf.extend_from_slice(&frame);
         let result = extract_frame_abcd_be16(&buf).unwrap().unwrap();
@@ -586,7 +579,7 @@ mod tests {
     /// every bug report read backwards.
     #[test]
     fn extract_bad_checksum() {
-        let mut frame = make_frame_be16(&[0x01, 0x02, 0x03]);
+        let mut frame = test_frame_be16(&[0x01, 0x02, 0x03]);
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
         assert!(matches!(
@@ -602,7 +595,7 @@ mod tests {
     /// an error: the extractor must wait for the rest rather than consume it.
     #[test]
     fn abcd_be16_one_byte_short_is_incomplete() {
-        let frame = make_frame_be16(&[0x01, 0x02, 0x03]);
+        let frame = test_frame_be16(&[0x01, 0x02, 0x03]);
         let truncated = &frame[..frame.len() - 1];
         assert!(extract_frame_abcd_be16(truncated).unwrap().is_none());
     }
@@ -800,7 +793,7 @@ mod tests {
     #[test]
     fn read_frame_single_chunk() {
         let payload = vec![0x01, 0x02, 0x03];
-        let frame = make_frame_be16(&payload);
+        let frame = test_frame_be16(&payload);
         let mock = MockTransport::new(vec![frame]);
         let mut rx_buf = Vec::new();
 
@@ -821,7 +814,7 @@ mod tests {
     #[test]
     fn read_frame_split_across_reads() {
         let payload = vec![0x01, 0x02, 0x03];
-        let frame = make_frame_be16(&payload);
+        let frame = test_frame_be16(&payload);
         // Split the frame into two parts
         let part1 = frame[..3].to_vec();
         let part2 = frame[3..].to_vec();
@@ -848,7 +841,7 @@ mod tests {
     #[test]
     fn read_frame_survives_empty_reports_between_data() {
         let payload = vec![0x01, 0x02, 0x03];
-        let frame = make_frame_be16(&payload);
+        let frame = test_frame_be16(&payload);
         let part1 = frame[..3].to_vec();
         let part2 = frame[3..].to_vec();
         let mock = MockTransport::new(vec![Vec::new(), Vec::new(), part1, Vec::new(), part2]);
@@ -887,7 +880,7 @@ mod tests {
     #[test]
     fn read_frame_propagate_error() {
         // Build a frame with a corrupted checksum
-        let mut frame = make_frame_be16(&[0x01, 0x02, 0x03]);
+        let mut frame = test_frame_be16(&[0x01, 0x02, 0x03]);
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
         let mock = MockTransport::new(vec![frame]);
@@ -908,12 +901,12 @@ mod tests {
     #[test]
     fn read_frame_skip_and_retry_on_error() {
         // First frame has bad checksum, second is valid
-        let mut bad_frame = make_frame_be16(&[0x01, 0x02, 0x03]);
+        let mut bad_frame = test_frame_be16(&[0x01, 0x02, 0x03]);
         let last = bad_frame.len() - 1;
         bad_frame[last] ^= 0xFF;
 
         let good_payload = vec![0x04, 0x05, 0x06];
-        let good_frame = make_frame_be16(&good_payload);
+        let good_frame = test_frame_be16(&good_payload);
 
         // Concatenate bad + good into one response chunk so the retry finds the good frame
         let mut combined = bad_frame;
@@ -939,8 +932,8 @@ mod tests {
         // First frame has payload starting with 0x01 (rejected), second with 0x02 (accepted)
         let rejected_payload = vec![0x01, 0xAA, 0xBB];
         let accepted_payload = vec![0x02, 0xCC, 0xDD];
-        let frame1 = make_frame_be16(&rejected_payload);
-        let frame2 = make_frame_be16(&accepted_payload);
+        let frame1 = test_frame_be16(&rejected_payload);
+        let frame2 = test_frame_be16(&accepted_payload);
 
         let mut combined = frame1;
         combined.extend_from_slice(&frame2);
@@ -964,7 +957,7 @@ mod tests {
     fn read_frame_existing_data_in_rx_buf() {
         // Frame data is already in rx_buf before read_frame is called
         let payload = vec![0x01, 0x02, 0x03];
-        let frame = make_frame_be16(&payload);
+        let frame = test_frame_be16(&payload);
         let mock = MockTransport::new(vec![]); // no transport reads needed
         let mut rx_buf = frame;
 
