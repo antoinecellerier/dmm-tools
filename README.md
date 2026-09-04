@@ -90,7 +90,7 @@ dmm-cli read            # stream measurements
 dmm-gui                 # launch the GUI
 ```
 
-To try changes that are not in a release yet, there are nightly [dev builds](docs/setup.md#dev-builds) — built automatically from `main` and untested.
+To try unreleased changes without building on your machine, use a nightly [dev build](docs/setup.md#dev-builds).
 
 See [setup & troubleshooting](docs/setup.md) for driver installation, udev rules, and platform-specific instructions.
 
