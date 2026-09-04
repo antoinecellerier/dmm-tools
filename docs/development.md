@@ -40,14 +40,6 @@ cargo clippy --workspace -- -D warnings
 cargo fmt --check
 ```
 
-CI also runs [actionlint](https://github.com/rhysd/actionlint) over
-`.github/workflows/`. To run it locally, install `actionlint` and `shellcheck` —
-without shellcheck it silently skips the bash inside `run:` blocks:
-
-```sh
-actionlint
-```
-
 ## Build artifacts & disk usage
 
 Cargo does not garbage-collect `target/` — old hash-suffixed artifacts in
@@ -134,6 +126,17 @@ Golden tests run as part of the standard test suite. They are the primary
 regression safety net for protocol parsing — add them whenever you verify
 a new mode/range/flag combination against real hardware.
 
+## Shell Completions
+
+Generate completions for your shell:
+
+```sh
+dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
+dmm-cli completions zsh > ~/.zfunc/_dmm-cli
+dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
+dmm-cli completions powershell >> $PROFILE
+```
+
 ## Release Process
 
 1. Write the release entry in `CHANGELOG.md` (see existing entries for format). If the release has a theme, put a short tagline in the heading — `## v0.2.0 — Multi-Device Protocol Support` — stating what it changes in scope or intent, and open the section with a one- or two-sentence summary of the intent and main areas touched
@@ -145,14 +148,36 @@ a new mode/range/flag combination against real hardware.
 7. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails if `CHANGELOG.md` has no `## v0.3.0` heading
 8. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, commit, and push
 
-`release.yml` and `dev-build.yml` share the build matrix in
-`.github/workflows/build-matrix.yml`, so a nightly dev build exercises the same
-packaging path a release does — a break shows up the next morning rather than at
-tag time. That workflow deliberately does not use `Swatinem/rust-cache`: these
-builds are unattended, and the 10 GB repository cache is worth more to `ci.yml`,
-whose caches decide pull-request turnaround.
+## GitHub Actions workflows
 
-## Dev builds
+Four workflows in `.github/workflows/`. None of them need touching to work on
+the crates:
+
+- `ci.yml` — fmt, clippy and tests on every push and pull request, plus a
+  three-target build so platform-specific breakage shows up early.
+- `build-matrix.yml` — the six-target release build, called by the two below.
+- `release.yml` — runs on a `v*` tag, see [Release Process](#release-process).
+- `dev-build.yml` — the nightly prerelease.
+
+### Linting the workflows
+
+`ci.yml` runs [actionlint](https://github.com/rhysd/actionlint) over
+`.github/workflows/`. To run it locally, install `actionlint` and `shellcheck` —
+without shellcheck it silently skips the bash inside `run:` blocks:
+
+```sh
+actionlint
+```
+
+### Shared build matrix
+
+`release.yml` and `dev-build.yml` both call `build-matrix.yml`, so a nightly dev
+build exercises the same packaging path a release does — a break shows up the
+next morning rather than at tag time. It deliberately does not use
+`Swatinem/rust-cache`: these builds are unattended, and the 10 GB repository
+cache is worth more to `ci.yml`, whose caches decide pull-request turnaround.
+
+### Dev builds
 
 `dev-build.yml` publishes a prerelease from `main` every night, skipping the run
 when `main` has not moved. Each build gets its own immutable `dev-<short sha>`
@@ -165,17 +190,6 @@ already has a dev release).
 The prerelease body comes from `.github/dev-release-notes.md` with the
 `## Unreleased` changelog section appended, which is another reason to keep that
 section current as changes land.
-
-## Shell Completions
-
-Generate completions for your shell:
-
-```sh
-dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
-dmm-cli completions zsh > ~/.zfunc/_dmm-cli
-dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
-dmm-cli completions powershell >> $PROFILE
-```
 
 ## AI-Assisted Development
 
