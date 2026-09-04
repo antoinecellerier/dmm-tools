@@ -13,6 +13,7 @@ paths:
 - Bold part: present tense, ≤ 12 words, what now works or exists. Not "Fixed X".
 - After the dash: no "because", no code mechanism, no how-it-was-fixed, no verification. Those go in the commit body.
 - Name a meter, output or shortcut only when the reader needs it to place the change.
+- Backtick any literal containing `@`. The section is lifted verbatim into the GitHub release body, where a bare `@name` renders as a mention of a real, uninvolved account — `"@12s"` (a MIN/MAX timestamp) linked a stranger on a published release. Deliberate credit is the exception: link it, as `[@user](https://github.com/user)`.
 
 Before:
 > **"Waiting for meter…" no longer lingers after disconnecting** — the timeout counter behind that message was only cleared by an incoming reading, so if the meter went quiet before you clicked Disconnect the banner stayed up for the rest of the disconnected session.
