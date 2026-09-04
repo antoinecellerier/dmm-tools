@@ -4,107 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  # Build-only smoke test: the release job below is gated on a v* tag, so a
+  # manual dispatch compiles all six targets and publishes nothing.
   workflow_dispatch:
 
 permissions:
   contents: write
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   build:
-    name: Build (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - name: Linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: dmm-tools-linux-x86_64
-            ext: tar.gz
-          - name: Windows
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: dmm-tools-windows-x86_64
-            ext: zip
-          - name: macOS (ARM)
-            os: macos-latest
-            target: aarch64-apple-darwin
-            artifact: dmm-tools-macos-aarch64
-            ext: tar.gz
-          - name: macOS (Intel)
-            os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: dmm-tools-macos-x86_64
-            ext: tar.gz
-          - name: Linux (ARM)
-            os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            artifact: dmm-tools-linux-aarch64
-            ext: tar.gz
-          - name: Windows (ARM)
-            os: windows-latest
-            target: aarch64-pc-windows-msvc
-            artifact: dmm-tools-windows-aarch64
-            ext: zip
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: release-${{ matrix.target }}
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: >
-          sudo apt-get update && sudo apt-get install -y
-          libudev-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev
-          libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
-
-      - name: Build
-        run: cargo build --workspace --release --target ${{ matrix.target }}
-
-      - name: Package (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          mkdir -p ${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/dmm-cli ${{ matrix.artifact }}/
-          cp target/${{ matrix.target }}/release/dmm-gui ${{ matrix.artifact }}/
-          cp README.md LICENSE ${{ matrix.artifact }}/
-          cp -r udev ${{ matrix.artifact }}/
-          cp -r docs ${{ matrix.artifact }}/
-          tar czf ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
-
-      - name: Package (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p ${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/dmm-cli ${{ matrix.artifact }}/
-          cp target/${{ matrix.target }}/release/dmm-gui ${{ matrix.artifact }}/
-          cp README.md LICENSE ${{ matrix.artifact }}/
-          cp -r docs ${{ matrix.artifact }}/
-          tar czf ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          mkdir -p ${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/dmm-cli.exe ${{ matrix.artifact }}/
-          cp target/${{ matrix.target }}/release/dmm-gui.exe ${{ matrix.artifact }}/
-          cp README.md LICENSE ${{ matrix.artifact }}/
-          cp -r docs ${{ matrix.artifact }}/
-          7z a ${{ matrix.artifact }}.${{ matrix.ext }} ${{ matrix.artifact }}/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.${{ matrix.ext }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-matrix.yml
 
   release:
     name: Create Release
@@ -142,9 +53,5 @@ jobs:
           name: ${{ steps.changelog.outputs.name }}
           body_path: release_notes.md
           files: |
-            artifacts/dmm-tools-linux-x86_64/*.tar.gz
-            artifacts/dmm-tools-windows-x86_64/*.zip
-            artifacts/dmm-tools-macos-aarch64/*.tar.gz
-            artifacts/dmm-tools-macos-x86_64/*.tar.gz
-            artifacts/dmm-tools-linux-aarch64/*.tar.gz
-            artifacts/dmm-tools-windows-aarch64/*.zip
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
