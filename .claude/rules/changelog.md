@@ -9,7 +9,7 @@ paths:
 
 `- **<what the user gets>** — <what they saw before, or the one detail that places it>`
 
-- IMPORTANT: 25 words after the dash is a ceiling, not a target — fewer is better. Past 25, mechanism has crept in; cut it.
+- IMPORTANT: 25 words after the dash is a ceiling, not a target — fewer is better. Past 25, mechanism has crept in; cut it. The one exemption is a migration step, below.
 - Bold part: present tense, ≤ 12 words, what now works or exists. Not "Fixed X".
 - After the dash: no "because", no code mechanism, no how-it-was-fixed, no verification. Those go in the commit body.
 - Name a meter, output or shortcut only when the reader needs it to place the change.
@@ -19,6 +19,16 @@ Before:
 
 After:
 > **"Waiting for meter…" no longer lingers after disconnecting** — it stayed up if the meter went quiet before you clicked Disconnect.
+
+## Migration steps
+
+A change the user must act on by hand — edit or delete a system file, run a command — may append one migration instruction. Test: *if they upgrade and do nothing, are they worse off?* If no, use the standard shape.
+
+- Imperative, ≤ 2 sentences, ≤ 35 words, exempt from the 25-word ceiling. May replace the before-state clause when the bold already carries it.
+- Say only what to do. This permits an instruction; it does not relax the ban on "because", mechanism or verification.
+- More than two sentences, or per-platform branches: put it in the doc that covers it and point there.
+
+> **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 
 ## Sections
 
