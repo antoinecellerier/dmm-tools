@@ -174,7 +174,10 @@ already has a dev release).
 
 The prerelease body comes from `.github/dev-release-notes.md` with the
 `## Unreleased` changelog section appended, which is another reason to keep that
-section current as changes land.
+section current as changes land. Keep each paragraph in that template on a
+single line, however long: GitHub renders a single newline in a release body as
+a hard line break, so wrapped prose comes out broken mid-sentence. `CHANGELOG.md`
+is written the same way for the same reason.
 
 ## AI-Assisted Development
 
