@@ -40,6 +40,14 @@ cargo clippy --workspace -- -D warnings
 cargo fmt --check
 ```
 
+CI also runs [actionlint](https://github.com/rhysd/actionlint) over
+`.github/workflows/`. To run it locally, install `actionlint` and `shellcheck` —
+without shellcheck it silently skips the bash inside `run:` blocks:
+
+```sh
+actionlint
+```
+
 ## Build artifacts & disk usage
 
 Cargo does not garbage-collect `target/` — old hash-suffixed artifacts in
