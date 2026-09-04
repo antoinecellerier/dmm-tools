@@ -13,8 +13,10 @@ on:
   push:
     tags:
       - "v*"
-  # Build-only smoke test: the release job below is gated on a v* tag, so a
-  # manual dispatch compiles all six targets and publishes nothing.
+  # Dispatching against a branch is a build-only smoke test: the release job
+  # below is gated on a v* ref, so it builds all six targets and publishes
+  # nothing. Dispatching against a tag is not — that gate passes, and the job
+  # overwrites that release's assets and notes.
   workflow_dispatch:
 
 permissions:
