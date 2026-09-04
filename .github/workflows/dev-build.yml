@@ -3,6 +3,13 @@
 # dev-<sha> tag; nothing is ever force-moved. Old dev releases are pruned.
 name: Dev build
 
+# Every nightly would otherwise be titled just "Dev build", leaving the run
+# list undifferentiated. The SHA is unabbreviated because it has to be:
+# run-name is evaluated before any job starts, so it can only read the github,
+# inputs and vars contexts -- not env or job outputs -- and expressions have no
+# substring function. There is no way to rename a run once it is under way.
+run-name: Dev build ${{ github.sha }}
+
 on:
   schedule:
     # The hour is arbitrary and NOT load-bearing -- the check job below skips
