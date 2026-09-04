@@ -1,5 +1,14 @@
 name: Release
 
+# A push event otherwise titles the run after the commit message, so the
+# version only shows up because the release commit happens to be named
+# "Release vX.Y.Z". State it outright, and say plainly when a manual dispatch
+# is only a build check that publishes nothing.
+run-name: >-
+  ${{ github.ref_type == 'tag'
+  && format('Release {0}', github.ref_name)
+  || format('Build check ({0})', github.ref_name) }}
+
 on:
   push:
     tags:
