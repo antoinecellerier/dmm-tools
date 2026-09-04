@@ -58,7 +58,7 @@ macOS ARM (Apple Silicon), Linux ARM (Raspberry Pi 3B+), and Windows ARM have be
 
 If you have one of these platforms and a supported meter:
 
-1. Download the appropriate build from [Releases](https://github.com/antoinecellerier/dmm-tools/releases), or build from source: `cargo build --workspace`
+1. Download the appropriate build from the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) — or, to test a fix that has not been released yet, a [dev build](docs/setup.md#dev-builds) — or build from source: `cargo build --workspace`
 2. Plug in the USB adapter and run `dmm-cli list`
 3. If the device is found, try `dmm-cli read` and `dmm-gui`
 4. Comment on the relevant issue with your results — include your OS version, device, meter model, and whether readings were correct

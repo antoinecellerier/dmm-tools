@@ -4,7 +4,15 @@ You need a [supported multimeter](supported-devices.md) (UNI-T UT61+/UT161, UT88
 
 ## Install from pre-built binaries
 
-Download the latest release for your platform from the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page. Extract and run — no build tools needed.
+Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform. Extract and run — no build tools needed.
+
+### Dev builds
+
+To try unreleased changes without installing a Rust toolchain, use a dev build — built nightly from `main`.
+
+Find them in the [dev build listing](https://github.com/antoinecellerier/dmm-tools/releases?q=prerelease%3Atrue), newest first. Archives are named `dmm-tools-dev-<commit>-<platform>`.
+
+Dev builds may be broken, and only the newest seven are kept. When reporting a problem, make sure to include the version you're running, e.g. by running `dmm-cli --version`.
 
 ## Build from source
 

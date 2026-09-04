@@ -30,6 +30,10 @@
 - **The shortcut help's close button shows an ×** — it drew a missing-glyph box.
 - **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 
+### Internal
+
+- **Nightly dev builds for all six platforms** — try unreleased changes without installing a Rust toolchain and building from source.
+
 ## v0.6.0 — Display Fidelity and Connection Fixes
 
 Overloads are shaded instead of breaking the graph line, and readings show what the meter shows (OL, digits, unit magnitudes, HV, model names). Pause, reconnect and corrupted-frame handling are fixed; CLI output carries every sub-value and flag.

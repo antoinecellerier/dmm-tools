@@ -137,6 +137,27 @@ a new mode/range/flag combination against real hardware.
 7. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails if `CHANGELOG.md` has no `## v0.3.0` heading
 8. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, commit, and push
 
+`release.yml` and `dev-build.yml` share the build matrix in
+`.github/workflows/build-matrix.yml`, so a nightly dev build exercises the same
+packaging path a release does — a break shows up the next morning rather than at
+tag time. That workflow deliberately does not use `Swatinem/rust-cache`: these
+builds are unattended, and the 10 GB repository cache is worth more to `ci.yml`,
+whose caches decide pull-request turnaround.
+
+## Dev builds
+
+`dev-build.yml` publishes a prerelease from `main` every night, skipping the run
+when `main` has not moved. Each build gets its own immutable `dev-<short sha>`
+tag — tags are never moved — and all but the newest seven dev releases are
+deleted automatically, tag included. Nothing here needs doing by hand; do not
+create or edit `dev-*` tags yourself. Trigger one early with
+`gh workflow run dev-build.yml` (add `-f force=true` to rebuild a commit that
+already has a dev release).
+
+The prerelease body comes from `.github/dev-release-notes.md` with the
+`## Unreleased` changelog section appended, which is another reason to keep that
+section current as changes land.
+
 ## Shell Completions
 
 Generate completions for your shell:

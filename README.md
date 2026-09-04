@@ -1,7 +1,7 @@
 # dmm-tools
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases)
+[![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
 Read, record, and remote-control digital multimeters over USB. Supports UNI-T and Voltcraft meters — see [supported devices](#supported-devices).
@@ -78,7 +78,7 @@ See [docs/supported-devices.md](docs/supported-devices.md) for the full compatib
 
 ## Quick start
 
-Pre-built binaries for Linux, Windows, and macOS are available on the [Releases](https://github.com/antoinecellerier/dmm-tools/releases) page. Or install from source:
+Pre-built binaries for Linux, Windows, and macOS are available on the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) page. Or install from source:
 
 ```sh
 cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-cli
@@ -89,6 +89,8 @@ cargo install --git https://github.com/antoinecellerier/dmm-tools.git dmm-gui
 dmm-cli read            # stream measurements
 dmm-gui                 # launch the GUI
 ```
+
+To try changes that are not in a release yet, there are nightly [dev builds](docs/setup.md#dev-builds) — built automatically from `main` and untested.
 
 See [setup & troubleshooting](docs/setup.md) for driver installation, udev rules, and platform-specific instructions.
 

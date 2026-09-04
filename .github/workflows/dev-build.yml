@@ -1,0 +1,171 @@
+# Nightly prerelease built from main, for users who want to try unreleased
+# fixes without a Rust toolchain. Each run publishes its own immutable
+# dev-<sha> tag; nothing is ever force-moved. Old dev releases are pruned.
+name: Dev build
+
+on:
+  schedule:
+    # The hour is arbitrary and NOT load-bearing -- the check job below skips
+    # runs where main has not moved, so drift costs nothing. An off-peak, odd
+    # minute avoids the on-the-hour scheduling stampede, which GitHub warns can
+    # delay or drop scheduled runs.
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Rebuild even if this commit already has a dev release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dev-build
+  # Never cancel a run in flight: a dispatch landing between the publish
+  # and prune steps would leave the new release unpruned.
+  cancel-in-progress: false
+
+env:
+  KEEP_DEV_RELEASES: 7
+
+jobs:
+  check:
+    name: Check for new commits
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      short_sha: ${{ steps.check.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Decide whether to build
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          # Use the same abbreviation git gives build.rs, so the tag and the
+          # hash the binary reports can never disagree.
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+
+          # Between "Release vX" and the following "-dev" bump, main carries a
+          # plain release version, and binary_help::version_string appends no
+          # commit to it. A dev build from that window would be indistinguishable
+          # from the release it shadows, so skip the window entirely.
+          VERSION=$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
+            | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          if [ "${VERSION#*-dev}" = "$VERSION" ]; then
+            echo "main is at $VERSION, not a -dev version; skipping until the dev bump lands."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # State lives in the release list, not in a git ref: no tag is read
+          # or used as a marker. Asking for the *newest* dev release rather
+          # than a specific tag keeps this correct after pruning. Sort on
+          # publishedAt: createdAt is the tagged commit's date, which can run
+          # backwards if main is ever rewritten.
+          LATEST=$(gh release list --limit 100 --json tagName,publishedAt \
+            --jq '[.[] | select(.tagName | startswith("dev-"))]
+                  | sort_by(.publishedAt) | reverse | .[0].tagName // ""')
+          echo "Newest dev release: ${LATEST:-<none>}; HEAD is dev-$SHORT_SHA (version $VERSION)"
+
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "Forced by workflow_dispatch."
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          elif [ "$LATEST" = "dev-$SHORT_SHA" ]; then
+            echo "main has not moved since the last dev build; skipping."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-matrix.yml
+    with:
+      archive-prefix: dmm-tools-dev-${{ needs.check.outputs.short_sha }}
+
+  publish:
+    name: Publish dev release
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Compose release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHORT_SHA: ${{ needs.check.outputs.short_sha }}
+        run: |
+          # "latest" excludes prereleases, so this resolves to the newest stable.
+          PREV=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
+          BUILD_DATE=$(date -u +%Y-%m-%d)
+          echo "RELEASE_NAME=Dev build ${BUILD_DATE} (${SHORT_SHA})" >> "$GITHUB_ENV"
+
+          # Drop the compare line before substituting, not after: once
+          # __PREV__ has been replaced there is nothing left to match.
+          cp .github/dev-release-notes.md notes_template.md
+          if [ -z "$PREV" ]; then
+            echo "No stable release to compare against; dropping the compare line."
+            sed -i "/__PREV__/d" notes_template.md
+          fi
+          sed -e "s|__REPO__|${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}|g" \
+              -e "s|__SHA__|${SHORT_SHA}|g" \
+              -e "s|__DATE__|${BUILD_DATE}|g" \
+              -e "s|__PREV__|${PREV}|g" \
+              notes_template.md > dev_notes.md
+
+          # Same shape as the release path's extraction; only the start match
+          # differs. The /^## v/ terminator already stops at the last release.
+          awk '/^## Unreleased$/ {found=1; next} /^## v/ {if (found) exit} found' \
+            CHANGELOG.md > unreleased.md
+          if [ -s unreleased.md ] && grep -q '[^[:space:]]' unreleased.md; then
+            cat unreleased.md >> dev_notes.md
+          else
+            echo "_Nothing recorded in the changelog since the last release._" >> dev_notes.md
+          fi
+          cat dev_notes.md
+
+      - name: Publish prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: dev-${{ needs.check.outputs.short_sha }}
+          name: ${{ env.RELEASE_NAME }}
+          body_path: dev_notes.md
+          prerelease: true
+          make_latest: false
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+
+      - name: Prune old dev releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # shell: bash brings -o pipefail; without it a failing gh in the
+        # pipeline below is swallowed by the loop and pruning stops silently.
+        shell: bash
+        run: |
+          # Matches ^dev- explicitly rather than excluding ^v, so a release
+          # named anything else can never be selected for deletion. Sorted on
+          # publishedAt so a rewritten history cannot make this delete the
+          # release the previous step just published.
+          STALE=$(gh release list --limit 100 --json tagName,publishedAt \
+            --jq "[.[] | select(.tagName | startswith(\"dev-\"))]
+                  | sort_by(.publishedAt) | reverse | .[${KEEP_DEV_RELEASES}:]
+                  | .[].tagName")
+          for tag in $STALE; do
+            echo "Pruning $tag"
+            gh release delete "$tag" --cleanup-tag --yes
+          done
