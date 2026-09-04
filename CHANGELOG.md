@@ -28,6 +28,7 @@
 - **Peak MIN/MAX badges show in the reading display** — screen readers announced them but the badge row left them out; badges now follow the CSV flags column order.
 - **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked the two integral cells the header named, shifting every sub-value column.
 - **The shortcut help's close button shows an ×** — it drew a missing-glyph box.
+- **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 
 ## v0.6.0 — Display Fidelity and Connection Fixes
 

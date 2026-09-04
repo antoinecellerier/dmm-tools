@@ -428,6 +428,10 @@ fn print_no_response_help(device: &SelectableDevice) {
     eprintln!("{}", style(device.activation_instructions).dim());
 }
 
+/// Setup guide URL, for hints printed by binaries installed outside a checkout.
+#[cfg(target_os = "linux")]
+const SETUP_DOC_URL: &str = "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md";
+
 /// Print platform-specific setup instructions when no USB cable is detected.
 fn print_transport_setup_help() {
     eprintln!("Check that the USB cable is plugged in and the meter is powered on.");
@@ -436,14 +440,11 @@ fn print_transport_setup_help() {
         eprintln!("On Linux, ensure the udev rule is installed:");
         eprintln!(
             "  {}",
-            style("sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/").dim()
+            style("sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/").dim()
         );
         eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
-        eprintln!(
-            "Your user must be in the plugdev group: {}",
-            style("sudo usermod -aG plugdev $USER").dim()
-        );
-        eprintln!("Then log out/in and replug the cable.");
+        eprintln!("Then replug the cable. On a headless machine, keep a group on the");
+        eprintln!("rule — see {}", style(SETUP_DOC_URL).dim());
     }
     #[cfg(target_os = "windows")]
     {

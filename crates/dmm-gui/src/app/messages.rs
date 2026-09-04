@@ -418,11 +418,11 @@ impl App {
             let platform_hint = if cfg!(target_os = "linux") {
                 "Check that the USB cable is plugged in and the meter is on.\n\
                  On Linux, ensure the udev rule is installed:\n\
-                 sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/\n\
+                 sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/\n\
                  sudo udevadm control --reload-rules\n\
-                 Your user must be in the plugdev group:\n\
-                 sudo usermod -aG plugdev $USER\n\
-                 Then log out/in and replug the cable.\n\n\
+                 Then replug the cable. On a headless machine, keep a group\n\
+                 on the rule — see the setup guide:\n\
+                 https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md\n\n\
                  Click \"Connect\" after resolving the issue."
             } else if cfg!(target_os = "windows") {
                 "Check that the USB cable is plugged in and the meter is on.\n\

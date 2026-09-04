@@ -1,0 +1,23 @@
+# dmm-tools — non-root access to the USB HID bridges used by UNI-T and
+# Voltcraft meters.
+#
+# TAG+="uaccess" hands each device to whoever is logged in at the local
+# seat, through a systemd-logind ACL that is dropped again at logout.
+# systemd acts on the tag from its own 73-seat-late.rules, so this file
+# has to sort before it — do not renumber it above 73.
+#
+# Two cases get no ACL: a headless or SSH-only machine, which has no local
+# seat, and a distribution running eudev without logind (Alpine, Void,
+# Artix, Gentoo/OpenRC), where the tag is ignored. There, append
+# GROUP="<a group you are in>", MODE="0660" to each rule below. Do not use
+# "input": that group also reads every keyboard and mouse event device on
+# the machine. See docs/setup.md.
+
+# UNI-T multimeters — CP2110 HID-to-UART bridge (UT61E+, UT8803, UT171, UT181A, etc.)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea80", TAG+="uaccess"
+
+# UNI-T multimeters — WCH CH9329 HID-to-UART bridge (UT-D09 cable for UT181A, UT171, etc.)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e429", TAG+="uaccess"
+
+# UNI-T multimeters — WCH CH9325 HID bridge (UT-D04 cable for UT803, UT804, etc.)
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e008", TAG+="uaccess"

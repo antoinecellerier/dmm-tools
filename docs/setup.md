@@ -45,20 +45,61 @@ See the [CLI reference](cli-reference.md) and [GUI reference](gui-reference.md) 
 To allow non-root access to the HID device (covers CP2110, CH9329, and CH9325 adapters):
 
 ```sh
-sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/
+sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger
 ```
 
-Then re-plug the meter or log out/in.
+Then re-plug the meter. The rule tags the device `uaccess`, and logind puts an
+ACL on the device node for whoever is logged in at the local seat, dropping it
+again at logout. Check it with `getfacl /dev/hidrawN` — your user should appear
+as `user:<you>:rw-`.
 
-Your user must be in the `plugdev` group:
+The file name matters. logind acts on the tag from its own
+`73-seat-late.rules`, so a rule that sets the tag has to sort before it — a
+`99-` rule is applied too late and silently does nothing. If you installed an
+earlier release's rule, remove it:
 
 ```sh
-sudo usermod -aG plugdev $USER
+sudo rm -f /etc/udev/rules.d/99-dmm-tools.rules
 ```
 
-Log out and back in for the group change to take effect.
+#### Distribution notes
+
+The steps above are all that is needed on Fedora, RHEL and its rebuilds, Debian,
+Ubuntu and their systemd-based derivatives, Raspberry Pi OS, Arch, and openSUSE.
+Two families need something different:
+
+| Distribution | What to do |
+| --- | --- |
+| NixOS | Install the file through `services.udev.packages` so it keeps its `70-` name. `services.udev.extraRules` writes `99-local.rules`, too late for the tag ([nixpkgs#308681](https://github.com/NixOS/nixpkgs/issues/308681)). |
+| Alpine, Void, Artix, Devuan, Gentoo/OpenRC | Use the group fallback below — eudev does not implement the `uaccess` builtin, so without logind the tag is silently ignored. |
+
+#### Headless machines, and distributions without logind
+
+A machine with no local seat — an SSH-only server or Raspberry Pi — gets no ACL,
+and neither does a system running eudev without logind. Fall back to a group:
+pick one your user is already in, or create a dedicated one, and append it to
+each rule in `/etc/udev/rules.d/70-dmm-tools.rules`:
+
+```
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea80", TAG+="uaccess", GROUP="dmm", MODE="0660"
+```
+
+```sh
+sudo groupadd -f dmm
+sudo usermod -aG dmm $USER
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Log out and back in for the group change to take effect. Leave the tag in place
+— it is harmless where it does nothing, so one file covers both cases.
+
+Do not use the `input` group for this, even though it exists everywhere and does
+work. Its members can read `/dev/input/event*` — every keystroke and mouse event
+on the machine, from every application and the login screen. That is a far wider
+grant than access to one multimeter cable
+([#17](https://github.com/antoinecellerier/dmm-tools/issues/17)).
 
 ### Windows — driver
 
@@ -78,6 +119,7 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 - Verify the USB adapter is plugged in
 - **Linux:** `lsusb | grep -E '10C4:EA80|1A86:E429|1A86:E008'` — look for CP2110 (`10C4:EA80`), CH9329 (`1A86:E429`), or CH9325 (`1A86:E008`). If missing, check the udev rule (see above)
+- **Linux, cable listed by `lsusb` but still not found:** `ls -l /dev/hidraw*` — the meter's node should show a trailing `+`, marking the ACL. For the detail, `getfacl /dev/hidrawN` (from the `acl` package) should list your user as `user:<you>:rw-`. If it doesn't, the udev rule isn't installed under a name that sorts before `73-seat-late.rules`, or you're on a headless machine (see above)
 - **Windows:** check Device Manager for the CP2110 device — if missing or showing an error, reinstall the driver
 - **macOS:** `ioreg -p IOUSB -l | grep CP2110` — if missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
 

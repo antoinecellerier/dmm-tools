@@ -22,7 +22,7 @@ steps below remain the procedure for the UT181A items still open in
 
 2. Install udev rule (Linux only):
    ```sh
-   sudo cp udev/99-dmm-tools.rules /etc/udev/rules.d/
+   sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/
    sudo udevadm control --reload-rules
    ```
    Unplug and replug the cable after installing the rule.

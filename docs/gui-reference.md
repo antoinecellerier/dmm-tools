@@ -482,8 +482,8 @@ to their defaults.
 Shown automatically when connection fails:
 
 - **USB cable not found:** platform-specific instructions (Linux: udev rule
-  install and `plugdev` group membership; Windows: Device Manager guidance to
-  check if a driver is needed). All cable variants are detected automatically.
+  install; Windows: Device Manager guidance to check if a driver is needed).
+  All cable variants are detected automatically.
 - **No response from meter:** animated "Waiting for meter..." indicator
   during initial timeouts, then step-by-step instructions to enable USB mode
   (insert module, turn on, long-press USB/Hz until S icon appears)
