@@ -45,6 +45,7 @@ jobs:
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       short_sha: ${{ steps.check.outputs.short_sha }}
+      version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v5
 
@@ -65,6 +66,7 @@ jobs:
           # from the release it shadows, so skip the window entirely.
           VERSION=$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
             | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [ "${VERSION#*-dev}" = "$VERSION" ]; then
             echo "main is at $VERSION, not a -dev version; skipping until the dev bump lands."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
@@ -115,11 +117,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHORT_SHA: ${{ needs.check.outputs.short_sha }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           # "latest" excludes prereleases, so this resolves to the newest stable.
           PREV=$(gh release view --json tagName --jq .tagName 2>/dev/null || true)
           BUILD_DATE=$(date -u +%Y-%m-%d)
-          echo "RELEASE_NAME=Dev build ${BUILD_DATE} (${SHORT_SHA})" >> "$GITHUB_ENV"
+          # Exactly what binary_help::version_label renders in the GUI, and what
+          # dmm-cli --version prints, so a pasted bug report names a release.
+          # The date is left out: GitHub already columns it in the release list.
+          echo "RELEASE_NAME=v${VERSION} (${SHORT_SHA})" >> "$GITHUB_ENV"
 
           # Drop the compare line before substituting, not after: once
           # __PREV__ has been replaced there is nothing left to match.
