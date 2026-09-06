@@ -16,8 +16,8 @@ dmm-cli <COMMAND> [OPTIONS]
 ## Description
 
 Communicates with UNI-T and Voltcraft multimeters over USB. Supports live
-measurement reading, button commands, protocol debugging, and guided data
-capture for verification. See [supported devices](supported-devices.md) for
+measurement reading, button commands, mode switching, protocol debugging, and
+guided data capture for verification. See [supported devices](supported-devices.md) for
 the full compatibility list.
 
 Set `NO_COLOR=1` to disable colored output.
@@ -76,7 +76,7 @@ there.
 The `mock` device generates synthetic measurements cycling through multiple modes
 (DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires
 no USB hardware and is useful for development, demos, and testing output formats.
-Supports `read` and `command` subcommands. The `info`, `debug`, and `capture`
+Supports the `read`, `command` and `mode` subcommands. The `info`, `debug`, and `capture`
 subcommands require real hardware and will exit with an error when used with `mock`.
 
 #### Mock Modes
@@ -315,6 +315,35 @@ No remote commands — the meter streams continuously after connection.
 ```bash
 dmm-cli command hold
 dmm-cli --device ut181a command hold
+```
+
+### dmm-cli mode
+
+Switch the meter's function within the current dial position without touching
+the dial (UT181A and mock). Run with no arguments to list the modes reachable
+now:
+
+```
+dmm-cli mode                 # list modes, * marks the live one
+dmm-cli mode <CHOICE>        # switch, by label or hex id
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
+
+`<CHOICE>` is a label (case-insensitive, quoted if it has spaces) or the hex id
+listed beside it. After switching, `dmm-cli` waits up to 2 s for the meter to
+report the new mode and prints `Meter now in <mode>`; a refused or unconfirmed
+switch exits non-zero — check the dial position. A dial position with nothing
+to switch to prints a note and exits 0. REL and manual range are
+[`dmm-cli command`](#dmm-cli-command) buttons, not modes.
+
+**Example:**
+
+```bash
+dmm-cli --device ut181a mode
+dmm-cli --device ut181a mode "V AC Hz"
 ```
 
 ### dmm-cli debug

@@ -93,6 +93,16 @@ Example: --device mock read --mock-mode dcv"
         /// Command name (run without arguments to see available commands)
         action: Option<String>,
     },
+    /// Switch the meter's function without touching the dial.
+    /// Run with no arguments to list the modes reachable from where it sits now.
+    Mode {
+        /// Mode label or hex id from the listing (run without arguments to see them)
+        choice: Option<String>,
+        /// Pin mock device to a specific mode (only with --device mock).
+        /// Without this, mock cycles through all modes automatically.
+        #[arg(long)]
+        mock_mode: Option<String>,
+    },
     /// Raw hex dump mode for protocol debugging
     Debug {
         /// Number of requests to send (0 = unlimited)
@@ -315,6 +325,9 @@ fn main() {
             mock_mode,
         ),
         Cmd::Command { action } if !device.requires_hardware => cmd_command(device, None, action),
+        Cmd::Mode { choice, mock_mode } if !device.requires_hardware => {
+            cmd_mode(device, None, choice, mock_mode)
+        }
         Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
             eprintln!(
                 "{} This command requires real hardware (not supported with --device {}).",
@@ -345,6 +358,10 @@ fn main() {
             &transform.to_transform(),
         ),
         Cmd::Command { action } => cmd_command(device, adapter, action),
+        Cmd::Mode {
+            choice,
+            mock_mode: _,
+        } => cmd_mode(device, adapter, choice, None),
         Cmd::Debug { count, interval_ms } => cmd_debug(device, adapter, count, interval_ms),
         Cmd::Capture {
             output,
@@ -633,15 +650,7 @@ fn cmd_read_mock(
     transform: &Transform,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = match mock_mode {
-        Some(mode_str) => {
-            let mode: dmm_lib::mock::MockMode = mode_str
-                .parse()
-                .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?;
-            dmm_lib::mock::open_mock_mode(mode)?
-        }
-        None => dmm_lib::mock::open_mock()?,
-    };
+    let mut dmm = open_mock_device(mock_mode)?;
     info!("mock device connected, starting measurement loop");
     // Mock returns instantly — use 100ms floor to simulate ~10 Hz
     let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
@@ -656,6 +665,25 @@ fn cmd_read_mock(
         integrate,
         transform,
     )
+}
+
+/// Open the mock, pinned to `mock_mode` when one was given.
+///
+/// Shared by every subcommand that takes `--mock-mode`, so an unknown mode
+/// name is rejected with the same message (and the same list of valid names)
+/// wherever it is passed.
+fn open_mock_device(
+    mock_mode: Option<String>,
+) -> Result<dmm_lib::Dmm<dmm_lib::transport::NullTransport>, Box<dyn std::error::Error>> {
+    match mock_mode {
+        Some(mode_str) => {
+            let mode: dmm_lib::mock::MockMode = mode_str
+                .parse()
+                .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?;
+            Ok(dmm_lib::mock::open_mock_mode(mode)?)
+        }
+        None => Ok(dmm_lib::mock::open_mock()?),
+    }
 }
 
 /// Shared measurement loop for both real and mock devices.
@@ -908,6 +936,190 @@ fn print_available_commands(
     Ok(())
 }
 
+/// The one thing a user can do about a mode the meter won't take. Both
+/// failures below end here, so they end in the same words.
+const CHECK_DIAL_HINT: &str = "check the dial position";
+
+/// How long to wait for a switched mode to show up in the measurement
+/// stream. The meter acknowledges the command before the frame carrying the
+/// new mode arrives, so "accepted" and "switched" are two separate answers.
+const MODE_SWITCH_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// Gap between polls while waiting for that frame.
+const MODE_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// List or switch the modes the meter reaches from its current dial position.
+///
+/// Both paths need a reading first: the choices are relative to what the
+/// meter is measuring now, so there is nothing to list or match against
+/// until one frame has arrived.
+fn cmd_mode(
+    device: &'static SelectableDevice,
+    adapter: Option<&str>,
+    choice: Option<String>,
+    mock_mode: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if device.requires_hardware {
+        let mut dmm = open_with_help(device, adapter)?;
+        run_mode(&mut dmm, choice)
+    } else {
+        let mut dmm = open_mock_device(mock_mode)?;
+        run_mode(&mut dmm, choice)
+    }
+}
+
+/// Whether the meter has a mode to switch *to* from where its dial sits.
+///
+/// A single choice is the live mode on its own — the single-variant UT181A
+/// dials (Ohm, nS, Cap, Hz, Duty, Pulse Width) report exactly that — so it
+/// means what an empty list means: nothing to list, and nothing to switch.
+fn offers_a_mode_switch(choices: &[dmm_lib::protocol::ModeChoice]) -> bool {
+    choices.len() > 1
+}
+
+fn run_mode<T: dmm_lib::transport::Transport>(
+    dmm: &mut dmm_lib::Dmm<T>,
+    choice: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let model_name = dmm.profile().model_name;
+    let reading = dmm.request_measurement()?;
+    let choices = dmm.mode_choices(&reading);
+
+    if !offers_a_mode_switch(&choices) {
+        eprintln!(
+            "{} {model_name} has no switchable modes in {} \u{2014} use the dial.",
+            style("Note:").yellow(),
+            reading.mode,
+        );
+        return Ok(());
+    }
+
+    let Some(input) = choice else {
+        print_mode_choices(model_name, &choices);
+        // Name an id that is actually in the list above, and preferably one
+        // that would change something.
+        let example = choices.iter().find(|c| !c.current).unwrap_or(&choices[0]);
+        eprintln!(
+            "\n{}",
+            style(format!(
+                "Tip: pass a name or id to switch, e.g. dmm-cli mode {:#06x}",
+                example.id
+            ))
+            .dim()
+        );
+        return Ok(());
+    };
+
+    let Some(target) = resolve_mode_choice(&choices, &input) else {
+        print_mode_choices(model_name, &choices);
+        return Err(format!("unknown mode: {input}").into());
+    };
+    let (id, label) = (target.id, target.label.to_string());
+
+    if target.current {
+        println!("{} {label}", style("Meter is already in").green());
+        return Ok(());
+    }
+    // Everything below reads from `choices` again, so drop the borrow.
+    let mut live = choices
+        .iter()
+        .find(|c| c.current)
+        .map_or_else(|| reading.mode.to_string(), |c| c.label.to_string());
+
+    if let Err(e) = dmm.select_mode(id) {
+        // A refusal is the meter answering, not a fault: say so, and say what
+        // the user can do about it.
+        return Err(match e {
+            dmm_lib::error::Error::CommandRejected(detail) => {
+                format!("the meter refused {label}: {detail} \u{2014} {CHECK_DIAL_HINT}").into()
+            }
+            other => Box::<dyn std::error::Error>::from(other),
+        });
+    }
+
+    let started = std::time::Instant::now();
+    loop {
+        match dmm.request_measurement() {
+            Ok(reading) => {
+                let choices = dmm.mode_choices(&reading);
+                if choices.iter().any(|c| c.id == id && c.current) {
+                    println!("{} {label}", style("Meter now in").green());
+                    return Ok(());
+                }
+                if let Some(c) = choices.iter().find(|c| c.current) {
+                    live = c.label.to_string();
+                }
+            }
+            // The frame straddling the switch can be unreadable, and the meter
+            // can go quiet across it altogether — the vendor app sleeps 100 ms
+            // after every SET_MODE. Neither ends the wait: the next frame
+            // parses, and the 2 s deadline below is what gives up. Anything
+            // else is a real fault.
+            Err(e) if matches!(e.kind(), ErrorKind::Protocol | ErrorKind::Timeout) => {
+                log::warn!("waiting for the mode switch: {e}");
+            }
+            Err(e) => return Err(e.into()),
+        }
+        if std::time::Instant::now()
+            .checked_duration_since(started)
+            .unwrap_or_default()
+            >= MODE_SWITCH_TIMEOUT
+        {
+            break;
+        }
+        std::thread::sleep(MODE_POLL_INTERVAL);
+    }
+
+    Err(format!("Meter did not switch (still {live}) \u{2014} {CHECK_DIAL_HINT}").into())
+}
+
+/// One line per choice, `*` on the live one, id last so it can be copied
+/// straight back into the command.
+fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::ModeChoice]) {
+    println!("Modes for {}:", style(model_name).bold());
+    let width = choices
+        .iter()
+        .map(|c| c.label.chars().count())
+        .max()
+        .unwrap_or(0);
+    for c in choices {
+        // Pad the bare label: styling it first would count escape bytes
+        // toward the width and misalign the column.
+        let pad = " ".repeat(width - c.label.chars().count());
+        println!(
+            "{} {}{pad}  {}",
+            if c.current {
+                style("*").green().bold()
+            } else {
+                style(" ")
+            },
+            c.label,
+            style(format!("{:#06x}", c.id)).dim(),
+        );
+    }
+}
+
+/// Resolve a `mode` argument against the choices the meter just reported:
+/// a label, case-insensitively, or the `0x` id printed beside it.
+///
+/// The id is the disambiguator — a family is free to give two variants the
+/// same label, and then only the id picks one of them out.
+fn resolve_mode_choice<'a>(
+    choices: &'a [dmm_lib::protocol::ModeChoice],
+    input: &str,
+) -> Option<&'a dmm_lib::protocol::ModeChoice> {
+    let input = input.trim();
+    if let Some(hex) = input
+        .strip_prefix("0x")
+        .or_else(|| input.strip_prefix("0X"))
+        && let Ok(id) = u16::from_str_radix(hex, 16)
+    {
+        return choices.iter().find(|c| c.id == id);
+    }
+    let needle = input.to_lowercase();
+    choices.iter().find(|c| c.label.to_lowercase() == needle)
+}
+
 fn cmd_debug(
     device: &'static SelectableDevice,
     adapter: Option<&str>,
@@ -982,6 +1194,7 @@ fn cmd_debug(
 mod tests {
     use super::*;
     use dmm_lib::measurement::MeasuredValue;
+    use dmm_lib::protocol::ModeChoice;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;
 
     #[test]
@@ -1165,6 +1378,260 @@ mod tests {
                 assert!(action.is_none());
             }
             _ => panic!("expected Command"),
+        }
+    }
+
+    #[test]
+    fn clap_parse_mode() {
+        let cli = Cli::try_parse_from(["dmm-cli", "mode", "V AC Hz"]).unwrap();
+        match cli.command {
+            Cmd::Mode { choice, .. } => assert_eq!(choice.as_deref(), Some("V AC Hz")),
+            _ => panic!("expected Mode"),
+        }
+    }
+
+    #[test]
+    fn clap_parse_mode_no_choice_lists_modes() {
+        let cli = Cli::try_parse_from(["dmm-cli", "mode"]).unwrap();
+        match cli.command {
+            Cmd::Mode { choice, mock_mode } => {
+                assert!(choice.is_none());
+                assert!(mock_mode.is_none());
+            }
+            _ => panic!("expected Mode"),
+        }
+    }
+
+    fn mode_choice(id: u16, label: &'static str, current: bool) -> ModeChoice {
+        ModeChoice {
+            id,
+            label: std::borrow::Cow::Borrowed(label),
+            current,
+        }
+    }
+
+    /// A user retypes what the listing printed, in whatever case they like.
+    #[test]
+    fn resolve_mode_choice_matches_a_label_case_insensitively() {
+        let choices = [
+            mode_choice(0x1111, "V AC", true),
+            mode_choice(0x1121, "V AC Hz", false),
+        ];
+        for input in ["V AC Hz", "v ac hz", "  V Ac hZ  "] {
+            assert_eq!(
+                resolve_mode_choice(&choices, input).map(|c| c.id),
+                Some(0x1121),
+                "{input}"
+            );
+        }
+    }
+
+    /// The listing prints the id so it can be pasted back, which is the only
+    /// way to pick between two variants a family named the same.
+    #[test]
+    fn resolve_mode_choice_accepts_the_printed_hex_id() {
+        let choices = [
+            mode_choice(0x1111, "V AC", true),
+            mode_choice(0x1121, "V AC", false),
+        ];
+        assert_eq!(
+            resolve_mode_choice(&choices, "0x1121").map(|c| c.id),
+            Some(0x1121)
+        );
+        // The listing pads to four digits; a user may not.
+        assert_eq!(
+            resolve_mode_choice(&choices, "0X1111").map(|c| c.id),
+            Some(0x1111)
+        );
+        assert_eq!(
+            resolve_mode_choice(&[mode_choice(9, "T2", false)], "0x9").map(|c| c.id),
+            Some(9)
+        );
+    }
+
+    /// Ids the fake meter below gives its choices, spaced like the UT181A's
+    /// variant nibble so the hex the tests type back is realistic.
+    fn fake_mode_id(index: usize) -> u16 {
+        0x1111 + (index as u16) * 0x10
+    }
+
+    static FAKE_PROFILE: dmm_lib::protocol::DeviceProfile = dmm_lib::protocol::DeviceProfile {
+        family_name: "Fake",
+        model_name: "Fake meter",
+        stability: dmm_lib::protocol::Stability::Experimental,
+        supported_commands: &[],
+        max_aux_values: 0,
+        verification_issue: None,
+    };
+
+    /// A meter whose dial reaches `labels`, sitting on the first of them.
+    ///
+    /// `post_switch_errors` are handed out in place of the readings that
+    /// follow a successful switch — the meter garbling a frame or going quiet
+    /// across a SET_MODE.
+    struct FakeMeter {
+        labels: Vec<&'static str>,
+        live: usize,
+        switched: bool,
+        post_switch_errors: Vec<dmm_lib::error::Error>,
+        /// Ids `select_mode` was asked for, so a test can assert it was left
+        /// alone.
+        selected: std::sync::Arc<std::sync::Mutex<Vec<u16>>>,
+    }
+
+    impl dmm_lib::protocol::Protocol for FakeMeter {
+        fn init(&mut self, _t: &dyn dmm_lib::transport::Transport) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+
+        fn request_measurement(
+            &mut self,
+            _t: &dyn dmm_lib::transport::Transport,
+        ) -> dmm_lib::error::Result<dmm_lib::measurement::Measurement> {
+            if self.switched && !self.post_switch_errors.is_empty() {
+                return Err(self.post_switch_errors.remove(0));
+            }
+            Ok(dmm_lib::measurement::Measurement {
+                mode: self.labels[self.live].into(),
+                mode_raw: fake_mode_id(self.live),
+                ..dmm_lib::measurement::Measurement::test_fixture(
+                    MeasuredValue::Normal(1.0),
+                    "V",
+                    dmm_lib::flags::StatusFlags::default(),
+                )
+            })
+        }
+
+        fn send_command(
+            &mut self,
+            _t: &dyn dmm_lib::transport::Transport,
+            command: &str,
+        ) -> dmm_lib::error::Result<()> {
+            Err(dmm_lib::error::Error::UnsupportedCommand(
+                command.to_string(),
+            ))
+        }
+
+        fn get_name(
+            &mut self,
+            _t: &dyn dmm_lib::transport::Transport,
+        ) -> dmm_lib::error::Result<Option<String>> {
+            Ok(None)
+        }
+
+        fn profile(&self) -> &dmm_lib::protocol::DeviceProfile {
+            &FAKE_PROFILE
+        }
+
+        fn mode_choices(&self, _current: &dmm_lib::measurement::Measurement) -> Vec<ModeChoice> {
+            self.labels
+                .iter()
+                .enumerate()
+                .map(|(i, label)| ModeChoice {
+                    id: fake_mode_id(i),
+                    label: std::borrow::Cow::Borrowed(label),
+                    current: i == self.live,
+                })
+                .collect()
+        }
+
+        fn select_mode(
+            &mut self,
+            _t: &dyn dmm_lib::transport::Transport,
+            id: u16,
+        ) -> dmm_lib::error::Result<()> {
+            self.selected.lock().expect("poisoned").push(id);
+            match (0..self.labels.len()).find(|&i| fake_mode_id(i) == id) {
+                Some(i) => {
+                    self.live = i;
+                    self.switched = true;
+                    Ok(())
+                }
+                None => Err(dmm_lib::error::Error::UnsupportedCommand(format!(
+                    "mode {id:#06x}"
+                ))),
+            }
+        }
+    }
+
+    type SelectedIds = std::sync::Arc<std::sync::Mutex<Vec<u16>>>;
+
+    fn fake_meter(
+        labels: &[&'static str],
+        post_switch_errors: Vec<dmm_lib::error::Error>,
+    ) -> (dmm_lib::Dmm<dmm_lib::transport::NullTransport>, SelectedIds) {
+        let selected: SelectedIds = Default::default();
+        let meter = FakeMeter {
+            labels: labels.to_vec(),
+            live: 0,
+            switched: false,
+            post_switch_errors,
+            selected: std::sync::Arc::clone(&selected),
+        };
+        let dmm = dmm_lib::Dmm::new(dmm_lib::transport::NullTransport, Box::new(meter))
+            .expect("the fake meter needs no transport");
+        (dmm, selected)
+    }
+
+    /// A single-variant dial (the UT181A Ohm, nS, Cap, Hz, Duty and Pulse
+    /// Width positions) reports one choice: the mode the meter is already in.
+    /// Listing it, and tipping the user to switch to it, is noise — it counts
+    /// as nothing to switch, exactly as an empty list does.
+    #[test]
+    fn only_the_live_mode_is_not_a_switch_to_offer() {
+        assert!(!offers_a_mode_switch(&[]));
+        assert!(!offers_a_mode_switch(&[mode_choice(
+            0x5111,
+            "Resistance",
+            true
+        )]));
+        assert!(offers_a_mode_switch(&[
+            mode_choice(0x1111, "V AC", true),
+            mode_choice(0x1121, "V AC Hz", false),
+        ]));
+    }
+
+    /// And the command says so and stops: exit 0, meter untouched, whether or
+    /// not a choice was asked for.
+    #[test]
+    fn a_dial_with_only_the_live_mode_switches_nothing() {
+        for arg in [None, Some("0x1111".to_string())] {
+            let (mut dmm, selected) = fake_meter(&["Resistance"], vec![]);
+            run_mode(&mut dmm, arg).expect("one choice is not a failure");
+            assert!(
+                selected.lock().expect("poisoned").is_empty(),
+                "the meter was switched"
+            );
+        }
+    }
+
+    /// The vendor app sleeps 100 ms after every SET_MODE, so a meter that
+    /// goes quiet across the switch is expected. One timeout must not end the
+    /// 2 s wait the switch just started.
+    #[test]
+    fn a_mode_switch_waits_through_a_quiet_meter() {
+        let (mut dmm, _) = fake_meter(&["V AC", "V AC Hz"], vec![dmm_lib::error::Error::Timeout]);
+        run_mode(&mut dmm, Some("0x1121".to_string())).expect("a timeout must not end the wait");
+    }
+
+    /// Everything that is not a garbled frame or a quiet meter still ends the
+    /// wait: a dead link is not something more polling will fix.
+    #[test]
+    fn a_mode_switch_gives_up_on_a_lost_link() {
+        let (mut dmm, _) = fake_meter(
+            &["V AC", "V AC Hz"],
+            vec![dmm_lib::error::Error::NoTransportFound],
+        );
+        assert!(run_mode(&mut dmm, Some("0x1121".to_string())).is_err());
+    }
+
+    #[test]
+    fn resolve_mode_choice_rejects_anything_else() {
+        let choices = [mode_choice(0x1111, "V AC", true)];
+        // Not a label, an id of no choice, an unparseable id, and a decimal
+        // id (only the printed `0x` form is an id).
+        for input in ["V DC", "0x2222", "0xzz", "4369", ""] {
+            assert!(resolve_mode_choice(&choices, input).is_none(), "{input}");
         }
     }
 

@@ -16,6 +16,7 @@
 
 ### CLI
 
+- **`dmm-cli mode` lists and switches the meter's function** — V AC to V AC Hz or dBm without turning the dial, on the UT181A and the mock.
 - **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
