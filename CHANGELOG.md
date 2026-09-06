@@ -21,7 +21,7 @@
 - **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
-- **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period) and `temp2` (second thermocouple) stand in for a UT181A in the CLI and GUI.
+- **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period), `temp2` (second thermocouple), `temp-diff` and `temp-diff-rev` (their difference) stand in for a UT181A in the CLI and GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
 - **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
 

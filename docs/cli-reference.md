@@ -97,6 +97,8 @@ By default, the mock device cycles through all modes automatically. Use
 | `ncv` | NCV (cycling levels 0-4) |
 | `acv-hz` | AC Voltage with frequency and period sub-displays |
 | `temp2` | Temperature with a second thermocouple (T2) |
+| `temp-diff` | Temperature difference T1-T2 |
+| `temp-diff-rev` | Temperature difference T2-T1 |
 
 **Examples:**
 

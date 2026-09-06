@@ -39,6 +39,8 @@ pub enum MockMode {
     Ncv,
     AcVHz,
     TempDual,
+    TempDiff,
+    TempDiffRev,
 }
 
 /// One row of the mode table: everything `MockMode` exposes for a variant.
@@ -52,9 +54,9 @@ struct MockModeInfo {
 }
 
 /// Every mode, in auto-cycle order. The order of the first nine entries is
-/// load-bearing for the GUI demo and several tests; the multi-display modes
-/// were appended so it stayed unchanged.
-const MODES: [MockModeInfo; 11] = [
+/// load-bearing for the GUI demo and several tests; the multi-display and
+/// differential modes were appended so it stayed unchanged.
+const MODES: [MockModeInfo; 13] = [
     MockModeInfo {
         mode: MockMode::DcV,
         label: "dcv",
@@ -121,6 +123,18 @@ const MODES: [MockModeInfo; 11] = [
         description: "Temperature with a second thermocouple (T2)",
         aliases: &["temp-dual", "temp_dual"],
     },
+    MockModeInfo {
+        mode: MockMode::TempDiff,
+        label: "temp-diff",
+        description: "Temperature difference T1-T2",
+        aliases: &["tempdiff", "temp_diff"],
+    },
+    MockModeInfo {
+        mode: MockMode::TempDiffRev,
+        label: "temp-diff-rev",
+        description: "Temperature difference T2-T1",
+        aliases: &["tempdiffrev", "temp_diff_rev"],
+    },
 ];
 
 /// `MODES` projected to bare variants, so `ALL` can't drift from the table.
@@ -173,7 +187,14 @@ impl MockMode {
 /// reports no choices, so consumers exercise the unsupported path too.
 const MOCK_MODE_GROUPS: [&[MockMode]; 2] = [
     &[MockMode::AcV, MockMode::AcVHz],
-    &[MockMode::Temp, MockMode::TempDual],
+    // Four entries, like a real UT181A on the temperature dial: one probe,
+    // both probes, and the two arithmetic arrangements.
+    &[
+        MockMode::Temp,
+        MockMode::TempDual,
+        MockMode::TempDiff,
+        MockMode::TempDiffRev,
+    ],
 ];
 
 impl std::str::FromStr for MockMode {
@@ -306,8 +327,17 @@ fn hz_value(t: f64, duration: f64) -> MeasuredValue {
     MeasuredValue::Normal(60.0 + 0.5 * (t / duration * TAU).sin())
 }
 
+/// T1, the thermocouple every temperature scenario puts on the main display,
+/// in °C: one slow ramp across 20–30 °C per duration.
+///
+/// Named separately from [`temp_value`] so the differential arrangements can
+/// subtract the very same waveform rather than restating the math.
+fn temp_t1_celsius(t: f64, duration: f64) -> f64 {
+    triangle(t / duration, 20.0, 30.0)
+}
+
 fn temp_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(triangle(t / duration, 20.0, 30.0))
+    MeasuredValue::Normal(temp_t1_celsius(t, duration))
 }
 
 fn dcma_value(t: f64, duration: f64) -> MeasuredValue {
@@ -348,15 +378,36 @@ fn acv_hz_period_value(t: f64, duration: f64) -> MeasuredValue {
     MeasuredValue::Normal(1000.0 / acv_line_hz(t, duration))
 }
 
-/// Second thermocouple of the `temp2` scenario, in °C.
+/// T2, the second thermocouple of the `temp2` scenario, in °C.
 ///
 /// Deliberately not derived from T1: two sine cycles per duration with a
 /// smaller swing, against T1's single triangle ramp. The two traces then cross
 /// repeatedly instead of running parallel, which is the point of the scenario —
 /// a graph with two sub-values on it has to show them apart. The 21–25 °C swing
 /// stays inside T1's 20–30 °C band so both share one Y axis.
+///
+/// Named separately from [`temp2_value`] for the same reason as
+/// [`temp_t1_celsius`]: the differential arrangements subtract this waveform.
+fn temp_t2_celsius(t: f64, duration: f64) -> f64 {
+    23.0 + 2.0 * (t / duration * 2.0 * TAU).sin()
+}
+
 fn temp2_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(23.0 + 2.0 * (t / duration * 2.0 * TAU).sin())
+    MeasuredValue::Normal(temp_t2_celsius(t, duration))
+}
+
+/// The `temp-diff` scenario's reading: T1 − T2, the real difference of the two
+/// probes `temp2` displays, at the same elapsed time. All four temperature
+/// scenarios share a duration, so switching between them shows arithmetic that
+/// adds up.
+fn temp_diff_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(temp_t1_celsius(t, duration) - temp_t2_celsius(t, duration))
+}
+
+/// The `temp-diff-rev` scenario's reading: the same difference the other way
+/// round, T2 − T1.
+fn temp_diff_rev_value(t: f64, duration: f64) -> MeasuredValue {
+    MeasuredValue::Normal(temp_t2_celsius(t, duration) - temp_t1_celsius(t, duration))
 }
 
 /// Frequency then period — the order the UT181A's `0x1121` frame sends them.
@@ -511,6 +562,38 @@ fn scenarios() -> Vec<Scenario> {
             temp_value,
         )
         .with_aux(TEMP_DUAL_AUX),
+        // The temperature dial's two arithmetic arrangements, so the mode
+        // group has the four entries a real UT181A offers there. They run on
+        // the same 8 s clock as `temp` and `temp2` and subtract those very
+        // waveforms, so the four readings agree with each other.
+        //
+        // No sub-values: the meter's aux layout in the differential
+        // arrangements is unverified. `aux_labels` in the UT181A decoder
+        // deliberately falls back to the positional "Aux1"/"Aux2" for 0x4231
+        // and 0x4241 because no source says which probe feeds the slot, so
+        // the mock asserts nothing here either.
+        Scenario::new(
+            MockMode::TempDiff,
+            "Temp \u{00B0}C T1-T2",
+            0x0A,
+            0,
+            "\u{00B0}C",
+            "",
+            400.0,
+            8.0,
+            temp_diff_value,
+        ),
+        Scenario::new(
+            MockMode::TempDiffRev,
+            "Temp \u{00B0}C T2-T1",
+            0x0A,
+            0,
+            "\u{00B0}C",
+            "",
+            400.0,
+            8.0,
+            temp_diff_rev_value,
+        ),
     ]
 }
 
@@ -1408,6 +1491,16 @@ mod tests {
         assert_eq!("temp2".parse::<MockMode>().unwrap(), MockMode::TempDual);
         assert_eq!("temp-dual".parse::<MockMode>().unwrap(), MockMode::TempDual);
         assert_eq!("temp_dual".parse::<MockMode>().unwrap(), MockMode::TempDual);
+        assert_eq!("temp-diff".parse::<MockMode>().unwrap(), MockMode::TempDiff);
+        assert_eq!("temp_diff".parse::<MockMode>().unwrap(), MockMode::TempDiff);
+        assert_eq!(
+            "temp-diff-rev".parse::<MockMode>().unwrap(),
+            MockMode::TempDiffRev
+        );
+        assert_eq!(
+            "temp_diff_rev".parse::<MockMode>().unwrap(),
+            MockMode::TempDiffRev
+        );
         assert!("invalid".parse::<MockMode>().is_err());
     }
 
@@ -1625,6 +1718,63 @@ mod tests {
             differed |= (t1 - t2).abs() > 0.1;
         }
         assert!(differed, "T2 never departs from T1");
+    }
+
+    /// The arithmetic arrangements must show the real difference of the two
+    /// probes `temp2` displays — a separate waveform would read as a
+    /// contradiction when switching between the modes — and the reversed
+    /// arrangement must be its negation. Neither carries sub-values: the
+    /// meter's aux layout in these arrangements is unverified, so the mock
+    /// claims nothing.
+    #[test]
+    fn temperature_differentials_are_opposite_and_single_display() {
+        let mut dmm = open_mock_mode(MockMode::TempDiff).unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert_eq!(m.mode, "Temp \u{00B0}C T1-T2");
+        assert_eq!(m.unit, "\u{00B0}C");
+        assert!(m.aux_values.is_empty());
+
+        let mut dmm = open_mock_mode(MockMode::TempDiffRev).unwrap();
+        let m = dmm.request_measurement().unwrap();
+        assert_eq!(m.mode, "Temp \u{00B0}C T2-T1");
+        assert!(m.aux_values.is_empty());
+
+        // Sharing the dual scenario's clock is what lets the four readings
+        // agree: the same elapsed time must mean the same T1 and T2 in all of
+        // them.
+        let duration = scenario_duration(MockMode::TempDiff);
+        assert_eq!(duration, scenario_duration(MockMode::TempDual));
+        assert_eq!(duration, scenario_duration(MockMode::TempDiffRev));
+
+        const SAMPLES: usize = 16;
+        let mut swing: f64 = 0.0;
+        for i in 0..SAMPLES {
+            let t = i as f64 / SAMPLES as f64 * duration;
+            let (t1, t2) = match (temp_value(t, duration), temp2_value(t, duration)) {
+                (MeasuredValue::Normal(t1), MeasuredValue::Normal(t2)) => (t1, t2),
+                other => panic!("expected Normal probe values, got {other:?}"),
+            };
+            match (
+                temp_diff_value(t, duration),
+                temp_diff_rev_value(t, duration),
+            ) {
+                (MeasuredValue::Normal(fwd), MeasuredValue::Normal(rev)) => {
+                    assert!(
+                        (fwd - (t1 - t2)).abs() < 1e-9,
+                        "T1-T2 read {fwd} but the probes say {t1} - {t2} at t={t}"
+                    );
+                    assert!(
+                        (rev - (t2 - t1)).abs() < 1e-9,
+                        "T2-T1 read {rev} but the probes say {t2} - {t1} at t={t}"
+                    );
+                    swing = swing.max(fwd.abs());
+                }
+                other => panic!("expected Normal values, got {other:?}"),
+            }
+        }
+        // The probes are shaped to cross, so the difference has to move — a
+        // constant zero would satisfy every assertion above.
+        assert!(swing > 1.0, "the differential never left {swing} °C");
     }
 
     /// Duration of the scenario driving `mode`, for sampling its waveforms.
