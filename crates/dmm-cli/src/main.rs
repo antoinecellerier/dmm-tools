@@ -96,7 +96,7 @@ Example: --device mock read --mock-mode dcv"
     /// Switch the meter's function without touching the dial.
     /// Run with no arguments to list the modes reachable from where it sits now.
     Mode {
-        /// Mode label or hex id from the listing (run without arguments to see them)
+        /// Mode label, or a unique fragment of one, from the listing (run without arguments to see them)
         choice: Option<String>,
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, mock cycles through all modes automatically.
@@ -996,23 +996,29 @@ fn run_mode<T: dmm_lib::transport::Transport>(
 
     let Some(input) = choice else {
         print_mode_choices(model_name, &choices);
-        // Name an id that is actually in the list above, and preferably one
-        // that would change something.
+        // Name a fragment that is actually in the column above, and
+        // preferably one that would change something.
         let example = choices.iter().find(|c| !c.current).unwrap_or(&choices[0]);
         eprintln!(
             "\n{}",
             style(format!(
-                "Tip: pass a name or id to switch, e.g. dmm-cli mode {:#06x}",
-                example.id
+                "Tip: the right column switches to that mode, e.g. dmm-cli mode {}",
+                quote_for_shell(&shortest_fragment(&choices, example))
             ))
             .dim()
         );
         return Ok(());
     };
 
-    let Some(target) = resolve_mode_choice(&choices, &input) else {
-        print_mode_choices(model_name, &choices);
-        return Err(format!("unknown mode: {input}").into());
+    let target = match resolve_mode_choice(&choices, &input) {
+        Ok(target) => target,
+        Err(NoModeMatch::Ambiguous(labels)) => {
+            return Err(format!("ambiguous mode: {input} matches {}", labels.join(", ")).into());
+        }
+        Err(NoModeMatch::Unknown) => {
+            print_mode_choices(model_name, &choices);
+            return Err(format!("unknown mode: {input}").into());
+        }
     };
     let (id, label) = (target.id, target.label.to_string());
 
@@ -1073,8 +1079,9 @@ fn run_mode<T: dmm_lib::transport::Transport>(
     Err(format!("Meter did not switch (still {live}) \u{2014} {CHECK_DIAL_HINT}").into())
 }
 
-/// One line per choice, `*` on the live one, id last so it can be copied
-/// straight back into the command.
+/// One line per choice, `*` on the live one, and the least that has to be
+/// typed to reach it in a second column — so the fragment form is on screen
+/// rather than something to guess at.
 fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::ModeChoice]) {
     println!("Modes for {}:", style(model_name).bold());
     let width = choices
@@ -1094,30 +1101,89 @@ fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::ModeChoice
                 style(" ")
             },
             c.label,
-            style(format!("{:#06x}", c.id)).dim(),
+            style(quote_for_shell(&shortest_fragment(choices, c))).dim(),
         );
     }
 }
 
-/// Resolve a `mode` argument against the choices the meter just reported:
-/// a label, case-insensitively, or the `0x` id printed beside it.
+/// The shortest run of words from a choice's label that [`resolve_mode_choice`]
+/// maps back to that same choice — what the listing shows as the thing to type.
 ///
-/// The id is the disambiguator — a family is free to give two variants the
-/// same label, and then only the id picks one of them out.
+/// Runs are tried shortest first, measured in characters and, at equal length,
+/// leftmost first. A label whose every fragment is shared with a longer label
+/// ("V AC" beside "V AC Hz") has no shorter form: the whole label comes back,
+/// which the resolver takes as an exact match.
+fn shortest_fragment(
+    choices: &[dmm_lib::protocol::ModeChoice],
+    target: &dmm_lib::protocol::ModeChoice,
+) -> String {
+    let words: Vec<&str> = target.label.split_whitespace().collect();
+    let mut runs: Vec<(usize, usize, String)> = Vec::new();
+    for len in 1..=words.len() {
+        for start in 0..=words.len() - len {
+            let run = words[start..start + len].join(" ").to_lowercase();
+            runs.push((run.chars().count(), start, run));
+        }
+    }
+    runs.sort_by_key(|(chars, start, _)| (*chars, *start));
+    runs.into_iter()
+        .map(|(_, _, run)| run)
+        .find(|run| resolve_mode_choice(choices, run).is_ok_and(|hit| hit.id == target.id))
+        // Only reachable for a label the runs above cannot reproduce (empty,
+        // or oddly spaced); the label itself is always an exact match.
+        .unwrap_or_else(|| target.label.to_lowercase())
+}
+
+/// A label or fragment as it has to be typed back on a shell command line:
+/// bare when the shell would leave it alone, double-quoted otherwise.
+fn quote_for_shell(text: &str) -> String {
+    let bare = !text.is_empty()
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'));
+    if bare {
+        text.to_string()
+    } else {
+        format!("\"{text}\"")
+    }
+}
+
+/// Why a `mode` argument picked out no single choice.
+#[derive(Debug)]
+enum NoModeMatch<'a> {
+    /// The input is a fragment of these labels, and equal to none of them.
+    Ambiguous(Vec<&'a str>),
+    /// The input is a fragment of no label at all.
+    Unknown,
+}
+
+/// Resolve a `mode` argument against the choices the meter just reported: a
+/// label, case-insensitively, or a fragment of exactly one of them.
+///
+/// An exact match wins outright — a label that is also a substring of longer
+/// ones ("V AC" beside "V AC Hz") stays reachable by typing it in full.
 fn resolve_mode_choice<'a>(
     choices: &'a [dmm_lib::protocol::ModeChoice],
     input: &str,
-) -> Option<&'a dmm_lib::protocol::ModeChoice> {
-    let input = input.trim();
-    if let Some(hex) = input
-        .strip_prefix("0x")
-        .or_else(|| input.strip_prefix("0X"))
-        && let Ok(id) = u16::from_str_radix(hex, 16)
-    {
-        return choices.iter().find(|c| c.id == id);
+) -> Result<&'a dmm_lib::protocol::ModeChoice, NoModeMatch<'a>> {
+    let needle = input.trim().to_lowercase();
+    if needle.is_empty() {
+        return Err(NoModeMatch::Unknown);
     }
-    let needle = input.to_lowercase();
-    choices.iter().find(|c| c.label.to_lowercase() == needle)
+    if let Some(exact) = choices.iter().find(|c| c.label.to_lowercase() == needle) {
+        return Ok(exact);
+    }
+    let hits: Vec<_> = choices
+        .iter()
+        .filter(|c| c.label.to_lowercase().contains(&needle))
+        .collect();
+    match hits[..] {
+        [one] => Ok(one),
+        [] => Err(NoModeMatch::Unknown),
+        _ => Err(NoModeMatch::Ambiguous(
+            hits.iter().map(|c| c.label.as_ref()).collect(),
+        )),
+    }
 }
 
 fn cmd_debug(
@@ -1419,38 +1485,167 @@ mod tests {
         ];
         for input in ["V AC Hz", "v ac hz", "  V Ac hZ  "] {
             assert_eq!(
-                resolve_mode_choice(&choices, input).map(|c| c.id),
+                resolve_mode_choice(&choices, input).ok().map(|c| c.id),
                 Some(0x1121),
                 "{input}"
             );
         }
     }
 
-    /// The listing prints the id so it can be pasted back, which is the only
-    /// way to pick between two variants a family named the same.
+    /// Typing a whole label is tedious, so a fragment of exactly one of them
+    /// is enough.
     #[test]
-    fn resolve_mode_choice_accepts_the_printed_hex_id() {
-        let choices = [
-            mode_choice(0x1111, "V AC", true),
-            mode_choice(0x1121, "V AC", false),
+    fn resolve_mode_choice_matches_a_unique_label_fragment() {
+        let temps = [
+            mode_choice(0x4211, "Temp °C", true),
+            mode_choice(0x4221, "Temp °C T2", false),
+            mode_choice(0x4231, "Temp °C T1-T2", false),
         ];
         assert_eq!(
-            resolve_mode_choice(&choices, "0x1121").map(|c| c.id),
+            resolve_mode_choice(&temps, "t1-t2").ok().map(|c| c.id),
+            Some(0x4231)
+        );
+        let volts = [
+            mode_choice(0x1111, "V AC", true),
+            mode_choice(0x1121, "V AC Hz", false),
+            mode_choice(0x1131, "V AC Peak", false),
+        ];
+        assert_eq!(
+            resolve_mode_choice(&volts, "hz").ok().map(|c| c.id),
             Some(0x1121)
-        );
-        // The listing pads to four digits; a user may not.
-        assert_eq!(
-            resolve_mode_choice(&choices, "0X1111").map(|c| c.id),
-            Some(0x1111)
-        );
-        assert_eq!(
-            resolve_mode_choice(&[mode_choice(9, "T2", false)], "0x9").map(|c| c.id),
-            Some(9)
         );
     }
 
+    /// A label that is also a fragment of longer ones stays reachable: typed
+    /// in full it is an exact match, and an exact match wins outright.
+    #[test]
+    fn resolve_mode_choice_prefers_an_exact_label_over_a_fragment() {
+        let choices = [
+            mode_choice(0x1111, "V AC", true),
+            mode_choice(0x1121, "V AC Hz", false),
+            mode_choice(0x1131, "V AC Peak", false),
+        ];
+        assert_eq!(
+            resolve_mode_choice(&choices, "v ac").ok().map(|c| c.id),
+            Some(0x1111)
+        );
+    }
+
+    /// A fragment of several labels picks none of them, and says which ones
+    /// it was torn between — that is what the user has to narrow down.
+    #[test]
+    fn resolve_mode_choice_reports_an_ambiguous_fragment() {
+        let choices = [
+            mode_choice(0x4211, "Temp °C", true),
+            mode_choice(0x4221, "Temp °C T2", false),
+            mode_choice(0x4231, "Temp °C T1-T2", false),
+            mode_choice(0x4241, "Temp °C T2-T1", false),
+        ];
+        match resolve_mode_choice(&choices, "temp") {
+            Err(NoModeMatch::Ambiguous(labels)) => assert_eq!(
+                labels,
+                ["Temp °C", "Temp °C T2", "Temp °C T1-T2", "Temp °C T2-T1"]
+            ),
+            other => panic!("expected an ambiguity, got {other:?}"),
+        }
+    }
+
+    /// Label groups a meter really offers, each with the fragment the listing
+    /// is expected to print beside every one of its labels: the mock's
+    /// temperature dial, the UT181A's V AC and temperature dials, and the
+    /// mock's AC V dial.
+    fn fragment_cases() -> [(&'static [&'static str], &'static [&'static str]); 4] {
+        [
+            (
+                &[
+                    "Temp °C",
+                    "Temp °C T1 (T2)",
+                    "Temp °C T1-T2",
+                    "Temp °C T2-T1",
+                ],
+                &["temp °c", "(t2)", "t1-t2", "t2-t1"],
+            ),
+            (
+                &[
+                    "V AC",
+                    "V AC Hz",
+                    "V AC Peak",
+                    "V AC LPF",
+                    "V AC dBV",
+                    "V AC dBm",
+                ],
+                &["v ac", "hz", "peak", "lpf", "dbv", "dbm"],
+            ),
+            (
+                &["°C", "°C T2", "°C T1-T2", "°C T2-T1"],
+                &["°c", "°c t2", "t1-t2", "t2-t1"],
+            ),
+            (&["AC V", "AC V Hz"], &["ac v", "hz"]),
+        ]
+    }
+
+    fn fragment_choices(labels: &[&'static str]) -> Vec<ModeChoice> {
+        labels
+            .iter()
+            .enumerate()
+            .map(|(i, label)| mode_choice(fake_mode_id(i), label, i == 0))
+            .collect()
+    }
+
+    /// What the second column of the listing says, group by group.
+    #[test]
+    fn shortest_fragment_is_the_least_that_picks_a_mode_out() {
+        for (labels, expected) in fragment_cases() {
+            let choices = fragment_choices(labels);
+            let fragments: Vec<_> = choices
+                .iter()
+                .map(|c| shortest_fragment(&choices, c))
+                .collect();
+            assert_eq!(fragments, expected, "{labels:?}");
+        }
+    }
+
+    /// The column is only useful if what it prints comes back to the line it
+    /// is printed on — including for a label every fragment of which is
+    /// shared, where the whole label is the answer.
+    #[test]
+    fn shortest_fragment_always_selects_its_own_mode() {
+        // The groups above, plus the shorter lists the resolver tests use.
+        let extra: [&[&str]; 3] = [
+            &["V AC", "V AC Hz"],
+            &["Temp °C", "Temp °C T2", "Temp °C T1-T2"],
+            &["V AC"],
+        ];
+        for labels in fragment_cases().iter().map(|(l, _)| *l).chain(extra) {
+            let choices = fragment_choices(labels);
+            for c in &choices {
+                let fragment = shortest_fragment(&choices, c);
+                assert_eq!(
+                    resolve_mode_choice(&choices, &fragment)
+                        .ok()
+                        .map(|hit| hit.id),
+                    Some(c.id),
+                    "{fragment:?} for {}",
+                    c.label
+                );
+            }
+        }
+    }
+
+    /// A fragment is meant to be typed back, so anything a shell would split
+    /// or mangle is printed quoted.
+    #[test]
+    fn quote_for_shell_quotes_what_a_shell_would_not_take_bare() {
+        for bare in ["hz", "t1-t2", "dbv", "peak_2", "1.5"] {
+            assert_eq!(quote_for_shell(bare), bare, "{bare}");
+        }
+        for quoted in ["ac v", "(t2)", "temp °c", "°c", "ac+dc", ""] {
+            assert_eq!(quote_for_shell(quoted), format!("\"{quoted}\""), "{quoted}");
+        }
+    }
+
     /// Ids the fake meter below gives its choices, spaced like the UT181A's
-    /// variant nibble so the hex the tests type back is realistic.
+    /// variant nibble so what `select_mode` is asked for is realistic.
     fn fake_mode_id(index: usize) -> u16 {
         0x1111 + (index as u16) * 0x10
     }
@@ -1595,7 +1790,7 @@ mod tests {
     /// not a choice was asked for.
     #[test]
     fn a_dial_with_only_the_live_mode_switches_nothing() {
-        for arg in [None, Some("0x1111".to_string())] {
+        for arg in [None, Some("Resistance".to_string())] {
             let (mut dmm, selected) = fake_meter(&["Resistance"], vec![]);
             run_mode(&mut dmm, arg).expect("one choice is not a failure");
             assert!(
@@ -1611,7 +1806,7 @@ mod tests {
     #[test]
     fn a_mode_switch_waits_through_a_quiet_meter() {
         let (mut dmm, _) = fake_meter(&["V AC", "V AC Hz"], vec![dmm_lib::error::Error::Timeout]);
-        run_mode(&mut dmm, Some("0x1121".to_string())).expect("a timeout must not end the wait");
+        run_mode(&mut dmm, Some("V AC Hz".to_string())).expect("a timeout must not end the wait");
     }
 
     /// Everything that is not a garbled frame or a quiet meter still ends the
@@ -1622,16 +1817,22 @@ mod tests {
             &["V AC", "V AC Hz"],
             vec![dmm_lib::error::Error::NoTransportFound],
         );
-        assert!(run_mode(&mut dmm, Some("0x1121".to_string())).is_err());
+        assert!(run_mode(&mut dmm, Some("V AC Hz".to_string())).is_err());
     }
 
     #[test]
     fn resolve_mode_choice_rejects_anything_else() {
         let choices = [mode_choice(0x1111, "V AC", true)];
-        // Not a label, an id of no choice, an unparseable id, and a decimal
-        // id (only the printed `0x` form is an id).
-        for input in ["V DC", "0x2222", "0xzz", "4369", ""] {
-            assert!(resolve_mode_choice(&choices, input).is_none(), "{input}");
+        // Another mode's label, the id the listing no longer prints, and an
+        // empty argument — which matches nothing rather than everything.
+        for input in ["V DC", "0x1111", "4369", "", "   "] {
+            assert!(
+                matches!(
+                    resolve_mode_choice(&choices, input),
+                    Err(NoModeMatch::Unknown)
+                ),
+                "{input}"
+            );
         }
     }
 

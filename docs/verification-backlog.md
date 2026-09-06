@@ -377,16 +377,15 @@ own software sends, not hardware confirmation.
   software, before dmm-tools existed). Unverified, not known-broken
 - SET_MODE (0x01) — vendor-traced; implemented 2026-09-06 as
   `dmm-cli mode` (lists the modes the dial reaches, switches by label or
-  by the hex id printed beside it) and the GUI's mode dropdown under the
+  by a unique fragment of one) and the GUI's mode dropdown under the
   reading. No meter has answered one yet. Runnable checks, each with an
   LCD photo beside the tool's output:
   - `dmm-cli --device ut181a mode` on the V AC dial — expect six
     choices, `*` on the live one
   - `dmm-cli --device ut181a mode "V AC Hz"` (0x1121), then
     `mode "V AC dBm"` (0x1161), then `mode "V AC"` (0x1111)
-  - on the temperature dial, `mode "°C T1-T2"` (0x4231), then
-    `mode "°C"` (0x4211) — the hex id is accepted wherever the label is
-    awkward to type
+  - on the temperature dial, `mode t1-t2` (0x4231), then `mode "°C"`
+    (0x4211) — a unique fragment of a label is enough
   - a switch prints `Meter now in <label>`; `Meter did not switch` or a
     refusal is the interesting result — report it verbatim
   - the family-local rule: the listing should never offer a word from

@@ -326,20 +326,22 @@ the dial (UT181A and mock). Run with no arguments to list the modes reachable
 now:
 
 ```
-dmm-cli mode                 # list modes, * marks the live one
-dmm-cli mode <CHOICE>        # switch, by label or hex id
+dmm-cli mode                 # list modes (* = live) and what to type for each
+dmm-cli mode <CHOICE>        # switch, by label
 ```
 
 | Option | Default | Description |
 |---|---|---|
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
 
-`<CHOICE>` is a label (case-insensitive, quoted if it has spaces) or the hex id
-listed beside it. After switching, `dmm-cli` waits up to 2 s for the meter to
-report the new mode and prints `Meter now in <mode>`; a refused or unconfirmed
-switch exits non-zero — check the dial position. A dial position with nothing
-to switch to prints a note and exits 0. REL and manual range are
-[`dmm-cli command`](#dmm-cli-command) buttons, not modes.
+`<CHOICE>` is a label from the listing, case-insensitive, or a fragment of one
+that matches a single label — the listing prints the shortest such fragment
+beside each mode, quoted where a shell needs it. After switching, `dmm-cli`
+waits up to 2 s for the meter to report the new mode and prints
+`Meter now in <mode>`; a refused or unconfirmed switch exits non-zero — check
+the dial position. A dial position with nothing to switch to prints a note and
+exits 0. REL and manual range are [`dmm-cli command`](#dmm-cli-command)
+buttons, not modes.
 
 **Example:**
 
