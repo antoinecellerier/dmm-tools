@@ -277,6 +277,10 @@ command codes sent as the command byte:
 | NCV (0x24) | VDC (0x02) | 0x111 |
 | NCV (0x24) | Ohm (0x0A) | 0x10F |
 
+Not implemented: these values do not fit the one-byte command field that
+`FUN_00755400` writes, so the wire form of a function change is still
+unknown — see `docs/verification-backlog.md` (issue #4).
+
 Square wave output (UT171C): pseudo-mode 0x1007, commands 0xE0/0xE1.
 
 ---

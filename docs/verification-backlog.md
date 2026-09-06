@@ -321,6 +321,15 @@ real hardware**. Every aspect needs end-to-end verification.
   decompile evidence
 - Aux value interpretation — kHz frequency on V AC / mV AC per gulux;
   other modes unknown
+- Remote function selection — the vendor app's function grid proves the
+  meter takes some command to change function, and the (from, to) mode
+  transition table in the spec (§4.7, `FUN_00630e0b`) is the lead, but the
+  codes it lists exceed the one-byte command field the frame builder
+  (`FUN_00755400`) writes, and the two were never reconciled. Recovering
+  the real encoding — Delphi virtual dispatch, the method-table route that
+  found the UT181A's SET_MODE — is what stands between the UT171 and
+  `dmm-cli mode`. The cycle-to-target driver does not apply either: no
+  cycle-button command is known for this family.
 
 ### UT181A — confirmed on hardware, formats still open
 
