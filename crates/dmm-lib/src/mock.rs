@@ -179,6 +179,13 @@ impl MockMode {
             .position(|m| *m == self)
             .and_then(|i| u16::try_from(i).ok())
     }
+
+    /// The mode behind a `Protocol::mode_choices` id — the inverse of
+    /// [`Self::choice_id`], for a consumer that has to name the scenario it
+    /// just picked (the GUI re-pins its Settings row with it).
+    pub fn from_choice_id(id: u16) -> Option<MockMode> {
+        MockMode::ALL.get(usize::from(id)).copied()
+    }
 }
 
 /// The mode groups the mock offers as remote mode choices, standing in for a
@@ -1082,9 +1089,8 @@ impl Protocol for MockProtocol {
     }
 
     fn select_mode(&mut self, _transport: &dyn Transport, id: u16) -> Result<()> {
-        let scenario = MockMode::ALL
-            .get(id as usize)
-            .and_then(|mode| self.scenarios.iter().position(|s| s.id == *mode));
+        let scenario = MockMode::from_choice_id(id)
+            .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
         let Some(idx) = scenario else {
             return Err(Error::UnsupportedCommand(format!("mode {id:#06x}")));
         };
@@ -2015,5 +2021,16 @@ mod tests {
             matches!(err, Error::UnsupportedCommand(_)),
             "got {err:?}, want UnsupportedCommand"
         );
+    }
+
+    /// `from_choice_id` inverts `choice_id` for every mode, and gives nothing
+    /// for an id past the table.
+    #[test]
+    fn choice_ids_round_trip() {
+        for mode in MockMode::ALL {
+            let id = mode.choice_id().expect("every mode has a choice id");
+            assert_eq!(MockMode::from_choice_id(id), Some(*mode), "{mode:?}");
+        }
+        assert_eq!(MockMode::from_choice_id(MockMode::ALL.len() as u16), None);
     }
 }

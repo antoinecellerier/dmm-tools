@@ -24,6 +24,7 @@ mod transform_ui;
 mod whats_new;
 
 use dmm_lib::measurement::Measurement;
+use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{ModeChoice, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui::{self, Color32};
@@ -300,6 +301,12 @@ impl App {
             settings.theme = theme;
         }
         settings.overrides.adapter = cli.adapter;
+        Self::from_settings(settings)
+    }
+
+    /// The app state for `settings`, before any frame. Separate from
+    /// [`App::new`] so tests can build one without an eframe context.
+    fn from_settings(settings: Settings) -> Self {
         let graph = Graph::new();
         let initial_device = registry::resolve_device(&settings.shared.device_family)
             .unwrap_or_else(registry::default_device);
@@ -373,10 +380,38 @@ impl App {
 
     /// Ask the meter to switch to one of the modes in
     /// `connection.mode_choices`. A refusal comes back as a toast.
-    pub(super) fn select_mode(&self, id: u16) {
+    pub(super) fn select_mode(&mut self, id: u16) {
         if let Some(tx) = &self.connection.cmd_tx {
             let _ = tx.send(RemoteCommand::SelectMode(id));
         }
+        if self.repin_mock(id) {
+            self.settings.save();
+        }
+    }
+
+    /// Keep the Settings row's mock pin truthful after a dropdown pick.
+    ///
+    /// `settings.mock_mode` is the scenario the mock is pinned to at connect;
+    /// a pick moves the mock's live scenario without a reconnect, so a pinned
+    /// mock is re-pinned to the scenario picked. Returns whether the settings
+    /// changed (and so need saving). No `needs_reconnect`: the mock has
+    /// already switched, and a reconnect would restart it. An auto-cycling
+    /// mock (empty pin) is left alone — it carries on cycling from the picked
+    /// scenario, so the row stays right. The SELECT button has the same
+    /// desync and is left alone: the GUI cannot learn which scenario the
+    /// mock cycled to.
+    fn repin_mock(&mut self, id: u16) -> bool {
+        if self.selected_device().id != "mock" || self.settings.mock_mode.is_empty() {
+            return false;
+        }
+        let Some(mode) = MockMode::from_choice_id(id) else {
+            return false;
+        };
+        self.settings.mock_mode = mode.label().to_string();
+        // An explicit choice, as in the Settings row: it replaces a
+        // `--mock-mode` override rather than being saved under it.
+        self.settings.overrides.mock_mode = None;
+        true
     }
 
     fn selected_device(&self) -> &'static registry::SelectableDevice {
@@ -728,5 +763,57 @@ impl eframe::App for App {
         if self.connection.state == ConnectionState::Connected {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app(device: &str, mock_mode: &str) -> App {
+        let mut settings = Settings::default();
+        settings.shared.device_family = device.to_string();
+        settings.mock_mode = mock_mode.to_string();
+        // As after `--mock-mode`: the pin on screen is an override.
+        settings.overrides.mock_mode = Some(String::new());
+        App::from_settings(settings)
+    }
+
+    fn choice_id_of(mode: MockMode) -> u16 {
+        (0..u16::MAX)
+            .find(|&id| MockMode::from_choice_id(id) == Some(mode))
+            .expect("every mock mode has a choice id")
+    }
+
+    /// The Settings row pins the mock at connect; a dropdown pick moves the
+    /// mock without a reconnect, so the pin has to follow it or the row lies.
+    #[test]
+    fn a_pick_re_pins_a_pinned_mock_without_reconnecting() {
+        let mut app = app("mock", "temp2");
+        assert!(app.repin_mock(choice_id_of(MockMode::TempDiff)));
+        assert_eq!(app.settings.mock_mode, "temp-diff");
+        assert_eq!(
+            app.settings.overrides.mock_mode, None,
+            "the pick replaces a --mock-mode override"
+        );
+        assert!(!app.connection.needs_reconnect);
+    }
+
+    /// An auto-cycling mock keeps cycling from the picked scenario, so the
+    /// row's "Auto (cycle)" stays true and is left alone.
+    #[test]
+    fn a_pick_leaves_an_auto_cycling_mock_unpinned() {
+        let mut app = app("mock", "");
+        assert!(!app.repin_mock(choice_id_of(MockMode::TempDiff)));
+        assert_eq!(app.settings.mock_mode, "");
+        assert!(!app.connection.needs_reconnect);
+    }
+
+    /// A pick on a real meter has nothing to do with the mock's pin.
+    #[test]
+    fn a_pick_on_a_real_meter_leaves_the_mock_pin_alone() {
+        let mut app = app("ut181a", "temp2");
+        assert!(!app.repin_mock(0x1121));
+        assert_eq!(app.settings.mock_mode, "temp2");
     }
 }

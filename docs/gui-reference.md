@@ -39,7 +39,8 @@ When Mock is selected, a **Mock mode** row appears in Settings with
 choices: **Auto (cycle)** (default) or a specific mode (dcv, acv, ohm,
 cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff,
 temp-diff-rev). Selecting a specific mode pins the mock to that
-measurement type indefinitely.
+measurement type indefinitely; a pick in the reading's mode dropdown
+re-pins it.
 Remote control buttons (HOLD, REL,
 RANGE, etc.) respond to toggle flags. The SELECT button advances to
 the next mode regardless of the auto-cycle setting.
