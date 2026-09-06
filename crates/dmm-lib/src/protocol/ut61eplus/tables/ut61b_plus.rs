@@ -1,5 +1,6 @@
 use super::specs_ut61b_plus as specs;
-use super::{ModeEntry, ModeTables, RangeInfo, r};
+use super::{ModeEntry, ModeTables, RangeInfo, m, r};
+use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61B+ (and UT161B).
@@ -109,7 +110,112 @@ impl Default for Ut61bPlusTable {
     }
 }
 
+/// Dial positions of the UT61B+/UT161B — [MANUAL], UT61+ Series User Manual
+/// §VII "Function Dial" (printed page 9).
+///
+/// Membership only: the driver presses until the target shows, so no ring
+/// here claims a press order. No press has been observed on this model; see
+/// `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1.
+const DIAL: &[DialPosition] = &[
+    // Hz/% — the dedicated frequency position, listed first because it is the
+    // smallest one reaching Hz and Duty %, which every ring below also reaches.
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Hz,
+            modes: &[m(Mode::Hz), m(Mode::DutyCycle)],
+        }],
+    },
+    // V~ — no AC+DC and no LPF on this model, so SELECT offers nothing here.
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Hz,
+            modes: &[m(Mode::AcV), m(Mode::Hz), m(Mode::DutyCycle)],
+        }],
+    },
+    // V⎓
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::DcV)],
+        }],
+    },
+    // mV
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcMv), m(Mode::AcMv)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcMv), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // Ω / continuity
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::Ohm), m(Mode::Continuity)],
+        }],
+    },
+    // Diode / capacitance — a position of its own on this model.
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::Diode), m(Mode::Capacitance)],
+        }],
+    },
+    // µA
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcUa), m(Mode::AcUa)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcUa), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // mA
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcMa), m(Mode::AcMa)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcMa), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // A
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcA), m(Mode::AcA)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcA), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // NCV
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::Ncv)],
+        }],
+    },
+];
+
 impl ModeTables for Ut61bPlusTable {
+    const DIAL_POSITIONS: &'static [DialPosition] = DIAL;
     const MODEL_NAME: &'static str = "UNI-T UT61B+";
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_> {

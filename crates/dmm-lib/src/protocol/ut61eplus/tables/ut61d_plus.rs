@@ -1,6 +1,7 @@
 use super::specs_ut61b_plus as specs_b;
 use super::specs_ut61d_plus as specs;
-use super::{ModeEntry, ModeTables, RangeInfo, r};
+use super::{ModeEntry, ModeTables, RangeInfo, m, r};
+use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61D+ (and UT161D).
@@ -113,7 +114,132 @@ impl Default for Ut61dPlusTable {
     }
 }
 
+/// Dial positions of the UT61D+/UT161D — [MANUAL], UT61+ Series User Manual
+/// §VII "Function Dial" (printed page 9), plus §11 for the temperature pair
+/// ("Short press the SELECT button to switch between °C and °F").
+///
+/// Membership only: the driver presses until the target shows, so no ring
+/// here claims a press order. No press has been observed on this model; see
+/// `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1.
+const DIAL: &[DialPosition] = &[
+    // Hz/% — the dedicated frequency position, listed first because it is the
+    // smallest one reaching Hz and Duty %, which every ring below also reaches.
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Hz,
+            modes: &[m(Mode::Hz), m(Mode::DutyCycle)],
+        }],
+    },
+    // V≂ — this model puts AC and DC volts on one position.
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::AcV), m(Mode::DcV)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcV), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // mV
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcMv), m(Mode::AcMv)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcMv), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // Ω / continuity / diode / capacitance
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[
+                m(Mode::Ohm),
+                m(Mode::Continuity),
+                m(Mode::Diode),
+                m(Mode::Capacitance),
+            ],
+        }],
+    },
+    // °C / °F
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::TempC), m(Mode::TempF)],
+        }],
+    },
+    // LoZ — two separate dial positions. Which byte this model sends is
+    // unresolved (spec §3) and nothing says SELECT cycles between them, so
+    // each stands alone instead of sharing a ring.
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::LozV)],
+        }],
+    },
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::LozV2)],
+        }],
+    },
+    // µA
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcUa), m(Mode::AcUa)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcUa), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // mA
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcMa), m(Mode::AcMa)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcMa), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // A
+    DialPosition {
+        rings: &[
+            Ring {
+                button: CycleButton::Select,
+                modes: &[m(Mode::DcA), m(Mode::AcA)],
+            },
+            Ring {
+                button: CycleButton::Hz,
+                modes: &[m(Mode::AcA), m(Mode::Hz), m(Mode::DutyCycle)],
+            },
+        ],
+    },
+    // NCV
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[m(Mode::Ncv)],
+        }],
+    },
+];
+
 impl ModeTables for Ut61dPlusTable {
+    const DIAL_POSITIONS: &'static [DialPosition] = DIAL;
     const MODEL_NAME: &'static str = "UNI-T UT61D+";
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_> {

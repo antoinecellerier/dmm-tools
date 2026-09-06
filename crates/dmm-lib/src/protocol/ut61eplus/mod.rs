@@ -6,12 +6,15 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len};
+use crate::protocol::{
+    DeviceProfile, ModeChoice, Protocol, Stability, check_len, cycle, unknown_mode, unknown_mode16,
+};
 use crate::transport::Transport;
 use command::Command;
 use log::debug;
 use mode::Mode;
 use std::borrow::Cow;
+use std::time::Duration;
 use tables::DeviceTable;
 
 const UT61EPLUS_COMMANDS: &[&str] = &[
@@ -33,6 +36,9 @@ pub struct Ut61PlusProtocol {
     table: Box<dyn DeviceTable>,
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
+    /// What the last reading said about where the dial sits, for
+    /// [`Protocol::mode_choices`] and [`Protocol::select_mode`].
+    dial: cycle::DialState,
 }
 
 impl Default for Ut61PlusProtocol {
@@ -121,6 +127,7 @@ impl Ut61PlusProtocol {
         Self {
             table,
             rx_buf: Vec::with_capacity(64),
+            dial: cycle::DialState::default(),
             profile: DeviceProfile {
                 family_name: "UT61+/UT161",
                 model_name,
@@ -161,6 +168,28 @@ impl Ut61PlusProtocol {
         Err(Error::Timeout)
     }
 
+    /// Write one command frame and drain whatever the meter answers with.
+    ///
+    /// The meter acks a button press with a short frame; leaving it in the
+    /// buffer would make the next measurement read start mid-stream.
+    fn press_command(&mut self, transport: &dyn Transport, cmd: Command) -> Result<()> {
+        let encoded = cmd.encode();
+        transport.write(&encoded)?;
+
+        // Drain any ack/response the meter sends back.
+        self.rx_buf.clear();
+        let mut tmp = [0u8; 64];
+        for _ in 0..3 {
+            let n = transport.read_timeout(&mut tmp, 50)?;
+            if n == 0 {
+                break;
+            }
+            debug!("drained {} bytes after command", n);
+        }
+
+        Ok(())
+    }
+
     fn command_from_name(name: &str) -> Result<Command> {
         match name {
             "hold" => Ok(Command::Hold),
@@ -190,27 +219,17 @@ impl Protocol for Ut61PlusProtocol {
         let cmd = Command::GetMeasurement.encode();
         debug!("sending measurement request");
         transport.write(&cmd)?;
-        self.read_measurement(transport)
+        let m = self.read_measurement(transport)?;
+        // The stream is the only place the meter states its mode, so every
+        // reading is what keeps the dial position current.
+        self.dial.observe(self.table.dial_positions(), m.mode_raw);
+        Ok(m)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let cmd = Self::command_from_name(command)?;
-        let encoded = cmd.encode();
         debug!("sending command: {command}");
-        transport.write(&encoded)?;
-
-        // Drain any ack/response the meter sends back.
-        self.rx_buf.clear();
-        let mut tmp = [0u8; 64];
-        for _ in 0..3 {
-            let n = transport.read_timeout(&mut tmp, 50)?;
-            if n == 0 {
-                break;
-            }
-            debug!("drained {} bytes after command", n);
-        }
-
-        Ok(())
+        self.press_command(transport, cmd)
     }
 
     fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>> {
@@ -243,6 +262,14 @@ impl Protocol for Ut61PlusProtocol {
     fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static crate::specs::ModeSpecInfo> {
         let mode = Mode::from_byte(mode_raw as u8).ok()?;
         self.table.mode_spec_info(mode)
+    }
+
+    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
+        cycle::mode_choices(self, current)
+    }
+
+    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
+        cycle::select_mode(self, transport, id)
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
@@ -392,6 +419,61 @@ impl Protocol for Ut61PlusProtocol {
     }
 }
 
+/// How long to leave the meter alone after a button press before asking it
+/// what mode it is in.
+///
+/// The meter is polled, so a press can land while a frame is already on its
+/// way and the reading after it still shows the old mode. Both values are
+/// starting points; neither has been tuned against hardware.
+const SELECT_SETTLE_DELAY: Duration = Duration::from_millis(150);
+/// Readings taken after a press before concluding it changed nothing.
+const SELECT_SETTLE_READS: usize = 3;
+
+impl cycle::CycleMeter for Ut61PlusProtocol {
+    fn dial_positions(&self) -> &'static [cycle::DialPosition] {
+        self.table.dial_positions()
+    }
+
+    fn dial_state(&self) -> &cycle::DialState {
+        &self.dial
+    }
+
+    fn dial_state_mut(&mut self) -> &mut cycle::DialState {
+        &mut self.dial
+    }
+
+    fn press(&mut self, transport: &dyn Transport, button: cycle::CycleButton) -> Result<()> {
+        let cmd = match button {
+            cycle::CycleButton::Select => Command::Select,
+            cycle::CycleButton::Hz => Command::Select2,
+        };
+        self.press_command(transport, cmd)
+    }
+
+    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
+        Protocol::request_measurement(self, transport).map(|m| m.mode_raw)
+    }
+
+    fn mode_label(&self, mode: u16) -> Cow<'static, str> {
+        match u8::try_from(mode) {
+            Ok(byte) => match Mode::from_byte(byte) {
+                Ok(m) => Cow::Borrowed(m.as_static_str()),
+                Err(_) => unknown_mode(byte),
+            },
+            // This family's mode field is one byte wide; anything wider than
+            // that never came from a meter.
+            Err(_) => unknown_mode16(mode),
+        }
+    }
+
+    fn settle(&self) -> cycle::Settle {
+        cycle::Settle {
+            delay: SELECT_SETTLE_DELAY,
+            reads: SELECT_SETTLE_READS,
+        }
+    }
+}
+
 /// Parse a UT61E+/UT61B+/UT61D+/UT161 measurement payload (pure function).
 ///
 /// Layout (verified against real device captures):
@@ -519,6 +601,133 @@ pub fn make_test_measurement(
 mod tests {
     use super::*;
     use tables::ut61e_plus::Ut61ePlusTable;
+
+    // --- Remote mode selection (protocol::cycle) --------------------------
+    //
+    // The cycles these exercise are verified on a real UT61E+ (research spec
+    // §2.3/§2.5); what is not verified is the settle timing, which the fake
+    // transport below sidesteps by answering instantly.
+
+    use crate::protocol::cycle::{CycleButton, CycleMeter};
+    use crate::protocol::framing::test_frame_be16;
+    use crate::transport::mock::MockTransport;
+    use std::cell::{Cell, RefCell};
+    use std::collections::VecDeque;
+
+    /// A frame carrying a DC-V-shaped reading in `mode`.
+    fn frame_in(mode: u8) -> Vec<u8> {
+        test_frame_be16(&make_payload(
+            mode,
+            0x01,
+            b" 12.345",
+            (0x00, 0x00),
+            (0x00, 0x00, 0x00),
+        ))
+    }
+
+    #[test]
+    fn press_writes_the_select_and_hz_frames() {
+        let mock = MockTransport::new(vec![]);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.press(&mock, CycleButton::Select).unwrap();
+        proto.press(&mock, CycleButton::Hz).unwrap();
+
+        let written = mock.written.borrow();
+        // 0x4C + 379 = 0x01C7, 0x49 + 379 = 0x01C4.
+        assert_eq!(written.len(), 2, "{written:02X?}");
+        assert_eq!(written[0], [0xAB, 0xCD, 0x03, 0x4C, 0x01, 0xC7]);
+        assert_eq!(written[1], [0xAB, 0xCD, 0x03, 0x49, 0x01, 0xC4]);
+    }
+
+    #[test]
+    fn mode_choices_on_the_dc_volts_dial_offer_ac_dc() {
+        let mock = MockTransport::new(vec![frame_in(0x02)]);
+        let mut proto = Ut61PlusProtocol::new();
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.mode, "DC V");
+
+        let choices = proto.mode_choices(&m);
+        assert_eq!(
+            choices.iter().map(|c| c.id).collect::<Vec<_>>(),
+            vec![0x02, 0x19]
+        );
+        assert_eq!(choices[0].label, "DC V");
+        assert!(choices[0].current, "DC V is the live mode");
+        assert_eq!(choices[1].label, "AC+DC V");
+        assert!(!choices[1].current);
+    }
+
+    /// A UT61E+ on the V⎓ dial: it answers 0x5E with a reading, and SELECT
+    /// (0x4C) flips DC V ↔ AC+DC V and acks with `FF 00`.
+    ///
+    /// `MockTransport` cannot stand in here — it ignores writes, so the drain
+    /// after a press would swallow a queued measurement frame.
+    struct VoltsDial {
+        mode: Cell<u8>,
+        queued: RefCell<VecDeque<Vec<u8>>>,
+        presses: Cell<usize>,
+    }
+
+    impl VoltsDial {
+        fn new(mode: u8) -> Self {
+            Self {
+                mode: Cell::new(mode),
+                queued: RefCell::new(VecDeque::new()),
+                presses: Cell::new(0),
+            }
+        }
+    }
+
+    impl Transport for VoltsDial {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            match data.get(3) {
+                Some(&0x5E) => self
+                    .queued
+                    .borrow_mut()
+                    .push_back(frame_in(self.mode.get())),
+                Some(&0x4C) => {
+                    self.presses.set(self.presses.get() + 1);
+                    self.mode
+                        .set(if self.mode.get() == 0x02 { 0x19 } else { 0x02 });
+                    // The meter acks a press before the next reading.
+                    self.queued
+                        .borrow_mut()
+                        .push_back(test_frame_be16(&[0xFF, 0x00]));
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            let Some(frame) = self.queued.borrow_mut().pop_front() else {
+                return Ok(0);
+            };
+            let len = frame.len().min(buf.len());
+            buf[..len].copy_from_slice(&frame[..len]);
+            Ok(len)
+        }
+
+        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn select_mode_presses_once_and_the_stream_keeps_parsing() {
+        let meter = VoltsDial::new(0x02);
+        let mut proto = Ut61PlusProtocol::new();
+        assert_eq!(proto.request_measurement(&meter).unwrap().mode, "DC V");
+
+        proto.select_mode(&meter, 0x19).expect("switched");
+        assert_eq!(meter.presses.get(), 1, "one press per ring step");
+        assert_eq!(proto.dial.last_mode(), Some(0x19));
+
+        // The ack must not have been left in the buffer for the next read.
+        let m = proto.request_measurement(&meter).unwrap();
+        assert_eq!(m.mode, "AC+DC V");
+        assert_eq!(m.range_label, "22V");
+    }
 
     #[test]
     fn parse_dc_voltage() {

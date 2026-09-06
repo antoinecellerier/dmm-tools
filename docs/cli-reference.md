@@ -284,6 +284,10 @@ dmm-cli command <ACTION>     # send a command
 | `peak` | Enter Peak Min/Max mode |
 | `exit_peak` | Exit Peak Min/Max mode |
 
+`select` and `select2` are raw presses — each steps the dial position's ring
+one function on, whatever that turns out to be. To name the mode you want
+instead, use [`dmm-cli mode`](#dmm-cli-mode).
+
 #### UT181A commands
 
 | Command | Description |
@@ -322,8 +326,8 @@ dmm-cli --device ut181a command hold
 ### dmm-cli mode
 
 Switch the meter's function within the current dial position without touching
-the dial (UT181A and mock). Run with no arguments to list the modes reachable
-now:
+the dial (UT61+/UT161, UT181A and mock). Run with no arguments to list the
+modes reachable now:
 
 ```
 dmm-cli mode                 # list modes (* = live) and what to type for each
@@ -343,9 +347,19 @@ the dial position. A dial position with nothing to switch to prints a note and
 exits 0. REL and manual range are [`dmm-cli command`](#dmm-cli-command)
 buttons, not modes.
 
+The UT61+/UT161 meters take no set-mode command, so a switch there is a short
+burst of SELECT and Hz/% presses, each one read back from the meter until the
+target mode shows — slower than a single command, and audible on the meter.
+One caveat comes with that: Hz and Duty % are reported with the same mode byte
+from every dial position, so after moving the dial while the meter shows one
+of them, take a reading in another mode once — otherwise the listing may still
+be the previous position's.
+
 **Example:**
 
 ```bash
+dmm-cli mode                       # a UT61E+ on the V⎓ dial: DC V, AC+DC V
+dmm-cli mode "AC+DC V"
 dmm-cli --device ut181a mode
 dmm-cli --device ut181a mode "V AC Hz"
 ```

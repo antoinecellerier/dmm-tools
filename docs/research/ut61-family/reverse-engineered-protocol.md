@@ -128,6 +128,99 @@ requires device testing.
 
 ---
 
+### 3.1 Function dial positions and cycle rings — [MANUAL]
+
+Source: UT61+ Series User Manual §VII "Function Dial" (printed page 9), read
+from the PDF rendering; §11 for the UT61D+ temperature pair. The tables below
+say **which modes a dial position reaches with which button** — membership
+only. The order a button walks its ring in is *not* claimed: it differs
+between models and was never captured for most positions, so the driver in
+`crates/dmm-lib/src/protocol/cycle.rs` presses and reads the mode back until
+the target shows, which works whatever the real order is.
+
+The two buttons are the orange **SELECT** (command 0x4C) and **Hz/%**
+(0x49, `Select2`). A position with both rings joins them at exactly one mode:
+crossing rings means walking to that mode with the first button and away with
+the second.
+
+**Hz (0x04) and Duty % (0x05) carry no dial information** — [VERIFIED]: the
+meter sends the same two bytes from every position that offers them, so a
+reading in Hz cannot say which position produced it. History is what
+disambiguates: a meter last seen in AC mV is on the mV position.
+
+#### UT61E+ / UT161E
+
+| Dial position | SELECT ring | Hz/% ring |
+|---|---|---|
+| Hz/% | — | Hz, Duty % |
+| V~ | AC V, LPF V | AC V, Hz, Duty % |
+| V⎓ | DC V, AC+DC V | — |
+| mV | DC mV, AC mV | AC mV, Hz, Duty % |
+| Ω | Ω, Continuity, Diode, Capacitance | — |
+| hFE | hFE | — |
+| µA | DC µA, AC µA | AC µA, Hz, Duty % |
+| mA | DC mA, AC mA | AC mA, Hz, Duty % |
+| A | DC A, AC A | AC A, Hz, Duty % |
+| NCV | NCV | — |
+
+Cycles confirmed on a real UT61E+ — **[VERIFIED]**
+(`docs/research/ut61eplus/reverse-engineered-protocol.md` §2.3 and §2.5,
+and the Completed table of `docs/verification-backlog.md`):
+
+- SELECT (0x4C) cycles DC V ↔ AC+DC V on V⎓, AC V ↔ LPF V on V~, and DC ↔ AC
+  on the mA and A positions.
+- Hz/% (0x49) cycles AC mV → Hz → Duty % → AC mV, reaches Hz from V~ and
+  Duty % from AC mA, and does nothing (the meter beeps) on DC V.
+- Modes 0x15 (LoZ V), 0x16 (LoZ V 2) and 0x17 (LPF) are reachable from no
+  position of this model, which is why the table above lists none of them.
+
+The order within the four-mode Ω ring is **[UNVERIFIED]** — the table lists
+its members, not the sequence.
+
+#### UT61D+ / UT161D
+
+| Dial position | SELECT ring | Hz/% ring |
+|---|---|---|
+| Hz/% | — | Hz, Duty % |
+| V≂ | AC V, DC V | AC V, Hz, Duty % |
+| mV | DC mV, AC mV | AC mV, Hz, Duty % |
+| Ω | Ω, Continuity, Diode, Capacitance | — |
+| °C/°F | °C, °F | — |
+| LoZ | LoZ V (0x15) | — |
+| LoZ | LoZ V (0x16) | — |
+| µA | DC µA, AC µA | AC µA, Hz, Duty % |
+| mA | DC mA, AC mA | AC mA, Hz, Duty % |
+| A | DC A, AC A | AC A, Hz, Duty % |
+| NCV | NCV | — |
+
+This model combines AC and DC volts on one position (§2.1) and has no hFE,
+no LPF and no AC+DC. Both ring contents and ring order are **[UNVERIFIED]** —
+no UT61D+ has been connected. The two LoZ positions are listed separately
+because which byte the meter sends is unresolved (§3) and nothing in the
+manual says SELECT cycles between them.
+
+#### UT61B+ / UT161B
+
+| Dial position | SELECT ring | Hz/% ring |
+|---|---|---|
+| Hz/% | — | Hz, Duty % |
+| V~ | — | AC V, Hz, Duty % |
+| V⎓ | DC V | — |
+| mV | DC mV, AC mV | AC mV, Hz, Duty % |
+| Ω/Continuity | Ω, Continuity | — |
+| Diode/Capacitance | Diode, Capacitance | — |
+| µA | DC µA, AC µA | AC µA, Hz, Duty % |
+| mA | DC mA, AC mA | AC mA, Hz, Duty % |
+| A | DC A, AC A | AC A, Hz, Duty % |
+| NCV | NCV | — |
+
+This model has no AC+DC and no LPF, so its V~ position has no SELECT ring at
+all, and it splits the E+'s single Ω position in two. No temperature, no hFE,
+no LoZ. Both ring contents and ring order are **[UNVERIFIED]** — no UT61B+
+has been connected.
+
+---
+
 ## 4. Flag Byte Differences — [MANUAL + VENDOR]
 
 The flag byte layout is identical across all models. The meter firmware

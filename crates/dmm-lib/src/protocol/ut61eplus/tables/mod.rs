@@ -6,6 +6,7 @@ pub mod ut61d_plus;
 pub mod ut61e_plus;
 
 use super::mode::Mode;
+use crate::protocol::cycle::DialPosition;
 
 pub use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
@@ -20,6 +21,11 @@ pub struct RangeInfo {
 /// `docs/research/ut61-family/reverse-engineered-protocol.md`, section 9.
 pub(crate) const fn r(label: &'static str, unit: &'static str) -> RangeInfo {
     RangeInfo { label, unit }
+}
+
+/// A [`Mode`] as the `mode_raw` value the dial tables are written in.
+pub(crate) const fn m(mode: Mode) -> u16 {
+    mode as u16
 }
 
 /// Look up a range entry by index. Shared by all device table implementations.
@@ -40,6 +46,15 @@ pub trait DeviceTable: Send {
     /// Per-mode specification data (input impedance, notes).
     fn mode_spec_info(&self, _mode: Mode) -> Option<&'static ModeSpecInfo> {
         None
+    }
+
+    /// The model's dial positions, for the cycle-to-target mode driver in
+    /// `protocol::cycle`.
+    ///
+    /// Empty — the default — means this model's dial is not described, so the
+    /// meter simply offers no remote mode selection.
+    fn dial_positions(&self) -> &'static [DialPosition] {
+        &[]
     }
 }
 
@@ -93,6 +108,9 @@ pub(crate) trait ModeTables: Send {
     /// blanket impl below derives from it.
     const MODEL_NAME: &'static str;
 
+    /// Dial table returned by `DeviceTable::dial_positions`.
+    const DIAL_POSITIONS: &'static [DialPosition];
+
     fn entry(&self, mode: Mode) -> ModeEntry<'_>;
 }
 
@@ -116,6 +134,10 @@ impl<T: ModeTables> DeviceTable for T {
     fn mode_spec_info(&self, mode: Mode) -> Option<&'static ModeSpecInfo> {
         self.entry(mode).mode_spec
     }
+
+    fn dial_positions(&self) -> &'static [DialPosition] {
+        T::DIAL_POSITIONS
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +146,149 @@ mod tests {
     use super::ut61d_plus::Ut61dPlusTable;
     use super::ut61e_plus::Ut61ePlusTable;
     use super::*;
+    use crate::protocol::cycle::{self, CycleButton};
+    use std::borrow::Cow;
+
+    /// Hz and Duty % are reported with the same byte whichever position
+    /// produced them, so they are the only modes allowed on more than one.
+    const SHARED: &[u16] = &[m(Mode::Hz), m(Mode::DutyCycle)];
+    const BUTTONS: &[CycleButton] = &[CycleButton::Select, CycleButton::Hz];
+
+    const DIAL_TABLES: [(&str, &[DialPosition]); 3] = [
+        ("UT61E+", Ut61ePlusTable::DIAL_POSITIONS),
+        ("UT61B+", Ut61bPlusTable::DIAL_POSITIONS),
+        ("UT61D+", Ut61dPlusTable::DIAL_POSITIONS),
+    ];
+
+    fn label(mode: u16) -> Cow<'static, str> {
+        match u8::try_from(mode).map(Mode::from_byte) {
+            Ok(Ok(mode)) => Cow::Borrowed(mode.as_static_str()),
+            _ => Cow::Owned(format!("Unknown({mode:#04x})")),
+        }
+    }
+
+    /// The modes of the single position that reaches `mode`, sorted.
+    fn modes_at(positions: &[DialPosition], mode: Mode) -> Vec<u16> {
+        let found: Vec<_> = positions.iter().filter(|p| p.contains(m(mode))).collect();
+        assert_eq!(found.len(), 1, "{mode:?} should be on exactly one position");
+        sorted(found[0].modes())
+    }
+
+    fn all_modes(positions: &[DialPosition]) -> Vec<u16> {
+        sorted(positions.iter().flat_map(|p| p.modes()).collect())
+    }
+
+    fn sorted(mut modes: Vec<u16>) -> Vec<u16> {
+        modes.sort_unstable();
+        modes.dedup();
+        modes
+    }
+
+    #[test]
+    fn every_dial_table_is_well_formed() {
+        for (model, positions) in DIAL_TABLES {
+            println!("checking {model}");
+            cycle::assert_table_invariants(positions, SHARED, BUTTONS, &label);
+        }
+    }
+
+    /// Every mode a table lists must be one the parser can produce, or the
+    /// driver would offer a switch to something no reading can confirm.
+    #[test]
+    fn every_dial_table_mode_round_trips_through_from_byte() {
+        for (model, positions) in DIAL_TABLES {
+            for mode in all_modes(positions) {
+                let byte = u8::try_from(mode).unwrap_or_else(|_| panic!("{model}: {mode:#06x}"));
+                let parsed = Mode::from_byte(byte)
+                    .unwrap_or_else(|_| panic!("{model}: {byte:#04x} is not a mode"));
+                assert_eq!(m(parsed), mode, "{model}");
+            }
+        }
+    }
+
+    /// The E+ reaches AC+DC and LPF; its V~ position pairs LPF with the Hz
+    /// ring, joined at AC V.
+    #[test]
+    fn ut61e_plus_ac_volts_reaches_lpf_and_the_hz_ring() {
+        assert_eq!(
+            modes_at(Ut61ePlusTable::DIAL_POSITIONS, Mode::AcV),
+            sorted(vec![
+                m(Mode::AcV),
+                m(Mode::LpfV),
+                m(Mode::Hz),
+                m(Mode::DutyCycle)
+            ])
+        );
+    }
+
+    /// The B+ has neither AC+DC nor LPF, so its V~ position has no SELECT
+    /// ring at all — only the Hz/% one.
+    #[test]
+    fn ut61b_plus_ac_volts_has_only_the_hz_ring() {
+        let positions = Ut61bPlusTable::DIAL_POSITIONS;
+        assert_eq!(
+            modes_at(positions, Mode::AcV),
+            sorted(vec![m(Mode::AcV), m(Mode::Hz), m(Mode::DutyCycle)])
+        );
+        let ac_v = positions
+            .iter()
+            .find(|p| p.contains(m(Mode::AcV)))
+            .expect("AC V position");
+        assert!(
+            ac_v.rings.iter().all(|r| r.button == CycleButton::Hz),
+            "the UT61B+ V~ position has no SELECT ring"
+        );
+    }
+
+    /// The D+ puts AC and DC volts on one dial position, so SELECT swaps them.
+    #[test]
+    fn ut61d_plus_combines_ac_and_dc_volts_on_one_position() {
+        assert_eq!(
+            modes_at(Ut61dPlusTable::DIAL_POSITIONS, Mode::AcV),
+            sorted(vec![
+                m(Mode::AcV),
+                m(Mode::DcV),
+                m(Mode::Hz),
+                m(Mode::DutyCycle)
+            ])
+        );
+    }
+
+    /// Manual §11: "Short press the SELECT button to switch between °C and °F".
+    #[test]
+    fn ut61d_plus_switches_temperature_units_with_select() {
+        let positions = Ut61dPlusTable::DIAL_POSITIONS;
+        assert_eq!(
+            modes_at(positions, Mode::TempC),
+            sorted(vec![m(Mode::TempC), m(Mode::TempF)])
+        );
+        let temp = positions
+            .iter()
+            .find(|p| p.contains(m(Mode::TempC)))
+            .expect("temperature position");
+        assert_eq!(temp.rings.len(), 1);
+        assert_eq!(temp.rings[0].button, CycleButton::Select);
+    }
+
+    /// A table must not offer a mode the model does not have: the driver would
+    /// press the ring all the way round looking for it.
+    #[test]
+    fn dial_tables_list_no_mode_the_model_lacks() {
+        let b_plus = all_modes(Ut61bPlusTable::DIAL_POSITIONS);
+        for absent in [Mode::Hfe, Mode::TempC, Mode::TempF, Mode::LozV] {
+            assert!(!b_plus.contains(&m(absent)), "UT61B+ has no {absent:?}");
+        }
+        // 0x15/0x16/0x17 were unreachable from every UT61E+ dial position
+        // (backlog, "Modes not reachable on UT61E+").
+        let e_plus = all_modes(Ut61ePlusTable::DIAL_POSITIONS);
+        for absent in [Mode::LozV, Mode::LozV2, Mode::Lpf] {
+            assert!(
+                !e_plus.contains(&m(absent)),
+                "UT61E+ cannot reach {absent:?} ({:#04x})",
+                m(absent)
+            );
+        }
+    }
 
     #[test]
     fn spec_lookup_rejects_an_out_of_bounds_range() {

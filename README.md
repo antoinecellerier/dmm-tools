@@ -51,8 +51,8 @@ Send remote commands, or switch the meter's mode without touching the dial:
 $ dmm-cli command hold
 Sent hold
 
-$ dmm-cli --device ut181a mode "V AC Hz"
-Meter now in V AC Hz
+$ dmm-cli mode "AC+DC V"
+Meter now in AC+DC V
 ```
 
 Connect to other device families with `--device`:

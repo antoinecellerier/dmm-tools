@@ -237,9 +237,9 @@ decompiled code — DMM.exe decompilation was incomplete):
 | 0x42 | ExitMinMax | `actionExitMaxMin` | **[VERIFIED]** (remote) |
 | 0x47 | Auto | `actionRangeAuto` | **[VERIFIED]** (restores auto-range) |
 | 0x48 | Rel | `actionRel` | **[VERIFIED]** (remote) |
-| 0x49 | Select2 (Hz/USB) | `actionHz` | **[VERIFIED]** (AC mV: cycles mV → Hz → Duty% → mV; no effect on DC V) |
+| 0x49 | Select2 (Hz/USB) | `actionHz` | **[VERIFIED]** (AC mV: cycles mV → Hz → Duty% → mV; no effect on DC V) — rings per dial position: `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1 |
 | 0x4B | Light | `actionLight` | **[VERIFIED]** (backlight toggle) |
-| 0x4C | Select (orange) | `actionSelect` | **[VERIFIED]** (cycles sub-modes, e.g. DC V → AC+DC V) |
+| 0x4C | Select (orange) | `actionSelect` | **[VERIFIED]** (cycles sub-modes, e.g. DC V → AC+DC V) — rings per dial position: `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1 |
 | 0x4D | PeakMinMax | `actionPeak` | **[VERIFIED]** (AC modes only; beeps but no visible effect on DC V) |
 | 0x4E | ExitPeak | `actionExitPeak` | **[VERIFIED]** (clears peak flags, returns to live) |
 | 0x5F | GetName | (device discovery) | **[VERIFIED]** — two-frame response (FF 00 ack, then ASCII name); see verification backlog |

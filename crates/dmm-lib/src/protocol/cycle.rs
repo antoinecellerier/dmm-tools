@@ -35,10 +35,6 @@
 //! `Protocol::mode_choices` / `Protocol::select_mode` to the free functions
 //! here.
 
-// Nothing wires this module yet: the families that delegate to it land in
-// follow-up commits, and until then every item here is unused outside tests.
-#![allow(dead_code)]
-
 use log::debug;
 use std::borrow::Cow;
 use std::time::Duration;
@@ -766,6 +762,7 @@ mod tests {
     #[test]
     fn a_shared_mode_without_history_picks_the_smallest_position() {
         let meter = FakeMeter::new(HZ, vec![(CycleButton::Hz, vec![HZ, DUTY])]);
+        assert_eq!(resolve_position(DIAL, None, HZ), Some(P_HZ));
         let choices = mode_choices(&meter, &reading(HZ));
         assert_eq!(ids(&choices), vec![HZ, DUTY]);
         assert_eq!(current_ids(&choices), vec![HZ]);
@@ -788,6 +785,7 @@ mod tests {
     #[test]
     fn a_single_function_position_offers_one_choice() {
         let meter = FakeMeter::seeded(HFE, vec![(CycleButton::Select, vec![HFE])]);
+        assert_eq!(meter.state.position(), Some(P_HFE));
         let choices = mode_choices(&meter, &reading(HFE));
         assert_eq!(ids(&choices), vec![HFE]);
         assert_eq!(current_ids(&choices), vec![HFE]);

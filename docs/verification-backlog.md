@@ -61,6 +61,53 @@ cannot occur for mode 0x02. Harmless today (the meter never sends range 4 on
 DC V, so the entry is simply never read), but it contradicts the verified
 record and should either go or gain a comment explaining why it's kept.
 
+### UT61+ remote mode selection (cycle-to-target)
+
+Shipped 2026-09-07: `dmm-cli mode` and the GUI's mode dropdown now work on
+the UT61+/UT161 family. The meter takes no set-mode command, so the driver
+(`crates/dmm-lib/src/protocol/cycle.rs`) presses SELECT (0x4C) or Hz/%
+(0x49) and re-reads the mode byte until the target shows. It plans from a
+per-model dial table — which modes each dial position reaches with which
+button — taken from the UT61+ Series User Manual §VII and recorded in
+`docs/research/ut61-family/reverse-engineered-protocol.md` §3.1. The
+individual presses are verified on the in-house UT61E+; the tables and the
+settle timing are not.
+
+Runnable checks on the UT61E+, one dial position at a time, each with an LCD
+photo beside the tool's output:
+
+- on every position in turn, `dmm-cli --device ut61eplus mode` should list
+  exactly that position's modes with `*` on the live one — V⎓ two, V~ four,
+  mV four, Ω four, µA/mA/A four each, hFE one, NCV one, Hz two
+- switch to each listed entry in turn (`dmm-cli mode "AC+DC V"` on V⎓,
+  `mode "LPF V"` and `mode Hz` and `mode Duty` on V~, and so on) and confirm
+  the LCD agrees with the printed `Meter now in <mode>`
+- the Ω position's ring order is unknown, so it is the one worth watching:
+  from Ω, switch to Capacitance and then back to Continuity, and report how
+  many presses each took (`RUST_LOG=dmm_lib=debug` prints one
+  `cycle: pressing …` line per press)
+- settle timing — `SELECT_SETTLE_DELAY` is 150 ms and `SELECT_SETTLE_READS`
+  is 3, both guesses. Watch the debug log for `cycle: pressing` lines that
+  repeat with the same `in <mode>`: that is a press the meter had not yet
+  reported, and means the delay is too short
+- a switch must not disturb the rest of the meter's state: with AUTO set
+  before the switch, `dmm-cli read --format json --count 1` afterwards should
+  still report `"auto_range":true`
+- the negatives: on V⎓ the listing should not offer Hz or Duty % at all (the
+  Hz/% button does nothing there), and a switch to a mode from another dial
+  position should be refused before any write reaches the meter
+
+UT61B+/UT61D+/UT161x owners — [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7).
+Their dial tables come from the manual alone and no press has been observed,
+so the listing itself is the thing to check: on each dial position,
+`dmm-cli --device ut61b+ mode` (or `ut61d+`) should name exactly the
+functions the meter's own SELECT and Hz/% buttons reach there, and a switch
+to each should land. Two specifics: the UT61D+ V≂ position is expected to
+carry both AC V and DC V on SELECT, and its temperature position to switch
+°C/°F on SELECT; the UT61B+ V~ position is expected to have no SELECT
+function at all. A mode listed but unreachable shows up as
+`<mode> never appeared; the meter is back in <mode>`.
+
 ### Modes not yet tested with real signals
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
