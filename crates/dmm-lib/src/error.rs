@@ -24,6 +24,12 @@ pub enum Error {
     #[error("unsupported command: {0}")]
     UnsupportedCommand(String),
 
+    /// The meter received the command and refused it — typically because the
+    /// dial isn't where the command needs it. Retrying the same command won't
+    /// help; the user has to change something.
+    #[error("command rejected: {0}")]
+    CommandRejected(String),
+
     #[error("unknown device: {0}")]
     UnknownDevice(String),
 
@@ -93,8 +99,9 @@ pub enum ErrorKind {
     /// Response arrived but couldn't be parsed (checksum, invalid response,
     /// unknown mode byte). Reconnect alone won't help if the protocol is wrong.
     Protocol,
-    /// User-side misconfiguration (unknown device ID, bad adapter selector,
-    /// unsupported command). Reconnect won't help.
+    /// Something only the user can fix (unknown device ID, bad adapter
+    /// selector, unsupported command, a command the meter refused).
+    /// Reconnect won't help — report it and carry on streaming.
     Configuration,
     /// Interrupted system call — typically a Ctrl-C signal mid-read.
     Interrupted,
@@ -114,9 +121,10 @@ impl Error {
             Self::InvalidResponse { .. } | Self::ChecksumMismatch { .. } | Self::UnknownMode(_) => {
                 ErrorKind::Protocol
             }
-            Self::UnknownDevice(_) | Self::AdapterNotFound(_) | Self::UnsupportedCommand(_) => {
-                ErrorKind::Configuration
-            }
+            Self::UnknownDevice(_)
+            | Self::AdapterNotFound(_)
+            | Self::UnsupportedCommand(_)
+            | Self::CommandRejected(_) => ErrorKind::Configuration,
         }
     }
 }
@@ -165,6 +173,12 @@ mod tests {
         );
         assert_eq!(
             Error::UnsupportedCommand("bar".into()).kind(),
+            ErrorKind::Configuration
+        );
+        // A refused command must not look like a transport fault: the GUI
+        // reconnects on those, and reconnecting can't move the meter's dial.
+        assert_eq!(
+            Error::CommandRejected("baz".into()).kind(),
             ErrorKind::Configuration
         );
     }

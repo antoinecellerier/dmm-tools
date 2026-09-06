@@ -124,6 +124,12 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         self.consecutive_timeouts
     }
 
+    /// Read-only access to the underlying `Dmm`, for queries that don't need
+    /// the mutable borrow — device profile, mode choices, transport info.
+    pub fn dmm(&self) -> &Dmm<T> {
+        self.dmm
+    }
+
     /// Mutable access to the underlying `Dmm`. Useful for sending commands
     /// or reading transport info between ticks.
     pub fn dmm_mut(&mut self) -> &mut Dmm<T> {

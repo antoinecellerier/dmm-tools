@@ -67,6 +67,16 @@ USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protoc
 Each family implements its own framing, parsing, and command encoding internally, but all
 produce the same `Measurement` struct.
 
+**Absolute mode selection** is the second remote-control path, alongside the named commands of
+`send_command()`. `mode_choices(&Measurement)` lists the modes the meter can be switched into
+*from where its dial sits right now* — each a `ModeChoice { id, label, current }` whose label
+uses the same vocabulary as `Measurement::mode` — and `select_mode(id)` switches to one. Both
+default to "unsupported" on the trait, so a family opts in by implementing them (currently the
+UT181A, whose ids are mode words, and the mock). CLI and GUI drive the pair generically: an
+empty list means hide the control, and the flagged entry is the live mode. This is what
+`send_command("select")` cannot express — a cycling button gives no way to jump to a named mode
+or to know which one is active.
+
 **Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
 devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation
 instructions, and a factory function that creates the correct `Protocol` instance. The CLI

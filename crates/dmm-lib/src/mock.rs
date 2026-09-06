@@ -5,7 +5,7 @@ use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::tables::DeviceTable;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
 use std::f64::consts::TAU;
@@ -156,7 +156,25 @@ impl MockMode {
     pub fn description(self) -> &'static str {
         self.info().description
     }
+
+    /// This mode's index in [`MockMode::ALL`] — the id the mock hands to
+    /// `Protocol::mode_choices` and takes back in `Protocol::select_mode`.
+    fn choice_id(self) -> Option<u16> {
+        MockMode::ALL
+            .iter()
+            .position(|m| *m == self)
+            .and_then(|i| u16::try_from(i).ok())
+    }
 }
+
+/// The mode groups the mock offers as remote mode choices, standing in for a
+/// meter's "same dial position, different function" set (the UT181A's V AC
+/// with and without its Hz sub-display, say). Everything outside a group
+/// reports no choices, so consumers exercise the unsupported path too.
+const MOCK_MODE_GROUPS: [&[MockMode]; 2] = [
+    &[MockMode::AcV, MockMode::AcVHz],
+    &[MockMode::Temp, MockMode::TempDual],
+];
 
 impl std::str::FromStr for MockMode {
     type Err = String;
@@ -463,9 +481,15 @@ fn scenarios() -> Vec<Scenario> {
         // Multi-display scenarios, appended so the auto-cycle order of the
         // single-display ones above is unchanged. They exercise the
         // `aux_values` path (UT181A, UT171) without the hardware.
+        //
+        // Their mode strings name the sub-displays, as a multi-display meter
+        // does — the UT181A calls `0x1121` "V AC Hz", not "V AC". Without
+        // that, each of these read identically to the single-display scenario
+        // it sits beside, and the mode selector would offer two entries with
+        // the same label.
         Scenario::new(
             MockMode::AcVHz,
-            "AC V",
+            "AC V Hz",
             0x00,
             2,
             "V",
@@ -477,7 +501,7 @@ fn scenarios() -> Vec<Scenario> {
         .with_aux(ACV_HZ_AUX),
         Scenario::new(
             MockMode::TempDual,
-            "Temp \u{00B0}C",
+            "Temp \u{00B0}C T1 (T2)",
             0x0A,
             0,
             "\u{00B0}C",
@@ -509,6 +533,13 @@ enum PeakState {
 }
 
 /// Mock protocol that generates synthetic measurements without hardware.
+///
+/// Remote mode selection (`Protocol::mode_choices` / `Protocol::select_mode`)
+/// is modelled on the two multi-display scenario pairs listed in
+/// [`MOCK_MODE_GROUPS`]: from either member the mock offers both, and
+/// selecting one jumps the live scenario there and restarts its waveform. An
+/// auto-cycling mock keeps auto-cycling — it resumes the cycle from the
+/// selected scenario rather than pinning to it, so the demo keeps moving.
 pub struct MockProtocol {
     scenarios: Vec<Scenario>,
     current_scenario: usize,
@@ -944,6 +975,39 @@ impl Protocol for MockProtocol {
         Mode::from_byte(mode_raw as u8)
             .ok()
             .and_then(|mode| self.table.mode_spec_info(mode))
+    }
+
+    /// The live scenario's group, or nothing when it isn't in one. The
+    /// argument is ignored: the mock is its own source of truth for what it
+    /// is measuring, and a caller could hand back a stale reading.
+    fn mode_choices(&self, _current: &Measurement) -> Vec<ModeChoice> {
+        let live = self.current_mode();
+        let Some(group) = MOCK_MODE_GROUPS.iter().find(|g| g.contains(&live)) else {
+            return Vec::new();
+        };
+        group
+            .iter()
+            .filter_map(|&mode| {
+                let scenario = self.scenarios.iter().find(|s| s.id == mode)?;
+                Some(ModeChoice {
+                    id: mode.choice_id()?,
+                    label: Cow::Borrowed(scenario.mode),
+                    current: mode == live,
+                })
+            })
+            .collect()
+    }
+
+    fn select_mode(&mut self, _transport: &dyn Transport, id: u16) -> Result<()> {
+        let scenario = MockMode::ALL
+            .get(id as usize)
+            .and_then(|mode| self.scenarios.iter().position(|s| s.id == *mode));
+        let Some(idx) = scenario else {
+            return Err(Error::UnsupportedCommand(format!("mode {id:#06x}")));
+        };
+        self.current_scenario = idx;
+        self.scenario_started = Instant::now();
+        Ok(())
     }
 }
 
@@ -1505,7 +1569,9 @@ mod tests {
     fn acv_hz_emits_frequency_and_period_sub_values() {
         let mut dmm = open_mock_mode(MockMode::AcVHz).unwrap();
         let m = dmm.request_measurement().unwrap();
-        assert_eq!(m.mode, "AC V");
+        // Named for its sub-displays, so it doesn't read as the plain AC V
+        // scenario it shares a mode group with.
+        assert_eq!(m.mode, "AC V Hz");
         assert_eq!(m.unit, "V");
         assert_eq!(m.aux_values.len(), 2);
         assert_eq!(m.aux_values[0].label, "Frequency");
@@ -1534,6 +1600,7 @@ mod tests {
     fn temp_dual_emits_a_second_thermocouple() {
         let mut dmm = open_mock_mode(MockMode::TempDual).unwrap();
         let m = dmm.request_measurement().unwrap();
+        assert_eq!(m.mode, "Temp \u{00B0}C T1 (T2)");
         assert_eq!(m.unit, "\u{00B0}C");
         assert_eq!(m.aux_values.len(), 1);
         assert_eq!(m.aux_values[0].label, "T2");
@@ -1694,5 +1761,109 @@ mod tests {
         }
         // Verify unlisted commands are rejected
         assert!(proto.send_command(&transport, "nonexistent").is_err());
+    }
+
+    /// Every group member must offer the whole group, with exactly one entry
+    /// flagged as the live one.
+    #[test]
+    fn mode_choices_cover_the_live_scenario_group() {
+        let transport = NullTransport;
+        for group in MOCK_MODE_GROUPS {
+            for mode in group {
+                let mut proto = MockProtocol::with_mode(*mode);
+                let m = proto.request_measurement(&transport).unwrap();
+                let choices = proto.mode_choices(&m);
+                assert_eq!(choices.len(), group.len(), "{mode:?}");
+
+                let current: Vec<&ModeChoice> = choices.iter().filter(|c| c.current).collect();
+                assert_eq!(current.len(), 1, "{mode:?} flagged {current:?} as current");
+                assert_eq!(current[0].id, mode.choice_id().unwrap());
+
+                let ids: Vec<u16> = choices.iter().map(|c| c.id).collect();
+                let expected: Vec<u16> = group.iter().map(|m| m.choice_id().unwrap()).collect();
+                assert_eq!(ids, expected, "{mode:?}");
+
+                // The GUI shows these as popup entries, so two choices that
+                // read the same are indistinguishable to the user.
+                let labels: Vec<&str> = choices.iter().map(|c| c.label.as_ref()).collect();
+                let mut unique = labels.clone();
+                unique.sort_unstable();
+                unique.dedup();
+                assert_eq!(
+                    unique.len(),
+                    labels.len(),
+                    "{mode:?} offers duplicate labels: {labels:?}"
+                );
+            }
+        }
+    }
+
+    /// Labels use the same vocabulary as `Measurement::mode`, so a consumer
+    /// can put a choice and the live reading's mode side by side.
+    #[test]
+    fn mode_choice_labels_match_the_measurement_mode() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::AcV);
+        let m = proto.request_measurement(&transport).unwrap();
+        for choice in proto.mode_choices(&m) {
+            let mut other = MockProtocol::with_mode(MockMode::ALL[choice.id as usize]);
+            let reading = other.request_measurement(&transport).unwrap();
+            assert_eq!(choice.label, reading.mode);
+        }
+    }
+
+    /// Scenarios outside a group report nothing, which is how a consumer
+    /// learns the control doesn't apply.
+    #[test]
+    fn ungrouped_scenarios_offer_no_mode_choices() {
+        let transport = NullTransport;
+        for mode in MockMode::ALL {
+            if MOCK_MODE_GROUPS.iter().any(|g| g.contains(mode)) {
+                continue;
+            }
+            let mut proto = MockProtocol::with_mode(*mode);
+            let m = proto.request_measurement(&transport).unwrap();
+            assert!(proto.mode_choices(&m).is_empty(), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn select_mode_switches_the_live_scenario() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::Temp);
+        let id = MockMode::TempDual.choice_id().unwrap();
+        proto.select_mode(&transport, id).unwrap();
+        assert_eq!(proto.current_mode(), MockMode::TempDual);
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(m.aux_values.len(), 1, "temp2 emits its second probe");
+    }
+
+    /// Selecting a mode on an auto-cycling mock moves it there and lets the
+    /// cycle continue, rather than pinning the scenario.
+    #[test]
+    fn select_mode_keeps_an_auto_cycling_mock_cycling() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::new();
+        proto
+            .select_mode(&transport, MockMode::AcVHz.choice_id().unwrap())
+            .unwrap();
+        assert_eq!(proto.current_mode(), MockMode::AcVHz);
+        // Run the scenario past its duration: the cycle must advance.
+        proto.scenario_started -= Duration::from_secs(60);
+        proto.request_measurement(&transport).unwrap();
+        assert_ne!(proto.current_mode(), MockMode::AcVHz);
+    }
+
+    #[test]
+    fn select_mode_rejects_an_unknown_id() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::new();
+        let err = proto
+            .select_mode(&transport, MockMode::ALL.len() as u16)
+            .unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(_)),
+            "got {err:?}, want UnsupportedCommand"
+        );
     }
 }

@@ -180,6 +180,17 @@ impl std::str::FromStr for DeviceFamily {
     }
 }
 
+/// A mode the host can switch the meter into from its current dial position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModeChoice {
+    /// Family-specific id handed back to `select_mode` (UT181A: the mode word).
+    pub id: u16,
+    /// Display name in the same vocabulary as `Measurement::mode`.
+    pub label: Cow<'static, str>,
+    /// The meter is in this mode now.
+    pub current: bool,
+}
+
 /// A step definition for the guided protocol capture wizard.
 pub struct CaptureStep {
     /// Unique identifier for this step (e.g. "dcv", "hold_on").
@@ -260,5 +271,23 @@ pub trait Protocol: Send {
     /// Default `None` — families without a spec table can leave this unimplemented.
     fn mode_spec_info(&self, _mode_raw: u16) -> Option<&'static ModeSpecInfo> {
         None
+    }
+
+    /// Modes the meter can be switched into without touching the dial, given
+    /// the reading it is producing now.
+    ///
+    /// An empty list — the default — means the family has no remote mode
+    /// selection, so consumers hide the control rather than special-casing
+    /// families. A one-entry list means the same: that entry is the mode the
+    /// meter is already in, and offering it switches nothing. Return the
+    /// family's own list either way; consumers decide what to draw.
+    fn mode_choices(&self, _current: &Measurement) -> Vec<ModeChoice> {
+        Vec::new()
+    }
+
+    /// Switch the meter into the mode `id` identifies, one of the ids
+    /// [`Protocol::mode_choices`] just returned.
+    fn select_mode(&mut self, _transport: &dyn Transport, id: u16) -> Result<()> {
+        Err(Error::UnsupportedCommand(format!("mode {id:#06x}")))
     }
 }
