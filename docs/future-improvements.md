@@ -312,20 +312,6 @@ The UT181A has built-in recording and saved measurement features (protocol comma
 
 Use cases: retrieving field measurements logged by the meter itself, longer recording sessions than USB-tethered capture allows.
 
-### UT181A primary/secondary display switching
-
-**Complexity:** Medium
-
-The vendor app's Setting panel switches the meter's primary and secondary
-display function — VAC / VAC,Hz / Peak / LowPass / dBV / dBm for voltage,
-T1,T2 / T2,T1 / T1−T2 / T2−T1 for temperature, and T1,T2 / REL for the
-secondary display — by sending set-function commands, and the reporter on
-issue #5 asked for the same here. The command bytes still have to be traced
-from the vendor software and verified on hardware; nothing is designed yet.
-
-Use cases: putting the meter in T1−T2 or dBm from the PC so the LCD and the
-software agree.
-
 ---
 
 ## Usability

@@ -77,15 +77,11 @@ success/failure) and expire after 4 seconds.
   MIN/MAX timestamps. Shown in every layout — the narrow layout condenses them
   to a single summary line. Single-display meters show nothing extra.
 - Mode and range label below in smaller text
-- On meters that can be switched between modes over USB (UT181A), the mode
-  label is a dropdown (`V AC Hz ▾`): it lists only the modes the current dial
-  position allows, marks the live one with `●`, and picking another switches
-  the meter. A switch the meter refuses shows a toast. Dial positions that
-  allow only one mode (Ohm, nS, Cap, Hz, Duty, Pulse Width) keep the plain
-  label, as do meters without USB mode switching.
-  Keyboard: Tab to the readout, Enter or Space opens the list on the live
-  mode, Up/Down (Home/End) move, Enter or Space picks, Esc or Tab closes
-  without a change.
+- On meters that can switch function over USB (UT181A, and the mock in AC V
+  and temperature), the mode label is a dropdown (`V AC Hz ▾`) of the modes
+  the current dial position allows, the live one marked `●`. Picking one
+  switches the meter; a refused switch shows a toast. Dial positions with a
+  single mode, and other meters, keep the plain label.
 - Active flags shown as colored badges:
   - **AUTO** — auto-range active
   - **HOLD** — display frozen on meter

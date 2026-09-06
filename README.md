@@ -16,7 +16,7 @@ Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 - Statistics, cursor measurements, reference lines with threshold triggers
 - Software scale, offset and unit relabel for clamps, shunts and sensor maps
 - Live specifications (resolution, accuracy) for the current range
-- Recording with CSV export and remote control buttons
+- Recording with CSV export, remote control buttons and mode switching
 - Big meter mode for bench-mount use
 
 ## [CLI](docs/cli-reference.md)
@@ -24,7 +24,7 @@ Includes a CLI with text/CSV/JSON output and a GUI with real-time graphing.
 - Live measurement streaming with text, CSV, and JSON output
 - Software scaling (`--scale`, `--offset`, `--unit`) for clamps, shunts and sensor maps
 - Coulomb counting / energy integration (`--integrate`)
-- Remote control — send button presses over USB
+- Remote control — send button presses and switch measurement mode over USB
 - Guided protocol capture wizard for bug reports
 
 ```
@@ -45,11 +45,14 @@ $ dmm-cli read --format json --count 1
 {"display_raw":"  3.369","flags":{"auto_range":true,"dc":false,"hold":false,...},"mode":"DC V","range":"22V","unit":"V","value":3.369}
 ```
 
-Send remote commands:
+Send remote commands, or switch the meter's mode without touching the dial:
 
 ```
 $ dmm-cli command hold
 Sent hold
+
+$ dmm-cli --device ut181a mode "V AC Hz"
+Meter now in V AC Hz
 ```
 
 Connect to other device families with `--device`:

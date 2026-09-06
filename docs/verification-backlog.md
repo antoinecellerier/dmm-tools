@@ -375,16 +375,60 @@ own software sends, not hardware confirmation.
   UT61E+, but nobody has run the two together, and @diego351's older
   CP2110-equipped unit was never detected on macOS at all (with other
   software, before dmm-tools existed). Unverified, not known-broken
-- SET_MODE (0x01) — vendor-traced, implementation in progress, needs
-  hardware: switch V AC ↔ V AC Hz ↔ dBm and T1(T2) ↔ T1−T2 from the PC
-  and confirm the LCD follows. Also confirm the family-local rule — a
-  word from another dial family should be refused or ignored
-- SET_RANGE (0x02) — vendor-traced 1-based index semantics, needs
-  hardware: step a manual range on V DC and check the range byte the
-  meter reports back matches the index sent
+- SET_MODE (0x01) — vendor-traced; implemented 2026-09-06 as
+  `dmm-cli mode` (lists the modes the dial reaches, switches by label or
+  by the hex id printed beside it) and the GUI's mode dropdown under the
+  reading. No meter has answered one yet. Runnable checks, each with an
+  LCD photo beside the tool's output:
+  - `dmm-cli --device ut181a mode` on the V AC dial — expect six
+    choices, `*` on the live one
+  - `dmm-cli --device ut181a mode "V AC Hz"` (0x1121), then
+    `mode "V AC dBm"` (0x1161), then `mode "V AC"` (0x1111)
+  - on the temperature dial, `mode "°C T1-T2"` (0x4231), then
+    `mode "°C"` (0x4211) — the hex id is accepted wherever the label is
+    awkward to type
+  - a switch prints `Meter now in <label>`; `Meter did not switch` or a
+    refusal is the interesting result — report it verbatim
+  - the family-local rule: the listing should never offer a word from
+    another dial position, and a word from another family should be
+    refused or ignored
+- REL command — implemented 2026-09-06 (`dmm-cli command rel`, and the
+  GUI's REL button now appears for this meter) as SET_MODE with nibble 0
+  flipped, gated per variant from the vendor UI. Needs hardware: on
+  V AC, `dmm-cli --device ut181a command rel` should light REL on the
+  LCD and the meter should report the companion word 0x1112 (shown as
+  `V AC REL`); a second `command rel` should leave REL. Continuity and
+  diode spend nibble 0 = 2 on the open-beeper and alarm functions, so
+  the tool refuses `command rel` there without sending anything —
+  confirm the meter's own REL button is equally dead in those modes
+- REL companion words on the non-plain variants — 0x1142 (V AC LPF),
+  0x1152 (V AC dBV), 0x1162 (V AC dBm), 0x2142 (mV AC+DC), 0x3122
+  (V DC AC+DC), 0x4222 (°C T2, and its °F mirror 0x4322), 0x8122 /
+  0x9122 / 0xA122 (µA / mA / A DC AC+DC) are vendor-traced only. Needs
+  hardware: enter each variant, toggle REL, and confirm the mode word
+  the meter reports back is the companion listed here
+- SET_RANGE (0x02) — vendor-traced 1-based index semantics; since
+  2026-09-06 the `range` command steps the family's ladder from the last
+  range the meter reported instead of always sending index 1. Needs
+  hardware: on V DC, `dmm-cli --device ut181a command range` twice, and
+  check with `dmm-cli --device ut181a read --format json --count 1` that
+  `"range"` advances one rung per press (not back to the first) and
+  matches the LCD's range annunciator; `command auto` should return to
+  auto-range. `dmm-cli --device ut181a debug` prints the raw payload if
+  the range byte itself is wanted
 - SET_MIN_MAX (0x04) payload width — the vendor app sends **one** byte,
   not the uint32 antage and sigrok describe (spec §4.2). The code sends
-  one byte; a meter needs to confirm MIN/MAX actually engages
+  one byte; a meter needs to confirm MIN/MAX actually engages: on V DC,
+  `dmm-cli --device ut181a command minmax` should light MIN/MAX on the
+  LCD and put min/max/avg sub-values in the stream, and
+  `command exit_minmax` should leave it
+- Command replies (type 0x01, "OK" / "ER") — community-sourced only (the
+  vendor app's handling of them was not traced), never seen from a meter. Since 2026-09-06 every command above waits
+  for one and turns "ER" into an error, while silence still passes, so
+  run the checks with `RUST_LOG=dmm_lib=debug` and report which line
+  appears: `ut181a: <command> acknowledged` (the meter answered) or
+  `ut181a: no reply to <command> … assuming accepted` (it did not),
+  alongside the LCD photo showing whether the command took effect
 - **Not implemented**: recording protocol (0x0A-0x0F), saved measurement
   retrieval (0x07-0x09), SET_REFERENCE command, timestamp decoding,
   response types 0x03/0x04/0x05/0x72
