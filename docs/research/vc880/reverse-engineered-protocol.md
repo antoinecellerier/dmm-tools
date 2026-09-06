@@ -4,7 +4,7 @@ Based on ILSpy decompilation of Voltsoft `DMSShare.dll` and the VC880
 user manual. See `reverse-engineering-approach.md` for methodology.
 
 Confidence levels:
-- **[KNOWN]** -- from the user manual
+- **[KNOWN]** / **[MANUAL]** -- from the user manual
 - **[VENDOR]** -- from Voltsoft decompilation
 - **[INFERRED]** -- logically deduced
 - **[UNVERIFIED]** -- requires real device testing
@@ -319,6 +319,60 @@ From `SetStatus()` (line 16782). Each flag is extracted as
 | 3 | BarDispEn | Bar graph display enabled |
 | 4 | PassBeep | Pass beep enabled (comp mode) |
 | 5 | NgBeep | NG (fail) beep enabled (comp mode) |
+
+### 4.4 Rotary positions and SHIFT/SETUP sub-functions -- [MANUAL]
+
+The dial picks a *position*; within a position the SHIFT/SETUP button (3)
+steps through the functions that position offers. The host cannot turn the
+dial, so this table is the boundary of what remote mode selection can reach.
+
+Sources: the "Drehschalter (4)" figure on printed page 10 of the VC880 user
+manual, whose layout gives each position its symbols; §3 of the same manual
+("SHIFT/SETUP-Taste zur Funktionsumschaltung (rote Symbole)"), which says the
+red symbols beside a position are what SHIFT/SETUP reaches; and the §8
+measurement procedures, which say the same in words. Function codes are from
+§4.1.
+
+| Position | Functions (primary first) | Codes | Manual |
+|----------|---------------------------|-------|--------|
+| mV⎓ Hz % | DC mV, Frequency, Duty % | 0x02, 0x03, 0x04 | §8d: "Drücken Sie die „SHIFT/SETUP“-Taste bis im Display „Hz“ erscheint … erneut … bis „%“ im Display erscheint" |
+| V⎓ (red AC+DC) | DC V, AC+DC V, (DC mV) | 0x00, 0x01, (0x02) | figure; §8b |
+| V~ | AC V | 0x05 | figure (no red symbol on this position) |
+| Lo | ACV low-pass | 0x12 | §8j: its own dial symbol, no SHIFT/SETUP |
+| Ω (red diode, continuity) | Ω, Diode, Continuity | 0x06, 0x07, 0x08 | §8g: "Drücken Sie die Taste „SHIFT/SETUP“ um die Messfunktion umzuschalten … Eine erneute Betätigung schaltet in die erste Messfunktion usw." |
+| ⊣⊢ | Capacitance | 0x09 | §8h |
+| °C°F | °C, °F | 0x0A, 0x0B | §8i: "Drücken Sie die Taste „SHIFT/SETUP“ um die Messfunktion auf eine Anzeige in °F umzuschalten. Eine erneute Betätigung schaltet in die erste Messfunktion usw." |
+| µA≂ | DC µA, AC µA | 0x0C, 0x0D | §8c |
+| mA≂ | DC mA, AC mA | 0x0E, 0x0F | §8c |
+| A≂ | DC A, AC A | 0x10, 0x11 | §8c: "Drücken Sie die Taste „SHIFT/SETUP“ (3) um in den AC-Messbereich umzuschalten … Eine erneute Betätigung schaltet wieder zurück usw." |
+
+**Order is unverified.** Every source says *which* symbol a position offers
+("bis … erscheint" — until it appears), never in which order the presses walk
+them. The order above is the manual's order of description, not a claim about
+the meter.
+
+**0x02 sits on two positions.** The V⎓ position auto-ranges down to 400 mV and
+reports that as function 0x02 rather than 0x00 (§4.2, [VENDOR]), so a reading
+of 0x02 alone does not say which of the two positions the dial is on. The mV
+position is the better guess and the implementation prefers it.
+
+**The manual's §8b text contradicts its own figure.** The AC-voltage procedure
+reads "wählen den Messbereich „V“. Drücken Sie die Taste „SHIFT/SETUP“ (3) um
+in den AC-Messbereich umzuschalten" (the range symbol after „V“ renders blank
+in this PDF and is absent from its text layer), which describes a meter where
+AC V is a SHIFT/SETUP sub-function of a voltage position. The figure instead
+gives V~ a position of its own and puts AC+DC on V⎓. One guess at the mismatch
+— not a finding — is that the text is written for the series rather than this
+model: §7 introduces its symbol list as „alle möglichen Symbole und Angaben der
+Serie VC800“. We follow the figure. A meter would settle it: see
+`docs/verification-backlog.md`.
+
+**How the implementation uses this.** `crates/dmm-lib/src/protocol/vc880/mod.rs`
+holds the table as `DIAL`, one entry per position, each a single SHIFT/SETUP
+ring (the VC-880 has no Hz/% button). It is membership only: the shared driver
+in `protocol/cycle.rs` presses `Select` (0x4C) and reads the function code back
+until the target appears, which works whatever the real press order is. Nothing
+in the table is hardware-confirmed.
 
 ---
 

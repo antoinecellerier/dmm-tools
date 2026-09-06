@@ -14,13 +14,17 @@
 //! VC890Reading classes).
 //! See docs/research/vc890/reverse-engineered-protocol.md
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::measurement::Measurement;
+use crate::protocol::cycle::{
+    self, CycleButton, CycleMeter, DialPosition, DialState, Ring, Settle,
+};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::vc8x0_common::{
-    RangeEntry, common_flags, main_display, parse_value, re, resolve_function, resolve_range,
+    CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags, main_display, parse_value, re,
+    resolve_function, resolve_range,
 };
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len};
+use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability, check_len};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
@@ -151,10 +155,102 @@ fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static s
 
 use super::vc8x0_common::COMMANDS as VC890_COMMANDS;
 
+/// The dial, position by position, and the functions SHIFT/SETUP reaches on
+/// each -- [MANUAL], no hardware has confirmed it.
+///
+/// From Fig. 1 on printed page 54 of the English VC-890 operating
+/// instructions (the red symbols beside a position are its SHIFT/SETUP
+/// sub-functions) and the §11 measurement procedures. Membership only: the
+/// manual says which symbol each position offers ("press … until the symbol
+/// appears"), never the press order, so the driver presses and reads the mode
+/// back. See `docs/research/vc890/reverse-engineered-protocol.md`.
+///
+/// LoZ is not here: it is a separate "Low Imp. 400 kΩ" button and a status
+/// flag, not a function code.
+const DIAL: &[DialPosition] = &[
+    // V~ (red Lo): AC V, ACV low-pass
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x00, 0x01],
+        }],
+    },
+    // V⎓ (red AC+DC): DC V, AC+DC V
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x02, 0x03],
+        }],
+    },
+    // mV⎓ / Hz % : DC mV, Frequency, Duty %
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x04, 0x05, 0x06],
+        }],
+    },
+    // Ω (red diode, continuity) — listed in the order §11f/§11g describe them
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x07, 0x09, 0x08],
+        }],
+    },
+    // ⊣⊢ : Capacitance
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0A],
+        }],
+    },
+    // °C°F
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0B, 0x0C],
+        }],
+    },
+    // µA≂ : DC µA, AC µA
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0D, 0x0E],
+        }],
+    },
+    // mA≂ : DC mA, AC mA
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0F, 0x10],
+        }],
+    },
+    // A≂ : DC A, AC A
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x11, 0x12],
+        }],
+    },
+];
+
+/// How long a press takes to show up in a reading. Not hardware-tuned:
+/// nobody has timed a real VC-890.
+///
+/// No delay, because this meter is polled and a read is a full request; two
+/// of them is the budget, since each already costs two ack bursts (400 ms of
+/// vendor-prescribed sleeps) before the meter answers.
+const SETTLE: Settle = Settle {
+    delay: Duration::ZERO,
+    reads: 2,
+};
+
 /// Protocol implementation for the Voltcraft VC-890.
 pub struct Vc890Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
+    /// Which dial position the readings say the meter is on, for the mode
+    /// driver in [`crate::protocol::cycle`].
+    dial: DialState,
 }
 
 impl Default for Vc890Protocol {
@@ -175,7 +271,19 @@ impl Vc890Protocol {
                 max_aux_values: 0,
                 verification_issue: Some(14),
             },
+            dial: DialState::default(),
         }
+    }
+
+    /// Write one command frame the way every VC-890 exchange starts: the
+    /// vendor's pre-clear ack burst (`WriteCommand(cmd, ack: true)` →
+    /// `AckMessage(clear: true)`), then the frame itself.
+    ///
+    /// `send_command` and the mode driver's `press` both go through here so
+    /// the two can't drift apart.
+    fn write_command(&self, transport: &dyn Transport, cmd: u8) -> Result<()> {
+        send_ack_sequence(transport)?;
+        transport.write(&super::vc8x0_common::build_command(cmd))
     }
 }
 
@@ -210,18 +318,17 @@ impl Protocol for Vc890Protocol {
         // Post-confirm ack after a valid frame is reassembled.
         send_ack_sequence(transport)?;
 
-        parse_measurement(&payload)
+        let measurement = parse_measurement(&payload)?;
+        // Readings are the only place the meter states its function, so
+        // every one of them is what keeps the dial position current.
+        self.dial.observe(DIAL, measurement.mode_raw);
+        Ok(measurement)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
-        use super::vc8x0_common;
-        let cmd_byte = vc8x0_common::command_byte(command)?;
-        let frame = vc8x0_common::build_command(cmd_byte);
+        let cmd_byte = super::vc8x0_common::command_byte(command)?;
         debug!("vc890: sending command {command} ({cmd_byte:#04x})");
-        // Pre-clear ack: vendor `WriteCommand(cmd, ack: true)` default path.
-        send_ack_sequence(transport)?;
-        transport.write(&frame)?;
-        Ok(())
+        self.write_command(transport, cmd_byte)
     }
 
     fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>> {
@@ -260,6 +367,63 @@ impl Protocol for Vc890Protocol {
             samples: 3,
         });
         steps
+    }
+
+    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
+        cycle::mode_choices(self, current)
+    }
+
+    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
+        cycle::select_mode(self, transport, id)
+    }
+}
+
+impl CycleMeter for Vc890Protocol {
+    fn dial_positions(&self) -> &'static [DialPosition] {
+        DIAL
+    }
+
+    fn dial_state(&self) -> &DialState {
+        &self.dial
+    }
+
+    fn dial_state_mut(&mut self) -> &mut DialState {
+        &mut self.dial
+    }
+
+    fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
+        match button {
+            CycleButton::Select => {
+                debug!("vc890: pressing {SELECT_BUTTON_NAME} ({CMD_SELECT:#04x})");
+                // Nothing to read back here: the meter echoes the command in
+                // a frame of its own, and `request_measurement`'s accept
+                // filter (type byte 0x01) already skips it.
+                self.write_command(transport, CMD_SELECT)
+            }
+            CycleButton::Hz => Err(Error::UnsupportedCommand(format!(
+                "the VC-890 has no {} button",
+                self.button_name(button)
+            ))),
+        }
+    }
+
+    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
+        Protocol::request_measurement(self, transport).map(|m| m.mode_raw)
+    }
+
+    fn mode_label(&self, mode: u16) -> Cow<'static, str> {
+        resolve_function(FUNCTION_TABLE, mode as u8, "vc890").0
+    }
+
+    fn settle(&self) -> Settle {
+        SETTLE
+    }
+
+    fn button_name(&self, button: CycleButton) -> &'static str {
+        match button {
+            CycleButton::Select => SELECT_BUTTON_NAME,
+            CycleButton::Hz => "Hz/%",
+        }
     }
 }
 
@@ -347,6 +511,7 @@ mod tests {
     use super::*;
     use crate::measurement::MeasuredValue;
     use crate::protocol::test_support::snapshot;
+    use crate::transport::mock::MockTransport;
 
     /// Build a minimal VC890 live data payload for testing.
     fn make_payload(function: u8, range: u8, main_display: &[u8; 7], status: [u8; 8]) -> Vec<u8> {
@@ -563,7 +728,6 @@ mod tests {
     /// Ours went through the VC-880-shaped helper, which writes bare.
     #[test]
     fn get_name_sends_the_ack_burst_first() {
-        use crate::transport::mock::MockTransport;
         let transport = MockTransport::new(vec![]);
         let mut proto = Vc890Protocol::new();
         // No response queued, so this fails after the writes — the writes are
@@ -585,7 +749,6 @@ mod tests {
 
     #[test]
     fn send_ack_sequence_writes_three_copies() {
-        use crate::transport::mock::MockTransport;
         let transport = MockTransport::new(vec![]);
         send_ack_sequence(&transport).unwrap();
         let writes = transport.written.borrow();
@@ -968,5 +1131,113 @@ raw_payload=61"#
 0x11: A|10A - - - - - - - -
 0x12: A|10A - - - - - - - -"#
         );
+    }
+
+    // ---- dial table and mode switching ----
+
+    /// One reading through `request_measurement`, the way the mode driver
+    /// gets its picture of the dial.
+    ///
+    /// The frame is fed in two chunks: `read_frame` reads at most 64 bytes at
+    /// a time and a VC-890 live-data frame is 66.
+    fn read_one(function: u8) -> (Vc890Protocol, Measurement) {
+        let payload = make_payload(function, 0x30, b"  1.234", zero_status());
+        let frame = framing::test_frame_be16(&payload);
+        let (head, tail) = frame.split_at(32);
+        let transport = MockTransport::new(vec![head.to_vec(), tail.to_vec()]);
+        let mut proto = Vc890Protocol::new();
+        let m = proto
+            .request_measurement(&transport)
+            .expect("the frame parses");
+        (proto, m)
+    }
+
+    fn ids(choices: &[ModeChoice]) -> Vec<u16> {
+        choices.iter().map(|c| c.id).collect()
+    }
+
+    fn labels(choices: &[ModeChoice]) -> Vec<String> {
+        choices.iter().map(|c| c.label.to_string()).collect()
+    }
+
+    fn current_ids(choices: &[ModeChoice]) -> Vec<u16> {
+        choices.iter().filter(|c| c.current).map(|c| c.id).collect()
+    }
+
+    #[test]
+    fn the_dial_table_is_well_formed() {
+        cycle::assert_table_invariants(
+            DIAL,
+            // Unlike the VC-880, no function code is reported from two
+            // positions.
+            &[],
+            // The VC-890 has no Hz/% button; SHIFT/SETUP is the only one.
+            &[CycleButton::Select],
+            &|mode| resolve_function(FUNCTION_TABLE, mode as u8, "vc890").0,
+        );
+    }
+
+    /// V~ carries the low-pass filter as its SHIFT/SETUP sub-function — on
+    /// the VC-880 that is a dial position of its own.
+    #[test]
+    fn the_ac_volts_position_lists_the_low_pass_filter() {
+        assert_eq!(DIAL[0].modes(), vec![0x00, 0x01]);
+    }
+
+    /// AC+DC sits on V⎓, as it does on the VC-880 — but under different
+    /// function codes.
+    #[test]
+    fn the_dc_volts_position_lists_ac_dc() {
+        assert_eq!(DIAL[1].modes(), vec![0x02, 0x03]);
+    }
+
+    #[test]
+    fn a_reading_records_the_dial_position() {
+        let (proto, _) = read_one(0x07);
+        assert_eq!(proto.dial.last_mode(), Some(0x07));
+        assert_eq!(proto.dial.position(), Some(3), "the Ω position");
+    }
+
+    #[test]
+    fn the_ohm_position_lists_diode_and_continuity() {
+        let (proto, m) = read_one(0x07);
+        let choices = proto.mode_choices(&m);
+        assert_eq!(ids(&choices), vec![0x07, 0x09, 0x08]);
+        assert_eq!(labels(&choices), ["Ω", "Diode", "Continuity"]);
+        assert_eq!(current_ids(&choices), vec![0x07]);
+    }
+
+    /// The ack burst goes first here too — a bare frame is what the VC-880
+    /// sends, and this meter ignores it.
+    #[test]
+    fn pressing_select_sends_the_ack_burst_then_the_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc890Protocol::new();
+        proto
+            .press(&transport, CycleButton::Select)
+            .expect("the frames are written");
+
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 4, "three ack frames then SHIFT/SETUP");
+        for (i, w) in writes.iter().take(3).enumerate() {
+            assert_eq!(w.as_slice(), ACK_FRAME, "write {i} should be an ack frame");
+        }
+        assert_eq!(
+            writes[3],
+            super::super::vc8x0_common::build_command(0x4C),
+            "SHIFT/SETUP is command 0x4C"
+        );
+    }
+
+    #[test]
+    fn pressing_hz_is_refused_without_writing() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc890Protocol::new();
+        let err = proto.press(&transport, CycleButton::Hz).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("Hz/%")),
+            "got {err:?}"
+        );
+        assert!(transport.written.borrow().is_empty());
     }
 }

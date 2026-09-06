@@ -171,6 +171,32 @@ real hardware**. Every aspect needs end-to-end verification.
   assumes).
 - Commands: same as VC-880 plus 0x5D (Set Time) and 0x5E (Get Measurement)
 - PC button activation requirement
+- Dial table and SHIFT/SETUP mode switching — implemented 2026-09-07 as
+  `dmm-cli mode` (and the GUI's mode dropdown) over the [MANUAL] dial table
+  in the spec's "Rotary positions" section. Nothing in it is
+  hardware-confirmed: the manual says which symbol each position offers,
+  never the order the presses walk them. Runnable checks, one dial position
+  at a time:
+  - `dmm-cli --device vc890 mode` on every position — the listing should
+    name exactly the functions that position offers, `*` on the live one.
+    The capacitance position offers one function, so it prints "no
+    switchable modes" instead of a list. Report the dial symbol and the
+    list whenever they disagree
+  - switch to every entry the listing offers, with
+    `RUST_LOG=dmm_lib=debug dmm-cli --device vc890 mode "<label>"`, and
+    paste the log: one `cycle: pressing SHIFT/SETUP (in X, want Y)` line per
+    press, so it records both the press count and the order the function
+    codes actually came round in
+  - the raw cycle, independent of our table: `dmm-cli --device vc890 command
+    select` followed by `dmm-cli --device vc890 read --count 3`, repeated
+    until the display returns to where it started, once per position
+  - V~ should carry the low-pass filter (0x01) as its sub-function here,
+    where the VC-880 gives Lo a dial position of its own — confirm on the
+    meter, since the two families' dials otherwise match
+  - the settle constants are untuned guesses (no delay, 2 reads for a press
+    to show up). `the meter refused …: SHIFT/SETUP did nothing in <mode>`
+    while the display *did* change means they are too tight — report the
+    mode and how long the meter takes to answer
 
 **Voltcraft VC-880 / VC650BT**:
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
@@ -186,6 +212,37 @@ real hardware**. Every aspect needs end-to-end verification.
 - Streaming rate (manual says 2-3 Hz)
 - PC button activation requirement
 - VC650BT compatibility (same protocol confirmed by installer comparison)
+- Dial table and SHIFT/SETUP mode switching — implemented 2026-09-07 as
+  `dmm-cli mode` (and the GUI's mode dropdown) over the [MANUAL] dial table
+  in spec §4.4. Nothing in it is hardware-confirmed: the manual says which
+  symbol each position offers, never the order the presses walk them, and
+  its §8b text contradicts its own figure over where AC V lives. Runnable
+  checks, one dial position at a time:
+  - `dmm-cli --device vc880 mode` on every position — the listing should
+    name exactly the functions that position offers, `*` on the live one.
+    V~, Lo and capacitance offer one function each, so they print "no
+    switchable modes" instead of a list. Report the dial symbol and the
+    list whenever they disagree
+  - switch to every entry the listing offers, with
+    `RUST_LOG=dmm_lib=debug dmm-cli --device vc880 mode "<label>"`, and
+    paste the log: one `cycle: pressing SHIFT/SETUP (in X, want Y)` line per
+    press, so it records both the press count and the order the function
+    codes actually came round in
+  - the raw cycle, independent of our table: `dmm-cli --device vc880 command
+    select` followed by `dmm-cli --device vc880 read --count 3`, repeated
+    until the display returns to where it started, once per position
+  - the figure/text conflict: V~ and Lo are separate positions in the
+    figure, with AC+DC on V⎓. If SHIFT/SETUP on V~ switches anything, the
+    figure is wrong and §8b was right — say what the display did
+  - the 0x02 overlap: on the V⎓ position, let the meter auto-range below
+    400 mV and check with `dmm-cli --device vc880 read --count 1` whether
+    the reading turns into `DC mV` (`dmm-cli --device vc880 debug` prints
+    the raw function byte). That overlap is why a bare 0x02 reading is
+    assumed to be the mV dial
+  - the settle constants are untuned guesses (no delay, 4 reads for a press
+    to show up in the stream). `the meter refused …: SHIFT/SETUP did nothing
+    in <mode>` while the display *did* change means they are too tight —
+    report the mode and the streaming rate
 
 **UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
 - **Resolved (2026-06 review)** — see spec §7.4 for full evidence:

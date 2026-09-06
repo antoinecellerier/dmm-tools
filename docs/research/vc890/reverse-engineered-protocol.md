@@ -6,7 +6,8 @@ in the same DLL.
 
 See `docs/research/vc880/reverse-engineering-approach.md` for methodology.
 
-Confidence levels: **[VENDOR]** = from Voltsoft decompilation.
+Confidence levels: **[VENDOR]** = from Voltsoft decompilation,
+**[MANUAL]** = from the VC-890 user manual.
 
 ---
 
@@ -140,6 +141,54 @@ treat "low battery" conservatively.
 | 0x10 | AC mA | was 0x0F |
 | 0x11 | DC A | was 0x10 |
 | 0x12 | AC A | was 0x11 |
+
+## Rotary positions and SHIFT/SETUP sub-functions -- [MANUAL]
+
+The dial picks a *position*; within a position the SHIFT/SETUP button (3)
+steps through the functions that position offers. The host cannot turn the
+dial, so this table is the boundary of what remote mode selection can reach.
+
+Sources: Fig. 1 on printed page 54 (PDF page 11) of the English VC-890
+operating instructions, whose layout gives each position its symbols — the
+red ones are the SHIFT/SETUP sub-functions — and the §11 measurement
+procedures, which say the same in words. In the quotes below, `[…]` marks a
+range symbol that the PDF renders as a glyph the text layer drops; it is read
+off the figure, not off the sentence.
+
+| Position | Functions (primary first) | Codes | Manual |
+|----------|---------------------------|-------|--------|
+| V~ (red Lo) | AC V, ACV low-pass | 0x00, 0x01 | §11j: "select the measurement range “V\[~\]”. Press the SHIFT/SETUP button (3) to switch to the measurement range “\[Lo\]”" |
+| V⎓ (red AC+DC) | DC V, AC+DC V | 0x02, 0x03 | §11b: "If required you can select the “AC+DC” measuring function … select the measuring range “V\[⎓\]”. Press the SHIFT/SETUP button (3) to switch to the “AC+DC” measuring function" |
+| mV⎓ Hz % | DC mV, Frequency, Duty % | 0x04, 0x05, 0x06 | §11d: "select the measuring range “mV Hz %”. Press the SHIFT/SETUP button (3) until “Hz” appears … press the SHIFT/SETUP button again until “%” appears" |
+| Ω (red diode, continuity) | Ω, Diode, Continuity | 0x07, 0x09, 0x08 | §11f/§11g: "select the measuring range “Ω”. Press the SHIFT/SETUP button (3) until the diode test symbol appears" / "until the continuity test symbol appears" |
+| ⊣⊢ | Capacitance | 0x0A | §11h |
+| °C°F | °C, °F | 0x0B, 0x0C | §11i: "Press the SHIFT/SETUP button (3) to switch to a display in °F" |
+| µA≂ | DC µA, AC µA | 0x0D, 0x0E | §11c |
+| mA≂ | DC mA, AC mA | 0x0F, 0x10 | §11c |
+| A≂ | DC A, AC A | 0x11, 0x12 | §11c: "Press the SHIFT/SETUP button (3) to switch to the AC measuring range … Pressing the button again will switch back" |
+
+**Order is unverified.** Every source says *which* symbol a position offers
+("until … appears"), never in which order the presses walk them. The order
+above is the manual's order of description, not a claim about the meter.
+
+**No function code is on two positions**, unlike the VC-880's 0x02, so a
+reading names its dial position unambiguously.
+
+**LoZ is not a function.** "Low Imp. 400 kΩ" is its own front-panel button
+(§16) and shows up as the `Loz` status bit, not as a function code, so it is
+not something SHIFT/SETUP can reach and not in this table.
+
+**Note the differences from the VC-880's dial** (§4.4 of that spec): the
+low-pass filter is a SHIFT/SETUP sub-function of V~ here rather than a dial
+position of its own, and this dial has two OFF positions, one at each end of
+the sweep.
+
+**How the implementation uses this.** `crates/dmm-lib/src/protocol/vc890/mod.rs`
+holds the table as `DIAL`, one entry per position, each a single SHIFT/SETUP
+ring (the VC-890 has no Hz/% button). It is membership only: the shared driver
+in `protocol/cycle.rs` presses `Select` (0x4C) and reads the function code back
+until the target appears, which works whatever the real press order is. Nothing
+in the table is hardware-confirmed.
 
 ## Range Tables -- [VENDOR]
 

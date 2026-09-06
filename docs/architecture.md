@@ -73,8 +73,9 @@ produce the same `Measurement` struct.
 uses the same vocabulary as `Measurement::mode` — and `select_mode(id)` switches to one. Both
 default to "unsupported" on the trait, and a family opts in one of two ways: with a direct
 set-mode command (the UT181A, whose ids are mode words, and the mock), or through the shared
-cycle-to-target driver in `protocol/cycle.rs` (the UT61+/UT161 family, whose ids are mode
-bytes) — that driver presses SELECT or Hz/% and reads the mode back until the target shows,
+cycle-to-target driver in `protocol/cycle.rs` (the UT61+/UT161 family and the Voltcraft
+VC-880/VC-890, whose ids are mode bytes) — that driver presses SELECT, Hz/% or SHIFT/SETUP and
+reads the mode back until the target shows,
 planning from a per-model table of dial positions because the meter never reports the dial.
 CLI and GUI drive the pair generically: an
 empty list means hide the control, and the flagged entry is the live mode. This is what

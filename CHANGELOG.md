@@ -4,7 +4,7 @@
 
 ### GUI
 
-- **Switch the meter's function from the mode label** — on meters that allow it (UT61+/UT161, UT181A, mock) it is now a dropdown instead of plain text.
+- **Switch the meter's function from the mode label** — on meters that allow it (UT61+/UT161, UT181A, VC-880, VC-890, mock) it is now a dropdown instead of plain text.
 - **Scale row converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were parsed but never shown.
 - **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
@@ -17,7 +17,7 @@
 
 ### CLI
 
-- **`dmm-cli mode` lists and switches the meter's function** — reach Hz, LPF or AC+DC without turning the dial, on the UT61+/UT161, the UT181A and the mock.
+- **`dmm-cli mode` lists and switches the meter's function** — reach Hz, LPF or AC+DC without turning the dial, on the UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and the mock.
 - **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".

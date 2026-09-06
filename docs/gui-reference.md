@@ -80,8 +80,8 @@ success/failure) and expire after 4 seconds.
   MIN/MAX timestamps. Shown in every layout — the narrow layout condenses them
   to a single summary line. Single-display meters show nothing extra.
 - Mode and range label below in smaller text
-- On meters that can switch function over USB (UT61+/UT161, UT181A, and the
-  mock in AC V and temperature), the mode label is a dropdown (`V AC Hz ▾`) of the modes
+- On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
+  VC-890, and the mock in AC V and temperature), the mode label is a dropdown (`V AC Hz ▾`) of the modes
   the current dial position allows, the live one marked `●`. Picking one
   switches the meter; a refused switch shows a toast. Dial positions with a
   single mode, and other meters, keep the plain label.

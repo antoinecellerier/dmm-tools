@@ -312,6 +312,22 @@ within a dial position (V AC → V AC Hz, …) is [`dmm-cli mode`](#dmm-cli-mode
 | `connect` | Start measurement streaming |
 | `pause` | Stop measurement streaming |
 
+#### VC-880 / VC650BT / VC-890 commands
+
+| Command | Description |
+|---|---|
+| `hold` | Toggle Hold mode |
+| `rel` | Toggle relative (REL) mode |
+| `max_min_avg` | Cycle Max/Min/Avg recording |
+| `exit_max_min_avg` | Exit Max/Min/Avg recording |
+| `range_manual` | Switch to manual ranging |
+| `range_auto` | Return to auto-range |
+| `light` | Toggle backlight |
+| `select` | SHIFT/SETUP button (steps the dial position's functions) |
+
+None of these is confirmed on hardware (issues #13 and #14). Naming the
+function you want instead of stepping to it is [`dmm-cli mode`](#dmm-cli-mode).
+
 #### UT8803
 
 No remote commands — the meter streams continuously after connection.
@@ -326,8 +342,8 @@ dmm-cli --device ut181a command hold
 ### dmm-cli mode
 
 Switch the meter's function within the current dial position without touching
-the dial (UT61+/UT161, UT181A and mock). Run with no arguments to list the
-modes reachable now:
+the dial (UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and mock). Run with no
+arguments to list the modes reachable now:
 
 ```
 dmm-cli mode                 # list modes (* = live) and what to type for each
@@ -354,6 +370,10 @@ One caveat comes with that: Hz and Duty % are reported with the same mode byte
 from every dial position, so after moving the dial while the meter shows one
 of them, take a reading in another mode once — otherwise the listing may still
 be the previous position's.
+
+The Voltcraft VC-880/VC650BT and VC-890 work the same way through their
+SHIFT/SETUP button. Their dial tables come from the manuals and no meter has
+confirmed them yet — see `docs/verification-backlog.md`.
 
 **Example:**
 

@@ -30,6 +30,14 @@ pub(crate) fn build_command(cmd: u8) -> Vec<u8> {
     frame
 }
 
+/// The button the vendor DLL calls `Select` (spec §5, "SELECT button (cycle
+/// sub-function)"). Both meters' front panel labels it SHIFT/SETUP, and it is
+/// what steps a dial position through its sub-functions.
+pub(crate) const CMD_SELECT: u8 = 0x4C;
+
+/// What the front panel calls [`CMD_SELECT`], for messages the user reads.
+pub(crate) const SELECT_BUTTON_NAME: &str = "SHIFT/SETUP";
+
 /// Map a command name to its byte value.
 ///
 /// Command bytes are identical for VC-880 and VC-890.
@@ -42,7 +50,7 @@ pub(crate) fn command_byte(command: &str) -> Result<u8> {
         "range_auto" => Ok(0x47),
         "range_manual" => Ok(0x46),
         "light" => Ok(0x4B),
-        "select" => Ok(0x4C),
+        "select" => Ok(CMD_SELECT),
         _ => Err(Error::UnsupportedCommand(command.to_string())),
     }
 }
@@ -262,6 +270,8 @@ mod tests {
         assert_eq!(command_byte("hold").unwrap(), 0x4A);
         assert_eq!(command_byte("rel").unwrap(), 0x48);
         assert_eq!(command_byte("light").unwrap(), 0x4B);
+        // The mode driver presses the same byte the "select" command sends.
+        assert_eq!(command_byte("select").unwrap(), CMD_SELECT);
     }
 
     #[test]

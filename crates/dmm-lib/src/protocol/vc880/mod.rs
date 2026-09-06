@@ -13,16 +13,21 @@
 //! Based on ILSpy decompilation of Voltsoft DMSShare.dll.
 //! See docs/research/vc880/reverse-engineered-protocol.md
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::measurement::Measurement;
+use crate::protocol::cycle::{
+    self, CycleButton, CycleMeter, DialPosition, DialState, Ring, Settle,
+};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::vc8x0_common::{
-    RangeEntry, common_flags, main_display, parse_value, re, resolve_function, resolve_range,
+    CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags, main_display, parse_value, re,
+    resolve_function, resolve_range,
 };
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len};
+use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability, check_len};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
+use std::time::Duration;
 
 /// Live data message type byte.
 const MSG_TYPE_LIVE_DATA: u8 = 0x01;
@@ -119,10 +124,114 @@ fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static s
 
 use super::vc8x0_common::COMMANDS as VC880_COMMANDS;
 
+/// The dial, position by position, and the functions SHIFT/SETUP reaches on
+/// each -- [MANUAL], no hardware has confirmed it.
+///
+/// From the "Drehschalter (4)" figure on printed page 10 of the VC880 manual
+/// (the red symbols beside a position are its SHIFT/SETUP sub-functions, §3)
+/// and the §8 measurement procedures. Membership only: the manual says which
+/// symbol each position offers, never the press order, so the driver presses
+/// and reads the mode back. See `docs/research/vc880/reverse-engineered-protocol.md`
+/// §4.4, which also records where the manual's own text disagrees with its
+/// figure.
+///
+/// The mV position is listed first on purpose. Function 0x02 is the only code
+/// on two positions — the V position reports it for its 400 mV auto range
+/// (§4.2) — and with no history a mode lands on the position listed first
+/// among the smallest, which should be the mV dial: that is the position a
+/// meter sitting in 0x02 is most likely on.
+const DIAL: &[DialPosition] = &[
+    // mV⎓ / Hz % : DC mV, Frequency, Duty %
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x02, 0x03, 0x04],
+        }],
+    },
+    // V⎓ (red AC+DC): DC V, AC+DC V, and DC mV on the 400 mV auto range
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x00, 0x01, 0x02],
+        }],
+    },
+    // V~ : AC V alone — the figure gives this position no red symbol
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x05],
+        }],
+    },
+    // Lo : ACV low-pass, its own dial position (§8j)
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x12],
+        }],
+    },
+    // Ω (red diode, continuity)
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x06, 0x07, 0x08],
+        }],
+    },
+    // ⊣⊢ : Capacitance
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x09],
+        }],
+    },
+    // °C°F
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0A, 0x0B],
+        }],
+    },
+    // µA≂ : DC µA, AC µA
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0C, 0x0D],
+        }],
+    },
+    // mA≂ : DC mA, AC mA
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x0E, 0x0F],
+        }],
+    },
+    // A≂ : DC A, AC A
+    DialPosition {
+        rings: &[Ring {
+            button: CycleButton::Select,
+            modes: &[0x10, 0x11],
+        }],
+    },
+];
+
+/// How long a press takes to show up in the stream. Not hardware-tuned:
+/// nobody has timed a real VC-880.
+///
+/// No delay, because the meter streams and every read already waits for the
+/// next frame; the budget is in reads instead. Four of them covers the frames
+/// that were already in flight when the press landed and still name the old
+/// function.
+const SETTLE: Settle = Settle {
+    delay: Duration::ZERO,
+    reads: 4,
+};
+
 /// Protocol implementation for the Voltcraft VC-880 and VC650BT.
 pub struct Vc880Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
+    /// Which dial position the stream says the meter is on, for the mode
+    /// driver in [`crate::protocol::cycle`].
+    dial: DialState,
 }
 
 impl Default for Vc880Protocol {
@@ -152,6 +261,7 @@ impl Vc880Protocol {
                 max_aux_values: 0,
                 verification_issue: Some(13),
             },
+            dial: DialState::default(),
         }
     }
 }
@@ -175,7 +285,11 @@ impl Protocol for Vc880Protocol {
             "vc880",
             &framing::HEADER,
         )?;
-        parse_measurement(&payload)
+        let measurement = parse_measurement(&payload)?;
+        // The stream is the only place the meter states its function, so
+        // every reading is what keeps the dial position current.
+        self.dial.observe(DIAL, measurement.mode_raw);
+        Ok(measurement)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -197,6 +311,63 @@ impl Protocol for Vc880Protocol {
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         super::vc8x0_common::capture_steps()
+    }
+
+    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
+        cycle::mode_choices(self, current)
+    }
+
+    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
+        cycle::select_mode(self, transport, id)
+    }
+}
+
+impl CycleMeter for Vc880Protocol {
+    fn dial_positions(&self) -> &'static [DialPosition] {
+        DIAL
+    }
+
+    fn dial_state(&self) -> &DialState {
+        &self.dial
+    }
+
+    fn dial_state_mut(&mut self) -> &mut DialState {
+        &mut self.dial
+    }
+
+    fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
+        match button {
+            CycleButton::Select => {
+                debug!("vc880: pressing {SELECT_BUTTON_NAME} ({CMD_SELECT:#04x})");
+                // Nothing to read back here: the meter answers a command with
+                // a 0xFF Result frame, and `request_measurement`'s accept
+                // filter (type byte 0x01) already skips it.
+                transport.write(&super::vc8x0_common::build_command(CMD_SELECT))
+            }
+            CycleButton::Hz => Err(Error::UnsupportedCommand(format!(
+                "the VC-880 has no {} button",
+                self.button_name(button)
+            ))),
+        }
+    }
+
+    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
+        Protocol::request_measurement(self, transport).map(|m| m.mode_raw)
+    }
+
+    fn mode_label(&self, mode: u16) -> Cow<'static, str> {
+        resolve_function(FUNCTION_TABLE, mode as u8, "vc880").0
+    }
+
+    fn settle(&self) -> Settle {
+        SETTLE
+    }
+
+    fn button_name(&self, button: CycleButton) -> &'static str {
+        match button {
+            CycleButton::Select => SELECT_BUTTON_NAME,
+            CycleButton::Hz => "Hz/%",
+        }
     }
 }
 
@@ -259,6 +430,7 @@ mod tests {
     use super::*;
     use crate::measurement::MeasuredValue;
     use crate::protocol::test_support::snapshot;
+    use crate::transport::mock::MockTransport;
 
     /// Build a minimal 34-byte VC880 live data payload for testing.
     fn make_payload(function: u8, range: u8, main_display: &[u8; 7], status: [u8; 7]) -> Vec<u8> {
@@ -724,5 +896,110 @@ raw_payload=34"#
 0x11: A|10A - - - - - - - -
 0x12: V|4V V|40V V|400V V|1000V - - - - -"#
         );
+    }
+
+    // ---- dial table and mode switching ----
+
+    /// One live-data frame through `request_measurement`, the way the mode
+    /// driver gets its picture of the dial.
+    fn read_one(function: u8) -> (Vc880Protocol, Measurement) {
+        let payload = make_payload(function, 0x30, b"  1.234", zero_status());
+        let transport = MockTransport::new(vec![framing::test_frame_be16(&payload)]);
+        let mut proto = Vc880Protocol::new();
+        let m = proto
+            .request_measurement(&transport)
+            .expect("the frame parses");
+        (proto, m)
+    }
+
+    fn ids(choices: &[ModeChoice]) -> Vec<u16> {
+        choices.iter().map(|c| c.id).collect()
+    }
+
+    fn labels(choices: &[ModeChoice]) -> Vec<String> {
+        choices.iter().map(|c| c.label.to_string()).collect()
+    }
+
+    fn current_ids(choices: &[ModeChoice]) -> Vec<u16> {
+        choices.iter().filter(|c| c.current).map(|c| c.id).collect()
+    }
+
+    #[test]
+    fn the_dial_table_is_well_formed() {
+        cycle::assert_table_invariants(
+            DIAL,
+            // The V position reports DC mV for its 400 mV auto range, so
+            // 0x02 is deliberately on two positions.
+            &[0x02],
+            // The VC-880 has no Hz/% button; SHIFT/SETUP is the only one.
+            &[CycleButton::Select],
+            &|mode| resolve_function(FUNCTION_TABLE, mode as u8, "vc880").0,
+        );
+    }
+
+    #[test]
+    fn a_reading_records_the_dial_position() {
+        let (proto, _) = read_one(0x06);
+        assert_eq!(proto.dial.last_mode(), Some(0x06));
+        assert_eq!(proto.dial.position(), Some(4), "the Ω position");
+    }
+
+    /// 0x02 is on both the mV and the V position, and a fresh process has no
+    /// history to tell them apart. The mV dial is the guess.
+    #[test]
+    fn a_dc_mv_reading_without_history_lists_the_mv_position() {
+        let (proto, m) = read_one(0x02);
+        let choices = proto.mode_choices(&m);
+        assert_eq!(ids(&choices), vec![0x02, 0x03, 0x04]);
+        assert_eq!(labels(&choices), ["DC mV", "Frequency", "Duty %"]);
+        assert_eq!(current_ids(&choices), vec![0x02]);
+    }
+
+    /// From the V position the same code is reachable, so a meter that
+    /// auto-ranged down to 400 mV can still be switched back.
+    #[test]
+    fn the_v_position_lists_ac_dc_and_the_400_mv_code() {
+        let (proto, m) = read_one(0x00);
+        let choices = proto.mode_choices(&m);
+        assert_eq!(ids(&choices), vec![0x00, 0x01, 0x02]);
+        assert_eq!(current_ids(&choices), vec![0x00]);
+    }
+
+    #[test]
+    fn the_ohm_position_lists_diode_and_continuity() {
+        let (proto, m) = read_one(0x06);
+        let choices = proto.mode_choices(&m);
+        assert_eq!(ids(&choices), vec![0x06, 0x07, 0x08]);
+        assert_eq!(labels(&choices), ["Ω", "Diode", "Continuity"]);
+    }
+
+    #[test]
+    fn pressing_select_writes_one_shift_setup_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc880Protocol::new();
+        proto
+            .press(&transport, CycleButton::Select)
+            .expect("the frame is written");
+
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 1, "the VC-880 sends the frame bare");
+        assert_eq!(
+            writes[0],
+            super::super::vc8x0_common::build_command(0x4C),
+            "SHIFT/SETUP is command 0x4C"
+        );
+        assert_eq!(writes[0].len(), 6);
+    }
+
+    #[test]
+    fn pressing_hz_is_refused_without_writing() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc880Protocol::new();
+        let err = proto.press(&transport, CycleButton::Hz).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("Hz/%")),
+            "got {err:?}"
+        );
+        assert!(transport.written.borrow().is_empty());
     }
 }
