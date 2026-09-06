@@ -281,7 +281,10 @@ Two reporters have run the UT181A on a real meter, both over the CH9329
 (UT-D09) cable ([issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)).
 The start command, framing, the normal-format value layout, V DC,
 V AC + Hz and dual-thermocouple temperature are confirmed; the binaries
-keep the EXPERIMENTAL label until the items below are closed.
+keep the EXPERIMENTAL label until the items below are closed. A vendor
+trace of `UT181A.exe` V1.05 on 2026-09-06 added the mode- and
+range-command semantics (spec §6.1, §7.1) — evidence about what UNI-T's
+own software sends, not hardware confirmation.
 
 - ~~SET_MONITOR command required during init~~ — **VERIFIED** 2026-04-07
   by @alexander-magon on real UT181A (CH9329 cable). The meter does not
@@ -305,18 +308,32 @@ keep the EXPERIMENTAL label until the items below are closed.
   `crates/dmm-lib/src/protocol/ut181a/mod.rs`.
 - Mode word decoding (79 nibble-encoded uint16 modes) — `0x3111`
   (V DC), `0x4211` (°C) and `0x1121` (V AC Hz) verified on hardware;
-  the rest still need a meter. **Corrections from the 2026-06 review** (per
-  sigrok + antage, hardware pending): DC-current n1=2 codes
-  (0x8121/0x9121/0xA121) are AC+DC, not Hz; 0x4121 = mV DC Peak (sigrok
-  notes 0x4131 as a possible alternative — check on hardware); 0x5212 =
-  Continuity open-beeper and 0x6112 = Diode Alarm (not REL variants);
-  temperature n1 selects the display arrangement (T1(T2)/T2(T1)/
-  T1-T2/T2-T1) — the n1=1 arrangement is now hardware-confirmed to put
-  one probe on the main display and the other in aux1; the other three
-  are still community-sourced. HOLD command now sends `[0x12, 0x5A]`
-  (antage's button-code form) — confirm it toggles HOLD. COMP digits
-  read from the low nibble unshifted. Need at least one mode per family
-  to confirm the nibble decoder works broadly.
+  the rest still need a meter. **Vendor-confirmed 2026-09-06** from
+  `UT181A.exe` V1.05 (spec §6.1): the composition rule
+  `family | primary << 4 | secondary` is what the vendor app both sends
+  and decodes, and the per-family variant table (which primary variants
+  exist per dial position, their on-meter captions, and which offer REL)
+  is now written down. Still 3 modes hardware-confirmed, not 79 — the
+  vendor binary says what UNI-T's software sends, not what the meter
+  accepts. The 2026-06 corrections all survive the vendor trace:
+  DC-current n1=2 codes (0x8121/0x9121/0xA121) are AC+DC, not Hz;
+  0x4121 = mV DC Peak (the vendor's own label decoder has no 0x4131,
+  so sigrok's alternative can be dropped once hardware agrees);
+  0x5212 = Continuity open-beeper and 0x6112 = Diode Alarm (not REL
+  variants); temperature n1 selects the display arrangement
+  (T1(T2)/T2(T1)/T1-T2/T2-T1) — the n1=1 arrangement is hardware-
+  confirmed to put one probe on the main display and the other in aux1;
+  the other three are vendor-confirmed but not hardware-confirmed.
+  COMP digits read from the low nibble unshifted. Need at least one mode
+  per family to confirm the nibble decoder works broadly.
+- HOLD command `[0x12, 0x5A]` — **vendor-confirmed 2026-09-06**: the
+  wrapper at `0x8703e8` hard-codes the single payload byte `0x5A` and is
+  the Hold action's only call site, independently of antage. Still needs
+  a meter: confirm it actually toggles HOLD, and whether bare `[0x12]`
+  works too
+- mV AC+DC (`0x2141`) — the vendor UI emits it, but its own label
+  decoder has no case for family `0x21` with n1=4 (spec §6.1). Needs
+  hardware to say whether the meter accepts the word
 - Device-sent unit string parsing — "VDC", "VAC", "Hz", "ms" and
   Latin-1 "°C" (`0xB0 0x43`) verified on hardware; the remaining unit
   strings in spec §8 (`~`, `k~`, `M~`, `nS`, `nF`, `uF`, `dBV`, `dBm`,
@@ -339,7 +356,11 @@ keep the EXPERIMENTAL label until the items below are closed.
 - Range label lookup table — range byte 0x03 on V AC decodes to "600V",
   confirmed against a 239 V mains reading (2026-09-02), but the meter
   chose that range itself; **manual** range mode is still unverified,
-  as are the other families' ladders
+  as are the other families' ladders. **Vendor-confirmed 2026-09-06**
+  (spec §7.1): the ladders per family, that the index is 1-based, and
+  that A DC, A AC, Celsius, Fahrenheit, Beeper, ns and Diode have no
+  manual range. Duty and ms-Pulse ladders are new and have no community
+  cross-check at all
 - Misc2 flags: lead_error (bit 3), comp (bit 4), record (bit 5) — now
   parsed but not yet verified on real hardware. Bits 0 (auto-range) and
   1 (HV warning) confirmed 2026-09-02
@@ -354,9 +375,19 @@ keep the EXPERIMENTAL label until the items below are closed.
   UT61E+, but nobody has run the two together, and @diego351's older
   CP2110-equipped unit was never detected on macOS at all (with other
   software, before dmm-tools existed). Unverified, not known-broken
+- SET_MODE (0x01) — vendor-traced, implementation in progress, needs
+  hardware: switch V AC ↔ V AC Hz ↔ dBm and T1(T2) ↔ T1−T2 from the PC
+  and confirm the LCD follows. Also confirm the family-local rule — a
+  word from another dial family should be refused or ignored
+- SET_RANGE (0x02) — vendor-traced 1-based index semantics, needs
+  hardware: step a manual range on V DC and check the range byte the
+  meter reports back matches the index sent
+- SET_MIN_MAX (0x04) payload width — the vendor app sends **one** byte,
+  not the uint32 antage and sigrok describe (spec §4.2). The code sends
+  one byte; a meter needs to confirm MIN/MAX actually engages
 - **Not implemented**: recording protocol (0x0A-0x0F), saved measurement
-  retrieval (0x07-0x09), SET_MODE/SET_REFERENCE commands, timestamp
-  decoding, response types 0x03/0x04/0x05/0x72
+  retrieval (0x07-0x09), SET_REFERENCE command, timestamp decoding,
+  response types 0x03/0x04/0x05/0x72
 
 ### CP2110 feature reports (AN434)
 - (none pending)

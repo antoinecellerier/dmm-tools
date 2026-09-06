@@ -16,7 +16,7 @@ implementations that agree on the protocol details.
    independent implementation with recording download support
 3. **sigrok uni-t-ut181a driver** (C) --
    https://github.com/sigrokproject/libsigrok/tree/master/src/hardware/uni-t-ut181a --
-   the most complete implementation, includes COMP mode and all 97
+   the most complete implementation, includes COMP mode and all 79
    measurement modes
 4. **antage/cp211x_uart** (Rust crate) --
    https://github.com/antage/cp211x_uart -- CP2110/CP2114 UART
@@ -27,8 +27,28 @@ implementations that agree on the protocol details.
 
 No vendor software decompilation was originally needed for the CP2110
 protocol -- the community work is comprehensive. However, vendor
-software analysis was later performed to investigate CH9329 (WCH)
-cable support (see "Phase 2: CH9329 Transport Analysis" below).
+software analysis was later performed twice: to investigate CH9329 (WCH)
+cable support (see "Phase 2: CH9329 Transport Analysis" below), and to
+put the mode- and range-setting commands on a second, independent
+footing (see "Phase 3" below).
+
+The community sources do document SET_MODE (0x01), SET_RANGE (0x02) and
+the 79 mode words -- that material is [KNOWN] in
+`reverse-engineered-protocol.md` §4.2, §6 and §7 and predates Phase 3.
+What they do not give is the *semantics* around them: which mode words
+are reachable from which dial position, what each nibble-1 variant is
+called on the meter, which variants offer REL, the per-family manual
+range ladders, and which families have no manual range at all. Phase 3
+adds those, corrects one payload width the community specs get wrong
+(SET_MIN_MAX), and independently re-sources the opcodes and payload
+layouts that were previously agreement-between-implementations only.
+
+Phase 3 used **only** the vendor binary that was already approved and
+extracted for Phase 2 (`references/ut181/vendor-software/extracted/UT181A/UT181A.exe`).
+No new community source was read for it, and no reference implementation
+was consulted while tracing; the comparison against antage and sigrok in
+"What this settles" happens after the fact, against the tables already in
+`reverse-engineered-protocol.md`.
 
 ## What Each Source Provides
 
@@ -53,7 +73,7 @@ Independent implementation confirming:
 ### sigrok uni-t-ut181a driver
 
 The most complete implementation:
-- All 97 measurement modes parsed
+- All 79 measurement modes parsed
 - COMP (comparator) mode support
 - Full recording protocol
 - Bargraph data parsing
@@ -78,7 +98,9 @@ All three implementations were compared for agreement on:
 - Checksum algorithm (16-bit LE sum of length + payload bytes)
 - Command codes (0x01-0x12)
 - Measurement packet format (all variants)
-- Mode word values (97 modes)
+- Mode word values (79 modes; the figure was 97 in the first draft of
+  this document and was corrected in the 2026-06 review — both sigrok
+  and antage define 79)
 - Range byte values (0x00-0x08)
 - Recording protocol (start, info, data download)
 - Timestamp format (packed 32-bit)
@@ -120,7 +142,7 @@ Checked existing project files:
 | Frame structure (0xAB 0xCD header, uint16 LE length, uint16 LE checksum) | 3 implementations agree |
 | Checksum = byte sum of length field + payload | 3 implementations agree |
 | All 15 command codes (0x01-0x12) | antage + sigrok + loblab |
-| All 97 mode words (0x1111-0xA231) | antage + sigrok |
+| All 79 mode words (0x1111-0xA231) | antage + sigrok |
 | Range bytes 0x00-0x08 | antage + sigrok + loblab |
 | Measurement packet format (all 4 variants) | antage + sigrok |
 | COMP mode fields | sigrok driver |
@@ -398,6 +420,339 @@ confirming a shared data processing pipeline.
 | CH9329 operating mode | Mode 0 (composite KB+mouse+custom HID) or Mode 3 (custom HID only)? `lsusb -v` from device owner needed | If Mode 0, need to select the correct HID interface (not keyboard/mouse). `hidapi` filtering by usage page should handle this |
 | Config sequence necessity | Is the 4-chunk config read/write required before data flows, or does the CH9329 come pre-configured? | Can implement without it initially — if data doesn't flow, add config init |
 | Cable availability | Is UT-D09 now standard with new UT181A purchases, or a regional/production variant? | No impact on implementation |
+
+## Phase 3: Mode and range commands (TfrmSetting trace)
+
+September 2026. Source: the vendor binary only
+(`references/ut181/vendor-software/extracted/UT181A/UT181A.exe`, V1.05,
+already approved and extracted in Phase 2). Result:
+`reverse-engineered-protocol.md` §4.2, §6.1 and §7.1.
+
+### Why the first vendor pass missed SET_MODE and SET_RANGE
+
+The April 2026 pass read the Ghidra headless decompilation
+(`UT181A_decompiled.txt`, 13,980 functions, 518K lines) and found
+opcodes 0x03, 0x05, 0x07-0x0A, 0x0C, 0x0E and 0x0F -- but not SET_MODE
+(0x01), SET_RANGE (0x02), SET_MIN_MAX (0x04), SAVE_MEAS (0x06),
+GET_REC_SAMPLES (0x0D) or HOLD (0x12).
+
+That is a gap in the decompilation, not in the binary. Ghidra's
+auto-analysis creates functions from call targets; a Delphi event
+handler is never called directly -- it is reached through the form's
+RTTI method table -- so nothing marks it as code. Of the 69 published
+`TfrmSetting` handlers, **67 are absent** from the decompile. (The two
+it did get, `edtRelValueKeyPress` at `0x86d2ac` and `miRecordViewClick`
+at `0x86f230`, happen to be call targets elsewhere.) The output jumps
+straight from `FUN_00868128` to `FUN_0086cfc0`, and again from
+`FUN_0086d600` to `FUN_0086eea0`.
+
+The six send wrappers those handlers use -- `0x8702b8`, `0x8702d8`,
+`0x8703a4`, `0x8703e8`, `0x8703fc`, `0x870588` -- are missing for the
+same reason, one step removed: their *only* call sites are inside
+handlers Ghidra never turned into code, so nothing referenced them
+either. Their neighbours in the same 0x8702xx-0x8705xx run
+(`0x870298`, `0x8702f8`, `0x87030c`, `0x870344`, `0x870364`,
+`0x870378`, `0x870384`, `0x870390`, `0x870408`, `0x87059c`,
+`0x8705b0`) are all present -- those are reached from ordinary
+methods. That asymmetry is what made the first pass look like a
+complete command list when it was not.
+
+The three steps below close that gap without re-running Ghidra.
+
+### Step 1 -- recover handler addresses from the Delphi method table
+
+A Delphi class's published method table is a run of
+`[u16 entry_len][u32 VA][shortstring name]` records with
+`entry_len == len(name) + 7`. Scanning the raw PE bytes for that
+invariant recovers every handler address with its source-level name:
+
+```python
+import re, struct
+d = open('references/ut181/vendor-software/extracted/UT181A/UT181A.exe',
+         'rb').read()
+for m in re.finditer(rb'[\x03-\x40][A-Za-z_][A-Za-z0-9_]{2,63}', d):
+    off = m.start(); n = d[off]; name = d[off+1:off+1+n]
+    if len(name) != n or not re.fullmatch(rb'[A-Za-z_][A-Za-z0-9_]*', name):
+        continue
+    if off < 6:
+        continue
+    elen = struct.unpack_from('<H', d, off-6)[0]
+    addr = struct.unpack_from('<I', d, off-4)[0]
+    if elen == n + 7 and 0x401000 <= addr < 0x8d0000 \
+            and 0x46a400 <= off <= 0x46b200:
+        print(f"file 0x{off:x}  addr 0x{addr:08x}  {name.decode()}")
+```
+
+The `0x46a400..0x46b200` window is `TfrmSetting`'s table; find it by
+searching for the class-name shortstring `b'\x0bTfrmSetting'` (file
+offset `0x46acf2`) and bracketing around it, or drop the window
+entirely to dump every class in the binary. 69 entries come out,
+including:
+
+```
+addr 0x0086d31c  FormCreate
+addr 0x0086ceac  btnUpdate1Click
+addr 0x0086cf0c  cbBoxRangeChange
+addr 0x0086dffc  rbtnFXClick
+addr 0x0086e9d8  rbtnVAC_M1Click     ... one per primary radio ...
+addr 0x0086cd0c  actHoldExecute
+addr 0x0086cd18  actMaxMinExecute
+addr 0x0086ce80  btnMaxMinExitClick
+addr 0x0086ce90  btnMaxMinSaveClick
+addr 0x0086ce9c  btnRestartClick
+addr 0x0086d28c  edtRelValueChange
+addr 0x0086f2c4  tmrRelTimer
+```
+
+The same trick reads the published *field* table (`vmtFieldTable`,
+entries `[u32 offset][u16 class index][shortstring name]`), which turns
+the `[ebx+0x438]` operands in the handlers into component names --
+`rbtnVAC_F1`, `rbtnVAC_F2`, `rbtnVAC_F3`, `PageControl1` at `+0x408`,
+and so on. 287 entries.
+
+### Step 2 -- disassemble those addresses directly
+
+`objdump` maps PE sections itself, so the virtual addresses from step 1
+work as-is:
+
+```sh
+objdump -d -M intel --start-address=0x86ceac --stop-address=0x86cfc0 \
+    references/ut181/vendor-software/extracted/UT181A/UT181A.exe
+```
+
+Delphi's `register` convention (`eax`, `edx`, `ecx`, then stack) makes
+the send wrappers trivial to read. `0x8702b8`, for instance, is nine
+instructions: split `dx` into two stack bytes, `push 2`, point `ecx` at
+them, `mov dl,0x1`, `call 0x870408`. Two helper addresses recur and are
+worth naming once: `0x4aeb9c` is `TControl.SetEnabled` (it writes the
+bool to `[self+0x61]` and sends `CM_ENABLEDCHANGED`, `0xB00B`) and
+`0x4aecdc` is `SetCaption`. `0x42a588` is the `Sleep` import thunk.
+
+Delphi `UnicodeString` literals are addressed at their first character,
+with `length` as a `u32` at `addr-4`, so a caption operand like
+`mov edx,0x86ea4c` resolves with:
+
+```python
+o = 0x400 + 0x86ea4c - 0x401000        # .text: VA 0x401000 -> file 0x400
+n = struct.unpack_from('<I', d, o-4)[0]
+print(d[o:o+2*n].decode('utf-16-le'))  # -> 'VAC'
+```
+
+### Step 3 -- parse the form resource (binary DFM)
+
+The click handlers only manipulate radio buttons; the `Tag` values that
+actually compose the mode word, and the range combo contents, live in
+the form resource. `TfrmSetting`'s binary DFM starts at file offset
+`0x620334` (`TPF0` signature). The format is: object = class
+shortstring, name shortstring, then `(name, value-type byte, value)`
+property triples until a `0` byte, then child objects until a `0` byte.
+
+```python
+import struct
+d = open('references/ut181/vendor-software/extracted/UT181A/UT181A.exe',
+         'rb').read()
+p = 0x620334 + 4                       # skip the 'TPF0' signature
+
+def sstr():
+    global p
+    n = d[p]; p += 1; s = d[p:p+n]; p += n
+    return s.decode('latin1')
+
+def value():
+    global p
+    t = d[p]; p += 1                   # Delphi TValueType
+    if t == 0: return None                                     # vaNull
+    if t == 1:                                                 # vaList
+        out = []
+        while d[p] != 0: out.append(value())
+        p += 1; return out
+    if t == 2: v = struct.unpack_from('<b', d, p)[0]; p += 1; return v
+    if t == 3: v = struct.unpack_from('<h', d, p)[0]; p += 2; return v
+    if t == 4: v = struct.unpack_from('<i', d, p)[0]; p += 4; return v
+    if t == 5: p += 10; return 'extended'
+    if t in (6, 7): return sstr()                  # vaString / vaIdent
+    if t == 8: return False
+    if t == 9: return True
+    if t == 10:                                                # vaBinary
+        n = struct.unpack_from('<I', d, p)[0]; p += 4 + n; return f'bin{n}'
+    if t == 11:                                                # vaSet
+        out = []
+        while True:
+            e = sstr()
+            if not e: break
+            out.append(e)
+        return set(out)
+    if t == 12:                                                # vaLString
+        n = struct.unpack_from('<I', d, p)[0]; p += 4
+        s = d[p:p+n].decode('latin1'); p += n; return s
+    if t == 13: return None                                    # vaNil
+    if t == 14:                                                # vaCollection
+        out = []
+        while d[p] != 0:
+            if d[p] in (2, 3, 4): value()
+            item = {}
+            while d[p] != 0:
+                k = sstr(); item[k] = value()
+            p += 1; out.append(item)
+        p += 1; return out
+    if t == 15: v = struct.unpack_from('<f', d, p)[0]; p += 4; return v
+    if t in (16, 17, 21): p += 8; return 'num8'
+    if t == 18:                                                # vaWString
+        n = struct.unpack_from('<I', d, p)[0]; p += 4
+        s = d[p:p+2*n].decode('utf-16-le'); p += 2*n; return s
+    if t == 19: v = struct.unpack_from('<q', d, p)[0]; p += 8; return v
+    if t == 20:                                                # vaUTF8String
+        n = struct.unpack_from('<I', d, p)[0]; p += 4
+        s = d[p:p+n].decode('utf-8', 'replace'); p += n; return s
+    raise ValueError(f'unknown value type {t} at 0x{p-1:x}')
+
+def obj(depth):
+    global p
+    if d[p] & 0xF0 == 0xF0:            # ffInherited / ffChildPos / ffInline
+        f = d[p]; p += 1
+        if f & 0x02: p += 2
+    cls = sstr(); name = sstr(); props = {}
+    while d[p] != 0:
+        k = sstr(); props[k] = value()
+    p += 1
+    kids = []
+    while d[p] != 0:
+        kids.append(obj(depth + 1))
+    p += 1
+    return {'class': cls, 'name': name, 'props': props,
+            'children': kids, 'depth': depth}
+
+KEEP = ('Tag', 'Caption', 'OnClick', 'Visible', 'ItemIndex',
+        'Items.Strings')
+
+def walk(o):
+    keep = {k: v for k, v in o['props'].items() if k in KEEP}
+    print('  ' * o['depth'] + f"{o['class']} {o['name']} {keep}")
+    for c in o['children']: walk(c)
+
+walk(obj(0))
+```
+
+Output (abridged -- 21 tab sheets, 287 components, matching the field
+table count from step 1):
+
+```
+TTabSheet SheetVAC {'Tag': 4352, 'Caption': '   VAC    '}
+  TGroupBox GroupBoxRange11 {'Tag': 3, 'Caption': ' Range '}
+    TComboBox cbBoxVACRange {'Tag': 4, 'ItemIndex': 0,
+      'Items.Strings': ['Auto', '0 - 6', '0 - 60', '0 - 600', '0 - 1000']}
+  TGroupBox GroupBoxMenu11 {'Tag': 1, 'Caption': ' Primary Mode'}
+    TRadioButton rbtnVAC_M1 {'Tag': 1, 'Caption': 'VAC',
+      'OnClick': 'rbtnVAC_M1Click'}
+    ... M2 'VAC,HZ', M3 'Peak', M4 'LowPass', M5 'dBV', M6 'dBm' ...
+  TGroupBox GroupBoxFX11 {'Tag': 2, 'Caption': ' Secondary Mode '}
+    TRadioButton rbtnVAC_F1 {'Tag': 1, ...}
+    TRadioButton rbtnVAC_F2 {'Tag': 2, 'Caption': 'REL', ...}
+    TRadioButton rbtnVAC_F3 {'Tag': 3, 'Caption': 'Peak', ...}
+```
+
+Group-box `Tag` values are the key: 1 = Primary Mode, 2 = Secondary
+Mode, 3 = Range, 4 = Rel entry. Both the mode-word builder and the
+receive-side dialog refresh look controls up by those tags.
+
+### Function map
+
+| Address | Role |
+|---------|------|
+| `0x870408` | Generic sender `(conn, opcode, payload, len)` -- header, length, opcode, payload, checksum |
+| `0x870298` | Checksum helper (byte sum, u16) |
+| `0x8702b8` | **SET_MODE 0x01** -- u16 LE mode word |
+| `0x8702d8` | **SET_RANGE 0x02** -- `is_auto ? 0 : index`, one byte |
+| `0x8702f8` | DEL_SAVED_MEAS 0x09 -- u16 |
+| `0x87030c` | DEL_RECORDING 0x0F -- u16 |
+| `0x870344` | SET_MONITOR 0x05 -- one byte. The wrapper sends `arg == 0`, so its own parameter is inverted relative to the wire byte; the wire byte itself is 1 = stream, matching the hardware-verified `AB CD 04 00 05 01 0A 00` |
+| `0x870364` | GET_SAVED_MEAS 0x07 -- u16 |
+| `0x870378` | GET_SAVED_COUNT 0x08 -- no payload |
+| `0x870384` | GET_REC_COUNT 0x0E -- no payload |
+| `0x870390` | GET_REC_INFO 0x0C -- u16 |
+| `0x8703a4` | **GET_REC_SAMPLES 0x0D** -- u16 index + u32 offset (6 bytes) |
+| `0x8703e8` | **HOLD 0x12** -- single payload byte `0x5A` |
+| `0x8703fc` | **SAVE_MEAS 0x06** -- no payload |
+| `0x870588` | **SET_MIN_MAX 0x04** -- **one** byte |
+| `0x87059c` | SET_REFERENCE 0x03 -- float32 (4 bytes) |
+| `0x8705b0` | START_RECORDING 0x0A -- 17-byte payload: name, NUL at +9, u16 interval at +11, u32 duration at +13 |
+| `0x86d31c` | `FormCreate` -- assigns the 20 tab-sheet base words |
+| `0x86d700` | Mode-word builder: `ActivePage.Tag + (primary.Tag << 4) + secondary.Tag` |
+| `0x86d72c` | Primary-radio click tail: caches the new primary nibble, re-selects the secondary radio |
+| `0x86ceac` | `btnUpdate1Click` -- composes, compares with the live word, sends SET_MODE, `Sleep(100)` |
+| `0x86cf0c` | `cbBoxRangeChange` -- sends SET_RANGE from the combo's `ItemIndex`, `Sleep(100)` |
+| `0x86cfc0` | Receive-side dialog refresh: decomposes the meter's word into tab / primary / secondary |
+| `0x86d1c4` | Receive-side range refresh: writes the meter's range byte into the combo's `ItemIndex` |
+| `0x86d524` | Finds the active tab's range combo (group box `Tag == 3`) |
+| `0x86cd0c` / `0x86cd18` / `0x86ce80` / `0x86ce90` / `0x86ce9c` | Hold, Max/Min toggle, Max/Min exit, Save, Restart actions |
+| `0x86f2c4` | `tmrRelTimer` -- parses the REL edit box and sends SET_REFERENCE |
+| `FUN_0085e69c` | Receive-side label decoder: switches on the mode word's high byte and `low & 0xF0` to build the record grid's "Pri" / "Sec" strings |
+
+### What this settles
+
+**Corrections.** One item where the vendor binary contradicts the
+community specs outright:
+
+- **SET_MIN_MAX takes one byte, not four.** `0x870588` pushes a payload
+  length of 1, making the whole frame 8 bytes. antage and sigrok both
+  describe a uint32.
+
+**New -- not in any community source.** The opcodes themselves were
+already documented; what was missing is how a host is meant to drive
+them:
+
+- **The composition rule.** `word = ActivePage.Tag + (primary.Tag << 4)
+  + secondary.Tag`, with the receive side decomposing the same way. The
+  nibble *encoding* was already in §6; what is new is that the vendor
+  app treats the high byte as the dial position and therefore **never
+  emits a word from a different family** -- so a host cannot change the
+  measurement function over USB, only variants within the dial's own
+  family.
+- **Per-family primary variants, their on-meter captions, and which of
+  them offer REL** (`reverse-engineered-protocol.md` §6.1). Community
+  tables list mode words; they do not say which are siblings of which,
+  nor that REL is withheld on every Hz and Peak variant.
+- **Per-family manual range ladders**, that the SET_RANGE index is
+  1-based into them, and that A DC, A AC, Celsius, Fahrenheit, Beeper,
+  ns and Diode have **no** manual range at all (§7.1). The Duty and
+  ms-Pulse ladders have no counterpart in the community range table.
+
+**Independently re-sourced.** Previously [KNOWN] only as
+agreement-between-implementations, now also read out of the vendor
+binary:
+
+- SET_MODE = `0x01` + u16 LE mode word (`0x8702b8`); SET_RANGE = `0x02`
+  + one byte, `0` = auto (`0x8702d8`); SAVE_MEAS = `0x06` with no
+  payload; GET_REC_SAMPLES = `0x0D` with u16 index + u32 offset; and the
+  frame builder itself (`0x870408`).
+- **HOLD's payload byte is `0x5A`**, hard-coded in `0x8703e8` -- the
+  `[0x12, 0x5A]` form antage uses, previously the only implementation
+  that transmitted 0x12 at all.
+- Several mode rows the 2026-06 review had flagged: `0x3121` = V DC
+  AC+DC (not Hz), `0x4121` = mV DC Peak (not sigrok's alternative
+  `0x4131`), DC-current `n1 = 2` = AC+DC, and `0x5212` / `0x6112` as
+  Beeper open-circuit and Diode alarm rather than REL variants.
+
+### What remains open
+
+- **Everything above is hardware-unverified.** The vendor app's
+  behaviour is evidence about what UNI-T's own software sends, not
+  proof the meter accepts it. `docs/verification-backlog.md` carries
+  the asks.
+- **The reply frame was not traced.** Type `0x01` with `"OK"` / `"ER"`
+  stays community-sourced; how (or whether) the vendor app checks it
+  after a SET_MODE was not followed through.
+- **mV AC+DC (`0x2141`).** The vendor UI emits it, but its own label
+  decoder has no case for family `0x21` with `n1 = 4`. Flagged
+  [UNVERIFIED] in §6.1.
+- **`n0 = 3`.** A third "Peak" secondary radio exists on every tab but
+  is hidden or disabled everywhere, so the vendor app never emits a
+  word ending in 3. Whether the meter would accept one is unknown.
+  (One handler, `rbtnVAC_M6Click`, does not touch that radio at all --
+  it relies on whichever handler ran before it having disabled it.)
+- **No trace of COMP.** The `actComp` action is `Visible = False` in the
+  form resource, so the vendor app ships COMP mode switched off in the
+  UI and there is no call site to read.
 
 ## File Inventory
 
