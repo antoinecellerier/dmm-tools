@@ -16,6 +16,7 @@
 
 ### CLI
 
+- **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period) and `temp2` (second thermocouple) stand in for a UT181A in the CLI and GUI.
@@ -24,6 +25,8 @@
 
 ### Bug fixes
 
+- **A UT181A command the meter refuses is reported as an error** — every command reported as sent, whether the meter acted on it or not.
+- **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.
 - **Capture reports' confirmation line names every flag** — a sample taken with HV, LOW BAT, LEAD ERR, COMP or REC showed only "[AUTO]".
 - **Peak MIN/MAX badges show in the reading display** — screen readers announced them but the badge row left them out; badges now follow the CSV flags column order.
 - **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked the two integral cells the header named, shifting every sub-value column.

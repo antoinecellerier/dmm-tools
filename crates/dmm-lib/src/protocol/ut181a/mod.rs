@@ -18,24 +18,24 @@
 //!
 //! - Recording protocol (commands 0x0A-0x0F): start/stop/retrieve/delete recordings
 //! - Saved measurement retrieval (commands 0x07-0x09): get/delete saved readings
-//! - SET_MODE command (0x01): changing measurement mode remotely
 //! - SET_REFERENCE command (0x03): setting relative reference value
 //! - Saved measurement packet parsing (response type 0x03)
 //! - Recording info/data packet parsing (response types 0x04, 0x05)
 //! - Reply data parsing (response type 0x72)
 //! - Timestamp decoding (packed 32-bit format, protocol spec Section 9)
 //! - Bargraph value extraction (detected but not exposed)
-//! - Secondary displays in the GUI or in any CSV (they are parsed, and
-//!   `dmm-cli` prints them in text, JSON and capture output)
+
+pub(crate) mod mode;
 
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode16};
+use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability, check_len, unknown_mode16};
 use crate::transport::Transport;
-use log::debug;
+use log::{debug, warn};
 use std::borrow::Cow;
+use std::time::{Duration, Instant};
 
 /// Decode a UT181A mode word (uint16 LE) into a human-readable string.
 ///
@@ -210,6 +210,7 @@ const UT181A_COMMANDS: &[&str] = &[
     "hold",
     "range",
     "auto",
+    "rel",
     "minmax",
     "exit_minmax",
     "monitor",
@@ -231,9 +232,26 @@ fn build_command(payload: &[u8]) -> Vec<u8> {
     frame
 }
 
+/// SET_MODE (opcode 0x01) carrying `word` as uint16 LE.
+///
+/// See docs/research/ut181/reverse-engineered-protocol.md
+/// §6.1 Mode switching (SET_MODE) -- [VENDOR].
+fn build_set_mode(word: u16) -> Vec<u8> {
+    let [lo, hi] = word.to_le_bytes();
+    build_command(&[0x01, lo, hi])
+}
+
 /// Protocol implementation for the UT181A.
 pub struct Ut181aProtocol {
     rx_buf: Vec<u8>,
+    /// Mode word of the last measurement parsed. SET_MODE, REL and SET_RANGE
+    /// are all relative to it — the meter never tells us its dial position
+    /// except through the stream, so a command issued before the first
+    /// reading takes one itself (`require_last_mode`).
+    last_mode_raw: Option<u16>,
+    /// Range byte of the last measurement parsed, so "range" steps the ladder
+    /// from where the meter actually is rather than restarting at 1.
+    last_range_raw: Option<u8>,
     profile: DeviceProfile,
 }
 
@@ -247,21 +265,140 @@ impl Ut181aProtocol {
     pub fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(256),
+            last_mode_raw: None,
+            last_range_raw: None,
             profile: DeviceProfile {
                 family_name: "UT181A",
                 model_name: "UNI-T UT181A",
                 // Two reporters have confirmed V DC, V AC + Hz and dual-thermocouple
                 // temperature on a real meter (issue #5), but the REL / MIN/MAX /
-                // Peak / COMP formats, the remote commands and the CP2110 cable have
-                // never run against one. Stays Experimental so the badge keeps
-                // linking to the verification issue; README and
-                // docs/supported-devices.md say the same.
+                // Peak / COMP formats and the CP2110 cable have never run against
+                // one. The remote commands — SET_MODE, SET_RANGE, REL, MIN/MAX —
+                // are traced from the vendor Windows app rather than guessed
+                // (research spec §6.1), but no meter has answered one yet, and the
+                // reply frame that would say whether it did is itself unverified.
+                // Stays Experimental so the badge keeps linking to the verification
+                // issue; README and docs/supported-devices.md say the same.
                 stability: Stability::Experimental,
                 supported_commands: UT181A_COMMANDS,
                 // aux1 + aux2 + COMP High + COMP Low.
                 max_aux_values: 4,
                 verification_issue: Some(5),
             },
+        }
+    }
+
+    /// Write a command frame, then wait for the meter's reply code.
+    ///
+    /// The meter answers a command with a type-0x01 packet carrying "OK" or
+    /// "ER" (spec §4.1). "ER" is the only signal that a mode or range the dial
+    /// doesn't allow was refused, so it becomes an error the caller can show;
+    /// without it a rejected command looked exactly like an accepted one.
+    ///
+    /// Measurement frames that arrive while we wait are dropped — the meter
+    /// keeps streaming through a command. Whatever follows the reply stays in
+    /// `rx_buf`, so the next `request_measurement` resumes mid-stream instead
+    /// of losing the bytes a blind drain used to throw away.
+    ///
+    /// The reply framing is hardware-unverified, so silence is treated as
+    /// success: a meter that answers nothing must not fail every command.
+    fn send_frame(&mut self, transport: &dyn Transport, frame: &[u8], what: &str) -> Result<()> {
+        /// How long to wait for the reply before assuming the meter is not
+        /// going to send one.
+        const REPLY_TIMEOUT: Duration = Duration::from_millis(300);
+        /// Guard against a transport that returns empty without blocking,
+        /// which would otherwise busy-spin until the deadline. Same reasoning
+        /// as `framing::read_uart_bytes`.
+        const MAX_EMPTY_READS: usize = 256;
+
+        debug!("ut181a: sending {what}: {frame:02X?}");
+        transport.write(frame)?;
+
+        let deadline = Instant::now() + REPLY_TIMEOUT;
+        let mut empty_reads = 0usize;
+        let mut tmp = [0u8; 64];
+        loop {
+            match framing::extract_frame_abcd_2byte_le16(&self.rx_buf) {
+                Ok(Some((payload, consumed))) => {
+                    self.rx_buf.drain(..consumed);
+                    // Reply code packets are type 0x01; anything else is the
+                    // measurement stream running underneath us.
+                    if payload.first() == Some(&0x01) {
+                        return reply_result(&payload, what);
+                    }
+                    debug!(
+                        "ut181a: dropping a {} byte frame while waiting for the {what} reply",
+                        payload.len()
+                    );
+                    continue;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    // Drop the corrupt data rather than re-extracting it every
+                    // pass; `request_measurement` resyncs on the next header.
+                    warn!("ut181a: frame error waiting for the {what} reply: {e}, clearing buffer");
+                    self.rx_buf.clear();
+                }
+            }
+
+            // `checked_duration_since` rather than a subtraction: a backward
+            // clock jump must not panic here.
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .unwrap_or_default();
+            let timeout_ms = i32::try_from(remaining.as_millis()).unwrap_or(i32::MAX);
+            if timeout_ms == 0 || empty_reads >= MAX_EMPTY_READS {
+                debug!("ut181a: no reply to {what} within {REPLY_TIMEOUT:?}, assuming accepted");
+                return Ok(());
+            }
+            let n = transport.read_timeout(&mut tmp, timeout_ms)?;
+            if n == 0 {
+                empty_reads += 1;
+            } else {
+                empty_reads = 0;
+                self.rx_buf.extend_from_slice(&tmp[..n]);
+            }
+        }
+    }
+
+    /// The mode word the last measurement reported, taking a reading first if
+    /// none has arrived yet.
+    ///
+    /// Every mode-relative command needs the dial position, and a fresh
+    /// process has none: opening the device only runs `init`, which starts
+    /// the stream without reading from it. So a one-shot `dmm-cli command
+    /// rel` has to consume one frame itself before it can build the command.
+    /// A meter that does not answer surfaces as the read's own error — a
+    /// `Timeout` already says the stream is silent, which is the point where
+    /// "enable Communication on the meter" is the useful advice.
+    fn require_last_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
+        match self.last_mode_raw {
+            Some(mode) => Ok(mode),
+            // `request_measurement` records `last_mode_raw` from every frame
+            // it parses, so a successful read always yields a mode word.
+            None => Ok(self.request_measurement(transport)?.mode_raw),
+        }
+    }
+}
+
+/// Turn a type-0x01 reply packet into a result.
+///
+/// Payload is `[0x01, 'O', 'K']` or `[0x01, 'E', 'R']` (spec §4.1). Anything
+/// else is logged and treated as acceptance: the reply format is
+/// hardware-unverified, so an unrecognised answer is more likely our gap than
+/// a refusal.
+fn reply_result(payload: &[u8], what: &str) -> Result<()> {
+    match &payload[1..] {
+        [b'O', b'K', ..] => {
+            debug!("ut181a: {what} acknowledged");
+            Ok(())
+        }
+        [b'E', b'R', ..] => Err(Error::CommandRejected(format!(
+            "{what} rejected by the meter — check the dial position"
+        ))),
+        other => {
+            debug!("ut181a: unrecognised reply to {what}: {other:02X?}");
+            Ok(())
         }
     }
 }
@@ -289,7 +426,12 @@ impl Protocol for Ut181aProtocol {
             "ut181a",
             &framing::HEADER,
         )?;
-        parse_measurement(&payload)
+        let measurement = parse_measurement(&payload)?;
+        // The stream is the only place the meter states its dial position, so
+        // record it for the mode-relative commands.
+        self.last_mode_raw = Some(measurement.mode_raw);
+        self.last_range_raw = Some(measurement.range_raw);
+        Ok(measurement)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -299,31 +441,42 @@ impl Protocol for Ut181aProtocol {
             // this) sends the two-byte payload; sending bare [0x12] is
             // untested. Hardware check pending.
             "hold" => build_command(&[0x12, 0x5A]),
+            // REL is not its own opcode: it is SET_MODE with nibble 0 flipped
+            // between 1 (plain) and 2 (relative), which is also how it turns
+            // back off (research spec §6.1).
+            "rel" => {
+                let current = self.require_last_mode(transport)?;
+                if !mode::rel_supported(current) {
+                    return Err(Error::UnsupportedCommand(format!(
+                        "rel in {} ({current:#06x})",
+                        decode_mode_word(current)
+                    )));
+                }
+                build_set_mode(current ^ 0x3)
+            }
+            // Step the dial's manual range ladder from wherever the meter
+            // reported it, wrapping back to the first manual range.
             "range" => {
-                // Cycle to next manual range (range + 1, wrapping)
-                // Without state tracking, just toggle to range 1
-                build_command(&[0x02, 0x01])
+                let current = self.require_last_mode(transport)?;
+                let last = self.last_range_raw.unwrap_or(0);
+                let Some(next) = mode::next_manual_range(current, last) else {
+                    return Err(Error::UnsupportedCommand(format!(
+                        "range in {} ({current:#06x}): fixed-range mode",
+                        decode_mode_word(current)
+                    )));
+                };
+                build_command(&[0x02, next])
             }
             "auto" => build_command(&[0x02, 0x00]),
-            "minmax" => build_command(&[0x04, 0x01, 0x00, 0x00, 0x00]),
-            "exit_minmax" => build_command(&[0x04, 0x00, 0x00, 0x00, 0x00]),
+            // SET_MIN_MAX takes a single byte, not the uint32 the community
+            // specs list — the vendor app sends two-byte frames (§6.1).
+            "minmax" => build_command(&[0x04, 0x01]),
+            "exit_minmax" => build_command(&[0x04, 0x00]),
             "monitor" => build_command(&[0x05, 0x01]),
             "save" => build_command(&[0x06]),
             _ => return Err(Error::UnsupportedCommand(command.to_string())),
         };
-        debug!("ut181a: sending command {command}: {:02X?}", frame);
-        transport.write(&frame)?;
-
-        // Drain any response
-        self.rx_buf.clear();
-        let mut tmp = [0u8; 64];
-        for _ in 0..3 {
-            let n = transport.read_timeout(&mut tmp, 100)?;
-            if n == 0 {
-                break;
-            }
-        }
-        Ok(())
+        self.send_frame(transport, &frame, command)
     }
 
     fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
@@ -332,6 +485,25 @@ impl Protocol for Ut181aProtocol {
 
     fn profile(&self) -> &DeviceProfile {
         &self.profile
+    }
+
+    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
+        mode::mode_choices(current.mode_raw)
+    }
+
+    /// Only words from the dial's own family are sent: the vendor app never
+    /// crosses a family boundary, and the meter would refuse it anyway.
+    /// Validation happens before the write, so a stray id costs no I/O.
+    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
+        let current = self.require_last_mode(transport)?;
+        if !mode::mode_choices(current).iter().any(|c| c.id == id) {
+            return Err(Error::UnsupportedCommand(format!(
+                "mode {id:#06x} is not reachable from {} ({current:#06x}) — turn the dial first",
+                decode_mode_word(current)
+            )));
+        }
+        let frame = build_set_mode(id);
+        self.send_frame(transport, &frame, &format!("mode {}", decode_mode_word(id)))
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
@@ -1079,14 +1251,9 @@ mod tests {
 
     #[test]
     fn build_command_set_minmax_on() {
-        let frame = build_command(&[0x04, 0x01, 0x00, 0x00, 0x00]);
-        // AB CD 07 00 04 01 00 00 00 0C 00
-        assert_eq!(
-            frame,
-            vec![
-                0xAB, 0xCD, 0x07, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x0C, 0x00
-            ]
-        );
+        let frame = build_command(&[0x04, 0x01]);
+        // AB CD 04 00 04 01 09 00
+        assert_eq!(frame, vec![0xAB, 0xCD, 0x04, 0x00, 0x04, 0x01, 0x09, 0x00]);
     }
 
     #[test]
@@ -1436,5 +1603,366 @@ mod tests {
         } else {
             panic!("expected Normal aux1 value");
         }
+    }
+
+    // --- Remote control: mode selection, REL, range, replies ---------------
+    //
+    // Every command below is traced from the vendor Windows app and has never
+    // run against a meter (research spec §6.1), so these tests pin the bytes
+    // we chose to send, not behaviour anyone has observed.
+
+    use crate::transport::mock::MockTransport;
+
+    /// A protocol that has already parsed one measurement, so the
+    /// mode-relative commands have a dial position to work from.
+    fn proto_in(mode_word: u16, range: u8) -> (Ut181aProtocol, MockTransport) {
+        let mut payload = make_payload(mode_word, 1.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
+        payload[5] = range;
+        let mock = MockTransport::new(vec![build_command(&payload)]);
+        let mut proto = Ut181aProtocol::new();
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.mode_raw, mode_word);
+        assert_eq!(m.range_raw, range);
+        (proto, mock)
+    }
+
+    /// The single frame a command wrote.
+    fn only_write(mock: &MockTransport) -> Vec<u8> {
+        let written = mock.written.borrow();
+        assert_eq!(
+            written.len(),
+            1,
+            "expected exactly one write: {written:02X?}"
+        );
+        written[0].clone()
+    }
+
+    #[test]
+    fn select_mode_sends_set_mode_with_the_mode_word() {
+        let (mut proto, mock) = proto_in(0x1111, 0);
+        proto.select_mode(&mock, 0x1121).unwrap();
+        // AB CD | len 05 00 | 01 (SET_MODE) 21 11 (0x1121 LE) | checksum
+        // 05+00+01+21+11 = 0x38.
+        assert_eq!(
+            only_write(&mock),
+            hex("AB CD 05 00 01 21 11 38 00"),
+            "SET_MODE 0x1121"
+        );
+    }
+
+    #[test]
+    fn select_mode_refuses_a_word_from_another_family() {
+        let (mut proto, mock) = proto_in(0x1111, 0);
+        // V DC is a different dial position: the meter can't get there on its own.
+        let err = proto.select_mode(&mock, 0x3111).unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(_)),
+            "got {err:?}, want UnsupportedCommand"
+        );
+        assert!(
+            mock.written.borrow().is_empty(),
+            "a rejected id must cost no I/O"
+        );
+    }
+
+    /// With no reading yet the command takes one itself, so a silent stream
+    /// surfaces as the read's own timeout — and nothing is sent on a guess.
+    #[test]
+    fn select_mode_without_a_reading_fails_on_the_read() {
+        let mock = MockTransport::new(vec![]);
+        let mut proto = Ut181aProtocol::new();
+        let err = proto.select_mode(&mock, 0x1121).unwrap_err();
+        assert!(matches!(err, Error::Timeout), "got {err:?}, want Timeout");
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// REL is SET_MODE with nibble 0 flipped, in both directions.
+    #[test]
+    fn rel_toggles_nibble_zero_of_the_mode_word() {
+        let (mut proto, mock) = proto_in(0x1111, 0);
+        proto.send_command(&mock, "rel").unwrap();
+        // 05+00+01+12+11 = 0x29.
+        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 12 11 29 00"));
+
+        let (mut proto, mock) = proto_in(0x1112, 0);
+        proto.send_command(&mock, "rel").unwrap();
+        // 05+00+01+11+11 = 0x28.
+        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 11 11 28 00"));
+    }
+
+    /// A fresh process has never read the stream — opening the device only
+    /// runs `init` — so a one-shot `command rel` takes a reading itself to
+    /// learn which mode word to toggle.
+    #[test]
+    fn rel_reads_the_mode_when_none_has_arrived_yet() {
+        let frame = build_command(&make_payload(
+            0x1111,
+            1.0,
+            0x20,
+            b"VAC\0\0\0\0\0",
+            0x00,
+            0x01,
+        ));
+        let mock = MockTransport::new(vec![frame]);
+        let mut proto = Ut181aProtocol::new();
+
+        proto.send_command(&mock, "rel").unwrap();
+
+        // 0x1111 -> 0x1112. A fresh protocol has no other source for that
+        // word than the queued frame, so the read landed before the write.
+        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 12 11 29 00"));
+        assert_eq!(proto.last_mode_raw, Some(0x1111));
+    }
+
+    /// ...and with the stream silent, the read's timeout is the error: no
+    /// frame goes out carrying a guessed mode word.
+    #[test]
+    fn rel_without_a_reading_fails_on_the_read() {
+        let mock = MockTransport::new(vec![]);
+        let mut proto = Ut181aProtocol::new();
+        let err = proto.send_command(&mock, "rel").unwrap_err();
+        assert!(matches!(err, Error::Timeout), "got {err:?}, want Timeout");
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// REL rides on the variant, not only on the plain mode — the vendor app
+    /// offers it on LowPass, dB and AC+DC too (research spec §6.1).
+    #[test]
+    fn rel_works_on_the_other_rel_capable_variants() {
+        // V AC LowPass 0x1141 -> 0x1142. 05+00+01+42+11 = 0x59.
+        let (mut proto, mock) = proto_in(0x1141, 0);
+        proto.send_command(&mock, "rel").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 42 11 59 00"));
+
+        // V DC AC+DC 0x3121 -> 0x3122. 05+00+01+22+31 = 0x59.
+        let (mut proto, mock) = proto_in(0x3121, 0);
+        proto.send_command(&mock, "rel").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 05 00 01 22 31 59 00"));
+    }
+
+    /// ...and is withheld on every Hz and Peak variant, on the differential
+    /// temperature arrangements, and on continuity and diode — which spend
+    /// nibble 0 = 2 on the open beeper and the alarm instead.
+    #[test]
+    fn rel_is_unsupported_where_the_vendor_disables_it() {
+        for word in [
+            0x1121, // V AC Hz
+            0x1131, // V AC Peak
+            0x4231, // °C T1-T2
+            0x8221, // µA AC Hz
+            0x5211, // Continuity
+            0x6111, // Diode
+        ] {
+            let (mut proto, mock) = proto_in(word, 0);
+            let err = proto.send_command(&mock, "rel").unwrap_err();
+            assert!(
+                matches!(err, Error::UnsupportedCommand(_)),
+                "{word:#06x}: got {err:?}, want UnsupportedCommand"
+            );
+            assert!(
+                mock.written.borrow().is_empty(),
+                "{word:#06x} wrote a frame"
+            );
+        }
+    }
+
+    #[test]
+    fn range_steps_the_manual_ladder_and_wraps() {
+        // V DC has four manual ranges; auto (0) steps to the first.
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        proto.send_command(&mock, "range").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 01 07 00"));
+
+        // The top of the ladder wraps back to 1, not to auto.
+        let (mut proto, mock) = proto_in(0x3111, 4);
+        proto.send_command(&mock, "range").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 01 07 00"));
+
+        // Mid-ladder: 1 -> 2.
+        let (mut proto, mock) = proto_in(0x3111, 1);
+        proto.send_command(&mock, "range").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 02 08 00"));
+    }
+
+    #[test]
+    fn range_is_unsupported_on_a_fixed_range_mode() {
+        let (mut proto, mock) = proto_in(0x4211, 0); // °C
+        let err = proto.send_command(&mock, "range").unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(_)),
+            "got {err:?}, want UnsupportedCommand"
+        );
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// SET_MIN_MAX takes one byte, not the uint32 the community specs list.
+    #[test]
+    fn minmax_sends_a_single_argument_byte() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        proto.send_command(&mock, "minmax").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 04 01 09 00"));
+
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        proto.send_command(&mock, "exit_minmax").unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 04 00 08 00"));
+    }
+
+    #[test]
+    fn mode_choices_lists_the_dial_family() {
+        let (proto, _mock) = proto_in(0x1111, 0);
+        let m = make_payload(0x1111, 1.0, 0x20, b"VAC\0\0\0\0\0", 0x00, 0x01);
+        let m = parse_measurement(&m).unwrap();
+        let choices = proto.mode_choices(&m);
+        assert_eq!(choices.len(), 6, "V AC: plain, Hz, Peak, LPF, dBV, dBm");
+        assert_eq!(choices[0].label, "V AC");
+        let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
+        assert_eq!(current, vec![0x1111]);
+    }
+
+    #[test]
+    fn mode_choices_covers_the_temperature_arrangements() {
+        let (proto, _mock) = proto_in(0x4211, 0);
+        let m = parse_measurement(&make_payload(
+            0x4231,
+            1.0,
+            0x10,
+            b"\xB0C\0\0\0\0\0\0",
+            0x00,
+            0x01,
+        ))
+        .unwrap();
+        let choices = proto.mode_choices(&m);
+        let labels: Vec<&str> = choices.iter().map(|c| c.label.as_ref()).collect();
+        assert_eq!(labels, vec!["°C", "°C T2", "°C T1-T2", "°C T2-T1"]);
+        let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
+        assert_eq!(current, vec![0x4231]);
+    }
+
+    #[test]
+    fn mode_choices_pairs_continuity_with_its_open_beeper() {
+        let (proto, _mock) = proto_in(0x5211, 0);
+        let m = parse_measurement(&make_payload(
+            0x5212,
+            1.0,
+            0x20,
+            b"~\0\0\0\0\0\0\0",
+            0x00,
+            0x01,
+        ))
+        .unwrap();
+        let choices = proto.mode_choices(&m);
+        let labels: Vec<&str> = choices.iter().map(|c| c.label.as_ref()).collect();
+        assert_eq!(labels, vec!["Continuity", "Continuity (open)"]);
+        // Nibble 0 = 2 is a second function here, so it is its own choice —
+        // not the REL companion of the first.
+        let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
+        assert_eq!(current, vec![0x5212]);
+    }
+
+    /// With REL on, the meter reports the companion word (0x1112, 0x1142…).
+    /// The choice list still has to point at the variant underneath it, or
+    /// the UI would show no mode selected.
+    #[test]
+    fn mode_choices_flags_the_variant_behind_an_active_rel() {
+        for (reported, expected) in [(0x1112u16, 0x1111u16), (0x1142, 0x1141)] {
+            let (proto, _mock) = proto_in(reported, 0);
+            let m = parse_measurement(&make_payload(
+                reported,
+                1.0,
+                0x20,
+                b"VAC\0\0\0\0\0",
+                0x00,
+                0x01,
+            ))
+            .unwrap();
+            let choices = proto.mode_choices(&m);
+            let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
+            assert_eq!(current, vec![expected], "from {reported:#06x}");
+        }
+    }
+
+    #[test]
+    fn an_ok_reply_completes_the_command() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        mock.push_response(build_command(&[0x01, b'O', b'K']));
+        proto.send_command(&mock, "auto").unwrap();
+    }
+
+    #[test]
+    fn an_er_reply_becomes_a_rejection() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        mock.push_response(build_command(&[0x01, b'E', b'R']));
+        let err = proto.send_command(&mock, "auto").unwrap_err();
+        assert!(
+            matches!(err, Error::CommandRejected(_)),
+            "got {err:?}, want CommandRejected"
+        );
+    }
+
+    /// The reply framing is hardware-unverified, so a silent meter must not
+    /// turn every command into an error.
+    #[test]
+    fn silence_is_treated_as_acceptance() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        proto.send_command(&mock, "auto").unwrap();
+    }
+
+    /// The meter keeps streaming through a command, so the reply can arrive
+    /// behind a measurement frame.
+    #[test]
+    fn a_measurement_frame_before_the_reply_is_skipped() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        mock.push_response(build_command(&make_payload(
+            0x3111,
+            2.0,
+            0x20,
+            b"VDC\0\0\0\0\0",
+            0x00,
+            0x01,
+        )));
+        mock.push_response(build_command(&[0x01, b'E', b'R']));
+        let err = proto.send_command(&mock, "auto").unwrap_err();
+        assert!(
+            matches!(err, Error::CommandRejected(_)),
+            "got {err:?}, want CommandRejected"
+        );
+    }
+
+    /// Bytes trailing the reply belong to the stream. The old blind drain
+    /// threw them away; the next `request_measurement` must still see them.
+    #[test]
+    fn bytes_after_the_reply_stay_buffered_for_the_next_measurement() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        let mut burst = build_command(&[0x01, b'O', b'K']);
+        burst.extend_from_slice(&build_command(&make_payload(
+            0x3111,
+            7.5,
+            0x20,
+            b"VDC\0\0\0\0\0",
+            0x00,
+            0x01,
+        )));
+        mock.push_response(burst);
+
+        proto.send_command(&mock, "auto").unwrap();
+        // The mock has nothing left to hand out, so this can only come from
+        // the bytes that arrived with the reply.
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("7.50"));
+    }
+
+    /// Every command the profile advertises must be accepted from a mode that
+    /// supports it, and nothing else may be.
+    #[test]
+    fn advertised_commands_are_accepted() {
+        for &cmd in UT181A_COMMANDS {
+            let (mut proto, mock) = proto_in(0x3111, 0);
+            assert!(
+                proto.send_command(&mock, cmd).is_ok(),
+                "UT181A_COMMANDS lists '{cmd}' but send_command rejects it in V DC"
+            );
+        }
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        assert!(proto.send_command(&mock, "nonexistent").is_err());
     }
 }

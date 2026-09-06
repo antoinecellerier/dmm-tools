@@ -287,12 +287,17 @@ dmm-cli command <ACTION>     # send a command
 | Command | Description |
 |---|---|
 | `hold` | Toggle Hold mode |
-| `range` | Set manual range 1 |
+| `range` | Step to the next manual range for the current dial position |
 | `auto` | Return to auto-range |
+| `rel` | Toggle relative (REL) mode |
 | `minmax` | Enable Min/Max recording |
 | `exit_minmax` | Disable Min/Max recording |
 | `monitor` | Enable streaming (SET_MONITOR) |
 | `save` | Save current measurement to device memory |
+
+`range` is refused in fixed-range modes; `rel` in continuity, diode,
+differential temperature and any mode's Hz or Peak variant. Switching function
+within a dial position (V AC → V AC Hz, …) is [`dmm-cli mode`](#dmm-cli-mode).
 
 #### UT171 commands
 
