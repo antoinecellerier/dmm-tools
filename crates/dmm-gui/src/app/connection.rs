@@ -1,10 +1,11 @@
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::Stability;
+use dmm_lib::protocol::{ModeChoice, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Transport;
 use eframe::egui;
 use log::{error, info, warn};
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
@@ -16,6 +17,24 @@ pub(crate) enum ThreadControl {
     /// Halt (`true`) or resume (`false`) acquisition. Halting stops the meter
     /// being polled at all — it is not a display-side freeze.
     SetPaused(bool),
+}
+
+/// A command the UI asks the acquisition thread to send to the meter.
+pub(crate) enum RemoteCommand {
+    /// A named button command (`hold`, `range`, …) from the remote controls.
+    Named(String),
+    /// Switch to one of the modes `Dmm::mode_choices` listed, by its id.
+    SelectMode(u16),
+}
+
+impl std::fmt::Display for RemoteCommand {
+    /// The subject of the failure toast: "Command 'hold' failed: …".
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Named(name) => write!(f, "Command '{name}'"),
+            Self::SelectMode(_) => f.write_str("Mode switch"),
+        }
+    }
 }
 
 /// Upper bound on the configured sample interval.
@@ -96,6 +115,14 @@ pub(crate) enum DmmMessage {
     /// A failure the GUI itself diagnosed — a panicking thread, or a meter
     /// that stopped answering. No library error stands behind these.
     ErrorText(String),
+    /// A command the user sent was refused or could not be sent. Shown as a
+    /// toast, not as a connection issue: the link is fine and the meter is
+    /// still streaming, so neither the help text nor a reconnect applies.
+    CommandFailed(String),
+    /// Modes the meter can be switched into from its current dial position.
+    /// Sent when the mode changes and after a successful switch; empty for
+    /// families without remote mode selection.
+    ModeChoices(Vec<ModeChoice>),
     /// Waiting for meter response (consecutive timeout count).
     WaitingForMeter(u32),
 }
@@ -137,11 +164,29 @@ fn establish_connection<T: Transport>(
 pub(super) struct ThreadContext {
     pub msg_tx: mpsc::Sender<DmmMessage>,
     pub ctrl_rx: mpsc::Receiver<ThreadControl>,
-    pub cmd_rx: mpsc::Receiver<String>,
+    pub cmd_rx: mpsc::Receiver<RemoteCommand>,
     pub ctx: egui::Context,
     pub query_name: bool,
     pub sample_interval_ms: u32,
     pub stop_flag: Arc<AtomicBool>,
+}
+
+/// The mode a reading was in, as far as the mode-choice list is concerned:
+/// the raw word plus the decoded text.
+///
+/// The text is part of the key because the choice list is not always a pure
+/// function of the mode word. The mock device keeps one word per dial position
+/// and cycles between scenarios underneath it (Temp, TempDual and TempDiff all
+/// report 0x0A), and a family whose choices depend on more than the word would
+/// behave the same way. Keying on the word alone leaves the dropdown marking a
+/// mode the meter has already left, so picking the live one does nothing.
+type ModeKey = (u16, Cow<'static, str>);
+
+/// Whether `m` needs its mode choices re-listed, given the mode of the reading
+/// they were last sent for. `None` — a fresh connection, or a mode the user
+/// just selected — always re-lists.
+fn mode_choices_stale(last: Option<&ModeKey>, m: &Measurement) -> bool {
+    last.is_none_or(|(raw, text)| *raw != m.mode_raw || *text != m.mode)
 }
 
 /// Run the measurement loop on a background thread, generic over transport type.
@@ -194,6 +239,9 @@ where
         .with_cancel(move || sleep_stop.load(Ordering::Relaxed));
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
+    // Mode of the last reading whose mode choices were sent. `None` forces
+    // the next reading to re-list them.
+    let mut last_mode: Option<ModeKey> = None;
     loop {
         if stop_flag.load(Ordering::Relaxed) || !handle_control(&ctrl_rx, &mut paused) {
             info!("background thread: stopping");
@@ -204,8 +252,21 @@ where
         // `dmm_mut()` so the underlying `Dmm` stays owned by the stream
         // across command sends and doesn't reset its tick schedule.
         while let Ok(cmd) = cmd_rx.try_recv() {
-            if let Err(e) = stream.dmm_mut().send_command(&cmd) {
-                warn!("background thread: command failed: {e}");
+            let result = match &cmd {
+                RemoteCommand::Named(name) => stream.dmm_mut().send_command(name),
+                RemoteCommand::SelectMode(id) => stream.dmm_mut().select_mode(*id),
+            };
+            match (result, &cmd) {
+                // Which entry is live has changed even where the mode word
+                // has not (the mock keeps one word per dial position), so
+                // the list is re-sent with the next reading.
+                (Ok(()), RemoteCommand::SelectMode(_)) => last_mode = None,
+                (Ok(()), RemoteCommand::Named(_)) => {}
+                (Err(e), _) => {
+                    warn!("background thread: {cmd} failed: {e}");
+                    let _ = msg_tx.send(DmmMessage::CommandFailed(format!("{cmd} failed: {e}")));
+                    ctx.request_repaint();
+                }
             }
         }
 
@@ -220,6 +281,13 @@ where
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
                 protocol_errors = 0;
+                // Only when the mode changes: the list is the same for every
+                // reading in between, and this runs per sample.
+                if mode_choices_stale(last_mode.as_ref(), &m) {
+                    last_mode = Some((m.mode_raw, m.mode.clone()));
+                    let choices = stream.dmm().mode_choices(&m);
+                    let _ = msg_tx.send(DmmMessage::ModeChoices(choices));
+                }
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
                     break;
                 }
@@ -309,6 +377,8 @@ where
                 }
                 stream = MeasurementStream::new(&mut dmm, tick);
                 protocol_errors = 0;
+                // The dial may have moved while the link was down.
+                last_mode = None;
             }
         }
 
@@ -336,6 +406,8 @@ pub(super) fn handle_thread_panic(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::MeasuredValue;
 
     #[test]
     fn no_messages_keeps_running() {
@@ -393,6 +465,45 @@ mod tests {
         drop(tx);
         let mut paused = true;
         assert!(!handle_control(&rx, &mut paused));
+    }
+
+    fn reading(mode_raw: u16, mode: &'static str) -> Measurement {
+        Measurement {
+            mode: mode.into(),
+            mode_raw,
+            ..Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default())
+        }
+    }
+
+    /// The re-list has to survive being run per sample: an unchanged mode must
+    /// not keep rebuilding and resending the list.
+    #[test]
+    fn mode_choices_are_listed_once_per_mode() {
+        let m = reading(0x0A, "Temperature");
+        assert!(mode_choices_stale(None, &m), "first reading must list");
+        let key = (m.mode_raw, m.mode.clone());
+        assert!(!mode_choices_stale(Some(&key), &m));
+    }
+
+    /// The mock cycles Temp / Temp dual / Temp diff under one mode word, and
+    /// the live entry moves with each. Keying on the word alone left the
+    /// dropdown marking a mode the meter had already left.
+    #[test]
+    fn mode_choices_are_relisted_when_only_the_mode_text_changes() {
+        let key = (0x0A, Cow::Borrowed("Temperature"));
+        assert!(mode_choices_stale(
+            Some(&key),
+            &reading(0x0A, "Temperature (dual)")
+        ));
+    }
+
+    #[test]
+    fn mode_choices_are_relisted_when_the_mode_word_changes() {
+        let key = (0x0A, Cow::Borrowed("Temperature"));
+        assert!(mode_choices_stale(
+            Some(&key),
+            &reading(0x00, "Temperature")
+        ));
     }
 
     /// A paused thread with nothing to do returns to the caller so queued

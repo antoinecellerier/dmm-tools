@@ -24,7 +24,7 @@ mod transform_ui;
 mod whats_new;
 
 use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::registry;
+use dmm_lib::protocol::{ModeChoice, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui::{self, Color32};
 use std::sync::atomic::AtomicBool;
@@ -38,6 +38,7 @@ use crate::graph::Graph;
 use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
 use appearance::{font_definitions, install_text_styles};
+use connection::RemoteCommand;
 use dmm_lib::stats::SeriesStats;
 use export::ExportOutcome;
 use layout::ContentLayout;
@@ -187,6 +188,9 @@ pub(super) struct Connection {
     pub(super) feedback_url: String,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
+    /// Modes the meter can be switched into from its current dial position,
+    /// as last listed by the acquisition thread. Empty when it offers none.
+    pub(super) mode_choices: Vec<ModeChoice>,
     /// When true, incoming measurements are ignored (connection stays alive).
     pub(super) paused: bool,
     pub(super) last_error: Option<ConnectionIssue>,
@@ -203,7 +207,7 @@ pub(super) struct Connection {
     /// acquisition thread's pacing sleep can bail out on it mid-tick.
     /// `ctrl_tx` stays the control path; this is the wake signal.
     stop_flag: Option<Arc<AtomicBool>>,
-    pub(super) cmd_tx: Option<mpsc::Sender<String>>,
+    pub(super) cmd_tx: Option<mpsc::Sender<RemoteCommand>>,
     /// Reconnect on next frame (device selection changed while connected).
     pub(super) needs_reconnect: bool,
 }
@@ -216,6 +220,7 @@ impl Default for Connection {
             experimental: false,
             feedback_url: String::new(),
             supported_commands: Vec::new(),
+            mode_choices: Vec::new(),
             paused: false,
             last_error: None,
             waiting_timeouts: 0,
@@ -362,7 +367,15 @@ impl App {
 
     pub(super) fn send_command(&self, cmd: &str) {
         if let Some(tx) = &self.connection.cmd_tx {
-            let _ = tx.send(cmd.to_string());
+            let _ = tx.send(RemoteCommand::Named(cmd.to_string()));
+        }
+    }
+
+    /// Ask the meter to switch to one of the modes in
+    /// `connection.mode_choices`. A refusal comes back as a toast.
+    pub(super) fn select_mode(&self, id: u16) {
+        if let Some(tx) = &self.connection.cmd_tx {
+            let _ = tx.send(RemoteCommand::SelectMode(id));
         }
     }
 
@@ -544,6 +557,9 @@ impl eframe::App for App {
                             .as_ref()
                             .map_or(0usize, |m| m.aux_values.len())
                             .hash(&mut h);
+                        // The mode selector is a framed control, a little
+                        // taller than the plain label it replaces.
+                        display::mode_switch_offered(&self.connection.mode_choices).hash(&mut h);
                         self.settings.show_stats.hash(&mut h);
                         self.settings.show_specs.hash(&mut h);
                         self.big_meter_mode.hash(&mut h);
@@ -567,14 +583,18 @@ impl eframe::App for App {
                                 self.meter_fit.content_height
                             };
                             let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                            let (scale, measured_ratios) = display::show_reading_large(
+                            let (scale, measured_ratios, picked_mode) = display::show_reading_large(
                                 ui,
                                 self.last_measurement.as_ref(),
                                 content_h,
                                 &self.meter_fit.reading_ratios,
                                 &tc,
                                 !self.transform.is_identity(),
+                                &self.connection.mode_choices,
                             );
+                            if let Some(id) = picked_mode {
+                                self.select_mode(id);
+                            }
                             let after_reading = ui.cursor().top();
 
                             if !minimal {

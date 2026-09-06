@@ -27,19 +27,24 @@ impl App {
     /// centre panel (wide).
     pub(super) fn show_reading_column(&mut self, ui: &mut Ui, layout: ContentLayout) {
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-        match layout {
+        let picked_mode = match layout {
             ContentLayout::Wide => display::show_reading(
                 ui,
                 self.last_measurement.as_ref(),
                 &tc,
                 !self.transform.is_identity(),
+                &self.connection.mode_choices,
             ),
             ContentLayout::Narrow => display::show_reading_compact(
                 ui,
                 self.last_measurement.as_ref(),
                 &tc,
                 !self.transform.is_identity(),
+                &self.connection.mode_choices,
             ),
+        };
+        if let Some(id) = picked_mode {
+            self.select_mode(id);
         }
         let controls_top = ui.cursor().top();
         self.show_remote_controls(ui, 1.0);

@@ -11,7 +11,8 @@ use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
 use super::connection::{
-    self, DmmMessage, ThreadContext, ThreadControl, handle_thread_panic, run_device_thread,
+    self, DmmMessage, RemoteCommand, ThreadContext, ThreadControl, handle_thread_panic,
+    run_device_thread,
 };
 use super::plot_input::{PlotInput, resolve_plot_input};
 use super::{App, ConnectionState};
@@ -82,7 +83,7 @@ impl App {
 
         let (msg_tx, msg_rx) = mpsc::channel();
         let (ctrl_tx, ctrl_rx) = mpsc::channel();
-        let (cmd_tx, cmd_rx) = mpsc::channel::<String>();
+        let (cmd_tx, cmd_rx) = mpsc::channel::<RemoteCommand>();
         let stop_flag = Arc::new(AtomicBool::new(false));
         self.connection.rx = Some(msg_rx);
         self.connection.ctrl_tx = Some(ctrl_tx);
@@ -172,6 +173,7 @@ impl App {
         self.connection.experimental = false;
         self.connection.feedback_url.clear();
         self.connection.supported_commands.clear();
+        self.connection.mode_choices.clear();
         self.connection.paused = false;
         self.connection.reconnect_attempt = 0;
         self.connection.reconnect_last_error = None;
@@ -235,6 +237,9 @@ impl App {
                     }
                     self.connection.feedback_url = feedback_url;
                     self.connection.supported_commands = cmds;
+                    // A reconnect may find the dial elsewhere; the thread
+                    // re-lists the choices with its first reading.
+                    self.connection.mode_choices.clear();
                     self.connection.device_name = if name.is_empty() {
                         None
                     } else {
@@ -363,6 +368,12 @@ impl App {
                     if self.connection.state == ConnectionState::Disconnected {
                         clear_channel = true;
                     }
+                }
+                DmmMessage::CommandFailed(msg) => {
+                    self.toast = Some((msg, true, Instant::now()));
+                }
+                DmmMessage::ModeChoices(choices) => {
+                    self.connection.mode_choices = choices;
                 }
             }
         }

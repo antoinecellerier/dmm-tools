@@ -77,6 +77,15 @@ success/failure) and expire after 4 seconds.
   MIN/MAX timestamps. Shown in every layout — the narrow layout condenses them
   to a single summary line. Single-display meters show nothing extra.
 - Mode and range label below in smaller text
+- On meters that can be switched between modes over USB (UT181A), the mode
+  label is a dropdown (`V AC Hz ▾`): it lists only the modes the current dial
+  position allows, marks the live one with `●`, and picking another switches
+  the meter. A switch the meter refuses shows a toast. Dial positions that
+  allow only one mode (Ohm, nS, Cap, Hz, Duty, Pulse Width) keep the plain
+  label, as do meters without USB mode switching.
+  Keyboard: Tab to the readout, Enter or Space opens the list on the live
+  mode, Up/Down (Home/End) move, Enter or Space picks, Esc or Tab closes
+  without a change.
 - Active flags shown as colored badges:
   - **AUTO** — auto-range active
   - **HOLD** — display frozen on meter
@@ -505,6 +514,7 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
 - Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the **Customize colors** disclosure header, the graph minimap, the recording-panel resize divider, and the left side-panel resize handle.
 - Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the 2D saturation/value square and the 1D hue gradient also accept arrow keys (2 % step, horizontal for saturation/hue, vertical for value).
+- The mode dropdown under the reading opens on Enter or Space with the live mode focused; Up/Down move, Enter picks, Esc or Tab closes.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
 - The `?` keyboard-shortcut help overlay traps focus inside while open and restores focus to the `?` button when closed (Esc or Ctrl+W). The version label opens a separate **What's New** OS window — that window has its own focus management, but closing it restores focus to the version label in the main window.
 

@@ -30,5 +30,6 @@ paths:
 - `allow_drag(false)` also suppresses pointer position events; use `plot.reset()` per frame to pin the view while keeping events.
 - `plot.reset()` also clears egui_plot's `hidden_items`, so its `Legend` cannot act as a show/hide control while the view is pinned — paint a static key and put the toggles in the toolbar (the graph's **Show:** chips).
 - After mode changes or data clears, call `plot.reset()` to avoid stale bounds from the previous state.
+- Popups and dropdowns (`ComboBox`, `Popup::menu`) leave keyboard focus on the opener, so an opened popup is unreachable without Tab and Tab walks out of it. Every popup must move focus into itself on the frame it opens, handle Arrow/Enter/Esc, close on Tab, and return focus to the opener on close — `color_edit` in `app/controls.rs` and `show_mode_readout` in `display.rs` are the pattern.
 - `set_pixels_per_point()` and `set_visuals()` called every frame reset egui's internal panel state (resize positions, scroll offsets). Only call when the value changes.
 - egui API naming is inconsistent — verify method names against docs (`fill_color()` not `color()`, `Vec2b` not `Axis` for `allow_drag`/`allow_zoom`).
