@@ -829,7 +829,10 @@ fn lookup_range_label(mode_word: u16, range: u8) -> &'static str {
         (0x7, 0x1, 6) => "6MHz",
         (0x7, 0x1, 7) => "60MHz",
 
-        // Duty cycle (0x7, sub 0x2), Pulse width (0x7, sub 0x3): fixed range
+        // Duty cycle (0x7, sub 0x2), Pulse width (0x7, sub 0x3): the vendor
+        // range combo holds four items (60/600/6000/60000, see the spec's
+        // §7.1) but no source says what the LCD calls them, so the rungs
+        // stay unnamed and `range_choices` offers none of them.
         (0x7, _, _) => "",
 
         // Temperature (0x4, sub 0x2/0x3): fixed range
@@ -2121,6 +2124,27 @@ mod tests {
         ))
         .unwrap();
         assert!(proto.choices(Setting::Range, &m).is_empty());
+    }
+
+    /// Duty cycle has a four-item vendor ladder but no rung labels: a blank
+    /// entry can be neither picked nor confirmed, so nothing is offered.
+    #[test]
+    fn an_unnamed_ladder_offers_nothing() {
+        let (proto, _mock) = proto_in(0x7211, 0);
+        let m = parse_measurement(&make_payload(
+            0x7211,
+            50.0,
+            0x20,
+            b"%\0\0\0\0\0\0\0",
+            0x00,
+            0x01,
+        ))
+        .unwrap();
+        assert!(proto.choices(Setting::Range, &m).is_empty());
+        assert!(
+            mode::range_choices(0x7311, 0, true).is_empty(),
+            "pulse width"
+        );
     }
 
     #[test]

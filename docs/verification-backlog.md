@@ -562,6 +562,14 @@ own software sends, not hardware confirmation.
   range byte itself is wanted. `dmm-cli --device ut181a command range`
   still steps the ladder a rung at a time from the last range the meter
   reported, so it is the fallback if a named switch is refused
+- Duty cycle (0x7211) and pulse width (0x7311) range labels — the vendor
+  form's range combo holds four items for each (spec §7.1: 60 / 600 / 6000 /
+  60000) but no source says what the LCD calls those rungs, so `get range`
+  offers nothing there and the GUI shows a plain label. Needs hardware: on
+  the Hz dial switched to Duty, `dmm-cli --device ut181a command range`
+  four times with `read --count 1` after each, noting the LCD's range
+  annunciator and the `"range"` field; then `command auto`. The labels the
+  LCD shows are what the table needs
 - SET_MIN_MAX (0x04) payload width — the vendor app sends **one** byte,
   not the uint32 antage and sigrok describe (spec §4.2). The code sends
   one byte; a meter needs to confirm MIN/MAX actually engages: on V DC,

@@ -238,13 +238,17 @@ pub(crate) fn mode_choices(current_mode_raw: u16) -> Vec<Choice> {
 ///
 /// Auto first, then the family's manual ladder — which is what SET_RANGE
 /// indexes, so the choice id *is* the byte the command takes. Empty for a
-/// fixed-range family (A DC/AC, temperature, continuity, conductance, diode,
-/// duty cycle, pulse width) and for a word from no known family.
+/// fixed-range family (A DC/AC, temperature, continuity, conductance, diode),
+/// for a word from no known family, and for a ladder whose rungs have no
+/// label to offer them by: the vendor app lists four items for duty cycle
+/// and pulse width, but nothing says what the meter calls them, and a blank
+/// entry cannot be picked or confirmed.
 pub(crate) fn range_choices(word: u16, range_raw: u8, auto_range: bool) -> Vec<Choice> {
     let Some(f) = lookup(word) else {
         return Vec::new();
     };
-    if f.manual_ranges == 0 {
+    if f.manual_ranges == 0 || (1..=f.manual_ranges).any(|r| lookup_range_label(word, r).is_empty())
+    {
         return Vec::new();
     }
     let mut choices = vec![Choice {
