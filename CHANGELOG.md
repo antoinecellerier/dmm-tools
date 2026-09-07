@@ -26,6 +26,7 @@
 - **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
 - **Capture reports carry the raw wire bytes and the parse errors for each step** — a step whose frames the tool couldn't decode was saved empty, with no trace of what the meter sent.
 - **`capture --unverified` runs only the steps still lacking hardware evidence** — a reporter had to copy a hand-written `--steps` list out of the issue; `--list-steps --format md` prints that checklist.
+- **Capture steps advance when the meter reaches the state asked for** — a keypress filed whatever was on screen at the time, and a button that did nothing re-filed the old reading.
 
 ### Bug fixes
 

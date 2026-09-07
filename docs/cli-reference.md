@@ -566,6 +566,18 @@ The run ends with how many unverified steps the report now covers and the issue
 to attach it to. `--list-steps --format md` prints that same list as the
 checklist those issues carry.
 
+Steps advance on the meter, not on a keypress: the tool watches the readings
+and captures once the meter settles into the state the instruction asked for.
+Enter captures immediately, `s` skips the step, `q` finishes the run and saves.
+A meter that settles into something else is reported — `meter shows: mode is
+"AC V", want "DC V"` — and the step keeps waiting; after 45 seconds it offers
+Enter as well. A step the previous reading already satisfies takes Enter
+only, straight away: shorting the probes on DC V changes nothing the tool can
+see. Ω across your body does not — OL becoming a reading is a change — so that
+step captures itself. A step that presses a button is recorded as `did nothing` when
+the meter's state doesn't change, instead of re-filing the reading from before
+the press.
+
 Each sample is read back for you to confirm against the meter's screen. On a
 meter with secondary displays, that confirmation line lists the sub-values in
 parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,

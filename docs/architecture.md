@@ -102,6 +102,7 @@ CLI binary using `clap`. Split into three modules:
 |--------|---------------|
 | `main.rs` | CLI framework, command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug` subcommands |
 | `capture.rs` | Guided protocol capture tool: types (`CaptureReport`, `StepResult`, `SampleData`), step definitions, interactive prompting, multi-part capture orchestration, YAML report I/O |
+| `watch.rs` | Capture step advance logic: when the meter has settled into the state a step asked for, semantic (`expect`) or raw payload diff against the previous step |
 | `format.rs` | Measurement output formatting (text/csv/json) |
 
 All protocol logic lives in the library crate. The `capture` subcommand provides a guided

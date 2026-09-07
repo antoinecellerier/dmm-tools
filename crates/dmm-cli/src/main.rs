@@ -1,6 +1,7 @@
 mod capture;
 mod format;
 mod recording;
+mod watch;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;

@@ -6,7 +6,7 @@ step advances on what the meter shows rather than on a keypress, every byte on t
 reaches the report even when the parser rejects it, and the tool's autonomy scales with how
 much of the family's protocol is already trusted.
 
-## A. Auto-advance on observed state (planned)
+## A. Auto-advance on observed state
 
 Capture watches the meter instead of asking. After printing an instruction it polls
 continuously and captures on its own once the meter reaches a new, stable state. Keys stay
@@ -14,24 +14,33 @@ as overrides: Enter captures now, `s` skips, `q` finishes the run.
 
 Two detectors, picked per step by whether the step carries an `expect`:
 
-- **Semantic** (step has `expect`): advance when K consecutive frames satisfy the predicate —
-  mode label, flag values, range auto/manual, value class (Overload, Negative). A stable
-  state that does not match is reported ("meter shows AC V, step wants DC V") and the tool
-  keeps waiting rather than filing the wrong mode.
-- **Raw-diff** (no `expect`, or the parser is untrusted): advance when the payload's
-  non-digit bytes differ from the previous step's baseline and then hold identical for K
-  frames. Works even when the parser is wrong about everything.
+- **Semantic** (step has `expect`): advance when `STABLE_FRAMES` consecutive frames satisfy
+  the predicate — mode label, flag values, range auto/manual, value class (Overload,
+  Negative). A stable state that does not match is reported once
+  (`meter shows: mode is "AC V", want "DC V"`) and the tool keeps waiting rather than filing
+  the wrong mode.
+- **Raw-diff** (no `expect`): advance when the payload bytes the previous step's samples held
+  constant differ from that baseline and then hold for `STABLE_FRAMES` frames. Works even
+  when the parser is wrong about everything. The first step of a run has no baseline, so only
+  Enter ends its wait; a resumed run takes the baseline from the report's stored samples.
 
-Stability means K identical (mode, range, flags) tuples, or K identical non-digit raw bytes;
-digits may vary. K = 3, with a per-step inactivity timeout that falls back to "press Enter
-when ready" so a user hunting for a thermocouple is never stranded.
+Stability means `STABLE_FRAMES` = 3 identical signatures — (mode, range, flags) plus, in
+raw-diff, the baseline's constant payload bytes; digits may vary. `STEP_TIMEOUT` = 45 s with
+nothing new prints "press Enter when the meter is ready" and keeps watching, so a user
+hunting for a thermocouple is never stranded. A step whose `expect` the previous step's last
+reading already satisfies is Enter-only and prints that line immediately: the mode is
+unchanged and nothing observable would announce the action, as when the probes are shorted
+on DC V. Ω across the body is not such a step — the same dial position, but OL to a finite
+reading is a change open leads cannot fake. An Enter-only step still reports a mismatch, so
+the wrong dial position is caught.
 
-Command steps (`hold`, `minmax`, …) run the same watcher after `send_command` and expect the
-flag to flip. If it does not flip within the timeout the step records `did nothing` in its
-`error` rather than filing pre-command frames — the fix for the stale-frame class of bug.
+Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`, against the
+frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT` = 3 s. If it
+does not, the step records `<command> did nothing; the meter still shows …` in its `error`
+rather than filing pre-command frames — the fix for the stale-frame class of bug.
 
-A dial-only step costs zero interactions: read the instruction, turn the dial, see
-`✓ DC V, 5 samples` and the next instruction.
+A dial-only step captures without a keypress: read the instruction, turn the dial, and the
+samples appear. The per-step confirmation prompt after them is what F removes.
 
 ## B. Full wire trace and parse diagnostics
 
