@@ -5,8 +5,10 @@ use super::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
 // ── DC Voltage (manual page 26) ─────────────────────────────────────────
 
-// Range order matches ut61e_plus.rs: 2.2V, 22V, 220V, 1000V, 220mV
-// ±(0.1%+5) for 220mV; ±(0.05%+5) merged for 2.2V/22V/220V; ±(0.1%+5) for 1000V
+// Range order matches ut61e_plus.rs: 2.2V, 22V, 220V, 1000V
+// ±(0.05%+5) merged for 2.2V/22V/220V; ±(0.1%+5) for 1000V
+// The manual's 220mV row belongs to DC mV (DC_MV_SPECS index 0), which is
+// its own mode on its own dial position, not a fifth DC V range.
 pub static DC_V_SPECS: &[SpecInfo] = &[
     SpecInfo {
         resolution: "0.1mV",
@@ -36,13 +38,6 @@ pub static DC_V_SPECS: &[SpecInfo] = &[
             accuracy: "0.1%+5",
         }],
     },
-    SpecInfo {
-        resolution: "0.01mV",
-        accuracy: &[AccuracyBand {
-            freq_range: None,
-            accuracy: "0.1%+5",
-        }],
-    },
 ];
 
 pub static DC_V_MODE: ModeSpecInfo = ModeSpecInfo {
@@ -53,7 +48,8 @@ pub static DC_V_MODE: ModeSpecInfo = ModeSpecInfo {
 
 // ── AC Voltage (manual page 27) ─────────────────────────────────────────
 
-// Range order: 2.2V, 22V, 220V, 750V, 220mV
+// Range order: 2.2V, 22V, 220V, 750V
+// The 220mV row is AC mV (AC_MV_SPECS index 0), a mode of its own.
 pub static AC_V_SPECS: &[SpecInfo] = &[
     SpecInfo {
         resolution: "0.1mV",
@@ -104,19 +100,6 @@ pub static AC_V_SPECS: &[SpecInfo] = &[
             AccuracyBand {
                 freq_range: Some("1kHz\u{2013}10kHz"),
                 accuracy: "3.0%+50",
-            },
-        ],
-    },
-    SpecInfo {
-        resolution: "0.01mV",
-        accuracy: &[
-            AccuracyBand {
-                freq_range: Some("40Hz\u{2013}1kHz"),
-                accuracy: "1.0%+10",
-            },
-            AccuracyBand {
-                freq_range: Some("1kHz\u{2013}10kHz"),
-                accuracy: "1.5%+30",
             },
         ],
     },
@@ -653,8 +636,7 @@ pub static DUTY_MODE: ModeSpecInfo = ModeSpecInfo {
 // LPF mode accuracy from the AC Voltage table.
 // When LPF is enabled (SELECT in AC V mode), bandwidth is 40Hz–100Hz.
 // The meter reports Mode::LpfV (0x18) — a distinct mode byte from AcV.
-// Range order matches dc_v: 2.2V, 22V, 220V, 1000V, 220mV
-// 220mV has no LPF data in the manual.
+// Range order matches dc_v: 2.2V, 22V, 220V, 1000V.
 pub static LPF_V_SPECS: &[SpecInfo] = &[
     SpecInfo {
         resolution: "0.1mV",
@@ -735,9 +717,7 @@ pub static HFE_MODE: ModeSpecInfo = ModeSpecInfo {
 
 // ── AC+DC Voltage (UT61E+ only, manual page 28) ────────────────────────
 
-// Range order matches dc_v: 2.2V, 22V, 220V, 1000V, 220mV
-// AC+DC starts at 2.2V (no 220mV range in manual), but we match the
-// range byte index from the DcV table. Ranges 0-3 have data, range 4 (220mV) = None.
+// Range order matches dc_v: 2.2V, 22V, 220V, 1000V.
 // ±(1.8%+70) merged for 2.2V/22V/220V; ±(4.0%+70) for 1000V
 pub static ACDC_V_SPECS: &[SpecInfo] = &[
     SpecInfo {
@@ -781,13 +761,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dc_v_has_5_ranges() {
-        assert_eq!(DC_V_SPECS.len(), 5);
+    fn dc_v_has_4_ranges() {
+        assert_eq!(DC_V_SPECS.len(), 4);
     }
 
     #[test]
-    fn ac_v_has_5_ranges_with_2_bands_each() {
-        assert_eq!(AC_V_SPECS.len(), 5);
+    fn ac_v_has_4_ranges_with_2_bands_each() {
+        assert_eq!(AC_V_SPECS.len(), 4);
         for spec in AC_V_SPECS {
             assert_eq!(spec.accuracy.len(), 2);
         }
@@ -795,7 +775,7 @@ mod tests {
 
     #[test]
     fn lpf_v_has_4_ranges() {
-        // LPF V covers 2.2V–1000V (no 220mV), matching dc_v indices 0-3
+        // LPF V covers 2.2V–1000V, matching dc_v index for index.
         assert_eq!(LPF_V_SPECS.len(), 4);
     }
 
@@ -818,8 +798,8 @@ mod tests {
     fn dc_v_resolution_matches_manual() {
         // 2.2V range (index 0) → 0.1mV resolution
         assert_eq!(DC_V_SPECS[0].resolution, "0.1mV");
-        // 220mV range (index 4) → 0.01mV resolution
-        assert_eq!(DC_V_SPECS[4].resolution, "0.01mV");
+        // 1000V range (index 3) → 0.1V resolution
+        assert_eq!(DC_V_SPECS[3].resolution, "0.1V");
     }
 
     #[test]

@@ -6,8 +6,8 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// Device table for the UNI-T UT61E+.
 pub struct Ut61ePlusTable {
     // Tables indexed by range byte (0x00..0x07 typically)
-    dc_v: [RangeInfo; 5],
-    ac_v: [RangeInfo; 5],
+    dc_v: [RangeInfo; 4],
+    ac_v: [RangeInfo; 4],
     dc_mv: [RangeInfo; 2],
     ac_mv: [RangeInfo; 2],
     ohm: [RangeInfo; 7],
@@ -30,19 +30,21 @@ pub struct Ut61ePlusTable {
 impl Ut61ePlusTable {
     pub fn new() -> Self {
         Self {
+            // Four ranges, verified on a real UT61E+ (2026-03-21): the
+            // meter never sends a fifth. The vendor decompile listed a
+            // 220mV entry here, but 220 mV is the separate DC mV mode
+            // (0x03) on its own dial position, not a range of mode 0x02.
             dc_v: [
                 r("2.2V", "V"),
                 r("22V", "V"),
                 r("220V", "V"),
                 r("1000V", "V"),
-                r("220mV", "mV"),
             ],
             ac_v: [
                 r("2.2V", "V"),
                 r("22V", "V"),
                 r("220V", "V"),
                 r("750V", "V"),
-                r("220mV", "mV"),
             ],
             dc_mv: [r("220mV", "mV"), r("2.2V", "mV")],
             ac_mv: [r("220mV", "mV"), r("2.2V", "mV")],
@@ -291,11 +293,8 @@ mod tests {
         let r3 = t.range_info(Mode::DcV, 3).unwrap();
         assert_eq!(r3.label, "1000V");
 
-        let r4 = t.range_info(Mode::DcV, 4).unwrap();
-        assert_eq!(r4.label, "220mV");
-        assert_eq!(r4.unit, "mV");
-
-        assert!(t.range_info(Mode::DcV, 5).is_none());
+        // No fifth range: 220 mV is mode 0x03 on the mV dial position.
+        assert!(t.range_info(Mode::DcV, 4).is_none());
     }
 
     // --- AC Voltage ---
@@ -304,8 +303,7 @@ mod tests {
         let t = table();
         assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "2.2V");
         assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "750V");
-        assert_eq!(t.range_info(Mode::AcV, 4).unwrap().label, "220mV");
-        assert!(t.range_info(Mode::AcV, 5).is_none());
+        assert!(t.range_info(Mode::AcV, 4).is_none());
     }
 
     // --- DC/AC millivolts ---

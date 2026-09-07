@@ -55,11 +55,11 @@ has 4 manual ranges** (0=2.2V, 1=22V, 2=220V, 3=1000V), and 220mV is reachable
 only through the separate DC mV dial position (mode 0x03). So the six-step
 sweep was wrong by two even before the command behaviour is settled.
 
-That leaves a small live inconsistency: `Ut61ePlusTable::dc_v` is declared
-`[RangeInfo; 5]` with a fifth "220mV" entry, which the verified table says
-cannot occur for mode 0x02. Harmless today (the meter never sends range 4 on
-DC V, so the entry is simply never read), but it contradicts the verified
-record and should either go or gain a comment explaining why it's kept.
+The stray fifth "220mV" entry in `Ut61ePlusTable::dc_v` and `ac_v` — which
+the verified table says cannot occur for mode 0x02 — was removed on
+2026-09-07, along with its rows in the spec tables and in the range table of
+`docs/research/ut61-family/reverse-engineered-protocol.md`. The 220 mV specs
+live on where the mode does, in `DC_MV_SPECS`/`AC_MV_SPECS` index 0.
 
 ### UT61+ remote mode selection (cycle-to-target)
 
@@ -576,10 +576,10 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   (`dmm-cli capture`) so the goldens match verified device behavior.
 - **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
   The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
-  the current reading. The code has a 5th entry (range 4=220mV) from vendor
-  RE — this may be used by other models (UT61B+/D+) but was never observed
-  on the UT61E+. The 220mV capability on the UT61E+ is via DC mV mode (0x03),
-  a separate dial position.
+  the current reading. The code carried a 5th entry (range 4=220mV) from
+  vendor RE, never observed on the UT61E+; it was dropped on 2026-09-07.
+  The 220mV capability on the UT61E+ is via DC mV mode (0x03), a separate
+  dial position. The UT61B+/D+ tables keep their own shapes.
 - **DC mV mode (0x03) is a separate mode, not DC V range 4.** Auto-range
   stays in DC V mode (0x02) even at 100mV. DC mV (0x03) is only reached
   via the mV dial position. On UT61E+, DC mV has only 1 range (range 0 =

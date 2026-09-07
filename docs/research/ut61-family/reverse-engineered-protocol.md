@@ -439,7 +439,7 @@ zero (duty cycle, diode, hFE). Generated from the source tables, not retyped.
 
 ### UT61E+ (22,000 counts)
 
-Source: `ut61e_plus.rs` (52 ranges).
+Source: `ut61e_plus.rs` (50 ranges).
 
 | Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
 |---|---|---|---|---|---|---|
@@ -447,12 +447,10 @@ Source: `ut61e_plus.rs` (52 ranges).
 | `dc_v` | DcV, AcDcV, LpfV, LozV | 1 | 22V | V | 22 | -22 |
 | `dc_v` | DcV, AcDcV, LpfV, LozV | 2 | 220V | V | 220 | -220 |
 | `dc_v` | DcV, AcDcV, LpfV, LozV | 3 | 1000V | V | 1000 | -1000 |
-| `dc_v` | DcV, AcDcV, LpfV, LozV | 4 | 220mV | mV | 220 | -220 |
 | `ac_v` | AcV | 0 | 2.2V | V | 2.2 | -2.2 |
 | `ac_v` | AcV | 1 | 22V | V | 22 | -22 |
 | `ac_v` | AcV | 2 | 220V | V | 220 | -220 |
 | `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
-| `ac_v` | AcV | 4 | 220mV | mV | 220 | -220 |
 | `dc_mv` | DcMv, AcDcMv, LpfMv | 0 | 220mV | mV | 220 | -220 |
 | `dc_mv` | DcMv, AcDcMv, LpfMv | 1 | 2.2V | mV | 2200 | -2200 |
 | `ac_mv` | AcMv | 0 | 220mV | mV | 220 | -220 |
