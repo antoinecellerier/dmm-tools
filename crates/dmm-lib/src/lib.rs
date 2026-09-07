@@ -175,23 +175,33 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
 /// or HID device path (as shown by [`list_devices`]). When `None`, picks the
 /// first matching adapter (and logs a warning if multiple are found).
 pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box<dyn Transport>>> {
+    let (transport, protocol) = open_transport_by_id_auto(id, adapter)?;
+    Dmm::new(transport, protocol)
+}
+
+/// Open the transport and build the protocol without running `Protocol::init`.
+///
+/// Lets a caller wrap the transport — recording wire bytes, say — before the
+/// init handshake runs, so those bytes are observable too. Pass the pair to
+/// [`Dmm::new`] to finish opening the device.
+pub fn open_transport_by_id_auto(
+    id: &str,
+    adapter: Option<&str>,
+) -> Result<(Box<dyn Transport>, Box<dyn Protocol>)> {
     let entry =
         protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
 
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
 
-    match adapter {
+    let (device, kt) = match adapter {
         Some(adapter) => open_with_adapter(&api, adapter),
         None => open_first_match(&api, entry.family),
-    }
-    .map(|(device, kt)| {
-        info!(
-            "found {} adapter (VID={:#06x} PID={:#06x})",
-            kt.name, kt.vid, kt.pid
-        );
-        ((kt.init)(device), (entry.new_protocol)())
-    })
-    .and_then(|(transport, protocol)| Dmm::new(transport?, protocol))
+    }?;
+    info!(
+        "found {} adapter (VID={:#06x} PID={:#06x})",
+        kt.name, kt.vid, kt.pid
+    );
+    Ok(((kt.init)(device)?, (entry.new_protocol)()))
 }
 
 /// Open a specific adapter identified by serial number or HID path.
