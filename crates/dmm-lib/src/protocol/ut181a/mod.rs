@@ -693,71 +693,105 @@ impl Protocol for Ut181aProtocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        use crate::protocol::CaptureStep;
+        use crate::flags::Flag;
+        use crate::protocol::{CaptureStep, Expect, RangeExpect, ValueExpect};
+
+        // Only V DC, V AC and °C have been seen on real hardware (issue #5).
         // Core UT181A modes
         vec![
-            CaptureStep::basic("vdc", "Set meter to V DC"),
-            CaptureStep::basic("vac", "Set meter to V AC"),
-            CaptureStep::basic("mvdc", "Set meter to mV DC"),
-            CaptureStep::basic("mvac", "Set meter to mV AC"),
-            CaptureStep::basic("ohm", "Set meter to Resistance"),
-            CaptureStep::basic("cont", "Set meter to Continuity"),
-            CaptureStep::basic("ns", "Set meter to Conductance (nS)"),
-            CaptureStep::basic("diode", "Set meter to Diode"),
-            CaptureStep::basic("cap", "Set meter to Capacitance"),
-            CaptureStep::basic("hz", "Set meter to Frequency (Hz)"),
-            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)"),
-            CaptureStep::basic("uadc", "Set meter to uA DC"),
-            CaptureStep::basic("uaac", "Set meter to uA AC"),
-            CaptureStep::basic("madc", "Set meter to mA DC"),
-            CaptureStep::basic("maac", "Set meter to mA AC"),
-            CaptureStep::basic("adc", "Set meter to A DC"),
-            CaptureStep::basic("aac", "Set meter to A AC"),
-            CaptureStep::basic("tempc", "Set meter to Temperature C"),
-            CaptureStep::basic("tempf", "Set meter to Temperature F"),
+            CaptureStep::basic("vdc", "Set meter to V DC")
+                .verified()
+                .gate()
+                .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
+            CaptureStep::basic("dcv_short", "V DC mode: touch the two probe tips together.")
+                .gate()
+                .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
+            CaptureStep::basic(
+                "dcv_negative",
+                "V DC mode: leads reversed on a battery or any DC source (skip if none).",
+            )
+            .gate()
+            .expect(Expect::mode("V DC").value(ValueExpect::Negative)),
+            CaptureStep::basic("vac", "Set meter to V AC")
+                .verified()
+                .expect(Expect::mode("V AC")),
+            CaptureStep::basic("mvdc", "Set meter to mV DC").expect(Expect::mode("mV DC")),
+            CaptureStep::basic("mvac", "Set meter to mV AC").expect(Expect::mode("mV AC")),
+            CaptureStep::basic(
+                "ohm",
+                "Set meter to Resistance. Leave leads open (should show OL).",
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
+            CaptureStep::basic(
+                "ohm_short",
+                "Resistance mode: touch the two probe tips together.",
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            CaptureStep::basic("cont", "Set meter to Continuity")
+                .expect(Expect::mode("Continuity")),
+            CaptureStep::basic("ns", "Set meter to Conductance (nS)").expect(Expect::mode("nS")),
+            CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
+            CaptureStep::basic("cap", "Set meter to Capacitance")
+                .expect(Expect::mode("Capacitance")),
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
+            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)")
+                .expect(Expect::mode("Duty %")),
+            CaptureStep::basic("uadc", "Set meter to uA DC").expect(Expect::mode("µA DC")),
+            CaptureStep::basic("uaac", "Set meter to uA AC").expect(Expect::mode("µA AC")),
+            CaptureStep::basic("madc", "Set meter to mA DC").expect(Expect::mode("mA DC")),
+            CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
+            CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),
+            CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
+            CaptureStep::basic("tempc", "Set meter to Temperature C")
+                .verified()
+                .expect(Expect::mode("°C")),
+            CaptureStep::basic("tempf", "Set meter to Temperature F").expect(Expect::mode("°F")),
             // Remote command steps
-            CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3),
+            CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3)
+                .expect(Expect::new().flags(&[(Flag::Hold, true)])),
             CaptureStep::with_command(
                 "hold_off",
                 "We will send HOLD again to turn it off.",
                 "hold",
                 3,
-            ),
-            CaptureStep::with_command("minmax", "We will enable MIN/MAX.", "minmax", 3),
-            CaptureStep::with_command("minmax_off", "We will disable MIN/MAX.", "exit_minmax", 3),
-            CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3),
+            )
+            .expect(Expect::new().flags(&[(Flag::Hold, false)])),
+            CaptureStep::with_command("minmax", "We will enable MIN/MAX.", "minmax", 3)
+                .expect(Expect::new().flags(&[(Flag::Min, true), (Flag::Max, true)])),
+            CaptureStep::with_command("minmax_off", "We will disable MIN/MAX.", "exit_minmax", 3)
+                .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
+            CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3)
+                .expect(Expect::new().range(RangeExpect::Auto)),
             // Format variant verification steps
             CaptureStep::basic(
                 "rel",
                 "V DC mode: long-press REL to enable relative. \
                               The report should list Reference and Absolute \
                               sub-values under each sample.",
-            ),
-            CaptureStep {
-                id: "rel_off",
-                instruction: "Long-press REL again to disable relative mode.",
-                command: None,
-                samples: 3,
-            },
+            )
+            .expect(Expect::new().flags(&[(Flag::Rel, true)])),
+            CaptureStep::basic("rel_off", "Long-press REL again to disable relative mode.")
+                .samples(3)
+                .expect(Expect::new().flags(&[(Flag::Rel, false)])),
             CaptureStep::basic(
                 "peak",
                 "V AC mode: enable Peak mode (FUNC button). \
                               The report should list a Peak Min sub-value \
                               under each sample.",
-            ),
-            CaptureStep {
-                id: "peak_off",
-                instruction: "Disable Peak mode.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "manual_range",
-                instruction: "V DC mode: press RANGE to switch to manual range. \
+            )
+            .expect(Expect::new().flags(&[(Flag::PeakMax, true), (Flag::PeakMin, true)])),
+            CaptureStep::basic("peak_off", "Disable Peak mode.")
+                .samples(3)
+                .expect(Expect::new().flags(&[(Flag::PeakMax, false), (Flag::PeakMin, false)])),
+            CaptureStep::basic(
+                "manual_range",
+                "V DC mode: press RANGE to switch to manual range. \
                               Verify range_label shows the selected range (e.g. 60V).",
-                command: None,
-                samples: 3,
-            },
+            )
+            .samples(3)
+            .expect(Expect::new().range(RangeExpect::Manual)),
         ]
     }
 }

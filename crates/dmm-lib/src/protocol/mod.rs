@@ -1,4 +1,5 @@
 pub(crate) mod cycle;
+mod expect;
 pub(crate) mod framing;
 pub(crate) mod fs9721;
 pub mod registry;
@@ -12,6 +13,8 @@ pub(crate) mod ut8803;
 pub(crate) mod vc880;
 pub(crate) mod vc890;
 mod vc8x0_common;
+
+pub use expect::{Expect, RangeExpect, ValueExpect};
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
@@ -274,6 +277,16 @@ pub struct CaptureStep {
     pub command: Option<&'static str>,
     /// Number of samples to capture for this step.
     pub samples: usize,
+    /// This step's wire behaviour has been confirmed on real hardware, so a
+    /// capture run only re-files what is already known.
+    pub verified: bool,
+    /// One of the few steps that establish the core semantics — mode byte,
+    /// digits, decimal point, OL, sign. A run that skips these files samples
+    /// nothing can be concluded from.
+    pub gate: bool,
+    /// What a correctly parsed reading looks like once the user has done the
+    /// instruction; `None` where nothing can be asserted without guessing.
+    pub expect: Option<Expect>,
 }
 
 impl CaptureStep {
@@ -285,6 +298,9 @@ impl CaptureStep {
             instruction,
             command: None,
             samples: 5,
+            verified: false,
+            gate: false,
+            expect: None,
         }
     }
 
@@ -301,7 +317,42 @@ impl CaptureStep {
             instruction,
             command: Some(command),
             samples,
+            verified: false,
+            gate: false,
+            expect: None,
         }
+    }
+
+    /// Take `n` samples instead of the default five.
+    pub const fn samples(mut self, n: usize) -> Self {
+        self.samples = n;
+        self
+    }
+
+    /// Mark the step as confirmed on real hardware.
+    pub const fn verified(mut self) -> Self {
+        self.verified = true;
+        self
+    }
+
+    /// Mark the step verified only for models that have actually been tested —
+    /// families whose step list is shared by a verified meter and its
+    /// experimental siblings.
+    pub const fn verified_if(mut self, verified: bool) -> Self {
+        self.verified = verified;
+        self
+    }
+
+    /// Mark the step as one the family's core semantics rest on.
+    pub const fn gate(mut self) -> Self {
+        self.gate = true;
+        self
+    }
+
+    /// Attach what a correct reading looks like after the instruction.
+    pub const fn expect(mut self, expect: Expect) -> Self {
+        self.expect = Some(expect);
+        self
     }
 }
 
@@ -362,5 +413,79 @@ pub trait Protocol: Send {
     /// [`Protocol::choices`] just returned for that setting.
     fn select(&mut self, _transport: &dyn Transport, setting: Setting, _id: u16) -> Result<()> {
         Err(unsupported_setting(setting))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every device's capture steps, with the device id for failure messages.
+    fn all_steps() -> Vec<(&'static str, Stability, Vec<CaptureStep>)> {
+        registry::DEVICES
+            .iter()
+            .map(|d| {
+                let proto = (d.new_protocol)();
+                (d.id, proto.profile().stability, proto.capture_steps())
+            })
+            .collect()
+    }
+
+    /// A gate step without an expectation files samples nobody can judge.
+    #[test]
+    fn every_gate_step_has_an_expect() {
+        for (id, _, steps) in all_steps() {
+            for step in steps.iter().filter(|s| s.gate) {
+                assert!(
+                    step.expect.is_some(),
+                    "{id} gate step {} has no expect",
+                    step.id
+                );
+            }
+        }
+    }
+
+    /// An experimental device is one nobody has finished running, so its step
+    /// list must still have something left to confirm.
+    #[test]
+    fn experimental_devices_leave_steps_to_verify() {
+        for (id, stability, steps) in all_steps() {
+            if stability == Stability::Experimental {
+                assert!(
+                    steps.iter().any(|s| !s.verified),
+                    "{id} is experimental but every capture step is verified"
+                );
+            }
+        }
+    }
+
+    /// The UT61+/UT161 step list is shared, so the siblings would inherit the
+    /// UT61E+'s hardware history unless `verified_if` gates it.
+    #[test]
+    fn ut61_siblings_declare_nothing_verified() {
+        for (id, stability, steps) in all_steps() {
+            if id == "ut61eplus" {
+                assert!(
+                    steps.iter().any(|s| s.verified),
+                    "the UT61E+ is verified hardware and must say so"
+                );
+                continue;
+            }
+            let ut61_sibling = (d_family(id) == Some(DeviceFamily::Ut61EPlus))
+                && stability == Stability::Experimental;
+            if ut61_sibling {
+                assert!(
+                    steps.iter().all(|s| !s.verified),
+                    "{id} has never been run, so no step may claim verification"
+                );
+            }
+        }
+    }
+
+    fn d_family(id: &str) -> Option<DeviceFamily> {
+        registry::DEVICES
+            .iter()
+            .find(|d| d.id == id)
+            .map(|d| d.family)
     }
 }

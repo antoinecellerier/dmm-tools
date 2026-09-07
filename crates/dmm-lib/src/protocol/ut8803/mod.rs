@@ -183,28 +183,56 @@ impl Protocol for Ut8803Protocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        use crate::protocol::CaptureStep;
+        use crate::protocol::{CaptureStep, Expect, ValueExpect};
         // All 23 UT8803 position codes (modes 0x00-0x16)
         vec![
-            CaptureStep::basic("dcv", "Set meter to DC V (DCV)"),
-            CaptureStep::basic("acv", "Set meter to AC V (ACV)"),
-            CaptureStep::basic("dcua", "Set meter to DC uA"),
-            CaptureStep::basic("dcma", "Set meter to DC mA"),
-            CaptureStep::basic("dca", "Set meter to DC A"),
-            CaptureStep::basic("acua", "Set meter to AC uA"),
-            CaptureStep::basic("acma", "Set meter to AC mA"),
-            CaptureStep::basic("aca", "Set meter to AC A"),
-            CaptureStep::basic("ohm", "Set meter to Resistance (OHM)"),
-            CaptureStep::basic("cont", "Set meter to Continuity"),
-            CaptureStep::basic("diode", "Set meter to Diode"),
-            CaptureStep::basic("ind", "Set meter to Inductance (L)"),
-            CaptureStep::basic("cap", "Set meter to Capacitance (C)"),
-            CaptureStep::basic("hfe", "Set meter to hFE (transistor test)"),
-            CaptureStep::basic("scr", "Set meter to SCR (thyristor test)"),
-            CaptureStep::basic("tempc", "Set meter to Temperature C"),
-            CaptureStep::basic("tempf", "Set meter to Temperature F"),
-            CaptureStep::basic("hz", "Set meter to Frequency (Hz)"),
-            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)"),
+            CaptureStep::basic("dcv", "Set meter to DC V (DCV)")
+                .gate()
+                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
+            CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
+                .gate()
+                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
+            CaptureStep::basic(
+                "dcv_negative",
+                "DC V mode: leads reversed on a battery or any DC source (skip if none).",
+            )
+            .gate()
+            .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+            CaptureStep::basic("acv", "Set meter to AC V (ACV)").expect(Expect::mode("AC V")),
+            CaptureStep::basic("dcua", "Set meter to DC uA").expect(Expect::mode("DC µA")),
+            CaptureStep::basic("dcma", "Set meter to DC mA").expect(Expect::mode("DC mA")),
+            CaptureStep::basic("dca", "Set meter to DC A").expect(Expect::mode("DC A")),
+            CaptureStep::basic("acua", "Set meter to AC uA").expect(Expect::mode("AC µA")),
+            CaptureStep::basic("acma", "Set meter to AC mA").expect(Expect::mode("AC mA")),
+            CaptureStep::basic("aca", "Set meter to AC A").expect(Expect::mode("AC A")),
+            CaptureStep::basic(
+                "ohm",
+                "Set meter to Resistance (OHM). Leave leads open (should show OL).",
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
+            CaptureStep::basic(
+                "ohm_short",
+                "Resistance mode: touch the two probe tips together.",
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            CaptureStep::basic("cont", "Set meter to Continuity")
+                .expect(Expect::mode("Continuity")),
+            CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
+            CaptureStep::basic("ind", "Set meter to Inductance (L)")
+                .expect(Expect::mode("Inductance")),
+            CaptureStep::basic("cap", "Set meter to Capacitance (C)")
+                .expect(Expect::mode("Capacitance")),
+            CaptureStep::basic("hfe", "Set meter to hFE (transistor test)")
+                .expect(Expect::mode("hFE")),
+            CaptureStep::basic("scr", "Set meter to SCR (thyristor test)")
+                .expect(Expect::mode("SCR")),
+            CaptureStep::basic("tempc", "Set meter to Temperature C").expect(Expect::mode("°C")),
+            CaptureStep::basic("tempf", "Set meter to Temperature F").expect(Expect::mode("°F")),
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
+            CaptureStep::basic("duty", "Set meter to Duty Cycle (%)")
+                .expect(Expect::mode("Duty %")),
         ]
     }
 }

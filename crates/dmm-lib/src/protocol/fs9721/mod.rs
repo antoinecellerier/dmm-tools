@@ -566,22 +566,44 @@ impl Protocol for Fs9721Protocol {
     }
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
+        use crate::protocol::{Expect, ValueExpect};
         vec![
-            CaptureStep::basic("dcv", "Set meter to DC V"),
+            CaptureStep::basic("dcv", "Set meter to DC V")
+                .gate()
+                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
+            CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
+                .gate()
+                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "dcv_negative",
                 "Set meter to DC V with leads reversed (negative reading)",
-            ),
-            CaptureStep::basic("acv", "Set meter to AC V"),
-            CaptureStep::basic("ohm", "Set meter to Resistance (Ω)"),
+            )
+            .gate()
+            .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+            CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
+            CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
             CaptureStep::basic(
                 "ohm_ol",
                 "Set meter to Resistance (Ω) with open leads (overload)",
-            ),
-            CaptureStep::basic("cap", "Set meter to Capacitance"),
-            CaptureStep::basic("hz", "Set meter to Frequency (Hz)"),
-            CaptureStep::basic("diode", "Set meter to Diode"),
-            CaptureStep::basic("cont", "Set meter to Continuity"),
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
+            CaptureStep::basic(
+                "ohm_short",
+                "Resistance mode: touch the two probe tips together.",
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            CaptureStep::basic("cap", "Set meter to Capacitance")
+                .expect(Expect::mode("Capacitance")),
+            // Both models name the frequency mode "Frequency", not "Hz".
+            CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
+                .expect(Expect::mode("Frequency")),
+            CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
+            CaptureStep::basic("cont", "Set meter to Continuity")
+                .expect(Expect::mode("Continuity")),
+            // The HOLD wire encoding is what this step is for, so it asserts
+            // nothing about the flag.
             CaptureStep::basic(
                 "hold",
                 "Press HOLD (wire encoding unknown — capture needed)",

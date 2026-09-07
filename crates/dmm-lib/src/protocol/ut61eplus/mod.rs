@@ -288,128 +288,137 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        use crate::protocol::CaptureStep;
+        use crate::flags::Flag;
+        use crate::protocol::{CaptureStep, Expect, RangeExpect, ValueExpect};
+
+        // The list is shared by the whole UT61+/UT161 family, but only the
+        // UT61E+ has been run against hardware (docs/verification-backlog.md).
+        let hw = self.profile.stability == Stability::Verified;
         vec![
             // Measurement modes
-            CaptureStep {
-                id: "dcv",
-                instruction: "Set meter to DC V (V\u{23CF}). Leave leads open.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "dcv_short",
-                instruction: "DC V mode: touch the two probe tips together.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "acv",
-                instruction: "Set meter to AC V (V~). Leave leads open.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "dcmv",
-                instruction: "Set meter to DC mV. Leave leads open.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "ohm",
-                instruction: "Set meter to \u{03A9}. Leave leads open (should show OL).",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "ohm_short",
-                instruction: "\u{03A9} mode: touch the two probe tips together.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "continuity",
-                instruction: "Set meter to continuity (buzzer). Touch probes together.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "diode",
-                instruction: "Set meter to diode. Leave leads open (should show OL).",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "capacitance",
-                instruction: "Set meter to capacitance. Leave leads open.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "hz",
-                instruction: "Set meter to Hz (press SELECT2 on AC mA or V~ mode).",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "duty",
-                instruction: "Hz mode: press SELECT2 again for Duty %.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "ncv",
-                instruction: "Set meter to NCV. Hold near a live wire.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "hfe",
-                instruction: "Set meter to hFE (transistor test).",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "dcua",
-                instruction: "Set meter to DC uA.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "dcma",
-                instruction: "Set meter to DC mA.",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "dca",
-                instruction: "Set meter to DC A (A\u{23CF}).",
-                command: None,
-                samples: 3,
-            },
-            CaptureStep {
-                id: "temp",
-                instruction: "Set meter to temperature (K-type thermocouple, if available).",
-                command: None,
-                samples: 3,
-            },
+            CaptureStep::basic("dcv", "Set meter to DC V (V\u{23CF}). Leave leads open.")
+                .samples(3)
+                .verified_if(hw)
+                .gate()
+                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
+            CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
+                .samples(3)
+                .verified_if(hw)
+                .gate()
+                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
+            CaptureStep::basic(
+                "dcv_negative",
+                "DC V mode: leads reversed on a battery or any DC source (skip if none).",
+            )
+            .samples(3)
+            .gate()
+            .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+            CaptureStep::basic("acv", "Set meter to AC V (V~). Leave leads open.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("AC V")),
+            CaptureStep::basic("dcmv", "Set meter to DC mV. Leave leads open.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("DC mV")),
+            CaptureStep::basic(
+                "ohm",
+                "Set meter to \u{03A9}. Leave leads open (should show OL).",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
+            CaptureStep::basic(
+                "ohm_short",
+                "\u{03A9} mode: touch the two probe tips together.",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            CaptureStep::basic(
+                "continuity",
+                "Set meter to continuity (buzzer). Touch probes together.",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .expect(Expect::mode("Continuity")),
+            CaptureStep::basic(
+                "diode",
+                "Set meter to diode. Leave leads open (should show OL).",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .expect(Expect::mode("Diode")),
+            CaptureStep::basic("capacitance", "Set meter to capacitance. Leave leads open.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("Capacitance")),
+            CaptureStep::basic("hz", "Set meter to Hz (press SELECT2 on AC mA or V~ mode).")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("Hz")),
+            CaptureStep::basic("duty", "Hz mode: press SELECT2 again for Duty %.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("Duty %")),
+            CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("NCV")),
+            CaptureStep::basic("hfe", "Set meter to hFE (transistor test).")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("hFE")),
+            CaptureStep::basic("dcua", "Set meter to DC uA.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("DC µA")),
+            CaptureStep::basic("dcma", "Set meter to DC mA.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("DC mA")),
+            CaptureStep::basic("dca", "Set meter to DC A (A\u{23CF}).")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("DC A")),
+            // Temperature needs a thermocouple, so it has never been run.
+            CaptureStep::basic(
+                "temp",
+                "Set meter to temperature (K-type thermocouple, if available).",
+            )
+            .samples(3),
             // Flags & commands
             CaptureStep::with_command(
                 "hold",
                 "DC V mode: press HOLD on the meter, or we will send the command.",
                 "hold",
                 3,
-            ),
-            CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3),
-            CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3),
+            )
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Hold, true)])),
+            CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3)
+                .verified_if(hw)
+                .expect(Expect::new().flags(&[(Flag::Hold, false)])),
+            CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3)
+                .verified_if(hw)
+                .expect(Expect::new().flags(&[(Flag::Rel, true)])),
             CaptureStep::with_command(
                 "rel_off",
                 "We will send REL again to turn it off.",
                 "rel",
                 3,
-            ),
-            CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3),
-            CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3),
+            )
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Rel, false)])),
+            // Which of MIN and MAX the first press lands on is the meter's
+            // own cycle, so only the exit is asserted.
+            CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3)
+                .verified_if(hw),
+            CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
+                .verified_if(hw)
+                .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
             // A single RANGE press, not a sweep. A six-step sweep was tried
             // and removed: on hardware it produced range indices 0, 2, 0, 0,
             // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
@@ -423,13 +432,17 @@ impl Protocol for Ut61PlusProtocol {
                 "We will send RANGE to switch to manual.",
                 "range",
                 3,
-            ),
+            )
+            .verified_if(hw)
+            .expect(Expect::new().range(RangeExpect::Manual)),
             CaptureStep::with_command(
                 "auto",
                 "We will send AUTO to return to auto-range.",
                 "auto",
                 3,
-            ),
+            )
+            .verified_if(hw)
+            .expect(Expect::new().range(RangeExpect::Auto)),
         ]
     }
 }

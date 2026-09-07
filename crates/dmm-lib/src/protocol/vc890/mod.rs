@@ -379,14 +379,15 @@ impl Protocol for Vc890Protocol {
         // the step's screen-confirmation prompt is where the answer lands.
         // We currently treat 0 as "empty", which is a guess — see the
         // VC-890 entry in docs/verification-backlog.md.
-        steps.push(crate::protocol::CaptureStep {
-            id: "battery",
-            instruction: "Any mode. When prompted, type the battery indicator \
-                          shown on the meter (e.g. \"full\", \"2 of 3 bars\", \
-                          \"low-battery symbol lit\").",
-            command: None,
-            samples: 3,
-        });
+        steps.push(
+            crate::protocol::CaptureStep::basic(
+                "battery",
+                "Any mode. When prompted, type the battery indicator \
+                 shown on the meter (e.g. \"full\", \"2 of 3 bars\", \
+                 \"low-battery symbol lit\").",
+            )
+            .samples(3),
+        );
         steps
     }
 
