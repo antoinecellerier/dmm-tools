@@ -567,6 +567,24 @@ impl Protocol for Fs9721Protocol {
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
         use crate::protocol::{Expect, Need, ValueExpect};
+
+        // The two parsers name the same dial position differently, and a
+        // label this model cannot report leaves the step waiting for a state
+        // that never arrives. Only the UT803's V and mV carry an AC/DC
+        // prefix — its current modes are named by unit alone — and it has
+        // neither the duty-cycle display nor the "mA%" mode, while the
+        // tachometer and AC+DC are one model's each.
+        let ut803 = self.model == Fs9721Model::Ut803;
+        let for_model = |ut804: Option<&'static str>, ut803_label: Option<&'static str>| {
+            if ut803 { ut803_label } else { ut804 }
+        };
+        // Assert the mode where this model has a label for it, and nothing
+        // where it has not.
+        let named = |step: CaptureStep, label: Option<&'static str>| match label {
+            Some(label) => step.expect(Expect::mode(label)),
+            None => step,
+        };
+
         vec![
             CaptureStep::basic("dcv", "Set meter to DC V")
                 .gate()
@@ -585,8 +603,10 @@ impl Protocol for Fs9721Protocol {
             CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
             // AC+DC is the AC/DC nibble's fourth value; the spec (§5) has it
             // on the UT804 and leaves the UT803 open.
-            CaptureStep::basic("acdcv", "Set meter to AC+DC V (if the meter has it)")
-                .expect(Expect::mode("AC+DC V")),
+            named(
+                CaptureStep::basic("acdcv", "Set meter to AC+DC V (if the meter has it)"),
+                for_model(Some("AC+DC V"), None),
+            ),
             CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV")),
             CaptureStep::basic("acmv", "Set meter to AC mV (if the meter has it)")
                 .expect(Expect::mode("AC mV")),
@@ -618,15 +638,19 @@ impl Protocol for Fs9721Protocol {
             // Both models name the frequency mode "Frequency", not "Hz".
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
                 .expect(Expect::mode("Frequency")),
-            CaptureStep::basic(
-                "duty",
-                "Frequency mode: switch the display to Duty Cycle (%)",
-            )
-            .expect(Expect::mode("Duty %")),
+            named(
+                CaptureStep::basic(
+                    "duty",
+                    "Frequency mode: switch the display to Duty Cycle (%)",
+                ),
+                for_model(Some("Duty %"), None),
+            ),
             // Frequency with the alt bit set; the spec (§5) gives RPM to the
             // UT803 alone.
-            CaptureStep::basic("rpm", "Set meter to Tachometer / RPM (UT803 only)")
-                .expect(Expect::mode("Tachometer")),
+            named(
+                CaptureStep::basic("rpm", "Set meter to Tachometer / RPM (UT803 only)"),
+                for_model(None, Some("Tachometer")),
+            ),
             CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
@@ -636,18 +660,38 @@ impl Protocol for Fs9721Protocol {
             )
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("Temperature")),
-            CaptureStep::basic("dcua", "Set meter to DC µA").expect(Expect::mode("DC µA")),
-            CaptureStep::basic("acua", "Set meter to AC µA").expect(Expect::mode("AC µA")),
-            CaptureStep::basic("dcma", "Set meter to DC mA").expect(Expect::mode("DC mA")),
-            CaptureStep::basic("acma", "Set meter to AC mA").expect(Expect::mode("AC mA")),
-            CaptureStep::basic("dca", "Set meter to DC A").expect(Expect::mode("DC A")),
-            CaptureStep::basic("aca", "Set meter to AC A").expect(Expect::mode("AC A")),
+            named(
+                CaptureStep::basic("dcua", "Set meter to DC µA"),
+                for_model(Some("DC µA"), Some("µA")),
+            ),
+            named(
+                CaptureStep::basic("acua", "Set meter to AC µA"),
+                for_model(Some("AC µA"), Some("µA")),
+            ),
+            named(
+                CaptureStep::basic("dcma", "Set meter to DC mA"),
+                for_model(Some("DC mA"), Some("mA")),
+            ),
+            named(
+                CaptureStep::basic("acma", "Set meter to AC mA"),
+                for_model(Some("AC mA"), Some("mA")),
+            ),
+            named(
+                CaptureStep::basic("dca", "Set meter to DC A"),
+                for_model(Some("DC A"), Some("A")),
+            ),
+            named(
+                CaptureStep::basic("aca", "Set meter to AC A"),
+                for_model(Some("AC A"), Some("A")),
+            ),
             // Two modes whose names come from the vendor binaries alone
             // (spec §3.4): mode 14 "ADP / Logic" and mode 15, unit "mA%".
             CaptureStep::basic("adp", "Set meter to ADP / logic (UT804 only)")
                 .expect(Expect::mode("ADP")),
-            CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)")
-                .expect(Expect::mode("mA%")),
+            named(
+                CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
+                for_model(Some("mA%"), None),
+            ),
             // The HOLD wire encoding is what this step is for, so it asserts
             // nothing about the flag.
             CaptureStep::basic(
@@ -662,6 +706,38 @@ impl Protocol for Fs9721Protocol {
 mod tests {
     use super::*;
     use crate::protocol::test_support::snapshot;
+
+    /// A step may only ask for a label its own model's parser can report:
+    /// the UT803 names its current modes by unit alone, so asking it for
+    /// "DC µA" leaves the step waiting for a state that never arrives.
+    #[test]
+    fn each_model_is_asked_for_the_labels_its_parser_reports() {
+        let expected = |proto: &dyn Protocol, id: &str| -> Option<&'static str> {
+            proto
+                .capture_steps()
+                .into_iter()
+                .find(|s| s.id == id)
+                .expect("the step list has the step")
+                .expect
+                .and_then(|e| e.mode)
+        };
+
+        let ut803 = Fs9721Protocol::new_ut803();
+        assert_eq!(expected(&ut803, "dcua"), Some("µA"));
+        assert_eq!(expected(&ut803, "acma"), Some("mA"));
+        assert_eq!(expected(&ut803, "dca"), Some("A"));
+        assert_eq!(expected(&ut803, "rpm"), Some("Tachometer"));
+        // Modes the UT803 parser has no label for at all.
+        for id in ["duty", "ma_percent", "acdcv"] {
+            assert_eq!(expected(&ut803, id), None, "{id} asserted on the UT803");
+        }
+
+        let ut804 = Fs9721Protocol::new_ut804();
+        assert_eq!(expected(&ut804, "dcua"), Some("DC µA"));
+        assert_eq!(expected(&ut804, "duty"), Some("Duty %"));
+        assert_eq!(expected(&ut804, "acdcv"), Some("AC+DC V"));
+        assert_eq!(expected(&ut804, "rpm"), None, "the UT804 has no tachometer");
+    }
 
     /// Build a 14-nibble UT804 payload.
     /// digits = MSD-first nibbles 0-4; then range, mode, acdc, status.
