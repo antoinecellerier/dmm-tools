@@ -221,15 +221,14 @@ impl ModeTables for Ut61ePlusTable {
     const DIAL_POSITIONS: &'static [DialPosition] = DIAL;
     const MODEL_NAME: &'static str = "UNI-T UT61E+";
 
-    /// DC mV has one range on this model (220mV) and the RANGE button does
-    /// nothing in it — both verified 2026-03-21, see the "Range tables"
-    /// section of docs/verification-backlog.md. The table's second entry
-    /// (2.2V) is another model's, so the length alone would not say so.
-    ///
-    /// AC mV is not verified either way and is left offered; the backlog
-    /// asks for the check.
+    /// The mV dial has one range on this model (220mV) and the RANGE
+    /// button does nothing in either of its modes — DC mV verified
+    /// 2026-03-21, AC mV 2026-09-07 (three presses, range byte and AUTO
+    /// annunciator unmoved); see the "Range tables" section of
+    /// docs/verification-backlog.md. The table's second entry (2.2V) is
+    /// another model's, so the length alone would not say so.
     fn range_is_fixed(&self, mode: Mode) -> bool {
-        mode == Mode::DcMv
+        matches!(mode, Mode::DcMv | Mode::AcMv)
     }
 
     fn peak_modes(&self) -> &'static [Mode] {

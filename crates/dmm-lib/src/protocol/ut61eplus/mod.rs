@@ -833,13 +833,13 @@ mod tests {
         assert!(choices[1..].iter().all(|c| !c.current));
     }
 
-    /// DC mV has one range on the E+ and RANGE does nothing there; DC A's
-    /// table is a placeholder plus the one verified 20A entry; diode has a
-    /// single entry. None of the three is a ladder.
+    /// The mV dial has one range on the E+ and RANGE does nothing in DC mV
+    /// or AC mV; DC A's table is a placeholder plus the one verified 20A
+    /// entry; diode has a single entry. None of the four is a ladder.
     #[test]
     fn modes_without_a_ladder_offer_no_ranges() {
         let proto = Ut61PlusProtocol::new();
-        for (mode, range) in [(0x03, 0x00), (0x10, 0x01), (0x08, 0x00)] {
+        for (mode, range) in [(0x03, 0x00), (0x01, 0x00), (0x10, 0x01), (0x08, 0x00)] {
             let m = make_test_measurement(mode, range, b" 12.345", (0, 0), (0, MANUAL, 0));
             assert!(
                 proto.choices(Setting::Range, &m).is_empty(),

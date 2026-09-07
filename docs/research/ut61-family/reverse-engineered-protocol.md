@@ -494,6 +494,11 @@ Source: `ut61e_plus.rs` (50 ranges).
 | `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
 | `hfe` | Hfe | 0 | 1000β | β | 1000 | 0 |
 
+On the UT61E+ the mV dial is fixed-range in **both** of its modes — DC mV
+[VERIFIED] 2026-03-21, AC mV [VERIFIED] 2026-09-07 (three RANGE presses moved
+neither the range byte nor the AUTO annunciator). Only index 0 (220mV) occurs
+on this model; the 2.2V rows of `dc_mv`/`ac_mv` belong to other models.
+
 ### UT61B+ (6,000 counts)
 
 Source: `ut61b_plus.rs` (49 ranges).

@@ -735,10 +735,12 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   via the mV dial position. On UT61E+, DC mV has only 1 range (range 0 =
   220mV); the RANGE button has no effect. The code's dc_mv range 1 (2.2V)
   may be used by other models.
-- **AC mV (0x01): is RANGE dead there too?** DC mV is verified fixed and
-  the driver offers no range there; AC mV shares the same table and is
-  still offered. On the mV dial with SELECT on AC mV, press RANGE and
-  check whether the range byte or the AUTO annunciator moves at all.
+- **AC mV (0x01): RANGE is dead there too — verified 2026-09-07.** On the
+  mV dial in AC mV, `set range 2.2V` pressed RANGE once and re-read three
+  times; neither the range byte (220mV throughout) nor the AUTO annunciator
+  moved, and the walk gave up with "RANGE did nothing in 220mV". Both mV
+  modes are therefore fixed-range on the E+ and the choice list offers no
+  range in either. The table's 2.2V entry belongs to another model.
 
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
@@ -888,7 +890,8 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Bar polarity | bit0 of byte13 | Verified (set on negative readings) |
 | DC indicator | bit3 of byte13 | Verified (set on DC V, clear on AC mV) |
 | DC V range table | ranges 0-3 | Verified: 0=2.2V, 1=22V, 2=220V, 3=1000V (4 ranges, not 5) |
-| DC mV mode | 0x03 | Verified: separate mode via dial, range 0=220mV only on UT61E+ |
+| DC mV mode | 0x03 | Verified: separate mode via dial, range 0=220mV only on UT61E+; RANGE has no effect |
+| AC mV range | 0x01 | Verified 2026-09-07: fixed at 220mV — 3 RANGE presses moved neither the range byte nor AUTO |
 | Command ack frames | — | Verified (2-byte payload after commands, skipped in measurement path) |
 | Frame format | len includes checksum | Verified (19 bytes total) |
 | Checksum | 16-bit BE sum | Verified |
