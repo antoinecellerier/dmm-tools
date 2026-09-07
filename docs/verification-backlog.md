@@ -54,8 +54,51 @@ Since 2026-09-07 the library walks RANGE by read-back for `Setting::Range`:
 it presses 0x46, re-reads the range byte until the target rung shows, and
 aborts with "the mode changed to …" if the mode byte moves under it, so a
 wrong guess about what 0x46 does fails cleanly instead of stepping blind.
-The command that exercises it lands with the CLI phase; that will be the
-runnable check for this item.
+
+`dmm-cli get`/`set` reach that walk since the same day, so the runnable
+check is this, on the V⎓ dial position with a 1.5 V cell across the leads,
+noting the LCD range annunciator after each line:
+
+```
+RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus get range
+RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range 22V
+RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range 220V
+RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range 2.2V
+RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range auto
+```
+
+`RUST_LOG` is the only switch — the CLI takes no logging flag. Paste the
+`cycle: pressing RANGE (in X, want Y)` lines into this item whatever the
+outcome: they record the press count and the order the range bytes actually
+came round in, which is exactly what the 2026-07-29 capture could not
+settle. 1.5 V is inside all four rungs, so every switch is expected to land
+and print `Meter now in <rung> (manual range)`, then
+`Meter now auto-ranging (<rung>)`. The failures are the data:
+
+- `the mode changed to AC+DC V; stopped pressing RANGE` is the evidence
+  that 0x46 flips the mode as well as the range, which is what presses 4
+  and 6 above suggested and nothing has confirmed since. Say which rung it
+  started from and how many presses it got through.
+- `<rung> never appeared; the meter is back in <rung>` means the presses do
+  step, but not one rung at a time or not through that rung at all.
+- `AUTO did nothing; the meter is still in <rung>` would contradict the
+  0x47 line in the Completed table.
+
+Same session, same meter, for the settings that ride on the same read-back
+confirmation:
+
+- `dmm-cli --device ut61eplus set hold on` then `set hold off` — HOLD
+  should light and clear on one press each
+- `set minmax max`, `set minmax min`, `set minmax off` — MAX and MIN are
+  the only states the E+ is offered; off leaves by 0x42 rather than by a
+  press, so `EXIT MIN/MAX did nothing …` and a cleared badge would mean the
+  exit command is not what clears it
+- on the V~ dial position, `set peak p-max`, `set peak p-min` and
+  `set peak off` — this is also the "which modes Peak is offered in" check below
+- `dmm-cli --device ut61eplus get` on the DC mV and A dial positions should
+  print no `range` row: RANGE does nothing in DC mV (verified 2026-03-21, so
+  the E+ table marks that range as fixed), and both entries of the A table
+  carry the same `20A` label, so there is nothing to choose between
 
 The range *count* is not an open question — see Completed Verification: **DC V
 has 4 manual ranges** (0=2.2V, 1=22V, 2=220V, 3=1000V), and 220mV is reachable
@@ -70,8 +113,8 @@ live on where the mode does, in `DC_MV_SPECS`/`AC_MV_SPECS` index 0.
 
 ### UT61+ remote mode selection (cycle-to-target)
 
-Shipped 2026-09-07: `dmm-cli mode` and the GUI's mode dropdown work on the
-UT61+/UT161 family. The meter takes no set-mode command, so the driver
+Shipped 2026-09-07: `dmm-cli get mode`/`set mode` and the GUI's mode
+dropdown work on the UT61+/UT161 family. The meter takes no set-mode command, so the driver
 (`crates/dmm-lib/src/protocol/cycle.rs`) presses SELECT (0x4C) or Hz/%
 (0x49) and re-reads the mode byte until the target shows, planning from a
 per-model dial table recorded in
@@ -82,7 +125,7 @@ meter the same day, every position and every entry (Completed table below).
 UT61B+/UT61D+/UT161x owners — [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7).
 Their dial tables come from the manual alone and no press has been observed,
 so the listing itself is the thing to check: on each dial position,
-`dmm-cli --device ut61b+ mode` (or `ut61d+`) should name exactly the
+`dmm-cli --device ut61b+ get mode` (or `ut61d+`) should name exactly the
 functions the meter's own SELECT and Hz/% buttons reach there, and a switch
 to each should land. Two specifics: the UT61D+ V≂ position is expected to
 carry both AC V and DC V on SELECT, and its temperature position to switch
@@ -181,18 +224,18 @@ real hardware**. Every aspect needs end-to-end verification.
 - Commands: same as VC-880 plus 0x5D (Set Time) and 0x5E (Get Measurement)
 - PC button activation requirement
 - Dial table and SHIFT/SETUP mode switching — implemented 2026-09-07 as
-  `dmm-cli mode` (and the GUI's mode dropdown) over the [MANUAL] dial table
-  in the spec's "Rotary positions" section. Nothing in it is
+  `dmm-cli get mode`/`set mode` (and the GUI's mode dropdown) over the
+  [MANUAL] dial table in the spec's "Rotary positions" section. Nothing in it is
   hardware-confirmed: the manual says which symbol each position offers,
   never the order the presses walk them. Runnable checks, one dial position
   at a time:
-  - `dmm-cli --device vc890 mode` on every position — the listing should
+  - `dmm-cli --device vc890 get mode` on every position — the listing should
     name exactly the functions that position offers, `*` on the live one.
     The capacitance position offers one function, so it prints "no
     switchable modes" instead of a list. Report the dial symbol and the
     list whenever they disagree
   - switch to every entry the listing offers, with
-    `RUST_LOG=dmm_lib=debug dmm-cli --device vc890 mode "<label>"`, and
+    `RUST_LOG=dmm_lib=debug dmm-cli --device vc890 set mode "<label>"`, and
     paste the log: one `cycle: pressing SHIFT/SETUP (in X, want Y)` line per
     press, so it records both the press count and the order the function
     codes actually came round in
@@ -209,7 +252,17 @@ real hardware**. Every aspect needs end-to-end verification.
 - `Setting::Range` — implemented 2026-09-07 the same way, pressing RANGE
   (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
   nobody has confirmed that repeated 0x46 steps the ladder one rung at a
-  time on this meter
+  time on this meter. Runnable check, on a dial position with a stable
+  input applied: `dmm-cli --device vc890 get range` should name the rungs
+  that function offers, `*` on the live one — report any rung the meter's
+  own RANGE button reaches that the listing leaves out. Then
+  `RUST_LOG=dmm_lib=debug dmm-cli --device vc890 set range <label>` for each
+  of them, and `set range auto` to finish. Paste the
+  `cycle: pressing RANGE (in X, want Y)` lines: the press count per rung is
+  what says whether 0x46 steps one at a time.
+  `<label> never appeared; the meter is back in <label>` means it does not,
+  and `the mode changed to <mode>; stopped pressing RANGE` means 0x46 moves
+  the function byte too
 - `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07 by pressing
   0x4A, 0x48 and 0x49 and reading the flag back, with 0x43 to leave
   MAX/MIN/AVG. MIN/MAX is offered as off/MAX/MIN/AVG. Unverified: the order
@@ -217,7 +270,14 @@ real hardware**. Every aspect needs end-to-end verification.
   order works, but a state the meter never lights shows up as
   `<state> never appeared; the meter is back in <state>`), and whether
   every mode accepts HOLD and REL. Peak is not offered — the vendor command
-  table lists no peak command. See also the AVG flag item above
+  table lists no peak command. Runnable check:
+  `dmm-cli --device vc890 set minmax max`, then `set minmax min`, then
+  `set minmax avg`, then `set minmax off`, each with the badge the LCD
+  shows; `set minmax avg` is also the hardware check the AVG flag item
+  above wants, since it only succeeds if byte 31 bit 1 is read back. Then
+  `set hold on` / `set hold off` and `set rel on` / `set rel off` on two or
+  three dial positions. Run them under `RUST_LOG=dmm_lib=debug` and paste
+  the `cycle:` lines
 
 **Voltcraft VC-880 / VC650BT**:
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
@@ -237,18 +297,18 @@ real hardware**. Every aspect needs end-to-end verification.
 - PC button activation requirement
 - VC650BT compatibility (same protocol confirmed by installer comparison)
 - Dial table and SHIFT/SETUP mode switching — implemented 2026-09-07 as
-  `dmm-cli mode` (and the GUI's mode dropdown) over the [MANUAL] dial table
-  in spec §4.4. Nothing in it is hardware-confirmed: the manual says which
+  `dmm-cli get mode`/`set mode` (and the GUI's mode dropdown) over the
+  [MANUAL] dial table in spec §4.4. Nothing in it is hardware-confirmed: the manual says which
   symbol each position offers, never the order the presses walk them, and
   its §8b text contradicts its own figure over where AC V lives. Runnable
   checks, one dial position at a time:
-  - `dmm-cli --device vc880 mode` on every position — the listing should
+  - `dmm-cli --device vc880 get mode` on every position — the listing should
     name exactly the functions that position offers, `*` on the live one.
     V~, Lo and capacitance offer one function each, so they print "no
     switchable modes" instead of a list. Report the dial symbol and the
     list whenever they disagree
   - switch to every entry the listing offers, with
-    `RUST_LOG=dmm_lib=debug dmm-cli --device vc880 mode "<label>"`, and
+    `RUST_LOG=dmm_lib=debug dmm-cli --device vc880 set mode "<label>"`, and
     paste the log: one `cycle: pressing SHIFT/SETUP (in X, want Y)` line per
     press, so it records both the press count and the order the function
     codes actually came round in
@@ -270,13 +330,29 @@ real hardware**. Every aspect needs end-to-end verification.
 - `Setting::Range` — implemented 2026-09-07 the same way, pressing RANGE
   (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
   nobody has confirmed that repeated 0x46 steps the ladder one rung at a
-  time on this meter
+  time on this meter. Runnable check, on a dial position with a stable
+  input applied: `dmm-cli --device vc880 get range` should name the rungs
+  that function offers, `*` on the live one — report any rung the meter's
+  own RANGE button reaches that the listing leaves out. Then
+  `RUST_LOG=dmm_lib=debug dmm-cli --device vc880 set range <label>` for each
+  of them, and `set range auto` to finish. Paste the
+  `cycle: pressing RANGE (in X, want Y)` lines: the press count per rung is
+  what says whether 0x46 steps one at a time.
+  `<label> never appeared; the meter is back in <label>` means it does not,
+  and `the mode changed to <mode>; stopped pressing RANGE` means 0x46 moves
+  the function byte too
 - `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07 by pressing
   0x4A, 0x48 and 0x49 and reading the flag back, with 0x43 to leave
   MAX/MIN/AVG. MIN/MAX is offered as off/MAX/MIN/AVG. Unverified: the order
   0x49 walks those three in, and whether every mode accepts HOLD and REL.
-  Peak is not offered — the vendor command table lists no peak command. See
-  also the AVG flag item above
+  Peak is not offered — the vendor command table lists no peak command.
+  Runnable check: `dmm-cli --device vc880 set minmax max`, then
+  `set minmax min`, then `set minmax avg`, then `set minmax off`, each with
+  the badge the LCD shows; `set minmax avg` is also the hardware check the
+  AVG flag item above wants, since it only succeeds if byte 31 bit 1 is
+  read back. Then `set hold on` / `set hold off` and `set rel on` /
+  `set rel off` on two or three dial positions. Run them under
+  `RUST_LOG=dmm_lib=debug` and paste the `cycle:` lines
 
 **UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
 - **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
@@ -419,7 +495,7 @@ real hardware**. Every aspect needs end-to-end verification.
   (`FUN_00755400`) writes, and the two were never reconciled. Recovering
   the real encoding — Delphi virtual dispatch, the method-table route that
   found the UT181A's SET_MODE — is what stands between the UT171 and
-  `dmm-cli mode`. The cycle-to-target driver does not apply either: no
+  `dmm-cli set mode`. The cycle-to-target driver does not apply either: no
   cycle-button command is known for this family.
 
 ### UT181A — confirmed on hardware, formats still open
@@ -523,16 +599,17 @@ own software sends, not hardware confirmation.
   CP2110-equipped unit was never detected on macOS at all (with other
   software, before dmm-tools existed). Unverified, not known-broken
 - SET_MODE (0x01) — vendor-traced; implemented 2026-09-06 as
-  `dmm-cli mode` (lists the modes the dial reaches, switches by label or
-  by a unique fragment of one) and the GUI's mode dropdown under the
+  `dmm-cli get mode` (lists the modes the dial reaches) and `set mode`
+  (switches by label or by a unique fragment of one), and the GUI's mode
+  dropdown under the
   reading. No meter has answered one yet. Runnable checks, each with an
   LCD photo beside the tool's output:
-  - `dmm-cli --device ut181a mode` on the V AC dial — expect six
+  - `dmm-cli --device ut181a get mode` on the V AC dial — expect six
     choices, `*` on the live one
-  - `dmm-cli --device ut181a mode "V AC Hz"` (0x1121), then
-    `mode "V AC dBm"` (0x1161), then `mode "V AC"` (0x1111)
-  - on the temperature dial, `mode t1-t2` (0x4231), then `mode "°C"`
-    (0x4211) — a unique fragment of a label is enough
+  - `dmm-cli --device ut181a set mode "V AC Hz"` (0x1121), then
+    `set mode "V AC dBm"` (0x1161), then `set mode "V AC"` (0x1111)
+  - on the temperature dial, `set mode t1-t2` (0x4231), then
+    `set mode "°C"` (0x4211) — a unique fragment of a label is enough
   - a switch prints `Meter now in <label>`; `Meter did not switch` or a
     refusal is the interesting result — report it verbatim
   - the family-local rule: the listing should never offer a word from
@@ -553,17 +630,20 @@ own software sends, not hardware confirmation.
   0x9122 / 0xA122 (µA / mA / A DC AC+DC) are vendor-traced only. Needs
   hardware: enter each variant, toggle REL, and confirm the mode word
   the meter reports back is the companion listed here
-- SET_RANGE (0x02) — vendor-traced 1-based index semantics; since
-  2026-09-06 the `range` command steps the family's ladder from the last
-  range the meter reported instead of always sending index 1. Needs
-  hardware: on V DC, `dmm-cli --device ut181a command range` twice, and
-  check with `dmm-cli --device ut181a read --format json --count 1` that
-  `"range"` advances one rung per press (not back to the first) and
-  matches the LCD's range annunciator; `command auto` should return to
-  auto-range. `dmm-cli --device ut181a debug` prints the raw payload if
-  the range byte itself is wanted. Since 2026-09-07 `Setting::Range` sends
-  the same command absolutely — the choice id *is* the SET_RANGE byte, 0
-  being auto — so this check settles both
+- SET_RANGE (0x02) — vendor-traced 1-based index semantics. Since
+  2026-09-07 `Setting::Range` sends it absolutely: the choice id *is* the
+  SET_RANGE byte, 0 being auto, so one named switch tests the encoding
+  directly instead of inferring it from a step. Needs hardware: on V DC,
+  `dmm-cli --device ut181a set range <second rung's label>` (take the
+  label from `get range`), then
+  `dmm-cli --device ut181a get range --format json` — `"current"` and the
+  `current: true` entry should both name that rung, and it should match the
+  LCD's range annunciator. Then `dmm-cli --device ut181a set range auto`
+  should hand ranging back, and `get range --format json` show `"Auto"`
+  current. `dmm-cli --device ut181a debug` prints the raw payload if the
+  range byte itself is wanted. `dmm-cli --device ut181a command range`
+  still steps the ladder a rung at a time from the last range the meter
+  reported, so it is the fallback if a named switch is refused
 - SET_MIN_MAX (0x04) payload width — the vendor app sends **one** byte,
   not the uint32 antage and sigrok describe (spec §4.2). The code sends
   one byte; a meter needs to confirm MIN/MAX actually engages: on V DC,
@@ -578,7 +658,7 @@ own software sends, not hardware confirmation.
   own flags, so a command the meter ignores now reports
   `<setting> <state> did nothing; the meter is still in <state>` — worth
   quoting in any report. Peak is not offered as a setting: it is a mode
-  variant on this meter, reached through `dmm-cli mode`
+  variant on this meter, reached through `dmm-cli set mode`
 - Command replies (type 0x01, "OK" / "ER") — community-sourced only (the
   vendor app's handling of them was not traced), never seen from a meter. Since 2026-09-06 every command above waits
   for one and turns "ER" into an error, while silence still passes, so
@@ -794,7 +874,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Remote RANGE | 0x46 | Verified |
 | Remote AUTO | 0x47 | Verified |
 | Remote SELECT | 0x4C | Verified on every dial position (§3.1 of the ut61-family spec: V⎓, V~, mV, Ω, µA, mA, A rings; inert on hFE, NCV) |
-| Remote mode switching (`dmm-cli mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under HOLD and MIN/MAX; settle 150 ms / 3 reads |
+| Remote mode switching (`dmm-cli set mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under HOLD and MIN/MAX; settle 150 ms / 3 reads |
 | Remote LIGHT | 0x4B | Verified |
 | Remote SELECT2 | 0x49 | Verified (AC V/mV/µA/mA/A → Hz → Duty Cycle → back; Hz ↔ Duty on the Hz/% dial; inert on V⎓, DC mV, hFE, NCV) |
 | Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV; context-dependent, no effect on DC V) |

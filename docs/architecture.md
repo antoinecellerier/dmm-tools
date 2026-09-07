@@ -23,8 +23,9 @@ The library crate handles all device communication and data parsing. It has no U
 | `ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
 | `transport.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
-| `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability` |
+| `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
+| `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |
 | `protocol/framing.rs` | Message framing: find `AB CD`, `0xAC`, or FS9721 index-nibble header, extract payload, validate checksum (or position/index validation) |
 | `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `ModeTables` impls — one match per mode returning ranges and specs — behind the `DeviceTable` trait) |
 | `protocol/ut8802/` | UT8802 family: `Ut8802Protocol` — streaming protocol with 0x5A trigger, 0xAC 8-byte BCD frames |
@@ -39,7 +40,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
 | `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |
 | `stats.rs` | `RunningStats` (min/max/avg), `Integrator` (trapezoidal time-integral with gap handling), and `SeriesStats` — the mode/unit-keyed session both the CLI read loop and the GUI drain accumulate into, so the two agree on what starts a new series |
-| `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max, Low Battery |
+| `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
 | `binary_help.rs` | `--version` / `--device` help text shared by both binaries. Lives here because the device list comes from the registry, so a new device reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
 | `lib.rs` | `Dmm` struct: top-level API tying everything together |
@@ -63,36 +64,17 @@ USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protoc
 ```
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
-`request_measurement()`, `send_command()`, `get_name()`, `profile()`, and `capture_steps()`.
-Each family implements its own framing, parsing, and command encoding internally, but all
-produce the same `Measurement` struct.
+`request_measurement()`, `send_command()`, `choices()`/`select()`, `get_name()`, `profile()`,
+and `capture_steps()`. Each family implements its own framing, parsing, and command encoding
+internally, but all produce the same `Measurement` struct.
 
-**Absolute setting selection** is the second remote-control path, alongside the named commands
-of `send_command()`. A `Setting` names what is being driven — `Mode`, `Range`, `Hold`, `Rel`,
-`MinMax` and `Peak` are all implemented.
-`choices(Setting, &Measurement)` lists the values the setting can be switched to *from where
-the meter sits right now* — each a `Choice { id, label, current }` whose label uses the same
-vocabulary as `Measurement::mode` — and `select(Setting, id)` switches to one. Both
-default to "unsupported" on the trait, and a family opts in one of two ways: with a direct
-set-mode command (the UT181A, whose ids are mode words, and the mock), or through the shared
-cycle-to-target driver in `protocol/cycle.rs` (the UT61+/UT161 family and the Voltcraft
-VC-880/VC-890, whose ids are mode bytes) — that driver presses SELECT, Hz/% or SHIFT/SETUP and
-reads the mode back until the target shows,
-planning from a per-model table of dial positions because the meter never reports the dial.
-`Range` runs on the same two paths: `SET_RANGE` on the UT181A, and elsewhere the same
-read-back walk pressing RANGE, over the mode's range-label table as its ring — aborting if the
-mode changes under it, since the ladder would then be another function's. Choice id 0 is
-autorange throughout and is never walked to: every meter has a command of its own for it.
-The four flag-backed settings answer the same way, read back from the meter's own badges
-instead of the mode or range field: `Hold` and `Rel` are toggles reached in one press,
-confirmed by the flag; `MinMax` and `Peak` are rings the button steps between (off, MAX, MIN,
-plus AVG on the Voltcraft meters) and leave only by an exit command of their own, confirmed
-like autorange. Which states a family offers depends on the mode — Peak is offered only in
-the UT61+ AC modes and only on models that have it, and the UT181A reaches Peak through
-`Mode` instead. CLI and GUI drive the pair generically: an
-empty list means hide the control, and the flagged entry is the live value. This is what
-`send_command("select")` cannot express — a cycling button gives no way to jump to a named mode
-or to know which one is active.
+Remote control has two paths. `send_command()` sends a named button press and reads nothing
+back. `choices(Setting, &Measurement)` lists the values a setting (`Mode`, `Range`, `Hold`,
+`Rel`, `MinMax`, `Peak`) can take from where the meter sits, each a `Choice { id, label,
+current }`, and `select(Setting, id)` switches to one, confirmed from the stream. The UT181A
+and the mock answer with direct commands; the UT61+/UT161 and Voltcraft families go through
+`protocol/cycle.rs`. Both default to "unsupported", and the CLI and GUI hide any setting whose
+list has fewer than two entries.
 
 **Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
 devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation
@@ -118,7 +100,7 @@ CLI binary using `clap`. Split into three modules:
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | CLI framework, command dispatch, `list`/`info`/`read`/`command`/`debug` subcommands |
+| `main.rs` | CLI framework, command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug` subcommands |
 | `capture.rs` | Guided protocol capture tool: types (`CaptureReport`, `StepResult`, `SampleData`), step definitions, interactive prompting, multi-part capture orchestration, YAML report I/O |
 | `format.rs` | Measurement output formatting (text/csv/json) |
 
@@ -151,7 +133,7 @@ methods to it, so no panel owns state of its own.
 |--------|---------------|
 | `app/mod.rs` | The `App` struct, `ConnectionState`, construction, and the per-frame `update` that lays the panels out |
 | `app/appearance.rs` | Font chain and text styles, theme and colour overrides, zoom levels, always-on-top and decoration commands |
-| `app/connection.rs` | The background acquisition thread: open, poll, reconnect, and the `DmmMessage`/`ThreadControl` channel types |
+| `app/connection.rs` | The background acquisition thread: open, poll, reconnect, the per-setting choice lists (re-listed only when the reading they are keyed on moves), and the `DmmMessage`/`ThreadControl` channel types |
 | `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and the connection-help text |
 | `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and same-unit overlays |
 | `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/Help/shortcuts/settings group |
@@ -165,7 +147,7 @@ methods to it, so no panel owns state of its own.
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The "What's New" release-notes viewport |
 | `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
-| `display.rs` | The reading itself in its three sizes, with the mode line and sub-value rows |
+| `display.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
 | `recording.rs` | The bounded sample buffer and its CSV rendering |
 | `settings.rs` | Persisted settings and the colour presets |
 | `specs.rs` | Per-range specification rendering |
@@ -189,3 +171,4 @@ methods to it, so no panel owns state of its own.
 12. **Device registry** — all device metadata (display names, aliases, activation instructions, protocol factories, manual URLs) lives in a single `DEVICES` slice in the library. CLI and GUI consume the registry without device-specific knowledge, so adding a new device family requires zero app code changes.
 13. **Static spec data** — per-range specifications (resolution, accuracy bands) and per-mode metadata (input impedance, notes) are `&'static` arrays in `tables/specs_*.rs` files, transcribed from device manuals. The GUI caches spec lookups keyed on `(mode_raw, range_raw)` and re-looks up only on mode/range changes — zero per-frame allocations. Use `cargo run -p dmm-lib --example dump_specs` to verify spec data against manuals.
 14. **Derived series model** — a *frame* is one measurement's named series: `Main` plus each sub-value by label. A *derived series* is a (label, unit, op) triple over those names. `Op::Linear` re-expresses the main reading, so it replaces `Main` and keeps the meter's own value as the `Raw` sub-value — the convention meters themselves use (Fluke REL, the UT181A's relative and dBm formats). Planned ops that produce a *new* quantity (`Binary` for V×I or A−B, `Formula`) will instead be appended as sub-values, which the graph selector, the overlay traces and the CSV aux columns already handle. Each consumer applies transforms at exactly one point — the CLI read loop, the GUI message drain — after acquisition and before any fan-out to display, graph, recording and export, so every output shows the same numbers. The scale is applied in base units (`si_prefix()`) so a factor typed once stays correct when the meter auto-ranges from mV to V.
+15. **Name the target, confirm from the stream** — `select()` never trusts a press. The cycle driver presses once, waits for a fresh frame, re-reads rather than re-presses on a stale one, and gives up after ring length + 1 presses; a range walk aborts if the mode byte moves under it. Choice id 0 is auto-range on every family and is sent as the meter's own command, never walked to. A setting the family cannot drive fails as `UnsupportedCommand` before any I/O; a switch the meter did not perform fails as `CommandRejected` after it. Both are `ErrorKind::Configuration`, so the GUI shows a toast instead of reconnecting.
