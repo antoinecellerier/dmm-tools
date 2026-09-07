@@ -550,6 +550,7 @@ dmm-cli capture [OPTIONS]
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
 | `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
 | `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
+| `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one. |
 | `--list-steps` | | List the selected device's step IDs and exit. |
 | `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use (printed to stdout). |
 
@@ -583,6 +584,24 @@ meter with secondary displays, that confirmation line lists the sub-values in
 parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,
 Period 20.00 ms)` — so the whole screen is checked, not just the main value.
 
+A few steps are marked `gate` in `--list-steps`: DC V open and shorted, Ω
+open and shorted, and a negative reading. They establish the digits, decimal
+point, OL and sign, so each stops for an Enter (or for you to type what the
+meter shows). Once all are confirmed the report records `core_semantics:
+confirmed` and later steps capture without stopping; one you correct or skip
+records `core_semantics: failed` with the IDs in `gate_failures`, and every
+later step keeps asking. A verified family starts out trusted. `tier` in the
+report says where the run ended (`sniff`, `gate` or `trusted`).
+
+Readings captured without a stop are listed once at the end, numbered. Enter
+accepts them all; otherwise give the numbers that did not match and type what
+the meter showed for each (`confirmed_by: batch`). A piped run skips the
+review.
+
+`--sniff` is for a parser nobody trusts yet: every step advances on the raw
+bytes changing, every step is confirmed on the spot, and the gate never
+promotes the run.
+
 The report records every byte exchanged with the meter: `frames` under each
 step, `init_frames` for the handshake before the first one. Bytes the decoder
 rejected are there too, with the reason under `diagnostics`, and a step that
@@ -614,6 +633,9 @@ dmm-cli --device vc890 capture --unverified
 
 # Print the verification issue's checklist
 dmm-cli --device vc890 capture --list-steps --format md
+
+# Check every step by hand, ignoring what the decoder says
+dmm-cli --device vc890 capture --sniff
 ```
 
 ## Environment Variables

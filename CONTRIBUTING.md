@@ -28,7 +28,7 @@ It will:
 - Guide you to set specific modes on the meter (DC V, AC V, ohms, etc.)
 - Capture each step on its own once the meter settles into the mode asked for (Enter captures immediately, `s` skips, `q` finishes)
 - Record raw bytes and parsed values for each step
-- Ask you to confirm what the meter's LCD actually shows
+- Ask you to confirm what the meter's LCD actually shows — the first few steps one by one, the rest listed together at the end
 - Save everything to a YAML file (e.g. `capture-ut61e+.yaml`)
 
 If you're short on time, run only the steps no one has confirmed on hardware yet — the listing marks them `·`:

@@ -40,7 +40,7 @@ does not, the step records `<command> did nothing; the meter still shows …` in
 rather than filing pre-command frames — the fix for the stale-frame class of bug.
 
 A dial-only step captures without a keypress: read the instruction, turn the dial, and the
-samples appear. The per-step confirmation prompt after them is what F removes.
+samples appear. The per-step confirmation prompt after them is what F defers to the end of the run.
 
 ## B. Full wire trace and parse diagnostics
 
@@ -66,24 +66,32 @@ without grepping.
 
 One file to attach stays the rule: no sidecar trace.
 
-## C. Trust tiers (planned)
+## C. Trust tiers
 
 | Tier | When | Detector | Confirmation | Remote driving |
 |---|---|---|---|---|
-| 0 Sniff | family with no working parser, or `--sniff` | raw-diff | per state: user names the dial position (Enter accepts the parser's guess) | none |
-| 1 Gate | `Stability::Experimental` | raw-diff until the gate passes, then semantic | inline on gate steps; deferred batch review for the rest | after the gate passes |
-| 2 Trusted | `Stability::Verified`, or gate passed | semantic | deferred batch review only | yes |
+| 0 Sniff | `--sniff` | raw-diff | every step, inline | none |
+| 1 Gate | `Stability::Experimental` | semantic where the step declares an expectation | every step, inline | after the gate passes |
+| 2 Trusted | `Stability::Verified`, or gate passed | semantic where the step declares an expectation | gate steps inline; deferred batch review for the rest | yes |
 
 The **gate** is a small block of steps marked `gate: true` in the family's step list: DC V
 open, DC V shorted, Ω open (OL), Ω shorted, and a negative reading. Those five establish mode
-byte, digits, decimal point, OL and sign. Gate steps confirm inline with the existing one-key
-prompt — Enter means the LCD shows exactly this line, otherwise type what it shows. The
-decision is Enter-only everywhere, so nothing compares typed digits; a typed correction on a
-gate step is a mismatch.
+byte, digits, decimal point, OL and sign. They are tagged `(gate)` in the step header as they
+run, and confirm inline with the existing prompt — Enter means the LCD shows exactly this
+line, otherwise type what it shows. The decision is Enter-or-type everywhere, so nothing
+compares typed digits; a typed correction on a gate step is a mismatch.
 
-If every gate step is confirmed the report records `core_semantics: confirmed` and the run
-switches to tier 2. If any is corrected or skipped the run stays at tier 1 — inline
-confirmation, no remote driving — and the report says why.
+Once every gate step has a result the run rules on it, once, and says so. All captured and
+confirmed: the report records `core_semantics: confirmed`, the run switches to tier 2, and
+the steps after it are reviewed at the end. Any of them corrected, skipped, timed out or
+errored: `core_semantics: failed` with the step ids under `gate_failures`, and the run stays
+at tier 1 — inline confirmation, no remote driving. A resumed run rules on what the loaded
+report already holds. The tier reached is recorded as `tier`.
+
+Remote driving is D, which has not shipped; tier 2 buys the deferred review today.
+
+`--sniff` is the tier for a parser nobody trusts yet: `expect` is ignored, so every step
+advances on the payload bytes changing, and a passed gate does not promote the run.
 
 ## D. Autonomous sub-steps through `select` (planned)
 
@@ -127,13 +135,17 @@ credited there as today, and the code flag flips in the same commit. Unknowns th
 modes (VC-890 battery nibble, UT8802 byte 6) already follow the "one step whose typed answer
 resolves it" pattern, so the step stays the right unit of verification.
 
-## F. Lower-friction confirmation (planned)
+## F. Lower-friction confirmation
 
-After the run, a numbered table (step, what we read) is printed and the user gives the
-indices that were wrong; LCD text is typed only for those. Structured fields replace the
-`screen: "confirmed: …"` string: `confirmed: Option<bool>`, `lcd: Option<String>` for the
-typed correction, and `confirmed_by: inline | batch`. Reports carrying the old `screen`
-string still load, so a resume across versions works.
+After the protocol steps and before the freeform pass, every reading captured without a
+confirmation is printed as a numbered table (index, step id, the sample's summary line) and
+the user gives the indices that were wrong; LCD text is typed only for those. A run with
+nobody to ask — stderr is not a terminal — skips the review and leaves those steps
+unconfirmed rather than recording agreement nobody gave.
+
+Structured fields replace the `screen: "confirmed: …"` string: `confirmed: Option<bool>`,
+`lcd: Option<String>` for the typed correction, and `confirmed_by: inline | batch`. Reports
+carrying the old `screen` string still load, so a resume across versions works.
 
 ## G. Preparation up front (planned)
 

@@ -155,6 +155,9 @@ Install completions for your shell:
         /// Only run steps not yet confirmed on real hardware, plus the freeform pass
         #[arg(long)]
         unverified: bool,
+        /// Trust nothing the parser says: detect steps by raw byte changes and confirm each one
+        #[arg(long)]
+        sniff: bool,
         /// List all available step IDs and exit
         #[arg(long)]
         list_steps: bool,
@@ -448,6 +451,7 @@ fn main() {
             output,
             steps,
             unverified,
+            sniff,
             list_steps,
             format,
         } => {
@@ -458,7 +462,7 @@ fn main() {
                 Ok(())
             } else {
                 open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
-                    capture::cmd_capture(output, steps, unverified, dmm, recorder, device)
+                    capture::cmd_capture(output, steps, unverified, sniff, dmm, recorder, device)
                 })
             }
         }

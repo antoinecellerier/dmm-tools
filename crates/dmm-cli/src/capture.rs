@@ -46,7 +46,40 @@ pub(crate) struct CaptureReport {
     /// visible as one.
     #[serde(skip_serializing_if = "is_zero", default)]
     pub wire_events_dropped: u64,
+    /// How far the run trusted the parser by the end of it.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub tier: Option<Tier>,
+    /// Whether the gate steps agreed with the meter, so a reader knows
+    /// whether the readings below rest on a decoder that got the basics
+    /// right. Absent when the gate never finished.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub core_semantics: Option<CoreSemantics>,
+    /// The gate steps that did not confirm, which is where to start reading.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub gate_failures: Vec<String>,
     pub steps: Vec<StepResult>,
+}
+
+/// How much of what the parser says the run takes on trust, which decides how
+/// each step is detected and when the operator is asked about it.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Tier {
+    /// Nothing: steps advance on raw byte changes and every one is confirmed.
+    Sniff,
+    /// The core semantics are unproven, so the gate steps decide.
+    Gate,
+    /// Digits, OL and sign decode correctly, so the rest is reviewed in one
+    /// pass at the end.
+    Trusted,
+}
+
+/// What the gate steps said about the family's core semantics.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum CoreSemantics {
+    Confirmed,
+    Failed,
 }
 
 fn is_zero(n: &u64) -> bool {
@@ -179,6 +212,14 @@ impl StepResult {
         self.confirmed = Some(confirmed);
         self.lcd = (!confirmed).then_some(input);
         self.confirmed_by = Some(ConfirmedBy::Inline);
+    }
+
+    /// Record the end-of-run review's verdict: `lcd` is what the meter showed,
+    /// given only for the readings the operator listed as wrong.
+    fn set_batch_confirmation(&mut self, lcd: Option<String>) {
+        self.confirmed = Some(lcd.is_none());
+        self.lcd = lcd.filter(|text| !text.is_empty());
+        self.confirmed_by = Some(ConfirmedBy::Batch);
     }
 
     /// Fold an older report's free-text `screen` into the structured fields,
@@ -394,11 +435,102 @@ impl SampleData {
     }
 }
 
+/// The gate steps that did not confirm the parser, or `None` while any of
+/// them is still to run. An empty list is a gate that passed.
+fn gate_failures(report: &CaptureReport, gate_ids: &[&str]) -> Option<Vec<String>> {
+    let mut failed = Vec::new();
+    for id in gate_ids {
+        let step = report.steps.iter().find(|s| s.id == *id)?;
+        if step.status != StepStatus::Captured || step.confirmed != Some(true) {
+            failed.push((*id).to_string());
+        }
+    }
+    Some(failed)
+}
+
+/// How much the run trusts the parser, and what the gate has decided about it.
+pub(crate) struct Trust {
+    tier: Tier,
+    /// Every gate step the device declares, not just the selected ones: the
+    /// gate is only decided once the whole block has reported.
+    gate_ids: Vec<&'static str>,
+    /// The gate has been ruled on, so a failed one says so once.
+    decided: bool,
+}
+
+impl Trust {
+    /// A family whose readings hardware has confirmed is trusted from the
+    /// start; `--sniff` distrusts even a family that has been.
+    pub(crate) fn new(sniff: bool, verified: bool, steps: &[CaptureStep]) -> Self {
+        Trust {
+            tier: match (sniff, verified) {
+                (true, _) => Tier::Sniff,
+                (false, true) => Tier::Trusted,
+                (false, false) => Tier::Gate,
+            },
+            gate_ids: steps.iter().filter(|s| s.gate).map(|s| s.id).collect(),
+            decided: false,
+        }
+    }
+
+    /// What the step's detector may assume. Sniff assumes nothing: the step
+    /// advances on the payload bytes changing, whatever the parse made of it.
+    fn expect(&self, step: &CaptureStep) -> Option<dmm_lib::protocol::Expect> {
+        match self.tier {
+            Tier::Sniff => None,
+            Tier::Gate | Tier::Trusted => step.expect,
+        }
+    }
+
+    /// Whether the step is confirmed at the step itself. Gate steps always
+    /// are — the rest of the run's confirmations rest on them.
+    fn confirm_inline(&self, step: &CaptureStep) -> bool {
+        step.gate || self.tier != Tier::Trusted
+    }
+
+    /// Rule on the gate once every one of its steps has reported, and promote
+    /// the run if the parser got the core semantics right.
+    fn update(&mut self, report: &mut CaptureReport) {
+        if self.decided || self.tier != Tier::Gate || self.gate_ids.is_empty() {
+            return;
+        }
+        let Some(failures) = gate_failures(report, &self.gate_ids) else {
+            return;
+        };
+        self.decided = true;
+        if failures.is_empty() {
+            self.tier = Tier::Trusted;
+            report.core_semantics = Some(CoreSemantics::Confirmed);
+            eprintln!(
+                "{}",
+                style("Core semantics confirmed \u{2014} remaining steps are reviewed at the end.")
+                    .green()
+            );
+        } else {
+            report.core_semantics = Some(CoreSemantics::Failed);
+            eprintln!(
+                "{}",
+                style(format!(
+                    "Core semantics not confirmed ({}) \u{2014} every step will ask for confirmation.",
+                    failures.join(", ")
+                ))
+                .yellow()
+            );
+        }
+        report.gate_failures = failures;
+        report.tier = Some(self.tier);
+    }
+}
+
+/// What the protocol pass left behind: whether the operator asked to finish,
+/// and the steps captured without a confirmation.
+struct ProtocolPass {
+    quit: bool,
+    to_review: Vec<String>,
+}
+
 /// Run the device's own capture steps: modes, flags, and the manual range
 /// sweep, in the order the protocol declares them.
-///
-/// Returns `true` if the user asked to finish early, so the caller can skip
-/// the freeform pass.
 #[allow(clippy::too_many_arguments)]
 fn run_protocol_capture(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
@@ -409,20 +541,10 @@ fn run_protocol_capture(
     report: &mut CaptureReport,
     output_path: &str,
     input: &Input,
-) -> Result<bool, Box<dyn std::error::Error>> {
+    trust: &mut Trust,
+) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
     // Convert protocol steps to CLI steps
-    let steps: Vec<CaptureStep> = protocol_steps
-        .iter()
-        .map(|ps| CaptureStep {
-            id: ps.id,
-            instruction: ps.instruction,
-            command: ps.command,
-            samples: ps.samples,
-            expect: ps.expect,
-            verified: ps.verified,
-            gate: ps.gate,
-        })
-        .collect();
+    let steps: Vec<CaptureStep> = protocol_steps.iter().map(CaptureStep::from).collect();
 
     eprintln!(
         "{}",
@@ -433,14 +555,22 @@ fn run_protocol_capture(
         style("each step captures itself once the meter settles \u{2014} Enter=capture now, s=skip one, q=skip to end and save").dim()
     );
 
+    // A resumed run inherits the gate its earlier half already passed.
+    trust.update(report);
+
     // What the meter was left showing, so the next step can tell a new state
     // from it.
     let mut prev = PrevState::default();
+    let mut to_review = Vec::new();
     for step in &steps {
         if !step_selected(step, step_filter, unverified_only) {
             continue;
         }
-        let outcome = run_capture_step(dmm, recorder, step, report, true, input, &prev)?;
+        let outcome = run_capture_step(dmm, recorder, step, report, true, input, &prev, trust)?;
+        if outcome.to_review {
+            to_review.push(step.id.to_string());
+        }
+        trust.update(report);
         prev.last = outcome.last;
         // From the report, so a resumed run gets its baseline from the steps
         // it skipped as already captured. A step that captured nothing leaves
@@ -451,11 +581,17 @@ fn run_protocol_capture(
         }
         save_report(report, output_path)?;
         if outcome.quit {
-            return Ok(true);
+            return Ok(ProtocolPass {
+                quit: true,
+                to_review,
+            });
         }
     }
 
-    Ok(false)
+    Ok(ProtocolPass {
+        quit: false,
+        to_review,
+    })
 }
 
 /// The baseline a captured step's samples describe.
@@ -491,6 +627,20 @@ pub(crate) struct CaptureStep {
     /// One of the steps the family's core semantics rest on; flagged in the
     /// run so an operator knows which ones must not be skipped.
     pub gate: bool,
+}
+
+impl From<&dmm_lib::protocol::CaptureStep> for CaptureStep {
+    fn from(ps: &dmm_lib::protocol::CaptureStep) -> Self {
+        CaptureStep {
+            id: ps.id,
+            instruction: ps.instruction,
+            command: ps.command,
+            samples: ps.samples,
+            expect: ps.expect,
+            verified: ps.verified,
+            gate: ps.gate,
+        }
+    }
 }
 
 impl CaptureStep {
@@ -770,18 +920,29 @@ pub(crate) struct PrevState {
 pub(crate) struct StepOutcome {
     quit: bool,
     last: Option<Measurement>,
+    /// It captured a reading nobody was asked about, so the end-of-run review
+    /// has to cover it.
+    to_review: bool,
 }
 
 impl StepOutcome {
     /// The step is done and the run goes on; `last` where it captured one.
-    fn done(last: Option<Measurement>) -> Self {
-        StepOutcome { quit: false, last }
+    fn done(last: Option<Measurement>, to_review: bool) -> Self {
+        StepOutcome {
+            quit: false,
+            last,
+            to_review,
+        }
     }
 
     /// The step captured nothing — skipped, refused or ignored — so the next
     /// one has no reading to compare against.
     fn nothing(quit: bool) -> Self {
-        StepOutcome { quit, last: None }
+        StepOutcome {
+            quit,
+            last: None,
+            to_review: false,
+        }
     }
 }
 
@@ -870,6 +1031,7 @@ fn did_nothing(command: &str, last: Option<&Measurement>) -> String {
 }
 
 /// Run one capture step. Returns Ok(true) if user wants to quit.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_capture_step(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: &SharedRecorder,
@@ -878,6 +1040,7 @@ pub(crate) fn run_capture_step(
     interactive: bool,
     input: &Input,
     prev: &PrevState,
+    trust: &Trust,
 ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
     if report
@@ -896,6 +1059,7 @@ pub(crate) fn run_capture_step(
 
     recording::lock(recorder).set_step(Some(step.id));
     let mut errors = ErrorLog::default();
+    let expect = trust.expect(step);
 
     // The frame the watcher accepted, kept as the step's first sample: it is
     // the one reading known to be in the state the step asked for.
@@ -918,7 +1082,7 @@ pub(crate) fn run_capture_step(
             return Ok(StepOutcome::nothing(false));
         }
 
-        let mut watcher = StateWatcher::for_step(step.expect, before.as_ref(), true);
+        let mut watcher = StateWatcher::for_step(expect, before.as_ref(), true);
         match watch_for_state(
             dmm,
             input,
@@ -956,9 +1120,9 @@ pub(crate) fn run_capture_step(
         // cannot be seen arriving — DC V with the leads open and shorted
         // both read about zero — so it is Enter-only and the keyboard is
         // offered at once.
-        let ask = enter_only(step.expect, prev.last.as_ref());
+        let ask = enter_only(expect, prev.last.as_ref());
         let timeout = if ask { Duration::ZERO } else { STEP_TIMEOUT };
-        let mut watcher = StateWatcher::for_step(step.expect, prev.baseline.as_ref(), !ask);
+        let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);
         match watch_for_state(dmm, input, &mut watcher, timeout, true, &mut errors)? {
             Watched::Ready(m) => settled = m,
             // `hint` keeps the wait open, so the timeout never ends it.
@@ -1017,6 +1181,10 @@ pub(crate) fn run_capture_step(
     let confirmation = if let Some(last) = sample_data.last() {
         if interactive {
             eprintln!("  We read: {}", style(last.summary()).green());
+        }
+        // A trusted run doesn't stop here: the reading is listed with the
+        // others in the one review at the end.
+        if interactive && trust.confirm_inline(step) {
             Some(input.line(&format!(
                 "  {} ",
                 style("Enter=correct, or type what the meter actually shows:").dim()
@@ -1043,6 +1211,7 @@ pub(crate) fn run_capture_step(
         StepStatus::Captured
     };
 
+    let to_review = confirmation.is_none() && status == StepStatus::Captured;
     let mut result = StepResult {
         needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
         samples: sample_data,
@@ -1056,7 +1225,7 @@ pub(crate) fn run_capture_step(
 
     upsert_step(report, result);
     report.wire_events_dropped = recording::lock(recorder).dropped();
-    Ok(StepOutcome::done(measurements.pop()))
+    Ok(StepOutcome::done(measurements.pop(), to_review))
 }
 
 #[cfg(test)]
@@ -1613,6 +1782,9 @@ mod tests {
             "needs_attention",
             "wire_events_dropped",
             "device_id",
+            "tier",
+            "core_semantics",
+            "gate_failures",
         ] {
             assert!(!yaml.contains(key), "{key} must be omitted: {yaml}");
         }
@@ -1688,6 +1860,223 @@ mod tests {
         for key in ["confirmed", "lcd", "confirmed_by", "screen"] {
             assert!(!yaml.contains(key), "{key} must be omitted: {yaml}");
         }
+    }
+
+    /// A report holding one result per gate step, as the run would have left
+    /// it.
+    fn gate_report(results: &[(&str, StepStatus, Option<bool>)]) -> CaptureReport {
+        let mut report = CaptureReport::default();
+        for (id, status, confirmed) in results {
+            upsert_step(
+                &mut report,
+                StepResult {
+                    confirmed: *confirmed,
+                    ..StepResult::new(id, "do the thing", status.clone())
+                },
+            );
+        }
+        report
+    }
+
+    fn gate_steps() -> Vec<CaptureStep> {
+        vec![
+            cli_step("dcv", false, true),
+            cli_step("ohm", false, true),
+            cli_step("temp", false, false),
+        ]
+    }
+
+    /// The gate is what says the parser reads digits, OL and sign correctly,
+    /// so every one of its steps has to have been captured and confirmed.
+    #[test]
+    fn a_gate_passes_only_when_every_step_confirmed() {
+        let ids = ["dcv", "ohm"];
+        let passed = gate_report(&[
+            ("dcv", StepStatus::Captured, Some(true)),
+            ("ohm", StepStatus::Captured, Some(true)),
+        ]);
+        assert_eq!(gate_failures(&passed, &ids), Some(vec![]));
+
+        let corrected = gate_report(&[
+            ("dcv", StepStatus::Captured, Some(true)),
+            ("ohm", StepStatus::Captured, Some(false)),
+        ]);
+        assert_eq!(
+            gate_failures(&corrected, &ids),
+            Some(vec!["ohm".to_string()])
+        );
+
+        let skipped = gate_report(&[
+            ("dcv", StepStatus::Captured, Some(true)),
+            ("ohm", StepStatus::Skipped, None),
+        ]);
+        assert_eq!(gate_failures(&skipped, &ids), Some(vec!["ohm".to_string()]));
+
+        // Nothing to rule on until the whole block has reported.
+        let half = gate_report(&[("dcv", StepStatus::Captured, Some(true))]);
+        assert_eq!(gate_failures(&half, &ids), None);
+    }
+
+    /// A confirmed gate is what buys the rest of the run its deferred review.
+    #[test]
+    fn a_passed_gate_promotes_the_run() {
+        let mut trust = Trust::new(false, false, &gate_steps());
+        assert_eq!(trust.tier, Tier::Gate);
+        assert!(trust.confirm_inline(&cli_step("temp", false, false)));
+
+        let mut report = gate_report(&[
+            ("dcv", StepStatus::Captured, Some(true)),
+            ("ohm", StepStatus::Captured, Some(true)),
+        ]);
+        trust.update(&mut report);
+
+        assert_eq!(trust.tier, Tier::Trusted);
+        assert_eq!(report.tier, Some(Tier::Trusted));
+        assert_eq!(report.core_semantics, Some(CoreSemantics::Confirmed));
+        assert!(report.gate_failures.is_empty());
+        assert!(!trust.confirm_inline(&cli_step("temp", false, false)));
+        // Gate steps are confirmed at the step whatever the tier.
+        assert!(trust.confirm_inline(&cli_step("dcv", false, true)));
+    }
+
+    /// A gate step the meter disagreed with leaves every later reading worth
+    /// asking about.
+    #[test]
+    fn a_failed_gate_keeps_confirming_every_step() {
+        let mut trust = Trust::new(false, false, &gate_steps());
+        let mut report = gate_report(&[
+            ("dcv", StepStatus::Captured, Some(true)),
+            ("ohm", StepStatus::Captured, Some(false)),
+        ]);
+        trust.update(&mut report);
+
+        assert_eq!(trust.tier, Tier::Gate);
+        assert_eq!(report.core_semantics, Some(CoreSemantics::Failed));
+        assert_eq!(report.gate_failures, vec!["ohm".to_string()]);
+        assert!(trust.confirm_inline(&cli_step("temp", false, false)));
+    }
+
+    /// `--sniff` is for a parser nobody trusts, so a passed gate must not
+    /// hand it the benefit of the doubt.
+    #[test]
+    fn sniff_never_promotes_and_never_reads_the_expectation() {
+        let mut trust = Trust::new(true, true, &gate_steps());
+        assert_eq!(trust.tier, Tier::Sniff);
+
+        let mut report = gate_report(&[
+            ("dcv", StepStatus::Captured, Some(true)),
+            ("ohm", StepStatus::Captured, Some(true)),
+        ]);
+        trust.update(&mut report);
+
+        assert_eq!(trust.tier, Tier::Sniff);
+        assert_eq!(report.core_semantics, None);
+        assert!(trust.confirm_inline(&cli_step("temp", false, false)));
+
+        let mut step = cli_step("dcv", false, true);
+        step.expect = Some(dmm_lib::protocol::Expect::mode("DC V"));
+        assert!(trust.expect(&step).is_none(), "sniff detects on raw bytes");
+    }
+
+    /// Hardware has already confirmed a Verified family's readings, so its
+    /// run starts where a passed gate would leave it.
+    #[test]
+    fn a_verified_family_starts_trusted() {
+        let trust = Trust::new(false, true, &gate_steps());
+        assert_eq!(trust.tier, Tier::Trusted);
+        assert!(!trust.confirm_inline(&cli_step("temp", false, false)));
+
+        let mut step = cli_step("dcv", false, true);
+        step.expect = Some(dmm_lib::protocol::Expect::mode("DC V"));
+        assert!(trust.expect(&step).is_some());
+    }
+
+    #[test]
+    fn review_indices_are_one_based_and_bounded() {
+        assert_eq!(parse_review_indices("", 3), Ok(vec![]));
+        assert_eq!(parse_review_indices("  ", 3), Ok(vec![]));
+        assert_eq!(parse_review_indices("1,3", 3), Ok(vec![0, 2]));
+        assert_eq!(parse_review_indices("3 1", 3), Ok(vec![0, 2]));
+        assert_eq!(parse_review_indices("2, 2", 3), Ok(vec![1]));
+
+        for bad in ["0", "4", "-1", "two", "1,x"] {
+            assert!(
+                parse_review_indices(bad, 3).is_err(),
+                "{bad:?} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn the_review_table_numbers_every_reading() {
+        let rows = vec![
+            ("dcv".to_string(), "5.678 V [AUTO]".to_string()),
+            ("acv".to_string(), "239.22 V [AUTO HV!]".to_string()),
+        ];
+        let out = console::strip_ansi_codes(&render_review_table(&rows)).into_owned();
+        let lines: Vec<&str> = out.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].starts_with("    1  dcv"), "{out}");
+        assert!(lines[0].ends_with("5.678 V [AUTO]"), "{out}");
+        assert!(lines[1].starts_with("    2  acv"), "{out}");
+    }
+
+    /// The review is the only confirmation a trusted run's readings get, so
+    /// it has to record both verdicts the way the inline prompt does.
+    #[test]
+    fn the_review_confirms_and_corrects_the_readings_it_covers() {
+        let mut report = CaptureReport::default();
+        for id in ["dcv", "acv", "ohm"] {
+            upsert_step(&mut report, StepResult::new(id, "t", StepStatus::Captured));
+        }
+
+        apply_review(
+            &mut report,
+            &[
+                ("dcv".to_string(), None),
+                ("acv".to_string(), Some("239.4 V".to_string())),
+                // Listed as wrong but typed nothing: still a mismatch.
+                ("ohm".to_string(), Some(String::new())),
+            ],
+        );
+
+        assert_eq!(report.steps[0].confirmed, Some(true));
+        assert_eq!(report.steps[0].lcd, None);
+        assert_eq!(report.steps[0].confirmed_by, Some(ConfirmedBy::Batch));
+        assert_eq!(report.steps[1].confirmed, Some(false));
+        assert_eq!(report.steps[1].lcd.as_deref(), Some("239.4 V"));
+        assert_eq!(report.steps[1].confirmed_by, Some(ConfirmedBy::Batch));
+        assert_eq!(report.steps[2].confirmed, Some(false));
+        assert_eq!(report.steps[2].lcd, None);
+    }
+
+    /// Resuming an interrupted capture reloads the report, so one written
+    /// before the trust tiers existed must still parse.
+    #[test]
+    fn reports_without_the_trust_fields_still_load() {
+        let yaml = "date: '2026-01-01'\ntool_version: test\ndevice_name: UT61E+\n\
+                    supported: true\nsteps:\n- id: dcv\n  instruction: test\n  \
+                    status: captured\n";
+        let report: CaptureReport = serde_yaml_ng::from_str(yaml).unwrap();
+        assert_eq!(report.tier, None);
+        assert_eq!(report.core_semantics, None);
+        assert!(report.gate_failures.is_empty());
+    }
+
+    #[test]
+    fn the_tier_and_gate_outcome_serialize_in_lowercase() {
+        let report = CaptureReport {
+            tier: Some(Tier::Trusted),
+            core_semantics: Some(CoreSemantics::Failed),
+            gate_failures: vec!["ohm".to_string()],
+            ..CaptureReport::default()
+        };
+        let yaml = serde_yaml_ng::to_string(&report).unwrap();
+        assert!(yaml.contains("tier: trusted"), "{yaml}");
+        assert!(yaml.contains("core_semantics: failed"), "{yaml}");
+        let parsed: CaptureReport = serde_yaml_ng::from_str(&yaml).unwrap();
+        assert_eq!(parsed.tier, Some(Tier::Trusted));
+        assert_eq!(parsed.gate_failures, vec!["ohm".to_string()]);
     }
 
     #[test]
@@ -2335,6 +2724,101 @@ fn populate_report_metadata(
     report.supported = supported;
 }
 
+/// The numbered list the operator reads against the meter's screen, one line
+/// per reading captured without a confirmation.
+fn render_review_table(rows: &[(String, String)]) -> String {
+    let mut out = String::new();
+    for (i, (id, summary)) in rows.iter().enumerate() {
+        out.push_str(&format!(
+            "  {:>3}  {:<16} {summary}\n",
+            i + 1,
+            style(id).cyan()
+        ));
+    }
+    out
+}
+
+/// The readings the operator listed as wrong, as indices into the table.
+///
+/// One-based on the way in, since that is what the table shows; an empty line
+/// means every reading matched.
+fn parse_review_indices(input: &str, len: usize) -> Result<Vec<usize>, String> {
+    let mut out = Vec::new();
+    for token in input.split([',', ' ', '\t']).filter(|t| !t.is_empty()) {
+        let n = token
+            .parse::<usize>()
+            .ok()
+            .filter(|n| (1..=len).contains(n))
+            .ok_or_else(|| format!("{token:?} is not a number between 1 and {len}"))?;
+        if !out.contains(&(n - 1)) {
+            out.push(n - 1);
+        }
+    }
+    out.sort_unstable();
+    Ok(out)
+}
+
+/// Write the review's verdict into the report: `Some(text)` is what the meter
+/// showed for a reading the operator called wrong, `None` confirms it.
+fn apply_review(report: &mut CaptureReport, answers: &[(String, Option<String>)]) {
+    for (id, lcd) in answers {
+        if let Some(step) = report.steps.iter_mut().find(|s| s.id == *id) {
+            step.set_batch_confirmation(lcd.clone());
+        }
+    }
+}
+
+/// Ask about every reading the run captured without stopping for it, once.
+///
+/// A piped run has nobody to ask, so those readings stay unconfirmed rather
+/// than being recorded as agreed.
+fn run_batch_review(
+    report: &mut CaptureReport,
+    to_review: &[String],
+    output_path: &str,
+    input: &Input,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let rows: Vec<(String, String)> = to_review
+        .iter()
+        .filter_map(|id| {
+            let step = report.steps.iter().find(|s| s.id == *id)?;
+            Some((id.clone(), step.samples.last()?.summary()))
+        })
+        .collect();
+    if rows.is_empty() || !input.is_tty() {
+        return Ok(());
+    }
+
+    eprintln!(
+        "\n{}",
+        style("\u{2501}\u{2501}\u{2501} Review the readings \u{2501}\u{2501}\u{2501}").bold()
+    );
+    eprint!("{}", render_review_table(&rows));
+
+    let wrong = loop {
+        let answer = input.line(
+            "Numbers of the readings that did NOT match the meter's screen (Enter = all correct): ",
+        )?;
+        match parse_review_indices(&answer, rows.len()) {
+            Ok(indices) => break indices,
+            Err(e) => eprintln!("  {}", style(e).yellow()),
+        }
+    };
+
+    let mut answers: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
+    for (i, (id, _)) in rows.iter().enumerate() {
+        let lcd = if wrong.contains(&i) {
+            Some(input.line(&format!("[{id}] What did the meter show? "))?)
+        } else {
+            None
+        };
+        answers.push((id.clone(), lcd));
+    }
+    apply_review(report, &answers);
+    save_report(report, output_path)?;
+    Ok(())
+}
+
 /// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
 /// Part 4: Freeform additional captures.
 fn run_freeform_captures(
@@ -2423,6 +2907,7 @@ pub(crate) fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
     unverified_only: bool,
+    sniff: bool,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
@@ -2464,7 +2949,10 @@ pub(crate) fn cmd_capture(
         .filter(|s| !s.verified)
         .map(|s| s.id)
         .collect();
-    let done = run_protocol_capture(
+    let cli_steps: Vec<CaptureStep> = protocol_steps.iter().map(CaptureStep::from).collect();
+    let mut trust = Trust::new(sniff, supported, &cli_steps);
+    report.tier = Some(trust.tier);
+    let pass = run_protocol_capture(
         &mut dmm,
         &recorder,
         protocol_steps,
@@ -2473,9 +2961,12 @@ pub(crate) fn cmd_capture(
         &mut report,
         &output_path,
         &input,
+        &mut trust,
     )?;
 
-    if !done {
+    run_batch_review(&mut report, &pass.to_review, &output_path, &input)?;
+
+    if !pass.quit {
         run_freeform_captures(
             &mut dmm,
             &recorder,
