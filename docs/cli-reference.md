@@ -549,7 +549,9 @@ dmm-cli capture [OPTIONS]
 |---|---|---|
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
 | `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
+| `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
 | `--list-steps` | | List the selected device's step IDs and exit. |
+| `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use (printed to stdout). |
 
 The steps come from the selected device's protocol, so `--list-steps` shows
 exactly what will run for that meter — pass `--device` to see another one's.
@@ -557,6 +559,12 @@ Steps cover the measurement modes and the flag and button commands. Note that
 the per-range tables are still thinly covered: each mode step captures
 whatever range auto-ranging happened to pick, so ranges the meter doesn't
 select on its own go unverified.
+
+Each listed step is marked `✓` (confirmed on real hardware) or `·`, and
+`--unverified` runs just the `·` ones; with `--steps` the two narrow together.
+The run ends with how many unverified steps the report now covers and the issue
+to attach it to. `--list-steps --format md` prints that same list as the
+checklist those issues carry.
 
 Each sample is read back for you to confirm against the meter's screen. On a
 meter with secondary displays, that confirmation line lists the sub-values in
@@ -588,6 +596,12 @@ dmm-cli capture --steps range,auto
 
 # List the steps available for the selected device
 dmm-cli capture --list-steps
+
+# Run only the steps still lacking hardware evidence
+dmm-cli --device vc890 capture --unverified
+
+# Print the verification issue's checklist
+dmm-cli --device vc890 capture --list-steps --format md
 ```
 
 ## Environment Variables

@@ -1,3 +1,4 @@
+use crate::StepListFormat;
 use crate::recording::{self, SharedRecorder, WireEvent};
 use console::style;
 use dmm_lib::flags::StatusFlags;
@@ -35,6 +36,10 @@ pub(crate) struct CaptureReport {
     /// name query.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub init_frames: Vec<FrameRecord>,
+    /// The run was `--unverified`, so verified steps are absent by request
+    /// rather than skipped by the operator.
+    #[serde(skip_serializing_if = "is_false", default)]
+    pub unverified_only: bool,
     /// Wire events lost to the recorder's bound, so a truncated trace is
     /// visible as one.
     #[serde(skip_serializing_if = "is_zero", default)]
@@ -397,6 +402,7 @@ fn run_protocol_capture(
     recorder: &SharedRecorder,
     protocol_steps: Vec<dmm_lib::protocol::CaptureStep>,
     step_filter: &Option<std::collections::HashSet<String>>,
+    unverified_only: bool,
     report: &mut CaptureReport,
     output_path: &str,
 ) -> Result<bool, Box<dyn std::error::Error>> {
@@ -408,6 +414,8 @@ fn run_protocol_capture(
             instruction: ps.instruction,
             command: ps.command,
             samples: ps.samples,
+            verified: ps.verified,
+            gate: ps.gate,
         })
         .collect();
 
@@ -421,7 +429,7 @@ fn run_protocol_capture(
     );
 
     for step in &steps {
-        if !step_included(step_filter, step.id) {
+        if !step_selected(step, step_filter, unverified_only) {
             continue;
         }
         if run_capture_step(dmm, recorder, step, report, true)? {
@@ -440,9 +448,26 @@ pub(crate) struct CaptureStep {
     pub instruction: &'static str,
     pub command: Option<&'static str>,
     pub samples: usize,
+    /// Already confirmed on real hardware — `--unverified` skips these.
+    pub verified: bool,
+    /// One of the steps the family's core semantics rest on; flagged in the
+    /// run so an operator knows which ones must not be skipped.
+    pub gate: bool,
 }
 
 impl CaptureStep {
+    /// The line announcing the step. Gate steps say so: skipping one leaves
+    /// the rest of the run uninterpretable.
+    fn header(&self) -> String {
+        let id = style(format!("[{}]", self.id)).cyan().bold();
+        let gate = if self.gate {
+            format!(" {}", style("(gate)").dim())
+        } else {
+            String::new()
+        };
+        format!("{id} {}{gate}", self.instruction)
+    }
+
     /// Create a StepResult with no samples or screen capture.
     fn empty_result(&self, status: StepStatus, error: Option<String>) -> StepResult {
         StepResult {
@@ -592,11 +617,7 @@ pub(crate) fn run_capture_step(
 
     if interactive {
         eprintln!();
-        eprintln!(
-            "{} {}",
-            style(format!("[{}]", step.id)).cyan().bold(),
-            step.instruction
-        );
+        eprintln!("{}", step.header());
         let ch = prompt_key(&format!(
             "  {} ",
             style("any key=capture, s=skip, q=finish:").dim()
@@ -610,11 +631,7 @@ pub(crate) fn run_capture_step(
             return Ok(false);
         }
     } else {
-        eprintln!(
-            "{} {}",
-            style(format!("[{}]", step.id)).cyan().bold(),
-            step.instruction
-        );
+        eprintln!("{}", step.header());
     }
 
     recording::lock(recorder).set_step(Some(step.id));
@@ -1401,6 +1418,118 @@ mod tests {
         assert!(validate_step_filter(&filter, &steps).is_ok());
     }
 
+    fn cli_step(id: &'static str, verified: bool, gate: bool) -> CaptureStep {
+        CaptureStep {
+            id,
+            instruction: "do the thing",
+            command: None,
+            samples: 5,
+            verified,
+            gate,
+        }
+    }
+
+    /// `--steps` and `--unverified` narrow together: a verified step named on
+    /// the command line still doesn't run under `--unverified`.
+    #[test]
+    fn steps_and_unverified_intersect() {
+        let done = cli_step("dcv", true, false);
+        let todo = cli_step("temp", false, false);
+        let filter: Option<std::collections::HashSet<String>> = Some(
+            ["dcv".to_string(), "temp".to_string()]
+                .into_iter()
+                .collect(),
+        );
+
+        assert!(step_selected(&done, &None, false));
+        assert!(!step_selected(&done, &None, true));
+        assert!(step_selected(&todo, &None, true));
+
+        assert!(step_selected(&done, &filter, false));
+        assert!(!step_selected(&done, &filter, true));
+        assert!(step_selected(&todo, &filter, true));
+
+        let other: Option<std::collections::HashSet<String>> =
+            Some(["dcv".to_string()].into_iter().collect());
+        assert!(!step_selected(&todo, &other, true));
+    }
+
+    fn lib_step(id: &'static str, verified: bool, gate: bool) -> dmm_lib::protocol::CaptureStep {
+        let step = dmm_lib::protocol::CaptureStep::basic(id, "do the thing");
+        let step = if verified { step.verified() } else { step };
+        if gate { step.gate() } else { step }
+    }
+
+    fn ut61eplus() -> &'static SelectableDevice {
+        dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry has the UT61E+")
+    }
+
+    /// The issue checklist is generated, so its shape is asserted line by line.
+    #[test]
+    fn markdown_listing_is_the_issue_checklist() {
+        let steps = vec![lib_step("dcv", true, true), lib_step("temp", false, false)];
+        assert_eq!(
+            render_step_checklist(ut61eplus(), &steps),
+            "## What needs verification\n\
+             \n\
+             - [x] `dcv` — do the thing\n\
+             - [ ] `temp` — do the thing\n\
+             \n\
+             ```bash\n\
+             dmm-cli --device ut61eplus capture --unverified\n\
+             ```\n"
+        );
+    }
+
+    #[test]
+    fn text_listing_marks_each_step_and_asks_for_what_is_left() {
+        let steps = vec![lib_step("dcv", true, true), lib_step("temp", false, false)];
+        let out = console::strip_ansi_codes(&render_step_list(ut61eplus(), &steps)).into_owned();
+        assert!(out.contains("\u{2713} dcv"), "{out}");
+        assert!(out.contains("\u{b7} temp"), "{out}");
+        assert!(out.contains("gate"), "{out}");
+        assert!(out.contains("1 of 2 steps still unverified."), "{out}");
+        assert!(
+            out.contains("dmm-cli --device ut61eplus capture --unverified"),
+            "{out}"
+        );
+    }
+
+    /// A fully verified list has nothing to ask for.
+    #[test]
+    fn text_listing_omits_the_ask_when_nothing_is_unverified() {
+        let steps = vec![lib_step("dcv", true, false)];
+        let out = console::strip_ansi_codes(&render_step_list(ut61eplus(), &steps)).into_owned();
+        assert!(out.contains("0 of 1 steps still unverified."), "{out}");
+        assert!(!out.contains("--unverified\n"), "{out}");
+    }
+
+    /// Coverage counts captured steps only, and only ones that were unverified.
+    #[test]
+    fn coverage_counts_captured_unverified_steps() {
+        let mut report = CaptureReport::default();
+        upsert_step(
+            &mut report,
+            StepResult::new("temp", "t", StepStatus::Captured),
+        );
+        upsert_step(
+            &mut report,
+            StepResult::new("dcv", "d", StepStatus::Captured),
+        );
+        upsert_step(&mut report, StepResult::new("hz", "h", StepStatus::Skipped));
+        let unverified: std::collections::HashSet<&str> = ["temp", "hz"].into_iter().collect();
+        assert_eq!(unverified_covered(&report, &unverified), 1);
+    }
+
+    /// The real list is the one reporters see: the UT61E+ is verified hardware,
+    /// so `--unverified` must leave it something smaller than the whole run.
+    #[test]
+    fn unverified_count_is_a_subset_of_the_ut61eplus_steps() {
+        let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
+        let unverified = unverified_count(&steps);
+        assert!(unverified < steps.len(), "{unverified} of {}", steps.len());
+    }
+
     #[test]
     fn no_filter_accepts_everything() {
         let steps = dmm_lib::protocol::ut61eplus::Ut61PlusProtocol::new().capture_steps();
@@ -1531,34 +1660,90 @@ const FREEFORM_SAMPLES: usize = 3;
 /// device had used since protocols started declaring their own steps: the IDs
 /// shown matched nothing, so `--steps` filtered everything out and wrote an
 /// empty report.
-pub(crate) fn list_steps(device: &'static SelectableDevice) {
+pub(crate) fn list_steps(device: &'static SelectableDevice, format: StepListFormat) {
     let protocol = (device.new_protocol)();
     let steps = protocol.capture_steps();
+    match format {
+        StepListFormat::Text => eprint!("{}", render_step_list(device, &steps)),
+        // stdout: the checklist is meant to be piped or pasted into the issue.
+        StepListFormat::Md => print!("{}", render_step_checklist(device, &steps)),
+    }
+}
 
-    eprintln!(
-        "{} {}",
+/// The one-line ask a reporter runs to cover what hardware has not confirmed.
+fn unverified_ask(device: &'static SelectableDevice) -> String {
+    format!("dmm-cli --device {} capture --unverified", device.id)
+}
+
+/// How many of `steps` still lack hardware evidence.
+fn unverified_count(steps: &[dmm_lib::protocol::CaptureStep]) -> usize {
+    steps.iter().filter(|s| !s.verified).count()
+}
+
+/// The human listing: a mark per step, so reporter and maintainer read the
+/// same verification state, and the ask that covers what is left.
+fn render_step_list(
+    device: &'static SelectableDevice,
+    steps: &[dmm_lib::protocol::CaptureStep],
+) -> String {
+    let mut out = format!(
+        "{} {}\n\n",
         style("Available capture steps for").bold(),
         style(device.display_name).bold().cyan()
     );
-    eprintln!();
     if steps.is_empty() {
-        eprintln!("  This device declares no capture steps.");
+        out.push_str("  This device declares no capture steps.\n");
     }
-    for s in &steps {
-        eprintln!("    {:<16} {}", style(s.id).bold(), s.instruction);
+    for s in steps {
+        let mark = if s.verified {
+            style("\u{2713}").green()
+        } else {
+            style("\u{b7}").dim()
+        };
+        let gate = if s.gate { "gate" } else { "" };
+        out.push_str(&format!(
+            "  {mark} {:<16} {gate:<5} {}\n",
+            style(s.id).bold(),
+            s.instruction
+        ));
     }
-    eprintln!();
-    eprintln!("{}", style("  Always available:").cyan());
-    eprintln!(
-        "    {:<16} Freeform captures — describe any mode not covered above",
+    out.push_str(&format!("\n{}\n", style("  Always available:").cyan()));
+    out.push_str(&format!(
+        "    {:<16} Freeform captures — describe any mode not covered above\n\n",
         style(FREEFORM_STEP_ID).bold()
-    );
-    eprintln!();
-    eprintln!(
-        "Usage: {} {}",
+    ));
+    out.push_str(&format!(
+        "Usage: {} {}\n\n",
         style("dmm-cli capture --steps").dim(),
         style("dcmv,temp,duty").dim()
-    );
+    ));
+    let unverified = unverified_count(steps);
+    out.push_str(&format!(
+        "{unverified} of {} steps still unverified.\n",
+        steps.len()
+    ));
+    if unverified > 0 {
+        out.push_str(&format!(
+            "Run only those with: {}\n",
+            unverified_ask(device)
+        ));
+    }
+    out
+}
+
+/// The checklist the device verification issues carry, generated so the issue
+/// and the step list cannot drift. No colour: it is pasted into GitHub.
+fn render_step_checklist(
+    device: &'static SelectableDevice,
+    steps: &[dmm_lib::protocol::CaptureStep],
+) -> String {
+    let mut out = String::from("## What needs verification\n\n");
+    for s in steps {
+        let mark = if s.verified { 'x' } else { ' ' };
+        out.push_str(&format!("- [{mark}] `{}` — {}\n", s.id, s.instruction));
+    }
+    out.push_str(&format!("\n```bash\n{}\n```\n", unverified_ask(device)));
+    out
 }
 
 /// Reject `--steps` IDs that no step will match.
@@ -1597,6 +1782,17 @@ fn validate_step_filter(
 /// Returns true if the given step ID is included by the filter (or if there is no filter).
 fn step_included(step_filter: &Option<std::collections::HashSet<String>>, id: &str) -> bool {
     step_filter.as_ref().is_none_or(|f| f.contains(id))
+}
+
+/// Whether the protocol pass runs this step: `--steps` and `--unverified`
+/// narrow the list together, so naming a verified step under `--unverified`
+/// still skips it.
+fn step_selected(
+    step: &CaptureStep,
+    step_filter: &Option<std::collections::HashSet<String>>,
+    unverified_only: bool,
+) -> bool {
+    step_included(step_filter, step.id) && !(unverified_only && step.verified)
 }
 
 /// Verify that the meter is responding. Returns `(device_name, supported)` on success.
@@ -1829,6 +2025,7 @@ fn run_freeform_captures(
 pub(crate) fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
+    unverified_only: bool,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
@@ -1847,6 +2044,7 @@ pub(crate) fn cmd_capture(
 
     populate_report_metadata(&mut report, &mut dmm, device_name, supported);
     report.device_id = Some(device.id.to_string());
+    report.unverified_only = unverified_only;
     // Everything on the wire so far is the init handshake and the name query.
     report.init_frames = recording::lock(&recorder)
         .drain()
@@ -1862,11 +2060,17 @@ pub(crate) fn cmd_capture(
     // anticipate — and the only step that records what the meter's screen
     // actually said next to what we parsed.
     let protocol_steps = dmm.capture_steps();
+    let unverified_ids: std::collections::HashSet<&str> = protocol_steps
+        .iter()
+        .filter(|s| !s.verified)
+        .map(|s| s.id)
+        .collect();
     let done = run_protocol_capture(
         &mut dmm,
         &recorder,
         protocol_steps,
         &step_filter,
+        unverified_only,
         &mut report,
         &output_path,
     )?;
@@ -1880,6 +2084,29 @@ pub(crate) fn cmd_capture(
     eprintln!();
     eprintln!("{}", style("=== Capture complete! ===").bold().green());
     eprintln!("Report saved to: {}", style(&output_path).bold());
-    eprintln!("Please attach this file to your bug report or issue.");
+    let covered = unverified_covered(&report, &unverified_ids);
+    if unverified_only && covered == 0 {
+        eprintln!("No unverified step was captured, so there is nothing new to report.");
+    } else {
+        eprintln!(
+            "Covered {covered} of {} unverified steps for {}.",
+            unverified_ids.len(),
+            device.display_name
+        );
+    }
+    eprintln!("Attach the report to {}", dmm.profile().feedback_url());
     Ok(())
+}
+
+/// How many of the device's unverified steps the report now holds samples
+/// for — the number that says what this run is worth to the issue.
+fn unverified_covered(
+    report: &CaptureReport,
+    unverified_ids: &std::collections::HashSet<&str>,
+) -> usize {
+    report
+        .steps
+        .iter()
+        .filter(|s| s.status == StepStatus::Captured && unverified_ids.contains(s.id.as_str()))
+        .count()
 }

@@ -33,7 +33,7 @@ flag to flip. If it does not flip within the timeout the step records `did nothi
 A dial-only step costs zero interactions: read the instruction, turn the dial, see
 `✓ DC V, 5 samples` and the next instruction.
 
-## B. Full wire trace and parse diagnostics (planned)
+## B. Full wire trace and parse diagnostics
 
 A recording layer wraps the transport and logs every read and write with a timestamp and the
 active step id. `open_device_by_id_auto` splits into "open transport + protocol" and
@@ -98,18 +98,18 @@ These paths are hardware-unverified on three of the four families, so:
 
 `--no-drive` opts out, for receive-only cables (CH9325) or a cautious reporter.
 
-## E. Per-step verification status (planned)
+## E. Per-step verification status
 
-`CaptureStep` gains `verified: Verified | Unverified` (Unverified is the default for new
-steps), `gate: bool` (C) and `expect: Option<Expect>` (A). Around them:
+`CaptureStep` carries `verified: bool` (false for new steps), `gate: bool` (C) and
+`expect: Option<Expect>` (A). Around them:
 
 - `dmm-cli capture --unverified` runs only unverified steps plus the freeform pass. This is
-  the one-line ask in every device verification issue.
-- `--list-steps` marks each step ✓/✗ so reporter and maintainer read the same list, and
+  the one-line ask in every device verification issue. With `--steps` the two intersect.
+- `--list-steps` marks each step ✓/· so reporter and maintainer read the same list, and
   `--list-steps --format md` emits the `- [ ]`/`- [x]` checklist the issues already use, so
   the issue and the code cannot drift.
-- The epilogue prints coverage: "covered 9 of 14 unverified steps for VC-890; attach to issue
-  #14", using `DeviceProfile::feedback_url()`.
+- The epilogue prints coverage: "Covered 9 of 14 unverified steps for VC-890", followed by
+  the issue to attach the report to, from `DeviceProfile::feedback_url()`.
 - Tests: a Verified family declares no unverified steps, an Experimental family declares at
   least one, every gate step has an `expect`.
 

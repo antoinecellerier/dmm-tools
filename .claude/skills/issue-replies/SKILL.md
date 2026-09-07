@@ -41,7 +41,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 
 - Keep it light: body = answer, what we want confirmed, the ask(s). Every explanatory "why" goes to a footnote. Given a ladder of possible steps, ask for the single highest-value one.
 - First person, warm, credit-forward: thank and @-mention the reporter, attribute findings and fixes to their report, credit tooling in prose where it matters ("I looked into this with Claude Code — …").
-- Put heavy optional instructions (a full `capture`, multi-step experiments) in a collapsed `<details>` block behind the primary ask, with a quick option alongside (`--list-steps` / `--steps`).
+- Put heavy optional instructions (a full `capture`, multi-step experiments) in a collapsed `<details>` block behind the primary ask, with a quick option alongside (`capture --unverified`, `--list-steps` / `--steps`).
 - Make counts match structure: "three things" → exactly three numbered sections.
 - Checkboxes track hardware confirmation, not code state: an item under "Fixed" stays `- [ ]` until a reporter confirms it on a meter. Append the observation that closes it in italics (*Any reading with distinct digits confirms this in one shot.*).
 - Bold honesty caveats (**never tested against real hardware**, **no code bugs found**); state provenance ("verified from the rendered PDF, not text extraction").
@@ -74,7 +74,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
   ```sh
   dmm-cli list
   RUST_LOG=dmm_lib=trace dmm-cli --device <family> debug --count 5
-  dmm-cli --device <family> capture   # in <details>; --list-steps / --steps for a subset
+  dmm-cli --device <family> capture --unverified   # in <details>; a full capture, or --steps, for more
   ```
 
   State what success looks like at each rung (meter beeps on the streaming command; readings appear). Give the OS-native fallback for an empty `list`: `lsusb | grep -E '10C4:EA80|1A86:E429|1A86:E008'`, `ioreg -p IOUSB -l | grep -i CP2110`, Device Manager.
@@ -95,6 +95,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 ## Write results back (same commit as the change)
 
 - Reporter-verified item → strike and credit in `docs/verification-backlog.md`: `~~item~~ — **VERIFIED** YYYY-MM-DD by @user on real <meter> (<cable>). <evidence>. See PR #N.` Community-sourced but unrun → `per <source>`, no VERIFIED. Say in the reply that the backlog was updated.
+- Verification issue checklist → generated, never hand-edited: `dmm-cli --device <id> capture --list-steps --format md`. A verified item flips the step's `.verified()` in the code, so regenerate and paste the checklist whenever steps change.
 - Family fully verified → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
 - New unknown from the thread → backlog. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
 - Two to three weeks of silence on an ask → one polite nudge.

@@ -30,15 +30,20 @@ It will:
 - Ask you to confirm what the meter's LCD actually shows
 - Save everything to a YAML file (e.g. `capture-ut61e+.yaml`)
 
-You can run a partial capture if you only want specific steps:
+If you're short on time, run only the steps no one has confirmed on hardware yet — the listing marks them `·`:
 
 ```sh
-# List available steps
+# List available steps, marked ✓ (confirmed) or ·
 dmm-cli capture --list-steps
 
-# Run only specific steps
+# Run only the unconfirmed ones, plus the freeform pass
+dmm-cli capture --unverified
+
+# Or pick steps yourself
 dmm-cli capture --steps dcmv,temp,duty
 ```
+
+A full `dmm-cli capture` stays the thorough option: it re-checks the confirmed steps too.
 
 Captures auto-save after each step, so you can interrupt and resume later.
 

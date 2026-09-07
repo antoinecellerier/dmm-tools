@@ -151,9 +151,15 @@ Install completions for your shell:
         /// Only run specific steps (comma-separated IDs, e.g. "dcmv,temp,duty")
         #[arg(long, value_delimiter = ',')]
         steps: Option<Vec<String>>,
+        /// Only run steps not yet confirmed on real hardware, plus the freeform pass
+        #[arg(long)]
+        unverified: bool,
         /// List all available step IDs and exit
         #[arg(long)]
         list_steps: bool,
+        /// How --list-steps prints the list (md is the issue checklist)
+        #[arg(long, value_enum, default_value = "text", requires = "list_steps")]
+        format: StepListFormat,
     },
 }
 
@@ -261,6 +267,14 @@ impl From<SettingArg> for Setting {
 enum SettingsFormat {
     Text,
     Json,
+}
+
+/// How `capture --list-steps` prints the step list. `Md` is the checklist the
+/// device verification issues carry, so the issue and the code can't drift.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
+pub(crate) enum StepListFormat {
+    Text,
+    Md,
 }
 
 /// Where the effective `--device` value came from. Drives the dim fallback
@@ -432,16 +446,18 @@ fn main() {
         Cmd::Capture {
             output,
             steps,
+            unverified,
             list_steps,
+            format,
         } => {
             if list_steps {
                 // Device-scoped: the steps come from the selected device's
                 // protocol, so what's listed is what `--steps` will match.
-                capture::list_steps(device);
+                capture::list_steps(device, format);
                 Ok(())
             } else {
                 open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
-                    capture::cmd_capture(output, steps, dmm, recorder, device)
+                    capture::cmd_capture(output, steps, unverified, dmm, recorder, device)
                 })
             }
         }
