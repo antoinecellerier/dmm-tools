@@ -201,10 +201,10 @@ impl Protocol for Ut8803Protocol {
             .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
             CaptureStep::basic("acv", "Set meter to AC V (ACV)").expect(Expect::mode("AC V")),
-            CaptureStep::basic("dcua", "Set meter to DC uA").expect(Expect::mode("DC µA")),
+            CaptureStep::basic("dcua", "Set meter to DC µA").expect(Expect::mode("DC µA")),
             CaptureStep::basic("dcma", "Set meter to DC mA").expect(Expect::mode("DC mA")),
             CaptureStep::basic("dca", "Set meter to DC A").expect(Expect::mode("DC A")),
-            CaptureStep::basic("acua", "Set meter to AC uA").expect(Expect::mode("AC µA")),
+            CaptureStep::basic("acua", "Set meter to AC µA").expect(Expect::mode("AC µA")),
             CaptureStep::basic("acma", "Set meter to AC mA").expect(Expect::mode("AC mA")),
             CaptureStep::basic("aca", "Set meter to AC A").expect(Expect::mode("AC A")),
             CaptureStep::basic(

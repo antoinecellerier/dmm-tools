@@ -741,8 +741,8 @@ impl Protocol for Ut181aProtocol {
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
             CaptureStep::basic("duty", "Set meter to Duty Cycle (%)")
                 .expect(Expect::mode("Duty %")),
-            CaptureStep::basic("uadc", "Set meter to uA DC").expect(Expect::mode("µA DC")),
-            CaptureStep::basic("uaac", "Set meter to uA AC").expect(Expect::mode("µA AC")),
+            CaptureStep::basic("uadc", "Set meter to µA DC").expect(Expect::mode("µA DC")),
+            CaptureStep::basic("uaac", "Set meter to µA AC").expect(Expect::mode("µA AC")),
             CaptureStep::basic("madc", "Set meter to mA DC").expect(Expect::mode("mA DC")),
             CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
             CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),

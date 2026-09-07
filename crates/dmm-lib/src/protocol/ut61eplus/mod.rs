@@ -434,7 +434,7 @@ impl Protocol for Ut61PlusProtocol {
                 .verified_if(hw)
                 .needs(&[Need::Transistor])
                 .expect(Expect::mode("hFE")),
-            CaptureStep::basic("dcua", "Set meter to DC uA.")
+            CaptureStep::basic("dcua", "Set meter to DC µA.")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("DC µA")),
