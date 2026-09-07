@@ -185,6 +185,10 @@ pub(crate) struct StepResult {
     /// nothing still shows what the meter sent.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub frames: Vec<FrameRecord>,
+    /// Wire events the per-step cap trimmed, oldest first. Normal on a step
+    /// that waited for the operator, so it is a count and not a diagnostic.
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub frames_dropped: u64,
     /// Parse rejections seen while sampling — checksum mismatches, unknown
     /// modes, malformed responses.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -209,6 +213,7 @@ impl StepResult {
             screen: None,
             error: None,
             frames: vec![],
+            frames_dropped: 0,
             diagnostics: vec![],
             needs_attention: false,
         }
@@ -998,29 +1003,27 @@ pub(crate) fn upsert_step(report: &mut CaptureReport, result: StepResult) {
     }
 }
 
-/// Wire events belonging to `step_id`, capped, with the overflow noted.
+/// Wire events belonging to `step_id`, capped, and how many older ones the
+/// cap trimmed.
 ///
 /// The newest are kept: a step spends its wait watching the meter, and the
-/// frames worth reading are the sampled ones at the end of it.
-pub(crate) fn frames_for_step(
-    events: &[WireEvent],
-    step_id: &str,
-    diagnostics: &mut Vec<String>,
-) -> Vec<FrameRecord> {
+/// frames worth reading are the sampled ones at the end of it. The count is
+/// returned rather than written into `diagnostics` because a step that waits
+/// on a person passes the cap as a matter of course, and every diagnostic
+/// flags the step for a maintainer to read.
+pub(crate) fn frames_for_step(events: &[WireEvent], step_id: &str) -> (Vec<FrameRecord>, u64) {
     let mine: Vec<&WireEvent> = events
         .iter()
         .filter(|e| e.step.as_deref() == Some(step_id))
         .collect();
     let dropped = mine.len().saturating_sub(MAX_FRAMES_PER_STEP);
-    if dropped > 0 {
-        diagnostics.push(format!(
-            "{dropped} earlier wire events not recorded (cap {MAX_FRAMES_PER_STEP})"
-        ));
-    }
-    mine.into_iter()
-        .skip(dropped)
-        .map(FrameRecord::from)
-        .collect()
+    (
+        mine.into_iter()
+            .skip(dropped)
+            .map(FrameRecord::from)
+            .collect(),
+        dropped as u64,
+    )
 }
 
 /// Whether the step is worth a maintainer's attention: something didn't
@@ -1221,7 +1224,7 @@ pub(crate) fn run_capture_step(
             let mut result = step.empty_result(StepStatus::Error, Some(e.to_string()));
             let mut rec = recording::lock(recorder);
             rec.set_step(None);
-            result.frames = frames_for_step(&rec.drain(), step.id, &mut result.diagnostics);
+            (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step.id);
             result.needs_attention = true;
             upsert_step(report, result);
             return Ok(StepOutcome::nothing(false));
@@ -1246,7 +1249,7 @@ pub(crate) fn run_capture_step(
                 let mut rec = recording::lock(recorder);
                 rec.set_step(None);
                 result.diagnostics = errors.into_diagnostics();
-                result.frames = frames_for_step(&rec.drain(), step.id, &mut result.diagnostics);
+                (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step.id);
                 result.needs_attention = true;
                 upsert_step(report, result);
                 return Ok(StepOutcome::nothing(false));
@@ -1301,16 +1304,16 @@ pub(crate) fn run_capture_step(
     let mut measurements: Vec<Measurement> = settled.into_iter().collect();
     let wanted = step.samples.saturating_sub(measurements.len());
     measurements.extend(capture_samples(dmm, wanted, &mut errors));
-    let mut diagnostics = errors.into_diagnostics();
+    let diagnostics = errors.into_diagnostics();
     let sample_data: Vec<SampleData> = measurements
         .iter()
         .map(SampleData::from_measurement)
         .collect();
 
-    let frames = {
+    let (frames, frames_dropped) = {
         let mut rec = recording::lock(recorder);
         rec.set_step(None);
-        frames_for_step(&rec.drain(), step.id, &mut diagnostics)
+        frames_for_step(&rec.drain(), step.id)
     };
 
     for (i, s) in sample_data.iter().enumerate() {
@@ -1362,6 +1365,7 @@ pub(crate) fn run_capture_step(
         needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
         samples: sample_data,
         frames,
+        frames_dropped,
         diagnostics,
         ..StepResult::new(step.id, step.instruction, status)
     };
@@ -1884,16 +1888,44 @@ mod tests {
         events.push(event(0, Some("acv")));
         events.push(event(0, None));
 
-        let mut diagnostics = Vec::new();
-        let frames = frames_for_step(&events, "dcv", &mut diagnostics);
+        let (frames, dropped) = frames_for_step(&events, "dcv");
         assert_eq!(frames.len(), MAX_FRAMES_PER_STEP);
         assert_eq!(
             frames[0].at_ms, 3,
             "the three oldest events are the dropped ones"
         );
         assert_eq!(frames[0].hex, "AB CD");
-        assert_eq!(diagnostics.len(), 1);
-        assert!(diagnostics[0].starts_with("3 earlier wire events"));
+        assert_eq!(dropped, 3);
+    }
+
+    /// A step that waits on the operator — capacitance, NCV — passes the cap
+    /// as a matter of course. The trim used to arrive as a diagnostic, and
+    /// every diagnostic flags the step, so both were marked for a maintainer
+    /// with nothing wrong in them.
+    #[test]
+    fn passing_the_frame_cap_does_not_flag_the_step() {
+        let events: Vec<WireEvent> = (0..MAX_FRAMES_PER_STEP as u64 + 450)
+            .map(|at_ms| WireEvent {
+                at_ms,
+                dir: crate::recording::Direction::Rx,
+                step: Some("ncv".to_string()),
+                bytes: vec![0xAB, 0xCD],
+                feature: false,
+            })
+            .collect();
+
+        let (frames, dropped) = frames_for_step(&events, "ncv");
+        assert_eq!(frames.len(), MAX_FRAMES_PER_STEP);
+        assert_eq!(dropped, 450);
+
+        let samples = vec![SampleData::from_measurement(&make_test_measurement(
+            0x14,
+            0x00,
+            b"      3",
+            (0x00, 0x00),
+            (0x00, 0x00, 0x00),
+        ))];
+        assert!(!needs_attention(&samples, samples.len(), &[]));
     }
 
     /// Resuming an interrupted capture reloads the report, so one written
@@ -3081,15 +3113,15 @@ fn run_freeform_captures(
         recording::lock(recorder).set_step(Some(&step_id));
         let mut errors = ErrorLog::default();
         let measurements = capture_samples(dmm, FREEFORM_SAMPLES, &mut errors);
-        let mut diagnostics = errors.into_diagnostics();
+        let diagnostics = errors.into_diagnostics();
         let sample_data: Vec<SampleData> = measurements
             .iter()
             .map(SampleData::from_measurement)
             .collect();
-        let frames = {
+        let (frames, frames_dropped) = {
             let mut rec = recording::lock(recorder);
             rec.set_step(None);
-            frames_for_step(&rec.drain(), &step_id, &mut diagnostics)
+            frames_for_step(&rec.drain(), &step_id)
         };
 
         for (i, s) in sample_data.iter().enumerate() {
@@ -3115,6 +3147,7 @@ fn run_freeform_captures(
             needs_attention: needs_attention(&sample_data, FREEFORM_SAMPLES, &diagnostics),
             samples: sample_data,
             frames,
+            frames_dropped,
             diagnostics,
             ..StepResult::new(&step_id, &desc, status)
         };

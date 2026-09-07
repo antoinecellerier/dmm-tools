@@ -350,11 +350,11 @@ fn drive_choice(
         .iter()
         .map(SampleData::from_measurement)
         .collect();
-    let mut diagnostics = errors.into_diagnostics();
-    let frames = {
+    let diagnostics = errors.into_diagnostics();
+    let (frames, frames_dropped) = {
         let mut rec = recording::lock(recorder);
         rec.set_step(None);
-        frames_for_step(&rec.drain(), id, &mut diagnostics)
+        frames_for_step(&rec.drain(), id)
     };
 
     let hit = samples
@@ -387,6 +387,7 @@ fn drive_choice(
             needs_attention: !hit || needs_attention(&samples, samples_wanted, &diagnostics),
             samples,
             frames,
+            frames_dropped,
             diagnostics,
             error,
             ..StepResult::new(id, &instruction, status)
