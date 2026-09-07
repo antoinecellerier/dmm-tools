@@ -389,8 +389,8 @@ Tip: switch one by name, e.g. dmm-cli set range 22V
   "setting": "range",
   "current": "Auto",
   "choices": [
-    { "id": 0, "label": "Auto", "current": true },
-    { "id": 1, "label": "2.2V", "current": false }
+    { "label": "Auto", "current": true },
+    { "label": "2.2V", "current": false }
   ]
 }
 ```
@@ -417,8 +417,7 @@ that offers a choice:
 | `range` | The live range label, autoranging included. |
 | `setting` | Which setting the block is about. |
 | `current` | Label the meter sits on, or `null` when the list names none. |
-| `choices[].id` | The number `set` resolves a label to; `0` is Auto for `range`, off for `hold`, `rel`, `minmax` and `peak`. |
-| `choices[].label` | Display label — what `set` takes. |
+| `choices[].label` | Display label, unique within the list — what `set` takes. |
 | `choices[].current` | Whether the meter is on this value. |
 
 **Example:**
@@ -464,8 +463,9 @@ the target shows — slower than a single command, and audible on the meter. One
 caveat comes with that: Hz and Duty % are reported with the same mode byte from
 every dial position, and each `dmm-cli` run starts without history, so while the
 meter shows one of them `get mode` lists only Hz and Duty %. To get back to the
-position's voltage or current function, press SELECT once
-(`dmm-cli command select`); the next `get mode` lists everything again. The GUI
+position's voltage or current function, press Hz/% until it shows
+(`dmm-cli command select2`, once from Duty % on the UT61E+); the next `get mode`
+lists everything again. The GUI
 keeps track across readings, so it only has this gap until it has seen one
 other mode from the position.
 

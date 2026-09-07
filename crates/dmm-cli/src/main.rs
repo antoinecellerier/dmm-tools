@@ -1492,7 +1492,7 @@ fn setting_json(setting: Setting, choices: &[Choice]) -> serde_json::Value {
         "current": choices.iter().find(|c| c.current).map(|c| c.label.as_ref()),
         "choices": choices
             .iter()
-            .map(|c| serde_json::json!({"id": c.id, "label": c.label, "current": c.current}))
+            .map(|c| serde_json::json!({"label": c.label, "current": c.current}))
             .collect::<Vec<_>>(),
     })
 }
@@ -2467,9 +2467,10 @@ mod tests {
     }
 
     /// `get <SETTING> --format json` is one flat object: which meter, what it
-    /// is measuring, and the setting's own choices with their ids.
+    /// is measuring, and the setting's own choices by label — the label is
+    /// what `set` takes, so the library's ids stay out of the contract.
     #[test]
-    fn one_setting_json_carries_the_choices_and_their_ids() {
+    fn one_setting_json_carries_the_choices_by_label() {
         let (mut dmm, _) = fake_meter(&a_full_meter());
         let reading = dmm.request_measurement().expect("the fake meter answers");
         let choices = dmm.choices(Setting::Range, &reading);
@@ -2486,10 +2487,9 @@ mod tests {
         assert_eq!(parsed["range"], "22V");
         assert_eq!(parsed["setting"], "range");
         assert_eq!(parsed["current"], "Auto");
-        assert_eq!(parsed["choices"][0]["id"], 0);
+        assert!(parsed["choices"][0].get("id").is_none(), "no ids: {parsed}");
         assert_eq!(parsed["choices"][0]["label"], "Auto");
         assert_eq!(parsed["choices"][0]["current"], true);
-        assert_eq!(parsed["choices"][2]["id"], 2);
         assert_eq!(parsed["choices"][2]["label"], "22V");
         assert_eq!(parsed["choices"][2]["current"], false);
         assert_eq!(parsed["choices"].as_array().unwrap().len(), 4);
@@ -2519,7 +2519,6 @@ mod tests {
         assert_eq!(names, ["mode", "range", "hold", "minmax"]);
         assert!(!printed.contains("peak"), "{printed}");
         assert_eq!(settings[2]["current"], "off");
-        assert_eq!(settings[2]["choices"][1]["id"], 1);
         assert_eq!(settings[2]["choices"][1]["label"], "on");
     }
 
