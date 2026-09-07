@@ -75,6 +75,18 @@ The UT61B+ is offered no Peak at all, from the family spec's flag matrix
 (§4, blank Peak cells) and command matrix (§6, "No effect"); the UT61D+ is
 offered the same AC modes as the E+. Both unverified — issue #7.
 
+Where the buttons do nothing — observed 2026-09-07 on the in-house UT61E+,
+each sweep ending in `<button> did nothing`:
+
+- **REL:** Hz, Duty % and NCV.
+- **MIN/MAX:** continuity, diode, capacitance, Hz, Duty % and NCV.
+- **HOLD:** NCV.
+- **RANGE:** capacitance and Hz, single-range on this model.
+
+The manual (§VII) gives each button one line and no per-function list, so
+this is the only record. `choices()` still offers these settings there;
+narrowing it to what the meter accepts is a separate pass.
+
 ### Modes not yet tested with real signals
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
