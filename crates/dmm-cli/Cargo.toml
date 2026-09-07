@@ -15,7 +15,7 @@ dmm-settings = { path = "../dmm-settings" }
 clap.workspace = true
 clap_complete = "4"
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] } # `get --format json` leads with the header fields
 chrono.workspace = true
 env_logger.workspace = true
 ctrlc = "3"

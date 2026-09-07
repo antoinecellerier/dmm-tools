@@ -375,7 +375,7 @@ Settings for UT61E+ (DC V):
   mode   * DC V  AC+DC V
   range  * Auto  2.2V  22V  220V  1000V  (auto-ranging in 22V)
 
-Tip: switch one by name, e.g. dmm-cli set range 22V
+Tip: switch one by name, e.g. dmm-cli set mode "ac+dc"
 ```
 
 `--format json` prints one object per invocation — not one per line, unlike

@@ -2486,6 +2486,11 @@ mod tests {
         assert_eq!(parsed["mode"], "V AC");
         assert_eq!(parsed["range"], "22V");
         assert_eq!(parsed["setting"], "range");
+        let printed = serde_json::to_string(&doc).unwrap();
+        assert!(
+            printed.starts_with(r#"{"device":"Fake meter","mode":"V AC","range":"22V","setting""#),
+            "the header leads, as the reference shows: {printed}"
+        );
         assert_eq!(parsed["current"], "Auto");
         assert!(parsed["choices"][0].get("id").is_none(), "no ids: {parsed}");
         assert_eq!(parsed["choices"][0]["label"], "Auto");
