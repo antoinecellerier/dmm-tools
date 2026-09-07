@@ -233,9 +233,19 @@ impl Protocol for Ut171Protocol {
             .needs(&[Need::DcSource])
             .expect(Expect::mode("V DC").value(ValueExpect::Negative)),
             CaptureStep::basic("vac", "Set meter to V AC").expect(Expect::mode("V AC")),
+            // Spec §6: the manual reaches the V-to-frequency converter by
+            // long-pressing in AC V mode.
+            CaptureStep::basic(
+                "vfc",
+                "V AC mode: long-press for VFC (V\u{2192}Hz converter)",
+            )
+            .expect(Expect::mode("VFC")),
             CaptureStep::basic("vacdc", "Set meter to V AC+DC").expect(Expect::mode("V AC+DC")),
+            CaptureStep::basic("lozv", "Set meter to LoZ V~ (low-impedance AC V)")
+                .expect(Expect::mode("LoZ V~")),
             CaptureStep::basic("mvdc", "Set meter to mV DC").expect(Expect::mode("mV DC")),
             CaptureStep::basic("mvac", "Set meter to mV AC").expect(Expect::mode("mV AC")),
+            CaptureStep::basic("mvacdc", "Set meter to mV AC+DC").expect(Expect::mode("mV AC+DC")),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
             CaptureStep::basic("cap", "Set meter to Capacitance")
@@ -266,6 +276,9 @@ impl Protocol for Ut171Protocol {
             CaptureStep::basic("tempc", "Set meter to Temperature C (if available)")
                 .needs(&[Need::Thermocouple])
                 .expect(Expect::mode("°C")),
+            CaptureStep::basic("tempf", "Set meter to Temperature F (if available)")
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("°F")),
             CaptureStep::basic("ns", "Set meter to Conductance nS (if available)")
                 .expect(Expect::mode("nS")),
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
@@ -273,10 +286,20 @@ impl Protocol for Ut171Protocol {
                 .expect(Expect::mode("Duty %")),
             CaptureStep::basic("uadc", "Set meter to µA DC").expect(Expect::mode("µA DC")),
             CaptureStep::basic("uaac", "Set meter to µA AC").expect(Expect::mode("µA AC")),
+            CaptureStep::basic("uaacdc", "Set meter to µA AC+DC").expect(Expect::mode("µA AC+DC")),
             CaptureStep::basic("madc", "Set meter to mA DC").expect(Expect::mode("mA DC")),
             CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
+            CaptureStep::basic("maacdc", "Set meter to mA AC+DC").expect(Expect::mode("mA AC+DC")),
+            CaptureStep::basic("ma420", "Set meter to % (4-20 mA loop)")
+                .expect(Expect::mode("% 4-20mA")),
             CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),
             CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
+            CaptureStep::basic("aacdc", "Set meter to A AC+DC").expect(Expect::mode("A AC+DC")),
+            // The 600 A clamp positions are UT171C-only (spec §1.1).
+            CaptureStep::basic("a600dc", "Set meter to 600A DC (clamp, UT171C only)")
+                .expect(Expect::mode("600A DC")),
+            CaptureStep::basic("a600ac", "Set meter to 600A AC (clamp, UT171C only)")
+                .expect(Expect::mode("600A AC")),
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .needs(&[Need::LiveWire])
                 .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),

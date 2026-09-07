@@ -583,6 +583,13 @@ impl Protocol for Fs9721Protocol {
             .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
             CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
+            // AC+DC is the AC/DC nibble's fourth value; the spec (§5) has it
+            // on the UT804 and leaves the UT803 open.
+            CaptureStep::basic("acdcv", "Set meter to AC+DC V (if the meter has it)")
+                .expect(Expect::mode("AC+DC V")),
+            CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV")),
+            CaptureStep::basic("acmv", "Set meter to AC mV (if the meter has it)")
+                .expect(Expect::mode("AC mV")),
             CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
             CaptureStep::basic(
                 "ohm_ol",
@@ -611,9 +618,36 @@ impl Protocol for Fs9721Protocol {
             // Both models name the frequency mode "Frequency", not "Hz".
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
                 .expect(Expect::mode("Frequency")),
+            CaptureStep::basic(
+                "duty",
+                "Frequency mode: switch the display to Duty Cycle (%)",
+            )
+            .expect(Expect::mode("Duty %")),
+            // Frequency with the alt bit set; the spec (§5) gives RPM to the
+            // UT803 alone.
+            CaptureStep::basic("rpm", "Set meter to Tachometer / RPM (UT803 only)")
+                .expect(Expect::mode("Tachometer")),
             CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
+            CaptureStep::basic(
+                "temp",
+                "Set meter to temperature (K-type thermocouple, if available)",
+            )
+            .needs(&[Need::Thermocouple])
+            .expect(Expect::mode("Temperature")),
+            CaptureStep::basic("dcua", "Set meter to DC µA").expect(Expect::mode("DC µA")),
+            CaptureStep::basic("acua", "Set meter to AC µA").expect(Expect::mode("AC µA")),
+            CaptureStep::basic("dcma", "Set meter to DC mA").expect(Expect::mode("DC mA")),
+            CaptureStep::basic("acma", "Set meter to AC mA").expect(Expect::mode("AC mA")),
+            CaptureStep::basic("dca", "Set meter to DC A").expect(Expect::mode("DC A")),
+            CaptureStep::basic("aca", "Set meter to AC A").expect(Expect::mode("AC A")),
+            // Two modes whose names come from the vendor binaries alone
+            // (spec §3.4): mode 14 "ADP / Logic" and mode 15, unit "mA%".
+            CaptureStep::basic("adp", "Set meter to ADP / logic (UT804 only)")
+                .expect(Expect::mode("ADP")),
+            CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)")
+                .expect(Expect::mode("mA%")),
             // The HOLD wire encoding is what this step is for, so it asserts
             // nothing about the flag.
             CaptureStep::basic(

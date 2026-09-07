@@ -234,8 +234,19 @@ impl Protocol for Ut8803Protocol {
             CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
             CaptureStep::basic("ind", "Set meter to Inductance (L)")
                 .expect(Expect::mode("Inductance")),
+            // L and C each report three sub-measurements (spec §6.5: code 13
+            // is "Inductance, incl. Q and R"); the meter names them L/Q/R and
+            // C/D/R on the display.
+            CaptureStep::basic("ind_q", "Inductance mode: select the Q sub-measurement")
+                .expect(Expect::mode("Inductance Q")),
+            CaptureStep::basic("ind_r", "Inductance mode: select the R sub-measurement")
+                .expect(Expect::mode("Inductance R")),
             CaptureStep::basic("cap", "Set meter to Capacitance (C)")
                 .expect(Expect::mode("Capacitance")),
+            CaptureStep::basic("cap_d", "Capacitance mode: select the D sub-measurement")
+                .expect(Expect::mode("Capacitance D")),
+            CaptureStep::basic("cap_r", "Capacitance mode: select the R sub-measurement")
+                .expect(Expect::mode("Capacitance R")),
             CaptureStep::basic("hfe", "Set meter to hFE (transistor test)")
                 .needs(&[Need::Transistor])
                 .expect(Expect::mode("hFE")),

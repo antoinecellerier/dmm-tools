@@ -294,7 +294,7 @@ impl Protocol for Ut61PlusProtocol {
         // The list is shared by the whole UT61+/UT161 family, but only the
         // UT61E+ has been run against hardware (docs/verification-backlog.md).
         let hw = self.profile.stability == Stability::Verified;
-        vec![
+        let mut steps = vec![
             // Measurement modes
             CaptureStep::basic("dcv", "Set meter to DC V (V\u{23CF}). Leave leads open.")
                 .samples(3)
@@ -372,14 +372,28 @@ impl Protocol for Ut61PlusProtocol {
             )
             .verified_if(hw)
             .expect(Expect::new().range(RangeExpect::Auto)),
+            // The rest of each dial position's SELECT ring (spec §3.1): one
+            // step per mode the ring reaches, in dial order.
+            CaptureStep::basic(
+                "acdcv",
+                "Set meter to V\u{23CF} and press SELECT for AC+DC V.",
+            )
+            .samples(3)
+            .expect(Expect::mode("AC+DC V")),
             CaptureStep::basic("acv", "Set meter to AC V (V~). Leave leads open.")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("AC V")),
+            CaptureStep::basic("lpfv", "Set meter to V~ and press SELECT for LPF V.")
+                .samples(3)
+                .expect(Expect::mode("LPF V")),
             CaptureStep::basic("dcmv", "Set meter to DC mV. Leave leads open.")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("DC mV")),
+            CaptureStep::basic("acmv", "Set meter to mV and press SELECT for AC mV.")
+                .samples(3)
+                .expect(Expect::mode("AC mV")),
             CaptureStep::basic(
                 "ohm",
                 "Set meter to \u{03A9}. Leave leads open (should show OL).",
@@ -448,22 +462,52 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("DC µA")),
+            CaptureStep::basic("acua", "Set meter to µA and press SELECT for AC µA.")
+                .samples(3)
+                .expect(Expect::mode("AC µA")),
             CaptureStep::basic("dcma", "Set meter to DC mA.")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("DC mA")),
+            CaptureStep::basic("acma", "Set meter to mA and press SELECT for AC mA.")
+                .samples(3)
+                .expect(Expect::mode("AC mA")),
             CaptureStep::basic("dca", "Set meter to DC A (A\u{23CF}).")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("DC A")),
+            CaptureStep::basic("aca", "Set meter to A and press SELECT for AC A.")
+                .samples(3)
+                .expect(Expect::mode("AC A")),
             // Temperature needs a thermocouple, so it has never been run.
-            CaptureStep::basic(
-                "temp",
-                "Set meter to temperature (K-type thermocouple, if available).",
-            )
-            .samples(3)
-            .needs(&[Need::Thermocouple]),
-        ]
+            CaptureStep::basic("temp", "Set meter to temperature (K-type thermocouple).")
+                .samples(3)
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("\u{00B0}C")),
+            CaptureStep::basic("tempf", "Temperature position: press SELECT for \u{00B0}F.")
+                .samples(3)
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("\u{00B0}F")),
+            CaptureStep::basic("loz", "Set meter to LoZ (low-impedance volts).")
+                .samples(3)
+                .expect(Expect::mode("LoZ V")),
+        ];
+        // The list names every mode in the family; a model's dial table says
+        // which it reaches (spec §2.1: temperature and LoZ are UT61D+/UT161D
+        // positions), so the others are not asked for.
+        let dial = self.table.dial_positions();
+        steps.retain(|step| {
+            let Some(label) = step.expect.and_then(|e| e.mode) else {
+                return true;
+            };
+            dial.iter().flat_map(|p| p.modes()).any(|m| {
+                u8::try_from(m)
+                    .ok()
+                    .and_then(|b| Mode::from_byte(b).ok())
+                    .is_some_and(|mode| mode.as_static_str() == label)
+            })
+        });
+        steps
     }
 }
 
@@ -708,6 +752,29 @@ pub fn make_test_measurement(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each model is asked only for the modes its dial reaches: the E+ has
+    /// no temperature or LoZ position, the D+ has both.
+    #[test]
+    fn capture_steps_follow_the_model_s_dial() {
+        let ids = |model: &str| -> Vec<&'static str> {
+            Ut61PlusProtocol::for_model(model)
+                .expect("known model")
+                .capture_steps()
+                .iter()
+                .map(|s| s.id)
+                .collect()
+        };
+        let e_plus = ids("ut61e+");
+        assert!(e_plus.contains(&"acua"));
+        for id in ["temp", "tempf", "loz"] {
+            assert!(!e_plus.contains(&id), "{id} asked for on the E+");
+        }
+        let d_plus = ids("ut61d+");
+        for id in ["temp", "tempf", "loz"] {
+            assert!(d_plus.contains(&id), "{id} missing on the D+");
+        }
+    }
     use tables::ut61e_plus::Ut61ePlusTable;
 
     // --- Remote mode selection (protocol::cycle) --------------------------
