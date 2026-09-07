@@ -100,6 +100,15 @@ pub(crate) enum StepStatus {
     Error,
 }
 
+/// Where the operator's confirmation came from: the prompt shown at the step
+/// itself, or a review pass over the finished report.
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ConfirmedBy {
+    Inline,
+    Batch,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct StepResult {
     pub id: String,
@@ -107,7 +116,19 @@ pub(crate) struct StepResult {
     pub status: StepStatus,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub samples: Vec<SampleData>,
+    /// Whether the operator said our reading matched the meter. `None` when
+    /// they were never asked: a non-interactive run, or a step with no samples.
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub confirmed: Option<bool>,
+    /// What the meter actually showed, recorded only when it disagreed with
+    /// what we parsed.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub lcd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub confirmed_by: Option<ConfirmedBy>,
+    /// The free-text confirmation older reports stored. Read so a capture
+    /// started before this split can still be resumed; never written back.
+    #[serde(default, skip_serializing)]
     pub screen: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub error: Option<String>,
@@ -133,12 +154,42 @@ impl StepResult {
             instruction: instruction.to_string(),
             status,
             samples: vec![],
+            confirmed: None,
+            lcd: None,
+            confirmed_by: None,
             screen: None,
             error: None,
             frames: vec![],
             diagnostics: vec![],
             needs_attention: false,
         }
+    }
+
+    /// Record the operator's answer to the confirmation prompt: empty input
+    /// means our reading matched, anything else is what the meter showed.
+    fn set_inline_confirmation(&mut self, input: String) {
+        let confirmed = input.is_empty();
+        self.confirmed = Some(confirmed);
+        self.lcd = (!confirmed).then_some(input);
+        self.confirmed_by = Some(ConfirmedBy::Inline);
+    }
+
+    /// Fold an older report's free-text `screen` into the structured fields,
+    /// so resuming a capture started before the split keeps its confirmations.
+    pub(crate) fn normalize_legacy(&mut self) {
+        if self.confirmed.is_some() || self.lcd.is_some() || self.confirmed_by.is_some() {
+            return;
+        }
+        let Some(text) = self.screen.take() else {
+            return;
+        };
+        if text.starts_with("confirmed: ") {
+            self.confirmed = Some(true);
+        } else {
+            self.confirmed = Some(false);
+            self.lcd = Some(text);
+        }
+        self.confirmed_by = Some(ConfirmedBy::Inline);
     }
 }
 
@@ -607,19 +658,13 @@ pub(crate) fn run_capture_step(
         );
     }
 
-    let screen = if let Some(last) = sample_data.last() {
+    let confirmation = if let Some(last) = sample_data.last() {
         if interactive {
-            let summary = last.summary();
-            eprintln!("  We read: {}", style(&summary).green());
-            let input = prompt(&format!(
+            eprintln!("  We read: {}", style(last.summary()).green());
+            Some(prompt(&format!(
                 "  {} ",
                 style("Enter=correct, or type what the meter actually shows:").dim()
-            ))?;
-            Some(if input.is_empty() {
-                format!("confirmed: {summary}")
-            } else {
-                input
-            })
+            ))?)
         } else {
             None
         }
@@ -642,14 +687,16 @@ pub(crate) fn run_capture_step(
         StepStatus::Captured
     };
 
-    let result = StepResult {
+    let mut result = StepResult {
         needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
         samples: sample_data,
-        screen,
         frames,
         diagnostics,
         ..StepResult::new(step.id, step.instruction, status)
     };
+    if let Some(input) = confirmation {
+        result.set_inline_confirmation(input);
+    }
 
     upsert_step(report, result);
     report.wire_events_dropped = recording::lock(recorder).dropped();
@@ -1172,6 +1219,65 @@ mod tests {
         assert!(!yaml.contains("feature"), "got {yaml}");
     }
 
+    /// Enter at the prompt means the meter agreed with what we read, so the
+    /// step records the confirmation and no screen text.
+    #[test]
+    fn pressing_enter_confirms_the_reading() {
+        let mut step = StepResult::new("dcv", "test", StepStatus::Captured);
+        step.set_inline_confirmation(String::new());
+        assert_eq!(step.confirmed, Some(true));
+        assert_eq!(step.lcd, None);
+        assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
+    }
+
+    /// A typed correction is what the meter actually showed — the evidence
+    /// that our parse is wrong — so it is kept apart from the confirmation.
+    #[test]
+    fn a_typed_correction_records_what_the_meter_showed() {
+        let mut step = StepResult::new("dcv", "test", StepStatus::Captured);
+        step.set_inline_confirmation("5.68 V".to_string());
+        assert_eq!(step.confirmed, Some(false));
+        assert_eq!(step.lcd.as_deref(), Some("5.68 V"));
+        assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
+    }
+
+    /// Reports written before the split store the confirmation as free text.
+    /// Resuming one has to recover both cases, or the operator is asked to
+    /// confirm steps they already confirmed.
+    #[test]
+    fn legacy_screen_text_normalizes_into_the_new_fields() {
+        let mut step: StepResult = serde_yaml_ng::from_str(
+            "id: dcv\ninstruction: test\nstatus: captured\nscreen: 'confirmed: 5.678 V [AUTO]'\n",
+        )
+        .unwrap();
+        step.normalize_legacy();
+        assert_eq!(step.confirmed, Some(true));
+        assert_eq!(step.lcd, None);
+        assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
+        assert_eq!(step.screen, None);
+
+        let mut step: StepResult = serde_yaml_ng::from_str(
+            "id: dcv\ninstruction: test\nstatus: captured\nscreen: 5.68 V\n",
+        )
+        .unwrap();
+        step.normalize_legacy();
+        assert_eq!(step.confirmed, Some(false));
+        assert_eq!(step.lcd.as_deref(), Some("5.68 V"));
+        assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
+        assert_eq!(step.screen, None);
+    }
+
+    /// A step nobody was asked about — a non-interactive run, or one with no
+    /// samples — serializes exactly as it did before the fields existed.
+    #[test]
+    fn unconfirmed_steps_omit_the_confirmation_fields() {
+        let yaml = serde_yaml_ng::to_string(&StepResult::new("dcv", "test", StepStatus::Captured))
+            .unwrap();
+        for key in ["confirmed", "lcd", "confirmed_by", "screen"] {
+            assert!(!yaml.contains(key), "{key} must be omitted: {yaml}");
+        }
+    }
+
     #[test]
     fn upsert_step_insert() {
         let mut report = CaptureReport::default();
@@ -1315,7 +1421,9 @@ mod tests {
             supported: true,
             steps: vec![StepResult {
                 samples: vec![sample],
-                screen: Some("confirmed: 5.678 V [AUTO]".to_string()),
+                confirmed: Some(false),
+                lcd: Some("5.68 V".to_string()),
+                confirmed_by: Some(ConfirmedBy::Inline),
                 ..StepResult::new("dcv", "Set meter to DC V", StepStatus::Captured)
             }],
             ..CaptureReport::default()
@@ -1330,7 +1438,9 @@ mod tests {
         assert_eq!(parsed.steps.len(), 1);
         assert_eq!(parsed.steps[0].samples.len(), 1);
         assert_eq!(parsed.steps[0].samples[0].value, "5.678");
-        assert_eq!(parsed.steps[0].screen, report.steps[0].screen);
+        assert_eq!(parsed.steps[0].confirmed, Some(false));
+        assert_eq!(parsed.steps[0].lcd.as_deref(), Some("5.68 V"));
+        assert_eq!(parsed.steps[0].confirmed_by, Some(ConfirmedBy::Inline));
     }
 
     #[test]
@@ -1561,7 +1671,10 @@ fn load_or_create_report(
 
     let report = match std::fs::read_to_string(&output_path) {
         Ok(contents) => match serde_yaml_ng::from_str::<CaptureReport>(&contents) {
-            Ok(r) => {
+            Ok(mut r) => {
+                for step in &mut r.steps {
+                    step.normalize_legacy();
+                }
                 let captured = r
                     .steps
                     .iter()
@@ -1679,16 +1792,11 @@ fn run_freeform_captures(
             eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
         }
 
-        let screen = if let Some(last) = sample_data.last() {
-            let summary = last.summary();
-            let input = prompt(&format!(
-                "  We read: {summary}\n  Enter=correct, or type correction: "
-            ))?;
-            Some(if input.is_empty() {
-                format!("confirmed: {summary}")
-            } else {
-                input
-            })
+        let confirmation = if let Some(last) = sample_data.last() {
+            Some(prompt(&format!(
+                "  We read: {}\n  Enter=correct, or type correction: ",
+                last.summary()
+            ))?)
         } else {
             eprintln!("  No response from meter.");
             None
@@ -1699,17 +1807,17 @@ fn run_freeform_captures(
         } else {
             StepStatus::Captured
         };
-        upsert_step(
-            report,
-            StepResult {
-                needs_attention: needs_attention(&sample_data, FREEFORM_SAMPLES, &diagnostics),
-                samples: sample_data,
-                screen,
-                frames,
-                diagnostics,
-                ..StepResult::new(&step_id, &desc, status)
-            },
-        );
+        let mut result = StepResult {
+            needs_attention: needs_attention(&sample_data, FREEFORM_SAMPLES, &diagnostics),
+            samples: sample_data,
+            frames,
+            diagnostics,
+            ..StepResult::new(&step_id, &desc, status)
+        };
+        if let Some(input) = confirmation {
+            result.set_inline_confirmation(input);
+        }
+        upsert_step(report, result);
         report.wire_events_dropped = recording::lock(recorder).dropped();
         save_report(report, output_path)?;
         extra += 1;
