@@ -159,9 +159,11 @@ impl DialState {
     /// Duty % identically from the V~, mV and Hz positions, and a VC-880
     /// reports code 0x02 from two of its positions. Without history such a
     /// mode lands on the *smallest* position holding it (ties: the first
-    /// listed), which is the safe guess — that position's rings are a subset
-    /// of the larger ones', so a switch planned from it is valid wherever the
-    /// dial really is.
+    /// listed) — but only when that position's modes are a subset of every
+    /// other candidate's, which is what makes it the safe guess: a switch
+    /// planned from it is valid wherever the dial really is. Candidates that
+    /// overlap without nesting (the VC-880's mV and V positions) leave the
+    /// position unknown until a reading names one of them outright.
     pub(crate) fn observe(&mut self, positions: &[DialPosition], mode: u16) {
         self.last_mode = Some(mode);
         self.position = resolve_position(positions, self.position, mode);
@@ -175,14 +177,18 @@ fn resolve_position(positions: &[DialPosition], hint: Option<usize>, mode: u16) 
     {
         return Some(i);
     }
-    positions
+    let candidates: Vec<(usize, &DialPosition)> = positions
         .iter()
         .enumerate()
         .filter(|(_, p)| p.contains(mode))
-        // `min_by_key` keeps the first of equal keys, so ties go to the
-        // position listed first.
-        .min_by_key(|(_, p)| p.mode_count())
-        .map(|(i, _)| i)
+        .collect();
+    // `min_by_key` keeps the first of equal keys, so ties go to the position
+    // listed first.
+    let (i, smallest) = candidates.iter().min_by_key(|(_, p)| p.mode_count())?;
+    let nested = candidates
+        .iter()
+        .all(|(_, p)| smallest.modes().iter().all(|&m| p.contains(m)));
+    nested.then_some(*i)
 }
 
 /// A meter whose modes are reached by pressing front-panel buttons.
@@ -262,10 +268,15 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
     };
 
     let Some(index) = resolve_position(positions, meter.dial_state().position(), current) else {
-        return Err(Error::UnsupportedCommand(format!(
-            "{} is on no known dial position",
-            meter.mode_label(current)
-        )));
+        let known = positions.iter().any(|p| p.contains(current));
+        return Err(Error::UnsupportedCommand(if known {
+            format!(
+                "{} is reported from more than one dial position — take a reading in another mode first",
+                meter.mode_label(current)
+            )
+        } else {
+            format!("{} is on no known dial position", meter.mode_label(current))
+        }));
     };
 
     if id == current {
@@ -784,6 +795,39 @@ mod tests {
         let choices = mode_choices(&meter, &reading(HZ));
         assert_eq!(ids(&choices), vec![DC_MV, AC_MV, HZ, DUTY]);
         assert_eq!(current_ids(&choices), vec![HZ]);
+    }
+
+    /// The VC-880 reports 0x02 from its mV and V positions, whose other
+    /// modes differ. Neither is a safe guess for the other, so a bare 0x02
+    /// resolves nowhere until a reading has named one of them.
+    #[test]
+    fn a_shared_mode_between_non_nested_positions_resolves_nowhere() {
+        const OVERLAP: &[DialPosition] = &[
+            DialPosition {
+                rings: &[Ring {
+                    button: CycleButton::Select,
+                    modes: &[0x02, 0x03, 0x04],
+                }],
+            },
+            DialPosition {
+                rings: &[Ring {
+                    button: CycleButton::Select,
+                    modes: &[0x00, 0x01, 0x02],
+                }],
+            },
+        ];
+        assert_eq!(resolve_position(OVERLAP, None, 0x02), None);
+
+        let mut state = DialState::default();
+        state.observe(OVERLAP, 0x02);
+        assert_eq!(state.position(), None);
+        state.observe(OVERLAP, 0x00);
+        state.observe(OVERLAP, 0x02);
+        assert_eq!(
+            state.position(),
+            Some(1),
+            "0x00 put the dial on V, 0x02 keeps it"
+        );
     }
 
     #[test]

@@ -135,11 +135,10 @@ use super::vc8x0_common::COMMANDS as VC880_COMMANDS;
 /// §4.4, which also records where the manual's own text disagrees with its
 /// figure.
 ///
-/// The mV position is listed first on purpose. Function 0x02 is the only code
-/// on two positions — the V position reports it for its 400 mV auto range
-/// (§4.2) — and with no history a mode lands on the position listed first
-/// among the smallest, which should be the mV dial: that is the position a
-/// meter sitting in 0x02 is most likely on.
+/// Function 0x02 is the only code on two positions — the V position reports
+/// it for its 400 mV auto range (§4.2). The two share nothing else, so a
+/// bare 0x02 puts the dial nowhere (`cycle::DialState::observe`) and offers
+/// no switch until a reading has named one of the positions.
 const DIAL: &[DialPosition] = &[
     // mV⎓ / Hz % : DC mV, Frequency, Duty %
     DialPosition {
@@ -944,15 +943,40 @@ raw_payload=34"#
         assert_eq!(proto.dial.position(), Some(4), "the Ω position");
     }
 
-    /// 0x02 is on both the mV and the V position, and a fresh process has no
-    /// history to tell them apart. The mV dial is the guess.
+    /// 0x02 is on both the mV and the V position, which share nothing else,
+    /// so a fresh process has no safe guess: nothing to list, and a switch
+    /// is refused before any frame is written.
     #[test]
-    fn a_dc_mv_reading_without_history_lists_the_mv_position() {
-        let (proto, m) = read_one(0x02);
-        let choices = proto.mode_choices(&m);
-        assert_eq!(ids(&choices), vec![0x02, 0x03, 0x04]);
-        assert_eq!(labels(&choices), ["DC mV", "Frequency", "Duty %"]);
-        assert_eq!(current_ids(&choices), vec![0x02]);
+    fn a_dc_mv_reading_without_history_offers_nothing() {
+        let (mut proto, m) = read_one(0x02);
+        assert!(proto.mode_choices(&m).is_empty());
+
+        let transport = MockTransport::new(vec![]);
+        let err = proto.select_mode(&transport, 0x03).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("more than one dial position")),
+            "got {err:?}"
+        );
+        assert!(transport.written.borrow().is_empty());
+    }
+
+    /// Once a reading has named a position, 0x02 keeps it.
+    #[test]
+    fn a_dc_mv_reading_keeps_the_position_the_stream_established() {
+        for (first, expected) in [
+            (0x03, vec![0x02, 0x03, 0x04]),
+            (0x00, vec![0x00, 0x01, 0x02]),
+        ] {
+            let (mut proto, _) = read_one(first);
+            let transport = MockTransport::new(vec![framing::test_frame_be16(&make_payload(
+                0x02,
+                0x30,
+                b"  1.234",
+                zero_status(),
+            ))]);
+            let m = proto.request_measurement(&transport).expect("parses");
+            assert_eq!(ids(&proto.mode_choices(&m)), expected, "after {first:#04x}");
+        }
     }
 
     /// From the V position the same code is reachable, so a meter that

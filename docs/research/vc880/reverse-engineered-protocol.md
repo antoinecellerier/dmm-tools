@@ -353,8 +353,11 @@ the meter.
 
 **0x02 sits on two positions.** The V⎓ position auto-ranges down to 400 mV and
 reports that as function 0x02 rather than 0x00 (§4.2, [VENDOR]), so a reading
-of 0x02 alone does not say which of the two positions the dial is on. The mV
-position is the better guess and the implementation prefers it.
+of 0x02 alone does not say which of the two positions the dial is on. The two
+positions share no other function, so neither is a safe guess for the other:
+on a bare 0x02 the implementation leaves the position unknown — `dmm-cli
+mode` has nothing to list — until the stream has reported 0x00/0x01 (V⎓) or
+0x03/0x04 (mV), after which 0x02 keeps that position.
 
 **The manual's §8b text contradicts its own figure.** The AC-voltage procedure
 reads "wählen den Messbereich „V“. Drücken Sie die Taste „SHIFT/SETUP“ (3) um
