@@ -30,7 +30,7 @@
 - **Capture confirms the first few steps one by one and reviews the rest at the end** — every step stopped for an Enter; once the meter's digits, OL and sign decode right, the remaining readings are listed once for a single check. `--sniff` keeps per-step checks for a parser nobody trusts yet.
 - **Capture says up front what a run needs** — a thermocouple, a battery or a transistor turned up mid-run as a step nobody could do; the run now lists them first and skips the steps for anything you don't have.
 - **`capture --plan` runs a step list pasted from an issue** — an edge case the shipped steps didn't cover needed a new release before anyone could capture it.
-- **Capture walks every range and flag the tool can set** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked. `--no-drive` turns it off.
+- **Capture walks every range, flag and sub-mode the tool can set** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked. `--no-drive` turns it off.
 
 ### Bug fixes
 

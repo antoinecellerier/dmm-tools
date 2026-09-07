@@ -3,7 +3,9 @@
 //! A mode step captures whatever range auto-ranging picked and whatever flags
 //! the meter happened to be in. On a family implementing `choices`/`select`
 //! the tool can put the meter in each of them itself, so every range and flag
-//! reaches the report without asking the operator to press anything.
+//! reaches the report without asking the operator to press anything. The same
+//! `select` reaches a mode a button offers on the dial position the step is
+//! already at, which `switch_mode` does before the step is watched.
 
 use crate::capture::{
     CaptureReport, CaptureStep, ErrorLog, SampleData, StepResult, StepStatus, capture_samples,
@@ -18,7 +20,8 @@ use serde::{Deserialize, Serialize};
 /// The settings a sweep walks, in the order it walks them.
 ///
 /// Never `Setting::Mode`: the dial is the operator's, and a step list is
-/// written around which position they were asked to turn it to.
+/// written around which position they were asked to turn it to. A step that
+/// names a mode is switched to by `switch_mode`, one value, not swept.
 const SWEPT: [Setting; 5] = [
     Setting::Range,
     Setting::Hold,
@@ -260,6 +263,56 @@ pub(crate) fn sweep_step(
     Ok(())
 }
 
+/// Put the meter in the mode a step asks for, when a button reaches it from
+/// where the dial already sits — continuity, diode and capacitance from Ω on
+/// the UT61E+, duty from Hz.
+///
+/// Returns whether the tool switched. False leaves the step exactly as it was
+/// before: the instruction is asked, and the operator turns the dial.
+pub(crate) fn switch_mode(
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    step: &CaptureStep,
+    last: &Measurement,
+    driver: &mut Driver,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    // A command step's own command is what puts the meter where it belongs,
+    // and a step that names no mode has nothing to switch to.
+    if !driver.active() || step.command.is_some() {
+        return Ok(false);
+    }
+    let Some(want) = step.expect.and_then(|e| e.mode) else {
+        return Ok(false);
+    };
+    let choices = dmm.choices(Setting::Mode, last);
+    let Some(choice) = choices
+        .iter()
+        .find(|c| c.label.as_ref() == want && !c.current)
+    else {
+        return Ok(false);
+    };
+
+    eprintln!(
+        "  {}",
+        style(format!("\u{21b3} switching to {want} (sent by the tool)")).dim()
+    );
+    match dmm.select(Setting::Mode, choice.id) {
+        // The family reads the mode back before returning, and the step's
+        // watcher still demands its matching frames.
+        Ok(()) => Ok(true),
+        Err(e) => {
+            eprintln!(
+                "  {}",
+                style(format!(
+                    "\u{21b3} could not switch to {want}: {e} \u{2014} do it by hand"
+                ))
+                .dim()
+            );
+            driver.fail();
+            Ok(false)
+        }
+    }
+}
+
 /// What one driven choice left behind: the reading the next choice is
 /// computed from, and whether the meter refused the command.
 struct Driven {
@@ -486,10 +539,6 @@ mod tests {
         assert_eq!(d.state(), Drive::Off);
     }
 
-    fn mock(mode: dmm_lib::mock::MockMode) -> Box<dyn dmm_lib::protocol::Protocol> {
-        Box::new(dmm_lib::mock::MockProtocol::with_mode(mode))
-    }
-
     /// One sweep against the mock, which implements `choices`/`select` the
     /// way the four drivable families do.
     fn swept(mode: dmm_lib::mock::MockMode, step_id: &'static str, file: &str) -> CaptureReport {
@@ -578,6 +627,79 @@ mod tests {
         }
     }
 
+    /// A meter on the mock's AC V ring, which offers the "AC V Hz" sub-mode
+    /// the way a real dial position's button does.
+    fn meter(
+        proto: Box<dyn dmm_lib::protocol::Protocol>,
+    ) -> (
+        dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+        Measurement,
+    ) {
+        use dmm_lib::transport::{NullTransport, Transport};
+        let mut dmm =
+            dmm_lib::Dmm::new(Box::new(NullTransport) as Box<dyn Transport>, proto).unwrap();
+        let last = dmm.request_measurement().unwrap();
+        (dmm, last)
+    }
+
+    fn mock(mode: dmm_lib::mock::MockMode) -> Box<dyn dmm_lib::protocol::Protocol> {
+        Box::new(dmm_lib::mock::MockProtocol::with_mode(mode))
+    }
+
+    fn mode_step(mode: &'static str) -> CaptureStep {
+        CaptureStep {
+            id: "step",
+            instruction: "Set the meter to it",
+            command: None,
+            samples: 2,
+            expect: Some(dmm_lib::protocol::Expect::mode(mode)),
+            verified: false,
+            gate: false,
+            needs: &[],
+        }
+    }
+
+    /// The sub-mode is on the ring the dial already sits on, so the tool
+    /// presses the button instead of asking.
+    #[test]
+    fn a_mode_the_ring_offers_is_switched_to() {
+        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut driver = Driver::new(true);
+        assert!(switch_mode(&mut dmm, &mode_step("AC V Hz"), &last, &mut driver).unwrap());
+        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V Hz");
+        assert_eq!(driver.failures, 0);
+    }
+
+    /// A mode the ring does not reach needs the dial turned, which is the
+    /// operator's job: the tool must ask rather than send anything.
+    #[test]
+    fn a_mode_off_the_ring_is_left_to_the_operator() {
+        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut driver = Driver::new(true);
+        assert!(!switch_mode(&mut dmm, &mode_step("DC V"), &last, &mut driver).unwrap());
+        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V");
+
+        // A dial position offering no ring at all is the same case.
+        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::Ohm));
+        assert!(!switch_mode(&mut dmm, &mode_step("Capacitance"), &last, &mut driver).unwrap());
+        assert_eq!(dmm.request_measurement().unwrap().mode, "\u{03A9}");
+        assert_eq!(driver.failures, 0);
+    }
+
+    /// A command step sends its own command; switching the mode under it
+    /// would be undoing what the step is there to test.
+    #[test]
+    fn a_command_step_is_never_switched() {
+        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let step = CaptureStep {
+            command: Some("hold"),
+            ..mode_step("AC V Hz")
+        };
+        let mut driver = Driver::new(true);
+        assert!(!switch_mode(&mut dmm, &step, &last, &mut driver).unwrap());
+        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V");
+    }
+
     /// The mock, but one setting's values are refused the way a meter
     /// answers a function the mode it is in does not have. Turning the
     /// setting off still works: it is already off, which is what the
@@ -643,6 +765,17 @@ mod tests {
             }
             self.inner.select(t, setting, id)
         }
+    }
+
+    /// A refused switch falls back to asking, and spends one of the three
+    /// refusals that end remote control for the run.
+    #[test]
+    fn a_refused_switch_counts_against_the_budget() {
+        let (mut dmm, last) = meter(Refuses::boxed(dmm_lib::mock::MockMode::AcV, Setting::Mode));
+        let mut driver = Driver::new(true);
+        assert!(!switch_mode(&mut dmm, &mode_step("AC V Hz"), &last, &mut driver).unwrap());
+        assert_eq!(driver.failures, 1);
+        assert!(driver.active());
     }
 
     /// The meter refuses REL on an OL reading, so the sweep must not spend a

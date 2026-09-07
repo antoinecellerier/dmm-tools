@@ -605,7 +605,9 @@ fn run_protocol_capture(
     let mut prev = PrevState::default();
     let mut to_review = Vec::new();
     for step in &steps {
-        let outcome = run_capture_step(dmm, recorder, step, report, true, input, &prev, trust)?;
+        let outcome = run_capture_step(
+            dmm, recorder, step, report, true, input, &prev, trust, driver,
+        )?;
         if outcome.to_review {
             to_review.push(step.id.to_string());
         }
@@ -1178,6 +1180,7 @@ pub(crate) fn run_capture_step(
     input: &Input,
     prev: &PrevState,
     trust: &Trust,
+    driver: &mut crate::drive::Driver,
 ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
     if already_captured(report, step.id) {
@@ -1193,6 +1196,15 @@ pub(crate) fn run_capture_step(
     recording::lock(recorder).set_step(Some(step.id));
     let mut errors = ErrorLog::default();
     let expect = trust.expect(step);
+
+    // A mode a button on the meter reaches — continuity from Ω, duty
+    // from Hz — is the tool's to switch to; only the dial is the operator's.
+    if interactive
+        && trust.drives()
+        && let Some(last) = &prev.last
+    {
+        crate::drive::switch_mode(dmm, step, last, driver)?;
+    }
 
     // The frame the watcher accepted, kept as the step's first sample: it is
     // the one reading known to be in the state the step asked for.
@@ -1252,7 +1264,8 @@ pub(crate) fn run_capture_step(
         // A step whose expectation the previous reading already satisfies
         // cannot be seen arriving — DC V with the leads open and shorted
         // both read about zero — so it is Enter-only and the keyboard is
-        // offered at once.
+        // offered at once. A mode the tool just switched to is a change, so
+        // this is false there.
         let ask = enter_only(expect, prev.last.as_ref());
         let timeout = if ask { Duration::ZERO } else { STEP_TIMEOUT };
         let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);

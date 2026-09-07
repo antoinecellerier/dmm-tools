@@ -133,6 +133,12 @@ These paths are hardware-unverified on three of the four families, so:
 - REL is skipped while the reading is OL: the meter is entitled to refuse it
   there, and the refusal would spend the failure budget.
 
+A step whose `expect.mode` sits on the current dial position's ring — duty from Hz, Hz
+from AC V, continuity, diode and capacitance from Ω on the UT61E+ — is switched to by the
+tool before the step is watched, so the operator turns the dial and nothing else. A mode
+off the ring is asked for as before, and a refused switch prints what to do by hand and
+counts against the same failure budget.
+
 `--no-drive` opts out, for receive-only cables (CH9325) or a cautious reporter.
 The report records `drive: on | off | disabled` — `off` for `--no-drive` and
 for a family that offered no choice at all, `disabled` when the budget ran out.

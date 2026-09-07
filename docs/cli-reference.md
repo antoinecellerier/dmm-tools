@@ -604,10 +604,12 @@ On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock) every
 mode step past the gate is followed, without a prompt, by a walk of hold, REL, MIN/MAX,
 peak and every range, filed as `<step>/<setting>:<label>` sub-steps
 (`dcv/range:22V`, `dcv/hold:on`); the meter is left back on auto range with its
-flags off. A command the meter refuses is filed as an error sub-step — a
-refusal of a function the meter accepted elsewhere in the run doesn't count,
-the mode simply hasn't got it — and three refusals stop the sweeps for the
-rest of the run — `drive` in the report reads
+flags off. A step whose mode a button reaches from the dial position you are
+already on — continuity from Ω, Hz from AC V — is switched to by the tool, so
+you only ever turn the dial. A command the meter refuses is filed as an error
+sub-step — a refusal of a function the meter accepted elsewhere in the run
+doesn't count, the mode simply hasn't got it — and three refusals stop the
+sweeps for the rest of the run — `drive` in the report reads
 `on`, `off` or `disabled`. Sub-steps are protocol evidence rather than screen
 checks, so they are never confirmed by hand. `--no-drive` opts out, for a
 receive-only cable or a cautious reporter.
