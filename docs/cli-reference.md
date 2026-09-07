@@ -591,9 +591,9 @@ meter with secondary displays, that confirmation line lists the sub-values in
 parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,
 Period 20.00 ms)` — so the whole screen is checked, not just the main value.
 
-A few steps are marked `gate` in `--list-steps`: DC V open and shorted, Ω
-open and shorted, and a negative reading. They establish the digits, decimal
-point, OL and sign, so each stops for an Enter (or for you to type what the
+A few steps are marked `gate` in `--list-steps`: DC V open and shorted, Ω open,
+Ω with a probe tip held in each hand, Ω shorted, and a negative reading. They
+establish the digits, decimal point, OL and sign, so each stops for an Enter (or for you to type what the
 meter shows). Once all are confirmed the report records `core_semantics:
 confirmed` and later steps capture without stopping; one you correct or skip
 records `core_semantics: failed` with the IDs in `gate_failures`, and every

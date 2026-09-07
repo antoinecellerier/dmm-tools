@@ -213,6 +213,15 @@ impl Protocol for Ut8803Protocol {
             )
             .gate()
             .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
+            // Open and shorted leads repeat one digit value, so a digit-order
+            // or digit-value bug hides; a body reading spreads the digits out.
+            CaptureStep::basic(
+                "ohm_body",
+                "Resistance mode: hold one probe tip between the fingers of each \
+                 hand (body resistance, hundreds of kΩ).",
+            )
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "ohm_short",
                 "Resistance mode: touch the two probe tips together.",

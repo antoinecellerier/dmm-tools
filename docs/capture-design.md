@@ -75,8 +75,10 @@ One file to attach stays the rule: no sidecar trace.
 | 2 Trusted | `Stability::Verified`, or gate passed | semantic where the step declares an expectation | gate steps inline; deferred batch review for the rest | yes |
 
 The **gate** is a small block of steps marked `gate: true` in the family's step list: DC V
-open, DC V shorted, Ω open (OL), Ω shorted, and a negative reading. Those five establish mode
-byte, digits, decimal point, OL and sign. They are tagged `(gate)` in the step header as they
+open, DC V shorted, Ω open (OL), Ω across the operator's body, Ω shorted, and a negative
+reading. Those six establish mode byte, digits, decimal point, OL and sign — the body
+reading is the only one that puts non-zero digits on screen, open leads showing OL and
+shorted ones zero. They are tagged `(gate)` in the step header as they
 run, and confirm inline with the existing prompt — Enter means the LCD shows exactly this
 line, otherwise type what it shows. The decision is Enter-or-type everywhere, so nothing
 compares typed digits; a typed correction on a gate step is a mismatch.

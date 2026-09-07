@@ -388,6 +388,16 @@ impl Protocol for Ut61PlusProtocol {
             .verified_if(hw)
             .gate()
             .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
+            // Open and shorted leads repeat one digit value, so a digit-order
+            // or digit-value bug hides; a body reading spreads the digits out.
+            CaptureStep::basic(
+                "ohm_body",
+                "\u{03A9} mode: hold one probe tip between the fingers of each hand \
+                 (body resistance, hundreds of k\u{03A9}).",
+            )
+            .samples(3)
+            .gate()
+            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "ohm_short",
                 "\u{03A9} mode: touch the two probe tips together.",
