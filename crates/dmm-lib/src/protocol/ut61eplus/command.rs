@@ -16,14 +16,11 @@ pub enum Command {
     ExitMinMax = 0x42,
     /// RANGE button.
     ///
-    /// Engages manual ranging — that much is confirmed on hardware (the AUTO
-    /// flag clears and stays clear). What repeated presses do is **not**
-    /// known: this was described as "toggle range (auto/manual)", but six
-    /// consecutive presses never returned the meter to auto, and did not
-    /// step cleanly through the range table either. Unlike the other
-    /// commands, 0x46 has only decompile evidence (`QByteArray::append('F')`
-    /// in `FUN_100021f0`) and no verified behaviour note. See the UT61E+
-    /// section of docs/verification-backlog.md.
+    /// Verified on the UT61E+ (2026-09-07): the first press leaves auto on
+    /// the rung the meter is already in, each further press steps one rung
+    /// up, the top rung wraps to the bottom, and the mode byte never moves.
+    /// Only [`Command::Auto`] returns to auto-ranging. Does nothing on the
+    /// mV dial. See §6.1 of the UT61 family spec.
     Range = 0x46,
     /// Set auto-range.
     Auto = 0x47,
