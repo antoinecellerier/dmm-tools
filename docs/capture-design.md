@@ -167,12 +167,20 @@ Structured fields replace the `screen: "confirmed: …"` string: `confirmed: Opt
 `lcd: Option<String>` for the typed correction, and `confirmed_by: inline | batch`. Reports
 carrying the old `screen` string still load, so a resume across versions works.
 
-## G. Preparation up front (planned)
+## G. Preparation up front
 
-Before the first step, capture lists what the run needs — shorted leads, a small DC source,
-thermocouple, capacitor, live wire — derived from a `needs` tag on steps, and lets the user
-deselect groups once ("no thermocouple" skips `temp` and `tempf`). Family step lists are
-ordered so dial rotation is monotonic and lead changes are grouped; `docs/adding-devices.md`
+Before the first step, capture lists what the run needs — shorted leads, a DC source, a
+thermocouple, a live wire, a transistor, an SCR — derived from the `needs` tag on steps and
+numbered in `Need::ALL` order, each line naming the steps waiting on it. The user gives the
+numbers of anything they haven't got and those steps are marked `skipped` with `error:
+"skipped: no <label>"` before the run starts, so the question is asked once rather than met
+again on resume; naming such a step in a later `--steps` run asks again. The checklist covers
+only the steps `--steps` and `--unverified` selected, and a run with nobody to ask — stderr is
+not a terminal — prints the list and attempts everything.
+
+Family step lists are ordered so dial rotation is monotonic, lead changes are grouped, and a
+gate step sits right after the mode step it extends — shorting the probes on DC V is the step
+after DC V itself, not a later visit to the same dial position. `docs/adding-devices.md`
 states that rule for new families.
 
 ## H. Maintainer-authored plans (planned)

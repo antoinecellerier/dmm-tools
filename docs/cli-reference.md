@@ -567,6 +567,12 @@ The run ends with how many unverified steps the report now covers and the issue
 to attach it to. `--list-steps --format md` prints that same list as the
 checklist those issues carry.
 
+The run opens with what it needs on the bench — shorted leads, a DC source, a
+thermocouple — numbered, with the steps waiting on each. Give the numbers of
+anything you don't have and those steps are recorded as skipped before the run
+starts; they stay runnable later with `--steps`. A piped run skips the question
+and attempts everything.
+
 Steps advance on the meter, not on a keypress: the tool watches the readings
 and captures once the meter settles into the state the instruction asked for.
 Enter captures immediately, `s` skips the step, `q` finishes the run and saves.

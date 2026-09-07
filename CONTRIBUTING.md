@@ -25,6 +25,7 @@ dmm-cli --device ut8803 capture
 ```
 
 It will:
+- List what the run needs on the bench — shorted leads, a DC source, a thermocouple — before the first step, and skip the steps for anything you don't have
 - Guide you to set specific modes on the meter (DC V, AC V, ohms, etc.)
 - Capture each step on its own once the meter settles into the mode asked for (Enter captures immediately, `s` skips, `q` finishes)
 - Record raw bytes and parsed values for each step

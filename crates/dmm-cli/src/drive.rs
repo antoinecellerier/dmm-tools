@@ -522,6 +522,7 @@ mod tests {
             expect: None,
             verified: false,
             gate: false,
+            needs: &[],
         };
         let mut report = CaptureReport::default();
         let path = std::env::temp_dir()

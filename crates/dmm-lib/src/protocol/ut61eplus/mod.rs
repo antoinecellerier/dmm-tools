@@ -315,6 +315,63 @@ impl Protocol for Ut61PlusProtocol {
             .gate()
             .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+            // Flags & commands. These run wherever the dial is, so they sit
+            // on DC V: at the end of the list the dial was on DC A, a single
+            // range where RANGE and AUTO have nothing to do (`auto did
+            // nothing` on hardware, 2026-09-07); DC V has four rungs.
+            CaptureStep::with_command(
+                "hold",
+                "DC V mode: press HOLD on the meter, or we will send the command.",
+                "hold",
+                3,
+            )
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Hold, true)])),
+            CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3)
+                .verified_if(hw)
+                .expect(Expect::new().flags(&[(Flag::Hold, false)])),
+            CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3)
+                .verified_if(hw)
+                .expect(Expect::new().flags(&[(Flag::Rel, true)])),
+            CaptureStep::with_command(
+                "rel_off",
+                "We will send REL again to turn it off.",
+                "rel",
+                3,
+            )
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Rel, false)])),
+            // Which of MIN and MAX the first press lands on is the meter's
+            // own cycle, so only the exit is asserted.
+            CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3)
+                .verified_if(hw),
+            CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
+                .verified_if(hw)
+                .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
+            // A single RANGE press, not a sweep. A six-step sweep was tried
+            // and removed: on hardware it produced range indices 0, 2, 0, 0,
+            // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
+            // between DC V (0x02) and AC+DC V (0x19) partway through, which
+            // is the documented effect of SELECT (0x4C), not RANGE (0x46).
+            // Until what 0x46 actually does is known, stepping it repeatedly
+            // just files misleading data. See the UT61E+ section of
+            // docs/verification-backlog.md.
+            CaptureStep::with_command(
+                "range",
+                "We will send RANGE to switch to manual.",
+                "range",
+                3,
+            )
+            .verified_if(hw)
+            .expect(Expect::new().range(RangeExpect::Manual)),
+            CaptureStep::with_command(
+                "auto",
+                "We will send AUTO to return to auto-range.",
+                "auto",
+                3,
+            )
+            .verified_if(hw)
+            .expect(Expect::new().range(RangeExpect::Auto)),
             CaptureStep::basic("acv", "Set meter to AC V (V~). Leave leads open.")
                 .samples(3)
                 .verified_if(hw)
@@ -396,60 +453,6 @@ impl Protocol for Ut61PlusProtocol {
             )
             .samples(3)
             .needs(&[Need::Thermocouple]),
-            // Flags & commands
-            CaptureStep::with_command(
-                "hold",
-                "DC V mode: press HOLD on the meter, or we will send the command.",
-                "hold",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().flags(&[(Flag::Hold, true)])),
-            CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3)
-                .verified_if(hw)
-                .expect(Expect::new().flags(&[(Flag::Hold, false)])),
-            CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3)
-                .verified_if(hw)
-                .expect(Expect::new().flags(&[(Flag::Rel, true)])),
-            CaptureStep::with_command(
-                "rel_off",
-                "We will send REL again to turn it off.",
-                "rel",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().flags(&[(Flag::Rel, false)])),
-            // Which of MIN and MAX the first press lands on is the meter's
-            // own cycle, so only the exit is asserted.
-            CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3)
-                .verified_if(hw),
-            CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
-                .verified_if(hw)
-                .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
-            // A single RANGE press, not a sweep. A six-step sweep was tried
-            // and removed: on hardware it produced range indices 0, 2, 0, 0,
-            // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
-            // between DC V (0x02) and AC+DC V (0x19) partway through, which
-            // is the documented effect of SELECT (0x4C), not RANGE (0x46).
-            // Until what 0x46 actually does is known, stepping it repeatedly
-            // just files misleading data. See the UT61E+ section of
-            // docs/verification-backlog.md.
-            CaptureStep::with_command(
-                "range",
-                "We will send RANGE to switch to manual.",
-                "range",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().range(RangeExpect::Manual)),
-            CaptureStep::with_command(
-                "auto",
-                "We will send AUTO to return to auto-range.",
-                "auto",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().range(RangeExpect::Auto)),
         ]
     }
 }

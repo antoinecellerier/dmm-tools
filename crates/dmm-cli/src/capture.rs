@@ -4,6 +4,7 @@ use crate::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
 use console::{Key, style};
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::Measurement;
+use dmm_lib::protocol::Need;
 use dmm_lib::protocol::registry::SelectableDevice;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -554,8 +555,34 @@ fn run_protocol_capture(
     trust: &mut Trust,
     driver: &mut crate::drive::Driver,
 ) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
-    // Convert protocol steps to CLI steps
-    let steps: Vec<CaptureStep> = protocol_steps.iter().map(CaptureStep::from).collect();
+    // Convert protocol steps to CLI steps, keeping only what this run selects:
+    // the checklist below covers the steps that will actually run.
+    let mut steps: Vec<CaptureStep> = protocol_steps
+        .iter()
+        .map(CaptureStep::from)
+        .filter(|s| step_selected(s, step_filter, unverified_only))
+        .collect();
+
+    // Only what is still to do: a resumed run must not ask for the equipment
+    // of a step it already has samples for, nor overwrite that step's result.
+    let pending: Vec<CaptureStep> = steps
+        .iter()
+        .filter(|s| !already_captured(report, s.id))
+        .copied()
+        .collect();
+    let missing = ask_missing_needs(&pending, input)?;
+    let dropped = steps_without(&pending, &missing);
+    for (step, label) in &dropped {
+        upsert_step(
+            report,
+            step.empty_result(StepStatus::Skipped, Some(format!("skipped: no {label}"))),
+        );
+    }
+    if !dropped.is_empty() {
+        let ids: Vec<&str> = dropped.iter().map(|(s, _)| s.id).collect();
+        steps.retain(|s| !ids.contains(&s.id));
+        save_report(report, output_path)?;
+    }
 
     eprintln!(
         "{}",
@@ -574,9 +601,6 @@ fn run_protocol_capture(
     let mut prev = PrevState::default();
     let mut to_review = Vec::new();
     for step in &steps {
-        if !step_selected(step, step_filter, unverified_only) {
-            continue;
-        }
         let outcome = run_capture_step(dmm, recorder, step, report, true, input, &prev, trust)?;
         if outcome.to_review {
             to_review.push(step.id.to_string());
@@ -616,6 +640,15 @@ fn run_protocol_capture(
     })
 }
 
+/// Whether the report already holds samples for the step, which is what a
+/// resumed run leaves alone.
+fn already_captured(report: &CaptureReport, id: &str) -> bool {
+    report
+        .steps
+        .iter()
+        .any(|s| s.id == id && s.status == StepStatus::Captured)
+}
+
 /// The baseline a captured step's samples describe.
 fn baseline_from_report(report: &CaptureReport, step_id: &str) -> Option<Baseline> {
     let step = report.steps.iter().find(|s| s.id == step_id)?;
@@ -636,6 +669,7 @@ fn hex_bytes(hex: &str) -> Option<Vec<u8>> {
 
 // --- Step definitions ---
 
+#[derive(Clone, Copy)]
 pub(crate) struct CaptureStep {
     pub id: &'static str,
     pub instruction: &'static str,
@@ -649,6 +683,9 @@ pub(crate) struct CaptureStep {
     /// One of the steps the family's core semantics rest on; flagged in the
     /// run so an operator knows which ones must not be skipped.
     pub gate: bool,
+    /// Equipment the instruction asks for, listed before the run so a step
+    /// nobody can do is dropped rather than met halfway through.
+    pub needs: &'static [Need],
 }
 
 impl From<&dmm_lib::protocol::CaptureStep> for CaptureStep {
@@ -661,8 +698,78 @@ impl From<&dmm_lib::protocol::CaptureStep> for CaptureStep {
             expect: ps.expect,
             verified: ps.verified,
             gate: ps.gate,
+            needs: ps.needs,
         }
     }
+}
+
+/// The equipment the given steps ask for, numbered in `Need::ALL` order, and
+/// the needs behind those numbers. `None` when the run needs nothing beyond
+/// the meter and its leads.
+fn render_needs(steps: &[CaptureStep]) -> Option<(String, Vec<Need>)> {
+    let mut needs = Vec::new();
+    let mut lines = String::new();
+    for need in Need::ALL {
+        let ids: Vec<&str> = steps
+            .iter()
+            .filter(|s| s.needs.contains(&need))
+            .map(|s| s.id)
+            .collect();
+        if ids.is_empty() {
+            continue;
+        }
+        needs.push(need);
+        lines.push_str(&format!(
+            "  [{}] {}  (steps: {})\n",
+            needs.len(),
+            need.label(),
+            ids.join(", ")
+        ));
+    }
+    (!needs.is_empty()).then(|| (format!("You will need:\n{lines}"), needs))
+}
+
+/// The steps waiting on something the operator hasn't got, each with the item
+/// it was waiting on.
+fn steps_without<'a>(
+    steps: &'a [CaptureStep],
+    missing: &[Need],
+) -> Vec<(&'a CaptureStep, &'static str)> {
+    steps
+        .iter()
+        .filter_map(|s| {
+            let need = missing.iter().find(|n| s.needs.contains(n))?;
+            Some((s, need.label()))
+        })
+        .collect()
+}
+
+/// Show what the run needs and ask which of it is missing, so the bench is set
+/// up once instead of a thermocouple turning up as a step in the middle.
+///
+/// A run with nobody to ask attempts everything: the steps are still worth
+/// offering to a meter that might be sitting on the right source already.
+fn ask_missing_needs(
+    steps: &[CaptureStep],
+    input: &Input,
+) -> Result<Vec<Need>, Box<dyn std::error::Error>> {
+    let Some((table, needs)) = render_needs(steps) else {
+        return Ok(Vec::new());
+    };
+    eprintln!();
+    eprint!("{table}");
+    if !input.is_tty() {
+        return Ok(Vec::new());
+    }
+    let missing = loop {
+        let answer =
+            input.line("Numbers of anything you don't have (Enter = have everything): ")?;
+        match parse_review_indices(&answer, needs.len()) {
+            Ok(indices) => break indices,
+            Err(e) => eprintln!("  {}", style(e).yellow()),
+        }
+    };
+    Ok(missing.into_iter().map(|i| needs[i]).collect())
 }
 
 impl CaptureStep {
@@ -1069,11 +1176,7 @@ pub(crate) fn run_capture_step(
     trust: &Trust,
 ) -> Result<StepOutcome, Box<dyn std::error::Error>> {
     // Check if already captured (resume)
-    if report
-        .steps
-        .iter()
-        .any(|s| s.id == step.id && s.status == StepStatus::Captured)
-    {
+    if already_captured(report, step.id) {
         eprintln!("  {} already captured, skipping", style(step.id).dim());
         return Ok(StepOutcome::nothing(false));
     }
@@ -2237,7 +2340,67 @@ mod tests {
             expect: None,
             verified,
             gate,
+            needs: &[],
         }
+    }
+
+    fn needy_step(id: &'static str, needs: &'static [Need]) -> CaptureStep {
+        CaptureStep {
+            needs,
+            ..cli_step(id, false, false)
+        }
+    }
+
+    /// The checklist is what the operator sets the bench up from, so it lists
+    /// each item once, in one fixed order, with the steps waiting on it.
+    #[test]
+    fn needs_checklist_lists_each_item_once_in_need_order() {
+        let steps = [
+            needy_step("temp", &[Need::Thermocouple]),
+            needy_step("dcv_short", &[Need::ShortedLeads]),
+            needy_step("tempf", &[Need::Thermocouple]),
+            needy_step("acv", &[]),
+            needy_step("ohm_short", &[Need::ShortedLeads]),
+        ];
+        let (table, needs) = render_needs(&steps).unwrap();
+        assert_eq!(needs, vec![Need::ShortedLeads, Need::Thermocouple]);
+        assert_eq!(
+            table,
+            "You will need:\n\
+             \x20 [1] shorted test leads  (steps: dcv_short, ohm_short)\n\
+             \x20 [2] K-type thermocouple  (steps: temp, tempf)\n"
+        );
+    }
+
+    /// Nothing to gather, nothing to ask about: a run whose steps need only
+    /// the meter opens straight into the first step.
+    #[test]
+    fn no_needs_shows_no_checklist() {
+        let steps = [needy_step("acv", &[]), needy_step("hold", &[])];
+        assert!(render_needs(&steps).is_none());
+    }
+
+    /// Saying "no thermocouple" drops the temperature steps and nothing else.
+    #[test]
+    fn deselecting_a_need_drops_exactly_its_steps() {
+        let steps = [
+            needy_step("dcv_short", &[Need::ShortedLeads]),
+            needy_step("temp", &[Need::Thermocouple]),
+            needy_step("tempf", &[Need::Thermocouple]),
+            needy_step("acv", &[]),
+        ];
+        let dropped = steps_without(&steps, &[Need::Thermocouple]);
+        assert_eq!(
+            dropped
+                .iter()
+                .map(|(s, label)| (s.id, *label))
+                .collect::<Vec<_>>(),
+            vec![
+                ("temp", "K-type thermocouple"),
+                ("tempf", "K-type thermocouple"),
+            ]
+        );
+        assert!(steps_without(&steps, &[]).is_empty());
     }
 
     /// `--steps` and `--unverified` narrow together: a verified step named on
