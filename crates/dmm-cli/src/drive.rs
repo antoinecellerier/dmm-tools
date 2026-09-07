@@ -243,7 +243,6 @@ pub(crate) fn sweep_step(
                 continue;
             }
             filed += 1;
-            moved = true;
             let driven = drive_choice(
                 dmm,
                 recorder,
@@ -256,6 +255,11 @@ pub(crate) fn sweep_step(
             )?;
             if driven.hit {
                 driver.prove(setting);
+            }
+            // A refused setting left nothing to restore; a restore that the
+            // meter also refused would cost budget for the same refusal.
+            if !driven.refused {
+                moved = true;
             }
             if let Some(m) = driven.last {
                 current = m;
