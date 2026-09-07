@@ -269,6 +269,11 @@ is the same: 0x30 prefix, mask with `& 0x0F` to get index.
 | 4 | 600.0 V (0.1 V) | 1000.0 V (0.1 V) |
 | 5 | 1000 V (1 V) | — |
 
+The *index* column is the manual's own row order, not the wire encoding. On
+the UT61E+ the wire indices for DC V are 0=2.2V, 1=22V, 2=220V, 3=1000V —
+[VERIFIED] 2026-03-21 and re-walked 2026-09-07 (section 6.1). Its 220 mV
+full scale belongs to the separate DC mV mode, not to a DC V range index.
+
 ### 5.2 AC Voltage
 
 Same structure as DC voltage. AC bandwidth: 40-500 Hz (B+),
@@ -356,7 +361,7 @@ commands have no effect on models lacking the corresponding feature:
 | GetMeasurement | 0x5E | Yes | Yes | Yes |
 | Hold | 0x4A | Yes | Yes | Yes |
 | Range | 0x46 | Yes | Yes | Yes |
-| Auto | 0x47 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
+| Auto | 0x47 | [DEDUCED] | [DEDUCED] | Yes (§6.1) |
 | Rel | 0x48 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
 | MinMax | 0x41 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
 | ExitMinMax | 0x42 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
@@ -367,6 +372,33 @@ commands have no effect on models lacking the corresponding feature:
 | ExitPeak | 0x4E | No effect | [DEDUCED] | [DEDUCED] |
 | GetName | 0x5F | [UNVERIFIED] | [UNVERIFIED] | [UNVERIFIED] |
 
+### 6.1 Range and Auto semantics — [VERIFIED] (UT61E+, 2026-09-07)
+
+Walked on the in-house UT61E+ with `dmm-cli set range`, which presses the
+command and re-reads the range byte (leads open and with 1.5 V DC applied,
+V⎓ and V~ dial positions):
+
+- **Range (0x46)** steps the ladder. From auto-range the first press engages
+  *manual* ranging on the rung the meter is already showing — it does not
+  step — and every press after that moves exactly one rung up. The top rung
+  wraps to the bottom (DC V: 2.2V → 22V → 220V → 1000V → 2.2V). The mode
+  byte never changed under a press, so 0x46 does not touch the function.
+- **Auto (0x47)** puts the meter back in auto-range from any manual rung,
+  in one command.
+- The meter answers each command with a 2-byte `FF 00` ack frame, and its
+  first measurement frame after a press may still carry the pre-press state:
+  a reader that presses again on seeing the old value will overshoot.
+- Modes whose range is fixed ignore 0x46 entirely — on the E+ that is DC mV
+  and AC mV (section 9), where neither the range byte nor the AUTO
+  annunciator moves.
+
+**MIN/MAX and Peak rings — [VERIFIED]** on the same meter: MinMax (0x41)
+walks off → MAX → MIN, one press per step; the ring never comes back to off
+(2-state cycle, section 4 notes and 2026-03-21 device testing), so
+ExitMinMax (0x42) is what leaves. PeakMinMax (0x4D) walks P-MAX → P-MIN the
+same way in AC V, and ExitPeak (0x4E) leaves. Hold (0x4A) and Rel (0x48)
+each toggle on one press.
+
 ---
 
 ## 7. What Requires Real Device Verification
@@ -376,7 +408,9 @@ possible from the vendor software.
 
 1. **Range index → full-scale mapping** — manual gives full-scale
    values but not which range index maps to which. Ascending order
-   is [DEDUCED].
+   is [DEDUCED] except on the UT61E+ DC V ladder, where it is
+   [VERIFIED] (section 6.1: one rung up per RANGE press, 1000V wraps
+   to 2.2V).
 
 2. **6,000-count bar graph encoding** — 31 segments (from manual),
    but wire encoding unknown for offsets 12-13. [UNVERIFIED]
@@ -413,7 +447,7 @@ possible from the vendor software.
 | LoZ modes 0x15 vs 0x16 behavior | **VENDOR** | SI multiplier code paths differ |
 | LoZ mode byte sent by UT61D+ | **UNVERIFIED** | Requires device |
 | Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
-| Range index → full-scale mapping | **DEDUCED** | Ascending order assumed |
+| Range index → full-scale mapping | **DEDUCED** (E+ DC V **VERIFIED**) | Ascending order assumed; E+ DC V walked on the device 2026-09-07 |
 | Commands beyond 0x5E/0x4A/0x46 | **DEDUCED** | UT61E+ device testing |
 
 ---

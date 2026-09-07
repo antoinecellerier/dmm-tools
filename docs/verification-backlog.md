@@ -4,113 +4,6 @@ Items that need real components or specific setups to verify.
 
 ## Pending Verification
 
-### UT61E+ RANGE command (0x46) — what do repeated presses do?
-
-Blocks any per-range verification, so it's worth doing early.
-
-`0x46` is the only entry in the protocol spec's *Confirmed commands* table
-with decompile evidence (`QByteArray::append('F')` in `FUN_100021f0`) but no
-verified behaviour note. `Command::Range` described it as "toggle range
-(auto/manual)"; a capture on 2026-07-29 contradicts that.
-
-Six consecutive `range` presses on the DC V dial position, leads
-disconnected, produced:
-
-| press | mode byte | range index | label |
-|---|---|---|---|
-| 1 | 0x02 DC V | 0 | 2.2V |
-| 2 | 0x02 DC V | 2 | 220V |
-| 3 | 0x02 DC V | 0 | 2.2V |
-| 4 | 0x19 AC+DC V | 0 | 2.2V |
-| 5 | 0x02 DC V | 0 | 2.2V |
-| 6 | 0x19 AC+DC V | 0 | 2.2V |
-
-Two things to explain:
-
-- The range index never stepped monotonically and never reached 22V (index 1)
-  or 1000V (index 3), so it isn't a simple "next range" stepper. Nor did it
-  return to auto — `auto_range` stayed false for all six — so it isn't an
-  auto/manual toggle either.
-- The **mode byte changed** at presses 4 and 6, DC V ↔ AC+DC V. §"Confirmed
-  commands" attributes exactly that cycle to SELECT (`0x4C`), not RANGE.
-
-Confirmed: the first press does engage manual ranging, and `0x47` (Auto)
-restores auto-ranging.
-
-To settle it, connect a stable source (a 1.5 V cell makes range changes
-visible in the reading) and send single presses, checking the LCD and a
-`read` after each:
-
-```
-dmm-cli --device ut61eplus command range
-dmm-cli --device ut61eplus read --count 2
-```
-
-Until then the capture wizard sends `range` once, not repeatedly — a
-six-step sweep was tried and removed, because it files data that looks like
-a range sweep but isn't.
-
-Since 2026-09-07 the library walks RANGE by read-back for `Setting::Range`:
-it presses 0x46, re-reads the range byte until the target rung shows, and
-aborts with "the mode changed to …" if the mode byte moves under it, so a
-wrong guess about what 0x46 does fails cleanly instead of stepping blind.
-
-`dmm-cli get`/`set` reach that walk since the same day, so the runnable
-check is this, on the V⎓ dial position with a 1.5 V cell across the leads,
-noting the LCD range annunciator after each line:
-
-```
-RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus get range
-RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range 22V
-RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range 220V
-RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range 2.2V
-RUST_LOG=dmm_lib=debug dmm-cli --device ut61eplus set range auto
-```
-
-`RUST_LOG` is the only switch — the CLI takes no logging flag. Paste the
-`cycle: pressing RANGE (in X, want Y)` lines into this item whatever the
-outcome: they record the press count and the order the range bytes actually
-came round in, which is exactly what the 2026-07-29 capture could not
-settle. 1.5 V is inside all four rungs, so every switch is expected to land
-and print `Meter now in <rung> (manual range)`, then
-`Meter now auto-ranging (<rung>)`. The failures are the data:
-
-- `the mode changed to AC+DC V; stopped pressing RANGE` is the evidence
-  that 0x46 flips the mode as well as the range, which is what presses 4
-  and 6 above suggested and nothing has confirmed since. Say which rung it
-  started from and how many presses it got through.
-- `<rung> never appeared; the meter is back in <rung>` means the presses do
-  step, but not one rung at a time or not through that rung at all.
-- `AUTO did nothing; the meter is still in <rung>` would contradict the
-  0x47 line in the Completed table.
-
-Same session, same meter, for the settings that ride on the same read-back
-confirmation:
-
-- `dmm-cli --device ut61eplus set hold on` then `set hold off` — HOLD
-  should light and clear on one press each
-- `set minmax max`, `set minmax min`, `set minmax off` — MAX and MIN are
-  the only states the E+ is offered; off leaves by 0x42 rather than by a
-  press, so `EXIT MIN/MAX did nothing …` and a cleared badge would mean the
-  exit command is not what clears it
-- on the V~ dial position, `set peak p-max`, `set peak p-min` and
-  `set peak off` — this is also the "which modes Peak is offered in" check below
-- `dmm-cli --device ut61eplus get` on the DC mV and A dial positions should
-  print no `range` row: RANGE does nothing in DC mV (verified 2026-03-21, so
-  the E+ table marks that range as fixed), and both entries of the A table
-  carry the same `20A` label, so there is nothing to choose between
-
-The range *count* is not an open question — see Completed Verification: **DC V
-has 4 manual ranges** (0=2.2V, 1=22V, 2=220V, 3=1000V), and 220mV is reachable
-only through the separate DC mV dial position (mode 0x03). So the six-step
-sweep was wrong by two even before the command behaviour is settled.
-
-The stray fifth "220mV" entry in `Ut61ePlusTable::dc_v` and `ac_v` — which
-the verified table says cannot occur for mode 0x02 — was removed on
-2026-09-07, along with its rows in the spec tables and in the range table of
-`docs/research/ut61-family/reverse-engineered-protocol.md`. The 220 mV specs
-live on where the mode does, in `DC_MV_SPECS`/`AC_MV_SPECS` index 0.
-
 ### UT61+ remote mode selection (cycle-to-target)
 
 Shipped 2026-09-07: `dmm-cli get mode`/`set mode` and the GUI's mode
@@ -121,6 +14,15 @@ per-model dial table recorded in
 `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1. The UT61E+
 table, its ring orders and the settle timing were verified on the in-house
 meter the same day, every position and every entry (Completed table below).
+
+Observed 2026-09-07 on the in-house E+, and deliberate: once the meter is in
+Hz (0x04), `get mode` lists only `Hz, Duty %` and `set mode "AC V"` is
+refused as unknown there. The mode byte carries no dial information, and the
+driver does not guess between dial positions that do not nest, so from Hz it
+will not walk back to the position's AC mode. `set mode "%"` still works (one
+press), and from Duty % a raw `dmm-cli --device ut61eplus command select2`
+press returns the meter to AC V — the next frame reflects it about a second
+later.
 
 UT61B+/UT61D+/UT161x owners — [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7).
 Their dial tables come from the manual alone and no press has been observed,
@@ -137,19 +39,35 @@ function at all. A mode listed but unreachable shows up as
 
 Shipped 2026-09-07: `Setting::Hold`, `Rel`, `MinMax` and `Peak` reach a
 named state by pressing the family's own button (0x4A, 0x48, 0x41, 0x4D)
-and reading the flag back, leaving MIN/MAX and Peak by 0x42 and 0x4E. The
-commands and the flag bits are all verified on the in-house UT61E+
-(Completed table below), so what is new is only the state machine built on
-them.
+and reading the flag back, leaving MIN/MAX and Peak by 0x42 and 0x4E.
 
-Assumed, not verified — **which modes Peak is offered in.** Only AC mV is
-confirmed to activate it and only DC V is confirmed not to (2026-03-21,
-"MIN/MAX and Peak measurement reporting" below). The code offers Peak in
-the five pure-AC modes — AC V, AC mV, AC µA, AC mA, AC A
-(`AC_PEAK_MODES` in `tables/mod.rs`) — and nowhere else. The AC+DC and LPF
-variants are deliberately left out. On the in-house meter: in each of those
-modes, `dmm-cli command peak` and check whether P-MAX lights; then the same
-in AC+DC V and LPF V, which the code currently refuses with `peak cannot be
+**Verified the same day on the in-house UT61E+**, leads open, V⎓ and V~ dial
+positions, `RUST_LOG=dmm_lib=debug`:
+
+- `set hold on` then `set hold off`: one press each, each confirmed on the
+  next frame. A repeated `set hold on` presses nothing and answers "Meter is
+  already HOLD on".
+- `set rel on` then `set rel off`: one press each.
+- `set minmax max` (from off) and `set minmax min` (from MAX): one press
+  each. `set minmax off` logs `cycle: leaving minmax (in MIN)` and leaves by
+  the 0x42 exit command, not by a press.
+- On V~: `set peak p-max` and `set peak p-min`, one press each;
+  `set peak off` logs `cycle: leaving peak (in P-MIN)` and leaves by 0x4E.
+- Every press is answered with a 2-byte `[FF, 00]` ack frame, which the
+  parser skips. The first measurement frame after a press can still carry
+  the old state; the walk then logs `cycle: meter still reports <state>,
+  re-reading` and re-reads rather than pressing again (seen once each on
+  `set peak p-min` and `set peak off`). Without that it would overshoot.
+
+Partly settled — **which modes Peak is offered in.** Device evidence now
+covers AC V (2026-09-07: the meter entered and left P-MAX/P-MIN) on top of
+AC mV, and DC V is still the one mode confirmed not to react (2026-03-21,
+"MIN/MAX and Peak measurement reporting" below). A `get` on 2026-09-07 also
+showed the Peak row offered in AC V and AC A and absent in DC V, DC A and
+DC mV — but that listing is the code's own table (`AC_PEAK_MODES` in
+`tables/mod.rs`, the five pure-AC modes), so it is a cross-check, not
+evidence about the meter. Left to check on the in-house meter: AC µA and
+AC mA, and AC+DC V and LPF V, which the code refuses with `peak cannot be
 set in <mode> on this meter`. Every mode where the meter reacts but the
 list is empty (or the reverse) is a table fix.
 
@@ -699,6 +617,50 @@ and AC mV (open leads, ~8.7 mV noise).
 - **Mock updated** to match: independent flag cycling, stored values,
   AUTO cleared during MIN/MAX.
 
+### UT61E+ RANGE command (0x46) — RESOLVED
+
+Resolved 2026-09-07 on the in-house UT61E+ (CP2110 cable,
+`RUST_LOG=dmm_lib=debug`) with `dmm-cli get range` / `set range`, which press
+0x46 and re-read the range byte until the target rung shows.
+
+- **The first press from auto engages manual ranging on the rung the meter
+  is already in** — it does not step. Every further press steps exactly one
+  rung up.
+- **The top rung wraps to the bottom:** 1000V → 2.2V on DC V.
+- **`0x47` restores auto-ranging**, from a manual rung, in one command.
+- **The mode byte never moved under any press**, on either the V⎓ or the V~
+  dial position. So `0x46` is a pure range stepper.
+- With 1.5 V DC applied, the same walk read 1.5023 V (2.2V), 1.502 V (22V),
+  1.51 V (220V) and 1.5 V (1000V): resolution follows the rung, as on the LCD.
+
+Evidence — leads open, V⎓ dial, auto in 2.2V at the start:
+
+```
+set range 22V     cycle: pressing RANGE (in Auto, want 22V)
+                  cycle: pressing RANGE (in 2.2V, want 22V)     → 22V
+set range 220V    cycle: pressing RANGE (in 22V, want 220V)     → 220V
+set range 2.2V    cycle: pressing RANGE (in 220V, want 2.2V)
+                  cycle: pressing RANGE (in 1000V, want 2.2V)   → 2.2V
+set range 1000V   three presses: 2.2V → 22V → 220V → 1000V
+set range auto    cycle: setting auto-range (in 1000V)          → auto (220V, settling to 22V)
+```
+
+The 2026-07-29 capture that opened this item — six `range` presses whose
+range index went 0, 2, 0, 0, 0, 0 and whose mode byte appeared to flip
+DC V ↔ AC+DC V at presses 4 and 6 — is explained by reading the frame before
+the meter had applied the press: the indices are stale reads, not a strange
+stepping order. Whatever produced the mode flips there, it was not `0x46`.
+The library now waits for a fresh frame and re-reads a stale one instead of
+pressing again, which is why the walk above lands one rung per press. The
+capture wizard still sends `range` once and restores auto rather than
+sweeping.
+
+`get` prints **no range row** where there is nothing to choose: verified
+2026-09-07 in DC mV (fixed range, and `get range` / `set range` answer
+`Note: UNI-T UT61E+ has no switchable ranges in DC mV — use the dial.`),
+in DC A and in AC A (both table entries read `20A`). AC mV joined them the
+same day — see "Range tables" below.
+
 ### Range tables
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
@@ -726,8 +688,11 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   (`dmm-cli capture`) so the goldens match verified device behavior.
 - **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
   The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
-  the current reading. The code carried a 5th entry (range 4=220mV) from
-  vendor RE, never observed on the UT61E+; it was dropped on 2026-09-07.
+  the current reading; one rung per press and the 1000V→2.2V wrap were
+  re-confirmed 2026-09-07 (see the resolved 0x46 item above). The code
+  carried a 5th entry (range 4=220mV) from vendor RE, never observed on the
+  UT61E+; it was dropped on 2026-09-07 along with its rows in the family
+  spec tables.
   The 220mV capability on the UT61E+ is via DC mV mode (0x03), a separate
   dial position. The UT61B+/D+ tables keep their own shapes.
 - **DC mV mode (0x03) is a separate mode, not DC V range 4.** Auto-range
@@ -873,14 +838,16 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Remote REL | 0x48 | Verified |
 | Remote MIN/MAX | 0x41 | Verified |
 | Remote Exit MIN/MAX | 0x42 | Verified |
-| Remote RANGE | 0x46 | Verified |
-| Remote AUTO | 0x47 | Verified |
+| Remote RANGE | 0x46 | Verified 2026-09-07 on UT61E+: from auto the first press engages manual on the rung already showing, each further press steps one rung up, 1000V wraps to 2.2V; the mode byte never moves |
+| Remote AUTO | 0x47 | Verified 2026-09-07: restores auto-ranging from a manual rung in one command |
 | Remote SELECT | 0x4C | Verified on every dial position (§3.1 of the ut61-family spec: V⎓, V~, mV, Ω, µA, mA, A rings; inert on hFE, NCV) |
 | Remote mode switching (`dmm-cli set mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under HOLD and MIN/MAX; settle 150 ms / 3 reads |
 | Remote LIGHT | 0x4B | Verified |
 | Remote SELECT2 | 0x49 | Verified (AC V/mV/µA/mA/A → Hz → Duty Cycle → back; Hz ↔ Duty on the Hz/% dial; inert on V⎓, DC mV, hFE, NCV) |
-| Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV; context-dependent, no effect on DC V) |
-| Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings) |
+| Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV and, 2026-09-07, on AC V; context-dependent, no effect on DC V) |
+| Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings; used by `set peak off`, 2026-09-07) |
+| Remote range/flag setting (`dmm-cli set range`/`hold`/`rel`/`minmax`/`peak`) | 0x46-0x4E | Verified 2026-09-07 on UT61E+: one press per step, each confirmed by read-back; a stale frame is re-read, not re-pressed; MIN/MAX and Peak leave by 0x42 / 0x4E |
+| Modes with no range choice (UT61E+) | — | Verified 2026-09-07: `get` prints no range row in DC mV, AC mV, DC A or AC A |
 | Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name) |
 | MIN/MAX flag cycling | byte11 bits 2-3 | Verified: MAX only (bit 3) → MIN only (bit 2), 2-state cycle, never both set |
 | MIN/MAX value reporting | — | Verified: meter sends stored min/max value, not live reading |
