@@ -3190,7 +3190,13 @@ fn run_freeform_captures(
     );
     eprintln!("Set the meter to any mode/state not covered above.\n");
 
-    let mut extra = 0u32;
+    // A resumed report keeps its freeform steps: number on from them.
+    let mut extra = report
+        .steps
+        .iter()
+        .filter_map(|s| s.id.strip_prefix("extra_")?.parse::<u32>().ok())
+        .max()
+        .map_or(0, |n| n + 1);
     loop {
         let desc = input.line(&format!(
             "[extra_{extra}] Describe what you set the meter to (or 'q' to finish): "
