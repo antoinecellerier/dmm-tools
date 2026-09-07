@@ -970,17 +970,17 @@ impl Protocol for MockProtocol {
         let mode: Cow<'static, str> = Cow::Borrowed(scenario.mode);
         let mode_raw = scenario.mode_raw;
         let range_raw = self.reported_range();
-        let mut unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
+        let unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
         let mut range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
         // A manually selected rung renames the range the way the meter's own
-        // reading would. The bar graph keeps the scenario's full scale: the
-        // label table carries no numeric limit to rescale it with.
+        // reading would. The value and its unit stay the scenario's: the
+        // label table carries no numeric limit to rescale them with, and a
+        // unit swapped on its own would put the reading off by a decade.
         if self.manual_range.is_some()
             && let Some(info) = self
                 .current_table_mode()
                 .and_then(|mode| self.table.range_info(mode, range_raw))
         {
-            unit = Cow::Borrowed(info.unit);
             range_label = Cow::Borrowed(info.label);
         }
         let scenario = self.current_scenario();
@@ -2320,6 +2320,21 @@ mod tests {
     }
 
     // --- Range selection ---------------------------------------------------
+
+    /// A manual rung relabels the range only: the value and its unit stay the
+    /// scenario's, since swapping the unit alone would move the reading a
+    /// decade.
+    #[test]
+    fn a_manual_rung_keeps_the_scenarios_value_and_unit() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::Hz);
+        let before = proto.request_measurement(&transport).unwrap();
+        proto.select(&transport, Setting::Range, 3).unwrap();
+        let after = proto.request_measurement(&transport).unwrap();
+        assert_eq!(after.unit, before.unit);
+        assert_ne!(after.range_label, before.range_label, "the rung shows");
+        assert!(!after.flags.auto_range);
+    }
 
     #[test]
     fn range_choices_are_auto_plus_the_modes_ladder() {
