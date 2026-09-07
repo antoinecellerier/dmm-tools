@@ -216,13 +216,20 @@ const DIAL: &[DialPosition] = &[
 /// nobody has timed a real VC-880.
 ///
 /// No delay, because the meter streams and every read already waits for the
-/// next frame; the budget is in reads instead. Four of them covers the frames
-/// that were already in flight when the press landed and still name the old
-/// function.
+/// next frame; the budget is in reads instead. `press` drops what was queued
+/// when the press landed, so four reads is for the frame mid-flight and the
+/// meter's own reaction time.
 const SETTLE: Settle = Settle {
     delay: Duration::ZERO,
     reads: 4,
 };
+
+/// The drain after a press: reads of up to this timeout, until one comes
+/// back empty or the count runs out. A gap of 50 ms never occurs inside a
+/// frame at 9600 baud, so an empty read means the queue is clear; the count
+/// bounds it should the stream never pause.
+const PRESS_DRAIN_TIMEOUT_MS: i32 = 50;
+const PRESS_DRAIN_READS: usize = 8;
 
 /// Protocol implementation for the Voltcraft VC-880 and VC650BT.
 pub struct Vc880Protocol {
@@ -338,10 +345,23 @@ impl CycleMeter for Vc880Protocol {
         match button {
             CycleButton::Select => {
                 debug!("vc880: pressing {SELECT_BUTTON_NAME} ({CMD_SELECT:#04x})");
-                // Nothing to read back here: the meter answers a command with
-                // a 0xFF Result frame, and `request_measurement`'s accept
-                // filter (type byte 0x01) already skips it.
-                transport.write(&super::vc8x0_common::build_command(CMD_SELECT))
+                transport.write(&super::vc8x0_common::build_command(CMD_SELECT))?;
+                // The meter streams, so whatever was buffered when the press
+                // landed still names the old function — and `read_frame`
+                // hands frames out oldest first. Drop it here rather than
+                // spend the settle budget on it. The 0xFF Result frame the
+                // meter answers with goes the same way; `request_measurement`'s
+                // accept filter (type byte 0x01) skips it anyway.
+                self.rx_buf.clear();
+                let mut tmp = [0u8; 64];
+                for _ in 0..PRESS_DRAIN_READS {
+                    let n = transport.read_timeout(&mut tmp, PRESS_DRAIN_TIMEOUT_MS)?;
+                    if n == 0 {
+                        break;
+                    }
+                    debug!("vc880: drained {n} bytes after the press");
+                }
+                Ok(())
             }
             CycleButton::Hz => Err(Error::UnsupportedCommand(format!(
                 "the VC-880 has no {} button",
@@ -1013,6 +1033,29 @@ raw_payload=34"#
             "SHIFT/SETUP is command 0x4C"
         );
         assert_eq!(writes[0].len(), 6);
+    }
+
+    /// A frame queued before the press names the old function; the press
+    /// discards it so the settle reads start with what comes after.
+    #[test]
+    fn pressing_select_drops_the_frames_already_queued() {
+        let stale = framing::test_frame_be16(&make_payload(0x06, 0x30, b"  1.234", zero_status()));
+        let transport = MockTransport::new(vec![stale.clone(), stale]);
+        let mut proto = Vc880Protocol::new();
+        proto.rx_buf.extend_from_slice(&[0xAB, 0xCD, 0x01]);
+        proto
+            .press(&transport, CycleButton::Select)
+            .expect("the frame is written");
+        assert!(proto.rx_buf.is_empty());
+        // The next frame after the press is the first one read back.
+        transport.push_response(framing::test_frame_be16(&make_payload(
+            0x07,
+            0x30,
+            b"  1.234",
+            zero_status(),
+        )));
+        let m = proto.request_measurement(&transport).expect("parses");
+        assert_eq!(m.mode_raw, 0x07, "both queued 0x06 frames were dropped");
     }
 
     #[test]
