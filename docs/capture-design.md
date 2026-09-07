@@ -190,8 +190,8 @@ sequence that does not belong in the family's shipped list is captured without w
 release. A plan step carries the `CaptureStep` fields a plan may set, in owned form: `id`,
 `instruction`, `command`, `samples` (default 5), `needs` (the `Need` variants in snake_case)
 and `expect` (`mode`, `flags` by their report names, `range` `auto`/`manual`, `value`
-`overload`/`negative`/`finite`). Unknown keys and names are errors naming the file and the
-step, as are a repeated id, the reserved id `extra`, and a plan with no steps. `--plan`
+`overload`/`negative`/`finite`/`ncv`). Unknown keys and names are errors naming the file and
+the step, as are a repeated id, the reserved id `extra`, and a plan with no steps. `--plan`
 conflicts with `--steps`, `--unverified` and `--list-steps`; the strings are leaked once at
 load, so the steps meet the run's `&'static` step type.
 

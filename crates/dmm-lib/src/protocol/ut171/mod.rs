@@ -268,9 +268,9 @@ impl Protocol for Ut171Protocol {
             CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
             CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),
             CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
-            CaptureStep::basic("ncv", "Set meter to NCV")
+            CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .needs(&[Need::LiveWire])
-                .expect(Expect::mode("NCV")),
+                .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),
         ]
     }
 }

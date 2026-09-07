@@ -30,6 +30,9 @@ pub enum ValueExpect {
     Negative,
     /// A numeric reading — not OL, not an NCV level.
     Finite,
+    /// An NCV level of at least 1: the meter found a live wire. Level 0 is
+    /// what NCV shows the moment the dial reaches it.
+    NcvDetected,
 }
 
 impl ValueExpect {
@@ -39,6 +42,7 @@ impl ValueExpect {
             ValueExpect::Overload => "OL",
             ValueExpect::Negative => "a negative reading",
             ValueExpect::Finite => "a numeric reading",
+            ValueExpect::NcvDetected => "an NCV level of 1 or more",
         }
     }
 
@@ -47,6 +51,7 @@ impl ValueExpect {
             (ValueExpect::Overload, MeasuredValue::Overload) => true,
             (ValueExpect::Negative, MeasuredValue::Normal(v)) => v.is_finite() && *v < 0.0,
             (ValueExpect::Finite, MeasuredValue::Normal(v)) => v.is_finite(),
+            (ValueExpect::NcvDetected, MeasuredValue::NcvLevel(level)) => *level >= 1,
             _ => false,
         }
     }
@@ -313,6 +318,21 @@ mod tests {
             Expect::new().value(ValueExpect::Finite).check(&ncv),
             Err("value is NCV:2, want a numeric reading".to_string())
         );
+        assert_eq!(
+            Expect::new().value(ValueExpect::NcvDetected).check(&ncv),
+            Ok(())
+        );
+
+        // NCV with nothing near the probe: the display carries no digit, so
+        // the parser reports level 0 and the step has not been carried out.
+        for display in [b"     - ", b"   EF  "] {
+            let idle = make_test_measurement(0x14, 0x00, display, (0, 0), (0, 0, 0));
+            assert!(matches!(idle.value, MeasuredValue::NcvLevel(0)));
+            assert_eq!(
+                Expect::new().value(ValueExpect::NcvDetected).check(&idle),
+                Err("value is NCV:0, want an NCV level of 1 or more".to_string())
+            );
+        }
     }
 
     #[test]

@@ -636,7 +636,7 @@ to press first, as `dmm-cli command` names it), `samples` (default 5), `needs`
 (`shorted_leads`, `dc_source`, `thermocouple`, `live_wire`, `transistor`,
 `scr`) and `expect` — `mode` as the family's mode table spells it, `flags` by
 their report names (`hold`, `rel`, `auto_range`, …), `range` (`auto` or
-`manual`) and `value` (`overload`, `negative` or `finite`). Any other key, an
+`manual`) and `value` (`overload`, `negative`, `finite` or `ncv`). Any other key, an
 unknown name, a repeated id or the reserved id `extra` is an error naming the
 file and the step.
 

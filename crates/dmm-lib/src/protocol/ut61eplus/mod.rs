@@ -404,7 +404,7 @@ impl Protocol for Ut61PlusProtocol {
             .samples(3)
             .verified_if(hw)
             .needs(&[Need::ShortedLeads])
-            .expect(Expect::mode("Continuity")),
+            .expect(Expect::mode("Continuity").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "diode",
                 "Set meter to diode. Leave leads open (should show OL).",
@@ -428,7 +428,7 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .needs(&[Need::LiveWire])
-                .expect(Expect::mode("NCV")),
+                .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),
             CaptureStep::basic("hfe", "Set meter to hFE (transistor test).")
                 .samples(3)
                 .verified_if(hw)

@@ -154,11 +154,12 @@ impl PlanExpect {
                 "overload" => ValueExpect::Overload,
                 "negative" => ValueExpect::Negative,
                 "finite" => ValueExpect::Finite,
+                "ncv" => ValueExpect::NcvDetected,
                 other => {
                     return Err(problem(
                         path,
                         id,
-                        format!("unknown value {other:?} (valid: overload, negative, finite)"),
+                        format!("unknown value {other:?} (valid: overload, negative, finite, ncv)"),
                     ));
                 }
             });
@@ -306,6 +307,10 @@ steps:
         let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();
         assert_eq!(expect.range, Some(RangeExpect::Manual));
         assert_eq!(expect.value, Some(ValueExpect::Overload));
+
+        let yaml = "steps:\n  - id: a\n    instruction: b\n    expect:\n      value: ncv\n";
+        let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();
+        assert_eq!(expect.value, Some(ValueExpect::NcvDetected));
 
         let e = err("steps:\n  - id: a\n    instruction: b\n    expect:\n      range: fixed\n");
         assert_eq!(
