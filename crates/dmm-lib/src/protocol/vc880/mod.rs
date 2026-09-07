@@ -15,14 +15,13 @@
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
-use crate::protocol::cycle::RANGE_BUTTON_NAME;
 use crate::protocol::cycle::{
     self, CycleButton, CycleMeter, DialPosition, DialState, Ring, Settle,
 };
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::vc8x0_common::{
-    CMD_RANGE_AUTO, CMD_RANGE_MANUAL, CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags,
-    main_display, parse_value, re, resolve_function, resolve_range,
+    CMD_EXIT_MAX_MIN_AVG, CMD_RANGE_AUTO, RangeEntry, common_flags, main_display, parse_value, re,
+    resolve_function, resolve_range,
 };
 use crate::protocol::{
     Choice, DeviceProfile, Protocol, Setting, Stability, check_len, unsupported_setting,
@@ -364,7 +363,10 @@ impl Protocol for Vc880Protocol {
         match setting {
             Setting::Mode => cycle::mode_choices(self, current),
             Setting::Range => cycle::range_choices(self, current),
-            _ => Vec::new(),
+            flag => match cycle::FlagSetting::of(flag) {
+                Some(flag) => cycle::flag_choices(self, flag, current),
+                None => Vec::new(),
+            },
         }
     }
 
@@ -372,7 +374,10 @@ impl Protocol for Vc880Protocol {
         match setting {
             Setting::Mode => cycle::select_mode(self, transport, id),
             Setting::Range => cycle::select_range(self, transport, id),
-            _ => Err(unsupported_setting(setting)),
+            flag => match cycle::FlagSetting::of(flag) {
+                Some(flag) => cycle::select_flag(self, transport, flag, id),
+                None => Err(unsupported_setting(setting)),
+            },
         }
     }
 }
@@ -391,15 +396,11 @@ impl CycleMeter for Vc880Protocol {
     }
 
     fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
-        let (name, cmd) = match button {
-            CycleButton::Select => (SELECT_BUTTON_NAME, CMD_SELECT),
-            CycleButton::Range => (RANGE_BUTTON_NAME, CMD_RANGE_MANUAL),
-            CycleButton::Hz => {
-                return Err(Error::UnsupportedCommand(format!(
-                    "the VC-880 has no {} button",
-                    self.button_name(button)
-                )));
-            }
+        let name = self.button_name(button);
+        let Some(cmd) = super::vc8x0_common::press_command(button) else {
+            return Err(Error::UnsupportedCommand(format!(
+                "the VC-880 has no {name} button"
+            )));
         };
         debug!("vc880: pressing {name} ({cmd:#04x})");
         self.write_and_drain(transport, cmd)
@@ -418,11 +419,7 @@ impl CycleMeter for Vc880Protocol {
     }
 
     fn button_name(&self, button: CycleButton) -> &'static str {
-        match button {
-            CycleButton::Select => SELECT_BUTTON_NAME,
-            CycleButton::Range => RANGE_BUTTON_NAME,
-            CycleButton::Hz => "Hz/%",
-        }
+        super::vc8x0_common::button_name(button)
     }
 
     fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
@@ -440,6 +437,22 @@ impl CycleMeter for Vc880Protocol {
     fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
         debug!("vc880: sending auto-range ({CMD_RANGE_AUTO:#04x})");
         self.write_and_drain(transport, CMD_RANGE_AUTO)
+    }
+
+    fn flag_states(&self, setting: cycle::FlagSetting, _mode: u16) -> &'static [u16] {
+        super::vc8x0_common::flag_states(setting)
+    }
+
+    fn exit_flag(&mut self, transport: &dyn Transport, setting: cycle::FlagSetting) -> Result<()> {
+        match setting {
+            cycle::FlagSetting::MinMax => {
+                debug!("vc880: exiting MAX/MIN/AVG ({CMD_EXIT_MAX_MIN_AVG:#04x})");
+                self.write_and_drain(transport, CMD_EXIT_MAX_MIN_AVG)
+            }
+            // HOLD and REL press their own button back off, and the meter
+            // has no Peak, so the driver never asks this of them.
+            other => Err(unsupported_setting(other.setting())),
+        }
     }
 }
 
@@ -1211,6 +1224,87 @@ raw_payload=34"#
         let err = proto.press(&transport, CycleButton::Hz).unwrap_err();
         assert!(
             matches!(&err, Error::UnsupportedCommand(m) if m.contains("Hz/%")),
+            "got {err:?}"
+        );
+        assert!(transport.written.borrow().is_empty());
+    }
+
+    // --- Flag-backed settings ---------------------------------------------
+
+    /// The single command frame a press or exit wrote.
+    fn command_frame(transport: &MockTransport) -> Vec<u8> {
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 1, "the VC-880 sends the frame bare");
+        writes[0].clone()
+    }
+
+    /// Status byte 1: bit0=Rel, bit1=Avg, bit2=Min, bit3=Max.
+    const S_AVG: u8 = 0x02;
+
+    #[test]
+    fn minmax_lists_the_three_step_ring_and_off() {
+        let mut status = zero_status();
+        status[1] = S_AVG;
+        let m = parse_measurement(&make_payload(0x00, 0x31, b" 12.345", status)).unwrap();
+        assert!(m.flags.avg);
+
+        let proto = Vc880Protocol::new();
+        let choices = proto.choices(Setting::MinMax, &m);
+        assert_eq!(
+            choices.iter().map(|c| c.id).collect::<Vec<_>>(),
+            vec![0, 1, 2, 3]
+        );
+        assert_eq!(
+            choices.iter().map(|c| c.label.as_ref()).collect::<Vec<_>>(),
+            vec!["off", "MAX", "MIN", "AVG"]
+        );
+        assert!(choices[3].current, "AVG is lit");
+
+        // HOLD and REL are plain toggles; Peak is not a function of this meter.
+        assert_eq!(proto.choices(Setting::Hold, &m).len(), 2);
+        assert_eq!(proto.choices(Setting::Rel, &m).len(), 2);
+        assert!(proto.choices(Setting::Peak, &m).is_empty());
+    }
+
+    #[test]
+    fn the_flag_buttons_write_their_own_command_bytes() {
+        for (button, byte) in [
+            (CycleButton::Hold, 0x4Au8),
+            (CycleButton::Rel, 0x48),
+            (CycleButton::MinMax, 0x49),
+        ] {
+            let transport = MockTransport::new(vec![]);
+            let mut proto = Vc880Protocol::new();
+            proto.press(&transport, button).expect("written");
+            assert_eq!(
+                command_frame(&transport),
+                super::super::vc8x0_common::build_command(byte),
+                "{button:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn leaving_minmax_writes_the_exit_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc880Protocol::new();
+        proto
+            .exit_flag(&transport, cycle::FlagSetting::MinMax)
+            .expect("written");
+        assert_eq!(
+            command_frame(&transport),
+            super::super::vc8x0_common::build_command(0x43),
+            "ExitMaxMinAvg is command 0x43"
+        );
+    }
+
+    #[test]
+    fn pressing_peak_is_refused_without_writing() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc880Protocol::new();
+        let err = proto.press(&transport, CycleButton::Peak).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("PEAK")),
             "got {err:?}"
         );
         assert!(transport.written.borrow().is_empty());

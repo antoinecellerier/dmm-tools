@@ -68,7 +68,27 @@ pub trait DeviceTable: Send {
     fn range_is_fixed(&self, _mode: Mode) -> bool {
         false
     }
+
+    /// Modes where the Peak command (0x4D) does something on this model.
+    ///
+    /// Empty — the default — means the model has no Peak at all, which is
+    /// the UT61B+: the family spec's flag matrix (§4) leaves its Peak MAX
+    /// and Peak MIN cells blank and its command matrix (§6) marks 0x4D/0x4E
+    /// "No effect".
+    fn peak_modes(&self) -> &'static [Mode] {
+        &[]
+    }
 }
+
+/// The AC modes where Peak is offered on the models that have it.
+///
+/// Verified on a UT61E+ only for AC mV, where 0x4D activates while DC V
+/// ignores it (docs/verification-backlog.md, "MIN/MAX and Peak measurement
+/// reporting"). The manual describes Peak as an AC-waveform measurement, so
+/// the other pure-AC modes are offered with it; the AC+DC and LPF variants
+/// are left out until a meter says otherwise (backlog, UT61E+ section).
+pub(crate) const AC_PEAK_MODES: &[Mode] =
+    &[Mode::AcV, Mode::AcMv, Mode::AcUa, Mode::AcMa, Mode::AcA];
 
 /// The manual range ladder to offer in `mode`, or empty when there is none.
 ///
@@ -149,6 +169,11 @@ pub(crate) trait ModeTables: Send {
     fn range_is_fixed(&self, _mode: Mode) -> bool {
         false
     }
+
+    /// Modes where Peak works on this model. Default: none.
+    fn peak_modes(&self) -> &'static [Mode] {
+        &[]
+    }
 }
 
 impl<T: ModeTables> DeviceTable for T {
@@ -182,6 +207,10 @@ impl<T: ModeTables> DeviceTable for T {
 
     fn range_is_fixed(&self, mode: Mode) -> bool {
         ModeTables::range_is_fixed(self, mode)
+    }
+
+    fn peak_modes(&self) -> &'static [Mode] {
+        ModeTables::peak_modes(self)
     }
 }
 

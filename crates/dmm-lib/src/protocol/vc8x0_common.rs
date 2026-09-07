@@ -15,6 +15,7 @@
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::MeasuredValue;
+use crate::protocol::cycle::RANGE_BUTTON_NAME;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{CaptureStep, cycle, unknown_mode};
 use crate::transport::Transport;
@@ -48,15 +49,69 @@ pub(crate) const CMD_RANGE_MANUAL: u8 = 0x46;
 /// Return to auto-ranging: its own command, as it is its own button.
 pub(crate) const CMD_RANGE_AUTO: u8 = 0x47;
 
+/// HOLD, REL and the MAX/MIN/AVG pair (spec §5). The MAX/MIN/AVG button
+/// steps the states and only 0x43 leaves them, exactly as the UT61+ family's
+/// 0x41/0x42 pair does.
+pub(crate) const CMD_HOLD: u8 = 0x4A;
+pub(crate) const CMD_REL: u8 = 0x48;
+pub(crate) const CMD_MAX_MIN_AVG: u8 = 0x49;
+pub(crate) const CMD_EXIT_MAX_MIN_AVG: u8 = 0x43;
+
+/// What the front panels call the buttons the flag-backed settings press.
+pub(crate) const HOLD_BUTTON_NAME: &str = "HOLD";
+pub(crate) const REL_BUTTON_NAME: &str = "REL";
+pub(crate) const MAX_MIN_AVG_BUTTON_NAME: &str = "MAX/MIN/AVG";
+
+/// The command byte one press of `button` sends, or `None` for a button
+/// neither Voltcraft meter has.
+pub(crate) fn press_command(button: cycle::CycleButton) -> Option<u8> {
+    Some(match button {
+        cycle::CycleButton::Select => CMD_SELECT,
+        cycle::CycleButton::Range => CMD_RANGE_MANUAL,
+        cycle::CycleButton::Hold => CMD_HOLD,
+        cycle::CycleButton::Rel => CMD_REL,
+        cycle::CycleButton::MinMax => CMD_MAX_MIN_AVG,
+        // No Hz/% button (the SHIFT/SETUP ring reaches Hz), and no Peak
+        // function at all: the vendor command table lists neither.
+        cycle::CycleButton::Hz | cycle::CycleButton::Peak => return None,
+    })
+}
+
+/// What the front panel calls `button`, for the messages the user reads.
+pub(crate) fn button_name(button: cycle::CycleButton) -> &'static str {
+    match button {
+        cycle::CycleButton::Select => SELECT_BUTTON_NAME,
+        cycle::CycleButton::Range => RANGE_BUTTON_NAME,
+        cycle::CycleButton::Hold => HOLD_BUTTON_NAME,
+        cycle::CycleButton::Rel => REL_BUTTON_NAME,
+        cycle::CycleButton::MinMax => MAX_MIN_AVG_BUTTON_NAME,
+        cycle::CycleButton::Hz => "Hz/%",
+        cycle::CycleButton::Peak => "PEAK",
+    }
+}
+
+/// The states each flag-backed setting offers; identical on both meters.
+///
+/// HOLD and REL toggle. MAX/MIN/AVG is a ring of three plus off, its press
+/// order unverified — which is why the driver reads the flags back after
+/// every press instead of counting them. Neither meter has Peak.
+pub(crate) fn flag_states(setting: cycle::FlagSetting) -> &'static [u16] {
+    match setting {
+        cycle::FlagSetting::Hold | cycle::FlagSetting::Rel => &[0, 1],
+        cycle::FlagSetting::MinMax => &[0, 1, 2, 3],
+        cycle::FlagSetting::Peak => &[],
+    }
+}
+
 /// Map a command name to its byte value.
 ///
 /// Command bytes are identical for VC-880 and VC-890.
 pub(crate) fn command_byte(command: &str) -> Result<u8> {
     match command {
-        "hold" => Ok(0x4A),
-        "rel" => Ok(0x48),
-        "max_min_avg" => Ok(0x49),
-        "exit_max_min_avg" => Ok(0x43),
+        "hold" => Ok(CMD_HOLD),
+        "rel" => Ok(CMD_REL),
+        "max_min_avg" => Ok(CMD_MAX_MIN_AVG),
+        "exit_max_min_avg" => Ok(CMD_EXIT_MAX_MIN_AVG),
         "range_auto" => Ok(CMD_RANGE_AUTO),
         "range_manual" => Ok(CMD_RANGE_MANUAL),
         "light" => Ok(0x4B),
@@ -292,6 +347,18 @@ mod tests {
         assert_eq!(command_byte("range_auto").unwrap(), CMD_RANGE_AUTO);
         assert_eq!(command_byte("hold").unwrap(), 0x4A);
         assert_eq!(command_byte("rel").unwrap(), 0x48);
+        // The flag-setting driver presses the same bytes.
+        assert_eq!(press_command(cycle::CycleButton::Hold), Some(0x4A));
+        assert_eq!(press_command(cycle::CycleButton::Rel), Some(0x48));
+        assert_eq!(press_command(cycle::CycleButton::MinMax), Some(0x49));
+        assert_eq!(command_byte("max_min_avg").unwrap(), CMD_MAX_MIN_AVG);
+        assert_eq!(
+            command_byte("exit_max_min_avg").unwrap(),
+            CMD_EXIT_MAX_MIN_AVG
+        );
+        // Neither meter has these two.
+        assert_eq!(press_command(cycle::CycleButton::Hz), None);
+        assert_eq!(press_command(cycle::CycleButton::Peak), None);
         assert_eq!(command_byte("light").unwrap(), 0x4B);
         // The mode driver presses the same byte the "select" command sends.
         assert_eq!(command_byte("select").unwrap(), CMD_SELECT);

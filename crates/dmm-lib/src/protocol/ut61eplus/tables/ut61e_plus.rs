@@ -1,5 +1,5 @@
 use super::specs_ut61e_plus as specs;
-use super::{ModeEntry, ModeTables, RangeInfo, m, r};
+use super::{AC_PEAK_MODES, ModeEntry, ModeTables, RangeInfo, m, r};
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
@@ -230,6 +230,10 @@ impl ModeTables for Ut61ePlusTable {
     /// asks for the check.
     fn range_is_fixed(&self, mode: Mode) -> bool {
         mode == Mode::DcMv
+    }
+
+    fn peak_modes(&self) -> &'static [Mode] {
+        AC_PEAK_MODES
     }
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_> {

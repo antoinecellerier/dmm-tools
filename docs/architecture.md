@@ -68,8 +68,8 @@ Each family implements its own framing, parsing, and command encoding internally
 produce the same `Measurement` struct.
 
 **Absolute setting selection** is the second remote-control path, alongside the named commands
-of `send_command()`. A `Setting` names what is being driven — `Mode` and `Range` are
-implemented; `Hold`, `Rel`, `MinMax` and `Peak` are planned.
+of `send_command()`. A `Setting` names what is being driven — `Mode`, `Range`, `Hold`, `Rel`,
+`MinMax` and `Peak` are all implemented.
 `choices(Setting, &Measurement)` lists the values the setting can be switched to *from where
 the meter sits right now* — each a `Choice { id, label, current }` whose label uses the same
 vocabulary as `Measurement::mode` — and `select(Setting, id)` switches to one. Both
@@ -83,7 +83,13 @@ planning from a per-model table of dial positions because the meter never report
 read-back walk pressing RANGE, over the mode's range-label table as its ring — aborting if the
 mode changes under it, since the ladder would then be another function's. Choice id 0 is
 autorange throughout and is never walked to: every meter has a command of its own for it.
-CLI and GUI drive the pair generically: an
+The four flag-backed settings answer the same way, read back from the meter's own badges
+instead of the mode or range field: `Hold` and `Rel` are toggles reached in one press,
+confirmed by the flag; `MinMax` and `Peak` are rings the button steps between (off, MAX, MIN,
+plus AVG on the Voltcraft meters) and leave only by an exit command of their own, confirmed
+like autorange. Which states a family offers depends on the mode — Peak is offered only in
+the UT61+ AC modes and only on models that have it, and the UT181A reaches Peak through
+`Mode` instead. CLI and GUI drive the pair generically: an
 empty list means hide the control, and the flagged entry is the live value. This is what
 `send_command("select")` cannot express — a cycling button gives no way to jump to a named mode
 or to know which one is active.

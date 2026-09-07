@@ -269,7 +269,10 @@ impl Protocol for Ut61PlusProtocol {
         match setting {
             Setting::Mode => cycle::mode_choices(self, current),
             Setting::Range => cycle::range_choices(self, current),
-            _ => Vec::new(),
+            flag => match cycle::FlagSetting::of(flag) {
+                Some(flag) => cycle::flag_choices(self, flag, current),
+                None => Vec::new(),
+            },
         }
     }
 
@@ -277,7 +280,10 @@ impl Protocol for Ut61PlusProtocol {
         match setting {
             Setting::Mode => cycle::select_mode(self, transport, id),
             Setting::Range => cycle::select_range(self, transport, id),
-            _ => Err(unsupported_setting(setting)),
+            flag => match cycle::FlagSetting::of(flag) {
+                Some(flag) => cycle::select_flag(self, transport, flag, id),
+                None => Err(unsupported_setting(setting)),
+            },
         }
     }
 
@@ -460,6 +466,10 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
             cycle::CycleButton::Select => Command::Select,
             cycle::CycleButton::Hz => Command::Select2,
             cycle::CycleButton::Range => Command::Range,
+            cycle::CycleButton::Hold => Command::Hold,
+            cycle::CycleButton::Rel => Command::Rel,
+            cycle::CycleButton::MinMax => Command::MinMax,
+            cycle::CycleButton::Peak => Command::PeakMinMax,
         };
         self.press_command(transport, cmd)
     }
@@ -500,6 +510,33 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
 
     fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
         self.press_command(transport, Command::Auto)
+    }
+
+    /// HOLD, REL and MIN/MAX are taken in every mode — the family's command
+    /// matrix (research spec §6) lists no mode restriction on 0x4A, 0x48 or
+    /// 0x41, and remote mode switching was verified on a UT61E+ under an
+    /// active MIN/MAX. Peak is the one that depends on both model and mode.
+    fn flag_states(&self, setting: cycle::FlagSetting, mode: u16) -> &'static [u16] {
+        match setting {
+            cycle::FlagSetting::Hold | cycle::FlagSetting::Rel => &[0, 1],
+            // MAX then MIN, the order the meter's own 2-state ring cycles in.
+            // No AVG: the UT61E+ reports none over USB.
+            cycle::FlagSetting::MinMax => &[0, 1, 2],
+            cycle::FlagSetting::Peak => match u8::try_from(mode).map(Mode::from_byte) {
+                Ok(Ok(mode)) if self.table.peak_modes().contains(&mode) => &[0, 1, 2],
+                _ => &[],
+            },
+        }
+    }
+
+    fn exit_flag(&mut self, transport: &dyn Transport, setting: cycle::FlagSetting) -> Result<()> {
+        match setting {
+            cycle::FlagSetting::MinMax => self.press_command(transport, Command::ExitMinMax),
+            cycle::FlagSetting::Peak => self.press_command(transport, Command::ExitPeak),
+            // HOLD and REL press their own button back off, so the driver
+            // never asks this of them.
+            other => Err(unsupported_setting(other.setting())),
+        }
     }
 }
 
@@ -924,6 +961,226 @@ mod tests {
             .expect("already auto");
         assert_eq!(meter.autos.get(), 0);
         assert_eq!(meter.presses.get(), 0);
+    }
+
+    // --- Flag-backed settings (HOLD, REL, MIN/MAX, Peak) ------------------
+
+    /// Flag nibble 1 bits: REL is bit 0, HOLD bit 1, MIN bit 2, MAX bit 3.
+    const F_REL: u8 = 0x01;
+    const F_HOLD: u8 = 0x02;
+    const F_MIN: u8 = 0x04;
+    const F_MAX: u8 = 0x08;
+    /// Flag nibble 3 bits: P-MIN is bit 1, P-MAX bit 2.
+    const F_PEAK_MIN: u8 = 0x02;
+    const F_PEAK_MAX: u8 = 0x04;
+
+    fn flag_labels(choices: &[Choice]) -> Vec<String> {
+        choices.iter().map(|c| c.label.to_string()).collect()
+    }
+
+    #[test]
+    fn hold_and_rel_choices_follow_the_flags() {
+        let proto = Ut61PlusProtocol::new();
+        let m = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (F_HOLD, 0, 0));
+
+        let hold = proto.choices(Setting::Hold, &m);
+        assert_eq!(range_ids(&hold), vec![0, 1]);
+        assert_eq!(flag_labels(&hold), vec!["off", "on"]);
+        assert_eq!(hold.iter().filter(|c| c.current).count(), 1);
+        assert!(hold[1].current, "HOLD is lit");
+
+        let rel = proto.choices(Setting::Rel, &m);
+        assert_eq!(range_ids(&rel), vec![0, 1]);
+        assert!(rel[0].current, "REL is dark");
+    }
+
+    #[test]
+    fn minmax_choices_are_the_two_state_ring_plus_off() {
+        let proto = Ut61PlusProtocol::new();
+        let m = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (F_MIN, MANUAL, 0));
+        let choices = proto.choices(Setting::MinMax, &m);
+        assert_eq!(range_ids(&choices), vec![0, 1, 2]);
+        assert_eq!(flag_labels(&choices), vec!["off", "MAX", "MIN"]);
+        assert!(choices[2].current, "MIN is lit");
+
+        let max = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (F_MAX, MANUAL, 0));
+        assert!(proto.choices(Setting::MinMax, &max)[1].current);
+    }
+
+    /// Peak activates on AC mV and does nothing on DC V, verified 2026-03-21
+    /// (docs/verification-backlog.md).
+    #[test]
+    fn peak_is_offered_in_ac_but_not_in_dc_volts() {
+        let proto = Ut61PlusProtocol::new();
+        let ac = make_test_measurement(0x01, 0x00, b"  8.700", (0, 0), (0, 0, F_PEAK_MAX));
+        let choices = proto.choices(Setting::Peak, &ac);
+        assert_eq!(range_ids(&choices), vec![0, 1, 2]);
+        assert_eq!(flag_labels(&choices), vec!["off", "P-MAX", "P-MIN"]);
+        assert!(choices[1].current, "P-MAX is lit");
+
+        let dc = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
+        assert!(proto.choices(Setting::Peak, &dc).is_empty());
+    }
+
+    /// The B+ has no Peak flags and its command matrix marks 0x4D/0x4E "No
+    /// effect" (research spec §4 and §6).
+    #[test]
+    fn the_b_plus_offers_no_peak_anywhere() {
+        let proto = Ut61PlusProtocol::for_model("ut61b+").expect("known model");
+        let ac = make_test_measurement(0x01, 0x00, b"  8.700", (0, 0), (0, 0, 0));
+        assert!(proto.choices(Setting::Peak, &ac).is_empty());
+        // The buttons it does have are still offered.
+        assert_eq!(proto.choices(Setting::MinMax, &ac).len(), 3);
+    }
+
+    /// A UT61E+ whose HOLD (0x4A), MIN/MAX (0x41) and Peak (0x4D) buttons do
+    /// what the 2026-03-21 capture saw, and whose 0x42/0x4E leave those
+    /// states.
+    struct FlagDial {
+        mode: u8,
+        flag1: Cell<u8>,
+        flag3: Cell<u8>,
+        queued: RefCell<VecDeque<Vec<u8>>>,
+        writes: RefCell<Vec<u8>>,
+    }
+
+    impl FlagDial {
+        fn new(mode: u8) -> Self {
+            Self {
+                mode,
+                flag1: Cell::new(0),
+                flag3: Cell::new(0),
+                queued: RefCell::new(VecDeque::new()),
+                writes: RefCell::new(Vec::new()),
+            }
+        }
+
+        /// Step a two-state ring held in `cell`: off enters the first state,
+        /// and the two swap from there. Never returns to off.
+        fn ring(cell: &Cell<u8>, first: u8, second: u8) {
+            let now = cell.get();
+            let next = if now & first != 0 { second } else { first };
+            cell.set((now & !(first | second)) | next);
+        }
+
+        fn ack(&self) {
+            self.queued
+                .borrow_mut()
+                .push_back(test_frame_be16(&[0xFF, 0x00]));
+        }
+    }
+
+    impl Transport for FlagDial {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            let Some(&cmd) = data.get(3) else {
+                return Ok(());
+            };
+            self.writes.borrow_mut().push(cmd);
+            match cmd {
+                0x5E => {
+                    self.queued
+                        .borrow_mut()
+                        .push_back(test_frame_be16(&make_payload(
+                            self.mode,
+                            0x00,
+                            b" 12.345",
+                            (0x00, 0x00),
+                            (self.flag1.get(), 0x00, self.flag3.get()),
+                        )));
+                    return Ok(());
+                }
+                0x4A => self.flag1.set(self.flag1.get() ^ F_HOLD),
+                0x48 => self.flag1.set(self.flag1.get() ^ F_REL),
+                0x41 => Self::ring(&self.flag1, F_MAX, F_MIN),
+                0x42 => self.flag1.set(self.flag1.get() & !(F_MAX | F_MIN)),
+                0x4D => Self::ring(&self.flag3, F_PEAK_MAX, F_PEAK_MIN),
+                0x4E => self
+                    .flag3
+                    .set(self.flag3.get() & !(F_PEAK_MAX | F_PEAK_MIN)),
+                _ => {}
+            }
+            self.ack();
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            let Some(frame) = self.queued.borrow_mut().pop_front() else {
+                return Ok(0);
+            };
+            let len = frame.len().min(buf.len());
+            buf[..len].copy_from_slice(&frame[..len]);
+            Ok(len)
+        }
+
+        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The command bytes the meter was sent, measurement requests aside.
+    fn commands(meter: &FlagDial) -> Vec<u8> {
+        meter
+            .writes
+            .borrow()
+            .iter()
+            .copied()
+            .filter(|&c| c != 0x5E)
+            .collect()
+    }
+
+    #[test]
+    fn holding_presses_the_hold_command_once() {
+        let meter = FlagDial::new(0x02);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.select(&meter, Setting::Hold, 1).expect("held");
+        assert_eq!(commands(&meter), vec![0x4A]);
+        assert_eq!(meter.flag1.get(), F_HOLD);
+    }
+
+    #[test]
+    fn reaching_min_presses_the_minmax_button_twice() {
+        let meter = FlagDial::new(0x02);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.select(&meter, Setting::MinMax, 2).expect("in MIN");
+        assert_eq!(commands(&meter), vec![0x41, 0x41], "off -> MAX -> MIN");
+        assert_eq!(meter.flag1.get(), F_MIN);
+    }
+
+    #[test]
+    fn leaving_minmax_sends_the_exit_command() {
+        let meter = FlagDial::new(0x02);
+        meter.flag1.set(F_MAX);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.select(&meter, Setting::MinMax, 0).expect("left");
+        assert_eq!(commands(&meter), vec![0x42]);
+        assert_eq!(meter.flag1.get(), 0);
+    }
+
+    #[test]
+    fn reaching_peak_min_presses_the_peak_button_and_leaves_by_its_own() {
+        let meter = FlagDial::new(0x01);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.select(&meter, Setting::Peak, 2).expect("in P-MIN");
+        assert_eq!(commands(&meter), vec![0x4D, 0x4D]);
+        assert_eq!(meter.flag3.get(), F_PEAK_MIN);
+
+        proto.select(&meter, Setting::Peak, 0).expect("left peak");
+        assert_eq!(commands(&meter), vec![0x4D, 0x4D, 0x4E]);
+        assert_eq!(meter.flag3.get(), 0);
+    }
+
+    #[test]
+    fn peak_in_dc_volts_is_refused_without_writing() {
+        let meter = FlagDial::new(0x02);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.request_measurement(&meter).unwrap();
+        let err = proto.select(&meter, Setting::Peak, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m)
+                if m == "peak cannot be set in DC V on this meter"),
+            "{err}"
+        );
+        assert!(commands(&meter).is_empty());
     }
 
     #[test]

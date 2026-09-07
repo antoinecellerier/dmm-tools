@@ -183,8 +183,8 @@ impl std::str::FromStr for DeviceFamily {
 
 /// A meter setting the host can read the options of and switch between.
 ///
-/// [`Setting::Mode`] and [`Setting::Range`] are implemented; the rest name
-/// the settings the same API is about to carry.
+/// All six are implemented; which of them a given family offers is the
+/// family's own answer, and an empty choice list means "not offered".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Setting {
     /// Measurement mode. Choice ids are the family's own mode ids (UT181A: the
@@ -201,7 +201,8 @@ pub enum Setting {
     Hold,
     /// Relative (delta) reading. Choice id 0 is off, 1 is on.
     Rel,
-    /// Minimum/maximum tracking. Choice id 0 is off, 1 is MAX, 2 is MIN — the
+    /// Minimum/maximum tracking. Choice id 0 is off, 1 is MAX, 2 is MIN, and
+    /// 3 is AVG on the Voltcraft meters, whose button cycles all three — the
     /// UT181A has only the 0/1 pair.
     MinMax,
     /// Peak hold. Choice id 0 is off, 1 is P-MAX, 2 is P-MIN.

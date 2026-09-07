@@ -50,8 +50,9 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use crate::error::{Error, Result};
+use crate::flags::{Flag, StatusFlags};
 use crate::measurement::Measurement;
-use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice};
+use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice, Setting};
 use crate::transport::Transport;
 
 /// A front-panel button that cycles the meter through a ring of modes.
@@ -63,6 +64,14 @@ pub enum CycleButton {
     Hz,
     /// The RANGE button: steps the current mode's manual range ladder.
     Range,
+    /// The HOLD button: freezes and unfreezes the display.
+    Hold,
+    /// The REL button: enters and leaves relative reading.
+    Rel,
+    /// The MIN/MAX button: steps the min/max tracking states.
+    MinMax,
+    /// The PEAK button: steps the peak-hold states.
+    Peak,
 }
 
 /// One button and the modes (family `mode_raw` values) it cycles through.
@@ -231,6 +240,10 @@ pub(crate) trait CycleMeter {
             CycleButton::Select => "SELECT",
             CycleButton::Hz => "Hz/%",
             CycleButton::Range => RANGE_BUTTON_NAME,
+            CycleButton::Hold => "HOLD",
+            CycleButton::Rel => "REL",
+            CycleButton::MinMax => "MIN/MAX",
+            CycleButton::Peak => "PEAK",
         }
     }
 
@@ -259,6 +272,26 @@ pub(crate) trait CycleMeter {
         Err(crate::protocol::unsupported_setting(
             crate::protocol::Setting::Range,
         ))
+    }
+
+    /// The states `setting` can be put in while the meter is in `mode`,
+    /// [`OFF_STATE`] first.
+    ///
+    /// Empty — the default — means this family does not drive that setting
+    /// remotely, or this mode does not offer it (Peak only does something in
+    /// an AC context on the UT61+ family).
+    fn flag_states(&self, _setting: FlagSetting, _mode: u16) -> &'static [u16] {
+        &[]
+    }
+
+    /// Leave `setting`: its own command, as it is its own button on the
+    /// front panel. Never a press — the MIN/MAX and Peak rings cannot be
+    /// pressed back to off, only stepped between their active states.
+    ///
+    /// Only reached for the settings [`FlagSetting::toggles`] says are not
+    /// plain toggles; HOLD and REL press their own button back off.
+    fn exit_flag(&mut self, _transport: &dyn Transport, setting: FlagSetting) -> Result<()> {
+        Err(crate::protocol::unsupported_setting(setting.setting()))
     }
 }
 
@@ -331,6 +364,135 @@ impl<M: CycleMeter + ?Sized> Observable<M> for RangeWalk {
                 .cloned()
                 .unwrap_or_else(|| Cow::Owned(format!("range {value}"))),
         }
+    }
+}
+
+/// One of the meter settings the reading answers with a status flag.
+///
+/// [`Setting`] names six; these are the four the meter reports as a badge
+/// rather than as the mode or range field, and all four are driven the same
+/// way — a button that steps a ring of states, plus, where "off" is not one
+/// of that ring's steps, a command that leaves it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FlagSetting {
+    Hold,
+    Rel,
+    MinMax,
+    Peak,
+}
+
+/// The state each of these settings is in when its badge is dark.
+pub(crate) const OFF_STATE: u16 = 0;
+/// Label of [`OFF_STATE`].
+pub(crate) const OFF_LABEL: &str = "off";
+/// Label of the on state of a plain toggle (HOLD, REL).
+pub(crate) const ON_LABEL: &str = "on";
+
+impl FlagSetting {
+    /// The flag-backed half of [`Setting`], or `None` for the two settings
+    /// the reading reports as fields of its own.
+    pub(crate) fn of(setting: Setting) -> Option<Self> {
+        Some(match setting {
+            Setting::Hold => FlagSetting::Hold,
+            Setting::Rel => FlagSetting::Rel,
+            Setting::MinMax => FlagSetting::MinMax,
+            Setting::Peak => FlagSetting::Peak,
+            Setting::Mode | Setting::Range => return None,
+        })
+    }
+
+    /// The [`Setting`] this is, for the ids, the CLI word and the refusals.
+    pub(crate) fn setting(self) -> Setting {
+        match self {
+            FlagSetting::Hold => Setting::Hold,
+            FlagSetting::Rel => Setting::Rel,
+            FlagSetting::MinMax => Setting::MinMax,
+            FlagSetting::Peak => Setting::Peak,
+        }
+    }
+
+    /// The button whose presses step this setting's states.
+    pub(crate) fn button(self) -> CycleButton {
+        match self {
+            FlagSetting::Hold => CycleButton::Hold,
+            FlagSetting::Rel => CycleButton::Rel,
+            FlagSetting::MinMax => CycleButton::MinMax,
+            FlagSetting::Peak => CycleButton::Peak,
+        }
+    }
+
+    /// Whether the button's ring includes off, so the setting is a plain
+    /// toggle and no exit command is involved.
+    ///
+    /// HOLD and REL are. MIN/MAX and Peak are not: on a UT61E+ the first
+    /// press of 0x41 enters MAX and further presses only swap MAX and MIN —
+    /// off is reached by 0x42 alone (docs/verification-backlog.md, "MIN/MAX
+    /// and Peak measurement reporting"), and 0x4D/0x4E behave the same.
+    pub(crate) fn toggles(self) -> bool {
+        matches!(self, FlagSetting::Hold | FlagSetting::Rel)
+    }
+
+    /// The badge the meter lights in state `value`, or `None` for off and
+    /// for a value outside this setting's states.
+    fn flag(self, value: u16) -> Option<Flag> {
+        Some(match (self, value) {
+            (FlagSetting::Hold, 1) => Flag::Hold,
+            (FlagSetting::Rel, 1) => Flag::Rel,
+            (FlagSetting::MinMax, 1) => Flag::Max,
+            (FlagSetting::MinMax, 2) => Flag::Min,
+            (FlagSetting::MinMax, 3) => Flag::Avg,
+            (FlagSetting::Peak, 1) => Flag::PeakMax,
+            (FlagSetting::Peak, 2) => Flag::PeakMin,
+            _ => return None,
+        })
+    }
+
+    /// The non-off states, in id order — every badge worth testing a
+    /// reading for. A family that lacks one simply never sets its flag.
+    fn active_states(self) -> &'static [u16] {
+        match self {
+            FlagSetting::Hold | FlagSetting::Rel => &[1],
+            FlagSetting::MinMax => &[1, 2, 3],
+            FlagSetting::Peak => &[1, 2],
+        }
+    }
+
+    /// Which state the reading's flags put this setting in.
+    pub(crate) fn state(self, flags: &StatusFlags) -> u16 {
+        self.active_states()
+            .iter()
+            .copied()
+            .find(|&value| self.flag(value).is_some_and(|flag| flags.get(flag)))
+            .unwrap_or(OFF_STATE)
+    }
+
+    /// Display name of one state, in the vocabulary of the meter's own
+    /// badges, so a choice list reads like the display it switches.
+    pub(crate) fn label(self, value: u16) -> Cow<'static, str> {
+        if value == OFF_STATE {
+            return Cow::Borrowed(OFF_LABEL);
+        }
+        if self.toggles() {
+            return Cow::Borrowed(ON_LABEL);
+        }
+        match self.flag(value).and_then(Flag::label) {
+            Some(label) => Cow::Borrowed(label),
+            // A state no family offers; name it by number rather than hide it.
+            None => Cow::Owned(format!("{} {value}", self.setting())),
+        }
+    }
+}
+
+/// One flag-backed setting: what [`select_flag`] walks.
+struct FlagWalk(FlagSetting);
+
+impl<M: CycleMeter + ?Sized> Observable<M> for FlagWalk {
+    fn value(&self, _meter: &M, reading: &Measurement) -> Result<u16> {
+        Ok(self.0.state(&reading.flags))
+    }
+
+    fn label(&self, _meter: &M, value: u16) -> Cow<'static, str> {
+        self.0.label(value)
     }
 }
 
@@ -695,6 +857,116 @@ pub(crate) fn select_range<M: CycleMeter + ?Sized>(
     walk(meter, transport, &leg, &walk_obs, seen)
 }
 
+/// The states `setting` offers in `mode`, once `id` is known to be one.
+///
+/// Both refusals come from the family's own list, so a bad id never reaches
+/// the meter.
+fn check_flag_id<M: CycleMeter + ?Sized>(
+    meter: &M,
+    setting: FlagSetting,
+    mode: u16,
+    id: u16,
+) -> Result<&'static [u16]> {
+    let states = meter.flag_states(setting, mode);
+    if states.is_empty() {
+        return Err(Error::UnsupportedCommand(format!(
+            "{} cannot be set in {} on this meter",
+            setting.setting(),
+            meter.mode_label(mode)
+        )));
+    }
+    if !states.contains(&id) {
+        let offered: Vec<_> = states.iter().map(|&s| setting.label(s)).collect();
+        return Err(Error::UnsupportedCommand(format!(
+            "{} has no state {id}; {} offers {}",
+            setting.setting(),
+            meter.mode_label(mode),
+            offered.join(", ")
+        )));
+    }
+    Ok(states)
+}
+
+/// The states `setting` can be switched to in the mode `current` reports,
+/// for `Protocol::choices`.
+///
+/// Empty when the family or the mode does not offer the setting. Does not
+/// touch the meter's state, like [`mode_choices`].
+pub(crate) fn flag_choices<M: CycleMeter + ?Sized>(
+    meter: &M,
+    setting: FlagSetting,
+    current: &Measurement,
+) -> Vec<Choice> {
+    let live = setting.state(&current.flags);
+    meter
+        .flag_states(setting, current.mode_raw)
+        .iter()
+        .map(|&id| Choice {
+            id,
+            label: setting.label(id),
+            current: id == live,
+        })
+        .collect()
+}
+
+/// Put `setting` in state `id`, for `Protocol::select`.
+///
+/// Off is walked to only for a plain toggle; MIN/MAX and Peak leave by their
+/// own command, confirmed with the same settle-and-re-read discipline a
+/// press gets. Every other state is one ring walked with the setting's
+/// button — and entering from off is simply that walk's first press, which
+/// the observable sees take the setting from off to its first active state.
+pub(crate) fn select_flag<M: CycleMeter + ?Sized>(
+    meter: &mut M,
+    transport: &dyn Transport,
+    setting: FlagSetting,
+    id: u16,
+) -> Result<()> {
+    // A state the last known mode does not offer costs no I/O at all.
+    if let Some(mode) = meter.dial_state().last_mode() {
+        check_flag_id(meter, setting, mode, id)?;
+    }
+    // Which state the meter is in is only in the stream, and the mode may
+    // have moved since the last reading, so both come from a fresh one.
+    let reading = read_and_observe(meter, transport)?;
+    let states = check_flag_id(meter, setting, reading.mode_raw, id)?;
+    let walk_obs = FlagWalk(setting);
+    let seen = walk_obs.value(meter, &reading)?;
+    if seen == id {
+        return Ok(());
+    }
+    let settle = meter.settle();
+    let button = meter.button_name(setting.button());
+    if id == OFF_STATE && !setting.toggles() {
+        debug!(
+            "cycle: leaving {} (in {})",
+            setting.setting(),
+            walk_obs.label(meter, seen)
+        );
+        meter.exit_flag(transport, setting)?;
+        let now = observe_after_press(meter, transport, &walk_obs, seen, settle)?;
+        return if now == OFF_STATE {
+            Ok(())
+        } else {
+            Err(Error::CommandRejected(format!(
+                "EXIT {button} did nothing; the meter is still in {}",
+                walk_obs.label(meter, now)
+            )))
+        };
+    }
+    let leg = Leg {
+        button: setting.button(),
+        // Off is not a step of a non-toggle's ring: the button walks the
+        // active states only, and the first press is what enters them.
+        ring_len: states
+            .iter()
+            .filter(|&&s| setting.toggles() || s != OFF_STATE)
+            .count(),
+        target: id,
+    };
+    walk(meter, transport, &leg, &walk_obs, seen)
+}
+
 /// Panic unless a family's dial table is well formed.
 ///
 /// For family tests to call on their own table: every mistake checked here
@@ -897,11 +1169,16 @@ mod tests {
 
     /// A reading in `mode` on ladder rung `rung`, 0 meaning auto-range.
     fn reading_at(mode: u16, rung: u16) -> Measurement {
+        reading_with(mode, rung, StatusFlags::default())
+    }
+
+    /// The same, with the meter's badges on it.
+    fn reading_with(mode: u16, rung: u16, flags: StatusFlags) -> Measurement {
         Measurement {
             range_raw: rung.saturating_sub(1) as u8,
             flags: StatusFlags {
                 auto_range: rung == AUTO_RANGE_ID,
-                ..Default::default()
+                ..flags
             },
             ..reading(mode)
         }
@@ -946,6 +1223,18 @@ mod tests {
         /// Auto-range commands sent, and whether the meter obeys them.
         autos: usize,
         auto_works: bool,
+        /// The badges the meter is showing, and the ones it showed in the
+        /// frame already in flight when a press landed.
+        flags: StatusFlags,
+        stale_flags: StatusFlags,
+        /// Buttons the meter ignores, as a real one ignores a button its
+        /// current function has no use for.
+        dead: Vec<CycleButton>,
+        /// Whether this meter has a Peak function at all.
+        offers_peak: bool,
+        /// Exit commands sent, and whether the meter obeys them.
+        exits: usize,
+        exit_works: bool,
     }
 
     impl FakeMeter {
@@ -968,7 +1257,20 @@ mod tests {
                 range_flips_mode: None,
                 autos: 0,
                 auto_works: true,
+                flags: StatusFlags::default(),
+                stale_flags: StatusFlags::default(),
+                dead: Vec::new(),
+                offers_peak: false,
+                exits: 0,
+                exit_works: true,
             }
+        }
+
+        /// The one-ring SELECT meter with its badges already in `flags`.
+        fn showing(flags: StatusFlags) -> Self {
+            let mut meter = Self::v_dc();
+            meter.flags = flags;
+            meter
         }
 
         /// A meter on the DC V ladder, sitting on `rung` (0 = auto), whose
@@ -991,6 +1293,24 @@ mod tests {
         /// The one-ring SELECT meter of the V⎓ position.
         fn v_dc() -> Self {
             Self::seeded(DC_V, vec![(CycleButton::Select, vec![DC_V, ACDC_V])])
+        }
+
+        /// This meter's badges with `setting` moved to `state`.
+        fn flags_for(&self, setting: FlagSetting, state: u16) -> StatusFlags {
+            let mut flags = self.flags;
+            match setting {
+                FlagSetting::Hold => flags.hold = state == 1,
+                FlagSetting::Rel => flags.rel = state == 1,
+                FlagSetting::MinMax => {
+                    flags.max = state == 1;
+                    flags.min = state == 2;
+                }
+                FlagSetting::Peak => {
+                    flags.peak_max = state == 1;
+                    flags.peak_min = state == 2;
+                }
+            }
+            flags
         }
 
         /// The two-ring meter of the V~ position.
@@ -1044,6 +1364,14 @@ mod tests {
                 self.mode = next;
                 self.stale_left = self.stale;
             }
+            if let Some(setting) = flag_setting_of(button) {
+                self.stale_state = (self.mode, self.rung);
+                self.stale_flags = self.flags;
+                if !self.dead.contains(&button) {
+                    self.flags = self.flags_for(setting, next_state(setting, &self.flags));
+                    self.stale_left = self.stale;
+                }
+            }
             if button == CycleButton::Range && !self.ladder.is_empty() {
                 self.stale_state = (self.mode, self.rung);
                 self.rung = match (self.rung, self.real_rungs) {
@@ -1064,9 +1392,29 @@ mod tests {
             if self.stale_left > 0 {
                 self.stale_left -= 1;
                 let (mode, rung) = self.stale_state;
-                return Ok(reading_at(mode, rung));
+                return Ok(reading_with(mode, rung, self.stale_flags));
             }
-            Ok(reading_at(self.mode, self.rung))
+            Ok(reading_with(self.mode, self.rung, self.flags))
+        }
+
+        fn flag_states(&self, setting: FlagSetting, _mode: u16) -> &'static [u16] {
+            match setting {
+                FlagSetting::Hold | FlagSetting::Rel => &[0, 1],
+                FlagSetting::MinMax => &[0, 1, 2],
+                FlagSetting::Peak if self.offers_peak => &[0, 1, 2],
+                FlagSetting::Peak => &[],
+            }
+        }
+
+        fn exit_flag(&mut self, _transport: &dyn Transport, setting: FlagSetting) -> Result<()> {
+            self.exits += 1;
+            if self.exit_works {
+                self.stale_state = (self.mode, self.rung);
+                self.stale_flags = self.flags;
+                self.flags = self.flags_for(setting, OFF_STATE);
+                self.stale_left = self.stale;
+            }
+            Ok(())
         }
 
         fn range_ladder(&self, _mode: u16) -> Vec<Cow<'static, str>> {
@@ -1093,6 +1441,32 @@ mod tests {
                 reads: self.settle_reads,
             }
         }
+    }
+
+    /// The setting `button` steps, for the fake meter's press handler.
+    fn flag_setting_of(button: CycleButton) -> Option<FlagSetting> {
+        match button {
+            CycleButton::Hold => Some(FlagSetting::Hold),
+            CycleButton::Rel => Some(FlagSetting::Rel),
+            CycleButton::MinMax => Some(FlagSetting::MinMax),
+            CycleButton::Peak => Some(FlagSetting::Peak),
+            CycleButton::Select | CycleButton::Hz | CycleButton::Range => None,
+        }
+    }
+
+    /// Where one press of the setting's button lands: a toggle flips, and a
+    /// ring goes off -> MAX, then round the active states only, never back
+    /// to off.
+    fn next_state(setting: FlagSetting, flags: &StatusFlags) -> u16 {
+        let now = setting.state(flags);
+        if setting.toggles() {
+            return 1 - now;
+        }
+        if now == 1 { 2 } else { 1 }
+    }
+
+    fn labels(choices: &[Choice]) -> Vec<String> {
+        choices.iter().map(|c| c.label.to_string()).collect()
     }
 
     fn ids(choices: &[Choice]) -> Vec<u16> {
@@ -1627,6 +2001,170 @@ mod tests {
     }
 
     // ---- table invariants ----
+
+    // --- Flag-backed settings ---------------------------------------------
+
+    #[test]
+    fn flag_choices_name_the_badges_and_mark_the_live_one() {
+        let meter = FakeMeter::showing(StatusFlags {
+            min: true,
+            ..Default::default()
+        });
+        let current = reading_with(DC_V, AUTO_RANGE_ID, meter.flags);
+
+        let hold = flag_choices(&meter, FlagSetting::Hold, &current);
+        assert_eq!(ids(&hold), vec![0, 1]);
+        assert_eq!(labels(&hold), vec!["off", "on"]);
+        assert_eq!(current_ids(&hold), vec![0]);
+
+        let minmax = flag_choices(&meter, FlagSetting::MinMax, &current);
+        assert_eq!(ids(&minmax), vec![0, 1, 2]);
+        assert_eq!(labels(&minmax), vec!["off", "MAX", "MIN"]);
+        assert_eq!(current_ids(&minmax), vec![2], "MIN is lit");
+    }
+
+    #[test]
+    fn a_setting_the_meter_lacks_offers_nothing() {
+        let meter = FakeMeter::v_dc();
+        let current = reading(DC_V);
+        assert!(flag_choices(&meter, FlagSetting::Peak, &current).is_empty());
+    }
+
+    #[test]
+    fn a_toggle_is_reached_in_one_press() {
+        let mut meter = FakeMeter::v_dc();
+        select_flag(&mut meter, &NullTransport, FlagSetting::Hold, 1).expect("held");
+        assert_eq!(meter.presses, vec![CycleButton::Hold]);
+        assert!(meter.flags.hold);
+    }
+
+    #[test]
+    fn a_toggle_presses_its_own_button_back_off() {
+        let mut meter = FakeMeter::showing(StatusFlags {
+            rel: true,
+            ..Default::default()
+        });
+        select_flag(&mut meter, &NullTransport, FlagSetting::Rel, 0).expect("released");
+        assert_eq!(meter.presses, vec![CycleButton::Rel]);
+        assert_eq!(meter.exits, 0, "REL has no exit command");
+        assert!(!meter.flags.rel);
+    }
+
+    #[test]
+    fn a_setting_already_in_the_state_is_left_alone() {
+        let mut meter = FakeMeter::showing(StatusFlags {
+            hold: true,
+            ..Default::default()
+        });
+        select_flag(&mut meter, &NullTransport, FlagSetting::Hold, 1).expect("already held");
+        assert!(meter.presses.is_empty());
+        assert_eq!(meter.reads, 1, "only the reading that says where it is");
+    }
+
+    #[test]
+    fn a_button_the_meter_ignores_is_reported() {
+        let mut meter = FakeMeter::v_dc();
+        meter.dead = vec![CycleButton::Hold];
+        let err = select_flag(&mut meter, &NullTransport, FlagSetting::Hold, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m) if m == "HOLD did nothing in off"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn the_minmax_ring_is_entered_and_walked_by_its_button() {
+        let mut meter = FakeMeter::v_dc();
+        select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 2).expect("in MIN");
+        assert_eq!(
+            meter.presses,
+            vec![CycleButton::MinMax, CycleButton::MinMax],
+            "off -> MAX -> MIN"
+        );
+        assert!(meter.flags.min && !meter.flags.max);
+        assert_eq!(meter.exits, 0);
+    }
+
+    #[test]
+    fn swapping_max_for_min_is_one_press() {
+        let mut meter = FakeMeter::showing(StatusFlags {
+            max: true,
+            ..Default::default()
+        });
+        select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 2).expect("in MIN");
+        assert_eq!(meter.presses, vec![CycleButton::MinMax]);
+    }
+
+    #[test]
+    fn leaving_minmax_is_the_exit_command_and_no_press() {
+        let mut meter = FakeMeter::showing(StatusFlags {
+            max: true,
+            ..Default::default()
+        });
+        select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 0).expect("left MIN/MAX");
+        assert_eq!(meter.exits, 1);
+        assert!(meter.presses.is_empty(), "the button cannot reach off");
+        assert_eq!(FlagSetting::MinMax.state(&meter.flags), OFF_STATE);
+    }
+
+    #[test]
+    fn an_exit_the_meter_ignores_is_reported() {
+        let mut meter = FakeMeter::showing(StatusFlags {
+            max: true,
+            ..Default::default()
+        });
+        meter.exit_works = false;
+        let err = select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 0).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m)
+                if m == "EXIT MIN/MAX did nothing; the meter is still in MAX"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_state_outside_the_ring_costs_no_io() {
+        let mut meter = FakeMeter::v_dc();
+        let err = select_flag(&mut meter, &NullTransport, FlagSetting::MinMax, 3).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m)
+                if m == "minmax has no state 3; DC V offers off, MAX, MIN"),
+            "{err}"
+        );
+        assert_eq!(meter.reads, 0);
+        assert!(meter.presses.is_empty());
+    }
+
+    #[test]
+    fn a_setting_the_meter_lacks_is_refused_before_any_io() {
+        let mut meter = FakeMeter::v_dc();
+        let err = select_flag(&mut meter, &NullTransport, FlagSetting::Peak, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m)
+                if m == "peak cannot be set in DC V on this meter"),
+            "{err}"
+        );
+        assert_eq!(meter.reads, 0);
+    }
+
+    #[test]
+    fn a_stale_frame_after_a_flag_press_costs_a_read() {
+        let mut meter = FakeMeter::v_dc();
+        meter.stale = 1;
+        meter.settle_reads = 2;
+        select_flag(&mut meter, &NullTransport, FlagSetting::Hold, 1).expect("held");
+        assert_eq!(meter.presses.len(), 1, "the stale frame cost a read");
+        assert_eq!(meter.reads, 3, "one before, then the stale one and the new");
+    }
+
+    #[test]
+    fn peak_states_are_named_after_the_peak_badges() {
+        let mut meter = FakeMeter::v_dc();
+        meter.offers_peak = true;
+        let current = reading(DC_V);
+        let peak = flag_choices(&meter, FlagSetting::Peak, &current);
+        assert_eq!(labels(&peak), vec!["off", "P-MAX", "P-MIN"]);
+    }
 
     #[test]
     fn the_test_table_satisfies_the_invariants() {

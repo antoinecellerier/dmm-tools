@@ -90,6 +90,30 @@ carry both AC V and DC V on SELECT, and its temperature position to switch
 function at all. A mode listed but unreachable shows up as
 `<mode> never appeared; the meter is back in <mode>`.
 
+### UT61+ flag settings (HOLD, REL, MIN/MAX, Peak)
+
+Shipped 2026-09-07: `Setting::Hold`, `Rel`, `MinMax` and `Peak` reach a
+named state by pressing the family's own button (0x4A, 0x48, 0x41, 0x4D)
+and reading the flag back, leaving MIN/MAX and Peak by 0x42 and 0x4E. The
+commands and the flag bits are all verified on the in-house UT61E+
+(Completed table below), so what is new is only the state machine built on
+them.
+
+Assumed, not verified — **which modes Peak is offered in.** Only AC mV is
+confirmed to activate it and only DC V is confirmed not to (2026-03-21,
+"MIN/MAX and Peak measurement reporting" below). The code offers Peak in
+the five pure-AC modes — AC V, AC mV, AC µA, AC mA, AC A
+(`AC_PEAK_MODES` in `tables/mod.rs`) — and nowhere else. The AC+DC and LPF
+variants are deliberately left out. On the in-house meter: in each of those
+modes, `dmm-cli command peak` and check whether P-MAX lights; then the same
+in AC+DC V and LPF V, which the code currently refuses with `peak cannot be
+set in <mode> on this meter`. Every mode where the meter reacts but the
+list is empty (or the reverse) is a table fix.
+
+The UT61B+ is offered no Peak at all, from the family spec's flag matrix
+(§4, blank Peak cells) and command matrix (§6, "No effect"); the UT61D+ is
+offered the same AC modes as the E+. Both unverified — issue #7.
+
 ### Modes not yet tested with real signals
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
@@ -186,6 +210,14 @@ real hardware**. Every aspect needs end-to-end verification.
   (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
   nobody has confirmed that repeated 0x46 steps the ladder one rung at a
   time on this meter
+- `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07 by pressing
+  0x4A, 0x48 and 0x49 and reading the flag back, with 0x43 to leave
+  MAX/MIN/AVG. MIN/MAX is offered as off/MAX/MIN/AVG. Unverified: the order
+  0x49 walks those three in (the driver re-reads after every press, so any
+  order works, but a state the meter never lights shows up as
+  `<state> never appeared; the meter is back in <state>`), and whether
+  every mode accepts HOLD and REL. Peak is not offered — the vendor command
+  table lists no peak command. See also the AVG flag item above
 
 **Voltcraft VC-880 / VC650BT**:
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
@@ -239,6 +271,12 @@ real hardware**. Every aspect needs end-to-end verification.
   (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
   nobody has confirmed that repeated 0x46 steps the ladder one rung at a
   time on this meter
+- `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07 by pressing
+  0x4A, 0x48 and 0x49 and reading the flag back, with 0x43 to leave
+  MAX/MIN/AVG. MIN/MAX is offered as off/MAX/MIN/AVG. Unverified: the order
+  0x49 walks those three in, and whether every mode accepts HOLD and REL.
+  Peak is not offered — the vendor command table lists no peak command. See
+  also the AVG flag item above
 
 **UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
 - **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
@@ -532,6 +570,15 @@ own software sends, not hardware confirmation.
   `dmm-cli --device ut181a command minmax` should light MIN/MAX on the
   LCD and put min/max/avg sub-values in the stream, and
   `command exit_minmax` should leave it
+- `Setting::Hold`, `Rel` and `MinMax` — implemented 2026-09-07, all three
+  absolute: HOLD is the 0x12/0x5A button press, REL is SET_MODE with nibble
+  0 flipped (and is offered only where `mode::rel_supported` says the
+  vendor app enables it), MIN/MAX is SET_MIN_MAX 0/1, whose payload width
+  is the open question above. Each is confirmed by re-reading the meter's
+  own flags, so a command the meter ignores now reports
+  `<setting> <state> did nothing; the meter is still in <state>` — worth
+  quoting in any report. Peak is not offered as a setting: it is a mode
+  variant on this meter, reached through `dmm-cli mode`
 - Command replies (type 0x01, "OK" / "ER") — community-sourced only (the
   vendor app's handling of them was not traced), never seen from a meter. Since 2026-09-06 every command above waits
   for one and turns "ER" into an error, while silence still passes, so

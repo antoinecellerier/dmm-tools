@@ -276,6 +276,20 @@ pub(crate) fn rel_supported(word: u16) -> bool {
     f.rel_capable(word) && matches!(word & 0xF, N0_PLAIN | N0_REL)
 }
 
+/// The mode word that puts `word`'s function into REL (`on`) or takes it
+/// back out, or `None` when this variant has no REL companion.
+///
+/// REL is not its own opcode on this meter: it is SET_MODE with nibble 0
+/// switched between 1 (plain) and 2 (relative), research spec §6.1. That
+/// makes it absolute — the same command reaches the same state whatever the
+/// meter was doing.
+pub(crate) fn rel_word(word: u16, on: bool) -> Option<u16> {
+    if !rel_supported(word) {
+        return None;
+    }
+    Some((word & !0xF) | if on { N0_REL } else { N0_PLAIN })
+}
+
 /// The next manual range after `last_range` (0 = auto), or `None` when the
 /// family has no manual ladder.
 ///

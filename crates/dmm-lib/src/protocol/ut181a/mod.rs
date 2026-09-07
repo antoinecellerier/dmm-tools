@@ -30,6 +30,7 @@ pub(crate) mod mode;
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{
     Choice, DeviceProfile, Protocol, Setting, Stability, check_len, unknown_mode16,
@@ -235,6 +236,13 @@ fn build_command(payload: &[u8]) -> Vec<u8> {
     frame
 }
 
+/// Readings taken after a setting command before concluding it did nothing.
+///
+/// Three, as on the cycling families: one for the frame already in flight,
+/// one for the meter's own reaction, one to spare. Nobody has timed a real
+/// UT181A, so the budget is in reads rather than a delay.
+const FLAG_CONFIRM_READS: usize = 3;
+
 /// SET_MODE (opcode 0x01) carrying `word` as uint16 LE.
 ///
 /// See docs/research/ut181/reverse-engineered-protocol.md
@@ -382,6 +390,126 @@ impl Ut181aProtocol {
             None => Ok(self.request_measurement(transport)?.mode_raw),
         }
     }
+
+    /// The states `setting` offers in `mode`, [`cycle::OFF_STATE`] first.
+    ///
+    /// HOLD is a button press; REL is a mode-word variant and only exists
+    /// where the vendor app enables it (`mode::rel_supported`); MIN/MAX is
+    /// SET_MIN_MAX's on/off byte, not the MAX/MIN ring the cycling meters
+    /// walk. Peak is a mode variant on this meter, reached through
+    /// [`Setting::Mode`], so it is not offered here.
+    fn flag_states(setting: FlagSetting, mode: u16) -> &'static [u16] {
+        match setting {
+            FlagSetting::Hold | FlagSetting::MinMax => &[0, 1],
+            FlagSetting::Rel if mode::rel_supported(mode) => &[0, 1],
+            FlagSetting::Rel | FlagSetting::Peak => &[],
+        }
+    }
+
+    /// Display name of one state. MIN/MAX is a plain switch here, so it is
+    /// named off/on rather than after the MAX and MIN badges.
+    fn flag_label(setting: FlagSetting, id: u16) -> Cow<'static, str> {
+        match setting {
+            FlagSetting::MinMax => Cow::Borrowed(if id == cycle::OFF_STATE {
+                cycle::OFF_LABEL
+            } else {
+                cycle::ON_LABEL
+            }),
+            other => other.label(id),
+        }
+    }
+
+    fn check_flag_id(setting: FlagSetting, mode: u16, id: u16) -> Result<()> {
+        let states = Self::flag_states(setting, mode);
+        if states.is_empty() {
+            return Err(Error::UnsupportedCommand(format!(
+                "{} cannot be set in {} ({mode:#06x}) on this meter",
+                setting.setting(),
+                decode_mode_word(mode)
+            )));
+        }
+        if !states.contains(&id) {
+            return Err(Error::UnsupportedCommand(format!(
+                "{} has no state {id}; {} offers off, on",
+                setting.setting(),
+                decode_mode_word(mode)
+            )));
+        }
+        Ok(())
+    }
+
+    /// Read the meter back until it reports something other than `seen`.
+    ///
+    /// The meter streams through a command, so the frame in flight when it
+    /// landed still shows the old state; that has to cost a re-read, never a
+    /// second command. Same discipline as `cycle::observe_after_press`, which
+    /// this family cannot use — it takes no button presses to walk.
+    fn confirm_flag(
+        &mut self,
+        transport: &dyn Transport,
+        setting: FlagSetting,
+        seen: u16,
+    ) -> Result<u16> {
+        for _ in 0..FLAG_CONFIRM_READS {
+            let now = setting.state(&self.request_measurement(transport)?.flags);
+            if now != seen {
+                return Ok(now);
+            }
+            debug!(
+                "ut181a: meter still reports {} {}, re-reading",
+                setting.setting(),
+                Self::flag_label(setting, seen)
+            );
+        }
+        Ok(seen)
+    }
+
+    /// Put `setting` in state `id`: one absolute command (REL, MIN/MAX) or
+    /// one button press (HOLD), then the meter's own flags to confirm it.
+    fn select_flag(
+        &mut self,
+        transport: &dyn Transport,
+        setting: FlagSetting,
+        id: u16,
+    ) -> Result<()> {
+        // A state the last known mode does not offer costs no I/O at all.
+        if let Some(mode) = self.last_mode_raw {
+            Self::check_flag_id(setting, mode, id)?;
+        }
+        // Which state the meter is in is only in the stream, and the mode may
+        // have moved since the last reading, so both come from a fresh one.
+        let reading = self.request_measurement(transport)?;
+        Self::check_flag_id(setting, reading.mode_raw, id)?;
+        let seen = setting.state(&reading.flags);
+        if seen == id {
+            return Ok(());
+        }
+        let frame = match setting {
+            // 0x12 = button-press command, 0x5A = HOLD button code, as in
+            // `send_command`. The only toggle here, so the fresh reading
+            // above is what decides whether to send it at all.
+            FlagSetting::Hold => build_command(&[0x12, 0x5A]),
+            FlagSetting::Rel => {
+                // `check_flag_id` already refused a mode with no REL.
+                let word = mode::rel_word(reading.mode_raw, id != cycle::OFF_STATE)
+                    .ok_or_else(|| unsupported_setting(setting.setting()))?;
+                build_set_mode(word)
+            }
+            FlagSetting::MinMax => build_command(&[0x04, id as u8]),
+            FlagSetting::Peak => return Err(unsupported_setting(setting.setting())),
+        };
+        let what = format!("{} {}", setting.setting(), Self::flag_label(setting, id));
+        self.send_frame(transport, &frame, &what)?;
+        let now = self.confirm_flag(transport, setting, seen)?;
+        if now == id {
+            Ok(())
+        } else {
+            Err(Error::CommandRejected(format!(
+                "{what} did nothing; the meter is still in {}",
+                Self::flag_label(setting, now)
+            )))
+        }
+    }
 }
 
 /// Turn a type-0x01 reply packet into a result.
@@ -498,7 +626,20 @@ impl Protocol for Ut181aProtocol {
                 current.range_raw,
                 current.flags.auto_range,
             ),
-            _ => Vec::new(),
+            flag => {
+                let Some(flag) = FlagSetting::of(flag) else {
+                    return Vec::new();
+                };
+                let live = flag.state(&current.flags);
+                Self::flag_states(flag, current.mode_raw)
+                    .iter()
+                    .map(|&id| Choice {
+                        id,
+                        label: Self::flag_label(flag, id),
+                        current: id == live,
+                    })
+                    .collect()
+            }
         }
     }
 
@@ -508,9 +649,9 @@ impl Protocol for Ut181aProtocol {
     /// family's own ladder. Validation happens before the write, so a stray
     /// id costs no I/O.
     fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
-        let current = self.require_last_mode(transport)?;
         match setting {
             Setting::Mode => {
+                let current = self.require_last_mode(transport)?;
                 if !mode::mode_choices(current).iter().any(|c| c.id == id) {
                     return Err(Error::UnsupportedCommand(format!(
                         "mode {id:#06x} is not reachable from {} ({current:#06x}) — turn the dial first",
@@ -523,6 +664,7 @@ impl Protocol for Ut181aProtocol {
             // The meter takes the range absolutely, so there is nothing to
             // walk: the id is the SET_RANGE byte, and 0 is auto.
             Setting::Range => {
+                let current = self.require_last_mode(transport)?;
                 // The reading's own range and auto flag only decide which
                 // entry is marked current; validation needs the list alone.
                 let ladder = mode::range_choices(current, 0, false);
@@ -543,7 +685,10 @@ impl Protocol for Ut181aProtocol {
                 let what = format!("range {}", choice.label);
                 self.send_frame(transport, &build_command(&[0x02, id as u8]), &what)
             }
-            _ => Err(unsupported_setting(setting)),
+            flag => match FlagSetting::of(flag) {
+                Some(flag) => self.select_flag(transport, flag, id),
+                None => Err(unsupported_setting(setting)),
+            },
         }
     }
 
@@ -1459,9 +1604,10 @@ mod tests {
         assert!(parse_measurement(&payload).is_err());
     }
 
-    #[test]
-    fn parse_minmax_format() {
-        let mbytes = 0x3111u16.to_le_bytes();
+    /// A MIN/MAX-format payload (misc format_type 2) — how the meter reports
+    /// while SET_MIN_MAX is on, which is what sets the MIN and MAX flags.
+    fn minmax_payload(mode: u16) -> Vec<u8> {
+        let mbytes = mode.to_le_bytes();
         let mut payload = vec![
             0x02, // type
             0x20, // misc: format_type=2 (minmax)
@@ -1481,7 +1627,12 @@ mod tests {
         payload.extend_from_slice(&30u32.to_le_bytes());
         // shared unit
         payload.extend_from_slice(b"VDC\0\0\0\0\0");
+        payload
+    }
 
+    #[test]
+    fn parse_minmax_format() {
+        let payload = minmax_payload(0x3111);
         let m = parse_measurement(&payload).unwrap();
 
         assert_eq!(m.mode, "V DC");
@@ -2088,6 +2239,150 @@ mod tests {
         // the bytes that arrived with the reply.
         let m = proto.request_measurement(&mock).unwrap();
         assert_eq!(m.display_raw.as_deref(), Some("7.50"));
+    }
+
+    // --- Flag-backed settings (HOLD, REL, MIN/MAX) ------------------------
+
+    /// The OK reply the meter answers a command with (spec §4.1).
+    fn ok_reply() -> Vec<u8> {
+        build_command(&[0x01, b'O', b'K'])
+    }
+
+    fn er_reply() -> Vec<u8> {
+        build_command(&[0x01, b'E', b'R'])
+    }
+
+    /// A plain V DC frame, with `misc` carrying the HOLD bit when set.
+    fn plain_frame(mode: u16, misc: u8) -> Vec<u8> {
+        build_command(&make_payload(mode, 1.0, 0x20, b"VDC\0\0\0\0\0", misc, 0x01))
+    }
+
+    #[test]
+    fn hold_and_minmax_are_offered_as_a_plain_switch() {
+        let proto = Ut181aProtocol::new();
+        let m = parse_measurement(&make_payload(
+            0x1111,
+            1.0,
+            0x20,
+            b"VDC\0\0\0\0\0",
+            0x00,
+            0x01,
+        ))
+        .unwrap();
+
+        for setting in [Setting::Hold, Setting::MinMax] {
+            let choices = proto.choices(setting, &m);
+            assert_eq!(
+                choices.iter().map(|c| c.id).collect::<Vec<_>>(),
+                vec![0, 1],
+                "{setting}"
+            );
+            assert_eq!(
+                choices.iter().map(|c| c.label.as_ref()).collect::<Vec<_>>(),
+                vec!["off", "on"],
+                "{setting}"
+            );
+            assert!(choices[0].current, "{setting} is off");
+        }
+        // Peak is a mode variant on this meter, not a setting of its own.
+        assert!(proto.choices(Setting::Peak, &m).is_empty());
+    }
+
+    #[test]
+    fn a_minmax_reading_marks_the_on_state() {
+        let proto = Ut181aProtocol::new();
+        let m = parse_measurement(&minmax_payload(0x3111)).unwrap();
+        assert!(proto.choices(Setting::MinMax, &m)[1].current);
+    }
+
+    /// Continuity is one of the functions the vendor app disables REL on.
+    #[test]
+    fn rel_is_not_offered_where_the_vendor_disables_it() {
+        let proto = Ut181aProtocol::new();
+        let cont = parse_measurement(&make_payload(
+            0x5121,
+            1.0,
+            0x20,
+            b"\0\0\0\0\0\0\0\0",
+            0x00,
+            0x01,
+        ))
+        .unwrap();
+        assert!(!mode::rel_supported(cont.mode_raw));
+        assert!(proto.choices(Setting::Rel, &cont).is_empty());
+    }
+
+    #[test]
+    fn selecting_minmax_sends_the_single_argument_byte() {
+        let mock = MockTransport::new(vec![
+            plain_frame(0x3111, 0x00),
+            ok_reply(),
+            build_command(&minmax_payload(0x3111)),
+        ]);
+        let mut proto = Ut181aProtocol::new();
+        proto.select(&mock, Setting::MinMax, 1).expect("recording");
+        // AB CD | len 04 00 | 04 (SET_MIN_MAX) 01 | checksum 04+00+04+01 = 0x09.
+        assert_eq!(
+            only_write(&mock),
+            vec![0xAB, 0xCD, 0x04, 0x00, 0x04, 0x01, 0x09, 0x00]
+        );
+    }
+
+    #[test]
+    fn selecting_hold_sends_the_button_press() {
+        let mock = MockTransport::new(vec![
+            plain_frame(0x3111, 0x00),
+            ok_reply(),
+            plain_frame(0x3111, 0x80),
+        ]);
+        let mut proto = Ut181aProtocol::new();
+        proto.select(&mock, Setting::Hold, 1).expect("held");
+        assert_eq!(
+            only_write(&mock),
+            vec![0xAB, 0xCD, 0x04, 0x00, 0x12, 0x5A, 0x70, 0x00]
+        );
+    }
+
+    #[test]
+    fn selecting_rel_flips_nibble_zero_of_the_mode_word() {
+        let mock = MockTransport::new(vec![
+            plain_frame(0x1111, 0x00),
+            ok_reply(),
+            // The REL frame format (misc format_type 1) is what lights REL.
+            build_command(&make_relative_payload(0x1112, 2.0, 10.0, 12.0)),
+        ]);
+        let mut proto = Ut181aProtocol::new();
+        proto.select(&mock, Setting::Rel, 1).expect("relative");
+        // SET_MODE 0x1112, the REL companion of 0x1111.
+        assert_eq!(
+            only_write(&mock),
+            vec![0xAB, 0xCD, 0x05, 0x00, 0x01, 0x12, 0x11, 0x29, 0x00]
+        );
+    }
+
+    #[test]
+    fn a_setting_already_in_the_state_sends_nothing() {
+        let mock = MockTransport::new(vec![plain_frame(0x3111, 0x80)]);
+        let mut proto = Ut181aProtocol::new();
+        proto.select(&mock, Setting::Hold, 1).expect("already held");
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    #[test]
+    fn an_er_reply_rejects_a_hold() {
+        let mock = MockTransport::new(vec![plain_frame(0x3111, 0x00), er_reply()]);
+        let mut proto = Ut181aProtocol::new();
+        let err = proto.select(&mock, Setting::Hold, 1).unwrap_err();
+        assert!(matches!(err, Error::CommandRejected(_)), "{err}");
+    }
+
+    #[test]
+    fn a_state_the_meter_lacks_costs_no_io() {
+        let (mut proto, mock) = proto_in(0x1111, 0);
+        mock.written.borrow_mut().clear();
+        let err = proto.select(&mock, Setting::MinMax, 2).unwrap_err();
+        assert!(matches!(err, Error::UnsupportedCommand(_)), "{err}");
+        assert!(mock.written.borrow().is_empty());
     }
 
     /// Every command the profile advertises must be accepted from a mode that

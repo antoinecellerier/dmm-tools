@@ -1,6 +1,6 @@
 use super::specs_ut61b_plus as specs_b;
 use super::specs_ut61d_plus as specs;
-use super::{ModeEntry, ModeTables, RangeInfo, m, r};
+use super::{AC_PEAK_MODES, ModeEntry, ModeTables, RangeInfo, m, r};
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
@@ -241,6 +241,10 @@ const DIAL: &[DialPosition] = &[
 impl ModeTables for Ut61dPlusTable {
     const DIAL_POSITIONS: &'static [DialPosition] = DIAL;
     const MODEL_NAME: &'static str = "UNI-T UT61D+";
+
+    fn peak_modes(&self) -> &'static [Mode] {
+        AC_PEAK_MODES
+    }
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_> {
         match mode {

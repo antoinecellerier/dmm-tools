@@ -2,12 +2,12 @@ use crate::Dmm;
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::protocol::cycle::FlagSetting;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use crate::protocol::ut61eplus::tables::{self, DeviceTable};
 use crate::protocol::{
     AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice, DeviceProfile, Protocol, Setting, Stability,
-    unsupported_setting,
 };
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
@@ -810,6 +810,90 @@ impl MockProtocol {
         Ok(())
     }
 
+    /// The states a flag-backed setting offers in the live scenario.
+    ///
+    /// The mock stands in for a UT61E+: HOLD, REL and MIN/MAX everywhere,
+    /// MIN/MAX as the MAX/MIN ring with no AVG, and Peak only where the
+    /// meter reacts to it — `send_command` ignores "peak" on the DC
+    /// scenarios, so offering it there would list a state select cannot
+    /// reach.
+    fn flag_states(&self, setting: FlagSetting) -> &'static [u16] {
+        match setting {
+            FlagSetting::Hold | FlagSetting::Rel => &[0, 1],
+            FlagSetting::MinMax => &[0, 1, 2],
+            FlagSetting::Peak if self.peak_applies() => &[0, 1, 2],
+            FlagSetting::Peak => &[],
+        }
+    }
+
+    /// Whether the Peak command does anything in the live scenario.
+    fn peak_applies(&self) -> bool {
+        !matches!(
+            self.current_scenario().id,
+            MockMode::DcV | MockMode::DcMa | MockMode::OhmOl
+        )
+    }
+
+    /// Which state a flag-backed setting is in, from the mock's own state
+    /// rather than a reading the caller may have kept.
+    fn flag_state(&self, setting: FlagSetting) -> u16 {
+        match setting {
+            FlagSetting::Hold => u16::from(self.hold),
+            FlagSetting::Rel => u16::from(self.rel),
+            FlagSetting::MinMax => match self.minmax_state {
+                MinMaxState::Off => 0,
+                MinMaxState::Max => 1,
+                MinMaxState::Min => 2,
+            },
+            FlagSetting::Peak => match self.peak_state {
+                PeakState::Off => 0,
+                PeakState::Max => 1,
+                PeakState::Min => 2,
+            },
+        }
+    }
+
+    /// Press the setting's button, or send its exit command, until the mock
+    /// is in state `id` — the same presses the real driver would send, so
+    /// MIN/MAX still locks the range and Peak still ends MIN/MAX.
+    fn select_flag(&mut self, setting: FlagSetting, id: u16) -> Result<()> {
+        if !self.flag_states(setting).contains(&id) {
+            return Err(Error::UnsupportedCommand(format!(
+                "{} state {id} in {}",
+                setting.setting(),
+                self.current_scenario().mode
+            )));
+        }
+        let (press, exit) = match setting {
+            FlagSetting::Hold => ("hold", "hold"),
+            FlagSetting::Rel => ("rel", "rel"),
+            FlagSetting::MinMax => ("minmax", "exit_minmax"),
+            FlagSetting::Peak => ("peak", "exit_peak"),
+        };
+        if id == 0 {
+            if self.flag_state(setting) != 0 {
+                self.send_command(&NullTransport, exit)?;
+            }
+            return Ok(());
+        }
+        // One press per state plus one, the same budget `cycle::walk` gives
+        // a ring it is stepping.
+        for _ in 0..self.flag_states(setting).len() + 1 {
+            if self.flag_state(setting) == id {
+                return Ok(());
+            }
+            self.send_command(&NullTransport, press)?;
+        }
+        if self.flag_state(setting) == id {
+            Ok(())
+        } else {
+            Err(Error::CommandRejected(format!(
+                "{} never reached state {id}",
+                setting.setting()
+            )))
+        }
+    }
+
     /// Elapsed seconds since the current scenario started. Uses
     /// `checked_duration_since` so a backward clock jump returns 0 instead of
     /// panicking.
@@ -1184,8 +1268,17 @@ impl Protocol for MockProtocol {
         if setting == Setting::Range {
             return self.range_choices();
         }
-        if setting != Setting::Mode {
-            return Vec::new();
+        if let Some(flag) = FlagSetting::of(setting) {
+            let live = self.flag_state(flag);
+            return self
+                .flag_states(flag)
+                .iter()
+                .map(|&id| Choice {
+                    id,
+                    label: flag.label(id),
+                    current: id == live,
+                })
+                .collect();
         }
         let live = self.current_mode();
         let Some(group) = MOCK_MODE_GROUPS.iter().find(|g| g.contains(&live)) else {
@@ -1208,8 +1301,8 @@ impl Protocol for MockProtocol {
         if setting == Setting::Range {
             return self.select_range(id);
         }
-        if setting != Setting::Mode {
-            return Err(unsupported_setting(setting));
+        if let Some(flag) = FlagSetting::of(setting) {
+            return self.select_flag(flag, id);
         }
         let scenario = MockMode::from_choice_id(id)
             .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
@@ -2134,6 +2227,96 @@ mod tests {
         proto.scenario_started -= Duration::from_secs(60);
         proto.request_measurement(&transport).unwrap();
         assert_ne!(proto.current_mode(), MockMode::AcVHz);
+    }
+
+    // --- Flag-backed settings ----------------------------------------------
+
+    #[test]
+    fn every_flag_setting_round_trips() {
+        let transport = NullTransport;
+        // AC V: the one scenario where all four settings do something.
+        let mut proto = MockProtocol::with_mode(MockMode::AcV);
+        for (setting, states) in [
+            (Setting::Hold, &[1u16, 0][..]),
+            (Setting::Rel, &[1, 0][..]),
+            (Setting::MinMax, &[1, 2, 1, 0][..]),
+            (Setting::Peak, &[1, 2, 1, 0][..]),
+        ] {
+            for &id in states {
+                proto.select(&transport, setting, id).expect("switched");
+                let m = proto.request_measurement(&transport).unwrap();
+                let live: Vec<u16> = proto
+                    .choices(setting, &m)
+                    .iter()
+                    .filter(|c| c.current)
+                    .map(|c| c.id)
+                    .collect();
+                assert_eq!(live, vec![id], "{setting} -> {id}");
+            }
+        }
+    }
+
+    #[test]
+    fn flag_choices_are_named_like_the_badges() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::AcV);
+        let m = proto.request_measurement(&transport).unwrap();
+        let labels = |setting| -> Vec<String> {
+            proto
+                .choices(setting, &m)
+                .iter()
+                .map(|c| c.label.to_string())
+                .collect()
+        };
+        assert_eq!(labels(Setting::Hold), vec!["off", "on"]);
+        assert_eq!(labels(Setting::MinMax), vec!["off", "MAX", "MIN"]);
+        assert_eq!(labels(Setting::Peak), vec!["off", "P-MAX", "P-MIN"]);
+    }
+
+    /// The mock stands in for a UT61E+, which ignores Peak on DC.
+    #[test]
+    fn peak_is_not_offered_where_the_meter_ignores_it() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(proto.choices(Setting::Peak, &m).is_empty());
+        assert!(proto.select(&transport, Setting::Peak, 1).is_err());
+        // The other three are still offered.
+        assert_eq!(proto.choices(Setting::MinMax, &m).len(), 3);
+    }
+
+    #[test]
+    fn selecting_peak_ends_minmax_and_the_other_way_round() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::AcV);
+        proto.select(&transport, Setting::MinMax, 2).unwrap();
+        proto.select(&transport, Setting::Peak, 1).unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(m.flags.peak_max);
+        assert!(
+            !m.flags.min && !m.flags.max,
+            "MIN/MAX ends when peak starts"
+        );
+
+        proto.select(&transport, Setting::MinMax, 1).unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(m.flags.max);
+        assert!(
+            !m.flags.peak_max && !m.flags.peak_min,
+            "peak ends when MIN/MAX starts"
+        );
+    }
+
+    /// Selecting MIN/MAX locks the range, as the meter does while recording.
+    #[test]
+    fn minmax_selected_by_name_still_locks_the_range() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        proto.select(&transport, Setting::MinMax, 1).unwrap();
+        let err = proto.select(&transport, Setting::Range, 2).unwrap_err();
+        assert!(matches!(err, Error::CommandRejected(_)), "{err}");
+        proto.select(&transport, Setting::MinMax, 0).unwrap();
+        proto.select(&transport, Setting::Range, 2).expect("free");
     }
 
     // --- Range selection ---------------------------------------------------
