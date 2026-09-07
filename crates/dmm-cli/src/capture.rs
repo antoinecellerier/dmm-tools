@@ -1268,7 +1268,10 @@ pub(crate) fn run_capture_step(
                 false,
                 &mut errors,
             )? {
-                Watched::Ready(m) => settled = m,
+                Watched::Ready(m) => {
+                    driver.prove_command(cmd);
+                    settled = m;
+                }
                 Watched::TimedOut(last) => {
                     // No samples: filing pre-command frames as the step's result
                     // is what made a dead command look like a captured state.

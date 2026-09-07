@@ -41,7 +41,8 @@ holding for `2 × STABLE_FRAMES` frames, count as settled; two rungs alternating
 Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`, against the
 frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT` = 3 s. If it
 does not, the step records `<command> did nothing; the meter still shows …` in its `error`
-rather than filing pre-command frames — the fix for the stale-frame class of bug.
+rather than filing pre-command frames — the fix for the stale-frame class of bug. A command
+step whose flag flipped proves that setting for the sweeps (D), the way a sweep hit does.
 
 A dial-only step captures without a keypress: read the instruction, turn the dial, and the
 samples appear. The per-step confirmation prompt after them is what F defers to the end of the run.

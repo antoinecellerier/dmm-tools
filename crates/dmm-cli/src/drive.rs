@@ -83,6 +83,20 @@ impl Driver {
         }
     }
 
+    /// A command step whose flag flipped has proven its setting as surely as
+    /// a sweep hit: REL refused on the next mode is then that mode's doing.
+    pub(crate) fn prove_command(&mut self, command: &str) {
+        let setting = match command {
+            "hold" => Setting::Hold,
+            "rel" => Setting::Rel,
+            "minmax" | "exit_minmax" => Setting::MinMax,
+            "range" | "auto" => Setting::Range,
+            "peak" | "exit_peak" => Setting::Peak,
+            _ => return,
+        };
+        self.prove(setting);
+    }
+
     /// Whether a refusal of this setting says anything about the protocol.
     fn proven(&self, setting: Setting) -> bool {
         self.proven.contains(&setting)
@@ -833,7 +847,10 @@ mod tests {
     #[test]
     fn a_refusal_of_a_proven_setting_costs_no_budget() {
         let mut driver = Driver::new(true);
-        driver.prove(Setting::MinMax);
+        // The MIN/MAX command step flipped the flag earlier in the run.
+        driver.prove_command("minmax");
+        assert!(driver.proven(Setting::MinMax));
+        driver.prove_command("light");
         let report = swept_by(
             Refuses::boxed(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
             "dcv",
