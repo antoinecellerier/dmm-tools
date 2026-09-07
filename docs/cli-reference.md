@@ -539,6 +539,7 @@ dmm-cli completions powershell >> $PROFILE
 
 Guided protocol capture tool for bug reports and verification. Walks you
 through measuring known values in each mode and records the raw protocol data.
+See [Capture Design](capture-design.md) for the workflow's design and report schema.
 
 ```
 dmm-cli capture [OPTIONS]

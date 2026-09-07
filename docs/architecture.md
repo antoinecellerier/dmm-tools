@@ -108,6 +108,8 @@ All protocol logic lives in the library crate. The `capture` subcommand provides
 interactive wizard for protocol verification, outputting YAML reports with raw bytes.
 Uses `console` crate for colored output and single-key input, `serde_yaml` for report format.
 Capture reports are written atomically (temp file + rename) for crash safety.
+The capture workflow's design — detectors, trust tiers, report schema — is in
+`docs/capture-design.md`.
 
 ### dmm-gui
 
