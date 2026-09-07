@@ -534,10 +534,14 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[ModeChoice])
                 Popup::close_all(&ctx);
             }
             let is_open = ComboBox::is_open(&ctx, button_id);
-            if was_open && !is_open {
-                // Closed by any route — pick, Esc, Tab, click elsewhere:
-                // focus goes back to the readout rather than to the top of
-                // the Tab order.
+            // A click outside the list that closed it may have landed on
+            // another widget, which took the focus as it was drawn; that
+            // click is the user's choice of focus. A click on an entry is
+            // `activated` and not "elsewhere" in this sense.
+            let clicked_away = inner.response.clicked_elsewhere() && !activated;
+            if was_open && !is_open && !clicked_away {
+                // Closed by pick, Esc or Tab: focus goes back to the readout
+                // rather than to the top of the Tab order.
                 ctx.memory_mut(|m| m.request_focus(button_id));
             }
             ctx.data_mut(|d| d.insert_temp(was_open_key, is_open));
