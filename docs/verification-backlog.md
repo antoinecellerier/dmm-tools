@@ -123,6 +123,14 @@ These protocols are implemented based on reverse engineering (vendor software
 decompilation, community implementations) but have **never been tested against
 real hardware**. Every aspect needs end-to-end verification.
 
+The ask in every family's issue (#3, #4, #5, #7, #12, #13, #14, #15, #16) is
+the same: `dmm-cli --device <id> capture --unverified`, attach the report.
+The issue's checklist is `dmm-cli --device <id> capture --list-steps
+--format md`, so a step a report confirms flips `.verified()` in code, is
+credited here in the same commit, and the checklist is regenerated into the
+issue. The items below are the wire-level questions those steps answer,
+plus what no step reaches.
+
 **Voltcraft VC-890**:
 - Polled communication model (0x5E request → live data response)
 - Frame extraction (66-byte, AB CD header, BE16 checksum)
