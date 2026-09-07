@@ -16,7 +16,7 @@ dmm-cli <COMMAND> [OPTIONS]
 ## Description
 
 Communicates with UNI-T and Voltcraft multimeters over USB. Supports live
-measurement reading, button commands, mode switching, protocol debugging, and
+measurement reading, button commands, settings switching, protocol debugging, and
 guided data capture for verification. See [supported devices](supported-devices.md) for
 the full compatibility list.
 
@@ -76,7 +76,7 @@ there.
 The `mock` device generates synthetic measurements cycling through multiple modes
 (DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires
 no USB hardware and is useful for development, demos, and testing output formats.
-Supports the `read`, `command` and `mode` subcommands. The `info`, `debug`, and `capture`
+Supports the `read`, `command`, `get` and `set` subcommands. The `info`, `debug`, and `capture`
 subcommands require real hardware and will exit with an error when used with `mock`.
 
 #### Mock Modes
@@ -285,8 +285,9 @@ dmm-cli command <ACTION>     # send a command
 | `exit_peak` | Exit Peak Min/Max mode |
 
 `select` and `select2` are raw presses — each steps the dial position's ring
-one function on, whatever that turns out to be. To name the mode you want
-instead, use [`dmm-cli mode`](#dmm-cli-mode).
+one function on, whatever that turns out to be. To name the mode, range, HOLD,
+REL, MIN/MAX or Peak value you want instead of stepping to it, use
+[`dmm-cli set`](#dmm-cli-set).
 
 #### UT181A commands
 
@@ -302,8 +303,9 @@ instead, use [`dmm-cli mode`](#dmm-cli-mode).
 | `save` | Save current measurement to device memory |
 
 `range` is refused in fixed-range modes; `rel` in continuity, diode,
-differential temperature and any mode's Hz or Peak variant. Switching function
-within a dial position (V AC → V AC Hz, …) is [`dmm-cli mode`](#dmm-cli-mode).
+differential temperature and any mode's Hz or Peak variant. Naming the function
+within a dial position (V AC → V AC Hz, …), the range, HOLD, REL or MIN/MAX you
+want is [`dmm-cli set`](#dmm-cli-set).
 
 #### UT171 commands
 
@@ -326,7 +328,8 @@ within a dial position (V AC → V AC Hz, …) is [`dmm-cli mode`](#dmm-cli-mode
 | `select` | SHIFT/SETUP button (steps the dial position's functions) |
 
 None of these is confirmed on hardware (issues #13 and #14). Naming the
-function you want instead of stepping to it is [`dmm-cli mode`](#dmm-cli-mode).
+function, range, HOLD, REL or MIN/MAX value you want instead of stepping to it
+is [`dmm-cli set`](#dmm-cli-set).
 
 #### UT8803
 
@@ -339,16 +342,108 @@ dmm-cli command hold
 dmm-cli --device ut181a command hold
 ```
 
-### dmm-cli mode
+### dmm-cli get
 
-Switch the meter's function within the current dial position without touching
-the dial (UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and mock). Run with no
-arguments to list the modes reachable now:
+List what the meter's settings can be switched to from where it sits now —
+mode, range, HOLD, REL, MIN/MAX and Peak, without touching the dial
+(UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and mock). Run with no argument
+for every setting that offers a choice.
 
 ```
-dmm-cli mode                 # list modes (* = live) and what to type for each
-dmm-cli mode <CHOICE>        # switch, by label
+dmm-cli get                  # one row per setting, * = the live value
+dmm-cli get <SETTING>        # that setting alone, with what to type for each value
 ```
+
+| Argument | Default | Description |
+|---|---|---|
+| `<SETTING>` | all of them | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
+
+| Option | Default | Description |
+|---|---|---|
+| `--format <FORMAT>` | `text` | Output format: `text` or `json`. |
+| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
+
+Every listing is relative to where the meter sits: it names what can be reached
+without turning the dial. A setting the meter offers no choice in — Peak on a
+meter that has none, a dial position with a single function — is left out of
+the whole-meter listing, and on its own prints a note and exits 0. While the
+meter is autoranging, the range row says which rung it picked.
+
+```
+$ dmm-cli get
+Settings for UT61E+ (DC V):
+  mode   * DC V  AC+DC V
+  range  * Auto  2.2V  22V  220V  1000V  (auto-ranging in 22V)
+
+Tip: switch one by name, e.g. dmm-cli set range 22V
+```
+
+`--format json` prints one object per invocation — not one per line, unlike
+`read` — on stdout, with any note on stderr. `get <SETTING>` is flat:
+
+```json
+{
+  "device": "UT61E+",
+  "mode": "DC V",
+  "range": "22V",
+  "setting": "range",
+  "current": "Auto",
+  "choices": [
+    { "id": 0, "label": "Auto", "current": true },
+    { "id": 1, "label": "2.2V", "current": false }
+  ]
+}
+```
+
+`get` with no setting nests the same blocks under `settings`, one per setting
+that offers a choice:
+
+```json
+{
+  "device": "UT61E+",
+  "mode": "DC V",
+  "range": "22V",
+  "settings": [
+    { "setting": "mode", "current": "DC V", "choices": [] },
+    { "setting": "range", "current": "Auto", "choices": [] }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `device` | Model name of the connected meter. |
+| `mode` | What it is measuring, as `read` reports it. |
+| `range` | The live range label, autoranging included. |
+| `setting` | Which setting the block is about. |
+| `current` | Label the meter sits on, or `null` when the list names none. |
+| `choices[].id` | The number `set` resolves a label to; `0` is Auto for `range`, off for `hold`, `rel`, `minmax` and `peak`. |
+| `choices[].label` | Display label — what `set` takes. |
+| `choices[].current` | Whether the meter is on this value. |
+
+**Example:**
+
+```bash
+dmm-cli get                        # everything switchable from where it sits
+dmm-cli get range                  # the ranges the current mode offers
+dmm-cli get --format json          # one object, for scripts
+dmm-cli --device ut181a get mode
+```
+
+### dmm-cli set
+
+Switch one of the meter's settings by name. Run without a choice to list what
+that setting reaches from here:
+
+```
+dmm-cli set <SETTING>            # list the values (* = live) and what to type for each
+dmm-cli set <SETTING> <CHOICE>   # switch, by label
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `<SETTING>` | | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
+| `<CHOICE>` | list them | Label to switch to, or a unique fragment of one. |
 
 | Option | Default | Description |
 |---|---|---|
@@ -356,21 +451,21 @@ dmm-cli mode <CHOICE>        # switch, by label
 
 `<CHOICE>` is a label from the listing, case-insensitive, or a fragment of one
 that matches a single label — the listing prints the shortest such fragment
-beside each mode, quoted where a shell needs it. After switching, `dmm-cli`
-waits up to 2 s for the meter to report the new mode and prints
-`Meter now in <mode>`; a refused or unconfirmed switch exits non-zero — check
-the dial position. A dial position with nothing to switch to prints a note and
-exits 0. REL and manual range are [`dmm-cli command`](#dmm-cli-command)
-buttons, not modes.
+beside each value, quoted where a shell needs it. `on`, `off` and `auto` are
+labels like any other. After switching, `dmm-cli` waits up to 2 s for the meter
+to report the new value and prints what it now is (`Meter now in AC+DC V`,
+`Meter now auto-ranging (22V)`, `Meter now HOLD on`); a refused or unconfirmed
+switch exits non-zero — check the dial position, and for a range that the input
+is within it. A setting with nothing to switch to prints a note and exits 0.
 
 The UT61+/UT161 meters take no set-mode command, so a switch there is a short
-burst of SELECT and Hz/% presses, each one read back from the meter until the
-target mode shows — slower than a single command, and audible on the meter.
-One caveat comes with that: Hz and Duty % are reported with the same mode byte
-from every dial position, and each `dmm-cli` run starts without history, so
-while the meter shows one of them `dmm-cli mode` lists only Hz and Duty %. To
-get back to the position's voltage or current function, press SELECT once
-(`dmm-cli command select`); the next `mode` lists everything again. The GUI
+burst of SELECT, Hz/% or RANGE presses, each one read back from the meter until
+the target shows — slower than a single command, and audible on the meter. One
+caveat comes with that: Hz and Duty % are reported with the same mode byte from
+every dial position, and each `dmm-cli` run starts without history, so while the
+meter shows one of them `get mode` lists only Hz and Duty %. To get back to the
+position's voltage or current function, press SELECT once
+(`dmm-cli command select`); the next `get mode` lists everything again. The GUI
 keeps track across readings, so it only has this gap until it has seen one
 other mode from the position.
 
@@ -381,10 +476,12 @@ confirmed them yet — see `docs/verification-backlog.md`.
 **Example:**
 
 ```bash
-dmm-cli mode                       # a UT61E+ on the V⎓ dial: DC V, AC+DC V
-dmm-cli mode "AC+DC V"
-dmm-cli --device ut181a mode
-dmm-cli --device ut181a mode "V AC Hz"
+dmm-cli set mode                   # a UT61E+ on the V⎓ dial: DC V, AC+DC V
+dmm-cli set mode "AC+DC V"
+dmm-cli set range 22V              # pin the range
+dmm-cli set range auto
+dmm-cli set hold on
+dmm-cli --device ut181a set mode "V AC Hz"
 ```
 
 ### dmm-cli debug

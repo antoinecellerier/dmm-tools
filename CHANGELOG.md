@@ -17,7 +17,7 @@
 
 ### CLI
 
-- **`dmm-cli mode` lists and switches the meter's function** — reach Hz, LPF or AC+DC without turning the dial, on the UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and the mock.
+- **`dmm-cli get` and `set` list and switch the meter's settings by name** — mode, range, HOLD, REL, MIN/MAX and Peak without touching the meter, on the UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and the mock; `get --format json` for scripts.
 - **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".

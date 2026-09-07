@@ -164,7 +164,7 @@ disambiguates: a meter last seen in AC mV is on the mV position.
 | NCV | NCV | — |
 
 Every row of this table, ring orders included, was walked on a real UT61E+ on
-2026-09-07 with `dmm-cli mode` (leads open, `RUST_LOG=dmm_lib=debug`) —
+2026-09-07 with `dmm-cli set mode` (leads open, `RUST_LOG=dmm_lib=debug`) —
 **[VERIFIED]**:
 
 - SELECT (0x4C): DC V ↔ AC+DC V on V⎓; AC V ↔ LPF V on V~; DC ↔ AC on mV, µA,

@@ -16,6 +16,8 @@
 - `dmm-cli info` — connect and print device name (queried from meter)
 - `dmm-cli read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`, `--scale`, `--offset`, `--unit`
 - `dmm-cli command` — send button presses: hold, min-max, exit-min-max, rel, range, auto, select, select2, light, peak-min-max, exit-peak
+- `dmm-cli get` — list what the meter's mode, range, HOLD, REL, MIN/MAX and Peak can be switched to from where it sits, with `--format` (text/json)
+- `dmm-cli set` — switch one of those settings by label
 - `dmm-cli debug` — raw hex dump mode for protocol development
 - `dmm-cli capture` — guided protocol capture wizard for bug reports. YAML output with raw bytes, structured flags, user screen confirmations. Supports `--steps` filter, auto-resume, and freeform captures.
 

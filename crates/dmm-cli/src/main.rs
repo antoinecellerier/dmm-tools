@@ -7,6 +7,7 @@ use console::style;
 use dmm_lib::binary_help::ConnectedAdapters;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice};
+use dmm_lib::protocol::{Choice, Setting};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transform::{FactorError, Transform};
 use log::{error, info};
@@ -93,10 +94,27 @@ Example: --device mock read --mock-mode dcv"
         /// Command name (run without arguments to see available commands)
         action: Option<String>,
     },
-    /// Switch the meter's function without touching the dial.
-    /// Run with no arguments to list the modes reachable from where it sits now.
-    Mode {
-        /// Mode label, or a unique fragment of one, from the listing (run without arguments to see them)
+    /// List what the meter's settings can be switched to from where it sits now.
+    /// Run with no argument for every setting that offers a choice.
+    Get {
+        /// Setting to list (omit for all of them)
+        #[arg(value_enum)]
+        setting: Option<SettingArg>,
+        /// Output format
+        #[arg(long, default_value = "text")]
+        format: SettingsFormat,
+        /// Pin mock device to a specific mode (only with --device mock).
+        /// Without this, mock cycles through all modes automatically.
+        #[arg(long)]
+        mock_mode: Option<String>,
+    },
+    /// Switch one of the meter's settings without touching the meter.
+    /// Run without a choice to list what that setting reaches from here.
+    Set {
+        /// Setting to switch
+        #[arg(value_enum)]
+        setting: SettingArg,
+        /// Value label, or a unique fragment of one, from the listing (run without it to see them)
         choice: Option<String>,
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, mock cycles through all modes automatically.
@@ -207,6 +225,40 @@ fn parse_offset(s: &str) -> Result<f64, String> {
 pub enum OutputFormat {
     Text,
     Csv,
+    Json,
+}
+
+/// What `get` and `set` name on the command line, one word per
+/// [`dmm_lib::protocol::Setting`].
+#[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
+enum SettingArg {
+    Mode,
+    Range,
+    Hold,
+    Rel,
+    Minmax,
+    Peak,
+}
+
+impl From<SettingArg> for Setting {
+    fn from(arg: SettingArg) -> Self {
+        match arg {
+            SettingArg::Mode => Setting::Mode,
+            SettingArg::Range => Setting::Range,
+            SettingArg::Hold => Setting::Hold,
+            SettingArg::Rel => Setting::Rel,
+            SettingArg::Minmax => Setting::MinMax,
+            SettingArg::Peak => Setting::Peak,
+        }
+    }
+}
+
+/// How `get` prints a listing. Separate from [`OutputFormat`] because a
+/// settings listing has no CSV form — reusing that enum would take
+/// `--format csv` and then have nothing to do with it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
+enum SettingsFormat {
+    Text,
     Json,
 }
 
@@ -325,9 +377,16 @@ fn main() {
             mock_mode,
         ),
         Cmd::Command { action } if !device.requires_hardware => cmd_command(device, None, action),
-        Cmd::Mode { choice, mock_mode } if !device.requires_hardware => {
-            cmd_mode(device, None, choice, mock_mode)
-        }
+        Cmd::Get {
+            setting,
+            format,
+            mock_mode,
+        } if !device.requires_hardware => cmd_get(device, None, setting, format, mock_mode),
+        Cmd::Set {
+            setting,
+            choice,
+            mock_mode,
+        } if !device.requires_hardware => cmd_set(device, None, setting, choice, mock_mode),
         Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
             eprintln!(
                 "{} This command requires real hardware (not supported with --device {}).",
@@ -358,10 +417,16 @@ fn main() {
             &transform.to_transform(),
         ),
         Cmd::Command { action } => cmd_command(device, adapter, action),
-        Cmd::Mode {
+        Cmd::Get {
+            setting,
+            format,
+            mock_mode: _,
+        } => cmd_get(device, adapter, setting, format, None),
+        Cmd::Set {
+            setting,
             choice,
             mock_mode: _,
-        } => cmd_mode(device, adapter, choice, None),
+        } => cmd_set(device, adapter, setting, choice, None),
         Cmd::Debug { count, interval_ms } => cmd_debug(device, adapter, count, interval_ms),
         Cmd::Capture {
             output,
@@ -936,109 +1001,267 @@ fn print_available_commands(
     Ok(())
 }
 
-/// The one thing a user can do about a mode the meter won't take. Both
-/// failures below end here, so they end in the same words.
+/// The one thing a user can do about a value the meter won't take. Every
+/// failure below ends here, so they end in the same words.
 const CHECK_DIAL_HINT: &str = "check the dial position";
 
-/// How long to wait for a switched mode to show up in the measurement
+/// How long to wait for a switched setting to show up in the measurement
 /// stream. The meter acknowledges the command before the frame carrying the
-/// new mode arrives, so "accepted" and "switched" are two separate answers.
-const MODE_SWITCH_TIMEOUT: Duration = Duration::from_secs(2);
+/// new value arrives, so "accepted" and "switched" are two separate answers.
+const SWITCH_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Gap between polls while waiting for that frame.
-const MODE_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// List or switch the modes the meter reaches from its current dial position.
-///
-/// Both paths need a reading first: the choices are relative to what the
-/// meter is measuring now, so there is nothing to list or match against
-/// until one frame has arrived.
-fn cmd_mode(
-    device: &'static SelectableDevice,
-    adapter: Option<&str>,
-    choice: Option<String>,
-    mock_mode: Option<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if device.requires_hardware {
-        let mut dmm = open_with_help(device, adapter)?;
-        run_mode(&mut dmm, choice)
-    } else {
-        let mut dmm = open_mock_device(mock_mode)?;
-        run_mode(&mut dmm, choice)
+/// The [`Setting::Range`] choice id the library gives autorange. The CLI needs
+/// it to know which row carries the live-range note and which sentence a
+/// switch to it gets.
+const AUTO_RANGE_ID: u16 = 0;
+
+/// Shown in place of the live value when the meter is on something the list
+/// does not name — a manual range outside the family's ladder, say.
+const UNKNOWN_LIVE: &str = "?";
+
+/// How a setting is named in a listing header and in the lines `set` prints:
+/// Title case, or the capitals the meter's own buttons carry.
+fn setting_title(setting: Setting) -> &'static str {
+    match setting {
+        Setting::Mode => "Mode",
+        Setting::Range => "Range",
+        Setting::Hold => "HOLD",
+        Setting::Rel => "REL",
+        Setting::MinMax => "MIN/MAX",
+        Setting::Peak => "Peak",
     }
 }
 
-/// Whether the meter has a mode to switch *to* from where its dial sits.
+/// The same name where the sentence wants a plural ("has no switchable
+/// modes"). The button settings read as themselves.
+fn setting_plural(setting: Setting) -> &'static str {
+    match setting {
+        Setting::Mode => "modes",
+        Setting::Range => "ranges",
+        _ => setting_title(setting),
+    }
+}
+
+/// What a user can do about a value the meter won't take. A range is refused
+/// for one reason the dial does not cover: the reading is off the end of it.
+fn switch_hint(setting: Setting) -> &'static str {
+    match setting {
+        Setting::Range => "check the dial position and that the input is within the range",
+        _ => CHECK_DIAL_HINT,
+    }
+}
+
+/// Whether the meter has a value to switch *to* from where it sits.
 ///
-/// A single choice is the live mode on its own — the single-variant UT181A
+/// A single choice is the live value on its own — the single-variant UT181A
 /// dials (Ohm, nS, Cap, Hz, Duty, Pulse Width) report exactly that — so it
 /// means what an empty list means: nothing to list, and nothing to switch.
-fn offers_a_mode_switch(choices: &[dmm_lib::protocol::Choice]) -> bool {
+fn offers_a_switch(choices: &[Choice]) -> bool {
     choices.len() > 1
 }
 
-fn run_mode<T: dmm_lib::transport::Transport>(
+/// The value the meter sits on, or [`UNKNOWN_LIVE`] when the list marks none.
+fn live_label(choices: &[Choice]) -> &str {
+    choices
+        .iter()
+        .find(|c| c.current)
+        .map_or(UNKNOWN_LIVE, |c| c.label.as_ref())
+}
+
+/// The rung autoranging picked, for the note beside an Auto row — "Auto" on
+/// its own never says what the meter settled on. `None` unless this is the
+/// range list and the meter is autoranging.
+fn auto_range_rung<'a>(
+    setting: Setting,
+    choices: &[Choice],
+    reading: &'a dmm_lib::measurement::Measurement,
+) -> Option<&'a str> {
+    (setting == Setting::Range && choices.iter().any(|c| c.current && c.id == AUTO_RANGE_ID))
+        .then(|| reading.range_label.as_ref())
+}
+
+/// The note a setting — or, with `None`, the whole meter — with nothing to
+/// switch prints before exiting 0. Only the dial changes what modes and
+/// ranges a position offers; a button setting the meter lacks is not
+/// something the dial can fix, so it gets no such advice.
+fn print_nothing_to_switch(model_name: &str, setting: Option<Setting>, mode: &str) {
+    let what = setting.map_or("settings", setting_plural);
+    let advice = match setting {
+        None | Some(Setting::Mode | Setting::Range) => " \u{2014} use the dial",
+        Some(_) => "",
+    };
+    eprintln!(
+        "{} {model_name} has no switchable {what} in {mode}{advice}.",
+        style("Note:").yellow(),
+    );
+}
+
+/// The dim line under a listing. Both listings end in one, so both name a
+/// switch that can actually be made — and preferably one that would change
+/// something.
+fn print_tip(lead: &str, setting: Setting, choices: &[Choice]) {
+    let example = choices.iter().find(|c| !c.current).unwrap_or(&choices[0]);
+    eprintln!(
+        "\n{}",
+        style(format!(
+            "Tip: {lead}, e.g. dmm-cli set {} {}",
+            setting.name(),
+            quote_for_shell(&shortest_fragment(choices, example))
+        ))
+        .dim()
+    );
+}
+
+/// List what one setting, or every setting, reaches from where the meter sits.
+///
+/// Both need a reading first: the choices are relative to what the meter is
+/// measuring now, so there is nothing to list until one frame has arrived.
+fn cmd_get(
+    device: &'static SelectableDevice,
+    adapter: Option<&str>,
+    setting: Option<SettingArg>,
+    format: SettingsFormat,
+    mock_mode: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let setting = setting.map(Setting::from);
+    if device.requires_hardware {
+        let mut dmm = open_with_help(device, adapter)?;
+        run_get(&mut dmm, setting, format)
+    } else {
+        let mut dmm = open_mock_device(mock_mode)?;
+        run_get(&mut dmm, setting, format)
+    }
+}
+
+/// Switch one setting, or list what it reaches when no choice was named.
+fn cmd_set(
+    device: &'static SelectableDevice,
+    adapter: Option<&str>,
+    setting: SettingArg,
+    choice: Option<String>,
+    mock_mode: Option<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let setting = Setting::from(setting);
+    if device.requires_hardware {
+        let mut dmm = open_with_help(device, adapter)?;
+        run_set(&mut dmm, setting, choice)
+    } else {
+        let mut dmm = open_mock_device(mock_mode)?;
+        run_set(&mut dmm, setting, choice)
+    }
+}
+
+fn run_get<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
+    setting: Option<Setting>,
+    format: SettingsFormat,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let model_name = dmm.profile().model_name;
+    let reading = dmm.request_measurement()?;
+
+    let Some(setting) = setting else {
+        let offered = offered_settings(dmm, &reading);
+        return match format {
+            SettingsFormat::Json => print_json(settings_json(model_name, &reading, &offered)),
+            SettingsFormat::Text => {
+                if offered.is_empty() {
+                    print_nothing_to_switch(model_name, None, &reading.mode);
+                    return Ok(());
+                }
+                print_settings_table(model_name, &reading, &offered);
+                let (setting, choices) = offered
+                    .iter()
+                    .find(|(_, choices)| choices.iter().any(|c| !c.current))
+                    .unwrap_or(&offered[0]);
+                print_tip("switch one by name", *setting, choices);
+                Ok(())
+            }
+        };
+    };
+
+    let choices = dmm.choices(setting, &reading);
+    match format {
+        SettingsFormat::Json => {
+            print_json(one_setting_json(model_name, &reading, setting, &choices))
+        }
+        SettingsFormat::Text => {
+            if !offers_a_switch(&choices) {
+                print_nothing_to_switch(model_name, Some(setting), &reading.mode);
+                return Ok(());
+            }
+            print_choices(model_name, setting, &reading, &choices);
+            print_tip("the right column switches to it", setting, &choices);
+            Ok(())
+        }
+    }
+}
+
+fn run_set<T: dmm_lib::transport::Transport>(
+    dmm: &mut dmm_lib::Dmm<T>,
+    setting: Setting,
     choice: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let model_name = dmm.profile().model_name;
     let reading = dmm.request_measurement()?;
-    let choices = dmm.choices(dmm_lib::protocol::Setting::Mode, &reading);
+    let choices = dmm.choices(setting, &reading);
 
-    if !offers_a_mode_switch(&choices) {
-        eprintln!(
-            "{} {model_name} has no switchable modes in {} \u{2014} use the dial.",
-            style("Note:").yellow(),
-            reading.mode,
-        );
+    if !offers_a_switch(&choices) {
+        print_nothing_to_switch(model_name, Some(setting), &reading.mode);
         return Ok(());
     }
 
     let Some(input) = choice else {
-        print_mode_choices(model_name, &choices);
-        // Name a fragment that is actually in the column above, and
-        // preferably one that would change something.
-        let example = choices.iter().find(|c| !c.current).unwrap_or(&choices[0]);
-        eprintln!(
-            "\n{}",
-            style(format!(
-                "Tip: the right column switches to that mode, e.g. dmm-cli mode {}",
-                quote_for_shell(&shortest_fragment(&choices, example))
-            ))
-            .dim()
-        );
+        print_choices(model_name, setting, &reading, &choices);
+        print_tip("the right column switches to it", setting, &choices);
         return Ok(());
     };
 
-    let target = match resolve_mode_choice(&choices, &input) {
+    let target = match resolve_choice(&choices, &input) {
         Ok(target) => target,
-        Err(NoModeMatch::Ambiguous(labels)) => {
-            return Err(format!("ambiguous mode: {input} matches {}", labels.join(", ")).into());
+        Err(NoMatch::Ambiguous(labels)) => {
+            return Err(
+                format!("ambiguous {setting}: {input} matches {}", labels.join(", ")).into(),
+            );
         }
-        Err(NoModeMatch::Unknown) => {
-            print_mode_choices(model_name, &choices);
-            return Err(format!("unknown mode: {input}").into());
+        Err(NoMatch::Unknown) => {
+            print_choices(model_name, setting, &reading, &choices);
+            return Err(format!("unknown {setting}: {input}").into());
         }
     };
     let (id, label) = (target.id, target.label.to_string());
 
     if target.current {
-        println!("{} {label}", style("Meter is already in").green());
+        println!(
+            "{}",
+            style(switch_message(
+                false,
+                setting,
+                id,
+                &label,
+                &reading.range_label
+            ))
+            .green()
+        );
         return Ok(());
     }
     // Everything below reads from `choices` again, so drop the borrow.
     let mut live = choices
         .iter()
         .find(|c| c.current)
-        .map_or_else(|| reading.mode.to_string(), |c| c.label.to_string());
+        .map(|c| c.label.to_string());
 
-    if let Err(e) = dmm.select(dmm_lib::protocol::Setting::Mode, id) {
+    if let Err(e) = dmm.select(setting, id) {
         // A refusal is the meter answering, not a fault: say so, and say what
         // the user can do about it.
         return Err(match e {
-            dmm_lib::error::Error::CommandRejected(detail) => {
-                format!("the meter refused {label}: {detail} \u{2014} {CHECK_DIAL_HINT}").into()
-            }
+            dmm_lib::error::Error::CommandRejected(detail) => format!(
+                "the meter refused {label}: {detail} \u{2014} {}",
+                switch_hint(setting)
+            )
+            .into(),
             other => Box::<dyn std::error::Error>::from(other),
         });
     }
@@ -1047,13 +1270,23 @@ fn run_mode<T: dmm_lib::transport::Transport>(
     loop {
         match dmm.request_measurement() {
             Ok(reading) => {
-                let choices = dmm.choices(dmm_lib::protocol::Setting::Mode, &reading);
+                let choices = dmm.choices(setting, &reading);
                 if choices.iter().any(|c| c.id == id && c.current) {
-                    println!("{} {label}", style("Meter now in").green());
+                    println!(
+                        "{}",
+                        style(switch_message(
+                            true,
+                            setting,
+                            id,
+                            &label,
+                            &reading.range_label
+                        ))
+                        .green()
+                    );
                     return Ok(());
                 }
                 if let Some(c) = choices.iter().find(|c| c.current) {
-                    live = c.label.to_string();
+                    live = Some(c.label.to_string());
                 }
             }
             // The frame straddling the switch can be unreadable, and the meter
@@ -1062,39 +1295,80 @@ fn run_mode<T: dmm_lib::transport::Transport>(
             // parses, and the 2 s deadline below is what gives up. Anything
             // else is a real fault.
             Err(e) if matches!(e.kind(), ErrorKind::Protocol | ErrorKind::Timeout) => {
-                log::warn!("waiting for the mode switch: {e}");
+                log::warn!("waiting for the {setting} switch: {e}");
             }
             Err(e) => return Err(e.into()),
         }
         if std::time::Instant::now()
             .checked_duration_since(started)
             .unwrap_or_default()
-            >= MODE_SWITCH_TIMEOUT
+            >= SWITCH_TIMEOUT
         {
             break;
         }
-        std::thread::sleep(MODE_POLL_INTERVAL);
+        std::thread::sleep(POLL_INTERVAL);
     }
 
-    Err(format!("Meter did not switch (still {live}) \u{2014} {CHECK_DIAL_HINT}").into())
+    let still = live.map_or_else(String::new, |l| format!(" (still {l})"));
+    Err(format!(
+        "Meter did not switch{still} \u{2014} {}",
+        switch_hint(setting)
+    )
+    .into())
 }
 
-/// One line per choice, `*` on the live one, and the least that has to be
-/// typed to reach it in a second column — so the fragment form is on screen
-/// rather than something to guess at.
-fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::Choice]) {
-    println!("Modes for {}:", style(model_name).bold());
+/// What `set` prints once the meter is on `label`, in that setting's own
+/// words. `now` picks between the line a switch prints and the one a meter
+/// that was already there prints, so the pair cannot drift apart.
+fn switch_message(now: bool, setting: Setting, id: u16, label: &str, range_label: &str) -> String {
+    let lead = if now { "Meter now" } else { "Meter is already" };
+    match setting {
+        Setting::Mode => format!("{lead} in {label}"),
+        // "Auto" alone leaves the user guessing which rung that is.
+        Setting::Range if id == AUTO_RANGE_ID => format!("{lead} auto-ranging ({range_label})"),
+        Setting::Range => format!("{lead} in {label} (manual range)"),
+        Setting::Hold | Setting::Rel => format!("{lead} {} {label}", setting_title(setting)),
+        // Off is not a state the meter is "in", it is one it has left.
+        Setting::MinMax | Setting::Peak if id == 0 => {
+            format!("{lead} out of {}", setting_title(setting))
+        }
+        Setting::MinMax | Setting::Peak => format!("{lead} in {label}"),
+    }
+}
+
+/// The listing a single setting gets: a header naming the meter and, for
+/// everything but the mode itself, what it is measuring.
+fn choices_listing(
+    model_name: &str,
+    setting: Setting,
+    reading: &dmm_lib::measurement::Measurement,
+    choices: &[Choice],
+) -> Vec<String> {
+    let header = match setting {
+        Setting::Mode => format!("Modes for {}:", style(model_name).bold()),
+        _ => format!(
+            "{} for {} in {}:",
+            setting_title(setting),
+            style(model_name).bold(),
+            reading.mode
+        ),
+    };
+    let rung = auto_range_rung(setting, choices, reading);
     let width = choices
         .iter()
         .map(|c| c.label.chars().count())
         .max()
         .unwrap_or(0);
-    for c in choices {
+    let rows = choices.iter().map(|c| {
         // Pad the bare label: styling it first would count escape bytes
         // toward the width and misalign the column.
         let pad = " ".repeat(width - c.label.chars().count());
-        println!(
-            "{} {}{pad}  {}",
+        let note = match rung {
+            Some(rung) if c.id == AUTO_RANGE_ID => format!("  (now {rung})"),
+            _ => String::new(),
+        };
+        format!(
+            "{} {}{pad}  {}{}",
             if c.current {
                 style("*").green().bold()
             } else {
@@ -1102,21 +1376,179 @@ fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::Choice]) {
             },
             c.label,
             style(quote_for_shell(&shortest_fragment(choices, c))).dim(),
-        );
+            style(note).dim(),
+        )
+    });
+    std::iter::once(header).chain(rows).collect()
+}
+
+/// One line per choice, `*` on the live one, and the least that has to be
+/// typed to reach it in a second column — so the fragment form is on screen
+/// rather than something to guess at.
+fn print_choices(
+    model_name: &str,
+    setting: Setting,
+    reading: &dmm_lib::measurement::Measurement,
+    choices: &[Choice],
+) {
+    for line in choices_listing(model_name, setting, reading, choices) {
+        println!("{line}");
     }
 }
 
-/// The shortest run of words from a choice's label that [`resolve_mode_choice`]
+/// The whole-meter listing: one row per setting, its name, the live value
+/// behind a `*`, then what else it reaches. The labels themselves stand in
+/// for the per-setting listing's fragment column.
+fn settings_listing(
+    model_name: &str,
+    reading: &dmm_lib::measurement::Measurement,
+    offered: &[(Setting, Vec<Choice>)],
+) -> Vec<String> {
+    let header = format!(
+        "Settings for {} ({}):",
+        style(model_name).bold(),
+        reading.mode
+    );
+    let name_width = offered
+        .iter()
+        .map(|(s, _)| s.name().chars().count())
+        .max()
+        .unwrap_or(0);
+    let live_width = offered
+        .iter()
+        .map(|(_, choices)| live_label(choices).chars().count())
+        .max()
+        .unwrap_or(0);
+    let rows = offered.iter().map(|(setting, choices)| {
+        let live = live_label(choices);
+        let others: Vec<&str> = choices
+            .iter()
+            .filter(|c| !c.current)
+            .map(|c| c.label.as_ref())
+            .collect();
+        let note = match auto_range_rung(*setting, choices, reading) {
+            Some(rung) => format!("  (auto-ranging in {rung})"),
+            None => String::new(),
+        };
+        format!(
+            "  {:name_width$}  {} {}{}  {}{}",
+            setting.name(),
+            if choices.iter().any(|c| c.current) {
+                style("*").green().bold()
+            } else {
+                style(" ")
+            },
+            live,
+            " ".repeat(live_width - live.chars().count()),
+            others.join("  "),
+            style(note).dim(),
+        )
+    });
+    std::iter::once(header).chain(rows).collect()
+}
+
+fn print_settings_table(
+    model_name: &str,
+    reading: &dmm_lib::measurement::Measurement,
+    offered: &[(Setting, Vec<Choice>)],
+) {
+    for line in settings_listing(model_name, reading, offered) {
+        println!("{line}");
+    }
+}
+
+/// Every setting the meter offers a real choice in, in [`Setting::ALL`]
+/// order. One that offers nothing — an unimplemented Peak, a dial with a
+/// single mode — is simply absent, from both the table and the JSON.
+fn offered_settings<T: dmm_lib::transport::Transport>(
+    dmm: &dmm_lib::Dmm<T>,
+    reading: &dmm_lib::measurement::Measurement,
+) -> Vec<(Setting, Vec<Choice>)> {
+    Setting::ALL
+        .iter()
+        .map(|&s| (s, dmm.choices(s, reading)))
+        .filter(|(_, choices)| offers_a_switch(choices))
+        .collect()
+}
+
+/// The three fields every `get --format json` object leads with: which meter
+/// answered, and what it was measuring when it did.
+fn json_header(
+    model_name: &str,
+    reading: &dmm_lib::measurement::Measurement,
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut header = serde_json::Map::new();
+    header.insert("device".into(), model_name.into());
+    header.insert("mode".into(), reading.mode.as_ref().into());
+    header.insert("range".into(), reading.range_label.as_ref().into());
+    header
+}
+
+/// One setting's block, used flat for `get <SETTING>` and as an element of
+/// the `settings` array for `get`.
+fn setting_json(setting: Setting, choices: &[Choice]) -> serde_json::Value {
+    serde_json::json!({
+        "setting": setting.name(),
+        "current": choices.iter().find(|c| c.current).map(|c| c.label.as_ref()),
+        "choices": choices
+            .iter()
+            .map(|c| serde_json::json!({"id": c.id, "label": c.label, "current": c.current}))
+            .collect::<Vec<_>>(),
+    })
+}
+
+/// What `get <SETTING> --format json` prints. Flat, not nested: the query
+/// asked about one setting, so its fields sit beside the header's.
+fn one_setting_json(
+    model_name: &str,
+    reading: &dmm_lib::measurement::Measurement,
+    setting: Setting,
+    choices: &[Choice],
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut doc = json_header(model_name, reading);
+    if let serde_json::Value::Object(fields) = setting_json(setting, choices) {
+        doc.extend(fields);
+    }
+    doc
+}
+
+/// What `get --format json` prints: the header, then a block per setting the
+/// meter offers a choice in.
+fn settings_json(
+    model_name: &str,
+    reading: &dmm_lib::measurement::Measurement,
+    offered: &[(Setting, Vec<Choice>)],
+) -> serde_json::Map<String, serde_json::Value> {
+    let mut doc = json_header(model_name, reading);
+    doc.insert(
+        "settings".into(),
+        offered
+            .iter()
+            .map(|(s, choices)| setting_json(*s, choices))
+            .collect(),
+    );
+    doc
+}
+
+/// One object per invocation, and nothing else on stdout — `get --format json`
+/// answers a question rather than streaming, unlike `read`.
+fn print_json(
+    doc: serde_json::Map<String, serde_json::Value>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::Value::Object(doc))?
+    );
+    Ok(())
+}
+/// The shortest run of words from a choice's label that [`resolve_choice`]
 /// maps back to that same choice — what the listing shows as the thing to type.
 ///
 /// Runs are tried shortest first, measured in characters and, at equal length,
 /// leftmost first. A label whose every fragment is shared with a longer label
 /// ("V AC" beside "V AC Hz") has no shorter form: the whole label comes back,
 /// which the resolver takes as an exact match.
-fn shortest_fragment(
-    choices: &[dmm_lib::protocol::Choice],
-    target: &dmm_lib::protocol::Choice,
-) -> String {
+fn shortest_fragment(choices: &[Choice], target: &Choice) -> String {
     let label = typeable(&target.label);
     let words: Vec<&str> = label.split_whitespace().collect();
     let mut runs: Vec<(usize, usize, String)> = Vec::new();
@@ -1129,7 +1561,7 @@ fn shortest_fragment(
     runs.sort_by_key(|(chars, start, _)| (*chars, *start));
     runs.into_iter()
         .map(|(_, _, run)| run)
-        .find(|run| resolve_mode_choice(choices, run).is_ok_and(|hit| hit.id == target.id))
+        .find(|run| resolve_choice(choices, run).is_ok_and(|hit| hit.id == target.id))
         // Only reachable for a label the runs above cannot reproduce (empty,
         // or oddly spaced); the label itself is always an exact match.
         .unwrap_or(label)
@@ -1168,7 +1600,7 @@ fn quote_for_shell(text: &str) -> String {
 
 /// Why a `mode` argument picked out no single choice.
 #[derive(Debug)]
-enum NoModeMatch<'a> {
+enum NoMatch<'a> {
     /// The input is a fragment of these labels, and equal to none of them.
     Ambiguous(Vec<&'a str>),
     /// The input is a fragment of no label at all.
@@ -1180,13 +1612,10 @@ enum NoModeMatch<'a> {
 ///
 /// An exact match wins outright — a label that is also a substring of longer
 /// ones ("V AC" beside "V AC Hz") stays reachable by typing it in full.
-fn resolve_mode_choice<'a>(
-    choices: &'a [dmm_lib::protocol::Choice],
-    input: &str,
-) -> Result<&'a dmm_lib::protocol::Choice, NoModeMatch<'a>> {
+fn resolve_choice<'a>(choices: &'a [Choice], input: &str) -> Result<&'a Choice, NoMatch<'a>> {
     let needle = typeable(input.trim());
     if needle.is_empty() {
-        return Err(NoModeMatch::Unknown);
+        return Err(NoMatch::Unknown);
     }
     if let Some(exact) = choices.iter().find(|c| typeable(&c.label) == needle) {
         return Ok(exact);
@@ -1197,8 +1626,8 @@ fn resolve_mode_choice<'a>(
         .collect();
     match hits[..] {
         [one] => Ok(one),
-        [] => Err(NoModeMatch::Unknown),
-        _ => Err(NoModeMatch::Ambiguous(
+        [] => Err(NoMatch::Unknown),
+        _ => Err(NoMatch::Ambiguous(
             hits.iter().map(|c| c.label.as_ref()).collect(),
         )),
     }
@@ -1279,7 +1708,6 @@ mod tests {
     use super::*;
     use dmm_lib::measurement::MeasuredValue;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;
-    use dmm_lib::protocol::{Choice, Setting};
 
     #[test]
     fn clap_parse_list() {
@@ -1466,23 +1894,77 @@ mod tests {
     }
 
     #[test]
-    fn clap_parse_mode() {
-        let cli = Cli::try_parse_from(["dmm-cli", "mode", "V AC Hz"]).unwrap();
+    fn clap_parse_set() {
+        let cli = Cli::try_parse_from(["dmm-cli", "set", "mode", "V AC Hz"]).unwrap();
         match cli.command {
-            Cmd::Mode { choice, .. } => assert_eq!(choice.as_deref(), Some("V AC Hz")),
-            _ => panic!("expected Mode"),
+            Cmd::Set {
+                setting, choice, ..
+            } => {
+                assert_eq!(setting, SettingArg::Mode);
+                assert_eq!(choice.as_deref(), Some("V AC Hz"));
+            }
+            _ => panic!("expected Set"),
         }
     }
 
     #[test]
-    fn clap_parse_mode_no_choice_lists_modes() {
-        let cli = Cli::try_parse_from(["dmm-cli", "mode"]).unwrap();
+    fn clap_parse_set_no_choice_lists_them() {
+        let cli = Cli::try_parse_from(["dmm-cli", "set", "minmax"]).unwrap();
         match cli.command {
-            Cmd::Mode { choice, mock_mode } => {
+            Cmd::Set {
+                setting,
+                choice,
+                mock_mode,
+            } => {
+                assert_eq!(setting, SettingArg::Minmax);
                 assert!(choice.is_none());
                 assert!(mock_mode.is_none());
             }
-            _ => panic!("expected Mode"),
+            _ => panic!("expected Set"),
+        }
+    }
+
+    /// Every setting is nameable, and every name maps to the library's own.
+    #[test]
+    fn clap_parse_get_takes_each_setting_name() {
+        for (word, setting) in [
+            ("mode", Setting::Mode),
+            ("range", Setting::Range),
+            ("hold", Setting::Hold),
+            ("rel", Setting::Rel),
+            ("minmax", Setting::MinMax),
+            ("peak", Setting::Peak),
+        ] {
+            let cli = Cli::try_parse_from(["dmm-cli", "get", word]).unwrap();
+            match cli.command {
+                Cmd::Get {
+                    setting: Some(arg),
+                    format,
+                    ..
+                } => {
+                    assert_eq!(Setting::from(arg), setting, "{word}");
+                    assert_eq!(format, SettingsFormat::Text, "{word}");
+                }
+                _ => panic!("expected Get {word}"),
+            }
+            assert_eq!(setting.name(), word);
+        }
+    }
+
+    /// A settings listing has no CSV form, so `--format csv` is rejected
+    /// rather than silently printing text.
+    #[test]
+    fn clap_parse_get_takes_only_text_and_json() {
+        assert!(Cli::try_parse_from(["dmm-cli", "get", "--format", "json"]).is_ok());
+        assert!(Cli::try_parse_from(["dmm-cli", "get", "--format", "csv"]).is_err());
+    }
+
+    #[test]
+    fn clap_parse_get_no_setting_lists_everything() {
+        let cli = Cli::try_parse_from(["dmm-cli", "get"]).unwrap();
+        match cli.command {
+            Cmd::Get { setting, .. } => assert!(setting.is_none()),
+            _ => panic!("expected Get"),
         }
     }
 
@@ -1496,14 +1978,14 @@ mod tests {
 
     /// A user retypes what the listing printed, in whatever case they like.
     #[test]
-    fn resolve_mode_choice_matches_a_label_case_insensitively() {
+    fn resolve_choice_matches_a_label_case_insensitively() {
         let choices = [
             mode_choice(0x1111, "V AC", true),
             mode_choice(0x1121, "V AC Hz", false),
         ];
         for input in ["V AC Hz", "v ac hz", "  V Ac hZ  "] {
             assert_eq!(
-                resolve_mode_choice(&choices, input).ok().map(|c| c.id),
+                resolve_choice(&choices, input).ok().map(|c| c.id),
                 Some(0x1121),
                 "{input}"
             );
@@ -1513,7 +1995,7 @@ mod tests {
     /// The symbols the meters print are not on a keyboard, so their spelled
     /// out forms match too.
     #[test]
-    fn resolve_mode_choice_accepts_typeable_spellings() {
+    fn resolve_choice_accepts_typeable_spellings() {
         let choices = [
             mode_choice(0x06, "Ω", true),
             mode_choice(0x0C, "DC µA", false),
@@ -1521,7 +2003,7 @@ mod tests {
         ];
         for (input, id) in [("ohm", 0x06), ("Ω", 0x06), ("dc ua", 0x0C), ("c", 0x14)] {
             assert_eq!(
-                resolve_mode_choice(&choices, input).ok().map(|c| c.id),
+                resolve_choice(&choices, input).ok().map(|c| c.id),
                 Some(id),
                 "{input}"
             );
@@ -1531,14 +2013,14 @@ mod tests {
     /// Typing a whole label is tedious, so a fragment of exactly one of them
     /// is enough.
     #[test]
-    fn resolve_mode_choice_matches_a_unique_label_fragment() {
+    fn resolve_choice_matches_a_unique_label_fragment() {
         let temps = [
             mode_choice(0x4211, "Temp °C", true),
             mode_choice(0x4221, "Temp °C T2", false),
             mode_choice(0x4231, "Temp °C T1-T2", false),
         ];
         assert_eq!(
-            resolve_mode_choice(&temps, "t1-t2").ok().map(|c| c.id),
+            resolve_choice(&temps, "t1-t2").ok().map(|c| c.id),
             Some(0x4231)
         );
         let volts = [
@@ -1547,7 +2029,7 @@ mod tests {
             mode_choice(0x1131, "V AC Peak", false),
         ];
         assert_eq!(
-            resolve_mode_choice(&volts, "hz").ok().map(|c| c.id),
+            resolve_choice(&volts, "hz").ok().map(|c| c.id),
             Some(0x1121)
         );
     }
@@ -1555,14 +2037,14 @@ mod tests {
     /// A label that is also a fragment of longer ones stays reachable: typed
     /// in full it is an exact match, and an exact match wins outright.
     #[test]
-    fn resolve_mode_choice_prefers_an_exact_label_over_a_fragment() {
+    fn resolve_choice_prefers_an_exact_label_over_a_fragment() {
         let choices = [
             mode_choice(0x1111, "V AC", true),
             mode_choice(0x1121, "V AC Hz", false),
             mode_choice(0x1131, "V AC Peak", false),
         ];
         assert_eq!(
-            resolve_mode_choice(&choices, "v ac").ok().map(|c| c.id),
+            resolve_choice(&choices, "v ac").ok().map(|c| c.id),
             Some(0x1111)
         );
     }
@@ -1570,15 +2052,15 @@ mod tests {
     /// A fragment of several labels picks none of them, and says which ones
     /// it was torn between — that is what the user has to narrow down.
     #[test]
-    fn resolve_mode_choice_reports_an_ambiguous_fragment() {
+    fn resolve_choice_reports_an_ambiguous_fragment() {
         let choices = [
             mode_choice(0x4211, "Temp °C", true),
             mode_choice(0x4221, "Temp °C T2", false),
             mode_choice(0x4231, "Temp °C T1-T2", false),
             mode_choice(0x4241, "Temp °C T2-T1", false),
         ];
-        match resolve_mode_choice(&choices, "temp") {
-            Err(NoModeMatch::Ambiguous(labels)) => assert_eq!(
+        match resolve_choice(&choices, "temp") {
+            Err(NoMatch::Ambiguous(labels)) => assert_eq!(
                 labels,
                 ["Temp °C", "Temp °C T2", "Temp °C T1-T2", "Temp °C T2-T1"]
             ),
@@ -1661,9 +2143,7 @@ mod tests {
             for c in &choices {
                 let fragment = shortest_fragment(&choices, c);
                 assert_eq!(
-                    resolve_mode_choice(&choices, &fragment)
-                        .ok()
-                        .map(|hit| hit.id),
+                    resolve_choice(&choices, &fragment).ok().map(|hit| hit.id),
                     Some(c.id),
                     "{fragment:?} for {}",
                     c.label
@@ -1699,19 +2179,55 @@ mod tests {
         verification_issue: None,
     };
 
-    /// A meter whose dial reaches `labels`, sitting on the first of them.
-    ///
-    /// `post_switch_errors` are handed out in place of the readings that
-    /// follow a successful switch — the meter garbling a frame or going quiet
-    /// across a SET_MODE.
+    /// The ids a family gives a setting's choices. Mode ids are the family's
+    /// own, spaced like the UT181A's variant nibble; every other setting
+    /// counts from zero, where zero is off or auto.
+    fn fake_choice_id(setting: Setting, index: usize) -> u16 {
+        match setting {
+            Setting::Mode => fake_mode_id(index),
+            _ => index as u16,
+        }
+    }
+
+    /// One setting the fake meter offers: its labels, and which of them it
+    /// sits on.
+    type FakeList = (Setting, &'static [&'static str], usize);
+
+    /// A meter offering exactly `lists`, each sitting where the list says.
     struct FakeMeter {
-        labels: Vec<&'static str>,
-        live: usize,
+        lists: Vec<FakeList>,
+        live: std::collections::HashMap<Setting, usize>,
         switched: bool,
+        quirks: Quirks,
+        /// What `select` was asked for, so a test can assert the meter was
+        /// left alone.
+        selected: SelectedIds,
+    }
+
+    /// How the fake meter misbehaves after a `select`. The default is a meter
+    /// that simply works.
+    #[derive(Default)]
+    struct Quirks {
+        /// Handed out in place of the readings that follow a successful
+        /// switch — a garbled frame, or a meter gone quiet across it.
         post_switch_errors: Vec<dmm_lib::error::Error>,
-        /// Ids `select` was asked for, so a test can assert it was left
-        /// alone.
-        selected: std::sync::Arc<std::sync::Mutex<Vec<u16>>>,
+        /// What every `select` answers instead of switching.
+        refusal: Option<&'static str>,
+        /// Takes the command and then never reports the new value.
+        deaf: bool,
+    }
+
+    impl FakeMeter {
+        fn labels(&self, setting: Setting) -> Option<&'static [&'static str]> {
+            self.lists
+                .iter()
+                .find(|(s, _, _)| *s == setting)
+                .map(|(_, labels, _)| *labels)
+        }
+
+        fn live_index(&self, setting: Setting) -> usize {
+            self.live.get(&setting).copied().unwrap_or(0)
+        }
     }
 
     impl dmm_lib::protocol::Protocol for FakeMeter {
@@ -1723,12 +2239,23 @@ mod tests {
             &mut self,
             _t: &dyn dmm_lib::transport::Transport,
         ) -> dmm_lib::error::Result<dmm_lib::measurement::Measurement> {
-            if self.switched && !self.post_switch_errors.is_empty() {
-                return Err(self.post_switch_errors.remove(0));
+            if self.switched && !self.quirks.post_switch_errors.is_empty() {
+                return Err(self.quirks.post_switch_errors.remove(0));
             }
+            let mode_index = self.live_index(Setting::Mode);
+            let mode = self
+                .labels(Setting::Mode)
+                .map_or("DC V", |labels| labels[mode_index]);
+            // Autoranging settled on 22V; a manual rung reports itself.
+            let range_index = self.live_index(Setting::Range);
+            let range = match self.labels(Setting::Range) {
+                Some(labels) if range_index != 0 => labels[range_index],
+                _ => "22V",
+            };
             Ok(dmm_lib::measurement::Measurement {
-                mode: self.labels[self.live].into(),
-                mode_raw: fake_mode_id(self.live),
+                mode: mode.into(),
+                mode_raw: fake_mode_id(mode_index),
+                range_label: range.into(),
                 ..dmm_lib::measurement::Measurement::test_fixture(
                     MeasuredValue::Normal(1.0),
                     "V",
@@ -1760,16 +2287,20 @@ mod tests {
 
         fn choices(
             &self,
-            _setting: Setting,
+            setting: Setting,
             _current: &dmm_lib::measurement::Measurement,
         ) -> Vec<Choice> {
-            self.labels
+            let Some(labels) = self.labels(setting) else {
+                return Vec::new();
+            };
+            let live = self.live_index(setting);
+            labels
                 .iter()
                 .enumerate()
                 .map(|(i, label)| Choice {
-                    id: fake_mode_id(i),
+                    id: fake_choice_id(setting, i),
                     label: std::borrow::Cow::Borrowed(label),
-                    current: i == self.live,
+                    current: i == live,
                 })
                 .collect()
         }
@@ -1777,35 +2308,47 @@ mod tests {
         fn select(
             &mut self,
             _t: &dyn dmm_lib::transport::Transport,
-            _setting: Setting,
+            setting: Setting,
             id: u16,
         ) -> dmm_lib::error::Result<()> {
-            self.selected.lock().expect("poisoned").push(id);
-            match (0..self.labels.len()).find(|&i| fake_mode_id(i) == id) {
+            self.selected.lock().expect("poisoned").push((setting, id));
+            if let Some(detail) = self.quirks.refusal {
+                return Err(dmm_lib::error::Error::CommandRejected(detail.to_string()));
+            }
+            let Some(len) = self.labels(setting).map(<[&str]>::len) else {
+                return Err(dmm_lib::error::Error::UnsupportedCommand(format!(
+                    "{setting} cannot be set on this meter"
+                )));
+            };
+            match (0..len).find(|&i| fake_choice_id(setting, i) == id) {
                 Some(i) => {
-                    self.live = i;
+                    if !self.quirks.deaf {
+                        self.live.insert(setting, i);
+                    }
                     self.switched = true;
                     Ok(())
                 }
                 None => Err(dmm_lib::error::Error::UnsupportedCommand(format!(
-                    "mode {id:#06x}"
+                    "{setting} {id:#06x}"
                 ))),
             }
         }
     }
 
-    type SelectedIds = std::sync::Arc<std::sync::Mutex<Vec<u16>>>;
+    type SelectedIds = std::sync::Arc<std::sync::Mutex<Vec<(Setting, u16)>>>;
+    type FakeDmm = dmm_lib::Dmm<dmm_lib::transport::NullTransport>;
 
-    fn fake_meter(
-        labels: &[&'static str],
-        post_switch_errors: Vec<dmm_lib::error::Error>,
-    ) -> (dmm_lib::Dmm<dmm_lib::transport::NullTransport>, SelectedIds) {
+    fn fake_meter(lists: &[FakeList]) -> (FakeDmm, SelectedIds) {
+        fake_meter_with(lists, Quirks::default())
+    }
+
+    fn fake_meter_with(lists: &[FakeList], quirks: Quirks) -> (FakeDmm, SelectedIds) {
         let selected: SelectedIds = Default::default();
         let meter = FakeMeter {
-            labels: labels.to_vec(),
-            live: 0,
+            lists: lists.to_vec(),
+            live: lists.iter().map(|&(s, _, live)| (s, live)).collect(),
             switched: false,
-            post_switch_errors,
+            quirks,
             selected: std::sync::Arc::clone(&selected),
         };
         let dmm = dmm_lib::Dmm::new(dmm_lib::transport::NullTransport, Box::new(meter))
@@ -1813,69 +2356,347 @@ mod tests {
         (dmm, selected)
     }
 
+    /// A meter on the V AC dial: two modes, four ranges, HOLD, and no Peak.
+    fn a_full_meter() -> [FakeList; 4] {
+        [
+            (Setting::Mode, &["V AC", "V AC Hz"], 0),
+            (Setting::Range, &["Auto", "2.2V", "22V", "220V"], 0),
+            (Setting::Hold, &["off", "on"], 0),
+            (Setting::MinMax, &["off", "max", "min"], 0),
+        ]
+    }
+
+    /// The lines a listing is made of, with the styling stripped so the test
+    /// reads the same whether or not colour is on.
+    fn plain(lines: Vec<String>) -> Vec<String> {
+        lines
+            .into_iter()
+            .map(|l| console::strip_ansi_codes(&l).into_owned())
+            .collect()
+    }
+
     /// A single-variant dial (the UT181A Ohm, nS, Cap, Hz, Duty and Pulse
-    /// Width positions) reports one choice: the mode the meter is already in.
-    /// Listing it, and tipping the user to switch to it, is noise — it counts
-    /// as nothing to switch, exactly as an empty list does.
+    /// Width positions) reports one choice: the value the meter is already
+    /// on. Listing it, and tipping the user to switch to it, is noise — it
+    /// counts as nothing to switch, exactly as an empty list does.
     #[test]
-    fn only_the_live_mode_is_not_a_switch_to_offer() {
-        assert!(!offers_a_mode_switch(&[]));
-        assert!(!offers_a_mode_switch(&[mode_choice(
-            0x5111,
-            "Resistance",
-            true
-        )]));
-        assert!(offers_a_mode_switch(&[
+    fn only_the_live_value_is_not_a_switch_to_offer() {
+        assert!(!offers_a_switch(&[]));
+        assert!(!offers_a_switch(&[mode_choice(0x5111, "Resistance", true)]));
+        assert!(offers_a_switch(&[
             mode_choice(0x1111, "V AC", true),
             mode_choice(0x1121, "V AC Hz", false),
         ]));
     }
 
-    /// And the command says so and stops: exit 0, meter untouched, whether or
+    /// And both commands say so and stop: exit 0, meter untouched, whether or
     /// not a choice was asked for.
     #[test]
-    fn a_dial_with_only_the_live_mode_switches_nothing() {
+    fn a_setting_with_only_the_live_value_switches_nothing() {
+        let lists: [FakeList; 1] = [(Setting::Mode, &["Resistance"], 0)];
         for arg in [None, Some("Resistance".to_string())] {
-            let (mut dmm, selected) = fake_meter(&["Resistance"], vec![]);
-            run_mode(&mut dmm, arg).expect("one choice is not a failure");
+            let (mut dmm, selected) = fake_meter(&lists);
+            run_set(&mut dmm, Setting::Mode, arg).expect("one choice is not a failure");
             assert!(
                 selected.lock().expect("poisoned").is_empty(),
                 "the meter was switched"
             );
         }
+        let (mut dmm, selected) = fake_meter(&lists);
+        run_get(&mut dmm, Some(Setting::Mode), SettingsFormat::Text).expect("nothing to list");
+        run_get(&mut dmm, None, SettingsFormat::Text).expect("nothing to list");
+        assert!(selected.lock().expect("poisoned").is_empty());
+    }
+
+    /// The whole-meter listing: one row per setting that offers a choice, the
+    /// live value behind a `*`, and the rung autoranging picked.
+    #[test]
+    fn the_settings_table_lists_every_offered_setting() {
+        let (mut dmm, _) = fake_meter(&a_full_meter());
+        let reading = dmm.request_measurement().expect("the fake meter answers");
+        let offered = offered_settings(&dmm, &reading);
+        assert_eq!(
+            offered.iter().map(|(s, _)| *s).collect::<Vec<_>>(),
+            [
+                Setting::Mode,
+                Setting::Range,
+                Setting::Hold,
+                Setting::MinMax
+            ],
+            "Peak offers nothing, so it is absent"
+        );
+        let lines = plain(settings_listing("Fake meter", &reading, &offered));
+        assert_eq!(lines[0], "Settings for Fake meter (V AC):");
+        assert_eq!(
+            &lines[1..],
+            [
+                "  mode    * V AC  V AC Hz",
+                "  range   * Auto  2.2V  22V  220V  (auto-ranging in 22V)",
+                "  hold    * off   on",
+                "  minmax  * off   max  min",
+            ]
+        );
+    }
+
+    /// The per-setting listing keeps the mode header it always had, names the
+    /// live mode for every other setting, and says which rung Auto picked.
+    #[test]
+    fn a_setting_listing_names_the_meter_and_the_live_mode() {
+        let (mut dmm, _) = fake_meter(&a_full_meter());
+        let reading = dmm.request_measurement().expect("the fake meter answers");
+
+        let modes = dmm.choices(Setting::Mode, &reading);
+        let lines = plain(choices_listing(
+            "Fake meter",
+            Setting::Mode,
+            &reading,
+            &modes,
+        ));
+        assert_eq!(lines[0], "Modes for Fake meter:");
+        assert_eq!(&lines[1..], ["* V AC     \"v ac\"", "  V AC Hz  hz"]);
+
+        let ranges = dmm.choices(Setting::Range, &reading);
+        let lines = plain(choices_listing(
+            "Fake meter",
+            Setting::Range,
+            &reading,
+            &ranges,
+        ));
+        assert_eq!(lines[0], "Range for Fake meter in V AC:");
+        assert_eq!(lines[1], "* Auto  auto  (now 22V)");
+    }
+
+    /// `get <SETTING> --format json` is one flat object: which meter, what it
+    /// is measuring, and the setting's own choices with their ids.
+    #[test]
+    fn one_setting_json_carries_the_choices_and_their_ids() {
+        let (mut dmm, _) = fake_meter(&a_full_meter());
+        let reading = dmm.request_measurement().expect("the fake meter answers");
+        let choices = dmm.choices(Setting::Range, &reading);
+        let doc = serde_json::Value::Object(one_setting_json(
+            "Fake meter",
+            &reading,
+            Setting::Range,
+            &choices,
+        ));
+        let parsed: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&doc).unwrap()).unwrap();
+        assert_eq!(parsed["device"], "Fake meter");
+        assert_eq!(parsed["mode"], "V AC");
+        assert_eq!(parsed["range"], "22V");
+        assert_eq!(parsed["setting"], "range");
+        assert_eq!(parsed["current"], "Auto");
+        assert_eq!(parsed["choices"][0]["id"], 0);
+        assert_eq!(parsed["choices"][0]["label"], "Auto");
+        assert_eq!(parsed["choices"][0]["current"], true);
+        assert_eq!(parsed["choices"][2]["id"], 2);
+        assert_eq!(parsed["choices"][2]["label"], "22V");
+        assert_eq!(parsed["choices"][2]["current"], false);
+        assert_eq!(parsed["choices"].as_array().unwrap().len(), 4);
+    }
+
+    /// `get --format json` is one object per invocation, not one per line —
+    /// and a setting the meter offers nothing in is absent, not empty.
+    #[test]
+    fn the_settings_json_omits_a_setting_with_nothing_to_offer() {
+        let (mut dmm, _) = fake_meter(&a_full_meter());
+        let reading = dmm.request_measurement().expect("the fake meter answers");
+        let offered = offered_settings(&dmm, &reading);
+        let printed = serde_json::to_string(&serde_json::Value::Object(settings_json(
+            "Fake meter",
+            &reading,
+            &offered,
+        )))
+        .unwrap();
+        assert_eq!(printed.lines().count(), 1, "one object, not a stream");
+        let parsed: serde_json::Value = serde_json::from_str(&printed).unwrap();
+        assert_eq!(parsed["device"], "Fake meter");
+        let settings = parsed["settings"].as_array().unwrap();
+        let names: Vec<&str> = settings
+            .iter()
+            .map(|s| s["setting"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["mode", "range", "hold", "minmax"]);
+        assert!(!printed.contains("peak"), "{printed}");
+        assert_eq!(settings[2]["current"], "off");
+        assert_eq!(settings[2]["choices"][1]["id"], 1);
+        assert_eq!(settings[2]["choices"][1]["label"], "on");
+    }
+
+    /// `set hold on`: the meter is asked for id 1 and confirms it.
+    #[test]
+    fn set_switches_a_button_setting_by_label() {
+        let (mut dmm, selected) = fake_meter(&a_full_meter());
+        run_set(&mut dmm, Setting::Hold, Some("on".to_string())).expect("the meter takes it");
+        assert_eq!(*selected.lock().expect("poisoned"), [(Setting::Hold, 1)]);
+    }
+
+    /// Asking for what the meter is already on costs no command at all.
+    #[test]
+    fn set_to_the_live_value_touches_nothing() {
+        let (mut dmm, selected) = fake_meter(&a_full_meter());
+        run_set(&mut dmm, Setting::Hold, Some("off".to_string())).expect("already there");
+        assert!(selected.lock().expect("poisoned").is_empty());
+    }
+
+    /// A refusal is the meter answering: the error repeats what it said and
+    /// what the user can do about it.
+    #[test]
+    fn a_refused_switch_repeats_the_meters_reason() {
+        let (mut dmm, _) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                refusal: Some("HOLD is locked out"),
+                ..Default::default()
+            },
+        );
+        let err = run_set(&mut dmm, Setting::Hold, Some("on".to_string()))
+            .expect_err("the meter refused")
+            .to_string();
+        assert!(err.contains("the meter refused on"), "{err}");
+        assert!(err.contains("HOLD is locked out"), "{err}");
+        assert!(err.contains(CHECK_DIAL_HINT), "{err}");
+    }
+
+    /// A meter that takes the command and never reports the new value fails
+    /// after the deadline, naming what it is still on.
+    #[test]
+    fn a_switch_the_meter_never_confirms_fails() {
+        let (mut dmm, selected) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                deaf: true,
+                ..Default::default()
+            },
+        );
+        let err = run_set(&mut dmm, Setting::Hold, Some("on".to_string()))
+            .expect_err("never confirmed")
+            .to_string();
+        assert!(err.contains("Meter did not switch (still off)"), "{err}");
+        assert!(err.contains(CHECK_DIAL_HINT), "{err}");
+        assert_eq!(*selected.lock().expect("poisoned"), [(Setting::Hold, 1)]);
+    }
+
+    /// A range is refused for one reason the dial does not cover, so its hint
+    /// names that reason too.
+    #[test]
+    fn a_range_that_will_not_take_says_to_check_the_input() {
+        let (mut dmm, _) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                refusal: Some("out of range"),
+                ..Default::default()
+            },
+        );
+        let err = run_set(&mut dmm, Setting::Range, Some("22V".to_string()))
+            .expect_err("the meter refused")
+            .to_string();
+        assert!(err.contains("within the range"), "{err}");
+    }
+
+    /// `set range auto` from a manual rung: Auto is id 0, and the meter is
+    /// asked for exactly that.
+    #[test]
+    fn set_range_auto_asks_for_the_autorange_id() {
+        let lists: [FakeList; 1] = [(Setting::Range, &["Auto", "2.2V", "22V"], 2)];
+        let (mut dmm, selected) = fake_meter(&lists);
+        run_set(&mut dmm, Setting::Range, Some("auto".to_string())).expect("the meter takes it");
+        assert_eq!(
+            *selected.lock().expect("poisoned"),
+            [(Setting::Range, AUTO_RANGE_ID)]
+        );
+    }
+
+    /// Each setting says what the meter now is in its own words, and the
+    /// "already" line mirrors it word for word.
+    #[test]
+    fn switch_messages_speak_each_settings_own_language() {
+        for (setting, id, label, expected) in [
+            (Setting::Mode, 0x1121, "V AC Hz", "in V AC Hz"),
+            (Setting::Range, AUTO_RANGE_ID, "Auto", "auto-ranging (22V)"),
+            (Setting::Range, 2, "22V", "in 22V (manual range)"),
+            (Setting::Hold, 1, "on", "HOLD on"),
+            (Setting::Rel, 0, "off", "REL off"),
+            (Setting::MinMax, 1, "max", "in max"),
+            (Setting::MinMax, 0, "off", "out of MIN/MAX"),
+            (Setting::Peak, 2, "P-MIN", "in P-MIN"),
+            (Setting::Peak, 0, "off", "out of Peak"),
+        ] {
+            assert_eq!(
+                switch_message(true, setting, id, label, "22V"),
+                format!("Meter now {expected}")
+            );
+            assert_eq!(
+                switch_message(false, setting, id, label, "22V"),
+                format!("Meter is already {expected}")
+            );
+        }
+    }
+
+    /// A choice that matches several, or none, names the setting it was
+    /// asked about — the wording is shared by all six.
+    #[test]
+    fn an_unresolvable_choice_names_the_setting() {
+        let lists: [FakeList; 1] = [(
+            Setting::Mode,
+            &["Temp °C", "Temp °C T2", "Temp °C T1-T2"],
+            0,
+        )];
+        let (mut dmm, selected) = fake_meter(&lists);
+        let err = run_set(&mut dmm, Setting::Mode, Some("temp".to_string()))
+            .expect_err("several match")
+            .to_string();
+        assert!(
+            err.starts_with("ambiguous mode: temp matches Temp"),
+            "{err}"
+        );
+
+        let (mut dmm, _) = fake_meter(&a_full_meter());
+        let err = run_set(&mut dmm, Setting::Range, Some("500V".to_string()))
+            .expect_err("none match")
+            .to_string();
+        assert_eq!(err, "unknown range: 500V");
+        assert!(selected.lock().expect("poisoned").is_empty());
     }
 
     /// The vendor app sleeps 100 ms after every SET_MODE, so a meter that
     /// goes quiet across the switch is expected. One timeout must not end the
     /// 2 s wait the switch just started.
     #[test]
-    fn a_mode_switch_waits_through_a_quiet_meter() {
-        let (mut dmm, _) = fake_meter(&["V AC", "V AC Hz"], vec![dmm_lib::error::Error::Timeout]);
-        run_mode(&mut dmm, Some("V AC Hz".to_string())).expect("a timeout must not end the wait");
+    fn a_switch_waits_through_a_quiet_meter() {
+        let (mut dmm, _) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                post_switch_errors: vec![dmm_lib::error::Error::Timeout],
+                ..Default::default()
+            },
+        );
+        run_set(&mut dmm, Setting::Mode, Some("V AC Hz".to_string()))
+            .expect("a timeout must not end the wait");
     }
 
     /// Everything that is not a garbled frame or a quiet meter still ends the
     /// wait: a dead link is not something more polling will fix.
     #[test]
-    fn a_mode_switch_gives_up_on_a_lost_link() {
-        let (mut dmm, _) = fake_meter(
-            &["V AC", "V AC Hz"],
-            vec![dmm_lib::error::Error::NoTransportFound],
+    fn a_switch_gives_up_on_a_lost_link() {
+        let (mut dmm, _) = fake_meter_with(
+            &a_full_meter(),
+            Quirks {
+                post_switch_errors: vec![dmm_lib::error::Error::NoTransportFound],
+                ..Default::default()
+            },
         );
-        assert!(run_mode(&mut dmm, Some("V AC Hz".to_string())).is_err());
+        assert!(run_set(&mut dmm, Setting::Mode, Some("V AC Hz".to_string())).is_err());
     }
 
     #[test]
-    fn resolve_mode_choice_rejects_anything_else() {
+    fn resolve_choice_rejects_anything_else() {
         let choices = [mode_choice(0x1111, "V AC", true)];
         // Another mode's label, the id the listing no longer prints, and an
         // empty argument — which matches nothing rather than everything.
         for input in ["V DC", "0x1111", "4369", "", "   "] {
             assert!(
-                matches!(
-                    resolve_mode_choice(&choices, input),
-                    Err(NoModeMatch::Unknown)
-                ),
+                matches!(resolve_choice(&choices, input), Err(NoMatch::Unknown)),
                 "{input}"
             );
         }

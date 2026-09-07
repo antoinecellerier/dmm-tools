@@ -45,14 +45,18 @@ $ dmm-cli read --format json --count 1
 {"display_raw":"  3.369","flags":{"auto_range":true,"dc":false,"hold":false,...},"mode":"DC V","range":"22V","unit":"V","value":3.369}
 ```
 
-Send remote commands, or switch the meter's mode without touching the dial:
+Send remote commands, or switch the meter's mode, range, HOLD, REL, MIN/MAX and
+Peak without touching it:
 
 ```
 $ dmm-cli command hold
 Sent hold
 
-$ dmm-cli mode "AC+DC V"
+$ dmm-cli set mode "AC+DC V"
 Meter now in AC+DC V
+
+$ dmm-cli set range 22V
+Meter now in 22V (manual range)
 ```
 
 Connect to other device families with `--device`:
