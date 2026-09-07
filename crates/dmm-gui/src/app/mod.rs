@@ -25,7 +25,7 @@ mod whats_new;
 
 use dmm_lib::measurement::Measurement;
 use dmm_lib::mock::MockMode;
-use dmm_lib::protocol::{ModeChoice, registry};
+use dmm_lib::protocol::{Choice, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui::{self, Color32};
 use std::sync::atomic::AtomicBool;
@@ -191,7 +191,7 @@ pub(super) struct Connection {
     pub(super) supported_commands: Vec<String>,
     /// Modes the meter can be switched into from its current dial position,
     /// as last listed by the acquisition thread. Empty when it offers none.
-    pub(super) mode_choices: Vec<ModeChoice>,
+    pub(super) mode_choices: Vec<Choice>,
     /// When true, incoming measurements are ignored (connection stays alive).
     pub(super) paused: bool,
     pub(super) last_error: Option<ConnectionIssue>,

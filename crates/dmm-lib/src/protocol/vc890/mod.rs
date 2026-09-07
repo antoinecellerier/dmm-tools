@@ -24,7 +24,9 @@ use crate::protocol::vc8x0_common::{
     CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags, main_display, parse_value, re,
     resolve_function, resolve_range,
 };
-use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability, check_len};
+use crate::protocol::{
+    Choice, DeviceProfile, Protocol, Setting, Stability, check_len, unsupported_setting,
+};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
@@ -369,12 +371,18 @@ impl Protocol for Vc890Protocol {
         steps
     }
 
-    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
-        cycle::mode_choices(self, current)
+    fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
+        match setting {
+            Setting::Mode => cycle::mode_choices(self, current),
+            _ => Vec::new(),
+        }
     }
 
-    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
-        cycle::select_mode(self, transport, id)
+    fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        match setting {
+            Setting::Mode => cycle::select_mode(self, transport, id),
+            _ => Err(unsupported_setting(setting)),
+        }
     }
 }
 
@@ -1152,15 +1160,15 @@ raw_payload=61"#
         (proto, m)
     }
 
-    fn ids(choices: &[ModeChoice]) -> Vec<u16> {
+    fn ids(choices: &[Choice]) -> Vec<u16> {
         choices.iter().map(|c| c.id).collect()
     }
 
-    fn labels(choices: &[ModeChoice]) -> Vec<String> {
+    fn labels(choices: &[Choice]) -> Vec<String> {
         choices.iter().map(|c| c.label.to_string()).collect()
     }
 
-    fn current_ids(choices: &[ModeChoice]) -> Vec<u16> {
+    fn current_ids(choices: &[Choice]) -> Vec<u16> {
         choices.iter().filter(|c| c.current).map(|c| c.id).collect()
     }
 
@@ -1201,7 +1209,7 @@ raw_payload=61"#
     #[test]
     fn the_ohm_position_lists_diode_and_continuity() {
         let (proto, m) = read_one(0x07);
-        let choices = proto.mode_choices(&m);
+        let choices = proto.choices(Setting::Mode, &m);
         assert_eq!(ids(&choices), vec![0x07, 0x09, 0x08]);
         assert_eq!(labels(&choices), ["Ω", "Diode", "Continuity"]);
         assert_eq!(current_ids(&choices), vec![0x07]);

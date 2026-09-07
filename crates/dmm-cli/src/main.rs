@@ -973,7 +973,7 @@ fn cmd_mode(
 /// A single choice is the live mode on its own — the single-variant UT181A
 /// dials (Ohm, nS, Cap, Hz, Duty, Pulse Width) report exactly that — so it
 /// means what an empty list means: nothing to list, and nothing to switch.
-fn offers_a_mode_switch(choices: &[dmm_lib::protocol::ModeChoice]) -> bool {
+fn offers_a_mode_switch(choices: &[dmm_lib::protocol::Choice]) -> bool {
     choices.len() > 1
 }
 
@@ -983,7 +983,7 @@ fn run_mode<T: dmm_lib::transport::Transport>(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let model_name = dmm.profile().model_name;
     let reading = dmm.request_measurement()?;
-    let choices = dmm.mode_choices(&reading);
+    let choices = dmm.choices(dmm_lib::protocol::Setting::Mode, &reading);
 
     if !offers_a_mode_switch(&choices) {
         eprintln!(
@@ -1032,7 +1032,7 @@ fn run_mode<T: dmm_lib::transport::Transport>(
         .find(|c| c.current)
         .map_or_else(|| reading.mode.to_string(), |c| c.label.to_string());
 
-    if let Err(e) = dmm.select_mode(id) {
+    if let Err(e) = dmm.select(dmm_lib::protocol::Setting::Mode, id) {
         // A refusal is the meter answering, not a fault: say so, and say what
         // the user can do about it.
         return Err(match e {
@@ -1047,7 +1047,7 @@ fn run_mode<T: dmm_lib::transport::Transport>(
     loop {
         match dmm.request_measurement() {
             Ok(reading) => {
-                let choices = dmm.mode_choices(&reading);
+                let choices = dmm.choices(dmm_lib::protocol::Setting::Mode, &reading);
                 if choices.iter().any(|c| c.id == id && c.current) {
                     println!("{} {label}", style("Meter now in").green());
                     return Ok(());
@@ -1082,7 +1082,7 @@ fn run_mode<T: dmm_lib::transport::Transport>(
 /// One line per choice, `*` on the live one, and the least that has to be
 /// typed to reach it in a second column — so the fragment form is on screen
 /// rather than something to guess at.
-fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::ModeChoice]) {
+fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::Choice]) {
     println!("Modes for {}:", style(model_name).bold());
     let width = choices
         .iter()
@@ -1114,8 +1114,8 @@ fn print_mode_choices(model_name: &str, choices: &[dmm_lib::protocol::ModeChoice
 /// ("V AC" beside "V AC Hz") has no shorter form: the whole label comes back,
 /// which the resolver takes as an exact match.
 fn shortest_fragment(
-    choices: &[dmm_lib::protocol::ModeChoice],
-    target: &dmm_lib::protocol::ModeChoice,
+    choices: &[dmm_lib::protocol::Choice],
+    target: &dmm_lib::protocol::Choice,
 ) -> String {
     let label = typeable(&target.label);
     let words: Vec<&str> = label.split_whitespace().collect();
@@ -1181,9 +1181,9 @@ enum NoModeMatch<'a> {
 /// An exact match wins outright — a label that is also a substring of longer
 /// ones ("V AC" beside "V AC Hz") stays reachable by typing it in full.
 fn resolve_mode_choice<'a>(
-    choices: &'a [dmm_lib::protocol::ModeChoice],
+    choices: &'a [dmm_lib::protocol::Choice],
     input: &str,
-) -> Result<&'a dmm_lib::protocol::ModeChoice, NoModeMatch<'a>> {
+) -> Result<&'a dmm_lib::protocol::Choice, NoModeMatch<'a>> {
     let needle = typeable(input.trim());
     if needle.is_empty() {
         return Err(NoModeMatch::Unknown);
@@ -1278,8 +1278,8 @@ fn cmd_debug(
 mod tests {
     use super::*;
     use dmm_lib::measurement::MeasuredValue;
-    use dmm_lib::protocol::ModeChoice;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use dmm_lib::protocol::{Choice, Setting};
 
     #[test]
     fn clap_parse_list() {
@@ -1486,8 +1486,8 @@ mod tests {
         }
     }
 
-    fn mode_choice(id: u16, label: &'static str, current: bool) -> ModeChoice {
-        ModeChoice {
+    fn mode_choice(id: u16, label: &'static str, current: bool) -> Choice {
+        Choice {
             id,
             label: std::borrow::Cow::Borrowed(label),
             current,
@@ -1624,7 +1624,7 @@ mod tests {
         ]
     }
 
-    fn fragment_choices(labels: &[&'static str]) -> Vec<ModeChoice> {
+    fn fragment_choices(labels: &[&'static str]) -> Vec<Choice> {
         labels
             .iter()
             .enumerate()
@@ -1685,7 +1685,7 @@ mod tests {
     }
 
     /// Ids the fake meter below gives its choices, spaced like the UT181A's
-    /// variant nibble so what `select_mode` is asked for is realistic.
+    /// variant nibble so what `select` is asked for is realistic.
     fn fake_mode_id(index: usize) -> u16 {
         0x1111 + (index as u16) * 0x10
     }
@@ -1709,7 +1709,7 @@ mod tests {
         live: usize,
         switched: bool,
         post_switch_errors: Vec<dmm_lib::error::Error>,
-        /// Ids `select_mode` was asked for, so a test can assert it was left
+        /// Ids `select` was asked for, so a test can assert it was left
         /// alone.
         selected: std::sync::Arc<std::sync::Mutex<Vec<u16>>>,
     }
@@ -1758,11 +1758,15 @@ mod tests {
             &FAKE_PROFILE
         }
 
-        fn mode_choices(&self, _current: &dmm_lib::measurement::Measurement) -> Vec<ModeChoice> {
+        fn choices(
+            &self,
+            _setting: Setting,
+            _current: &dmm_lib::measurement::Measurement,
+        ) -> Vec<Choice> {
             self.labels
                 .iter()
                 .enumerate()
-                .map(|(i, label)| ModeChoice {
+                .map(|(i, label)| Choice {
                     id: fake_mode_id(i),
                     label: std::borrow::Cow::Borrowed(label),
                     current: i == self.live,
@@ -1770,9 +1774,10 @@ mod tests {
                 .collect()
         }
 
-        fn select_mode(
+        fn select(
             &mut self,
             _t: &dyn dmm_lib::transport::Transport,
+            _setting: Setting,
             id: u16,
         ) -> dmm_lib::error::Result<()> {
             self.selected.lock().expect("poisoned").push(id);

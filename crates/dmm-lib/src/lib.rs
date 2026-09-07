@@ -67,18 +67,22 @@ impl<T: Transport> Dmm<T> {
         self.protocol.send_command(&self.transport, command)
     }
 
-    /// Modes the meter can be switched into from where its dial sits now.
+    /// Values `setting` can be switched to from where the meter sits now.
     ///
-    /// Empty for families without remote mode selection. A one-entry list is
-    /// the live mode alone, which is the same offer, so a caller draws the
-    /// control only once the list holds more than one entry.
-    pub fn mode_choices(&self, current: &measurement::Measurement) -> Vec<protocol::ModeChoice> {
-        self.protocol.mode_choices(current)
+    /// Empty for families that cannot drive the setting remotely. A one-entry
+    /// list is the live value alone, which is the same offer, so a caller
+    /// draws the control only once the list holds more than one entry.
+    pub fn choices(
+        &self,
+        setting: protocol::Setting,
+        current: &measurement::Measurement,
+    ) -> Vec<protocol::Choice> {
+        self.protocol.choices(setting, current)
     }
 
-    /// Switch the meter into one of the modes [`Dmm::mode_choices`] listed.
-    pub fn select_mode(&mut self, id: u16) -> Result<()> {
-        self.protocol.select_mode(&self.transport, id)
+    /// Switch `setting` to one of the values [`Dmm::choices`] listed.
+    pub fn select(&mut self, setting: protocol::Setting, id: u16) -> Result<()> {
+        self.protocol.select(&self.transport, setting, id)
     }
 
     /// Request the device name from the meter.

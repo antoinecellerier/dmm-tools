@@ -1,6 +1,6 @@
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
-use dmm_lib::protocol::ModeChoice;
+use dmm_lib::protocol::Choice;
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
     Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, Id, Key, Modifiers,
@@ -409,7 +409,7 @@ fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32
 /// A single choice is the live mode on its own — the single-variant UT181A
 /// dials (Ohm, nS, Cap, Hz, Duty, Pulse Width) report exactly that — so it
 /// means what an empty list means: nothing to pick, and no control to draw.
-pub(crate) fn mode_switch_offered(choices: &[ModeChoice]) -> bool {
+pub(crate) fn mode_switch_offered(choices: &[Choice]) -> bool {
     choices.len() > 1
 }
 
@@ -430,7 +430,7 @@ pub(crate) fn mode_switch_offered(choices: &[ModeChoice]) -> bool {
 /// every close. The mechanisms are the ones `color_edit` uses for its
 /// picker: a was-open flag to see the open and close transitions, consumed
 /// keys plus a cancelled focus move, and a focus lock filter on the entry.
-fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[ModeChoice]) -> Option<u16> {
+fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> Option<u16> {
     if !mode_switch_offered(choices) {
         ui.label(
             RichText::new(mode)
@@ -609,7 +609,7 @@ fn show_reading_line_with_selector(
     scaled: bool,
     draw_value: impl FnOnce(&mut Ui),
     mode_size: f32,
-    mode_choices: &[ModeChoice],
+    mode_choices: &[Choice],
     tc: &ThemeColors,
 ) -> Option<u16> {
     ui.horizontal(|ui| {
@@ -638,7 +638,7 @@ fn show_reading_sized(
     value_size: f32,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[ModeChoice],
+    mode_choices: &[Choice],
 ) -> Option<u16> {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
@@ -714,7 +714,7 @@ fn show_reading_inline(
     value_size: f32,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[ModeChoice],
+    mode_choices: &[Choice],
 ) -> Option<u16> {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
@@ -806,7 +806,7 @@ pub fn show_reading(
     measurement: Option<&Measurement>,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[ModeChoice],
+    mode_choices: &[Choice],
 ) -> Option<u16> {
     show_reading_sized(
         ui,
@@ -862,7 +862,7 @@ pub fn show_reading_large(
     ratios: &ReadingRatios,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[ModeChoice],
+    mode_choices: &[Choice],
 ) -> (f32, ReadingRatios, Option<u16>) {
     let available_w = ui.available_width();
     let available_h = ui.available_height();
@@ -923,7 +923,7 @@ pub fn show_reading_compact(
     measurement: Option<&Measurement>,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[ModeChoice],
+    mode_choices: &[Choice],
 ) -> Option<u16> {
     match measurement {
         Some(m) => {
@@ -1571,8 +1571,8 @@ mod tests {
     use eframe::egui;
     use eframe::egui::accesskit::{Node, NodeId, Role, Toggled};
 
-    fn choice(id: u16, label: &'static str, current: bool) -> ModeChoice {
-        ModeChoice {
+    fn choice(id: u16, label: &'static str, current: bool) -> Choice {
+        Choice {
             id,
             label: Cow::Borrowed(label),
             current,
@@ -1581,7 +1581,7 @@ mod tests {
 
     /// Two entries for one dial position, the fixture's own mode live so the
     /// readout and the marked entry agree.
-    fn two_choices() -> Vec<ModeChoice> {
+    fn two_choices() -> Vec<Choice> {
         vec![
             choice(0x1111, "DC V", true),
             choice(0x1121, "AC V Hz", false),
@@ -1591,12 +1591,7 @@ mod tests {
     /// The layouts the readout appears in, drawn at the side-panel size.
     const LAYOUTS: [&str; 3] = ["two-line", "inline", "compact"];
 
-    fn draw_reading(
-        ui: &mut Ui,
-        layout: &str,
-        m: &Measurement,
-        choices: &[ModeChoice],
-    ) -> Option<u16> {
+    fn draw_reading(ui: &mut Ui, layout: &str, m: &Measurement, choices: &[Choice]) -> Option<u16> {
         let tc = crate::settings::Settings::default().theme_colors(true);
         match layout {
             "two-line" => {
@@ -1905,7 +1900,7 @@ mod tests {
         assert_eq!(f.focus, Some(combo), "focus must return to the readout");
     }
 
-    fn keyboard_fixture() -> (Measurement, Vec<ModeChoice>, ThemeColors) {
+    fn keyboard_fixture() -> (Measurement, Vec<Choice>, ThemeColors) {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         (

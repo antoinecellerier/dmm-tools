@@ -7,7 +7,8 @@ use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
 use crate::protocol::{
-    DeviceProfile, ModeChoice, Protocol, Stability, check_len, cycle, unknown_mode, unknown_mode16,
+    Choice, DeviceProfile, Protocol, Setting, Stability, check_len, cycle, unknown_mode,
+    unknown_mode16, unsupported_setting,
 };
 use crate::transport::Transport;
 use command::Command;
@@ -37,7 +38,7 @@ pub struct Ut61PlusProtocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
     /// What the last reading said about where the dial sits, for
-    /// [`Protocol::mode_choices`] and [`Protocol::select_mode`].
+    /// [`Protocol::choices`] and [`Protocol::select`] for [`Setting::Mode`].
     dial: cycle::DialState,
 }
 
@@ -264,12 +265,18 @@ impl Protocol for Ut61PlusProtocol {
         self.table.mode_spec_info(mode)
     }
 
-    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
-        cycle::mode_choices(self, current)
+    fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
+        match setting {
+            Setting::Mode => cycle::mode_choices(self, current),
+            _ => Vec::new(),
+        }
     }
 
-    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
-        cycle::select_mode(self, transport, id)
+    fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        match setting {
+            Setting::Mode => cycle::select_mode(self, transport, id),
+            _ => Err(unsupported_setting(setting)),
+        }
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
@@ -647,7 +654,7 @@ mod tests {
         let m = proto.request_measurement(&mock).unwrap();
         assert_eq!(m.mode, "DC V");
 
-        let choices = proto.mode_choices(&m);
+        let choices = proto.choices(Setting::Mode, &m);
         assert_eq!(
             choices.iter().map(|c| c.id).collect::<Vec<_>>(),
             vec![0x02, 0x19]
@@ -720,7 +727,7 @@ mod tests {
         let mut proto = Ut61PlusProtocol::new();
         assert_eq!(proto.request_measurement(&meter).unwrap().mode, "DC V");
 
-        proto.select_mode(&meter, 0x19).expect("switched");
+        proto.select(&meter, Setting::Mode, 0x19).expect("switched");
         assert_eq!(meter.presses.get(), 1, "one press per ring step");
         assert_eq!(proto.dial.last_mode(), Some(0x19));
 

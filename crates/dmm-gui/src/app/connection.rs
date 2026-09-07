@@ -1,6 +1,6 @@
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::{ModeChoice, Stability};
+use dmm_lib::protocol::{Choice, Setting, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Transport;
 use eframe::egui;
@@ -23,7 +23,7 @@ pub(crate) enum ThreadControl {
 pub(crate) enum RemoteCommand {
     /// A named button command (`hold`, `range`, …) from the remote controls.
     Named(String),
-    /// Switch to one of the modes `Dmm::mode_choices` listed, by its id.
+    /// Switch to one of the modes `Dmm::choices` listed, by its id.
     SelectMode(u16),
 }
 
@@ -122,7 +122,7 @@ pub(crate) enum DmmMessage {
     /// Modes the meter can be switched into from its current dial position.
     /// Sent when the mode changes and after a successful switch; empty for
     /// families without remote mode selection.
-    ModeChoices(Vec<ModeChoice>),
+    ModeChoices(Vec<Choice>),
     /// Waiting for meter response (consecutive timeout count).
     WaitingForMeter(u32),
 }
@@ -254,7 +254,7 @@ where
         while let Ok(cmd) = cmd_rx.try_recv() {
             let result = match &cmd {
                 RemoteCommand::Named(name) => stream.dmm_mut().send_command(name),
-                RemoteCommand::SelectMode(id) => stream.dmm_mut().select_mode(*id),
+                RemoteCommand::SelectMode(id) => stream.dmm_mut().select(Setting::Mode, *id),
             };
             match (result, &cmd) {
                 // Which entry is live has changed even where the mode word
@@ -285,7 +285,7 @@ where
                 // reading in between, and this runs per sample.
                 if mode_choices_stale(last_mode.as_ref(), &m) {
                     last_mode = Some((m.mode_raw, m.mode.clone()));
-                    let choices = stream.dmm().mode_choices(&m);
+                    let choices = stream.dmm().choices(Setting::Mode, &m);
                     let _ = msg_tx.send(DmmMessage::ModeChoices(choices));
                 }
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {

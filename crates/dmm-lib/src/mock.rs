@@ -5,7 +5,7 @@ use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::tables::DeviceTable;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
-use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability};
+use crate::protocol::{Choice, DeviceProfile, Protocol, Setting, Stability, unsupported_setting};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
 use std::f64::consts::TAU;
@@ -172,7 +172,7 @@ impl MockMode {
     }
 
     /// This mode's index in [`MockMode::ALL`] — the id the mock hands to
-    /// `Protocol::mode_choices` and takes back in `Protocol::select_mode`.
+    /// `Protocol::choices` and takes back in `Protocol::select`.
     fn choice_id(self) -> Option<u16> {
         MockMode::ALL
             .iter()
@@ -180,7 +180,7 @@ impl MockMode {
             .and_then(|i| u16::try_from(i).ok())
     }
 
-    /// The mode behind a `Protocol::mode_choices` id — the inverse of
+    /// The mode behind a `Protocol::choices` id — the inverse of
     /// [`Self::choice_id`], for a consumer that has to name the scenario it
     /// just picked (the GUI re-pins its Settings row with it).
     pub fn from_choice_id(id: u16) -> Option<MockMode> {
@@ -624,7 +624,7 @@ enum PeakState {
 
 /// Mock protocol that generates synthetic measurements without hardware.
 ///
-/// Remote mode selection (`Protocol::mode_choices` / `Protocol::select_mode`)
+/// Remote mode selection (`Protocol::choices` / `Protocol::select`)
 /// is modelled on the two multi-display scenario pairs listed in
 /// [`MOCK_MODE_GROUPS`]: from either member the mock offers both, and
 /// selecting one jumps the live scenario there and restarts its waveform. An
@@ -1070,7 +1070,10 @@ impl Protocol for MockProtocol {
     /// The live scenario's group, or nothing when it isn't in one. The
     /// argument is ignored: the mock is its own source of truth for what it
     /// is measuring, and a caller could hand back a stale reading.
-    fn mode_choices(&self, _current: &Measurement) -> Vec<ModeChoice> {
+    fn choices(&self, setting: Setting, _current: &Measurement) -> Vec<Choice> {
+        if setting != Setting::Mode {
+            return Vec::new();
+        }
         let live = self.current_mode();
         let Some(group) = MOCK_MODE_GROUPS.iter().find(|g| g.contains(&live)) else {
             return Vec::new();
@@ -1079,7 +1082,7 @@ impl Protocol for MockProtocol {
             .iter()
             .filter_map(|&mode| {
                 let scenario = self.scenarios.iter().find(|s| s.id == mode)?;
-                Some(ModeChoice {
+                Some(Choice {
                     id: mode.choice_id()?,
                     label: Cow::Borrowed(scenario.mode),
                     current: mode == live,
@@ -1088,7 +1091,10 @@ impl Protocol for MockProtocol {
             .collect()
     }
 
-    fn select_mode(&mut self, _transport: &dyn Transport, id: u16) -> Result<()> {
+    fn select(&mut self, _transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        if setting != Setting::Mode {
+            return Err(unsupported_setting(setting));
+        }
         let scenario = MockMode::from_choice_id(id)
             .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
         let Some(idx) = scenario else {
@@ -1928,10 +1934,10 @@ mod tests {
             for mode in group {
                 let mut proto = MockProtocol::with_mode(*mode);
                 let m = proto.request_measurement(&transport).unwrap();
-                let choices = proto.mode_choices(&m);
+                let choices = proto.choices(Setting::Mode, &m);
                 assert_eq!(choices.len(), group.len(), "{mode:?}");
 
-                let current: Vec<&ModeChoice> = choices.iter().filter(|c| c.current).collect();
+                let current: Vec<&Choice> = choices.iter().filter(|c| c.current).collect();
                 assert_eq!(current.len(), 1, "{mode:?} flagged {current:?} as current");
                 assert_eq!(current[0].id, mode.choice_id().unwrap());
 
@@ -1961,7 +1967,7 @@ mod tests {
         let transport = NullTransport;
         let mut proto = MockProtocol::with_mode(MockMode::AcV);
         let m = proto.request_measurement(&transport).unwrap();
-        for choice in proto.mode_choices(&m) {
+        for choice in proto.choices(Setting::Mode, &m) {
             let mut other = MockProtocol::with_mode(MockMode::ALL[choice.id as usize]);
             let reading = other.request_measurement(&transport).unwrap();
             assert_eq!(choice.label, reading.mode);
@@ -1979,7 +1985,7 @@ mod tests {
             }
             let mut proto = MockProtocol::with_mode(*mode);
             let m = proto.request_measurement(&transport).unwrap();
-            assert!(proto.mode_choices(&m).is_empty(), "{mode:?}");
+            assert!(proto.choices(Setting::Mode, &m).is_empty(), "{mode:?}");
         }
     }
 
@@ -1988,7 +1994,7 @@ mod tests {
         let transport = NullTransport;
         let mut proto = MockProtocol::with_mode(MockMode::Temp);
         let id = MockMode::TempDual.choice_id().unwrap();
-        proto.select_mode(&transport, id).unwrap();
+        proto.select(&transport, Setting::Mode, id).unwrap();
         assert_eq!(proto.current_mode(), MockMode::TempDual);
         let m = proto.request_measurement(&transport).unwrap();
         assert_eq!(m.aux_values.len(), 1, "temp2 emits its second probe");
@@ -2001,7 +2007,11 @@ mod tests {
         let transport = NullTransport;
         let mut proto = MockProtocol::new();
         proto
-            .select_mode(&transport, MockMode::AcVHz.choice_id().unwrap())
+            .select(
+                &transport,
+                Setting::Mode,
+                MockMode::AcVHz.choice_id().unwrap(),
+            )
             .unwrap();
         assert_eq!(proto.current_mode(), MockMode::AcVHz);
         // Run the scenario past its duration: the cycle must advance.
@@ -2015,7 +2025,7 @@ mod tests {
         let transport = NullTransport;
         let mut proto = MockProtocol::new();
         let err = proto
-            .select_mode(&transport, MockMode::ALL.len() as u16)
+            .select(&transport, Setting::Mode, MockMode::ALL.len() as u16)
             .unwrap_err();
         assert!(
             matches!(err, Error::UnsupportedCommand(_)),

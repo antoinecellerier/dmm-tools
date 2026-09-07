@@ -32,7 +32,7 @@
 //!
 //! A family implements [`CycleMeter`], keeps a [`DialState`] updated with
 //! [`DialState::observe`] from every measurement it parses, and forwards
-//! `Protocol::mode_choices` / `Protocol::select_mode` to the free functions
+//! `Protocol::choices` / `Protocol::select` to the free functions
 //! here.
 
 use log::debug;
@@ -41,7 +41,7 @@ use std::time::Duration;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
-use crate::protocol::ModeChoice;
+use crate::protocol::Choice;
 use crate::transport::Transport;
 
 /// A front-panel button that cycles the meter through a ring of modes.
@@ -221,7 +221,7 @@ pub(crate) trait CycleMeter {
     }
 }
 
-/// Modes reachable from the reading `current`, for `Protocol::mode_choices`.
+/// Modes reachable from the reading `current`, for `Protocol::choices`.
 ///
 /// Empty when the mode is on no position of the family's table. Does not
 /// touch the meter's state: a caller may hand back an older reading, and a
@@ -229,7 +229,7 @@ pub(crate) trait CycleMeter {
 pub(crate) fn mode_choices<M: CycleMeter + ?Sized>(
     meter: &M,
     current: &Measurement,
-) -> Vec<ModeChoice> {
+) -> Vec<Choice> {
     let positions = meter.dial_positions();
     let Some(index) = resolve_position(positions, meter.dial_state().position(), current.mode_raw)
     else {
@@ -238,7 +238,7 @@ pub(crate) fn mode_choices<M: CycleMeter + ?Sized>(
     positions[index]
         .modes()
         .into_iter()
-        .map(|id| ModeChoice {
+        .map(|id| Choice {
             id,
             label: meter.mode_label(id),
             current: id == current.mode_raw,
@@ -246,7 +246,7 @@ pub(crate) fn mode_choices<M: CycleMeter + ?Sized>(
         .collect()
 }
 
-/// Press the meter into mode `id`, for `Protocol::select_mode`.
+/// Press the meter into mode `id`, for `Protocol::select`.
 ///
 /// Everything that can be decided without touching the meter is decided
 /// first: an id on another dial position costs no I/O at all.
@@ -763,11 +763,11 @@ mod tests {
         }
     }
 
-    fn ids(choices: &[ModeChoice]) -> Vec<u16> {
+    fn ids(choices: &[Choice]) -> Vec<u16> {
         choices.iter().map(|c| c.id).collect()
     }
 
-    fn current_ids(choices: &[ModeChoice]) -> Vec<u16> {
+    fn current_ids(choices: &[Choice]) -> Vec<u16> {
         choices.iter().filter(|c| c.current).map(|c| c.id).collect()
     }
 

@@ -67,10 +67,12 @@ USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protoc
 Each family implements its own framing, parsing, and command encoding internally, but all
 produce the same `Measurement` struct.
 
-**Absolute mode selection** is the second remote-control path, alongside the named commands of
-`send_command()`. `mode_choices(&Measurement)` lists the modes the meter can be switched into
-*from where its dial sits right now* — each a `ModeChoice { id, label, current }` whose label
-uses the same vocabulary as `Measurement::mode` — and `select_mode(id)` switches to one. Both
+**Absolute setting selection** is the second remote-control path, alongside the named commands
+of `send_command()`. A `Setting` names what is being driven — `Mode` is the only one
+implemented so far; `Range`, `Hold`, `Rel`, `MinMax` and `Peak` are planned.
+`choices(Setting, &Measurement)` lists the values the setting can be switched to *from where
+the meter sits right now* — each a `Choice { id, label, current }` whose label uses the same
+vocabulary as `Measurement::mode` — and `select(Setting, id)` switches to one. Both
 default to "unsupported" on the trait, and a family opts in one of two ways: with a direct
 set-mode command (the UT181A, whose ids are mode words, and the mock), or through the shared
 cycle-to-target driver in `protocol/cycle.rs` (the UT61+/UT161 family and the Voltcraft
@@ -78,7 +80,7 @@ VC-880/VC-890, whose ids are mode bytes) — that driver presses SELECT, Hz/% or
 reads the mode back until the target shows,
 planning from a per-model table of dial positions because the meter never reports the dial.
 CLI and GUI drive the pair generically: an
-empty list means hide the control, and the flagged entry is the live mode. This is what
+empty list means hide the control, and the flagged entry is the live value. This is what
 `send_command("select")` cannot express — a cycling button gives no way to jump to a named mode
 or to know which one is active.
 

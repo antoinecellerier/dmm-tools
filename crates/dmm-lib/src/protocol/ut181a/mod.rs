@@ -31,7 +31,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, ModeChoice, Protocol, Stability, check_len, unknown_mode16};
+use crate::protocol::{
+    Choice, DeviceProfile, Protocol, Setting, Stability, check_len, unknown_mode16,
+    unsupported_setting,
+};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
@@ -487,14 +490,20 @@ impl Protocol for Ut181aProtocol {
         &self.profile
     }
 
-    fn mode_choices(&self, current: &Measurement) -> Vec<ModeChoice> {
-        mode::mode_choices(current.mode_raw)
+    fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
+        match setting {
+            Setting::Mode => mode::mode_choices(current.mode_raw),
+            _ => Vec::new(),
+        }
     }
 
     /// Only words from the dial's own family are sent: the vendor app never
     /// crosses a family boundary, and the meter would refuse it anyway.
     /// Validation happens before the write, so a stray id costs no I/O.
-    fn select_mode(&mut self, transport: &dyn Transport, id: u16) -> Result<()> {
+    fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        if setting != Setting::Mode {
+            return Err(unsupported_setting(setting));
+        }
         let current = self.require_last_mode(transport)?;
         if !mode::mode_choices(current).iter().any(|c| c.id == id) {
             return Err(Error::UnsupportedCommand(format!(
@@ -1640,7 +1649,7 @@ mod tests {
     #[test]
     fn select_mode_sends_set_mode_with_the_mode_word() {
         let (mut proto, mock) = proto_in(0x1111, 0);
-        proto.select_mode(&mock, 0x1121).unwrap();
+        proto.select(&mock, Setting::Mode, 0x1121).unwrap();
         // AB CD | len 05 00 | 01 (SET_MODE) 21 11 (0x1121 LE) | checksum
         // 05+00+01+21+11 = 0x38.
         assert_eq!(
@@ -1654,7 +1663,7 @@ mod tests {
     fn select_mode_refuses_a_word_from_another_family() {
         let (mut proto, mock) = proto_in(0x1111, 0);
         // V DC is a different dial position: the meter can't get there on its own.
-        let err = proto.select_mode(&mock, 0x3111).unwrap_err();
+        let err = proto.select(&mock, Setting::Mode, 0x3111).unwrap_err();
         assert!(
             matches!(err, Error::UnsupportedCommand(_)),
             "got {err:?}, want UnsupportedCommand"
@@ -1671,7 +1680,7 @@ mod tests {
     fn select_mode_without_a_reading_fails_on_the_read() {
         let mock = MockTransport::new(vec![]);
         let mut proto = Ut181aProtocol::new();
-        let err = proto.select_mode(&mock, 0x1121).unwrap_err();
+        let err = proto.select(&mock, Setting::Mode, 0x1121).unwrap_err();
         assert!(matches!(err, Error::Timeout), "got {err:?}, want Timeout");
         assert!(mock.written.borrow().is_empty());
     }
@@ -1812,7 +1821,7 @@ mod tests {
         let (proto, _mock) = proto_in(0x1111, 0);
         let m = make_payload(0x1111, 1.0, 0x20, b"VAC\0\0\0\0\0", 0x00, 0x01);
         let m = parse_measurement(&m).unwrap();
-        let choices = proto.mode_choices(&m);
+        let choices = proto.choices(Setting::Mode, &m);
         assert_eq!(choices.len(), 6, "V AC: plain, Hz, Peak, LPF, dBV, dBm");
         assert_eq!(choices[0].label, "V AC");
         let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
@@ -1831,7 +1840,7 @@ mod tests {
             0x01,
         ))
         .unwrap();
-        let choices = proto.mode_choices(&m);
+        let choices = proto.choices(Setting::Mode, &m);
         let labels: Vec<&str> = choices.iter().map(|c| c.label.as_ref()).collect();
         assert_eq!(labels, vec!["°C", "°C T2", "°C T1-T2", "°C T2-T1"]);
         let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
@@ -1850,7 +1859,7 @@ mod tests {
             0x01,
         ))
         .unwrap();
-        let choices = proto.mode_choices(&m);
+        let choices = proto.choices(Setting::Mode, &m);
         let labels: Vec<&str> = choices.iter().map(|c| c.label.as_ref()).collect();
         assert_eq!(labels, vec!["Continuity", "Continuity (open)"]);
         // Nibble 0 = 2 is a second function here, so it is its own choice —
@@ -1875,7 +1884,7 @@ mod tests {
                 0x01,
             ))
             .unwrap();
-            let choices = proto.mode_choices(&m);
+            let choices = proto.choices(Setting::Mode, &m);
             let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
             assert_eq!(current, vec![expected], "from {reported:#06x}");
         }

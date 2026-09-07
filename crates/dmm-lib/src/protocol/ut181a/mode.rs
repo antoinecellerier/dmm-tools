@@ -10,7 +10,7 @@
 //! §6.1 Mode switching (SET_MODE) -- [VENDOR].
 
 use super::decode_mode_word;
-use crate::protocol::ModeChoice;
+use crate::protocol::Choice;
 
 /// Mask selecting the dial family of a mode word: nibble 3 (function family)
 /// and nibble 2 (sub-function). The low byte is the variant and REL nibbles.
@@ -216,7 +216,7 @@ impl Family {
 /// choices of their own: REL is a toggle on top of a variant
 /// (`rel_supported`), so a meter sitting in `0x1112` reports `0x1111` — V AC —
 /// as its current choice, and one in `0x1142` reports `0x1141`, V AC LPF.
-pub(crate) fn mode_choices(current_mode_raw: u16) -> Vec<ModeChoice> {
+pub(crate) fn mode_choices(current_mode_raw: u16) -> Vec<Choice> {
     let Some(f) = lookup(current_mode_raw) else {
         return Vec::new();
     };
@@ -224,7 +224,7 @@ pub(crate) fn mode_choices(current_mode_raw: u16) -> Vec<ModeChoice> {
         .iter()
         .map(|&word| {
             let rel_active = f.rel_capable(word) && rel_partner(word) == current_mode_raw;
-            ModeChoice {
+            Choice {
                 id: word,
                 label: decode_mode_word(word),
                 current: word == current_mode_raw || rel_active,

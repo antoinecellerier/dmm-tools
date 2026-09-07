@@ -181,15 +181,74 @@ impl std::str::FromStr for DeviceFamily {
     }
 }
 
-/// A mode the host can switch the meter into from its current dial position.
+/// A meter setting the host can read the options of and switch between.
+///
+/// Only [`Setting::Mode`] is implemented so far; the rest name the settings
+/// the same API is about to carry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Setting {
+    /// Measurement mode. Choice ids are the family's own mode ids (UT181A: the
+    /// mode word; the cycling families: the mode byte).
+    Mode,
+    /// Measurement range. Choice id 0 is autorange, any other id is the
+    /// family's own range value.
+    Range,
+    /// Display hold. Choice id 0 is off, 1 is on.
+    Hold,
+    /// Relative (delta) reading. Choice id 0 is off, 1 is on.
+    Rel,
+    /// Minimum/maximum tracking. Choice id 0 is off, 1 is MAX, 2 is MIN — the
+    /// UT181A has only the 0/1 pair.
+    MinMax,
+    /// Peak hold. Choice id 0 is off, 1 is P-MAX, 2 is P-MIN.
+    Peak,
+}
+
+impl Setting {
+    /// Every setting, in the order the CLI and GUI list them.
+    pub const ALL: [Setting; 6] = [
+        Setting::Mode,
+        Setting::Range,
+        Setting::Hold,
+        Setting::Rel,
+        Setting::MinMax,
+        Setting::Peak,
+    ];
+
+    /// The lowercase word the CLI takes and prints for this setting.
+    pub fn name(self) -> &'static str {
+        match self {
+            Setting::Mode => "mode",
+            Setting::Range => "range",
+            Setting::Hold => "hold",
+            Setting::Rel => "rel",
+            Setting::MinMax => "minmax",
+            Setting::Peak => "peak",
+        }
+    }
+}
+
+impl std::fmt::Display for Setting {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// A value the host can switch a meter setting to from where it sits now.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModeChoice {
-    /// Family-specific id handed back to `select_mode` (UT181A: the mode word).
+pub struct Choice {
+    /// Family-specific id handed back to `select` (UT181A mode: the mode word).
     pub id: u16,
     /// Display name in the same vocabulary as `Measurement::mode`.
     pub label: Cow<'static, str>,
-    /// The meter is in this mode now.
+    /// The meter sits on this value now.
     pub current: bool,
+}
+
+/// The refusal a family returns for a setting it cannot drive, kept in one
+/// place so every family words it the same way.
+pub(crate) fn unsupported_setting(setting: Setting) -> Error {
+    Error::UnsupportedCommand(format!("{setting} cannot be set on this meter"))
 }
 
 /// A step definition for the guided protocol capture wizard.
@@ -274,21 +333,21 @@ pub trait Protocol: Send {
         None
     }
 
-    /// Modes the meter can be switched into without touching the dial, given
-    /// the reading it is producing now.
+    /// Values `setting` can be switched to without touching the dial, given
+    /// the reading the meter is producing now.
     ///
-    /// An empty list — the default — means the family has no remote mode
-    /// selection, so consumers hide the control rather than special-casing
-    /// families. A one-entry list means the same: that entry is the mode the
-    /// meter is already in, and offering it switches nothing. Return the
-    /// family's own list either way; consumers decide what to draw.
-    fn mode_choices(&self, _current: &Measurement) -> Vec<ModeChoice> {
+    /// An empty list — the default — means the family cannot drive that
+    /// setting remotely, so consumers hide the control rather than
+    /// special-casing families. A one-entry list means the same: that entry is
+    /// the value the meter already sits on, and offering it switches nothing.
+    /// Return the family's own list either way; consumers decide what to draw.
+    fn choices(&self, _setting: Setting, _current: &Measurement) -> Vec<Choice> {
         Vec::new()
     }
 
-    /// Switch the meter into the mode `id` identifies, one of the ids
-    /// [`Protocol::mode_choices`] just returned.
-    fn select_mode(&mut self, _transport: &dyn Transport, id: u16) -> Result<()> {
-        Err(Error::UnsupportedCommand(format!("mode {id:#06x}")))
+    /// Switch `setting` to the value `id` identifies, one of the ids
+    /// [`Protocol::choices`] just returned for that setting.
+    fn select(&mut self, _transport: &dyn Transport, setting: Setting, _id: u16) -> Result<()> {
+        Err(unsupported_setting(setting))
     }
 }
