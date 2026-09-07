@@ -293,7 +293,17 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
 
     let mut from = current;
     for leg in legs {
-        walk(meter, transport, &leg, from)?;
+        if let Err(e) = walk(meter, transport, &leg, from) {
+            // `walk` says where its own presses left the meter; when an
+            // earlier leg already moved it, say where it came from too, so
+            // the user knows the function changed under the failure.
+            return Err(match e {
+                Error::CommandRejected(detail) if from != current => Error::CommandRejected(
+                    format!("{detail}; started in {}", meter.mode_label(current)),
+                ),
+                other => other,
+            });
+        }
         from = leg.target;
     }
     Ok(())
@@ -960,6 +970,30 @@ mod tests {
         select_mode(&mut meter, &NullTransport, LPF_V).expect("switched");
         assert_eq!(meter.presses, vec![CycleButton::Hz, CycleButton::Select]);
         assert_eq!(meter.mode, LPF_V);
+    }
+
+    /// A failure on the second leg comes after the first one moved the
+    /// meter, so the error says where the walk started as well as where the
+    /// presses left it.
+    #[test]
+    fn a_failed_second_leg_names_the_starting_mode() {
+        let mut meter = FakeMeter::new(
+            LPF_V,
+            vec![
+                (CycleButton::Select, vec![AC_V, LPF_V]),
+                // A meter whose Hz/% ring has no Duty %: leg two cannot land.
+                (CycleButton::Hz, vec![AC_V, HZ]),
+            ],
+        );
+        meter.state.observe(DIAL, AC_V);
+        meter.state.observe(DIAL, LPF_V);
+        let err = select_mode(&mut meter, &NullTransport, DUTY).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m)
+                if m.contains("back in AC V") && m.ends_with("started in LPF V")),
+            "got {err:?}"
+        );
+        assert_eq!(meter.mode, AC_V, "the first leg's press stands");
     }
 
     #[test]
