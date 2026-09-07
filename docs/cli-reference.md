@@ -563,6 +563,12 @@ meter with secondary displays, that confirmation line lists the sub-values in
 parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,
 Period 20.00 ms)` — so the whole screen is checked, not just the main value.
 
+The report records every byte exchanged with the meter: `frames` under each
+step, `init_frames` for the handshake before the first one. Bytes the decoder
+rejected are there too, with the reason under `diagnostics`, and a step that
+decoded incompletely — unknown mode, parse error, or fewer samples than asked
+for — is marked `needs_attention: true`.
+
 After the device's own steps, capture always offers **freeform captures**:
 describe any mode the step list doesn't cover, and the tool records the
 samples alongside your confirmation or correction of what it read. Filter to

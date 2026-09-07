@@ -1,3 +1,4 @@
+use crate::recording::{self, SharedRecorder, WireEvent};
 use console::style;
 use dmm_lib::flags::StatusFlags;
 use dmm_lib::measurement::Measurement;
@@ -26,7 +27,68 @@ pub(crate) struct CaptureReport {
     )]
     pub transport_info: Option<String>,
     pub supported: bool,
+    /// Registry ID of the device the capture ran against — the report
+    /// otherwise only holds the name the meter reports for itself.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub device_id: Option<String>,
+    /// Wire events recorded before the first step: the init handshake and the
+    /// name query.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub init_frames: Vec<FrameRecord>,
+    /// Wire events lost to the recorder's bound, so a truncated trace is
+    /// visible as one.
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub wire_events_dropped: u64,
     pub steps: Vec<StepResult>,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// Cap on wire events recorded per step, so one chatty step can't grow the
+/// report without bound. Overflow is reported in the step's diagnostics.
+pub(crate) const MAX_FRAMES_PER_STEP: usize = 500;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum FrameDir {
+    Tx,
+    Rx,
+}
+
+/// One transfer over the wire, including bytes the framing layer rejected.
+#[derive(Serialize, Deserialize, Clone)]
+pub(crate) struct FrameRecord {
+    pub at_ms: u64,
+    pub dir: FrameDir,
+    pub hex: String,
+    /// HID feature report rather than an interrupt write.
+    #[serde(skip_serializing_if = "is_false", default)]
+    pub feature: bool,
+}
+
+impl From<&crate::recording::WireEvent> for FrameRecord {
+    fn from(e: &crate::recording::WireEvent) -> Self {
+        FrameRecord {
+            at_ms: e.at_ms,
+            dir: match e.dir {
+                crate::recording::Direction::Tx => FrameDir::Tx,
+                crate::recording::Direction::Rx => FrameDir::Rx,
+            },
+            hex: e
+                .bytes
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+            feature: e.feature,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -49,6 +111,35 @@ pub(crate) struct StepResult {
     pub screen: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub error: Option<String>,
+    /// Every byte exchanged while this step ran, so a step that decoded
+    /// nothing still shows what the meter sent.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub frames: Vec<FrameRecord>,
+    /// Parse rejections seen while sampling — checksum mismatches, unknown
+    /// modes, malformed responses.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub diagnostics: Vec<String>,
+    /// The step decoded incompletely: unknown mode, a parse rejection, or
+    /// fewer samples than asked for. Points a maintainer at the step to read.
+    #[serde(skip_serializing_if = "is_false", default)]
+    pub needs_attention: bool,
+}
+
+impl StepResult {
+    /// Base result for a step; the caller fills in what it actually captured.
+    pub(crate) fn new(id: &str, instruction: &str, status: StepStatus) -> Self {
+        StepResult {
+            id: id.to_string(),
+            instruction: instruction.to_string(),
+            status,
+            samples: vec![],
+            screen: None,
+            error: None,
+            frames: vec![],
+            diagnostics: vec![],
+            needs_attention: false,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -252,6 +343,7 @@ impl SampleData {
 /// the freeform pass.
 fn run_protocol_capture(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
     protocol_steps: Vec<dmm_lib::protocol::CaptureStep>,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
@@ -281,7 +373,7 @@ fn run_protocol_capture(
         if !step_included(step_filter, step.id) {
             continue;
         }
-        if run_capture_step(dmm, step, report, true)? {
+        if run_capture_step(dmm, recorder, step, report, true)? {
             return Ok(true);
         }
         save_report(report, output_path)?;
@@ -303,12 +395,8 @@ impl CaptureStep {
     /// Create a StepResult with no samples or screen capture.
     fn empty_result(&self, status: StepStatus, error: Option<String>) -> StepResult {
         StepResult {
-            id: self.id.to_string(),
-            instruction: self.instruction.to_string(),
-            status,
-            samples: vec![],
-            screen: None,
             error,
+            ..StepResult::new(self.id, self.instruction, status)
         }
     }
 }
@@ -332,24 +420,55 @@ pub(crate) fn prompt_key(msg: &str) -> Result<char, Box<dyn std::error::Error>> 
     Ok(ch)
 }
 
+/// What one sampling pass produced: the readings that parsed, and the errors
+/// that stopped the others from parsing.
+pub(crate) struct SampleRun {
+    pub samples: Vec<Measurement>,
+    pub diagnostics: Vec<String>,
+}
+
+/// Poll for `n` samples.
+///
+/// A parse rejection is recorded and polling continues: a meter whose frames
+/// we misread would otherwise end the step on the first bad frame, and the
+/// report showed neither a sample nor a reason.
 pub(crate) fn capture_samples(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     n: usize,
-) -> Vec<Measurement> {
+) -> SampleRun {
     let mut samples = Vec::new();
+    // First-seen order, with a repeat count: a stuck meter otherwise fills
+    // the report with the same line.
+    let mut errors: Vec<(String, usize)> = Vec::new();
     let mut attempts = 0;
     while samples.len() < n && attempts < n * 5 {
         match dmm.request_measurement() {
             Ok(m) => samples.push(m),
             Err(dmm_lib::error::Error::Timeout) => {}
             Err(e) => {
-                eprintln!("  error: {e}");
-                break;
+                let text = e.to_string();
+                eprintln!("  error: {text}");
+                match errors.iter_mut().find(|(t, _)| *t == text) {
+                    Some((_, count)) => *count += 1,
+                    None => errors.push((text, 1)),
+                }
             }
         }
         attempts += 1;
     }
-    samples
+    SampleRun {
+        samples,
+        diagnostics: errors
+            .into_iter()
+            .map(|(text, count)| {
+                if count > 1 {
+                    format!("{text} (x{count})")
+                } else {
+                    text
+                }
+            })
+            .collect(),
+    }
 }
 
 pub(crate) fn save_report(
@@ -372,9 +491,40 @@ pub(crate) fn upsert_step(report: &mut CaptureReport, result: StepResult) {
     }
 }
 
+/// Wire events belonging to `step_id`, capped, with the overflow noted.
+fn frames_for_step(
+    events: &[WireEvent],
+    step_id: &str,
+    diagnostics: &mut Vec<String>,
+) -> Vec<FrameRecord> {
+    let mine: Vec<&WireEvent> = events
+        .iter()
+        .filter(|e| e.step.as_deref() == Some(step_id))
+        .collect();
+    if mine.len() > MAX_FRAMES_PER_STEP {
+        diagnostics.push(format!(
+            "{} further wire events not recorded (cap {MAX_FRAMES_PER_STEP})",
+            mine.len() - MAX_FRAMES_PER_STEP
+        ));
+    }
+    mine.into_iter()
+        .take(MAX_FRAMES_PER_STEP)
+        .map(FrameRecord::from)
+        .collect()
+}
+
+/// Whether the step is worth a maintainer's attention: something didn't
+/// decode, or fewer readings arrived than were asked for.
+fn needs_attention(samples: &[SampleData], requested: usize, diagnostics: &[String]) -> bool {
+    !diagnostics.is_empty()
+        || samples.len() < requested
+        || samples.iter().any(|s| s.mode.starts_with("Unknown("))
+}
+
 /// Run one capture step. Returns Ok(true) if user wants to quit.
 pub(crate) fn run_capture_step(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
     step: &CaptureStep,
     report: &mut CaptureReport,
     interactive: bool,
@@ -416,23 +566,35 @@ pub(crate) fn run_capture_step(
         );
     }
 
+    recording::lock(recorder).set_step(Some(step.id));
+
     if let Some(cmd) = step.command {
         if let Err(e) = dmm.send_command(cmd) {
             eprintln!("  {}", style(format!("Command failed: {e}")).red());
-            upsert_step(
-                report,
-                step.empty_result(StepStatus::Error, Some(e.to_string())),
-            );
+            let mut result = step.empty_result(StepStatus::Error, Some(e.to_string()));
+            let mut rec = recording::lock(recorder);
+            rec.set_step(None);
+            result.frames = frames_for_step(&rec.drain(), step.id, &mut result.diagnostics);
+            result.needs_attention = true;
+            upsert_step(report, result);
             return Ok(false);
         }
         std::thread::sleep(Duration::from_millis(200));
     }
 
-    let raw_samples = capture_samples(dmm, step.samples);
-    let sample_data: Vec<SampleData> = raw_samples
+    let run = capture_samples(dmm, step.samples);
+    let mut diagnostics = run.diagnostics;
+    let sample_data: Vec<SampleData> = run
+        .samples
         .iter()
         .map(SampleData::from_measurement)
         .collect();
+
+    let frames = {
+        let mut rec = recording::lock(recorder);
+        rec.set_step(None);
+        frames_for_step(&rec.drain(), step.id, &mut diagnostics)
+    };
 
     for (i, s) in sample_data.iter().enumerate() {
         eprintln!(
@@ -481,15 +643,16 @@ pub(crate) fn run_capture_step(
     };
 
     let result = StepResult {
-        id: step.id.to_string(),
-        instruction: step.instruction.to_string(),
-        status,
+        needs_attention: needs_attention(&sample_data, step.samples, &diagnostics),
         samples: sample_data,
         screen,
-        error: None,
+        frames,
+        diagnostics,
+        ..StepResult::new(step.id, step.instruction, status)
     };
 
     upsert_step(report, result);
+    report.wire_events_dropped = recording::lock(recorder).dropped();
     Ok(false)
 }
 
@@ -502,6 +665,7 @@ mod tests {
     // call it on a concrete protocol type (not needed for `dyn Protocol`).
     use dmm_lib::protocol::Protocol;
     use dmm_lib::protocol::ut61eplus::make_test_measurement;
+    use std::sync::Mutex;
 
     #[test]
     fn sample_data_from_normal_measurement() {
@@ -817,17 +981,201 @@ mod tests {
         assert!(parsed.aux.is_empty());
     }
 
+    /// A UT61E+ frame: AB CD, length, payload, 16-bit BE sum.
+    fn frame(payload: &[u8]) -> Vec<u8> {
+        let mut f = vec![0xAB, 0xCD, (payload.len() + 2) as u8];
+        f.extend_from_slice(payload);
+        let sum = f.iter().fold(0u16, |acc, &b| acc.wrapping_add(b as u16));
+        f.extend_from_slice(&sum.to_be_bytes());
+        f
+    }
+
+    fn measurement_frame() -> Vec<u8> {
+        frame(&[
+            0x02, 0x30, b' ', b' ', b'5', b'.', b'6', b'7', b'8', 0, 0, 0x30, 0x30, 0x30,
+        ])
+    }
+
+    /// Canned transport: hands out one queued response per read, then goes
+    /// silent the way a real meter does on timeout.
+    struct QueuedTransport {
+        responses: Mutex<std::collections::VecDeque<Vec<u8>>>,
+    }
+
+    impl dmm_lib::transport::Transport for QueuedTransport {
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            let Some(next) = self.responses.lock().unwrap().pop_front() else {
+                return Ok(0);
+            };
+            let n = next.len().min(buf.len());
+            buf[..n].copy_from_slice(&next[..n]);
+            Ok(n)
+        }
+
+        fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn dmm_replaying(
+        responses: Vec<Vec<u8>>,
+    ) -> dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>> {
+        let transport = QueuedTransport {
+            responses: Mutex::new(responses.into()),
+        };
+        let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
+        dmm_lib::Dmm::new(
+            Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,
+            (device.new_protocol)(),
+        )
+        .unwrap()
+    }
+
+    /// A rejected frame used to end the step, so the report carried neither a
+    /// sample nor a reason. Keep polling and record why.
+    #[test]
+    fn capture_samples_reports_a_rejected_frame_and_keeps_polling() {
+        let mut bad = measurement_frame();
+        let last = bad.len() - 1;
+        bad[last] = bad[last].wrapping_add(1);
+
+        let mut dmm = dmm_replaying(vec![bad, measurement_frame()]);
+        let run = capture_samples(&mut dmm, 1);
+
+        assert_eq!(run.samples.len(), 1, "polling must continue past the error");
+        assert_eq!(run.diagnostics.len(), 1);
+        assert!(
+            run.diagnostics[0].contains("checksum"),
+            "got {:?}",
+            run.diagnostics
+        );
+    }
+
+    /// A meter stuck on bad frames would otherwise repeat one line per poll.
+    #[test]
+    fn repeated_errors_are_reported_once_with_a_count() {
+        let mut bad = measurement_frame();
+        let last = bad.len() - 1;
+        bad[last] = bad[last].wrapping_add(1);
+
+        let mut dmm = dmm_replaying(vec![bad.clone(), bad.clone(), bad]);
+        let run = capture_samples(&mut dmm, 1);
+
+        assert!(run.samples.is_empty());
+        assert_eq!(run.diagnostics.len(), 1);
+        assert!(
+            run.diagnostics[0].ends_with("(x3)"),
+            "got {:?}",
+            run.diagnostics
+        );
+    }
+
+    /// An unnamed mode is exactly what a capture is run to find, so the step
+    /// has to be flagged rather than read as a clean one.
+    #[test]
+    fn an_unknown_mode_needs_attention() {
+        let mut sample = SampleData::from_measurement(&make_test_measurement(
+            0x02,
+            0x01,
+            b"  1.000",
+            (0x00, 0x00),
+            (0x00, 0x00, 0x00),
+        ));
+        assert!(!needs_attention(&[sample.clone()], 1, &[]));
+
+        sample.mode = "Unknown(0x05)".to_string();
+        assert!(needs_attention(&[sample.clone()], 1, &[]));
+        // So do a parse rejection and a short step.
+        assert!(needs_attention(&[], 1, &[]));
+        assert!(needs_attention(
+            &[sample],
+            1,
+            &["checksum mismatch".to_string()]
+        ));
+    }
+
+    /// Only the events tagged with the step, and no more than the cap.
+    #[test]
+    fn step_frames_are_filtered_and_capped() {
+        let event = |step: Option<&str>| WireEvent {
+            at_ms: 0,
+            dir: crate::recording::Direction::Rx,
+            step: step.map(str::to_string),
+            bytes: vec![0xAB, 0xCD],
+            feature: false,
+        };
+        let mut events: Vec<WireEvent> = (0..MAX_FRAMES_PER_STEP + 3)
+            .map(|_| event(Some("dcv")))
+            .collect();
+        events.push(event(Some("acv")));
+        events.push(event(None));
+
+        let mut diagnostics = Vec::new();
+        let frames = frames_for_step(&events, "dcv", &mut diagnostics);
+        assert_eq!(frames.len(), MAX_FRAMES_PER_STEP);
+        assert_eq!(frames[0].hex, "AB CD");
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].starts_with("3 further wire events"));
+    }
+
+    /// Resuming an interrupted capture reloads the report, so one written
+    /// before wire recording existed must still parse.
+    #[test]
+    fn reports_without_the_wire_fields_still_load() {
+        let yaml = "date: '2026-01-01'\ntool_version: test\ndevice_name: UT61E+\n\
+                    supported: true\nsteps:\n- id: dcv\n  instruction: test\n  \
+                    status: captured\n";
+        let report: CaptureReport = serde_yaml_ng::from_str(yaml).unwrap();
+        assert_eq!(report.steps.len(), 1);
+        assert!(report.init_frames.is_empty());
+        assert!(report.steps[0].frames.is_empty());
+        assert!(report.steps[0].diagnostics.is_empty());
+        assert!(!report.steps[0].needs_attention);
+        assert_eq!(report.wire_events_dropped, 0);
+        assert_eq!(report.device_id, None);
+    }
+
+    /// The new fields must stay out of a report that has nothing to put in
+    /// them, so existing captures round-trip unchanged.
+    #[test]
+    fn empty_wire_fields_are_omitted() {
+        let report = CaptureReport {
+            steps: vec![StepResult::new("dcv", "test", StepStatus::Captured)],
+            ..CaptureReport::default()
+        };
+        let yaml = serde_yaml_ng::to_string(&report).unwrap();
+        for key in [
+            "frames",
+            "diagnostics",
+            "needs_attention",
+            "wire_events_dropped",
+            "device_id",
+        ] {
+            assert!(!yaml.contains(key), "{key} must be omitted: {yaml}");
+        }
+    }
+
+    #[test]
+    fn frame_records_serialize_with_a_lowercase_direction() {
+        let record = FrameRecord {
+            at_ms: 12,
+            dir: FrameDir::Rx,
+            hex: "AB CD".to_string(),
+            feature: false,
+        };
+        let yaml = serde_yaml_ng::to_string(&record).unwrap();
+        assert!(yaml.contains("dir: rx"), "got {yaml}");
+        assert!(!yaml.contains("feature"), "got {yaml}");
+    }
+
     #[test]
     fn upsert_step_insert() {
         let mut report = CaptureReport::default();
-        let result = StepResult {
-            id: "dcv".to_string(),
-            instruction: "test".to_string(),
-            status: StepStatus::Captured,
-            samples: vec![],
-            screen: None,
-            error: None,
-        };
+        let result = StepResult::new("dcv", "test", StepStatus::Captured);
         upsert_step(&mut report, result);
         assert_eq!(report.steps.len(), 1);
         assert_eq!(report.steps[0].id, "dcv");
@@ -836,24 +1184,10 @@ mod tests {
     #[test]
     fn upsert_step_replace() {
         let mut report = CaptureReport::default();
-        let result1 = StepResult {
-            id: "dcv".to_string(),
-            instruction: "first".to_string(),
-            status: StepStatus::Skipped,
-            samples: vec![],
-            screen: None,
-            error: None,
-        };
+        let result1 = StepResult::new("dcv", "first", StepStatus::Skipped);
         upsert_step(&mut report, result1);
 
-        let result2 = StepResult {
-            id: "dcv".to_string(),
-            instruction: "replaced".to_string(),
-            status: StepStatus::Captured,
-            samples: vec![],
-            screen: None,
-            error: None,
-        };
+        let result2 = StepResult::new("dcv", "replaced", StepStatus::Captured);
         upsert_step(&mut report, result2);
 
         assert_eq!(report.steps.len(), 1);
@@ -865,17 +1199,7 @@ mod tests {
     fn upsert_step_multiple_ids() {
         let mut report = CaptureReport::default();
         for id in ["dcv", "acv", "ohm"] {
-            upsert_step(
-                &mut report,
-                StepResult {
-                    id: id.to_string(),
-                    instruction: id.to_string(),
-                    status: StepStatus::Captured,
-                    samples: vec![],
-                    screen: None,
-                    error: None,
-                },
-            );
+            upsert_step(&mut report, StepResult::new(id, id, StepStatus::Captured));
         }
         assert_eq!(report.steps.len(), 3);
     }
@@ -990,13 +1314,11 @@ mod tests {
             transport_info: Some("CP2110 part=0x0a firmware=10".to_string()),
             supported: true,
             steps: vec![StepResult {
-                id: "dcv".to_string(),
-                instruction: "Set meter to DC V".to_string(),
-                status: StepStatus::Captured,
                 samples: vec![sample],
                 screen: Some("confirmed: 5.678 V [AUTO]".to_string()),
-                error: None,
+                ..StepResult::new("dcv", "Set meter to DC V", StepStatus::Captured)
             }],
+            ..CaptureReport::default()
         };
 
         let yaml = serde_yaml_ng::to_string(&report).unwrap();
@@ -1020,14 +1342,8 @@ mod tests {
             transport_name: None,
             transport_info: None,
             supported: true,
-            steps: vec![StepResult {
-                id: "dcv".to_string(),
-                instruction: "test".to_string(),
-                status: StepStatus::Skipped,
-                samples: vec![],
-                screen: None,
-                error: None,
-            }],
+            steps: vec![StepResult::new("dcv", "test", StepStatus::Skipped)],
+            ..CaptureReport::default()
         };
 
         let yaml = serde_yaml_ng::to_string(&report).unwrap();
@@ -1069,6 +1385,7 @@ mod tests {
             transport_info: None,
             supported: true,
             steps: vec![],
+            ..CaptureReport::default()
         };
 
         let dir = std::env::temp_dir();
@@ -1093,6 +1410,9 @@ mod tests {
 /// Filter keyword for the freeform capture pass. Not a protocol step — the
 /// pass generates `extra_0`, `extra_1`, … as the user describes each capture.
 pub(crate) const FREEFORM_STEP_ID: &str = "extra";
+
+/// Samples taken per freeform capture.
+const FREEFORM_SAMPLES: usize = 3;
 
 /// Print the step IDs `--steps` accepts for the selected device.
 ///
@@ -1314,6 +1634,7 @@ fn populate_report_metadata(
 /// Part 4: Freeform additional captures.
 fn run_freeform_captures(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
     step_filter: &Option<std::collections::HashSet<String>>,
     report: &mut CaptureReport,
     output_path: &str,
@@ -1339,8 +1660,20 @@ fn run_freeform_captures(
             break;
         }
 
-        let raw = capture_samples(dmm, 3);
-        let sample_data: Vec<SampleData> = raw.iter().map(SampleData::from_measurement).collect();
+        let step_id = format!("extra_{extra}");
+        recording::lock(recorder).set_step(Some(&step_id));
+        let run = capture_samples(dmm, FREEFORM_SAMPLES);
+        let mut diagnostics = run.diagnostics;
+        let sample_data: Vec<SampleData> = run
+            .samples
+            .iter()
+            .map(SampleData::from_measurement)
+            .collect();
+        let frames = {
+            let mut rec = recording::lock(recorder);
+            rec.set_step(None);
+            frames_for_step(&rec.drain(), &step_id, &mut diagnostics)
+        };
 
         for (i, s) in sample_data.iter().enumerate() {
             eprintln!("    {} {}", style(format!("[{i}]")).dim(), s.summary());
@@ -1361,21 +1694,23 @@ fn run_freeform_captures(
             None
         };
 
+        let status = if sample_data.is_empty() {
+            StepStatus::Timeout
+        } else {
+            StepStatus::Captured
+        };
         upsert_step(
             report,
             StepResult {
-                id: format!("extra_{extra}"),
-                instruction: desc,
-                status: if sample_data.is_empty() {
-                    StepStatus::Timeout
-                } else {
-                    StepStatus::Captured
-                },
+                needs_attention: needs_attention(&sample_data, FREEFORM_SAMPLES, &diagnostics),
                 samples: sample_data,
                 screen,
-                error: None,
+                frames,
+                diagnostics,
+                ..StepResult::new(&step_id, &desc, status)
             },
         );
+        report.wire_events_dropped = recording::lock(recorder).dropped();
         save_report(report, output_path)?;
         extra += 1;
     }
@@ -1387,6 +1722,7 @@ pub(crate) fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
@@ -1402,6 +1738,13 @@ pub(crate) fn cmd_capture(
     eprintln!("Output file: {output_path}\n");
 
     populate_report_metadata(&mut report, &mut dmm, device_name, supported);
+    report.device_id = Some(device.id.to_string());
+    // Everything on the wire so far is the init handshake and the name query.
+    report.init_frames = recording::lock(&recorder)
+        .drain()
+        .iter()
+        .map(FrameRecord::from)
+        .collect();
 
     validate_step_filter(&step_filter, &dmm.capture_steps())?;
 
@@ -1413,6 +1756,7 @@ pub(crate) fn cmd_capture(
     let protocol_steps = dmm.capture_steps();
     let done = run_protocol_capture(
         &mut dmm,
+        &recorder,
         protocol_steps,
         &step_filter,
         &mut report,
@@ -1420,9 +1764,10 @@ pub(crate) fn cmd_capture(
     )?;
 
     if !done {
-        run_freeform_captures(&mut dmm, &step_filter, &mut report, &output_path)?;
+        run_freeform_captures(&mut dmm, &recorder, &step_filter, &mut report, &output_path)?;
     }
 
+    report.wire_events_dropped = recording::lock(&recorder).dropped();
     save_report(&report, &output_path)?;
     eprintln!();
     eprintln!("{}", style("=== Capture complete! ===").bold().green());

@@ -1,5 +1,6 @@
 mod capture;
 mod format;
+mod recording;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
@@ -439,8 +440,9 @@ fn main() {
                 capture::list_steps(device);
                 Ok(())
             } else {
-                open_with_help(device, adapter)
-                    .and_then(|dmm| capture::cmd_capture(output, steps, dmm, device))
+                open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
+                    capture::cmd_capture(output, steps, dmm, recorder, device)
+                })
             }
         }
     };
@@ -559,40 +561,78 @@ fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
     Ok(running)
 }
 
+/// The meter handle every command works through, with the transport picked
+/// at runtime.
+type BoxedDmm = dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>;
+
 /// Open the meter with helpful error messages for common failures.
 fn open_with_help(
     device: &'static SelectableDevice,
     adapter: Option<&str>,
-) -> Result<dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>, Box<dyn std::error::Error>> {
-    match dmm_lib::open_device_by_id_auto(device.id, adapter) {
-        Ok(dmm) => {
-            let profile = dmm.profile();
-            if profile.stability == dmm_lib::protocol::Stability::Experimental {
-                eprintln!(
-                    "{}",
-                    style(format!(
-                        "WARNING: {} support is EXPERIMENTAL (unverified against real hardware).",
-                        profile.model_name
-                    ))
-                    .yellow()
-                    .bold()
-                );
-                eprintln!(
-                    "{}",
-                    style("Run 'capture' to generate a report for validation:").yellow()
-                );
-                eprintln!(
-                    "{}",
-                    style(format!("  dmm-cli --device {} capture", device.id)).yellow()
-                );
-                eprintln!(
-                    "{}",
-                    style(format!("Report feedback: {}", profile.feedback_url())).yellow()
-                );
-            }
-            Ok(dmm)
-        }
-        Err(dmm_lib::error::Error::NoTransportFound) => {
+) -> Result<BoxedDmm, Box<dyn std::error::Error>> {
+    let dmm = dmm_lib::open_device_by_id_auto(device.id, adapter)
+        .map_err(|e| open_error_help(device, e))?;
+    warn_if_experimental(device, dmm.profile());
+    Ok(dmm)
+}
+
+/// Open the meter with every wire byte recorded, the init handshake included,
+/// for `capture` to put in its report.
+fn open_recording_with_help(
+    device: &'static SelectableDevice,
+    adapter: Option<&str>,
+) -> Result<(BoxedDmm, recording::SharedRecorder), Box<dyn std::error::Error>> {
+    let (transport, protocol) = dmm_lib::open_transport_by_id_auto(device.id, adapter)
+        .map_err(|e| open_error_help(device, e))?;
+    let (transport, recorder) = recording::RecordingTransport::new(transport);
+    let dmm = dmm_lib::Dmm::new(
+        Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,
+        protocol,
+    )
+    .map_err(|e| open_error_help(device, e))?;
+    warn_if_experimental(device, dmm.profile());
+    Ok((dmm, recorder))
+}
+
+/// Tell the user an unverified protocol is in use and how to help fix it.
+fn warn_if_experimental(
+    device: &'static SelectableDevice,
+    profile: &dmm_lib::protocol::DeviceProfile,
+) {
+    if profile.stability != dmm_lib::protocol::Stability::Experimental {
+        return;
+    }
+    eprintln!(
+        "{}",
+        style(format!(
+            "WARNING: {} support is EXPERIMENTAL (unverified against real hardware).",
+            profile.model_name
+        ))
+        .yellow()
+        .bold()
+    );
+    eprintln!(
+        "{}",
+        style("Run 'capture' to generate a report for validation:").yellow()
+    );
+    eprintln!(
+        "{}",
+        style(format!("  dmm-cli --device {} capture", device.id)).yellow()
+    );
+    eprintln!(
+        "{}",
+        style(format!("Report feedback: {}", profile.feedback_url())).yellow()
+    );
+}
+
+/// Print setup help for the failures a user can act on, and return the error
+/// to report.
+fn open_error_help(
+    device: &'static SelectableDevice,
+    error: dmm_lib::error::Error,
+) -> Box<dyn std::error::Error> {
+    match error {
+        dmm_lib::error::Error::NoTransportFound => {
             eprintln!("{}", style("USB cable not found.").yellow().bold());
             print_transport_setup_help();
             let proto = (device.new_protocol)();
@@ -608,9 +648,9 @@ fn open_with_help(
                     .yellow()
                 );
             }
-            Err("device not found".into())
+            "device not found".into()
         }
-        Err(dmm_lib::error::Error::AdapterNotFound(ref detail)) => {
+        dmm_lib::error::Error::AdapterNotFound(ref detail) => {
             eprintln!(
                 "{} adapter not found: {detail}",
                 style("Error:").red().bold()
@@ -632,9 +672,9 @@ fn open_with_help(
                     style("Use --adapter <serial-or-path> to select one.").dim()
                 );
             }
-            Err("adapter not found".into())
+            "adapter not found".into()
         }
-        Err(e) => Err(e.into()),
+        e => e.into(),
     }
 }
 

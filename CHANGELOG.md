@@ -24,6 +24,7 @@
 - **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period), `temp2` (second thermocouple), `temp-diff` and `temp-diff-rev` (their difference) stand in for a UT181A in the CLI and GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
 - **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
+- **Capture reports carry the raw wire bytes and the parse errors for each step** — a step whose frames the tool couldn't decode was saved empty, with no trace of what the meter sent.
 
 ### Bug fixes
 

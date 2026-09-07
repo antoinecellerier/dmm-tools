@@ -42,8 +42,12 @@ handshake in the trace too. The wrapper lives in the CLI — `Transport` is a pu
 `&self` methods, so delegation is trivial.
 
 Per step the report carries a bounded `frames` list (ms offset, direction, raw hex)
-alongside `samples`; rejections are listed under `diagnostics`. The per-step cap and the
-recorder's bound are explicit constants.
+alongside `samples`; rejections are listed under `diagnostics`. Consecutive reads on one
+step within 50 ms are recorded as a single event, because the CP2110 delivers one UART byte
+per HID report and a 19-byte frame would otherwise be 19 events. The per-step cap and the
+recorder's bound are explicit constants; the oldest events over the cap are trimmed and
+counted in `frames_dropped`, which does not flag the step — a step that waits on the
+operator passes the cap as a matter of course.
 
 Sampling records `InvalidResponse`, `ChecksumMismatch` and `UnknownMode` into the step's
 `diagnostics` and keeps going instead of breaking out — on an unproven protocol those are the
@@ -141,7 +145,7 @@ do not belong in the family's shipped list.
 
 Report level: `device_id`, `init_frames`, `wire_events_dropped` (B); `unverified_only`
 (E); `tier`, `core_semantics`, `gate_failures` (C); `drive` (D); `plan` (H). Per step:
-`frames`, `diagnostics` and `needs_attention` (B); `confirmed`, `lcd` (typed corrections
+`frames`, `frames_dropped`, `diagnostics` and `needs_attention` (B); `confirmed`, `lcd` (typed corrections
 only) and `confirmed_by` (F); sub-step ids (D). Frames are raw wire transfers; a rejected
 one is visible as a frame with no matching sample and a line under `diagnostics`. Every
 addition is optional on read, so older reports still resume.
