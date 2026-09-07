@@ -131,6 +131,9 @@ real hardware**. Every aspect needs end-to-end verification.
 - 60,000 count range values (6/60/600 vs 4/40/400)
 - 7 display value fields (main + 6 sub-displays) — format and content
 - Status flag bytes (8 bytes at msg[56..63]) — all bit positions correct?
+- AVG flag (byte 57 bit 1) — parsed since 2026-09-07 and reported wherever
+  flags are shown; unverified on hardware. Put the meter in MAX/MIN/AVG and
+  confirm AVG lights only on the AVG step of the cycle.
 - Battery level nibble (msg[62]) — what do the values mean?
 - Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err, 3=V err
 - ACV LPF (0x01) range byte — vendor ignores it and fixes 1000V (2026-06
@@ -192,6 +195,9 @@ real hardware**. Every aspect needs end-to-end verification.
 - Main display (7 ASCII bytes) — values match LCD?
 - Sub-displays (sub1, sub2, bar) — format and content
 - Status flag bytes (7 bytes, 28 named flags) — all bit positions correct?
+- AVG flag (byte 31 bit 1) — parsed since 2026-09-07 and reported wherever
+  flags are shown; unverified on hardware. Press MAX/MIN/AVG (0x49) through
+  the cycle and confirm AVG lights only on the AVG step.
 - Overload detection (OL1 flag + "OL" in display string)
 - Commands: hold (0x4A), rel (0x48), range_auto (0x47), range_manual (0x46),
   max_min_avg (0x49), light (0x4B), select (0x4C)

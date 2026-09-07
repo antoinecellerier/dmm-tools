@@ -668,6 +668,19 @@ mod tests {
     }
 
     #[test]
+    fn parse_avg_flag() {
+        // Status byte 1 bit 1 = Avg (spec byte 57); Rel/Min/Max share the byte.
+        let mut status = zero_status();
+        status[1] = 0x02;
+        let payload = make_payload(0x02, 0x30, b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.avg);
+        assert!(!m.flags.rel);
+        assert!(!m.flags.min);
+        assert!(!m.flags.max);
+    }
+
+    #[test]
     fn parse_auto_range() {
         let payload = make_payload(0x02, 0x30, b"  1.234", zero_status());
         let m = parse_measurement(&payload).unwrap();
@@ -809,7 +822,7 @@ mod tests {
     }
 
     /// Every status byte 0xFF: OL1 forces Overload, the manual bit clears
-    /// AUTO, hold/rel/min/max/HV/LoZ/VOID light — and low_battery stays off,
+    /// AUTO, hold/rel/min/max/avg/HV/LoZ/VOID light — and low_battery stays off,
     /// because the battery nibble reads 0xF (full), not 0 (empty).
     #[test]
     fn snapshot_every_status_bit_set() {
@@ -824,7 +837,7 @@ value=Overload
 unit=V
 range_label=60V
 display_raw=Some("-1.2345")
-flags=hold,rel,min,max,hv_warning,loz,void
+flags=hold,rel,min,max,avg,hv_warning,loz,void
 aux=0
 raw_payload=61"#
         );

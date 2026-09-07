@@ -98,6 +98,8 @@ pub(crate) struct SampleFlags {
     pub auto_range: bool,
     pub min: bool,
     pub max: bool,
+    #[serde(default)]
+    pub avg: bool,
     pub low_battery: bool,
     pub hv_warning: bool,
     pub dc: bool,
@@ -128,6 +130,7 @@ impl From<&StatusFlags> for SampleFlags {
             auto_range: f.auto_range,
             min: f.min,
             max: f.max,
+            avg: f.avg,
             low_battery: f.low_battery,
             hv_warning: f.hv_warning,
             dc: f.dc,
@@ -154,6 +157,7 @@ impl From<&SampleFlags> for StatusFlags {
             rel: f.rel,
             min: f.min,
             max: f.max,
+            avg: f.avg,
             auto_range: f.auto_range,
             low_battery: f.low_battery,
             hv_warning: f.hv_warning,
@@ -567,6 +571,7 @@ mod tests {
             rel: true,
             min: true,
             max: true,
+            avg: true,
             auto_range: true,
             low_battery: true,
             hv_warning: true,
@@ -607,6 +612,7 @@ mod tests {
             rel: true,
             min: true,
             max: true,
+            avg: true,
             auto_range: true,
             low_battery: true,
             hv_warning: true,
@@ -672,13 +678,14 @@ mod tests {
             record: true,
             loz: true,
             void: true,
+            avg: true,
             low_battery: true,
             peak_max: true,
             ..Default::default()
         };
         let summary = SampleData::from_measurement(&m).summary();
         for expected in [
-            "AUTO", "LOW BAT", "HV!", "P-MAX", "LEAD ERR", "COMP", "REC", "LoZ", "VOID",
+            "AUTO", "AVG", "LOW BAT", "HV!", "P-MAX", "LEAD ERR", "COMP", "REC", "LoZ", "VOID",
         ] {
             assert!(
                 summary.contains(expected),

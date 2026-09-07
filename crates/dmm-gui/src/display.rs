@@ -183,6 +183,7 @@ fn spoken(flag: Flag) -> Option<&'static str> {
         Flag::Rel => "relative",
         Flag::Min => "minimum",
         Flag::Max => "maximum",
+        Flag::Avg => "average",
         Flag::PeakMin => "peak minimum",
         Flag::PeakMax => "peak maximum",
         Flag::LowBattery => "low battery",
@@ -206,6 +207,7 @@ fn badge_tone(flag: Flag, tc: &ThemeColors) -> Color32 {
         | Flag::AutoRange
         | Flag::Min
         | Flag::Max
+        | Flag::Avg
         | Flag::PeakMax
         | Flag::PeakMin
         | Flag::Comp
@@ -230,6 +232,9 @@ fn append_flags_phrase(out: &mut String, flags: &StatusFlags) {
 /// is `Flag::ALL[i]`, so the packing stays stable and stays complete as flags
 /// are added rather than relying on struct field order.
 fn flags_bits(flags: &StatusFlags) -> u16 {
+    // A seventeenth flag would shift straight out of the u16 and silently
+    // leave the fingerprint, so widen the packing before adding one.
+    const _: () = assert!(StatusFlags::COUNT <= u16::BITS as usize);
     Flag::ALL.iter().enumerate().fold(0u16, |bits, (i, &flag)| {
         bits | ((flags.get(flag) as u16) << i)
     })
@@ -1225,6 +1230,13 @@ mod tests {
                 "record",
                 StatusFlags {
                     record: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "avg",
+                StatusFlags {
+                    avg: true,
                     ..Default::default()
                 },
             ),

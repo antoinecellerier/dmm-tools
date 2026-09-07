@@ -634,6 +634,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_avg_flag() {
+        // Status byte 1 bit 1 = Avg (spec byte 31), the third step of the
+        // meter's MAX/MIN/AVG cycle. Rel/Min/Max share the byte and stay off.
+        let mut status = zero_status();
+        status[1] = 0x02;
+        let payload = make_payload(0x00, 0x30, b"  1.234", status);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(m.flags.avg);
+        assert!(!m.flags.rel);
+        assert!(!m.flags.min);
+        assert!(!m.flags.max);
+    }
+
+    #[test]
     fn parse_auto_range() {
         // Manual bit clear = auto range
         let payload = make_payload(0x00, 0x30, b"  1.234", zero_status());
@@ -746,7 +760,7 @@ mod tests {
     }
 
     /// Every status byte 0xFF: the OL1 bit forces Overload, the manual-range
-    /// bit clears AUTO, and hold/rel/min/max/HV/low-battery all light.
+    /// bit clears AUTO, and hold/rel/min/max/avg/HV/low-battery all light.
     #[test]
     fn snapshot_every_status_bit_set() {
         let payload = make_payload(0x00, b'1', b"-1.2345", [0xFF; 7]);
@@ -760,7 +774,7 @@ value=Overload
 unit=V
 range_label=40V
 display_raw=Some("-1.2345")
-flags=hold,rel,min,max,low_battery,hv_warning
+flags=hold,rel,min,max,avg,low_battery,hv_warning
 aux=0
 raw_payload=34"#
         );

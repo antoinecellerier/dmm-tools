@@ -89,7 +89,7 @@ success/failure) and expire after 4 seconds.
   - **AUTO** — auto-range active
   - **HOLD** — display frozen on meter
   - **REL** — relative/delta mode
-  - **MIN**, **MAX** — min/max recording active
+  - **MIN**, **MAX**, **AVG** — min/max/average recording active
   - **LOW BAT** — low battery warning (orange)
   - **SCALE** — a software [scale](#scale) is applied to the reading. Unlike
     the others this is the app's own state, not something the meter reported,

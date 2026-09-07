@@ -6,6 +6,7 @@ pub enum Flag {
     AutoRange,
     Min,
     Max,
+    Avg,
     LowBattery,
     HvWarning,
     PeakMax,
@@ -27,6 +28,7 @@ impl Flag {
         Flag::AutoRange,
         Flag::Min,
         Flag::Max,
+        Flag::Avg,
         Flag::LowBattery,
         Flag::HvWarning,
         Flag::PeakMax,
@@ -48,6 +50,7 @@ impl Flag {
             Flag::AutoRange => "auto_range",
             Flag::Min => "min",
             Flag::Max => "max",
+            Flag::Avg => "avg",
             Flag::LowBattery => "low_battery",
             Flag::HvWarning => "hv_warning",
             Flag::PeakMax => "peak_max",
@@ -72,6 +75,7 @@ impl Flag {
             Flag::AutoRange => "AUTO",
             Flag::Min => "MIN",
             Flag::Max => "MAX",
+            Flag::Avg => "AVG",
             Flag::LowBattery => "LOW BAT",
             Flag::HvWarning => "HV!",
             Flag::PeakMax => "P-MAX",
@@ -96,6 +100,9 @@ pub struct StatusFlags {
     pub rel: bool,
     pub min: bool,
     pub max: bool,
+    /// Average mode active (e.g. VC-880/VC-890 status byte 1 bit 1), the third
+    /// step of the meter's MAX/MIN/AVG cycle.
+    pub avg: bool,
     pub auto_range: bool,
     pub low_battery: bool,
     pub hv_warning: bool,
@@ -137,7 +144,7 @@ impl StatusFlags {
     }
 
     /// Number of flags in [`StatusFlags::as_pairs`] — i.e. every field.
-    pub const COUNT: usize = 15;
+    pub const COUNT: usize = 16;
 
     /// Value of a single flag. Exhaustive, so a new field fails to compile
     /// until it is wired into [`Flag`].
@@ -148,6 +155,7 @@ impl StatusFlags {
             Flag::AutoRange => self.auto_range,
             Flag::Min => self.min,
             Flag::Max => self.max,
+            Flag::Avg => self.avg,
             Flag::LowBattery => self.low_battery,
             Flag::HvWarning => self.hv_warning,
             Flag::PeakMax => self.peak_max,
@@ -212,6 +220,7 @@ mod tests {
             rel: true,
             min: true,
             max: true,
+            avg: true,
             auto_range: true,
             low_battery: true,
             hv_warning: true,
@@ -344,7 +353,7 @@ mod tests {
     fn all_flags_set_prints_every_label_in_order() {
         assert_eq!(
             all_set().to_string(),
-            "HOLD REL AUTO MIN MAX LOW BAT HV! P-MAX P-MIN LEAD ERR COMP REC LoZ VOID"
+            "HOLD REL AUTO MIN MAX AVG LOW BAT HV! P-MAX P-MIN LEAD ERR COMP REC LoZ VOID"
         );
     }
 

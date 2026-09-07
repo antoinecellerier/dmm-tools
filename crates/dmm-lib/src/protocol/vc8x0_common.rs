@@ -231,7 +231,10 @@ pub(crate) fn common_flags(status: &[u8]) -> (StatusFlags, bool) {
         // Status byte 2: bit0=Hold, bit1=Manual
         hold: status[2] & 0x01 != 0,
         // Status byte 1: bit0=Rel, bit1=Avg, bit2=Min, bit3=Max
+        // (vc880 spec byte 31, tables at lines 117 and 272; vc890 spec byte 57,
+        // line 95 — both families share this byte layout.)
         rel: status[1] & 0x01 != 0,
+        avg: status[1] & 0x02 != 0,
         min: status[1] & 0x04 != 0,
         max: status[1] & 0x08 != 0,
         auto_range: status[2] & 0x02 == 0, // Manual bit: 0=auto, 1=manual
