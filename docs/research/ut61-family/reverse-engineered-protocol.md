@@ -163,19 +163,29 @@ disambiguates: a meter last seen in AC mV is on the mV position.
 | A | DC A, AC A | AC A, Hz, Duty % |
 | NCV | NCV | — |
 
-Cycles confirmed on a real UT61E+ — **[VERIFIED]**
-(`docs/research/ut61eplus/reverse-engineered-protocol.md` §2.3 and §2.5,
-and the Completed table of `docs/verification-backlog.md`):
+Every row of this table, ring orders included, was walked on a real UT61E+ on
+2026-09-07 with `dmm-cli mode` (leads open, `RUST_LOG=dmm_lib=debug`) —
+**[VERIFIED]**:
 
-- SELECT (0x4C) cycles DC V ↔ AC+DC V on V⎓, AC V ↔ LPF V on V~, and DC ↔ AC
-  on the mA and A positions.
-- Hz/% (0x49) cycles AC mV → Hz → Duty % → AC mV, reaches Hz from V~ and
-  Duty % from AC mA, and does nothing (the meter beeps) on DC V.
+- SELECT (0x4C): DC V ↔ AC+DC V on V⎓; AC V ↔ LPF V on V~; DC ↔ AC on mV, µA,
+  mA and A; Ω → Continuity → Diode → Capacitance → Ω (that order).
+- Hz/% (0x49): AC V/mV/µA/mA/A → Hz → Duty % → back, and Hz ↔ Duty % on the
+  Hz/% position. It does nothing on V⎓ or in DC mV, and neither button does
+  anything on hFE or NCV.
+- Every leg needed one press. The meter reported the new mode on the first
+  read ~300 ms after the press in all but one case (one extra ~100 ms read on
+  the Ω ring), which is what the driver's 150 ms delay / 3 reads settle covers.
+- Pressing SELECT while the meter is in Hz or Duty % leaves the Hz/% ring for
+  the *other* member of the position's SELECT ring — LPF V on V~, DC mV, DC µA,
+  DC mA, DC A — not the junction mode. On the Hz/% position SELECT toggles
+  Hz ↔ Duty % like Hz/% does. The driver does not rely on either: it only
+  ever presses SELECT from a SELECT-ring mode.
+- A switch goes through under HOLD (the SELECT press also clears HOLD) and
+  under MIN/MAX. AUTO is back once the target mode shows. LPF V always
+  reports manual range (flag byte 15 bit 2 set) and the AUTO button does not
+  change that — a property of the meter, not of the switch.
 - Modes 0x15 (LoZ V), 0x16 (LoZ V 2) and 0x17 (LPF) are reachable from no
   position of this model, which is why the table above lists none of them.
-
-The order within the four-mode Ω ring is **[UNVERIFIED]** — the table lists
-its members, not the sequence.
 
 #### UT61D+ / UT161D
 

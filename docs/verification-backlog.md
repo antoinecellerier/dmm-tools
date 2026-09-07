@@ -63,39 +63,14 @@ record and should either go or gain a comment explaining why it's kept.
 
 ### UT61+ remote mode selection (cycle-to-target)
 
-Shipped 2026-09-07: `dmm-cli mode` and the GUI's mode dropdown now work on
-the UT61+/UT161 family. The meter takes no set-mode command, so the driver
+Shipped 2026-09-07: `dmm-cli mode` and the GUI's mode dropdown work on the
+UT61+/UT161 family. The meter takes no set-mode command, so the driver
 (`crates/dmm-lib/src/protocol/cycle.rs`) presses SELECT (0x4C) or Hz/%
-(0x49) and re-reads the mode byte until the target shows. It plans from a
-per-model dial table — which modes each dial position reaches with which
-button — taken from the UT61+ Series User Manual §VII and recorded in
-`docs/research/ut61-family/reverse-engineered-protocol.md` §3.1. The
-individual presses are verified on the in-house UT61E+; the tables and the
-settle timing are not.
-
-Runnable checks on the UT61E+, one dial position at a time, each with an LCD
-photo beside the tool's output:
-
-- on every position in turn, `dmm-cli --device ut61eplus mode` should list
-  exactly that position's modes with `*` on the live one — V⎓ two, V~ four,
-  mV four, Ω four, µA/mA/A four each, hFE one, NCV one, Hz two
-- switch to each listed entry in turn (`dmm-cli mode "AC+DC V"` on V⎓,
-  `mode "LPF V"` and `mode Hz` and `mode Duty` on V~, and so on) and confirm
-  the LCD agrees with the printed `Meter now in <mode>`
-- the Ω position's ring order is unknown, so it is the one worth watching:
-  from Ω, switch to Capacitance and then back to Continuity, and report how
-  many presses each took (`RUST_LOG=dmm_lib=debug` prints one
-  `cycle: pressing …` line per press)
-- settle timing — `SELECT_SETTLE_DELAY` is 150 ms and `SELECT_SETTLE_READS`
-  is 3, both guesses. Watch the debug log for `cycle: pressing` lines that
-  repeat with the same `in <mode>`: that is a press the meter had not yet
-  reported, and means the delay is too short
-- a switch must not disturb the rest of the meter's state: with AUTO set
-  before the switch, `dmm-cli read --format json --count 1` afterwards should
-  still report `"auto_range":true`
-- the negatives: on V⎓ the listing should not offer Hz or Duty % at all (the
-  Hz/% button does nothing there), and a switch to a mode from another dial
-  position should be refused before any write reaches the meter
+(0x49) and re-reads the mode byte until the target shows, planning from a
+per-model dial table recorded in
+`docs/research/ut61-family/reverse-engineered-protocol.md` §3.1. The UT61E+
+table, its ring orders and the settle timing were verified on the in-house
+meter the same day, every position and every entry (Completed table below).
 
 UT61B+/UT61D+/UT161x owners — [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7).
 Their dial tables come from the manual alone and no press has been observed,
@@ -112,8 +87,8 @@ function at all. A mode listed but unreachable shows up as
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 
-- **DC mV (0x03):** Needs small DC voltage source. Currently only tested as auto-range from DC V.
-- **AC µA (0x0D):** Needs AC current source.
+- **DC mV (0x03):** Mode byte verified on the mV dial. Needs small DC voltage source for value verification.
+- **AC µA (0x0D):** Mode byte verified via SELECT on µA dial. Needs AC current source for value verification.
 - **AC mA (0x0F):** Mode byte verified via SELECT on mA dial. Needs AC current source for value verification.
 - **AC A (0x11):** Mode byte verified via SELECT on A⎓ dial. Needs high-current AC for value verification.
 - **Temperature °C (0x0A):** Needs K-type thermocouple.
@@ -744,9 +719,10 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Remote Exit MIN/MAX | 0x42 | Verified |
 | Remote RANGE | 0x46 | Verified |
 | Remote AUTO | 0x47 | Verified |
-| Remote SELECT | 0x4C | Verified (cycles DC V → AC+DC) |
+| Remote SELECT | 0x4C | Verified on every dial position (§3.1 of the ut61-family spec: V⎓, V~, mV, Ω, µA, mA, A rings; inert on hFE, NCV) |
+| Remote mode switching (`dmm-cli mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under HOLD and MIN/MAX; settle 150 ms / 3 reads |
 | Remote LIGHT | 0x4B | Verified |
-| Remote SELECT2 | 0x49 | Verified (AC mV: cycles AC mV → Hz → Duty Cycle → AC mV) |
+| Remote SELECT2 | 0x49 | Verified (AC V/mV/µA/mA/A → Hz → Duty Cycle → back; Hz ↔ Duty on the Hz/% dial; inert on V⎓, DC mV, hFE, NCV) |
 | Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV; context-dependent, no effect on DC V) |
 | Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings) |
 | Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name) |

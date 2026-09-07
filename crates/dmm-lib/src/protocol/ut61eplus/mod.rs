@@ -423,8 +423,9 @@ impl Protocol for Ut61PlusProtocol {
 /// what mode it is in.
 ///
 /// The meter is polled, so a press can land while a frame is already on its
-/// way and the reading after it still shows the old mode. Both values are
-/// starting points; neither has been tuned against hardware.
+/// way and the reading after it still shows the old mode. On a UT61E+ the
+/// first read after this delay (which follows `press_command`'s own 150 ms
+/// drain) showed the new mode in every leg but one, where a second read did.
 const SELECT_SETTLE_DELAY: Duration = Duration::from_millis(150);
 /// Readings taken after a press before concluding it changed nothing.
 const SELECT_SETTLE_READS: usize = 3;

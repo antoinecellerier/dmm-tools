@@ -367,9 +367,12 @@ The UT61+/UT161 meters take no set-mode command, so a switch there is a short
 burst of SELECT and Hz/% presses, each one read back from the meter until the
 target mode shows — slower than a single command, and audible on the meter.
 One caveat comes with that: Hz and Duty % are reported with the same mode byte
-from every dial position, so after moving the dial while the meter shows one
-of them, take a reading in another mode once — otherwise the listing may still
-be the previous position's.
+from every dial position, and each `dmm-cli` run starts without history, so
+while the meter shows one of them `dmm-cli mode` lists only Hz and Duty %. To
+get back to the position's voltage or current function, press SELECT once
+(`dmm-cli command select`); the next `mode` lists everything again. The GUI
+keeps track across readings, so it only has this gap until it has seen one
+other mode from the position.
 
 The Voltcraft VC-880/VC650BT and VC-890 work the same way through their
 SHIFT/SETUP button. Their dial tables come from the manuals and no meter has

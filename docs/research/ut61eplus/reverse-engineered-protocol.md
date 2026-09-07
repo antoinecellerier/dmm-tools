@@ -309,7 +309,7 @@ confirmed by the mode-specific code paths in FUN_10007d50:
 | 0x00 | AC Voltage | ACV | String table position | **[VERIFIED]** |
 | 0x01 | AC Millivolt | ACmV | String table position | **[VERIFIED]** |
 | 0x02 | DC Voltage | DCV | String table position | **[VERIFIED]** |
-| 0x03 | DC Millivolt | DCmV | String table position | [UNVERIFIED] |
+| 0x03 | DC Millivolt | DCmV | String table position | **[VERIFIED]** (mV dial, mode byte capture) |
 | 0x04 | Frequency | FREQ | Multiplier check `cVar1 == '\x04'` | **[VERIFIED]** (V~ and mA via SELECT2) |
 | 0x05 | Duty Cycle | Duty Cycle | Bar graph "-" check `cVar1 == '\x05'` | **[VERIFIED]** (mA via SELECT2) |
 | 0x06 | Resistance | RES | Multiplier check `cVar1 == '\x06'` | **[VERIFIED]** |
@@ -319,9 +319,9 @@ confirmed by the mode-specific code paths in FUN_10007d50:
 | 0x0A | Temperature °C | Celsius | Special handling `cVar1 == '\n'` (0x0A) | — (not on UT61E+) |
 | 0x0B | Temperature °F | Fahrenheit | Special handling `cVar1 == '\v'` (0x0B) | — (not on UT61E+) |
 | 0x0C | DC µA | DCuA | String table position | **[VERIFIED]** |
-| 0x0D | AC µA | ACuA | String table position | [UNVERIFIED] |
+| 0x0D | AC µA | ACuA | String table position | **[VERIFIED]** (µA + SELECT, mode byte capture) |
 | 0x0E | DC mA | DCmA | String table position | **[VERIFIED]** |
-| 0x0F | AC mA | ACmA | String table position | [UNVERIFIED] |
+| 0x0F | AC mA | ACmA | String table position | **[VERIFIED]** (mA + SELECT, mode byte capture) |
 | 0x10 | DC A | DCA | String table position | **[VERIFIED]** (A⎓ dial) |
 | 0x11 | AC A | ACA | String table position | **[VERIFIED]** (A⎓ + SELECT) |
 | 0x12 | hFE | hFE | Multiplier check `cVar1 == '\x12'` | **[VERIFIED]** |
