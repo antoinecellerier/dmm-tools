@@ -43,6 +43,14 @@ struct Signature {
 }
 
 impl Signature {
+    /// The same mode, range and payload shape: only the flags may differ.
+    fn same_rung(&self, other: &Signature) -> bool {
+        self.mode_raw == other.mode_raw
+            && self.range_raw == other.range_raw
+            && self.len == other.len
+            && self.stable == other.stable
+    }
+
     fn of(m: &Measurement, baseline: Option<&Baseline>) -> Self {
         Signature {
             mode_raw: m.mode_raw,
@@ -124,6 +132,13 @@ pub(crate) struct StateWatcher {
     run: Option<(Signature, usize)>,
     /// Frames in a row that satisfied the expectation.
     matched: usize,
+    /// The last two signatures, newest first, and how many frames in a row
+    /// have matched the one two frames back with only the flags moving: a
+    /// meter alternating two states by design, as the UT61E+ does in AC+DC V
+    /// where the AC and DC components take turns with a flag saying which.
+    /// A range hunt alternating two rungs does not count.
+    previous: [Option<Signature>; 2],
+    alternating: usize,
     /// The settled state last reported, so a mismatch is printed once instead
     /// of on every frame. A meter that moves away and back reports again.
     reported: Option<Signature>,
@@ -146,6 +161,8 @@ impl StateWatcher {
             auto_advance,
             run: None,
             matched: 0,
+            previous: [None, None],
+            alternating: 0,
             reported: None,
         }
     }
@@ -167,6 +184,13 @@ impl StateWatcher {
             _ => 1,
         };
         self.run = Some((sig.clone(), run));
+        let blinking = self.previous[1].as_ref() == Some(&sig)
+            && self.previous[0]
+                .as_ref()
+                .is_some_and(|last| last.same_rung(&sig));
+        self.alternating = if blinking { self.alternating + 1 } else { 0 };
+        self.previous = [Some(sig.clone()), self.previous[0].take()];
+        let settled = run >= STABLE_FRAMES || self.alternating >= 2 * STABLE_FRAMES;
 
         if let Detector::Semantic(expect) = &self.detector {
             // Read out before the arms below touch the watcher's counters.
@@ -177,7 +201,7 @@ impl StateWatcher {
                     // The expectation holding is not the meter having settled:
                     // an autoranging meter satisfies "Ω, OL" on every rung it
                     // hunts through. The signature has to hold too.
-                    if self.matched >= STABLE_FRAMES && run >= STABLE_FRAMES && self.auto_advance {
+                    if self.matched >= STABLE_FRAMES && settled && self.auto_advance {
                         Verdict::Ready
                     } else {
                         Verdict::Waiting
@@ -305,6 +329,22 @@ mod tests {
         assert_eq!(w.feed(&dcv_on(0x01)), Verdict::Waiting);
         assert_eq!(w.feed(&dcv_on(0x01)), Verdict::Waiting);
         assert_eq!(w.feed(&dcv_on(0x01)), Verdict::Ready);
+    }
+
+    /// AC+DC V on the UT61E+ sends the AC and DC components in turn, a flag
+    /// toggling with them, so no three frames ever agree; the step still has
+    /// to capture. A hunt between two rungs is not that (above).
+    #[test]
+    fn a_flag_blinking_by_design_still_settles() {
+        let mut w = StateWatcher::for_step(Some(Expect::mode("DC V")), None, true);
+        let frame = |i: usize| {
+            let flag3 = if i.is_multiple_of(2) { 0x00 } else { 0x08 };
+            make_test_measurement(0x02, 0x01, b" 0.0008", (0x00, 0x00), (0x00, 0x00, flag3))
+        };
+        for i in 0..7 {
+            assert_eq!(w.feed(&frame(i)), Verdict::Waiting, "frame {i}");
+        }
+        assert_eq!(w.feed(&frame(7)), Verdict::Ready);
     }
 
     /// The wrong dial position settles too, and the operator has to be told

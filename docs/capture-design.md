@@ -33,7 +33,10 @@ that line immediately: only the leads move, and open probes wander enough to sat
 expectation on their own — a −0.0013 V wobble is not the battery being connected. The one
 exception is a previous reading of OL where the step expects a finite value: Ω open to Ω
 across the body is a change open leads cannot fake, so that step waits for it. An Enter-only
-step still reports a mismatch, so the wrong dial position is caught.
+step still reports a mismatch, so the wrong dial position is caught. Stability tolerates a meter that
+alternates two states by design: the UT61E+ in AC+DC V sends the AC and DC components in
+turn with a flag toggling between them, so two signatures differing only in flags, each
+holding for `2 × STABLE_FRAMES` frames, count as settled; two rungs alternating do not.
 
 Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`, against the
 frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT` = 3 s. If it

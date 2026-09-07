@@ -37,6 +37,7 @@
 ### Bug fixes
 
 - **UT61E+ NCV shows the detected level** — every detection read as level 0.
+- **Capture no longer waits 45 s on the UT61E+'s AC+DC V** — the meter sends the AC and DC components in turn and the step waited for them to stop.
 - **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.
 - **A UT181A command the meter refuses is reported as an error** — every command reported as sent, whether the meter acted on it or not.
 - **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.
