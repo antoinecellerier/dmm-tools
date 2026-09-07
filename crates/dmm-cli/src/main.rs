@@ -1117,11 +1117,12 @@ fn shortest_fragment(
     choices: &[dmm_lib::protocol::ModeChoice],
     target: &dmm_lib::protocol::ModeChoice,
 ) -> String {
-    let words: Vec<&str> = target.label.split_whitespace().collect();
+    let label = typeable(&target.label);
+    let words: Vec<&str> = label.split_whitespace().collect();
     let mut runs: Vec<(usize, usize, String)> = Vec::new();
     for len in 1..=words.len() {
         for start in 0..=words.len() - len {
-            let run = words[start..start + len].join(" ").to_lowercase();
+            let run = words[start..start + len].join(" ");
             runs.push((run.chars().count(), start, run));
         }
     }
@@ -1131,7 +1132,24 @@ fn shortest_fragment(
         .find(|run| resolve_mode_choice(choices, run).is_ok_and(|hit| hit.id == target.id))
         // Only reachable for a label the runs above cannot reproduce (empty,
         // or oddly spaced); the label itself is always an exact match.
-        .unwrap_or_else(|| target.label.to_lowercase())
+        .unwrap_or(label)
+}
+
+/// A label as it can be typed on any keyboard: lower-case, with the symbols
+/// the meters use spelled out (Ω → ohm, µ → u) or dropped (°). Both sides of
+/// a match go through this, so "ohm" finds "Ω" and "temp c" finds "Temp °C".
+fn typeable(label: &str) -> String {
+    label
+        .to_lowercase()
+        .chars()
+        .filter(|&c| c != '°')
+        .map(|c| match c {
+            // Both U+03A9 (Greek omega) and U+2126 (ohm sign) lower-case to ω.
+            'ω' => "ohm".to_string(),
+            'µ' | 'μ' => "u".to_string(),
+            other => other.to_string(),
+        })
+        .collect()
 }
 
 /// A label or fragment as it has to be typed back on a shell command line:
@@ -1166,16 +1184,16 @@ fn resolve_mode_choice<'a>(
     choices: &'a [dmm_lib::protocol::ModeChoice],
     input: &str,
 ) -> Result<&'a dmm_lib::protocol::ModeChoice, NoModeMatch<'a>> {
-    let needle = input.trim().to_lowercase();
+    let needle = typeable(input.trim());
     if needle.is_empty() {
         return Err(NoModeMatch::Unknown);
     }
-    if let Some(exact) = choices.iter().find(|c| c.label.to_lowercase() == needle) {
+    if let Some(exact) = choices.iter().find(|c| typeable(&c.label) == needle) {
         return Ok(exact);
     }
     let hits: Vec<_> = choices
         .iter()
-        .filter(|c| c.label.to_lowercase().contains(&needle))
+        .filter(|c| typeable(&c.label).contains(&needle))
         .collect();
     match hits[..] {
         [one] => Ok(one),
@@ -1492,6 +1510,24 @@ mod tests {
         }
     }
 
+    /// The symbols the meters print are not on a keyboard, so their spelled
+    /// out forms match too.
+    #[test]
+    fn resolve_mode_choice_accepts_typeable_spellings() {
+        let choices = [
+            mode_choice(0x06, "Ω", true),
+            mode_choice(0x0C, "DC µA", false),
+            mode_choice(0x14, "°C", false),
+        ];
+        for (input, id) in [("ohm", 0x06), ("Ω", 0x06), ("dc ua", 0x0C), ("c", 0x14)] {
+            assert_eq!(
+                resolve_mode_choice(&choices, input).ok().map(|c| c.id),
+                Some(id),
+                "{input}"
+            );
+        }
+    }
+
     /// Typing a whole label is tedious, so a fragment of exactly one of them
     /// is enough.
     #[test]
@@ -1554,7 +1590,7 @@ mod tests {
     /// is expected to print beside every one of its labels: the mock's
     /// temperature dial, the UT181A's V AC and temperature dials, and the
     /// mock's AC V dial.
-    fn fragment_cases() -> [(&'static [&'static str], &'static [&'static str]); 4] {
+    fn fragment_cases() -> [(&'static [&'static str], &'static [&'static str]); 5] {
         [
             (
                 &[
@@ -1563,7 +1599,7 @@ mod tests {
                     "Temp °C T1-T2",
                     "Temp °C T2-T1",
                 ],
-                &["temp °c", "(t2)", "t1-t2", "t2-t1"],
+                &["temp c", "(t2)", "t1-t2", "t2-t1"],
             ),
             (
                 &[
@@ -1578,9 +1614,13 @@ mod tests {
             ),
             (
                 &["°C", "°C T2", "°C T1-T2", "°C T2-T1"],
-                &["°c", "°c t2", "t1-t2", "t2-t1"],
+                &["c", "c t2", "t1-t2", "t2-t1"],
             ),
             (&["AC V", "AC V Hz"], &["ac v", "hz"]),
+            (
+                &["Ω", "Continuity", "Diode", "Capacitance"],
+                &["ohm", "continuity", "diode", "capacitance"],
+            ),
         ]
     }
 
