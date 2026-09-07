@@ -78,10 +78,12 @@ offered the same AC modes as the E+. Both unverified — issue #7.
 Where the buttons do nothing — observed 2026-09-07 on the in-house UT61E+,
 each sweep ending in `<button> did nothing`:
 
-- **REL:** Hz, Duty % and NCV.
+- **REL:** AC+DC V (open leads), Hz, Duty % and NCV.
 - **MIN/MAX:** continuity, diode, capacitance, Hz, Duty % and NCV.
 - **HOLD:** NCV.
 - **RANGE:** capacitance and Hz, single-range on this model.
+- **AUTO:** LPF V — the meter came up in 1000V manual and stayed there,
+  although the manual's AC V table lists LPF on every range.
 
 The manual (§VII) gives each button one line and no per-function list, so
 this is the only record. `choices()` still offers these settings there;
@@ -134,7 +136,12 @@ real hardware**. Every aspect needs end-to-end verification.
 - Battery level nibble (msg[62]) — what do the values mean?
 - Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err, 3=V err
 - ACV LPF (0x01) range byte — vendor ignores it and fixes 1000V (2026-06
-  review, DMSShare_decompiled.cs:23466); what does the meter send there?
+  review, DMSShare_decompiled.cs:23466). On hardware (2026-09-07) LPF V
+  reported range byte 1000V with AUTO off and refused AUTO; whether any
+  other range is reachable with a signal applied is open.
+- AC+DC V (0x19) alternates frames between the DC and AC components with
+  flag byte 3 bit 0x08 toggling (spec §2.7). Which component the set bit
+  marks needs a known source: a battery plus a mains-hum pickup would tell.
 - Inbound checksum — the vendor never validates meter→host checksums; our
   BE16 check is inferred from the host-side builder. If real frames are
   all rejected with ChecksumMismatch, suspect a different inbound scheme.

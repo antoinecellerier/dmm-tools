@@ -485,7 +485,7 @@ So bit2 SET = manual range (no AUTO label), bit2 CLEAR = auto range (show AUTO).
 | 0 | 0x01 | bar_pol | **[VERIFIED]** | Set when the reading is negative; bar graph then holds the magnitude. |
 | 1 | 0x02 | P-MIN | **[VERIFIED]** | `(bVar3 & 2) → "P-MIN"` |
 | 2 | 0x04 | P-MAX | **[VERIFIED]** | `(bVar3 & 4) → "P-MAX"` |
-| 3 | 0x08 | DC indicator | [VENDOR] | `(bVar3 & 8)` → used in AC+DC mode for AC/DC distinction |
+| 3 | 0x08 | DC indicator | **[VERIFIED]** toggles | `(bVar3 & 8)`. In AC+DC V (0x19) the meter alternates frames, this bit set on every other one, and the two carry different readings (open leads, 2026-09-07: ≈0.001 V with the bit clear, ≈0.04 V with it set) — the AC and DC components in turn, as the LCD blinks AC/DC. Which component the set bit marks is unconfirmed. |
 
 **[VERIFIED] Peak cycle:** P-MAX only → P-MIN only → P-MAX (2-state,
 bits never both set). When set, the `display` field contains the stored
