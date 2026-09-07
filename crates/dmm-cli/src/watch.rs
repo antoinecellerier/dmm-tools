@@ -264,13 +264,18 @@ impl StateWatcher {
 /// Open probes wander, and a wobble is not the action: -0.0013 V of lead
 /// noise satisfied "DC V, negative" before the battery was connected. The one
 /// exception is OL turning into a reading — Ω open to Ω across the body —
-/// which open leads cannot fake, so that step waits for it.
+/// which open leads cannot fake, so that step waits for it. So does a step
+/// with a magnitude floor (`at_least`): that floor is what tells the source
+/// from the noise.
 pub(crate) fn enter_only(expect: Option<Expect>, previous: Option<&Measurement>) -> bool {
     // Raw-diff spots its own change, and a run's first step has nothing to
     // compare against.
     let (Some(expect), Some(m)) = (expect, previous) else {
         return false;
     };
+    if expect.at_least.is_some() {
+        return false;
+    }
     if !matches!(expect.mode, Some(mode) if m.mode == mode) {
         return false;
     }
@@ -483,6 +488,11 @@ mod tests {
         // own, so the sign is not evidence the battery was connected.
         let negative_dcv = Expect::mode("DC V").value(ValueExpect::Negative);
         assert!(enter_only(Some(negative_dcv), Some(&dcv(b" 0.0000"))));
+        // With a floor the noise cannot reach, the watcher can tell.
+        assert!(!enter_only(
+            Some(negative_dcv.at_least(1.0)),
+            Some(&dcv(b" 0.0000"))
+        ));
 
         let finite_ohm = Expect::mode("\u{3a9}").value(ValueExpect::Finite);
         // ohm → ohm_body: same dial position, but OL to a finite
