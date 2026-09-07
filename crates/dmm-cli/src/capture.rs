@@ -1369,7 +1369,13 @@ pub(crate) fn run_capture_step(
             }
             // A trusted run doesn't stop here: the reading is listed with the
             // others in the one review at the end.
-            if interactive && trust.confirm_inline(step) {
+            //
+            // `is_tty`, as the end-of-run review does: a piped run's stdin
+            // answers every prompt with the empty line EOF gives, which reads
+            // as "the meter showed exactly this" — and a gate confirmed that
+            // way promotes the run and writes `core_semantics: confirmed`
+            // into the report without anyone having looked at the meter.
+            if interactive && input.is_tty() && trust.confirm_inline(step) {
                 let answer = input.line(&format!(
                     "  {} ",
                     style("Enter=correct, r=retake, or type what the meter actually shows:").dim()
