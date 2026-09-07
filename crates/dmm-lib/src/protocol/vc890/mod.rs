@@ -16,13 +16,14 @@
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
+use crate::protocol::cycle::RANGE_BUTTON_NAME;
 use crate::protocol::cycle::{
     self, CycleButton, CycleMeter, DialPosition, DialState, Ring, Settle,
 };
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::vc8x0_common::{
-    CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags, main_display, parse_value, re,
-    resolve_function, resolve_range,
+    CMD_RANGE_AUTO, CMD_RANGE_MANUAL, CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags,
+    main_display, parse_value, re, resolve_function, resolve_range,
 };
 use crate::protocol::{
     Choice, DeviceProfile, Protocol, Setting, Stability, check_len, unsupported_setting,
@@ -97,62 +98,81 @@ const FUNCTION_TABLE: &[(u8, &str, &str)] = &[
     (0x12, "AC A", "A"),
 ];
 
-/// Look up range info for a function code and range index.
-/// VC-890 has 60,000 counts — range values are 6/60/600 (not 4/40/400).
-fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
-    let table: &[RangeEntry] = match function {
-        // ACV LPF: vendor never reads the range byte and fixes the range
-        // at 1000V (DMSShare_decompiled.cs:23466-23469, `case 1`), unlike
-        // the other voltage functions. What the meter sends in the range
-        // byte for LPF is unknown — accept any index.
-        0x01 => {
-            return Some(("V", "1000V"));
-        }
-        // ACV, DCV, AC+DC V — voltage ranges
-        0x00 | 0x02 | 0x03 => &[re("", "6V"), re("", "60V"), re("", "600V"), re("", "1000V")],
-        // DC mV
-        0x04 => &[re("", "600mV")],
-        // Frequency
-        0x05 => &[
-            re("Hz", "60Hz"),
-            re("Hz", "600Hz"),
-            re("kHz", "6kHz"),
-            re("kHz", "60kHz"),
-            re("kHz", "600kHz"),
-            re("MHz", "6MHz"),
-            re("MHz", "60MHz"),
-            re("MHz", "600MHz"),
-        ],
-        // Impedance (Resistance)
-        0x07 => &[
-            re("Ω", "600Ω"),
-            re("kΩ", "6kΩ"),
-            re("kΩ", "60kΩ"),
-            re("kΩ", "600kΩ"),
-            re("MΩ", "6MΩ"),
-            re("MΩ", "60MΩ"),
-        ],
-        // Capacitance
-        0x0A => &[
-            re("nF", "60nF"),
-            re("nF", "600nF"),
-            re("µF", "6µF"),
-            re("µF", "60µF"),
-            re("µF", "600µF"),
-            re("µF", "6000µF"),
-            re("mF", "60mF"),
-        ],
-        // DC/AC µA
-        0x0D | 0x0E => &[re("", "600µA"), re("", "6000µA")],
-        // DC/AC mA
-        0x0F | 0x10 => &[re("", "60mA"), re("", "600mA")],
-        // DC/AC A
-        0x11 | 0x12 => &[re("", "10A")],
-        // Single-range functions
-        _ => return None,
-    };
+/// The range table of a function code, empty for a single-range or unknown
+/// function.
+///
+/// VC-890 has 60,000 counts — range values are 6/60/600 (not 4/40/400). The
+/// meter reports the index into this table as `range_raw - 0x30`, so it is
+/// also the manual range ladder [`Setting::Range`] offers.
+fn range_table(function: u8) -> &'static [RangeEntry] {
+    // `const` items rather than inline literals: a `&[...]` expression would
+    // be a temporary this function cannot return.
+    const VOLTAGE: &[RangeEntry] = &[re("", "6V"), re("", "60V"), re("", "600V"), re("", "1000V")];
+    const MILLIVOLTS: &[RangeEntry] = &[re("", "600mV")];
+    const FREQUENCY: &[RangeEntry] = &[
+        re("Hz", "60Hz"),
+        re("Hz", "600Hz"),
+        re("kHz", "6kHz"),
+        re("kHz", "60kHz"),
+        re("kHz", "600kHz"),
+        re("MHz", "6MHz"),
+        re("MHz", "60MHz"),
+        re("MHz", "600MHz"),
+    ];
+    const RESISTANCE: &[RangeEntry] = &[
+        re("\u{03A9}", "600\u{03A9}"),
+        re("k\u{03A9}", "6k\u{03A9}"),
+        re("k\u{03A9}", "60k\u{03A9}"),
+        re("k\u{03A9}", "600k\u{03A9}"),
+        re("M\u{03A9}", "6M\u{03A9}"),
+        re("M\u{03A9}", "60M\u{03A9}"),
+    ];
+    const CAPACITANCE: &[RangeEntry] = &[
+        re("nF", "60nF"),
+        re("nF", "600nF"),
+        re("\u{00B5}F", "6\u{00B5}F"),
+        re("\u{00B5}F", "60\u{00B5}F"),
+        re("\u{00B5}F", "600\u{00B5}F"),
+        re("\u{00B5}F", "6000\u{00B5}F"),
+        re("mF", "60mF"),
+    ];
+    const MICROAMPS: &[RangeEntry] = &[re("", "600\u{00B5}A"), re("", "6000\u{00B5}A")];
+    const MILLIAMPS: &[RangeEntry] = &[re("", "60mA"), re("", "600mA")];
+    const AMPS: &[RangeEntry] = &[re("", "10A")];
 
-    resolve_range(table, range_idx, FUNCTION_TABLE, function)
+    match function {
+        // ACV, DCV, AC+DC V — voltage ranges
+        0x00 | 0x02 | 0x03 => VOLTAGE,
+        // DC mV
+        0x04 => MILLIVOLTS,
+        // Frequency
+        0x05 => FREQUENCY,
+        // Impedance (Resistance)
+        0x07 => RESISTANCE,
+        // Capacitance
+        0x0A => CAPACITANCE,
+        // DC/AC µA
+        0x0D | 0x0E => MICROAMPS,
+        // DC/AC mA
+        0x0F | 0x10 => MILLIAMPS,
+        // DC/AC A
+        0x11 | 0x12 => AMPS,
+        // Single-range functions, ACV LPF among them (see `lookup_range`)
+        _ => &[],
+    }
+}
+
+/// Look up range info for a function code and range index.
+fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
+    // ACV LPF: vendor never reads the range byte and fixes the range at
+    // 1000V (DMSShare_decompiled.cs:23466-23469, `case 1`), unlike the other
+    // voltage functions. What the meter sends in the range byte for LPF is
+    // unknown — accept any index. `range_table` reports no ladder for it, so
+    // no range choice is offered there either.
+    if function == 0x01 {
+        return Some(("V", "1000V"));
+    }
+    resolve_range(range_table(function), range_idx, FUNCTION_TABLE, function)
 }
 
 use super::vc8x0_common::COMMANDS as VC890_COMMANDS;
@@ -374,6 +394,7 @@ impl Protocol for Vc890Protocol {
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
         match setting {
             Setting::Mode => cycle::mode_choices(self, current),
+            Setting::Range => cycle::range_choices(self, current),
             _ => Vec::new(),
         }
     }
@@ -381,6 +402,7 @@ impl Protocol for Vc890Protocol {
     fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
         match setting {
             Setting::Mode => cycle::select_mode(self, transport, id),
+            Setting::Range => cycle::select_range(self, transport, id),
             _ => Err(unsupported_setting(setting)),
         }
     }
@@ -400,23 +422,25 @@ impl CycleMeter for Vc890Protocol {
     }
 
     fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
-        match button {
-            CycleButton::Select => {
-                debug!("vc890: pressing {SELECT_BUTTON_NAME} ({CMD_SELECT:#04x})");
-                // Nothing to read back here: the meter echoes the command in
-                // a frame of its own, and `request_measurement`'s accept
-                // filter (type byte 0x01) already skips it.
-                self.write_command(transport, CMD_SELECT)
+        let (name, cmd) = match button {
+            CycleButton::Select => (SELECT_BUTTON_NAME, CMD_SELECT),
+            CycleButton::Range => (RANGE_BUTTON_NAME, CMD_RANGE_MANUAL),
+            CycleButton::Hz => {
+                return Err(Error::UnsupportedCommand(format!(
+                    "the VC-890 has no {} button",
+                    self.button_name(button)
+                )));
             }
-            CycleButton::Hz => Err(Error::UnsupportedCommand(format!(
-                "the VC-890 has no {} button",
-                self.button_name(button)
-            ))),
-        }
+        };
+        debug!("vc890: pressing {name} ({cmd:#04x})");
+        // Nothing to read back here: the meter echoes the command in a frame
+        // of its own, and `request_measurement`'s accept filter (type byte
+        // 0x01) already skips it.
+        self.write_command(transport, cmd)
     }
 
-    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
-        Protocol::request_measurement(self, transport).map(|m| m.mode_raw)
+    fn read(&mut self, transport: &dyn Transport) -> Result<Measurement> {
+        Protocol::request_measurement(self, transport)
     }
 
     fn mode_label(&self, mode: u16) -> Cow<'static, str> {
@@ -430,8 +454,26 @@ impl CycleMeter for Vc890Protocol {
     fn button_name(&self, button: CycleButton) -> &'static str {
         match button {
             CycleButton::Select => SELECT_BUTTON_NAME,
+            CycleButton::Range => RANGE_BUTTON_NAME,
             CycleButton::Hz => "Hz/%",
         }
+    }
+
+    fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
+        match u8::try_from(mode) {
+            Ok(function) => super::vc8x0_common::range_ladder(range_table(function)),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// The range byte is 0x30-based ASCII, so rung 1 arrives as 0x30.
+    fn range_rung(&self, range_raw: u8) -> u16 {
+        u16::from(range_raw.wrapping_sub(0x30)) + 1
+    }
+
+    fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
+        debug!("vc890: sending auto-range ({CMD_RANGE_AUTO:#04x})");
+        self.write_command(transport, CMD_RANGE_AUTO)
     }
 }
 
@@ -1213,6 +1255,75 @@ raw_payload=61"#
         assert_eq!(ids(&choices), vec![0x07, 0x09, 0x08]);
         assert_eq!(labels(&choices), ["Ω", "Diode", "Continuity"]);
         assert_eq!(current_ids(&choices), vec![0x07]);
+    }
+
+    // --- Range selection --------------------------------------------------
+
+    /// A status block with the MANUAL range bit set (status byte 2, bit 1).
+    fn manual_status() -> [u8; 8] {
+        let mut s = zero_status();
+        s[2] |= 0x02;
+        s
+    }
+
+    #[test]
+    fn the_resistance_ladder_is_listed_with_auto_first() {
+        // Range byte 0x32 is the third rung, 60kΩ.
+        let m = parse_measurement(&make_payload(0x07, 0x32, b" 12.345", manual_status()))
+            .expect("the frame parses");
+        let proto = Vc890Protocol::new();
+        let choices = proto.choices(Setting::Range, &m);
+        assert_eq!(ids(&choices), vec![0, 1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            labels(&choices),
+            ["Auto", "600Ω", "6kΩ", "60kΩ", "600kΩ", "6MΩ", "60MΩ"]
+        );
+        assert_eq!(current_ids(&choices), vec![3]);
+    }
+
+    /// DC mV has one range, and the vendor fixes ACV LPF at 1000V without
+    /// ever reading the range byte: neither offers a choice.
+    #[test]
+    fn single_range_functions_offer_no_ranges() {
+        let proto = Vc890Protocol::new();
+        for function in [0x01, 0x04, 0x08] {
+            let m = parse_measurement(&make_payload(function, 0x30, b"  1.234", manual_status()))
+                .expect("the frame parses");
+            assert!(
+                proto.choices(Setting::Range, &m).is_empty(),
+                "function {function:#04x} should offer no range"
+            );
+        }
+    }
+
+    #[test]
+    fn pressing_range_sends_the_ack_burst_then_the_range_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc890Protocol::new();
+        proto
+            .press(&transport, CycleButton::Range)
+            .expect("the frame is written");
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 4, "3 ack frames then RANGE: {writes:02X?}");
+        assert_eq!(
+            writes[3],
+            super::super::vc8x0_common::build_command(0x46),
+            "RANGE is command 0x46"
+        );
+    }
+
+    #[test]
+    fn auto_range_sends_the_ack_burst_then_the_auto_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc890Protocol::new();
+        proto.set_auto_range(&transport).expect("written");
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 4);
+        assert_eq!(
+            writes[3],
+            super::super::vc8x0_common::build_command(0x47),
+            "AUTO is command 0x47"
+        );
     }
 
     /// The ack burst goes first here too — a bare frame is what the VC-880

@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::MeasuredValue;
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{CaptureStep, unknown_mode};
+use crate::protocol::{CaptureStep, cycle, unknown_mode};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
@@ -38,6 +38,16 @@ pub(crate) const CMD_SELECT: u8 = 0x4C;
 /// What the front panel calls [`CMD_SELECT`], for messages the user reads.
 pub(crate) const SELECT_BUTTON_NAME: &str = "SHIFT/SETUP";
 
+/// The RANGE button: one press steps the manual range ladder (spec §5,
+/// "RANGE button"). Whether repeated presses really step it one rung at a
+/// time is unverified on both meters — see the VC-880 and VC-890 sections of
+/// docs/verification-backlog.md — which is why the range driver reads the
+/// range back after every press rather than counting them.
+pub(crate) const CMD_RANGE_MANUAL: u8 = 0x46;
+
+/// Return to auto-ranging: its own command, as it is its own button.
+pub(crate) const CMD_RANGE_AUTO: u8 = 0x47;
+
 /// Map a command name to its byte value.
 ///
 /// Command bytes are identical for VC-880 and VC-890.
@@ -47,8 +57,8 @@ pub(crate) fn command_byte(command: &str) -> Result<u8> {
         "rel" => Ok(0x48),
         "max_min_avg" => Ok(0x49),
         "exit_max_min_avg" => Ok(0x43),
-        "range_auto" => Ok(0x47),
-        "range_manual" => Ok(0x46),
+        "range_auto" => Ok(CMD_RANGE_AUTO),
+        "range_manual" => Ok(CMD_RANGE_MANUAL),
         "light" => Ok(0x4B),
         "select" => Ok(CMD_SELECT),
         _ => Err(Error::UnsupportedCommand(command.to_string())),
@@ -176,6 +186,13 @@ pub(crate) fn resolve_range(
     })
 }
 
+/// The manual range ladder of a function's range table, for
+/// `Setting::Range`. Rung `n` of the choice list is entry `n - 1`, which is
+/// what the meter reports as `range_raw - 0x30`.
+pub(crate) fn range_ladder(table: &'static [RangeEntry]) -> Vec<Cow<'static, str>> {
+    cycle::usable_ladder(table.iter().map(|e| Cow::Borrowed(e.range_label)).collect())
+}
+
 /// Look a function code up in a family's function table.
 ///
 /// Returns (mode name, base unit); an unrecognised code becomes a generic
@@ -267,6 +284,9 @@ mod tests {
 
     #[test]
     fn command_byte_known() {
+        // The range driver presses the same byte "range_manual" sends.
+        assert_eq!(command_byte("range_manual").unwrap(), CMD_RANGE_MANUAL);
+        assert_eq!(command_byte("range_auto").unwrap(), CMD_RANGE_AUTO);
         assert_eq!(command_byte("hold").unwrap(), 0x4A);
         assert_eq!(command_byte("rel").unwrap(), 0x48);
         assert_eq!(command_byte("light").unwrap(), 0x4B);

@@ -493,26 +493,58 @@ impl Protocol for Ut181aProtocol {
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
         match setting {
             Setting::Mode => mode::mode_choices(current.mode_raw),
+            Setting::Range => mode::range_choices(
+                current.mode_raw,
+                current.range_raw,
+                current.flags.auto_range,
+            ),
             _ => Vec::new(),
         }
     }
 
     /// Only words from the dial's own family are sent: the vendor app never
     /// crosses a family boundary, and the meter would refuse it anyway.
-    /// Validation happens before the write, so a stray id costs no I/O.
+    /// Ranges are the same story — SET_RANGE takes an index into the
+    /// family's own ladder. Validation happens before the write, so a stray
+    /// id costs no I/O.
     fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
-        if setting != Setting::Mode {
-            return Err(unsupported_setting(setting));
-        }
         let current = self.require_last_mode(transport)?;
-        if !mode::mode_choices(current).iter().any(|c| c.id == id) {
-            return Err(Error::UnsupportedCommand(format!(
-                "mode {id:#06x} is not reachable from {} ({current:#06x}) — turn the dial first",
-                decode_mode_word(current)
-            )));
+        match setting {
+            Setting::Mode => {
+                if !mode::mode_choices(current).iter().any(|c| c.id == id) {
+                    return Err(Error::UnsupportedCommand(format!(
+                        "mode {id:#06x} is not reachable from {} ({current:#06x}) — turn the dial first",
+                        decode_mode_word(current)
+                    )));
+                }
+                let frame = build_set_mode(id);
+                self.send_frame(transport, &frame, &format!("mode {}", decode_mode_word(id)))
+            }
+            // The meter takes the range absolutely, so there is nothing to
+            // walk: the id is the SET_RANGE byte, and 0 is auto.
+            Setting::Range => {
+                // The reading's own range and auto flag only decide which
+                // entry is marked current; validation needs the list alone.
+                let ladder = mode::range_choices(current, 0, false);
+                if ladder.is_empty() {
+                    return Err(Error::UnsupportedCommand(format!(
+                        "range in {} ({current:#06x}): fixed-range mode",
+                        decode_mode_word(current)
+                    )));
+                }
+                let Some(choice) = ladder.iter().find(|c| c.id == id) else {
+                    return Err(Error::UnsupportedCommand(format!(
+                        "range {id} is not one of the {} {} offers",
+                        ladder.len() - 1,
+                        decode_mode_word(current)
+                    )));
+                };
+                // The id came from the ladder, so it fits the command's byte.
+                let what = format!("range {}", choice.label);
+                self.send_frame(transport, &build_command(&[0x02, id as u8]), &what)
+            }
+            _ => Err(unsupported_setting(setting)),
         }
-        let frame = build_set_mode(id);
-        self.send_frame(transport, &frame, &format!("mode {}", decode_mode_word(id)))
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
@@ -1888,6 +1920,104 @@ mod tests {
             let current: Vec<u16> = choices.iter().filter(|c| c.current).map(|c| c.id).collect();
             assert_eq!(current, vec![expected], "from {reported:#06x}");
         }
+    }
+
+    // --- Range selection --------------------------------------------------
+
+    #[test]
+    fn v_ac_offers_auto_and_its_four_ranges() {
+        let (proto, _mock) = proto_in(0x1111, 2);
+        let m = parse_measurement(&{
+            let mut p = make_payload(0x1111, 1.0, 0x20, b"VAC\0\0\0\0\0", 0x00, 0x00);
+            p[5] = 2;
+            p
+        })
+        .unwrap();
+        let choices = proto.choices(Setting::Range, &m);
+        let listed: Vec<(u16, &str)> = choices.iter().map(|c| (c.id, c.label.as_ref())).collect();
+        assert_eq!(
+            listed,
+            vec![
+                (0, "Auto"),
+                (1, "6V"),
+                (2, "60V"),
+                (3, "600V"),
+                (4, "1000V")
+            ]
+        );
+        // misc2 bit 0 clear = manual, so the reported range byte is current.
+        assert_eq!(
+            choices
+                .iter()
+                .filter(|c| c.current)
+                .map(|c| c.id)
+                .collect::<Vec<_>>(),
+            vec![2]
+        );
+    }
+
+    #[test]
+    fn a_fixed_range_family_offers_nothing() {
+        let (proto, _mock) = proto_in(0x1111, 0);
+        // 0x4211: temperature, whose ranges the meter does not switch.
+        let m = parse_measurement(&make_payload(
+            0x4211,
+            20.0,
+            0x20,
+            b"C\0\0\0\0\0\0\0",
+            0x00,
+            0x01,
+        ))
+        .unwrap();
+        assert!(proto.choices(Setting::Range, &m).is_empty());
+    }
+
+    #[test]
+    fn selecting_a_range_sends_set_range_with_the_rung() {
+        let (mut proto, mock) = proto_in(0x1111, 1);
+        proto.select(&mock, Setting::Range, 3).unwrap();
+        // AB CD | len 04 00 | 02 (SET_RANGE) 03 | checksum 04+00+02+03 = 0x09.
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 03 09 00"));
+    }
+
+    #[test]
+    fn selecting_auto_sends_set_range_zero() {
+        let (mut proto, mock) = proto_in(0x1111, 2);
+        proto.select(&mock, Setting::Range, 0).unwrap();
+        assert_eq!(only_write(&mock), hex("AB CD 04 00 02 00 06 00"));
+    }
+
+    #[test]
+    fn a_rung_the_family_lacks_costs_no_io() {
+        let (mut proto, mock) = proto_in(0x1111, 0);
+        let err = proto.select(&mock, Setting::Range, 5).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("not one of the 4")),
+            "got {err:?}"
+        );
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_fixed_range_mode_refuses_a_range_without_sending() {
+        let (mut proto, mock) = proto_in(0x4211, 0);
+        let err = proto.select(&mock, Setting::Range, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("fixed-range mode")),
+            "got {err:?}"
+        );
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    #[test]
+    fn an_er_reply_rejects_a_range_selection() {
+        let (mut proto, mock) = proto_in(0x1111, 1);
+        mock.push_response(build_command(&[0x01, b'E', b'R']));
+        let err = proto.select(&mock, Setting::Range, 3).unwrap_err();
+        assert!(
+            matches!(err, Error::CommandRejected(_)),
+            "got {err:?}, want CommandRejected"
+        );
     }
 
     #[test]

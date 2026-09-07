@@ -3,9 +3,12 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::ut61eplus::mode::Mode;
-use crate::protocol::ut61eplus::tables::DeviceTable;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
-use crate::protocol::{Choice, DeviceProfile, Protocol, Setting, Stability, unsupported_setting};
+use crate::protocol::ut61eplus::tables::{self, DeviceTable};
+use crate::protocol::{
+    AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice, DeviceProfile, Protocol, Setting, Stability,
+    unsupported_setting,
+};
 use crate::transport::{NullTransport, Transport};
 use std::borrow::Cow;
 use std::f64::consts::TAU;
@@ -648,6 +651,9 @@ pub struct MockProtocol {
     rel: bool,
     rel_base: Option<f64>,
     auto_range: bool,
+    /// The ladder rung RANGE has been stepped to, as a range byte; `None`
+    /// means the scenario's own range, which is what auto-ranging picked.
+    manual_range: Option<u8>,
     /// Saved auto_range state before MIN/MAX activation (restored on exit).
     auto_range_before_minmax: bool,
     minmax_state: MinMaxState,
@@ -676,6 +682,7 @@ impl MockProtocol {
             rel: false,
             rel_base: None,
             auto_range: true,
+            manual_range: None,
             auto_range_before_minmax: true,
             minmax_state: MinMaxState::Off,
             stored_min: None,
@@ -724,6 +731,83 @@ impl MockProtocol {
     fn advance_scenario(&mut self) {
         self.current_scenario = (self.current_scenario + 1) % self.scenarios.len();
         self.scenario_started = Instant::now();
+        // The ladder belongs to the mode that was left behind.
+        self.manual_range = None;
+    }
+
+    /// The live scenario's mode as the UT61E+ table knows it.
+    fn current_table_mode(&self) -> Option<Mode> {
+        u8::try_from(self.current_scenario().mode_raw)
+            .ok()
+            .and_then(|b| Mode::from_byte(b).ok())
+    }
+
+    /// The manual range ladder of the live scenario's mode — the mock stands
+    /// in for a UT61E+, so the ladder is that meter's, from the same table
+    /// the range labels come from.
+    fn range_ladder(&self) -> Vec<Cow<'static, str>> {
+        match self.current_table_mode() {
+            Some(mode) => tables::range_ladder(&self.table, mode),
+            None => Vec::new(),
+        }
+    }
+
+    /// The range byte the meter reports: the rung RANGE was stepped to, or
+    /// the one auto-ranging picked for the scenario.
+    fn reported_range(&self) -> u8 {
+        self.manual_range
+            .unwrap_or(self.current_scenario().range_raw)
+    }
+
+    /// Auto plus the live mode's ladder, for `Protocol::choices`.
+    fn range_choices(&self) -> Vec<Choice> {
+        let ladder = self.range_ladder();
+        if ladder.is_empty() {
+            return Vec::new();
+        }
+        let live = (!self.auto_range).then(|| u16::from(self.reported_range()) + 1);
+        let mut choices = vec![Choice {
+            id: AUTO_RANGE_ID,
+            label: Cow::Borrowed(AUTO_RANGE_LABEL),
+            current: self.auto_range,
+        }];
+        choices.extend(ladder.into_iter().enumerate().map(|(i, label)| {
+            let id = i as u16 + 1;
+            Choice {
+                id,
+                label,
+                current: live == Some(id),
+            }
+        }));
+        choices
+    }
+
+    /// Jump straight to a rung, or back to auto for [`AUTO_RANGE_ID`].
+    ///
+    /// No walk: nothing here is a button press. The validation is the real
+    /// driver's, though, and so is the refusal under MIN/MAX — the meter
+    /// locks the range while it is recording (verified 2026-03-21).
+    fn select_range(&mut self, id: u16) -> Result<()> {
+        let ladder = self.range_ladder();
+        if ladder.is_empty() || (id != AUTO_RANGE_ID && usize::from(id) > ladder.len()) {
+            return Err(Error::UnsupportedCommand(format!(
+                "range {id} in {}",
+                self.current_scenario().mode
+            )));
+        }
+        if self.minmax_state != MinMaxState::Off {
+            return Err(Error::CommandRejected(
+                "MIN/MAX locks the range; leave MIN/MAX before changing it".to_string(),
+            ));
+        }
+        if id == AUTO_RANGE_ID {
+            self.manual_range = None;
+            self.auto_range = true;
+        } else {
+            self.manual_range = Some((id - 1) as u8);
+            self.auto_range = false;
+        }
+        Ok(())
     }
 
     /// Elapsed seconds since the current scenario started. Uses
@@ -801,9 +885,21 @@ impl Protocol for MockProtocol {
         let raw_value = (scenario.value_fn)(elapsed, scenario.duration_secs);
         let mode: Cow<'static, str> = Cow::Borrowed(scenario.mode);
         let mode_raw = scenario.mode_raw;
-        let range_raw = scenario.range_raw;
-        let unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
-        let range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
+        let range_raw = self.reported_range();
+        let mut unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
+        let mut range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
+        // A manually selected rung renames the range the way the meter's own
+        // reading would. The bar graph keeps the scenario's full scale: the
+        // label table carries no numeric limit to rescale it with.
+        if self.manual_range.is_some()
+            && let Some(info) = self
+                .current_table_mode()
+                .and_then(|mode| self.table.range_info(mode, range_raw))
+        {
+            unit = Cow::Borrowed(info.unit);
+            range_label = Cow::Borrowed(info.label);
+        }
+        let scenario = self.current_scenario();
         let range_max = scenario.range_max;
         let duration_secs = scenario.duration_secs;
         let aux_specs = scenario.aux;
@@ -968,10 +1064,24 @@ impl Protocol for MockProtocol {
                     self.rel_base = None;
                 }
             }
+            // The RANGE button engages manual ranging at the rung
+            // auto-ranging had picked, then steps the ladder one rung per
+            // press (verified on a UT61E+ for the first press). A mode with
+            // no ladder ignores it, as DC mV does on the real meter, and so
+            // does MIN/MAX, which locks the range.
             "range" => {
-                self.auto_range = false;
+                let ladder = self.range_ladder();
+                if !ladder.is_empty() && self.minmax_state == MinMaxState::Off {
+                    let next = match self.manual_range {
+                        None => usize::from(self.reported_range()).min(ladder.len() - 1),
+                        Some(rung) => (usize::from(rung) + 1) % ladder.len(),
+                    };
+                    self.manual_range = Some(next as u8);
+                    self.auto_range = false;
+                }
             }
             "auto" => {
+                self.manual_range = None;
                 self.auto_range = true;
             }
             "minmax" => {
@@ -1071,6 +1181,9 @@ impl Protocol for MockProtocol {
     /// argument is ignored: the mock is its own source of truth for what it
     /// is measuring, and a caller could hand back a stale reading.
     fn choices(&self, setting: Setting, _current: &Measurement) -> Vec<Choice> {
+        if setting == Setting::Range {
+            return self.range_choices();
+        }
         if setting != Setting::Mode {
             return Vec::new();
         }
@@ -1092,6 +1205,9 @@ impl Protocol for MockProtocol {
     }
 
     fn select(&mut self, _transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        if setting == Setting::Range {
+            return self.select_range(id);
+        }
         if setting != Setting::Mode {
             return Err(unsupported_setting(setting));
         }
@@ -2018,6 +2134,135 @@ mod tests {
         proto.scenario_started -= Duration::from_secs(60);
         proto.request_measurement(&transport).unwrap();
         assert_ne!(proto.current_mode(), MockMode::AcVHz);
+    }
+
+    // --- Range selection ---------------------------------------------------
+
+    #[test]
+    fn range_choices_are_auto_plus_the_modes_ladder() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        let m = proto.request_measurement(&transport).unwrap();
+        let choices = proto.choices(Setting::Range, &m);
+        let listed: Vec<(u16, &str)> = choices.iter().map(|c| (c.id, c.label.as_ref())).collect();
+        assert_eq!(
+            listed,
+            vec![
+                (0, "Auto"),
+                (1, "2.2V"),
+                (2, "22V"),
+                (3, "220V"),
+                (4, "1000V")
+            ]
+        );
+        assert_eq!(
+            choices
+                .iter()
+                .filter(|c| c.current)
+                .map(|c| c.id)
+                .collect::<Vec<_>>(),
+            vec![0],
+            "the mock starts auto-ranging"
+        );
+    }
+
+    /// Temperature and NCV have no ladder on the UT61E+ the mock stands in
+    /// for, so it offers no range there either.
+    #[test]
+    fn a_scenario_without_a_ladder_offers_no_ranges() {
+        let transport = NullTransport;
+        for mode in [MockMode::Temp, MockMode::Ncv] {
+            let mut proto = MockProtocol::with_mode(mode);
+            let m = proto.request_measurement(&transport).unwrap();
+            assert!(proto.choices(Setting::Range, &m).is_empty(), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn selecting_a_range_reports_it_and_auto_comes_back() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        proto.select(&transport, Setting::Range, 4).unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(m.range_label, "1000V");
+        assert_eq!(m.range_raw, 3);
+        assert!(!m.flags.auto_range);
+        let current: Vec<u16> = proto
+            .choices(Setting::Range, &m)
+            .into_iter()
+            .filter(|c| c.current)
+            .map(|c| c.id)
+            .collect();
+        assert_eq!(current, vec![4]);
+
+        proto.select(&transport, Setting::Range, 0).unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(m.flags.auto_range);
+        assert_eq!(m.range_label, "22V", "back to the scenario's own range");
+    }
+
+    /// The RANGE button and `select` drive the same state: a press engages
+    /// manual ranging where auto had left the meter, then steps the ladder.
+    #[test]
+    fn the_range_command_and_select_agree() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        proto.send_command(&transport, "range").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(!m.flags.auto_range);
+        assert_eq!(m.range_label, "22V", "manual at the rung auto had picked");
+
+        proto.send_command(&transport, "range").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(m.range_label, "220V");
+
+        proto.select(&transport, Setting::Range, 3).unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(m.range_label, "220V", "the same rung, chosen absolutely");
+
+        proto.send_command(&transport, "auto").unwrap();
+        assert!(
+            proto
+                .request_measurement(&transport)
+                .unwrap()
+                .flags
+                .auto_range
+        );
+    }
+
+    #[test]
+    fn select_range_rejects_an_id_the_ladder_lacks() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        let err = proto.select(&transport, Setting::Range, 5).unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(_)),
+            "got {err:?}, want UnsupportedCommand"
+        );
+    }
+
+    /// The meter locks the range while MIN/MAX records (verified
+    /// 2026-03-21), so the mock refuses a range change there.
+    #[test]
+    fn minmax_locks_the_range() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        proto.send_command(&transport, "minmax").unwrap();
+        let err = proto.select(&transport, Setting::Range, 2).unwrap_err();
+        assert!(
+            matches!(err, Error::CommandRejected(_)),
+            "got {err:?}, want CommandRejected"
+        );
+        // The RANGE button is equally dead while MIN/MAX holds the range.
+        proto.send_command(&transport, "range").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(m.range_label, "22V");
+
+        proto.send_command(&transport, "exit_minmax").unwrap();
+        proto.select(&transport, Setting::Range, 2).unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(m.range_label, "22V");
+        assert!(!m.flags.auto_range);
     }
 
     #[test]

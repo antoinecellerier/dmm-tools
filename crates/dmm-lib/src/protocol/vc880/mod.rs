@@ -15,13 +15,14 @@
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
+use crate::protocol::cycle::RANGE_BUTTON_NAME;
 use crate::protocol::cycle::{
     self, CycleButton, CycleMeter, DialPosition, DialState, Ring, Settle,
 };
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::vc8x0_common::{
-    CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags, main_display, parse_value, re,
-    resolve_function, resolve_range,
+    CMD_RANGE_AUTO, CMD_RANGE_MANUAL, CMD_SELECT, RangeEntry, SELECT_BUTTON_NAME, common_flags,
+    main_display, parse_value, re, resolve_function, resolve_range,
 };
 use crate::protocol::{
     Choice, DeviceProfile, Protocol, Setting, Stability, check_len, unsupported_setting,
@@ -68,60 +69,75 @@ const FUNCTION_TABLE: &[(u8, &str, &str)] = &[
     (0x12, "ACV LPF", "V"),
 ];
 
-/// Look up range info for a given function code and range index.
-/// Returns (unit, range_label) or None if the range index is out of bounds.
+/// The range table of a function code, empty for a single-range or unknown
+/// function.
 ///
 /// Range tables from DMSShare.dll `SetDeviceMode_And_Unit_And_Range()`
-/// and cross-referenced against VC880 user manual pages 62-65.
-fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
-    let table: &[RangeEntry] = match function {
-        // DCV, ACV, AC+DC V, ACV LPF — all share voltage ranges
-        0x00 | 0x01 | 0x05 | 0x12 => {
-            &[re("", "4V"), re("", "40V"), re("", "400V"), re("", "1000V")]
-        }
-        // DC mV
-        0x02 => &[re("", "400mV")],
-        // Frequency
-        0x03 => &[
-            re("Hz", "40Hz"),
-            re("Hz", "400Hz"),
-            re("kHz", "4kHz"),
-            re("kHz", "40kHz"),
-            re("kHz", "400kHz"),
-            re("MHz", "4MHz"),
-            re("MHz", "40MHz"),
-            re("MHz", "400MHz"),
-        ],
-        // Impedance (Resistance)
-        0x06 => &[
-            re("Ω", "400Ω"),
-            re("kΩ", "4kΩ"),
-            re("kΩ", "40kΩ"),
-            re("kΩ", "400kΩ"),
-            re("MΩ", "4MΩ"),
-            re("MΩ", "40MΩ"),
-        ],
-        // Capacitance
-        0x09 => &[
-            re("nF", "40nF"),
-            re("nF", "400nF"),
-            re("µF", "4µF"),
-            re("µF", "40µF"),
-            re("µF", "400µF"),
-            re("µF", "4000µF"),
-            re("mF", "40mF"),
-        ],
-        // DC/AC µA
-        0x0C | 0x0D => &[re("", "400µA"), re("", "4000µA")],
-        // DC/AC mA
-        0x0E | 0x0F => &[re("", "40mA"), re("", "400mA")],
-        // DC/AC A
-        0x10 | 0x11 => &[re("", "10A")],
-        // Single-range functions (duty, diode, continuity, temp, LPF)
-        _ => return None,
-    };
+/// and cross-referenced against VC880 user manual pages 62-65. The meter
+/// reports the index into this table as `range_raw - 0x30`, so it is also
+/// the manual range ladder [`Setting::Range`] offers.
+fn range_table(function: u8) -> &'static [RangeEntry] {
+    // `const` items rather than inline literals: a `&[...]` expression would
+    // be a temporary this function cannot return.
+    const VOLTAGE: &[RangeEntry] = &[re("", "4V"), re("", "40V"), re("", "400V"), re("", "1000V")];
+    const FREQUENCY: &[RangeEntry] = &[
+        re("Hz", "40Hz"),
+        re("Hz", "400Hz"),
+        re("kHz", "4kHz"),
+        re("kHz", "40kHz"),
+        re("kHz", "400kHz"),
+        re("MHz", "4MHz"),
+        re("MHz", "40MHz"),
+        re("MHz", "400MHz"),
+    ];
+    const RESISTANCE: &[RangeEntry] = &[
+        re("\u{03A9}", "400\u{03A9}"),
+        re("k\u{03A9}", "4k\u{03A9}"),
+        re("k\u{03A9}", "40k\u{03A9}"),
+        re("k\u{03A9}", "400k\u{03A9}"),
+        re("M\u{03A9}", "4M\u{03A9}"),
+        re("M\u{03A9}", "40M\u{03A9}"),
+    ];
+    const CAPACITANCE: &[RangeEntry] = &[
+        re("nF", "40nF"),
+        re("nF", "400nF"),
+        re("\u{00B5}F", "4\u{00B5}F"),
+        re("\u{00B5}F", "40\u{00B5}F"),
+        re("\u{00B5}F", "400\u{00B5}F"),
+        re("\u{00B5}F", "4000\u{00B5}F"),
+        re("mF", "40mF"),
+    ];
+    const MICROAMPS: &[RangeEntry] = &[re("", "400\u{00B5}A"), re("", "4000\u{00B5}A")];
+    const MILLIAMPS: &[RangeEntry] = &[re("", "40mA"), re("", "400mA")];
+    const AMPS: &[RangeEntry] = &[re("", "10A")];
+    const MILLIVOLTS: &[RangeEntry] = &[re("", "400mV")];
 
-    resolve_range(table, range_idx, FUNCTION_TABLE, function)
+    match function {
+        // DCV, ACV, AC+DC V, ACV LPF — all share voltage ranges
+        0x00 | 0x01 | 0x05 | 0x12 => VOLTAGE,
+        // DC mV
+        0x02 => MILLIVOLTS,
+        // Frequency
+        0x03 => FREQUENCY,
+        // Impedance (Resistance)
+        0x06 => RESISTANCE,
+        // Capacitance
+        0x09 => CAPACITANCE,
+        // DC/AC µA
+        0x0C | 0x0D => MICROAMPS,
+        // DC/AC mA
+        0x0E | 0x0F => MILLIAMPS,
+        // DC/AC A
+        0x10 | 0x11 => AMPS,
+        // Single-range functions (duty, diode, continuity, temp, LPF)
+        _ => &[],
+    }
+}
+
+/// Look up range info for a given function code and range index.
+/// Returns (unit, range_label) or None if the range index is out of bounds.
+fn lookup_range(function: u8, range_idx: u8) -> Option<(&'static str, &'static str)> {
+    resolve_range(range_table(function), range_idx, FUNCTION_TABLE, function)
 }
 
 use super::vc8x0_common::COMMANDS as VC880_COMMANDS;
@@ -274,6 +290,29 @@ impl Vc880Protocol {
     }
 }
 
+impl Vc880Protocol {
+    /// Write one command frame and drop what the stream had already queued.
+    ///
+    /// The meter streams, so whatever was buffered when the command landed
+    /// still describes the old state — and `read_frame` hands frames out
+    /// oldest first. Drop it here rather than spend the settle budget on it.
+    /// The 0xFF Result frame the meter answers with goes the same way;
+    /// `request_measurement`'s accept filter (type byte 0x01) skips it anyway.
+    fn write_and_drain(&mut self, transport: &dyn Transport, cmd: u8) -> Result<()> {
+        transport.write(&super::vc8x0_common::build_command(cmd))?;
+        self.rx_buf.clear();
+        let mut tmp = [0u8; 64];
+        for _ in 0..PRESS_DRAIN_READS {
+            let n = transport.read_timeout(&mut tmp, PRESS_DRAIN_TIMEOUT_MS)?;
+            if n == 0 {
+                break;
+            }
+            debug!("vc880: drained {n} bytes after the command");
+        }
+        Ok(())
+    }
+}
+
 impl Protocol for Vc880Protocol {
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // VC-880 streams automatically after the user presses the PC button.
@@ -324,6 +363,7 @@ impl Protocol for Vc880Protocol {
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
         match setting {
             Setting::Mode => cycle::mode_choices(self, current),
+            Setting::Range => cycle::range_choices(self, current),
             _ => Vec::new(),
         }
     }
@@ -331,6 +371,7 @@ impl Protocol for Vc880Protocol {
     fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
         match setting {
             Setting::Mode => cycle::select_mode(self, transport, id),
+            Setting::Range => cycle::select_range(self, transport, id),
             _ => Err(unsupported_setting(setting)),
         }
     }
@@ -350,36 +391,22 @@ impl CycleMeter for Vc880Protocol {
     }
 
     fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
-        match button {
-            CycleButton::Select => {
-                debug!("vc880: pressing {SELECT_BUTTON_NAME} ({CMD_SELECT:#04x})");
-                transport.write(&super::vc8x0_common::build_command(CMD_SELECT))?;
-                // The meter streams, so whatever was buffered when the press
-                // landed still names the old function — and `read_frame`
-                // hands frames out oldest first. Drop it here rather than
-                // spend the settle budget on it. The 0xFF Result frame the
-                // meter answers with goes the same way; `request_measurement`'s
-                // accept filter (type byte 0x01) skips it anyway.
-                self.rx_buf.clear();
-                let mut tmp = [0u8; 64];
-                for _ in 0..PRESS_DRAIN_READS {
-                    let n = transport.read_timeout(&mut tmp, PRESS_DRAIN_TIMEOUT_MS)?;
-                    if n == 0 {
-                        break;
-                    }
-                    debug!("vc880: drained {n} bytes after the press");
-                }
-                Ok(())
+        let (name, cmd) = match button {
+            CycleButton::Select => (SELECT_BUTTON_NAME, CMD_SELECT),
+            CycleButton::Range => (RANGE_BUTTON_NAME, CMD_RANGE_MANUAL),
+            CycleButton::Hz => {
+                return Err(Error::UnsupportedCommand(format!(
+                    "the VC-880 has no {} button",
+                    self.button_name(button)
+                )));
             }
-            CycleButton::Hz => Err(Error::UnsupportedCommand(format!(
-                "the VC-880 has no {} button",
-                self.button_name(button)
-            ))),
-        }
+        };
+        debug!("vc880: pressing {name} ({cmd:#04x})");
+        self.write_and_drain(transport, cmd)
     }
 
-    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
-        Protocol::request_measurement(self, transport).map(|m| m.mode_raw)
+    fn read(&mut self, transport: &dyn Transport) -> Result<Measurement> {
+        Protocol::request_measurement(self, transport)
     }
 
     fn mode_label(&self, mode: u16) -> Cow<'static, str> {
@@ -393,8 +420,26 @@ impl CycleMeter for Vc880Protocol {
     fn button_name(&self, button: CycleButton) -> &'static str {
         match button {
             CycleButton::Select => SELECT_BUTTON_NAME,
+            CycleButton::Range => RANGE_BUTTON_NAME,
             CycleButton::Hz => "Hz/%",
         }
+    }
+
+    fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
+        match u8::try_from(mode) {
+            Ok(function) => super::vc8x0_common::range_ladder(range_table(function)),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// The range byte is 0x30-based ASCII, so rung 1 arrives as 0x30.
+    fn range_rung(&self, range_raw: u8) -> u16 {
+        u16::from(range_raw.wrapping_sub(0x30)) + 1
+    }
+
+    fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
+        debug!("vc880: sending auto-range ({CMD_RANGE_AUTO:#04x})");
+        self.write_and_drain(transport, CMD_RANGE_AUTO)
     }
 }
 
@@ -1027,6 +1072,81 @@ raw_payload=34"#
         let choices = proto.choices(Setting::Mode, &m);
         assert_eq!(ids(&choices), vec![0x06, 0x07, 0x08]);
         assert_eq!(labels(&choices), ["Ω", "Diode", "Continuity"]);
+    }
+
+    // --- Range selection --------------------------------------------------
+
+    /// A status block with the MANUAL range bit set (status byte 2, bit 1).
+    fn manual_status() -> [u8; 7] {
+        let mut s = zero_status();
+        s[2] |= 0x02;
+        s
+    }
+
+    #[test]
+    fn the_resistance_ladder_is_listed_with_auto_first() {
+        // Range byte 0x32 is the third rung, 40kΩ.
+        let m = parse_measurement(&make_payload(0x06, 0x32, b" 12.345", manual_status()))
+            .expect("the frame parses");
+        let proto = Vc880Protocol::new();
+        let choices = proto.choices(Setting::Range, &m);
+        assert_eq!(ids(&choices), vec![0, 1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            labels(&choices),
+            ["Auto", "400Ω", "4kΩ", "40kΩ", "400kΩ", "4MΩ", "40MΩ"]
+        );
+        assert_eq!(current_ids(&choices), vec![3]);
+    }
+
+    #[test]
+    fn an_auto_ranging_reading_marks_auto_current() {
+        let (proto, m) = read_one(0x06);
+        let choices = proto.choices(Setting::Range, &m);
+        assert_eq!(current_ids(&choices), vec![0]);
+    }
+
+    /// DC mV has one range and diode none at all: neither is a choice.
+    #[test]
+    fn single_range_functions_offer_no_ranges() {
+        let proto = Vc880Protocol::new();
+        for function in [0x02, 0x07, 0x0A] {
+            let m = parse_measurement(&make_payload(function, 0x30, b"  1.234", manual_status()))
+                .expect("the frame parses");
+            assert!(
+                proto.choices(Setting::Range, &m).is_empty(),
+                "function {function:#04x} should offer no range"
+            );
+        }
+    }
+
+    #[test]
+    fn pressing_range_writes_one_range_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc880Protocol::new();
+        proto
+            .press(&transport, CycleButton::Range)
+            .expect("the frame is written");
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(
+            writes[0],
+            super::super::vc8x0_common::build_command(0x46),
+            "RANGE is command 0x46"
+        );
+    }
+
+    #[test]
+    fn auto_range_writes_the_auto_frame() {
+        let transport = MockTransport::new(vec![]);
+        let mut proto = Vc880Protocol::new();
+        proto.set_auto_range(&transport).expect("written");
+        let writes = transport.written.borrow();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(
+            writes[0],
+            super::super::vc8x0_common::build_command(0x47),
+            "AUTO is command 0x47"
+        );
     }
 
     #[test]

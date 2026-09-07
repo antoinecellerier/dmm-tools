@@ -268,6 +268,7 @@ impl Protocol for Ut61PlusProtocol {
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
         match setting {
             Setting::Mode => cycle::mode_choices(self, current),
+            Setting::Range => cycle::range_choices(self, current),
             _ => Vec::new(),
         }
     }
@@ -275,6 +276,7 @@ impl Protocol for Ut61PlusProtocol {
     fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
         match setting {
             Setting::Mode => cycle::select_mode(self, transport, id),
+            Setting::Range => cycle::select_range(self, transport, id),
             _ => Err(unsupported_setting(setting)),
         }
     }
@@ -435,6 +437,9 @@ impl Protocol for Ut61PlusProtocol {
 /// drain) showed the new mode in every leg but one, where a second read did.
 const SELECT_SETTLE_DELAY: Duration = Duration::from_millis(150);
 /// Readings taken after a press before concluding it changed nothing.
+///
+/// RANGE presses reuse both constants: nobody has timed 0x46 separately, and
+/// the meter answers a press the same way whichever button sent it.
 const SELECT_SETTLE_READS: usize = 3;
 
 impl cycle::CycleMeter for Ut61PlusProtocol {
@@ -454,12 +459,13 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
         let cmd = match button {
             cycle::CycleButton::Select => Command::Select,
             cycle::CycleButton::Hz => Command::Select2,
+            cycle::CycleButton::Range => Command::Range,
         };
         self.press_command(transport, cmd)
     }
 
-    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16> {
-        Protocol::request_measurement(self, transport).map(|m| m.mode_raw)
+    fn read(&mut self, transport: &dyn Transport) -> Result<Measurement> {
+        Protocol::request_measurement(self, transport)
     }
 
     fn mode_label(&self, mode: u16) -> Cow<'static, str> {
@@ -479,6 +485,21 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
             delay: SELECT_SETTLE_DELAY,
             reads: SELECT_SETTLE_READS,
         }
+    }
+
+    /// The model's own range table for the mode, in range-byte order — the
+    /// same table `range_label` reads, so a rung is named exactly as the
+    /// reading that lands on it will be.
+    fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
+        match u8::try_from(mode).map(Mode::from_byte) {
+            Ok(Ok(mode)) => tables::range_ladder(self.table.as_ref(), mode),
+            // A mode byte this family's parser cannot name has no table.
+            _ => Vec::new(),
+        }
+    }
+
+    fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.press_command(transport, Command::Auto)
     }
 }
 
@@ -735,6 +756,174 @@ mod tests {
         let m = proto.request_measurement(&meter).unwrap();
         assert_eq!(m.mode, "AC+DC V");
         assert_eq!(m.range_label, "22V");
+    }
+
+    // --- Range selection (protocol::cycle) --------------------------------
+
+    /// Flag nibble 2 with the MANUAL range bit set (`flags.auto_range` is
+    /// its inverse).
+    const MANUAL: u8 = 0x04;
+
+    fn range_ids(choices: &[Choice]) -> Vec<u16> {
+        choices.iter().map(|c| c.id).collect()
+    }
+
+    #[test]
+    fn dc_volts_offers_auto_and_the_four_manual_ranges() {
+        let m = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (0, MANUAL, 0));
+        let proto = Ut61PlusProtocol::new();
+        let choices = proto.choices(Setting::Range, &m);
+        assert_eq!(range_ids(&choices), vec![0, 1, 2, 3, 4]);
+        let labels: Vec<_> = choices.iter().map(|c| c.label.as_ref()).collect();
+        assert_eq!(labels, vec!["Auto", "2.2V", "22V", "220V", "1000V"]);
+        // Range byte 1 is the second rung.
+        assert_eq!(
+            choices
+                .iter()
+                .filter(|c| c.current)
+                .map(|c| c.id)
+                .collect::<Vec<_>>(),
+            vec![2]
+        );
+    }
+
+    #[test]
+    fn an_auto_ranging_reading_marks_auto_current() {
+        let m = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
+        let proto = Ut61PlusProtocol::new();
+        let choices = proto.choices(Setting::Range, &m);
+        assert!(choices[0].current, "auto is the live choice");
+        assert!(choices[1..].iter().all(|c| !c.current));
+    }
+
+    /// DC mV has one range on the E+ and RANGE does nothing there; DC A's
+    /// table is a placeholder plus the one verified 20A entry; diode has a
+    /// single entry. None of the three is a ladder.
+    #[test]
+    fn modes_without_a_ladder_offer_no_ranges() {
+        let proto = Ut61PlusProtocol::new();
+        for (mode, range) in [(0x03, 0x00), (0x10, 0x01), (0x08, 0x00)] {
+            let m = make_test_measurement(mode, range, b" 12.345", (0, 0), (0, MANUAL, 0));
+            assert!(
+                proto.choices(Setting::Range, &m).is_empty(),
+                "{} should offer no range",
+                m.mode
+            );
+        }
+    }
+
+    /// A UT61E+ on the V⎓ dial whose RANGE button (0x46) steps the four DC V
+    /// ranges and whose AUTO button (0x47) returns to auto-ranging.
+    struct RangeDial {
+        range: Cell<u8>,
+        manual: Cell<bool>,
+        queued: RefCell<VecDeque<Vec<u8>>>,
+        presses: Cell<usize>,
+        autos: Cell<usize>,
+    }
+
+    impl RangeDial {
+        fn auto() -> Self {
+            Self {
+                range: Cell::new(1),
+                manual: Cell::new(false),
+                queued: RefCell::new(VecDeque::new()),
+                presses: Cell::new(0),
+                autos: Cell::new(0),
+            }
+        }
+
+        fn manual_at(range: u8) -> Self {
+            let dial = Self::auto();
+            dial.range.set(range);
+            dial.manual.set(true);
+            dial
+        }
+    }
+
+    impl Transport for RangeDial {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            match data.get(3) {
+                Some(&0x5E) => {
+                    let flag2 = if self.manual.get() { MANUAL } else { 0 };
+                    self.queued
+                        .borrow_mut()
+                        .push_back(test_frame_be16(&make_payload(
+                            0x02,
+                            self.range.get(),
+                            b" 12.345",
+                            (0x00, 0x00),
+                            (0x00, flag2, 0x00),
+                        )));
+                }
+                Some(&0x46) => {
+                    self.presses.set(self.presses.get() + 1);
+                    // The first press engages manual ranging where auto had
+                    // left the meter; later ones step the ladder.
+                    if self.manual.replace(true) {
+                        self.range.set((self.range.get() + 1) % 4);
+                    }
+                    self.queued
+                        .borrow_mut()
+                        .push_back(test_frame_be16(&[0xFF, 0x00]));
+                }
+                Some(&0x47) => {
+                    self.autos.set(self.autos.get() + 1);
+                    self.manual.set(false);
+                    self.queued
+                        .borrow_mut()
+                        .push_back(test_frame_be16(&[0xFF, 0x00]));
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            let Some(frame) = self.queued.borrow_mut().pop_front() else {
+                return Ok(0);
+            };
+            let len = frame.len().min(buf.len());
+            buf[..len].copy_from_slice(&frame[..len]);
+            Ok(len)
+        }
+
+        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn selecting_a_range_presses_the_range_button_to_it() {
+        let meter = RangeDial::manual_at(1);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.select(&meter, Setting::Range, 4).expect("switched");
+        assert_eq!(meter.presses.get(), 2, "22V -> 220V -> 1000V");
+        assert_eq!(meter.range.get(), 3);
+        assert_eq!(meter.autos.get(), 0);
+    }
+
+    #[test]
+    fn selecting_auto_sends_the_auto_command_and_confirms_it() {
+        let meter = RangeDial::manual_at(2);
+        let mut proto = Ut61PlusProtocol::new();
+        proto
+            .select(&meter, Setting::Range, 0)
+            .expect("back to auto");
+        assert_eq!(meter.autos.get(), 1);
+        assert_eq!(meter.presses.get(), 0);
+        assert!(!meter.manual.get());
+    }
+
+    #[test]
+    fn a_meter_already_auto_ranging_is_not_told_to_be() {
+        let meter = RangeDial::auto();
+        let mut proto = Ut61PlusProtocol::new();
+        proto
+            .select(&meter, Setting::Range, 0)
+            .expect("already auto");
+        assert_eq!(meter.autos.get(), 0);
+        assert_eq!(meter.presses.get(), 0);
     }
 
     #[test]

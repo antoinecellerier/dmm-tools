@@ -6,7 +6,8 @@ pub mod ut61d_plus;
 pub mod ut61e_plus;
 
 use super::mode::Mode;
-use crate::protocol::cycle::DialPosition;
+use crate::protocol::cycle::{self, DialPosition};
+use std::borrow::Cow;
 
 pub use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
@@ -56,6 +57,37 @@ pub trait DeviceTable: Send {
     fn dial_positions(&self) -> &'static [DialPosition] {
         &[]
     }
+
+    /// The range labels this model lists for `mode`, in range-byte order.
+    fn ranges(&self, _mode: Mode) -> &[RangeInfo] {
+        &[]
+    }
+
+    /// Whether RANGE is dead in `mode` on this model, so no ladder is
+    /// offered even though the table lists more than one entry.
+    fn range_is_fixed(&self, _mode: Mode) -> bool {
+        false
+    }
+}
+
+/// The manual range ladder to offer in `mode`, or empty when there is none.
+///
+/// The table is the ladder: the meter reports the range byte as an index
+/// into it, so rung `n` of the choice list is entry `n - 1`. Two table
+/// shapes are not ladders and [`cycle::usable_ladder`] drops both, and a
+/// model can say outright that RANGE does nothing in a mode
+/// ([`DeviceTable::range_is_fixed`]).
+pub(crate) fn range_ladder(table: &dyn DeviceTable, mode: Mode) -> Vec<Cow<'static, str>> {
+    if table.range_is_fixed(mode) {
+        return Vec::new();
+    }
+    cycle::usable_ladder(
+        table
+            .ranges(mode)
+            .iter()
+            .map(|r| Cow::Borrowed(r.label))
+            .collect(),
+    )
 }
 
 /// Everything a device table knows about one mode.
@@ -112,6 +144,11 @@ pub(crate) trait ModeTables: Send {
     const DIAL_POSITIONS: &'static [DialPosition];
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_>;
+
+    /// Modes this model's RANGE button cannot change. Default: none.
+    fn range_is_fixed(&self, _mode: Mode) -> bool {
+        false
+    }
 }
 
 impl<T: ModeTables> DeviceTable for T {
@@ -137,6 +174,14 @@ impl<T: ModeTables> DeviceTable for T {
 
     fn dial_positions(&self) -> &'static [DialPosition] {
         T::DIAL_POSITIONS
+    }
+
+    fn ranges(&self, mode: Mode) -> &[RangeInfo] {
+        self.entry(mode).ranges.unwrap_or(&[])
+    }
+
+    fn range_is_fixed(&self, mode: Mode) -> bool {
+        ModeTables::range_is_fixed(self, mode)
     }
 }
 

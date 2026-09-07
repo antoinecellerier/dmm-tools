@@ -9,8 +9,9 @@
 //! `docs/research/ut181/reverse-engineered-protocol.md`
 //! §6.1 Mode switching (SET_MODE) -- [VENDOR].
 
-use super::decode_mode_word;
-use crate::protocol::Choice;
+use super::{decode_mode_word, lookup_range_label};
+use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice};
+use std::borrow::Cow;
 
 /// Mask selecting the dial family of a mode word: nibble 3 (function family)
 /// and nibble 2 (sub-function). The low byte is the variant and REL nibbles.
@@ -231,6 +232,33 @@ pub(crate) fn mode_choices(current_mode_raw: u16) -> Vec<Choice> {
             }
         })
         .collect()
+}
+
+/// The ranges reachable in `word`, for `Protocol::choices`.
+///
+/// Auto first, then the family's manual ladder — which is what SET_RANGE
+/// indexes, so the choice id *is* the byte the command takes. Empty for a
+/// fixed-range family (A DC/AC, temperature, continuity, conductance, diode,
+/// duty cycle, pulse width) and for a word from no known family.
+pub(crate) fn range_choices(word: u16, range_raw: u8, auto_range: bool) -> Vec<Choice> {
+    let Some(f) = lookup(word) else {
+        return Vec::new();
+    };
+    if f.manual_ranges == 0 {
+        return Vec::new();
+    }
+    let mut choices = vec![Choice {
+        id: AUTO_RANGE_ID,
+        label: Cow::Borrowed(AUTO_RANGE_LABEL),
+        // The meter says so twice — the auto-range flag, and range byte 0.
+        current: auto_range || range_raw == 0,
+    }];
+    choices.extend((1..=f.manual_ranges).map(|rung| Choice {
+        id: u16::from(rung),
+        label: Cow::Borrowed(lookup_range_label(word, rung)),
+        current: !auto_range && range_raw == rung,
+    }));
+    choices
 }
 
 /// Whether REL can be toggled from `word`.

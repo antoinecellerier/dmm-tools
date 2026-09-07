@@ -30,6 +30,16 @@
 //! [`Settle`], and a reading that still shows the old mode triggers another
 //! read, never another press — a second press would step past the target.
 //!
+//! # Rings that are not modes
+//!
+//! The manual range ladder works the same way: RANGE is a button, the rungs
+//! are a ring, and the reading names the rung the meter landed on. So the
+//! same [`walk`] drives it, told through an [`Observable`] which part of the
+//! reading to watch and how to name its values. A ladder is one ring on its
+//! own — no dial table, no junction — and Auto is not part of it: every
+//! family reaches auto-ranging with a command of its own
+//! ([`CycleMeter::set_auto_range`]).
+//!
 //! A family implements [`CycleMeter`], keeps a [`DialState`] updated with
 //! [`DialState::observe`] from every measurement it parses, and forwards
 //! `Protocol::choices` / `Protocol::select` to the free functions
@@ -41,7 +51,7 @@ use std::time::Duration;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
-use crate::protocol::Choice;
+use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice};
 use crate::transport::Transport;
 
 /// A front-panel button that cycles the meter through a ring of modes.
@@ -51,6 +61,8 @@ pub enum CycleButton {
     Select,
     /// The Hz/% button: steps a position's frequency and duty-cycle modes.
     Hz,
+    /// The RANGE button: steps the current mode's manual range ladder.
+    Range,
 }
 
 /// One button and the modes (family `mode_raw` values) it cycles through.
@@ -204,8 +216,9 @@ pub(crate) trait CycleMeter {
     /// family needs. Does not read a measurement.
     fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()>;
 
-    /// Take one reading and return its `mode_raw`.
-    fn read_mode(&mut self, transport: &dyn Transport) -> Result<u16>;
+    /// Take one reading. The walk watches whichever part of it the
+    /// [`Observable`] cares about.
+    fn read(&mut self, transport: &dyn Transport) -> Result<Measurement>;
 
     /// Display name in the same vocabulary as `Measurement::mode`.
     fn mode_label(&self, mode: u16) -> Cow<'static, str>;
@@ -217,8 +230,121 @@ pub(crate) trait CycleMeter {
         match button {
             CycleButton::Select => "SELECT",
             CycleButton::Hz => "Hz/%",
+            CycleButton::Range => RANGE_BUTTON_NAME,
         }
     }
+
+    /// The manual range ladder `mode` offers: one label per rung, in ladder
+    /// order, so choice id `n` is entry `n - 1`.
+    ///
+    /// Empty — the default — means this family offers no remote range
+    /// selection, or this mode has no ladder worth offering
+    /// ([`usable_ladder`]).
+    fn range_ladder(&self, _mode: u16) -> Vec<Cow<'static, str>> {
+        Vec::new()
+    }
+
+    /// The 1-based rung a reading's `range_raw` names.
+    ///
+    /// The default is the plain 0-based index the UT61+ family reports; the
+    /// Voltcraft meters send it offset by 0x30 and override this.
+    fn range_rung(&self, range_raw: u8) -> u16 {
+        u16::from(range_raw) + 1
+    }
+
+    /// Put the meter back in auto-range: its own command on every family
+    /// here, as it is its own button on every front panel. Never a press —
+    /// walking the ladder cannot reach auto.
+    fn set_auto_range(&mut self, _transport: &dyn Transport) -> Result<()> {
+        Err(crate::protocol::unsupported_setting(
+            crate::protocol::Setting::Range,
+        ))
+    }
+}
+
+/// What the front panel calls [`CycleButton::Range`] on every meter here.
+pub(crate) const RANGE_BUTTON_NAME: &str = "RANGE";
+
+/// One dimension of the meter a [`walk`] steps through.
+///
+/// The walk is the same whatever is being stepped — press, read back, stop
+/// when the reading says the target arrived. What differs is which part of
+/// the reading to watch and how to name its values.
+pub(crate) trait Observable<M: CycleMeter + ?Sized> {
+    /// The value `reading` reports for this dimension, or the error that
+    /// ends the walk (the range ladder refuses to keep pressing once the
+    /// mode has changed under it).
+    fn value(&self, meter: &M, reading: &Measurement) -> Result<u16>;
+
+    /// Display name for one value, for the messages the walk produces.
+    fn label(&self, meter: &M, value: u16) -> Cow<'static, str>;
+}
+
+/// The mode byte: what [`select_mode`] walks.
+struct ModeWalk;
+
+impl<M: CycleMeter + ?Sized> Observable<M> for ModeWalk {
+    fn value(&self, _meter: &M, reading: &Measurement) -> Result<u16> {
+        Ok(reading.mode_raw)
+    }
+
+    fn label(&self, meter: &M, value: u16) -> Cow<'static, str> {
+        meter.mode_label(value)
+    }
+}
+
+/// The manual range ladder: what [`select_range`] walks.
+///
+/// `start_mode` is the mode the walk began in. A UT61E+ capture (2026-07-29,
+/// docs/verification-backlog.md) saw repeated RANGE presses flip the mode
+/// byte DC V <-> AC+DC V, which is SELECT's documented effect, not RANGE's.
+/// Whatever causes it, pressing on once the function has changed would be
+/// stepping a ladder the user never asked for, so the walk stops instead.
+struct RangeWalk {
+    start_mode: u16,
+    ladder: Vec<Cow<'static, str>>,
+}
+
+impl<M: CycleMeter + ?Sized> Observable<M> for RangeWalk {
+    fn value(&self, meter: &M, reading: &Measurement) -> Result<u16> {
+        if reading.mode_raw != self.start_mode {
+            return Err(Error::CommandRejected(format!(
+                "the mode changed to {}; stopped pressing {RANGE_BUTTON_NAME}",
+                meter.mode_label(reading.mode_raw),
+            )));
+        }
+        Ok(if reading.flags.auto_range {
+            AUTO_RANGE_ID
+        } else {
+            meter.range_rung(reading.range_raw)
+        })
+    }
+
+    fn label(&self, _meter: &M, value: u16) -> Cow<'static, str> {
+        match usize::from(value).checked_sub(1) {
+            None => Cow::Borrowed(AUTO_RANGE_LABEL),
+            // A rung the ladder doesn't list is a meter that disagrees with
+            // the family's table; name it by number rather than hide it.
+            Some(i) => self
+                .ladder
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| Cow::Owned(format!("range {value}"))),
+        }
+    }
+}
+
+/// A ladder worth offering, or nothing.
+///
+/// A single rung is no choice at all, and a table whose rungs all carry the
+/// same label is a placeholder rather than a ladder (the UT61E+ current
+/// tables pair a spare index 0 with the one verified 20A entry). Neither is
+/// offered: the consumers' rule is "fewer than two entries, draw nothing".
+pub(crate) fn usable_ladder(labels: Vec<Cow<'static, str>>) -> Vec<Cow<'static, str>> {
+    if labels.len() < 2 || labels.iter().all(|l| *l == labels[0]) {
+        return Vec::new();
+    }
+    labels
 }
 
 /// Modes reachable from the reading `current`, for `Protocol::choices`.
@@ -260,11 +386,7 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
     // issued before the first reading takes one itself.
     let current = match meter.dial_state().last_mode() {
         Some(mode) => mode,
-        None => {
-            let mode = meter.read_mode(transport)?;
-            meter.dial_state_mut().observe(positions, mode);
-            mode
-        }
+        None => read_and_observe(meter, transport)?.mode_raw,
     };
 
     let Some(index) = resolve_position(positions, meter.dial_state().position(), current) else {
@@ -293,7 +415,7 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
 
     let mut from = current;
     for leg in legs {
-        if let Err(e) = walk(meter, transport, &leg, from) {
+        if let Err(e) = walk(meter, transport, &leg, &ModeWalk, from) {
             // `walk` says where its own presses left the meter; when an
             // earlier leg already moved it, say where it came from too, so
             // the user knows the function changed under the failure.
@@ -313,7 +435,7 @@ pub(crate) fn select_mode<M: CycleMeter + ?Sized>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Leg {
     pub(crate) button: CycleButton,
-    /// Modes in the ring being walked — the press budget comes from it.
+    /// Entries in the ring being walked — the press budget comes from it.
     pub(crate) ring_len: usize,
     pub(crate) target: u16,
 }
@@ -368,10 +490,11 @@ pub(crate) fn plan(position: &DialPosition, from: u16, to: u16) -> Option<Vec<Le
 /// press changed nothing (wrong dial position for that button), the ring came
 /// back around to where it started without the target showing (the table
 /// claims a mode this model doesn't have), or the press budget ran out.
-fn walk<M: CycleMeter + ?Sized>(
+fn walk<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
     meter: &mut M,
     transport: &dyn Transport,
     leg: &Leg,
+    obs: &O,
     start: u16,
 ) -> Result<()> {
     let settle = meter.settle();
@@ -384,65 +507,192 @@ fn walk<M: CycleMeter + ?Sized>(
         debug!(
             "cycle: pressing {} (in {}, want {})",
             meter.button_name(leg.button),
-            meter.mode_label(seen),
-            meter.mode_label(leg.target)
+            obs.label(meter, seen),
+            obs.label(meter, leg.target)
         );
         meter.press(transport, leg.button)?;
-        let mode = observe_after_press(meter, transport, seen, settle)?;
-        if mode == leg.target {
+        let now = observe_after_press(meter, transport, obs, seen, settle)?;
+        if now == leg.target {
             return Ok(());
         }
-        if mode == seen {
+        if now == seen {
             return Err(Error::CommandRejected(format!(
                 "{} did nothing in {}",
                 meter.button_name(leg.button),
-                meter.mode_label(seen)
+                obs.label(meter, seen)
             )));
         }
-        if mode == start {
+        if now == start {
             return Err(Error::CommandRejected(format!(
                 "{} never appeared; the meter is back in {}",
-                meter.mode_label(leg.target),
-                meter.mode_label(start)
+                obs.label(meter, leg.target),
+                obs.label(meter, start)
             )));
         }
-        seen = mode;
+        seen = now;
     }
     Err(Error::CommandRejected(format!(
         "gave up after {budget} presses of {}; the meter is in {}",
         meter.button_name(leg.button),
-        meter.mode_label(seen)
+        obs.label(meter, seen)
     )))
 }
 
-/// Read the mode back after a press, skipping frames that still show `seen`.
+/// Take one reading and let it update the inferred dial position.
+///
+/// Every reading the driver takes goes through here, walk or not: the dial
+/// is only ever known from the modes the meter reports.
+fn read_and_observe<M: CycleMeter + ?Sized>(
+    meter: &mut M,
+    transport: &dyn Transport,
+) -> Result<Measurement> {
+    let reading = meter.read(transport)?;
+    let positions = meter.dial_positions();
+    meter.dial_state_mut().observe(positions, reading.mode_raw);
+    Ok(reading)
+}
+
+/// Read the meter back after a press, skipping frames that still show `seen`.
 ///
 /// Waits `settle.delay` before each read and takes up to `settle.reads` of
 /// them (always at least one), stopping at the first reading that differs.
 /// Returns `seen` when none does — the caller decides what that means.
-fn observe_after_press<M: CycleMeter + ?Sized>(
+fn observe_after_press<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
     meter: &mut M,
     transport: &dyn Transport,
+    obs: &O,
     seen: u16,
     settle: Settle,
 ) -> Result<u16> {
-    let positions = meter.dial_positions();
     let mut last = seen;
     for _ in 0..settle.reads.max(1) {
         if !settle.delay.is_zero() {
             std::thread::sleep(settle.delay);
         }
-        last = meter.read_mode(transport)?;
-        meter.dial_state_mut().observe(positions, last);
+        let reading = read_and_observe(meter, transport)?;
+        last = obs.value(meter, &reading)?;
         if last != seen {
             break;
         }
         debug!(
             "cycle: meter still reports {}, re-reading",
-            meter.mode_label(seen)
+            obs.label(meter, seen)
         );
     }
     Ok(last)
+}
+
+/// The ladder `mode` offers, once `id` is known to be one of its rungs.
+///
+/// Both refusals are decided from the family's own table, so a bad id never
+/// reaches the meter.
+fn check_range_id<M: CycleMeter + ?Sized>(
+    meter: &M,
+    mode: u16,
+    id: u16,
+) -> Result<Vec<Cow<'static, str>>> {
+    let ladder = meter.range_ladder(mode);
+    if ladder.is_empty() {
+        return Err(Error::UnsupportedCommand(format!(
+            "{} has no range to choose on this meter",
+            meter.mode_label(mode)
+        )));
+    }
+    if id != AUTO_RANGE_ID && usize::from(id) > ladder.len() {
+        return Err(Error::UnsupportedCommand(format!(
+            "range {id} is not one of the {} {} offers",
+            ladder.len(),
+            meter.mode_label(mode)
+        )));
+    }
+    Ok(ladder)
+}
+
+/// The ranges reachable in the mode `current` reports, for
+/// `Protocol::choices`.
+///
+/// Auto first, then the ladder, `id = index + 1`. Empty when the mode has no
+/// ladder to offer. Does not touch the meter's state, like
+/// [`mode_choices`].
+pub(crate) fn range_choices<M: CycleMeter + ?Sized>(
+    meter: &M,
+    current: &Measurement,
+) -> Vec<Choice> {
+    let ladder = meter.range_ladder(current.mode_raw);
+    if ladder.is_empty() {
+        return Vec::new();
+    }
+    let live = (!current.flags.auto_range).then(|| meter.range_rung(current.range_raw));
+    let mut choices = Vec::with_capacity(ladder.len() + 1);
+    choices.push(Choice {
+        id: AUTO_RANGE_ID,
+        label: Cow::Borrowed(AUTO_RANGE_LABEL),
+        current: current.flags.auto_range,
+    });
+    choices.extend(ladder.into_iter().enumerate().map(|(i, label)| {
+        let id = i as u16 + 1;
+        Choice {
+            id,
+            label,
+            current: live == Some(id),
+        }
+    }));
+    choices
+}
+
+/// Press the meter onto rung `id` of the current mode's ladder, or back to
+/// auto-range for [`AUTO_RANGE_ID`], for `Protocol::select`.
+///
+/// Auto is never walked to: it is its own command, confirmed with the same
+/// settle-and-re-read discipline a press gets. Everything else is one ring
+/// walked with RANGE — and the first press engages manual ranging at
+/// whatever rung auto had chosen (verified on a UT61E+), so a walk that
+/// starts in auto simply sees the observable go from auto to a rung and
+/// carries on.
+pub(crate) fn select_range<M: CycleMeter + ?Sized>(
+    meter: &mut M,
+    transport: &dyn Transport,
+    id: u16,
+) -> Result<()> {
+    // An id the last known mode's ladder doesn't have costs no I/O at all.
+    if let Some(mode) = meter.dial_state().last_mode() {
+        check_range_id(meter, mode, id)?;
+    }
+    // Which rung the meter sits on is only in the stream, and the mode may
+    // have moved since the last reading, so both come from a fresh one.
+    let reading = read_and_observe(meter, transport)?;
+    let ladder = check_range_id(meter, reading.mode_raw, id)?;
+    let walk_obs = RangeWalk {
+        start_mode: reading.mode_raw,
+        ladder,
+    };
+    let seen = walk_obs.value(meter, &reading)?;
+    if seen == id {
+        return Ok(());
+    }
+    let settle = meter.settle();
+    if id == AUTO_RANGE_ID {
+        debug!(
+            "cycle: setting auto-range (in {})",
+            walk_obs.label(meter, seen)
+        );
+        meter.set_auto_range(transport)?;
+        let now = observe_after_press(meter, transport, &walk_obs, seen, settle)?;
+        return if now == AUTO_RANGE_ID {
+            Ok(())
+        } else {
+            Err(Error::CommandRejected(format!(
+                "AUTO did nothing; the meter is still in {}",
+                walk_obs.label(meter, now)
+            )))
+        };
+    }
+    let leg = Leg {
+        button: CycleButton::Range,
+        ring_len: walk_obs.ladder.len(),
+        target: id,
+    };
+    walk(meter, transport, &leg, &walk_obs, seen)
 }
 
 /// Panic unless a family's dial table is well formed.
@@ -540,6 +790,7 @@ fn check_table(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flags::StatusFlags;
     use crate::transport::NullTransport;
 
     // Mode ids of a UT61E+-shaped meter.
@@ -644,6 +895,26 @@ mod tests {
         }
     }
 
+    /// A reading in `mode` on ladder rung `rung`, 0 meaning auto-range.
+    fn reading_at(mode: u16, rung: u16) -> Measurement {
+        Measurement {
+            range_raw: rung.saturating_sub(1) as u8,
+            flags: StatusFlags {
+                auto_range: rung == AUTO_RANGE_ID,
+                ..Default::default()
+            },
+            ..reading(mode)
+        }
+    }
+
+    /// A UT61E+-shaped DC V ladder.
+    fn dc_v_ladder() -> Vec<Cow<'static, str>> {
+        ["2.2V", "22V", "220V", "1000V"]
+            .into_iter()
+            .map(Cow::Borrowed)
+            .collect()
+    }
+
     /// A meter whose real buttons are `rings` — deliberately independent of
     /// the table the driver plans from, so a test can make the two disagree
     /// the way a wrong table disagrees with hardware.
@@ -653,11 +924,28 @@ mod tests {
         mode: u16,
         presses: Vec<CycleButton>,
         reads: usize,
-        /// Readings after a press that still report the pre-press mode.
+        /// Readings after a press that still report the pre-press state.
         stale: usize,
         stale_left: usize,
-        stale_mode: u16,
+        stale_state: (u16, u16),
         settle_reads: usize,
+        /// The ladder the *driver* is told about — the family's table.
+        ladder: Vec<Cow<'static, str>>,
+        /// The rung the meter is on, 0 being auto-range.
+        rung: u16,
+        /// The ladder the meter really has: a press steps `r % real_rungs +
+        /// 1`, and 0 means it never comes back around, so only the press
+        /// budget can stop a walk.
+        real_rungs: u16,
+        /// The rung the first press out of auto lands on, as the meter's own
+        /// auto-ranging had chosen it.
+        auto_rung: u16,
+        /// A meter that changes function under RANGE, as a UT61E+ was seen
+        /// to do (docs/verification-backlog.md, 2026-07-29).
+        range_flips_mode: Option<u16>,
+        /// Auto-range commands sent, and whether the meter obeys them.
+        autos: usize,
+        auto_works: bool,
     }
 
     impl FakeMeter {
@@ -671,9 +959,26 @@ mod tests {
                 reads: 0,
                 stale: 0,
                 stale_left: 0,
-                stale_mode: mode,
+                stale_state: (mode, 0),
                 settle_reads: 1,
+                ladder: Vec::new(),
+                rung: AUTO_RANGE_ID,
+                real_rungs: 0,
+                auto_rung: 1,
+                range_flips_mode: None,
+                autos: 0,
+                auto_works: true,
             }
+        }
+
+        /// A meter on the DC V ladder, sitting on `rung` (0 = auto), whose
+        /// RANGE button really does step that ladder.
+        fn on_ladder(rung: u16) -> Self {
+            let mut meter = Self::v_dc();
+            meter.ladder = dc_v_ladder();
+            meter.real_rungs = 4;
+            meter.rung = rung;
+            meter
         }
 
         /// A meter one reading in, as the driver normally finds it.
@@ -735,20 +1040,47 @@ mod tests {
             // A button that doesn't apply to the current mode changes nothing
             // (the real meter just beeps).
             if let Some(next) = next {
-                self.stale_mode = self.mode;
+                self.stale_state = (self.mode, self.rung);
                 self.mode = next;
+                self.stale_left = self.stale;
+            }
+            if button == CycleButton::Range && !self.ladder.is_empty() {
+                self.stale_state = (self.mode, self.rung);
+                self.rung = match (self.rung, self.real_rungs) {
+                    (AUTO_RANGE_ID, _) => self.auto_rung,
+                    (r, 0) => r + 1,
+                    (r, n) => r % n + 1,
+                };
+                if let Some(mode) = self.range_flips_mode {
+                    self.mode = mode;
+                }
                 self.stale_left = self.stale;
             }
             Ok(())
         }
 
-        fn read_mode(&mut self, _transport: &dyn Transport) -> Result<u16> {
+        fn read(&mut self, _transport: &dyn Transport) -> Result<Measurement> {
             self.reads += 1;
             if self.stale_left > 0 {
                 self.stale_left -= 1;
-                return Ok(self.stale_mode);
+                let (mode, rung) = self.stale_state;
+                return Ok(reading_at(mode, rung));
             }
-            Ok(self.mode)
+            Ok(reading_at(self.mode, self.rung))
+        }
+
+        fn range_ladder(&self, _mode: u16) -> Vec<Cow<'static, str>> {
+            self.ladder.clone()
+        }
+
+        fn set_auto_range(&mut self, _transport: &dyn Transport) -> Result<()> {
+            self.autos += 1;
+            if self.auto_works {
+                self.stale_state = (self.mode, self.rung);
+                self.rung = AUTO_RANGE_ID;
+                self.stale_left = self.stale;
+            }
+            Ok(())
         }
 
         fn mode_label(&self, mode: u16) -> Cow<'static, str> {
@@ -1112,6 +1444,186 @@ mod tests {
         meter.settle_reads = 0;
         select_mode(&mut meter, &NullTransport, ACDC_V).expect("switched");
         assert_eq!(meter.reads, 1);
+    }
+
+    // ---- the range ladder ----
+
+    #[test]
+    fn range_choices_list_auto_then_the_ladder() {
+        let meter = FakeMeter::on_ladder(2);
+        let choices = range_choices(&meter, &reading_at(DC_V, 2));
+        assert_eq!(ids(&choices), vec![0, 1, 2, 3, 4]);
+        assert_eq!(choices[0].label, "Auto");
+        assert_eq!(choices[2].label, "22V");
+        assert_eq!(current_ids(&choices), vec![2]);
+    }
+
+    #[test]
+    fn an_auto_ranging_meter_marks_auto_current() {
+        let meter = FakeMeter::on_ladder(AUTO_RANGE_ID);
+        let choices = range_choices(&meter, &reading_at(DC_V, AUTO_RANGE_ID));
+        assert_eq!(current_ids(&choices), vec![AUTO_RANGE_ID]);
+    }
+
+    #[test]
+    fn a_mode_with_no_ladder_offers_no_ranges() {
+        let meter = FakeMeter::v_dc();
+        assert!(range_choices(&meter, &reading_at(DC_V, 1)).is_empty());
+    }
+
+    #[test]
+    fn select_range_presses_once_per_rung() {
+        let mut meter = FakeMeter::on_ladder(1);
+        select_range(&mut meter, &NullTransport, 3).expect("switched");
+        assert_eq!(meter.presses, vec![CycleButton::Range; 2]);
+        assert_eq!(meter.rung, 3);
+    }
+
+    /// The first press out of auto engages manual ranging at whatever rung
+    /// auto had chosen, so the walk simply carries on from there.
+    #[test]
+    fn a_walk_out_of_auto_starts_where_auto_was() {
+        let mut meter = FakeMeter::on_ladder(AUTO_RANGE_ID);
+        meter.auto_rung = 2;
+        select_range(&mut meter, &NullTransport, 4).expect("switched");
+        assert_eq!(meter.presses.len(), 3);
+        assert_eq!(meter.rung, 4);
+    }
+
+    #[test]
+    fn selecting_the_rung_the_meter_is_on_presses_nothing() {
+        let mut meter = FakeMeter::on_ladder(2);
+        select_range(&mut meter, &NullTransport, 2).expect("already there");
+        assert!(meter.presses.is_empty());
+        assert_eq!(meter.autos, 0);
+    }
+
+    #[test]
+    fn a_rung_the_ladder_does_not_have_costs_no_io() {
+        for id in [5, 99] {
+            let mut meter = FakeMeter::on_ladder(1);
+            let err = select_range(&mut meter, &NullTransport, id).unwrap_err();
+            assert!(
+                matches!(&err, Error::UnsupportedCommand(m)
+                    if m.contains("is not one of the 4")),
+                "got {err:?}"
+            );
+            assert_eq!(meter.reads, 0, "{id} read the meter");
+            assert!(meter.presses.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_mode_without_a_ladder_refuses_before_any_io() {
+        let mut meter = FakeMeter::v_dc();
+        let err = select_range(&mut meter, &NullTransport, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::UnsupportedCommand(m) if m.contains("no range to choose")),
+            "got {err:?}"
+        );
+        assert_eq!(meter.reads, 0);
+    }
+
+    /// Auto is a command of its own, never a press.
+    #[test]
+    fn auto_is_one_command_and_no_press() {
+        let mut meter = FakeMeter::on_ladder(3);
+        select_range(&mut meter, &NullTransport, AUTO_RANGE_ID).expect("back to auto");
+        assert_eq!(meter.autos, 1);
+        assert!(meter.presses.is_empty());
+        assert_eq!(meter.rung, AUTO_RANGE_ID);
+    }
+
+    #[test]
+    fn a_meter_already_in_auto_is_left_alone() {
+        let mut meter = FakeMeter::on_ladder(AUTO_RANGE_ID);
+        select_range(&mut meter, &NullTransport, AUTO_RANGE_ID).expect("already auto");
+        assert_eq!(meter.autos, 0);
+        assert!(meter.presses.is_empty());
+    }
+
+    #[test]
+    fn an_auto_command_the_meter_ignores_is_reported() {
+        let mut meter = FakeMeter::on_ladder(2);
+        meter.auto_works = false;
+        let err = select_range(&mut meter, &NullTransport, AUTO_RANGE_ID).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m)
+                if m == "AUTO did nothing; the meter is still in 22V"),
+            "got {err:?}"
+        );
+    }
+
+    /// The meter was mid-frame when the press landed: re-read, never press
+    /// again, or the ladder steps past the target.
+    #[test]
+    fn a_stale_frame_after_a_range_press_costs_a_read() {
+        let mut meter = FakeMeter::on_ladder(1);
+        meter.stale = 2;
+        meter.settle_reads = 3;
+        select_range(&mut meter, &NullTransport, 2).expect("switched");
+        assert_eq!(meter.presses, vec![CycleButton::Range]);
+        // One read to find the starting rung, three to see the press land.
+        assert_eq!(meter.reads, 4);
+    }
+
+    /// Repeated RANGE presses were seen to flip a UT61E+ between DC V and
+    /// AC+DC V. Stepping a ladder that belongs to another function is not
+    /// what was asked for, so the walk stops on the spot.
+    #[test]
+    fn a_mode_change_mid_walk_stops_the_walk() {
+        let mut meter = FakeMeter::on_ladder(1);
+        meter.range_flips_mode = Some(ACDC_V);
+        let err = select_range(&mut meter, &NullTransport, 4).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m)
+                if m == "the mode changed to AC+DC V; stopped pressing RANGE"),
+            "got {err:?}"
+        );
+        assert_eq!(meter.presses.len(), 1, "no further press after the change");
+        assert_eq!(
+            meter.state.last_mode(),
+            Some(ACDC_V),
+            "the reading still moved the dial state"
+        );
+    }
+
+    /// The family's table claims a rung this meter doesn't have: the ladder
+    /// coming back around to where it started is what says so.
+    #[test]
+    fn a_ladder_coming_back_around_reports_the_missing_rung() {
+        let mut meter = FakeMeter::on_ladder(1);
+        meter.real_rungs = 2;
+        let err = select_range(&mut meter, &NullTransport, 4).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m)
+                if m == "1000V never appeared; the meter is back in 2.2V"),
+            "got {err:?}"
+        );
+        assert_eq!(meter.presses.len(), 2);
+    }
+
+    /// A meter whose RANGE never comes back around: only the budget — one
+    /// press per rung plus one — ends the walk.
+    #[test]
+    fn the_range_walk_gives_up_after_one_press_per_rung_plus_one() {
+        let mut meter = FakeMeter::on_ladder(2);
+        meter.real_rungs = 0;
+        let err = select_range(&mut meter, &NullTransport, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m)
+                if m.contains("gave up after 5 presses of RANGE")
+                    && m.contains("the meter is in range 7")),
+            "got {err:?}"
+        );
+        assert_eq!(meter.presses.len(), 5);
+    }
+
+    #[test]
+    fn a_ladder_that_offers_no_choice_is_dropped() {
+        assert!(usable_ladder(vec![Cow::Borrowed("20A")]).is_empty());
+        assert!(usable_ladder(vec![Cow::Borrowed("20A"), Cow::Borrowed("20A")]).is_empty());
+        assert_eq!(usable_ladder(dc_v_ladder()).len(), 4);
     }
 
     // ---- table invariants ----

@@ -183,15 +183,19 @@ impl std::str::FromStr for DeviceFamily {
 
 /// A meter setting the host can read the options of and switch between.
 ///
-/// Only [`Setting::Mode`] is implemented so far; the rest name the settings
-/// the same API is about to carry.
+/// [`Setting::Mode`] and [`Setting::Range`] are implemented; the rest name
+/// the settings the same API is about to carry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Setting {
     /// Measurement mode. Choice ids are the family's own mode ids (UT181A: the
     /// mode word; the cycling families: the mode byte).
     Mode,
-    /// Measurement range. Choice id 0 is autorange, any other id is the
-    /// family's own range value.
+    /// Measurement range. Choice id [`AUTO_RANGE_ID`] is autorange, and id
+    /// `n >= 1` is the n-th rung of the current mode's ladder, counting from
+    /// one — not the family's own range value, because the UT61+ range byte
+    /// is 0-based and rung 0 would collide with autorange. On the UT181A `n`
+    /// is exactly what SET_RANGE takes; elsewhere `n - 1` indexes the
+    /// family's own table.
     Range,
     /// Display hold. Choice id 0 is off, 1 is on.
     Hold,
@@ -244,6 +248,14 @@ pub struct Choice {
     /// The meter sits on this value now.
     pub current: bool,
 }
+
+/// The [`Setting::Range`] choice id that means autorange, listed first and
+/// reached by a command of its own rather than by pressing RANGE.
+pub(crate) const AUTO_RANGE_ID: u16 = 0;
+
+/// Label of the autorange choice, in the vocabulary of
+/// `Measurement::range_label`.
+pub(crate) const AUTO_RANGE_LABEL: &str = "Auto";
 
 /// The refusal a family returns for a setting it cannot drive, kept in one
 /// place so every family words it the same way.

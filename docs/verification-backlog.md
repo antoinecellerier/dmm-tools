@@ -50,6 +50,13 @@ Until then the capture wizard sends `range` once, not repeatedly — a
 six-step sweep was tried and removed, because it files data that looks like
 a range sweep but isn't.
 
+Since 2026-09-07 the library walks RANGE by read-back for `Setting::Range`:
+it presses 0x46, re-reads the range byte until the target rung shows, and
+aborts with "the mode changed to …" if the mode byte moves under it, so a
+wrong guess about what 0x46 does fails cleanly instead of stepping blind.
+The command that exercises it lands with the CLI phase; that will be the
+runnable check for this item.
+
 The range *count* is not an open question — see Completed Verification: **DC V
 has 4 manual ranges** (0=2.2V, 1=22V, 2=220V, 3=1000V), and 220mV is reachable
 only through the separate DC mV dial position (mode 0x03). So the six-step
@@ -172,6 +179,10 @@ real hardware**. Every aspect needs end-to-end verification.
     to show up). `the meter refused …: SHIFT/SETUP did nothing in <mode>`
     while the display *did* change means they are too tight — report the
     mode and how long the meter takes to answer
+- `Setting::Range` — implemented 2026-09-07 the same way, pressing RANGE
+  (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
+  nobody has confirmed that repeated 0x46 steps the ladder one rung at a
+  time on this meter
 
 **Voltcraft VC-880 / VC650BT**:
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
@@ -218,6 +229,10 @@ real hardware**. Every aspect needs end-to-end verification.
     to show up in the stream). `the meter refused …: SHIFT/SETUP did nothing
     in <mode>` while the display *did* change means they are too tight —
     report the mode and the streaming rate
+- `Setting::Range` — implemented 2026-09-07 the same way, pressing RANGE
+  (0x46) and re-reading the range byte, with 0x47 for auto. Unverified:
+  nobody has confirmed that repeated 0x46 steps the ladder one rung at a
+  time on this meter
 
 **UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
 - **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
@@ -502,7 +517,9 @@ own software sends, not hardware confirmation.
   `"range"` advances one rung per press (not back to the first) and
   matches the LCD's range annunciator; `command auto` should return to
   auto-range. `dmm-cli --device ut181a debug` prints the raw payload if
-  the range byte itself is wanted
+  the range byte itself is wanted. Since 2026-09-07 `Setting::Range` sends
+  the same command absolutely — the choice id *is* the SET_RANGE byte, 0
+  being auto — so this check settles both
 - SET_MIN_MAX (0x04) payload width — the vendor app sends **one** byte,
   not the uint32 antage and sigrok describe (spec §4.2). The code sends
   one byte; a meter needs to confirm MIN/MAX actually engages: on V DC,
@@ -585,6 +602,10 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   via the mV dial position. On UT61E+, DC mV has only 1 range (range 0 =
   220mV); the RANGE button has no effect. The code's dc_mv range 1 (2.2V)
   may be used by other models.
+- **AC mV (0x01): is RANGE dead there too?** DC mV is verified fixed and
+  the driver offers no range there; AC mV shares the same table and is
+  still offered. On the mV dial with SELECT on AC mV, press RANGE and
+  check whether the range byte or the AUTO annunciator moves at all.
 
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
