@@ -124,7 +124,9 @@ These paths are hardware-unverified on three of the four families, so:
   retried. A setting the meter has already taken a value on earlier in the run
   is refused because the current mode has no such function — MIN/MAX in
   continuity — so that refusal is filed but does not count: only an unproven
-  setting's does. One refusal also answers for the setting's remaining choices
+  setting's does. Nor is it flagged `needs_attention`: the error text is the
+  whole story, and a dozen flagged sub-steps with nothing wrong in them is how
+  a real finding gets missed. An unproven setting's refusal is flagged. One refusal also answers for the setting's remaining choices
   in that step, which are not asked for. After `DRIVE_FAILURE_BUDGET` = 3
   counted failures the sweep says `remote control unreliable on this meter`
   once and disables itself for the rest of the run. At most

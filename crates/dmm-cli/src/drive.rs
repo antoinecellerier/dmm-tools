@@ -230,7 +230,16 @@ pub(crate) fn sweep_step(
             }
             filed += 1;
             moved = true;
-            let driven = drive_choice(dmm, recorder, &id, setting, choice, step.samples, report)?;
+            let driven = drive_choice(
+                dmm,
+                recorder,
+                &id,
+                setting,
+                choice,
+                step.samples,
+                driver.proven(setting),
+                report,
+            )?;
             if driven.hit {
                 driver.prove(setting);
             }
@@ -326,7 +335,9 @@ struct Driven {
 /// Put the meter on one choice and file what it read back.
 ///
 /// A refusal is filed as the sub-step's error rather than retried: the
-/// protocol may simply be wrong about this family.
+/// protocol may simply be wrong about this family. `proven` says the setting
+/// has already worked this run, which is what decides whether the refusal is
+/// worth a maintainer's attention.
 #[allow(clippy::too_many_arguments)]
 fn drive_choice(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
@@ -335,6 +346,7 @@ fn drive_choice(
     setting: Setting,
     choice: &dmm_lib::protocol::Choice,
     samples_wanted: usize,
+    proven: bool,
     report: &mut CaptureReport,
 ) -> Result<Driven, Box<dyn std::error::Error>> {
     let instruction = sub_step_instruction(setting, &choice.label);
@@ -384,7 +396,14 @@ fn drive_choice(
     upsert_step(
         report,
         StepResult {
-            needs_attention: !hit || needs_attention(&samples, samples_wanted, &diagnostics),
+            // A setting that has worked elsewhere in the run is refused
+            // because this mode has no such function — MIN/MAX in continuity
+            // — so the error text is the whole story and nothing is flagged
+            // for a maintainer to look at.
+            needs_attention: match &selected {
+                Err(_) => !proven,
+                Ok(()) => !hit || needs_attention(&samples, samples_wanted, &diagnostics),
+            },
             samples,
             frames,
             frames_dropped,
@@ -825,6 +844,15 @@ mod tests {
         assert_eq!(driver.state(), Drive::On);
         let filed = minmax_steps(&report);
         assert_eq!(filed.len(), 1, "the refusal is still filed once: {filed:?}");
+        // Nothing to look at: the error text says the mode hasn't got MIN/MAX.
+        let refused = report
+            .steps
+            .iter()
+            .find(|s| s.id.starts_with("dcv/minmax:"))
+            .expect("the refusal is filed");
+        assert_eq!(refused.status, StepStatus::Error);
+        assert!(refused.error.is_some());
+        assert!(!refused.needs_attention, "a proven setting was flagged");
     }
 
     /// A setting nothing has driven yet is the case the budget exists for,
@@ -848,6 +876,14 @@ mod tests {
         assert!(
             report.steps.iter().any(|s| s.id == "dcv/hold:on"),
             "the settings after it still have to be swept"
+        );
+        // This one does accuse the protocol, so it is flagged.
+        assert!(
+            report
+                .steps
+                .iter()
+                .any(|s| s.id.starts_with("dcv/minmax:") && s.needs_attention),
+            "an unproven setting's refusal must be flagged"
         );
     }
 }
