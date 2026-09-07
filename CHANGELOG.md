@@ -24,22 +24,18 @@
 - **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period), `temp2` (second thermocouple), `temp-diff` and `temp-diff-rev` (their difference) stand in for a UT181A in the CLI and GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
 - **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
-- **Capture reports carry the raw wire bytes and the parse errors for each step** — a step whose frames the tool couldn't decode was saved empty, with no trace of what the meter sent.
-- **`capture --unverified` runs only the steps still lacking hardware evidence** — a reporter had to copy a hand-written `--steps` list out of the issue; `--list-steps --format md` prints that checklist.
-- **Capture steps advance when the meter reaches the state asked for** — a keypress filed whatever was on screen at the time, and a button that did nothing re-filed the old reading.
-- **Capture confirms the first few steps one by one and reviews the rest at the end** — every step stopped for an Enter; once the meter's digits, OL and sign decode right, the remaining readings are listed once for a single check. `--sniff` keeps per-step checks for a parser nobody trusts yet.
-- **Capture says up front what a run needs** — a thermocouple, a battery or a transistor turned up mid-run as a step nobody could do; the run now lists them first and skips the steps for anything you don't have.
-- **`capture --plan` runs a step list pasted from an issue** — an edge case the shipped steps didn't cover needed a new release before anyone could capture it.
-- **Capture walks every range, flag and sub-mode the tool can set** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked. `--no-drive` turns it off.
-- **Capture steps cover every sub-mode** — AC current, AC+DC, LPF and AC mV on the UT61+/UT161, the UT181A's Hz, Peak, dB and second-thermocouple modes, and the rest of the UT171, UT803/UT804 and UT8803 function tables had no step; a UT61+ model is only asked for the positions its own dial has.
-- **`r` at a capture confirmation retakes the step, and a step at the same dial position waits for Enter** — a wobble on open leads counted as the battery being connected, and there was no way back once it had.
-- **A capture step that needs something on the probes waits for the reading to change** — turning the dial first, as one does, captured the open leads before the battery, thermocouple or shorted tips were in place.
+- **Capture steps advance on the meter's own state** — a keypress filed whatever was on screen; a step needing something on the probes waits for the reading to change; `r` retakes one.
+- **Capture sets every range, flag and sub-mode it can** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked; `--no-drive` turns it off.
+- **Capture confirms the first few steps and reviews the rest at the end** — every step stopped for an Enter; `--sniff` keeps per-step checks for a parser nobody trusts yet.
+- **Capture reports carry every wire byte and parse error** — a step the tool couldn't decode was saved empty.
+- **Capture lists what a run needs up front** — a thermocouple or battery turned up mid-run as a step nobody could do; say what you lack and those steps are skipped.
+- **`capture --unverified` and `--plan` run what an issue asks for** — a reporter copied a hand-written `--steps` list, and an edge case waited for a release; `--list-steps --format md` prints the issue's checklist.
+- **Capture steps cover every sub-mode** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB modes had no step; a model is asked only for its own dial positions.
 
 ### Bug fixes
 
 - **UT61E+ NCV shows the detected level** — every detection read as level 0.
 - **Resuming a capture keeps its freeform steps** — a second run numbered from `extra_0` again and overwrote them.
-- **Capture no longer waits 45 s on the UT61E+'s AC+DC V** — the meter sends the AC and DC components in turn and the step waited for them to stop.
 - **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.
 - **A UT181A command the meter refuses is reported as an error** — every command reported as sent, whether the meter acted on it or not.
 - **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.
