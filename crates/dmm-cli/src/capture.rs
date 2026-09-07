@@ -851,6 +851,19 @@ impl Input {
         self.keys.is_some()
     }
 
+    /// Throw away keys typed before now.
+    ///
+    /// The reader thread buffers every keystroke, so a second Enter at a
+    /// confirmation prompt would still be waiting when the next step starts
+    /// watching — and would end that wait at once, filing the state the meter
+    /// was in before the operator touched the dial.
+    pub(crate) fn drain_keys(&self) {
+        let Some(keys) = &self.keys else {
+            return;
+        };
+        while keys.try_recv().is_ok() {}
+    }
+
     /// The key waiting, if any. Never blocks, so the watcher keeps reading.
     pub(crate) fn try_key(&self) -> Result<Option<Key>, Box<dyn std::error::Error>> {
         let Some(keys) = &self.keys else {
@@ -1236,6 +1249,9 @@ pub(crate) fn run_capture_step(
     let mut attempt = 0usize;
     let (sample_data, mut measurements, confirmation) = loop {
         attempt += 1;
+        // Anything typed before the step was announced answered the last
+        // prompt, not this step's wait.
+        input.drain_keys();
         // The frame the watcher accepted, kept as the step's first sample: it is
         // the one reading known to be in the state the step asked for.
         let mut settled: Option<Measurement> = None;
