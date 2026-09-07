@@ -53,6 +53,9 @@ struct PlanExpect {
     range: Option<String>,
     #[serde(default)]
     value: Option<String>,
+    /// Magnitude a numeric reading must reach, sign aside.
+    #[serde(default)]
+    at_least: Option<f64>,
 }
 
 /// The steps in `path`, ready for the capture loop.
@@ -163,6 +166,9 @@ impl PlanExpect {
                     ));
                 }
             });
+        }
+        if let Some(min) = self.at_least {
+            out = out.at_least(min);
         }
         Ok(out)
     }
@@ -311,6 +317,10 @@ steps:
         let yaml = "steps:\n  - id: a\n    instruction: b\n    expect:\n      value: ncv\n";
         let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();
         assert_eq!(expect.value, Some(ValueExpect::NcvDetected));
+
+        let yaml = "steps:\n  - id: a\n    instruction: b\n    expect:\n      value: negative\n      at_least: 1.0\n";
+        let expect = parse("edge.yaml", yaml).unwrap()[0].expect.unwrap();
+        assert_eq!(expect.at_least, Some(1.0));
 
         let e = err("steps:\n  - id: a\n    instruction: b\n    expect:\n      range: fixed\n");
         assert_eq!(

@@ -61,7 +61,7 @@ impl ValueExpect {
 ///
 /// Every field is optional: a step asserts only what its instruction actually
 /// pins down. An empty [`Expect`] asserts nothing and always passes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Expect {
     /// `Measurement::mode`, matched exactly. Only set where the label can be
     /// read off the family's own mode table.
@@ -72,6 +72,9 @@ pub struct Expect {
     pub range: Option<RangeExpect>,
     /// The class the reading must fall into.
     pub value: Option<ValueExpect>,
+    /// The magnitude a numeric reading must reach, in the mode's base unit:
+    /// what tells a battery on the probes from open-lead noise.
+    pub at_least: Option<f64>,
 }
 
 impl Default for Expect {
@@ -89,6 +92,7 @@ impl Expect {
             flags: &[],
             range: None,
             value: None,
+            at_least: None,
         }
     }
 
@@ -100,6 +104,7 @@ impl Expect {
             flags: &[],
             range: None,
             value: None,
+            at_least: None,
         }
     }
 
@@ -118,6 +123,12 @@ impl Expect {
     /// Require the reading to fall into `value`'s class.
     pub const fn value(mut self, value: ValueExpect) -> Self {
         self.value = Some(value);
+        self
+    }
+
+    /// Require a numeric reading of at least `magnitude`, sign aside.
+    pub const fn at_least(mut self, magnitude: f64) -> Self {
+        self.at_least = Some(magnitude);
         self
     }
 
@@ -172,6 +183,19 @@ impl Expect {
                 m.value_export_str(),
                 want.describe()
             ));
+        }
+
+        if let Some(min) = self.at_least {
+            let big_enough = match m.value {
+                MeasuredValue::Normal(v) => v.is_finite() && v.abs() >= min,
+                _ => false,
+            };
+            if !big_enough {
+                return Err(format!(
+                    "value is {}, want at least {min} either way",
+                    m.value_export_str()
+                ));
+            }
         }
 
         Ok(())
@@ -338,6 +362,24 @@ mod tests {
                 .value(ValueExpect::NcvDetected)
                 .check(&one_bar),
             Ok(())
+        );
+    }
+
+    /// Open leads read a few millivolts either way; a battery reads volts.
+    #[test]
+    fn at_least_tells_a_source_from_lead_noise() {
+        let noise = make_test_measurement(0x02, 0x01, b"-0.0013", (0, 0), (0, 0, 0));
+        let battery = make_test_measurement(0x02, 0x01, b"-1.6105", (0, 0), (0, 0, 0));
+        let overload = make_test_measurement(0x06, 0x01, b"     OL", (0, 0), (0, 0, 0));
+        let want = Expect::new().value(ValueExpect::Negative).at_least(1.0);
+        assert_eq!(want.check(&battery), Ok(()));
+        assert_eq!(
+            want.check(&noise),
+            Err("value is -0.0013, want at least 1 either way".to_string())
+        );
+        assert_eq!(
+            Expect::new().at_least(1.0).check(&overload),
+            Err("value is OL, want at least 1 either way".to_string())
         );
     }
 
