@@ -312,6 +312,7 @@ impl Protocol for Ut61PlusProtocol {
                 "DC V mode: leads reversed on a battery or any DC source (skip if none).",
             )
             .samples(3)
+            .verified_if(hw)
             .gate()
             .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
@@ -379,6 +380,7 @@ impl Protocol for Ut61PlusProtocol {
                 "Set meter to V\u{23CF} and press SELECT for AC+DC V.",
             )
             .samples(3)
+            .verified_if(hw)
             .expect(Expect::mode("AC+DC V")),
             CaptureStep::basic("acv", "Set meter to AC V (V~). Leave leads open.")
                 .samples(3)
@@ -386,6 +388,7 @@ impl Protocol for Ut61PlusProtocol {
                 .expect(Expect::mode("AC V")),
             CaptureStep::basic("lpfv", "Set meter to V~ and press SELECT for LPF V.")
                 .samples(3)
+                .verified_if(hw)
                 .expect(Expect::mode("LPF V")),
             CaptureStep::basic("dcmv", "Set meter to DC mV. Leave leads open.")
                 .samples(3)
@@ -393,6 +396,7 @@ impl Protocol for Ut61PlusProtocol {
                 .expect(Expect::mode("DC mV")),
             CaptureStep::basic("acmv", "Set meter to mV and press SELECT for AC mV.")
                 .samples(3)
+                .verified_if(hw)
                 .expect(Expect::mode("AC mV")),
             CaptureStep::basic(
                 "ohm",
@@ -410,6 +414,7 @@ impl Protocol for Ut61PlusProtocol {
                  (body resistance, hundreds of k\u{03A9}).",
             )
             .samples(3)
+            .verified_if(hw)
             .gate()
             .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic(
@@ -467,6 +472,7 @@ impl Protocol for Ut61PlusProtocol {
                 .expect(Expect::mode("DC µA")),
             CaptureStep::basic("acua", "Set meter to µA and press SELECT for AC µA.")
                 .samples(3)
+                .verified_if(hw)
                 .expect(Expect::mode("AC µA")),
             CaptureStep::basic("dcma", "Set meter to DC mA.")
                 .samples(3)
@@ -474,6 +480,7 @@ impl Protocol for Ut61PlusProtocol {
                 .expect(Expect::mode("DC mA")),
             CaptureStep::basic("acma", "Set meter to mA and press SELECT for AC mA.")
                 .samples(3)
+                .verified_if(hw)
                 .expect(Expect::mode("AC mA")),
             CaptureStep::basic("dca", "Set meter to DC A (A\u{23CF}).")
                 .samples(3)
@@ -481,6 +488,7 @@ impl Protocol for Ut61PlusProtocol {
                 .expect(Expect::mode("DC A")),
             CaptureStep::basic("aca", "Set meter to A and press SELECT for AC A.")
                 .samples(3)
+                .verified_if(hw)
                 .expect(Expect::mode("AC A")),
             // Temperature needs a thermocouple, so it has never been run.
             CaptureStep::basic("temp", "Set meter to temperature (K-type thermocouple).")

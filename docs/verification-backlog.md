@@ -859,7 +859,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | AC mV | 0x01 | Verified (mode byte capture) |
 | DC V | 0x02 | Verified (open, shorted, body voltage, bench PSU: 1V→2.2V, 5V→22V, 25V→220V ranges) |
 | Hz | 0x04 | Verified (mode byte capture) |
-| Ω | 0x06 | Verified (OL on open leads) |
+| Ω | 0x06 | Verified (OL on open leads; 2.3–3.4 MΩ across the body on the 22MΩ rung, 2026-09-07) |
 | Continuity | 0x07 | Verified (OL on open leads) |
 | Diode | 0x08 | Verified (OL on open leads) |
 | Capacitance | 0x09 | Verified (stray cap reading) |
@@ -896,6 +896,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings; used by `set peak off`, 2026-09-07) |
 | Remote range/flag setting (`dmm-cli set range`/`hold`/`rel`/`minmax`/`peak`) | 0x46-0x4E | Verified 2026-09-07 on UT61E+: one press per step, each confirmed by read-back; a stale frame is re-read, not re-pressed; MIN/MAX and Peak leave by 0x42 / 0x4E |
 | Modes with no range choice (UT61E+) | — | Verified 2026-09-07: `get` prints no range row in DC mV, AC mV, DC A or AC A |
+| Capture steps `dcv_negative`, `ohm_body`, `acdcv`, `lpfv`, `acmv`, `acua`, `acma`, `aca` | — | Verified 2026-09-07 on UT61E+ (captures 4 and 5): sign on a AAA battery, body resistance, and each SELECT sub-mode read back by the tool with open leads |
 | Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name) |
 | MIN/MAX flag cycling | byte11 bits 2-3 | Verified: MAX only (bit 3) → MIN only (bit 2), 2-state cycle, never both set |
 | MIN/MAX value reporting | — | Verified: meter sends stored min/max value, not live reading |
