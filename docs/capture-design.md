@@ -27,12 +27,13 @@ Two detectors, picked per step by whether the step carries an `expect`:
 Stability means `STABLE_FRAMES` = 3 identical signatures — (mode, range, flags) plus, in
 raw-diff, the baseline's constant payload bytes; digits may vary. `STEP_TIMEOUT` = 45 s with
 nothing new prints "press Enter when the meter is ready" and keeps watching, so a user
-hunting for a thermocouple is never stranded. A step whose `expect` the previous step's last
-reading already satisfies is Enter-only and prints that line immediately: the mode is
-unchanged and nothing observable would announce the action, as when the probes are shorted
-on DC V. Ω across the body is not such a step — the same dial position, but OL to a finite
-reading is a change open leads cannot fake. An Enter-only step still reports a mismatch, so
-the wrong dial position is caught.
+hunting for a thermocouple is never stranded. A step at the dial position the previous
+step's last reading was already in (`expect.mode` equals its mode) is Enter-only and prints
+that line immediately: only the leads move, and open probes wander enough to satisfy an
+expectation on their own — a −0.0013 V wobble is not the battery being connected. The one
+exception is a previous reading of OL where the step expects a finite value: Ω open to Ω
+across the body is a change open leads cannot fake, so that step waits for it. An Enter-only
+step still reports a mismatch, so the wrong dial position is caught.
 
 Command steps (`hold`, `minmax`, …) run the same watcher after `send_command`, against the
 frames read just before it, and expect the flag to flip within `COMMAND_TIMEOUT` = 3 s. If it
@@ -82,6 +83,12 @@ shorted ones zero. They are tagged `(gate)` in the step header as they
 run, and confirm inline with the existing prompt — Enter means the LCD shows exactly this
 line, otherwise type what it shows. The decision is Enter-or-type everywhere, so nothing
 compares typed digits; a typed correction on a gate step is a mismatch.
+
+`r` at that prompt retakes the step: the attempt's samples are dropped and the same wait
+runs again on the same previous state, so a step captured before the leads were where the
+instruction wanted them is redone rather than corrected. The frames of every attempt stay in
+the step — the recorder is per step. The deferred batch review (F) has no retake: by then
+the dial has moved on.
 
 Once every gate step has a result the run rules on it, once, and says so. All captured and
 confirmed: the report records `core_semantics: confirmed`, the run switches to tier 2, and

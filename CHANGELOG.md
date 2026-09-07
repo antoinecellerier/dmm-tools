@@ -31,6 +31,7 @@
 - **Capture says up front what a run needs** — a thermocouple, a battery or a transistor turned up mid-run as a step nobody could do; the run now lists them first and skips the steps for anything you don't have.
 - **`capture --plan` runs a step list pasted from an issue** — an edge case the shipped steps didn't cover needed a new release before anyone could capture it.
 - **Capture walks every range, flag and sub-mode the tool can set** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked. `--no-drive` turns it off.
+- **`r` at a capture confirmation retakes the step, and a step at the same dial position waits for Enter** — a wobble on open leads counted as the battery being connected, and there was no way back once it had.
 
 ### Bug fixes
 

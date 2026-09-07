@@ -3,15 +3,15 @@
 //! Pure decision logic over readings: the capture loop feeds frames in and
 //! advances the step on the answer, so nothing here does I/O or prompting.
 //!
-//! A step whose expectation the previous step's last reading already
-//! satisfies is Enter-only: the dial has not moved and nothing the tool can
-//! observe would announce the action, as when the probes are shorted on
-//! DC V. Such a watcher still reports a mismatch, it just never advances on
-//! its own.
+//! A step at the dial position the previous reading was already in is
+//! Enter-only: only the leads move, and open probes wander enough to satisfy
+//! an expectation on their own — shorting them on DC V, or connecting a
+//! battery. Such a watcher still reports a mismatch, it just never advances
+//! on its own.
 
 use dmm_lib::flags::StatusFlags;
-use dmm_lib::measurement::Measurement;
-use dmm_lib::protocol::Expect;
+use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::protocol::{Expect, ValueExpect};
 
 /// Frames that must agree before the meter counts as settled. Two would fire
 /// mid-flip on a meter that reports the new mode a frame before the digits.
@@ -215,21 +215,22 @@ impl StateWatcher {
 }
 
 /// Whether nothing observable would announce that the step was done: the
-/// meter is already in the step's mode *and* the previous reading already
-/// satisfies the whole expectation.
+/// meter is already in the step's mode, so only the leads move.
 ///
-/// Ω open (OL) to Ω across the body is the same dial position, but OL to a
-/// finite reading is a change open leads cannot fake, so that step waits for
-/// it; DC V open to DC V shorted is both about zero, so it asks for Enter.
+/// Open probes wander, and a wobble is not the action: -0.0013 V of lead
+/// noise satisfied "DC V, negative" before the battery was connected. The one
+/// exception is OL turning into a reading — Ω open to Ω across the body —
+/// which open leads cannot fake, so that step waits for it.
 pub(crate) fn enter_only(expect: Option<Expect>, previous: Option<&Measurement>) -> bool {
-    match (expect, previous) {
-        // Raw-diff spots its own change, and a run's first step has nothing
-        // to compare against.
-        (Some(expect), Some(m)) => {
-            matches!(expect.mode, Some(mode) if m.mode == mode) && expect.check(m).is_ok()
-        }
-        _ => false,
+    // Raw-diff spots its own change, and a run's first step has nothing to
+    // compare against.
+    let (Some(expect), Some(m)) = (expect, previous) else {
+        return false;
+    };
+    if !matches!(expect.mode, Some(mode) if m.mode == mode) {
+        return false;
     }
+    !(matches!(m.value, MeasuredValue::Overload) && expect.value == Some(ValueExpect::Finite))
 }
 
 #[cfg(test)]
@@ -389,14 +390,19 @@ mod tests {
         assert_eq!(w.feed(&ohm(b"  1.236")), Verdict::Ready);
     }
 
-    /// The three cases the gate walk produces: a step nothing can announce
-    /// asks for Enter, one the meter will show waits for it.
+    /// The cases the gate walk produces: a step the dial doesn't move for
+    /// asks for Enter, and only OL becoming a reading is watched for.
     #[test]
-    fn enter_only_when_the_previous_reading_already_passes() {
+    fn enter_only_at_the_previous_reading_s_dial_position() {
         let finite_dcv = Expect::mode("DC V").value(ValueExpect::Finite);
         // dcv → dcv_short: 0.0002 is finite already, so shorting the
         // probes changes nothing the tool can see.
         assert!(enter_only(Some(finite_dcv), Some(&dcv(b" 0.0002"))));
+
+        // dcv → dcv_negative: lead noise on open probes goes negative on its
+        // own, so the sign is not evidence the battery was connected.
+        let negative_dcv = Expect::mode("DC V").value(ValueExpect::Negative);
+        assert!(enter_only(Some(negative_dcv), Some(&dcv(b" 0.0000"))));
 
         let finite_ohm = Expect::mode("\u{3a9}").value(ValueExpect::Finite);
         // ohm → ohm_body: same dial position, but OL to a finite

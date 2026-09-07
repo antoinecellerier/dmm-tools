@@ -579,14 +579,19 @@ and captures once the meter settles into the state the instruction asked for.
 Enter captures immediately, `s` skips the step, `q` finishes the run and saves.
 A meter that settles into something else is reported — `meter shows: mode is
 "AC V", want "DC V"` — and the step keeps waiting; after 45 seconds it offers
-Enter as well. A step the previous reading already satisfies takes Enter
-only, straight away: shorting the probes on DC V changes nothing the tool can
-see. Ω across your body does not — OL becoming a reading is a change — so that
-step captures itself. A step that presses a button is recorded as `did nothing` when
+Enter as well. A step at the dial position the previous reading was already in
+takes Enter only, straight away: only the leads move, and open probes wander
+enough to look like the action — shorting them on DC V, or connecting a
+battery. Ω across your body is the exception — OL becoming a reading is a
+change open leads cannot fake — so that step captures itself. A step that
+presses a button is recorded as `did nothing` when
 the meter's state doesn't change, instead of re-filing the reading from before
 the press.
 
-Each sample is read back for you to confirm against the meter's screen. On a
+Each sample is read back for you to confirm against the meter's screen: Enter
+accepts it, `r` retakes the step — the samples are dropped and the same wait
+runs again, so a reading taken before the leads were in place is redone rather
+than corrected — and anything else you type is what the meter actually showed. On a
 meter with secondary displays, that confirmation line lists the sub-values in
 parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,
 Period 20.00 ms)` — so the whole screen is checked, not just the main value.
@@ -616,8 +621,8 @@ receive-only cable or a cautious reporter.
 
 Readings captured without a stop are listed once at the end, numbered. Enter
 accepts them all; otherwise give the numbers that did not match and type what
-the meter showed for each (`confirmed_by: batch`). A piped run skips the
-review.
+the meter showed for each (`confirmed_by: batch`). There is no retake in that
+review — the dial has moved on. A piped run skips the review.
 
 `--sniff` is for a parser nobody trusts yet: every step advances on the raw
 bytes changing, every step is confirmed on the spot, and the gate never

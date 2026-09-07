@@ -1172,6 +1172,27 @@ fn did_nothing(command: &str, last: Option<&Measurement>) -> String {
     }
 }
 
+/// What the operator typed at a step's inline confirmation prompt.
+#[derive(Debug, PartialEq, Eq)]
+enum Confirmation {
+    /// Empty means the reading matched; anything else is what the LCD showed.
+    Answer(String),
+    /// Do the step over: the attempt's samples are dropped.
+    Retake,
+}
+
+impl Confirmation {
+    /// `r` on its own is the retake key — no meter shows a bare "r", and a
+    /// typed correction that starts with one still reads as a correction.
+    fn of(answer: String) -> Self {
+        if answer.eq_ignore_ascii_case("r") {
+            Confirmation::Retake
+        } else {
+            Confirmation::Answer(answer)
+        }
+    }
+}
+
 /// Run one capture step. Returns Ok(true) if user wants to quit.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_capture_step(
@@ -1209,141 +1230,159 @@ pub(crate) fn run_capture_step(
         crate::drive::switch_mode(dmm, step, last, driver)?;
     }
 
-    // The frame the watcher accepted, kept as the step's first sample: it is
-    // the one reading known to be in the state the step asked for.
-    let mut settled: Option<Measurement> = None;
+    // One pass per attempt: `r` at the confirmation prompt drops the samples
+    // and runs the same wait again, on the same previous state. The recorder
+    // is not drained in between, so every attempt's frames reach the report.
+    let mut attempt = 0usize;
+    let (sample_data, mut measurements, confirmation) = loop {
+        attempt += 1;
+        // The frame the watcher accepted, kept as the step's first sample: it is
+        // the one reading known to be in the state the step asked for.
+        let mut settled: Option<Measurement> = None;
 
-    if let Some(cmd) = step.command {
-        // What the meter shows before the button is pressed, so a command
-        // that changes nothing can be told from one that works.
-        let before = capture_samples(dmm, STABLE_FRAMES, &mut errors);
-        let before = Baseline::from_payloads(before.iter().map(|m| m.raw_payload.as_slice()));
+        // A retake re-samples; it does not press the button again, which on a
+        // toggle like HOLD would undo the state the first press reached.
+        if let Some(cmd) = step.command.filter(|_| attempt == 1) {
+            // What the meter shows before the button is pressed, so a command
+            // that changes nothing can be told from one that works.
+            let before = capture_samples(dmm, STABLE_FRAMES, &mut errors);
+            let before = Baseline::from_payloads(before.iter().map(|m| m.raw_payload.as_slice()));
 
-        if let Err(e) = dmm.send_command(cmd) {
-            eprintln!("  {}", style(format!("Command failed: {e}")).red());
-            let mut result = step.empty_result(StepStatus::Error, Some(e.to_string()));
-            let mut rec = recording::lock(recorder);
-            rec.set_step(None);
-            (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step.id);
-            result.needs_attention = true;
-            upsert_step(report, result);
-            return Ok(StepOutcome::nothing(false));
-        }
-
-        let mut watcher = StateWatcher::for_step(expect, before.as_ref(), true);
-        match watch_for_state(
-            dmm,
-            input,
-            &mut watcher,
-            COMMAND_TIMEOUT,
-            false,
-            &mut errors,
-        )? {
-            Watched::Ready(m) => settled = m,
-            Watched::TimedOut(last) => {
-                // No samples: filing pre-command frames as the step's result
-                // is what made a dead command look like a captured state.
-                let error = did_nothing(cmd, last.as_ref());
-                eprintln!("  {}", style(&error).yellow());
-                let mut result = step.empty_result(StepStatus::Error, Some(error));
+            if let Err(e) = dmm.send_command(cmd) {
+                eprintln!("  {}", style(format!("Command failed: {e}")).red());
+                let mut result = step.empty_result(StepStatus::Error, Some(e.to_string()));
                 let mut rec = recording::lock(recorder);
                 rec.set_step(None);
-                result.diagnostics = errors.into_diagnostics();
                 (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step.id);
                 result.needs_attention = true;
                 upsert_step(report, result);
                 return Ok(StepOutcome::nothing(false));
             }
-            Watched::Skip => {
-                upsert_step(report, step.empty_result(StepStatus::Skipped, None));
-                return Ok(StepOutcome::nothing(false));
-            }
-            Watched::Quit => {
-                upsert_step(report, step.empty_result(StepStatus::Skipped, None));
-                return Ok(StepOutcome::nothing(true));
-            }
-        }
-    } else if interactive && input.is_tty() {
-        // A step whose expectation the previous reading already satisfies
-        // cannot be seen arriving — DC V with the leads open and shorted
-        // both read about zero — so it is Enter-only and the keyboard is
-        // offered at once. A mode the tool just switched to is a change, so
-        // this is false there.
-        let ask = enter_only(expect, prev.last.as_ref());
-        let timeout = if ask { Duration::ZERO } else { STEP_TIMEOUT };
-        let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);
-        match watch_for_state(dmm, input, &mut watcher, timeout, true, &mut errors)? {
-            Watched::Ready(m) => settled = m,
-            // `hint` keeps the wait open, so the timeout never ends it.
-            Watched::TimedOut(_) => {}
-            Watched::Skip => {
-                upsert_step(report, step.empty_result(StepStatus::Skipped, None));
-                return Ok(StepOutcome::nothing(false));
-            }
-            Watched::Quit => {
-                upsert_step(report, step.empty_result(StepStatus::Skipped, None));
-                return Ok(StepOutcome::nothing(true));
-            }
-        }
-    } else if interactive {
-        // No terminal to poll: ask, the way this step always did.
-        let ch = input.key(&format!(
-            "  {} ",
-            style("any key=capture, s=skip, q=finish:").dim()
-        ))?;
-        if ch == 'q' || ch == 'Q' {
-            upsert_step(report, step.empty_result(StepStatus::Skipped, None));
-            return Ok(StepOutcome::nothing(true));
-        }
-        if ch == 's' || ch == 'S' {
-            upsert_step(report, step.empty_result(StepStatus::Skipped, None));
-            return Ok(StepOutcome::nothing(false));
-        }
-    }
 
-    let mut measurements: Vec<Measurement> = settled.into_iter().collect();
-    let wanted = step.samples.saturating_sub(measurements.len());
-    measurements.extend(capture_samples(dmm, wanted, &mut errors));
+            let mut watcher = StateWatcher::for_step(expect, before.as_ref(), true);
+            match watch_for_state(
+                dmm,
+                input,
+                &mut watcher,
+                COMMAND_TIMEOUT,
+                false,
+                &mut errors,
+            )? {
+                Watched::Ready(m) => settled = m,
+                Watched::TimedOut(last) => {
+                    // No samples: filing pre-command frames as the step's result
+                    // is what made a dead command look like a captured state.
+                    let error = did_nothing(cmd, last.as_ref());
+                    eprintln!("  {}", style(&error).yellow());
+                    let mut result = step.empty_result(StepStatus::Error, Some(error));
+                    let mut rec = recording::lock(recorder);
+                    rec.set_step(None);
+                    result.diagnostics = errors.into_diagnostics();
+                    (result.frames, result.frames_dropped) = frames_for_step(&rec.drain(), step.id);
+                    result.needs_attention = true;
+                    upsert_step(report, result);
+                    return Ok(StepOutcome::nothing(false));
+                }
+                Watched::Skip => {
+                    upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+                    return Ok(StepOutcome::nothing(false));
+                }
+                Watched::Quit => {
+                    upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+                    return Ok(StepOutcome::nothing(true));
+                }
+            }
+        } else if interactive && input.is_tty() {
+            // A step whose expectation the previous reading already satisfies
+            // cannot be seen arriving — DC V with the leads open and shorted
+            // both read about zero — so it is Enter-only and the keyboard is
+            // offered at once. A mode the tool just switched to is a change, so
+            // this is false there.
+            let ask = enter_only(expect, prev.last.as_ref());
+            let timeout = if ask { Duration::ZERO } else { STEP_TIMEOUT };
+            let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);
+            match watch_for_state(dmm, input, &mut watcher, timeout, true, &mut errors)? {
+                Watched::Ready(m) => settled = m,
+                // `hint` keeps the wait open, so the timeout never ends it.
+                Watched::TimedOut(_) => {}
+                Watched::Skip => {
+                    upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+                    return Ok(StepOutcome::nothing(false));
+                }
+                Watched::Quit => {
+                    upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+                    return Ok(StepOutcome::nothing(true));
+                }
+            }
+        } else if interactive {
+            // No terminal to poll: ask, the way this step always did.
+            let ch = input.key(&format!(
+                "  {} ",
+                style("any key=capture, s=skip, q=finish:").dim()
+            ))?;
+            if ch == 'q' || ch == 'Q' {
+                upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+                return Ok(StepOutcome::nothing(true));
+            }
+            if ch == 's' || ch == 'S' {
+                upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+                return Ok(StepOutcome::nothing(false));
+            }
+        }
+
+        let mut measurements: Vec<Measurement> = settled.into_iter().collect();
+        let wanted = step.samples.saturating_sub(measurements.len());
+        measurements.extend(capture_samples(dmm, wanted, &mut errors));
+        let sample_data: Vec<SampleData> = measurements
+            .iter()
+            .map(SampleData::from_measurement)
+            .collect();
+
+        for (i, s) in sample_data.iter().enumerate() {
+            eprintln!(
+                "    {} mode={}({}) range={} display={:?}",
+                style(format!("[{i}]")).dim(),
+                s.mode_byte,
+                s.mode,
+                s.range_label,
+                s.display_raw
+            );
+        }
+
+        let confirmation = if let Some(last) = sample_data.last() {
+            if interactive {
+                eprintln!("  We read: {}", style(last.summary()).green());
+            }
+            // A trusted run doesn't stop here: the reading is listed with the
+            // others in the one review at the end.
+            if interactive && trust.confirm_inline(step) {
+                let answer = input.line(&format!(
+                    "  {} ",
+                    style("Enter=correct, r=retake, or type what the meter actually shows:").dim()
+                ))?;
+                match Confirmation::of(answer) {
+                    Confirmation::Retake => {
+                        eprintln!("  {}", style("retaking\u{2026}").dim());
+                        continue;
+                    }
+                    Confirmation::Answer(answer) => Some(answer),
+                }
+            } else {
+                None
+            }
+        } else {
+            eprintln!("  {}", style("No response from meter.").yellow());
+            None
+        };
+
+        break (sample_data, measurements, confirmation);
+    };
+
     let diagnostics = errors.into_diagnostics();
-    let sample_data: Vec<SampleData> = measurements
-        .iter()
-        .map(SampleData::from_measurement)
-        .collect();
-
     let (frames, frames_dropped) = {
         let mut rec = recording::lock(recorder);
         rec.set_step(None);
         frames_for_step(&rec.drain(), step.id)
-    };
-
-    for (i, s) in sample_data.iter().enumerate() {
-        eprintln!(
-            "    {} mode={}({}) range={} display={:?}",
-            style(format!("[{i}]")).dim(),
-            s.mode_byte,
-            s.mode,
-            s.range_label,
-            s.display_raw
-        );
-    }
-
-    let confirmation = if let Some(last) = sample_data.last() {
-        if interactive {
-            eprintln!("  We read: {}", style(last.summary()).green());
-        }
-        // A trusted run doesn't stop here: the reading is listed with the
-        // others in the one review at the end.
-        if interactive && trust.confirm_inline(step) {
-            Some(input.line(&format!(
-                "  {} ",
-                style("Enter=correct, or type what the meter actually shows:").dim()
-            ))?)
-        } else {
-            None
-        }
-    } else {
-        eprintln!("  {}", style("No response from meter.").yellow());
-        None
     };
 
     let status = if sample_data.is_empty() {
@@ -2001,6 +2040,21 @@ mod tests {
         assert_eq!(step.confirmed, Some(false));
         assert_eq!(step.lcd.as_deref(), Some("5.68 V"));
         assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
+    }
+
+    /// The retake key has to be told from a reading typed at the same prompt:
+    /// only a bare `r` redoes the step.
+    #[test]
+    fn r_alone_asks_for_a_retake() {
+        assert_eq!(Confirmation::of("r".to_string()), Confirmation::Retake);
+        assert_eq!(Confirmation::of("R".to_string()), Confirmation::Retake);
+        for typed in ["", "5.68 V", "rel", "R 0.5"] {
+            assert_eq!(
+                Confirmation::of(typed.to_string()),
+                Confirmation::Answer(typed.to_string()),
+                "{typed:?}"
+            );
+        }
     }
 
     /// Reports written before the split store the confirmation as free text.
