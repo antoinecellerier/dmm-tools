@@ -416,6 +416,10 @@ fn observe_after_press<M: CycleMeter + ?Sized>(
         if last != seen {
             break;
         }
+        debug!(
+            "cycle: meter still reports {}, re-reading",
+            meter.mode_label(seen)
+        );
     }
     Ok(last)
 }
