@@ -212,8 +212,8 @@ real hardware**. Every aspect needs end-to-end verification.
   - the 0x02 overlap: on the V⎓ position, let the meter auto-range below
     400 mV and check with `dmm-cli --device vc880 read --count 1` whether
     the reading turns into `DC mV` (`dmm-cli --device vc880 debug` prints
-    the raw function byte). That overlap is why a bare 0x02 reading is
-    assumed to be the mV dial
+    the raw function byte). That overlap is why a bare 0x02 with no other
+    code seen yet lists nothing to switch to
   - the settle constants are untuned guesses (no delay, 4 reads for a press
     to show up in the stream). `the meter refused …: SHIFT/SETUP did nothing
     in <mode>` while the display *did* change means they are too tight —
