@@ -556,96 +556,75 @@ dmm-cli capture [OPTIONS]
 | `--list-steps` | | List the selected device's step IDs and exit. |
 | `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use (printed to stdout). |
 
-The steps come from the selected device's protocol, so `--list-steps` shows
-exactly what will run for that meter — pass `--device` to see another one's.
-Steps cover the measurement modes and the flag and button commands. Ranges the
-meter can be told to select are all captured; only receive-only cables leave
-them to auto-ranging.
+The steps come from the selected device's protocol; `--list-steps` shows what
+will run for it (pass `--device` for another). Each step is marked `✓`
+(confirmed on hardware) or `·`; `--unverified` runs just the `·` ones and
+narrows further with `--steps`. `--list-steps --format md` prints the same
+list as the checklist the verification issues carry. The run ends with how
+many unverified steps the report covers and the issue to attach it to.
 
-Each listed step is marked `✓` (confirmed on real hardware) or `·`, and
-`--unverified` runs just the `·` ones; with `--steps` the two narrow together.
-The run ends with how many unverified steps the report now covers and the issue
-to attach it to. `--list-steps --format md` prints that same list as the
-checklist those issues carry.
+The run opens with what it needs on the bench (shorted leads, a DC source, a
+thermocouple), numbered. Give the numbers of anything you don't have; those
+steps are recorded as skipped and stay runnable with `--steps`. A piped run
+attempts everything.
 
-The run opens with what it needs on the bench — shorted leads, a DC source, a
-thermocouple — numbered, with the steps waiting on each. Give the numbers of
-anything you don't have and those steps are recorded as skipped before the run
-starts; they stay runnable later with `--steps`. A piped run skips the question
-and attempts everything.
+Steps advance on the meter, not on a keypress: the tool captures once the
+meter settles into the state the instruction asks for. Enter captures now,
+`s` skips, `q` finishes and saves. A meter settled in something else is
+reported once (`meter shows: mode is "AC V", want "DC V"`) and the step keeps
+waiting; after 45 seconds Enter is offered too. Enter is offered at once when
+the step stays at the previous reading's dial position (only the leads move)
+or needs something on the probes; the latter still captures on its own once
+the reading has changed from a failing one, as continuity going OL to a
+reading does. A button step whose flag does not flip is recorded as
+`did nothing` rather than filing the reading from before the press.
 
-Steps advance on the meter, not on a keypress: the tool watches the readings
-and captures once the meter settles into the state the instruction asked for.
-Enter captures immediately, `s` skips the step, `q` finishes the run and saves.
-A meter that settles into something else is reported — `meter shows: mode is
-"AC V", want "DC V"` — and the step keeps waiting; after 45 seconds it offers
-Enter as well. A step at the dial position the previous reading was already in
-takes Enter only, straight away: only the leads move, and open probes wander
-enough to look like the action — shorting them on DC V, or connecting a
-battery. Ω across your body is the exception — OL becoming a reading is a
-change open leads cannot fake — so that step captures itself. A step that
-presses a button is recorded as `did nothing` when
-the meter's state doesn't change, instead of re-filing the reading from before
-the press.
+Each sample is read back for you to check against the screen, sub-values
+included (`239.22 VAC [AUTO HV!] (Frequency 50.01 Hz, Period 20.00 ms)`).
+Enter accepts, `r` retakes the step, anything else is what the meter showed.
 
-Each sample is read back for you to confirm against the meter's screen: Enter
-accepts it, `r` retakes the step — the samples are dropped and the same wait
-runs again, so a reading taken before the leads were in place is redone rather
-than corrected — and anything else you type is what the meter actually showed. On a
-meter with secondary displays, that confirmation line lists the sub-values in
-parentheses after the reading — `239.22 VAC [AUTO HV!] (Frequency 50.01 Hz,
-Period 20.00 ms)` — so the whole screen is checked, not just the main value.
+Steps marked `gate` in `--list-steps` (DC V open and shorted, Ω open, across
+the body and shorted, a negative reading) establish digits, decimal point, OL
+and sign, and each stops for that check. All confirmed: the report records
+`core_semantics: confirmed` and later steps capture without stopping. One
+corrected or skipped: `core_semantics: failed`, the IDs in `gate_failures`,
+and every later step keeps asking. A verified family starts trusted; `tier`
+in the report says where the run ended (`sniff`, `gate` or `trusted`).
 
-A few steps are marked `gate` in `--list-steps`: DC V open and shorted, Ω open,
-Ω with a probe tip held in each hand, Ω shorted, and a negative reading. They
-establish the digits, decimal point, OL and sign, so each stops for an Enter (or for you to type what the
-meter shows). Once all are confirmed the report records `core_semantics:
-confirmed` and later steps capture without stopping; one you correct or skip
-records `core_semantics: failed` with the IDs in `gate_failures`, and every
-later step keeps asking. A verified family starts out trusted. `tier` in the
-report says where the run ended (`sniff`, `gate` or `trusted`).
-
-On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock) every
-mode step past the gate is followed, without a prompt, by a walk of hold, REL, MIN/MAX,
-peak and every range, filed as `<step>/<setting>:<label>` sub-steps
-(`dcv/range:22V`, `dcv/hold:on`); the meter is left back on auto range with its
-flags off. A step whose mode a button reaches from the dial position you are
-already on — continuity from Ω, Hz from AC V — is switched to by the tool, so
-you only ever turn the dial. A command the meter refuses is filed as an error
-sub-step — a refusal of a function the meter accepted elsewhere in the run
-doesn't count, the mode simply hasn't got it — and three refusals stop the
-sweeps for the rest of the run — `drive` in the report reads
-`on`, `off` or `disabled`. Sub-steps are protocol evidence rather than screen
-checks, so they are never confirmed by hand. `--no-drive` opts out, for a
-receive-only cable or a cautious reporter.
+On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock) each
+mode step past the gate is followed by a walk of hold, REL, MIN/MAX, peak and
+every range, filed as `<step>/<setting>:<label>` sub-steps (`dcv/range:22V`);
+the meter is left on auto range with its flags off. A mode a button reaches
+from the current dial position (continuity from Ω) is switched to by the tool.
+A refused command is filed as an error sub-step; three refusals of functions
+the meter has not accepted elsewhere in the run stop the sweeps (`drive` in
+the report: `on`, `off` or `disabled`). Sub-steps are never confirmed by
+hand. `--no-drive` opts out, for a receive-only cable.
 
 Readings captured without a stop are listed once at the end, numbered. Enter
 accepts them all; otherwise give the numbers that did not match and type what
-the meter showed for each (`confirmed_by: batch`). There is no retake in that
-review — the dial has moved on. A piped run skips the review.
+the meter showed (`confirmed_by: batch`). There is no retake there. A piped
+run skips the review.
 
-`--sniff` is for a parser nobody trusts yet: every step advances on the raw
-bytes changing, every step is confirmed on the spot, and the gate never
-promotes the run.
+`--sniff` is for a parser nobody trusts: every step advances on raw bytes
+changing, is confirmed on the spot, and the gate never promotes the run.
 
-The report records every byte exchanged with the meter: `frames` under each
-step, `init_frames` for the handshake before the first one. Bytes the decoder
-rejected are there too, with the reason under `diagnostics`, and a step that
-decoded incompletely — unknown mode, parse error, or fewer samples than asked
-for — is marked `needs_attention: true`.
+The report records every byte exchanged: `frames` under each step,
+`init_frames` for the handshake. Rejected bytes are there with the reason
+under `diagnostics`; a step with an unknown mode, a parse error or fewer
+samples than asked for is marked `needs_attention: true`.
 
-`--plan` runs a step list a maintainer wrote for one investigation — an edge
-case the shipped steps don't cover — so a reporter can run it without waiting
-for a release. The plan replaces the device's list for that run: same watching,
-confirmations, needs checklist, range and flag sweeps, and the freeform pass
-afterwards. A step takes `id` and `instruction`, optionally `command` (a button
-to press first, as `dmm-cli command` names it), `samples` (default 5), `needs`
-(`shorted_leads`, `dc_source`, `thermocouple`, `live_wire`, `transistor`,
-`scr`) and `expect` — `mode` as the family's mode table spells it, `flags` by
-their report names (`hold`, `rel`, `auto_range`, …), `range` (`auto` or
-`manual`) and `value` (`overload`, `negative`, `finite` or `ncv`). Any other key, an
-unknown name, a repeated id or the reserved id `extra` is an error naming the
-file and the step.
+`--plan` runs a step list a maintainer wrote for one investigation, so a
+reporter needs no release. It replaces the device's list for the run: same
+watching, confirmations, needs checklist, sweeps and freeform pass. A step
+takes `id`, `instruction`, and optionally `command` (a button, as `dmm-cli
+command` names it), `samples` (default 5), `needs` (`shorted_leads`,
+`dc_source`, `thermocouple`, `live_wire`, `transistor`, `scr`) and `expect`:
+`mode` as the family's mode table spells it, `flags` by report name (`hold`,
+`rel`, `auto_range`, …), `range` (`auto`/`manual`), `value` (`overload`,
+`negative`, `finite`, `ncv`) and `at_least` (magnitude a numeric reading must
+reach, sign aside). Any other key, unknown name, repeated id or the reserved
+id `extra` is an error naming the file and step.
 
 ```yaml
 steps:
@@ -665,17 +644,14 @@ steps:
     instruction: Press HOLD again on the meter itself
 ```
 
-Plan steps never gate the run, so an experimental family confirms each of them
-on the spot and a verified one reviews them together at the end. The report
-records `plan: <file>` and the run ends with `Plan <file>: N of M steps
-captured` in place of the unverified coverage line. The default output file
-becomes `capture-<device>-<plan file stem>.yaml`, so a plan run never resumes
-into the full report.
+Plan steps never gate the run. The report records `plan: <file>`, the run
+ends with `Plan <file>: N of M steps captured`, and the default output is
+`capture-<device>-<plan file stem>.yaml`, so a plan run never resumes into the
+full report.
 
-After the device's own steps, capture always offers **freeform captures**:
-describe any mode the step list doesn't cover, and the tool records the
-samples alongside your confirmation or correction of what it read. Filter to
-just this pass with `--steps extra`.
+After the device's own steps, capture offers **freeform captures**: describe
+any mode the list doesn't cover and the tool records the samples with your
+confirmation. `--steps extra` runs just this pass.
 
 **Examples:**
 
