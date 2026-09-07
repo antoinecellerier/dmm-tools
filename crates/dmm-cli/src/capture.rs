@@ -3290,7 +3290,17 @@ pub(crate) fn cmd_capture(
         Some(steps) => steps.clone(),
         None => protocol_steps.iter().map(CaptureStep::from).collect(),
     };
-    let mut trust = Trust::new(sniff, supported, &cli_steps);
+    // `--unverified` leaves out the steps hardware has already confirmed,
+    // which is the same evidence the gate is looking for: counting one of
+    // those as a gate step it never sees would leave the gate undecided for
+    // the whole run — no deferred review, no sweeps — on the very command
+    // `--list-steps` tells a reporter to run.
+    let gate_scope: Vec<CaptureStep> = cli_steps
+        .iter()
+        .copied()
+        .filter(|s| !(unverified_only && s.verified))
+        .collect();
+    let mut trust = Trust::new(sniff, supported, &gate_scope);
     report.tier = Some(trust.tier);
     let mut driver = crate::drive::Driver::new(!no_drive);
     let pass = run_protocol_capture(
