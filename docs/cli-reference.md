@@ -550,6 +550,7 @@ dmm-cli capture [OPTIONS]
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
 | `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
 | `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
+| `--plan <FILE>` | | Run the steps in a plan file instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
 | `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one. |
 | `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step. |
 | `--list-steps` | | List the selected device's step IDs and exit. |
@@ -626,6 +627,44 @@ rejected are there too, with the reason under `diagnostics`, and a step that
 decoded incompletely — unknown mode, parse error, or fewer samples than asked
 for — is marked `needs_attention: true`.
 
+`--plan` runs a step list a maintainer wrote for one investigation — an edge
+case the shipped steps don't cover — so a reporter can run it without waiting
+for a release. The plan replaces the device's list for that run: same watching,
+confirmations, needs checklist, range and flag sweeps, and the freeform pass
+afterwards. A step takes `id` and `instruction`, optionally `command` (a button
+to press first, as `dmm-cli command` names it), `samples` (default 5), `needs`
+(`shorted_leads`, `dc_source`, `thermocouple`, `live_wire`, `transistor`,
+`scr`) and `expect` — `mode` as the family's mode table spells it, `flags` by
+their report names (`hold`, `rel`, `auto_range`, …), `range` (`auto` or
+`manual`) and `value` (`overload`, `negative` or `finite`). Any other key, an
+unknown name, a repeated id or the reserved id `extra` is an error naming the
+file and the step.
+
+```yaml
+steps:
+  - id: dcv_open
+    instruction: Set the meter to DC V with the probes open
+    expect:
+      mode: DC V
+      value: finite
+  - id: dcv_hold
+    instruction: Leave it there
+    command: hold
+    samples: 3
+    expect:
+      flags:
+        hold: true
+  - id: dcv_release
+    instruction: Press HOLD again on the meter itself
+```
+
+Plan steps never gate the run, so an experimental family confirms each of them
+on the spot and a verified one reviews them together at the end. The report
+records `plan: <file>` and the run ends with `Plan <file>: N of M steps
+captured` in place of the unverified coverage line. The default output file
+becomes `capture-<device>-<plan file stem>.yaml`, so a plan run never resumes
+into the full report.
+
 After the device's own steps, capture always offers **freeform captures**:
 describe any mode the step list doesn't cover, and the tool records the
 samples alongside your confirmation or correction of what it read. Filter to
@@ -654,6 +693,9 @@ dmm-cli --device vc890 capture --list-steps --format md
 
 # Check every step by hand, ignoring what the decoder says
 dmm-cli --device vc890 capture --sniff
+
+# Run a maintainer's step list from an issue
+dmm-cli --device vc890 capture --plan edge.yaml
 ```
 
 ## Environment Variables

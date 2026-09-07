@@ -48,6 +48,8 @@ dmm-cli capture --steps dcmv,temp,duty
 
 A full `dmm-cli capture` stays the thorough option: it re-checks the confirmed steps too.
 
+If a maintainer posts a short plan file in your issue, run it with `dmm-cli capture --plan edge.yaml` and attach the report it writes.
+
 Captures auto-save after each step, so you can interrupt and resume later.
 
 ### What to do with the capture

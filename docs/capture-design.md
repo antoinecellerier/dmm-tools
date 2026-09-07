@@ -183,12 +183,25 @@ gate step sits right after the mode step it extends — shorting the probes on D
 after DC V itself, not a later visit to the same dial position. `docs/adding-devices.md`
 states that rule for new families.
 
-## H. Maintainer-authored plans (planned)
+## H. Maintainer-authored plans
 
-`--plan file.yaml` runs a list of steps with the same fields as `CaptureStep` (id,
-instruction, command, samples, expect) in owned form. A maintainer pastes a short YAML into
-an issue and the reporter runs it without waiting for a release — for nitpicky sequences that
-do not belong in the family's shipped list.
+`--plan file.yaml` runs a list of steps a maintainer pastes into an issue, so a nitpicky
+sequence that does not belong in the family's shipped list is captured without waiting for a
+release. A plan step carries the `CaptureStep` fields a plan may set, in owned form: `id`,
+`instruction`, `command`, `samples` (default 5), `needs` (the `Need` variants in snake_case)
+and `expect` (`mode`, `flags` by their report names, `range` `auto`/`manual`, `value`
+`overload`/`negative`/`finite`). Unknown keys and names are errors naming the file and the
+step, as are a repeated id, the reserved id `extra`, and a plan with no steps. `--plan`
+conflicts with `--steps`, `--unverified` and `--list-steps`; the strings are leaked once at
+load, so the steps meet the run's `&'static` step type.
+
+The plan replaces the device's list for that run and everything else stays: watcher, tiers,
+needs checklist, sweeps and the freeform pass. Plan steps are never `gate`, so a Verified
+family starts Trusted and reviews them in one pass while an Experimental one stays at Gate
+and confirms each inline. The report records `plan: <file>`, the epilogue reads `Plan
+<file>: N of M steps captured` — the device's unverified coverage says nothing about steps
+that are not in its list — and the default output file is
+`capture-<device>-<plan file stem>.yaml`, so a plan run never resumes into the full report.
 
 ## Report schema additions
 

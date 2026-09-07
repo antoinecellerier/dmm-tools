@@ -89,6 +89,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 - Cable bundled or bought separately, and where/when — this is how production changes (CP2110 → CH9329 on the UT181A) get tracked.
 - Per-step pass/fail with error output pasted; `capture-<device>.yaml` attached (auto-saves per step, resumable); an LCD photo beside the tool's output for any display-vs-parsed question.
 - Name the highest-value captures when they matter: negative reading, overload, one frame per dial position, MIN/MAX/REL toggled in turn.
+- An edge case the shipped steps don't cover: paste a plan YAML in a `<details>` block and ask for `dmm-cli --device \<family\> capture --plan edge.yaml` — steps are `id` + `instruction` plus optional `command`, `samples`, `needs` and `expect` (see `docs/cli-reference.md`), and the report attaches like any other.
 - Close platform threads with "even 'it works, no issues' is valuable"; ask whether any prerequisite was missing from the docs.
 - Disambiguate a vague symptom before acting ("window doesn't appear, or opens with no data?"); when the feature exists, ask whether they tried it and it failed or didn't spot it.
 

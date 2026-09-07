@@ -1,6 +1,7 @@
 mod capture;
 mod drive;
 mod format;
+mod plan;
 mod recording;
 mod watch;
 
@@ -156,6 +157,9 @@ Install completions for your shell:
         /// Only run steps not yet confirmed on real hardware, plus the freeform pass
         #[arg(long)]
         unverified: bool,
+        /// Run the steps in a maintainer's plan file instead of the device's own list
+        #[arg(long, value_name = "FILE", conflicts_with_all = ["steps", "unverified", "list_steps"])]
+        plan: Option<String>,
         /// Trust nothing the parser says: detect steps by raw byte changes and confirm each one
         #[arg(long)]
         sniff: bool,
@@ -455,6 +459,7 @@ fn main() {
             output,
             steps,
             unverified,
+            plan,
             sniff,
             no_drive,
             list_steps,
@@ -468,7 +473,7 @@ fn main() {
             } else {
                 open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
                     capture::cmd_capture(
-                        output, steps, unverified, sniff, no_drive, dmm, recorder, device,
+                        output, steps, unverified, sniff, no_drive, plan, dmm, recorder, device,
                     )
                 })
             }

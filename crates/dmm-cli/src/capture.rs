@@ -35,6 +35,10 @@ pub(crate) struct CaptureReport {
     /// otherwise only holds the name the meter reports for itself.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub device_id: Option<String>,
+    /// The plan file whose steps this run followed, in place of the device's
+    /// own list.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub plan: Option<String>,
     /// Wire events recorded before the first step: the init handshake and the
     /// name query.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -546,7 +550,7 @@ struct ProtocolPass {
 fn run_protocol_capture(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: &SharedRecorder,
-    protocol_steps: Vec<dmm_lib::protocol::CaptureStep>,
+    all_steps: &[CaptureStep],
     step_filter: &Option<std::collections::HashSet<String>>,
     unverified_only: bool,
     report: &mut CaptureReport,
@@ -555,11 +559,11 @@ fn run_protocol_capture(
     trust: &mut Trust,
     driver: &mut crate::drive::Driver,
 ) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
-    // Convert protocol steps to CLI steps, keeping only what this run selects:
-    // the checklist below covers the steps that will actually run.
-    let mut steps: Vec<CaptureStep> = protocol_steps
+    // Keep only what this run selects: the checklist below covers the steps
+    // that will actually run.
+    let mut steps: Vec<CaptureStep> = all_steps
         .iter()
-        .map(CaptureStep::from)
+        .copied()
         .filter(|s| step_selected(s, step_filter, unverified_only))
         .collect();
 
@@ -2492,7 +2496,7 @@ mod tests {
         );
         upsert_step(&mut report, StepResult::new("hz", "h", StepStatus::Skipped));
         let unverified: std::collections::HashSet<&str> = ["temp", "hz"].into_iter().collect();
-        assert_eq!(unverified_covered(&report, &unverified), 1);
+        assert_eq!(captured_count(&report, &unverified), 1);
     }
 
     /// The real list is the one reporters see: the UT61E+ is verified hardware,
@@ -2820,15 +2824,9 @@ fn verify_meter(
     Ok((device_name, supported))
 }
 
-/// Determine the output path and load an existing report (with resume/overwrite prompt)
-/// or create a fresh one. Returns `None` if the user chose to abort.
-fn load_or_create_report(
-    output_override: Option<String>,
-    device_name: &str,
-    input: &Input,
-) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
-    let slug = device_name
-        .chars()
+/// A name reduced to what a file name can safely carry.
+fn slug(name: &str) -> String {
+    name.chars()
         .map(|c| {
             if c.is_alphanumeric() {
                 c.to_ascii_lowercase()
@@ -2836,8 +2834,35 @@ fn load_or_create_report(
                 '-'
             }
         })
-        .collect::<String>();
-    let auto_path = format!("capture-{slug}.yaml");
+        .collect()
+}
+
+/// The plan file's name without its directory or extension.
+fn plan_stem(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "plan".to_string())
+}
+
+/// Determine the output path and load an existing report (with resume/overwrite prompt)
+/// or create a fresh one. Returns `None` if the user chose to abort.
+fn load_or_create_report(
+    output_override: Option<String>,
+    device_name: &str,
+    plan_path: Option<&str>,
+    input: &Input,
+) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
+    let auto_path = match plan_path {
+        // A plan run covers a handful of steps nobody else asked for, so it
+        // gets its own file rather than resuming into the full report.
+        Some(plan) => format!(
+            "capture-{}-{}.yaml",
+            slug(device_name),
+            slug(&plan_stem(plan))
+        ),
+        None => format!("capture-{}.yaml", slug(device_name)),
+    };
     let output_path = output_override.unwrap_or(auto_path);
 
     let report = match std::fs::read_to_string(&output_path) {
@@ -3099,18 +3124,22 @@ pub(crate) fn cmd_capture(
     unverified_only: bool,
     sniff: bool,
     no_drive: bool,
+    plan_path: Option<String>,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());
+    // Before the meter is touched: a plan the tool can't read is the
+    // reporter's typo, and they should hear about it straight away.
+    let plan_steps = plan_path.as_deref().map(crate::plan::load).transpose()?;
 
     let (device_name, supported) = verify_meter(&mut dmm, device)?;
 
     let input = Input::start();
     let (mut report, output_path) =
-        match load_or_create_report(output_override, &device_name, &input)? {
+        match load_or_create_report(output_override, &device_name, plan_path.as_deref(), &input)? {
             Some(pair) => pair,
             None => return Ok(()),
         };
@@ -3119,6 +3148,7 @@ pub(crate) fn cmd_capture(
 
     populate_report_metadata(&mut report, &mut dmm, device_name, supported);
     report.device_id = Some(device.id.to_string());
+    report.plan = plan_path.clone();
     report.unverified_only = unverified_only;
     // Everything on the wire so far is the init handshake and the name query.
     report.init_frames = recording::lock(&recorder)
@@ -3140,14 +3170,19 @@ pub(crate) fn cmd_capture(
         .filter(|s| !s.verified)
         .map(|s| s.id)
         .collect();
-    let cli_steps: Vec<CaptureStep> = protocol_steps.iter().map(CaptureStep::from).collect();
+    // A plan replaces the device's list for the run — same watcher, tiers,
+    // needs checklist and sweeps, but only the steps the maintainer wrote.
+    let cli_steps: Vec<CaptureStep> = match &plan_steps {
+        Some(steps) => steps.clone(),
+        None => protocol_steps.iter().map(CaptureStep::from).collect(),
+    };
     let mut trust = Trust::new(sniff, supported, &cli_steps);
     report.tier = Some(trust.tier);
     let mut driver = crate::drive::Driver::new(!no_drive);
     let pass = run_protocol_capture(
         &mut dmm,
         &recorder,
-        protocol_steps,
+        &cli_steps,
         &step_filter,
         unverified_only,
         &mut report,
@@ -3176,29 +3211,37 @@ pub(crate) fn cmd_capture(
     eprintln!();
     eprintln!("{}", style("=== Capture complete! ===").bold().green());
     eprintln!("Report saved to: {}", style(&output_path).bold());
-    let covered = unverified_covered(&report, &unverified_ids);
-    if unverified_only && covered == 0 {
-        eprintln!("No unverified step was captured, so there is nothing new to report.");
-    } else {
+    if let Some(plan) = &plan_path {
+        // The plan's steps are not in the device's unverified list, so its
+        // coverage line would read zero for a run that captured everything.
+        let ids: std::collections::HashSet<&str> = cli_steps.iter().map(|s| s.id).collect();
         eprintln!(
-            "Covered {covered} of {} unverified steps for {}.",
-            unverified_ids.len(),
-            device.display_name
+            "Plan {plan}: {} of {} steps captured",
+            captured_count(&report, &ids),
+            ids.len()
         );
+    } else {
+        let covered = captured_count(&report, &unverified_ids);
+        if unverified_only && covered == 0 {
+            eprintln!("No unverified step was captured, so there is nothing new to report.");
+        } else {
+            eprintln!(
+                "Covered {covered} of {} unverified steps for {}.",
+                unverified_ids.len(),
+                device.display_name
+            );
+        }
     }
     eprintln!("Attach the report to {}", dmm.profile().feedback_url());
     Ok(())
 }
 
-/// How many of the device's unverified steps the report now holds samples
-/// for — the number that says what this run is worth to the issue.
-fn unverified_covered(
-    report: &CaptureReport,
-    unverified_ids: &std::collections::HashSet<&str>,
-) -> usize {
+/// How many of `ids` the report now holds samples for — the number the
+/// epilogue reports as what this run is worth to the issue.
+fn captured_count(report: &CaptureReport, ids: &std::collections::HashSet<&str>) -> usize {
     report
         .steps
         .iter()
-        .filter(|s| s.status == StepStatus::Captured && unverified_ids.contains(s.id.as_str()))
+        .filter(|s| s.status == StepStatus::Captured && ids.contains(s.id.as_str()))
         .count()
 }
