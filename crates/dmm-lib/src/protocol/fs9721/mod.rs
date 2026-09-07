@@ -566,19 +566,21 @@ impl Protocol for Fs9721Protocol {
     }
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
-        use crate::protocol::{Expect, ValueExpect};
+        use crate::protocol::{Expect, Need, ValueExpect};
         vec![
             CaptureStep::basic("dcv", "Set meter to DC V")
                 .gate()
                 .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
             CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
                 .gate()
+                .needs(&[Need::ShortedLeads])
                 .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "dcv_negative",
                 "Set meter to DC V with leads reversed (negative reading)",
             )
             .gate()
+            .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
             CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
             CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
@@ -593,6 +595,7 @@ impl Protocol for Fs9721Protocol {
                 "Resistance mode: touch the two probe tips together.",
             )
             .gate()
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic("cap", "Set meter to Capacitance")
                 .expect(Expect::mode("Capacitance")),

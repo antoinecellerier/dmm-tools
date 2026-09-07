@@ -215,7 +215,7 @@ impl Protocol for Ut171Protocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        use crate::protocol::{CaptureStep, Expect, ValueExpect};
+        use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
         // All UT171 modes (0x01-0x24)
         vec![
             CaptureStep::basic("vdc", "Set meter to V DC")
@@ -223,12 +223,14 @@ impl Protocol for Ut171Protocol {
                 .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
             CaptureStep::basic("dcv_short", "V DC mode: touch the two probe tips together.")
                 .gate()
+                .needs(&[Need::ShortedLeads])
                 .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "dcv_negative",
                 "V DC mode: leads reversed on a battery or any DC source (skip if none).",
             )
             .gate()
+            .needs(&[Need::DcSource])
             .expect(Expect::mode("V DC").value(ValueExpect::Negative)),
             CaptureStep::basic("vac", "Set meter to V AC").expect(Expect::mode("V AC")),
             CaptureStep::basic("vacdc", "Set meter to V AC+DC").expect(Expect::mode("V AC+DC")),
@@ -249,9 +251,11 @@ impl Protocol for Ut171Protocol {
                 "Resistance mode: touch the two probe tips together.",
             )
             .gate()
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
             CaptureStep::basic("tempc", "Set meter to Temperature C (if available)")
+                .needs(&[Need::Thermocouple])
                 .expect(Expect::mode("°C")),
             CaptureStep::basic("ns", "Set meter to Conductance nS (if available)")
                 .expect(Expect::mode("nS")),
@@ -264,7 +268,9 @@ impl Protocol for Ut171Protocol {
             CaptureStep::basic("maac", "Set meter to mA AC").expect(Expect::mode("mA AC")),
             CaptureStep::basic("adc", "Set meter to A DC").expect(Expect::mode("A DC")),
             CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
-            CaptureStep::basic("ncv", "Set meter to NCV").expect(Expect::mode("NCV")),
+            CaptureStep::basic("ncv", "Set meter to NCV")
+                .needs(&[Need::LiveWire])
+                .expect(Expect::mode("NCV")),
         ]
     }
 }

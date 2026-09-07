@@ -289,7 +289,7 @@ impl Protocol for Ut61PlusProtocol {
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::flags::Flag;
-        use crate::protocol::{CaptureStep, Expect, RangeExpect, ValueExpect};
+        use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, ValueExpect};
 
         // The list is shared by the whole UT61+/UT161 family, but only the
         // UT61E+ has been run against hardware (docs/verification-backlog.md).
@@ -305,6 +305,7 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .gate()
+                .needs(&[Need::ShortedLeads])
                 .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "dcv_negative",
@@ -312,6 +313,7 @@ impl Protocol for Ut61PlusProtocol {
             )
             .samples(3)
             .gate()
+            .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
             CaptureStep::basic("acv", "Set meter to AC V (V~). Leave leads open.")
                 .samples(3)
@@ -336,6 +338,7 @@ impl Protocol for Ut61PlusProtocol {
             .samples(3)
             .verified_if(hw)
             .gate()
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "continuity",
@@ -343,6 +346,7 @@ impl Protocol for Ut61PlusProtocol {
             )
             .samples(3)
             .verified_if(hw)
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Continuity")),
             CaptureStep::basic(
                 "diode",
@@ -366,10 +370,12 @@ impl Protocol for Ut61PlusProtocol {
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .samples(3)
                 .verified_if(hw)
+                .needs(&[Need::LiveWire])
                 .expect(Expect::mode("NCV")),
             CaptureStep::basic("hfe", "Set meter to hFE (transistor test).")
                 .samples(3)
                 .verified_if(hw)
+                .needs(&[Need::Transistor])
                 .expect(Expect::mode("hFE")),
             CaptureStep::basic("dcua", "Set meter to DC uA.")
                 .samples(3)
@@ -388,7 +394,8 @@ impl Protocol for Ut61PlusProtocol {
                 "temp",
                 "Set meter to temperature (K-type thermocouple, if available).",
             )
-            .samples(3),
+            .samples(3)
+            .needs(&[Need::Thermocouple]),
             // Flags & commands
             CaptureStep::with_command(
                 "hold",

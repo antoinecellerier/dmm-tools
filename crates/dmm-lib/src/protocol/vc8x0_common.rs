@@ -177,7 +177,7 @@ pub(crate) const COMMANDS: &[&str] = &[
 /// duplicated lines in each protocol. Device-specific steps are appended by
 /// the caller.
 pub(crate) fn capture_steps() -> Vec<CaptureStep> {
-    use crate::protocol::{Expect, ValueExpect};
+    use crate::protocol::{Expect, Need, ValueExpect};
 
     vec![
         CaptureStep::basic("dcv", "Set meter to DC V")
@@ -185,12 +185,14 @@ pub(crate) fn capture_steps() -> Vec<CaptureStep> {
             .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
         CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
             .gate()
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
         CaptureStep::basic(
             "dcv_negative",
             "DC V mode: leads reversed on a battery or any DC source (skip if none).",
         )
         .gate()
+        .needs(&[Need::DcSource])
         .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
         CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
         CaptureStep::basic("acdcv", "Set meter to AC+DC V").expect(Expect::mode("AC+DC V")),
@@ -212,14 +214,19 @@ pub(crate) fn capture_steps() -> Vec<CaptureStep> {
             "Resistance mode: touch the two probe tips together.",
         )
         .gate()
+        .needs(&[Need::ShortedLeads])
         .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
         CaptureStep::basic("cont", "Set meter to Continuity").expect(Expect::mode("Continuity")),
         CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
         CaptureStep::basic("cap", "Set meter to Capacitance").expect(Expect::mode("Capacitance")),
         CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Frequency")),
         CaptureStep::basic("duty", "Set meter to Duty Cycle (%)").expect(Expect::mode("Duty %")),
-        CaptureStep::basic("tempc", "Set meter to Temperature °C").expect(Expect::mode("°C")),
-        CaptureStep::basic("tempf", "Set meter to Temperature °F").expect(Expect::mode("°F")),
+        CaptureStep::basic("tempc", "Set meter to Temperature °C")
+            .needs(&[Need::Thermocouple])
+            .expect(Expect::mode("°C")),
+        CaptureStep::basic("tempf", "Set meter to Temperature °F")
+            .needs(&[Need::Thermocouple])
+            .expect(Expect::mode("°F")),
         CaptureStep::basic("lpf", "Set meter to ACV Low-Pass Filter")
             .expect(Expect::mode("ACV LPF")),
     ]

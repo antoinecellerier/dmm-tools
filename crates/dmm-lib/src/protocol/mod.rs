@@ -267,6 +267,52 @@ pub(crate) fn unsupported_setting(setting: Setting) -> Error {
     Error::UnsupportedCommand(format!("{setting} cannot be set on this meter"))
 }
 
+/// A physical thing a capture step needs the user to have on the bench.
+///
+/// Capture lists these up front so the user can gather them once, and skip
+/// the steps for anything they do not have rather than discovering it
+/// halfway through the run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Need {
+    /// The two probe tips touched together.
+    ShortedLeads,
+    /// Any DC source to read, and to reverse the leads on for a negative.
+    DcSource,
+    /// A temperature probe; every family that measures °C uses a K-type.
+    Thermocouple,
+    /// Mains wiring to hold the meter against for the NCV detector.
+    LiveWire,
+    /// A transistor to sit in the hFE socket.
+    Transistor,
+    /// A thyristor for the SCR test.
+    Scr,
+}
+
+impl Need {
+    /// Every need, in the order the up-front checklist lists them.
+    pub const ALL: [Need; 6] = [
+        Need::ShortedLeads,
+        Need::DcSource,
+        Need::Thermocouple,
+        Need::LiveWire,
+        Need::Transistor,
+        Need::Scr,
+    ];
+
+    /// What to call this on the checklist, as an article-less noun phrase: it
+    /// reads after both "you will need" and "skipped: no".
+    pub fn label(self) -> &'static str {
+        match self {
+            Need::ShortedLeads => "shorted test leads",
+            Need::DcSource => "battery or other DC source",
+            Need::Thermocouple => "K-type thermocouple",
+            Need::LiveWire => "live mains wire nearby",
+            Need::Transistor => "transistor",
+            Need::Scr => "SCR (thyristor)",
+        }
+    }
+}
+
 /// A step definition for the guided protocol capture wizard.
 pub struct CaptureStep {
     /// Unique identifier for this step (e.g. "dcv", "hold_on").
@@ -287,6 +333,9 @@ pub struct CaptureStep {
     /// What a correctly parsed reading looks like once the user has done the
     /// instruction; `None` where nothing can be asserted without guessing.
     pub expect: Option<Expect>,
+    /// Equipment the instruction asks for beyond the meter and its leads, so
+    /// a run can be planned — and pruned — before it starts.
+    pub needs: &'static [Need],
 }
 
 impl CaptureStep {
@@ -301,6 +350,7 @@ impl CaptureStep {
             verified: false,
             gate: false,
             expect: None,
+            needs: &[],
         }
     }
 
@@ -320,6 +370,7 @@ impl CaptureStep {
             verified: false,
             gate: false,
             expect: None,
+            needs: &[],
         }
     }
 
@@ -352,6 +403,12 @@ impl CaptureStep {
     /// Attach what a correct reading looks like after the instruction.
     pub const fn expect(mut self, expect: Expect) -> Self {
         self.expect = Some(expect);
+        self
+    }
+
+    /// Declare the equipment this step's instruction asks for.
+    pub const fn needs(mut self, needs: &'static [Need]) -> Self {
+        self.needs = needs;
         self
     }
 }
@@ -478,6 +535,54 @@ mod tests {
                     steps.iter().all(|s| !s.verified),
                     "{id} has never been run, so no step may claim verification"
                 );
+            }
+        }
+    }
+
+    /// A word each need's instruction must contain, so a `needs` tag pinned to
+    /// the wrong step is caught rather than shipped into the checklist.
+    fn need_keyword(need: Need) -> &'static str {
+        match need {
+            Need::ShortedLeads => "together",
+            Need::DcSource => "revers",
+            Need::Thermocouple => "temperature",
+            Need::LiveWire => "ncv",
+            Need::Transistor => "transistor",
+            Need::Scr => "thyristor",
+        }
+    }
+
+    /// The checklist prints labels, so each must say something and say it
+    /// only once.
+    #[test]
+    fn need_labels_are_distinct_and_non_empty() {
+        for (i, need) in Need::ALL.iter().enumerate() {
+            assert!(!need.label().is_empty(), "{need:?} has no label");
+            for other in &Need::ALL[i + 1..] {
+                assert_ne!(
+                    need.label(),
+                    other.label(),
+                    "{need:?} and {other:?} share a label"
+                );
+            }
+        }
+    }
+
+    /// A step asking for equipment must name it, or the user reads a
+    /// checklist that does not match the instructions they are given.
+    #[test]
+    fn tagged_steps_name_what_they_need() {
+        for (id, _, steps) in all_steps() {
+            for step in &steps {
+                let text = step.instruction.to_lowercase();
+                for &need in step.needs {
+                    let keyword = need_keyword(need);
+                    assert!(
+                        text.contains(keyword),
+                        "{id} step {} claims {need:?} but its instruction never says {keyword:?}",
+                        step.id
+                    );
+                }
             }
         }
     }

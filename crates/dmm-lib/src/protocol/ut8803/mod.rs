@@ -183,7 +183,7 @@ impl Protocol for Ut8803Protocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        use crate::protocol::{CaptureStep, Expect, ValueExpect};
+        use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
         // All 23 UT8803 position codes (modes 0x00-0x16)
         vec![
             CaptureStep::basic("dcv", "Set meter to DC V (DCV)")
@@ -191,12 +191,14 @@ impl Protocol for Ut8803Protocol {
                 .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
             CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
                 .gate()
+                .needs(&[Need::ShortedLeads])
                 .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "dcv_negative",
                 "DC V mode: leads reversed on a battery or any DC source (skip if none).",
             )
             .gate()
+            .needs(&[Need::DcSource])
             .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
             CaptureStep::basic("acv", "Set meter to AC V (ACV)").expect(Expect::mode("AC V")),
             CaptureStep::basic("dcua", "Set meter to DC uA").expect(Expect::mode("DC µA")),
@@ -216,6 +218,7 @@ impl Protocol for Ut8803Protocol {
                 "Resistance mode: touch the two probe tips together.",
             )
             .gate()
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
@@ -225,11 +228,17 @@ impl Protocol for Ut8803Protocol {
             CaptureStep::basic("cap", "Set meter to Capacitance (C)")
                 .expect(Expect::mode("Capacitance")),
             CaptureStep::basic("hfe", "Set meter to hFE (transistor test)")
+                .needs(&[Need::Transistor])
                 .expect(Expect::mode("hFE")),
             CaptureStep::basic("scr", "Set meter to SCR (thyristor test)")
+                .needs(&[Need::Scr])
                 .expect(Expect::mode("SCR")),
-            CaptureStep::basic("tempc", "Set meter to Temperature C").expect(Expect::mode("°C")),
-            CaptureStep::basic("tempf", "Set meter to Temperature F").expect(Expect::mode("°F")),
+            CaptureStep::basic("tempc", "Set meter to Temperature C")
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("°C")),
+            CaptureStep::basic("tempf", "Set meter to Temperature F")
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("°F")),
             CaptureStep::basic("hz", "Set meter to Frequency (Hz)").expect(Expect::mode("Hz")),
             CaptureStep::basic("duty", "Set meter to Duty Cycle (%)")
                 .expect(Expect::mode("Duty %")),

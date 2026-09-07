@@ -694,7 +694,7 @@ impl Protocol for Ut181aProtocol {
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::flags::Flag;
-        use crate::protocol::{CaptureStep, Expect, RangeExpect, ValueExpect};
+        use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, ValueExpect};
 
         // Only V DC, V AC and °C have been seen on real hardware (issue #5).
         // Core UT181A modes
@@ -705,12 +705,14 @@ impl Protocol for Ut181aProtocol {
                 .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
             CaptureStep::basic("dcv_short", "V DC mode: touch the two probe tips together.")
                 .gate()
+                .needs(&[Need::ShortedLeads])
                 .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
             CaptureStep::basic(
                 "dcv_negative",
                 "V DC mode: leads reversed on a battery or any DC source (skip if none).",
             )
             .gate()
+            .needs(&[Need::DcSource])
             .expect(Expect::mode("V DC").value(ValueExpect::Negative)),
             CaptureStep::basic("vac", "Set meter to V AC")
                 .verified()
@@ -728,6 +730,7 @@ impl Protocol for Ut181aProtocol {
                 "Resistance mode: touch the two probe tips together.",
             )
             .gate()
+            .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
@@ -746,8 +749,11 @@ impl Protocol for Ut181aProtocol {
             CaptureStep::basic("aac", "Set meter to A AC").expect(Expect::mode("A AC")),
             CaptureStep::basic("tempc", "Set meter to Temperature C")
                 .verified()
+                .needs(&[Need::Thermocouple])
                 .expect(Expect::mode("°C")),
-            CaptureStep::basic("tempf", "Set meter to Temperature F").expect(Expect::mode("°F")),
+            CaptureStep::basic("tempf", "Set meter to Temperature F")
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("°F")),
             // Remote command steps
             CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3)
                 .expect(Expect::new().flags(&[(Flag::Hold, true)])),
