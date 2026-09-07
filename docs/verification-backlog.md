@@ -851,7 +851,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | AC mA | 0x0F | Verified (mA + SELECT) |
 | DC A | 0x10 | Verified (A⎓ dial, bench PSU ~100mA, range byte=0x01) |
 | AC A | 0x11 | Verified (A⎓ + SELECT) |
-| NCV | 0x14 | Verified (EF display) |
+| NCV | 0x14 | Verified (`"   EF  "` idle, `"     - "` at a mains cable — one `-` per level, manual §13; two or more segments unobserved) |
 | LPF V | 0x18 | Verified (V~ + SELECT, mode byte capture) |
 | AC+DC V | 0x19 | Verified (V⎓ + SELECT, mode byte capture) |
 | Duty Cycle % | 0x05 | Verified (AC mA + SELECT2, mode byte capture) |

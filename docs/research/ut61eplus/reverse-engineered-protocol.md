@@ -9,6 +9,7 @@ Based on:
 Confidence levels:
 - **[KNOWN]** — established facts from official Silicon Labs documentation
 - **[VENDOR]** — confirmed by decompiling UNI-T's official Windows software
+- **[MANUAL]** — stated in UNI-T's official user manual
 - **[DEDUCED]** — logical inferences not yet verified against real hardware
 - **[UNVERIFIED]** — requires real device testing to confirm
 - **[VERIFIED]** — confirmed against a real UT61E+ device
@@ -293,6 +294,14 @@ AB CD 10 <mode> <range> <display×7> <bar×2> <flags×3> <chk_hi> <chk_lo>
 **[VERIFIED]** The 7-char field is right-aligned with leading space
 padding on the real device. Examples observed: `" 12.345"` (normal
 reading), `"-12.345"` (negative value), `"    OL "` (overload).
+
+**NCV display format** — the NCV mode (0x14) draws a level, not a number:
+`"   EF  "` while no field is detected, and one `-` segment per level as
+the detected field grows, so the level is the dash count.
+**[VERIFIED]** `"   EF  "` (no field) and `"     - "` (level 1, meter
+beeping at a mains cable) on 2026-09-07; **[MANUAL]** §13 for the further
+segments, not yet observed. The decompilation's `-` check for
+`cVar1 == '\x14'` (§2.5) is the same display.
 
 **Overload detection** (from `FUN_100026a0`):
 - If display contains "O" AND "L" → OL (overload)
@@ -606,8 +615,9 @@ Configuration is stored in `options.xml`:
 3. **Mode bytes 0x03, 0x0D, 0x0F, 0x13**: not exercised (DC mV, AC µA,
    AC mA, Live). 0x0A/0x0B (temperature) are UT61D+ only.
 4. **Speculative mode bytes 0x1A-0x1E**: not yet observed from any device.
-5. **Edge cases**: NCV display format, hFE display format, temperature
-   handling on UT61D+, OL in different modes.
+5. **Edge cases**: NCV two-or-more `-` segments (§2.4: EF and one dash
+   verified), hFE display format, temperature handling on UT61D+, OL in
+   different modes.
 6. **CH9329 transport**: has not been exercised against a real UT61E+.
 
 ---

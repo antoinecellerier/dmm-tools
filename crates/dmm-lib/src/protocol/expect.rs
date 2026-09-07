@@ -323,16 +323,22 @@ mod tests {
             Ok(())
         );
 
-        // NCV with nothing near the probe: the display carries no digit, so
-        // the parser reports level 0 and the step has not been carried out.
-        for display in [b"     - ", b"   EF  "] {
-            let idle = make_test_measurement(0x14, 0x00, display, (0, 0), (0, 0, 0));
-            assert!(matches!(idle.value, MeasuredValue::NcvLevel(0)));
-            assert_eq!(
-                Expect::new().value(ValueExpect::NcvDetected).check(&idle),
-                Err("value is NCV:0, want an NCV level of 1 or more".to_string())
-            );
-        }
+        // NCV with nothing near the probe shows "EF" (level 0); one "-"
+        // segment is the meter's first detection level.
+        let idle = make_test_measurement(0x14, 0x00, b"   EF  ", (0, 0), (0, 0, 0));
+        assert!(matches!(idle.value, MeasuredValue::NcvLevel(0)));
+        assert_eq!(
+            Expect::new().value(ValueExpect::NcvDetected).check(&idle),
+            Err("value is NCV:0, want an NCV level of 1 or more".to_string())
+        );
+        let one_bar = make_test_measurement(0x14, 0x00, b"     - ", (0, 0), (0, 0, 0));
+        assert!(matches!(one_bar.value, MeasuredValue::NcvLevel(1)));
+        assert_eq!(
+            Expect::new()
+                .value(ValueExpect::NcvDetected)
+                .check(&one_bar),
+            Ok(())
+        );
     }
 
     #[test]

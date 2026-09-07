@@ -615,7 +615,16 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let display_trimmed = display_raw.trim();
     let display_compact: String = display_trimmed.chars().filter(|c| *c != ' ').collect();
     let value = if mode == Mode::Ncv {
-        let level = display_compact.parse::<u8>().unwrap_or(0);
+        // The NCV level is drawn as "-" segments, not a digit: "EF" while no
+        // field is detected, one more "-" per level as it grows (manual §13;
+        // "   EF  " and "     - " observed on 2026-09-07). A numeric display
+        // is still accepted in case some firmware sends one.
+        let dashes = display_compact.chars().filter(|c| *c == '-').count() as u8;
+        let level = if dashes > 0 {
+            dashes
+        } else {
+            display_compact.parse::<u8>().unwrap_or(0)
+        };
         MeasuredValue::NcvLevel(level)
     } else if display_compact == "OL" || display_compact.contains("OL") {
         MeasuredValue::Overload
@@ -1283,5 +1292,21 @@ mod tests {
         let m = parse_measurement(&payload, &table).unwrap();
         assert_eq!(m.mode, "NCV");
         assert!(matches!(m.value, MeasuredValue::NcvLevel(3)));
+    }
+
+    /// NCV level from the "-" segments (manual §13). Only "EF" and a single
+    /// dash have been seen on hardware; two dashes follow our counting rule.
+    #[test]
+    fn parse_ncv_dash_levels() {
+        let table = Ut61ePlusTable::new();
+        for (display, level) in [(b"   EF  ", 0u8), (b"     - ", 1), (b"    -- ", 2)] {
+            let payload = make_payload(0x14, 0x00, display, (0x00, 0x00), (0x00, 0x00, 0x00));
+            let m = parse_measurement(&payload, &table).unwrap();
+            assert!(
+                matches!(m.value, MeasuredValue::NcvLevel(l) if l == level),
+                "display {display:?}: {:?}",
+                m.value
+            );
+        }
     }
 }

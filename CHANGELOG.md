@@ -34,6 +34,7 @@
 
 ### Bug fixes
 
+- **UT61E+ NCV shows the detected level** — every detection read as level 0.
 - **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.
 - **A UT181A command the meter refuses is reported as an error** — every command reported as sent, whether the meter acted on it or not.
 - **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.
