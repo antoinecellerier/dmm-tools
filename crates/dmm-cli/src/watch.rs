@@ -128,6 +128,13 @@ pub(crate) struct StateWatcher {
     detector: Detector,
     /// Whether a satisfied expectation may capture on its own.
     auto_advance: bool,
+    /// Only after a reading in the right mode has failed the expectation:
+    /// a step that needs something on the probes is usually reached dial
+    /// first, and open leads pass "DC V, finite" before the battery is on.
+    /// Continuity going OL to a reading, or NCV from level 0 to 1, is the
+    /// change such a step captures on.
+    gated: bool,
+    armed: bool,
     /// The signature the current run of frames shares, and its length.
     run: Option<(Signature, usize)>,
     /// Frames in a row that satisfied the expectation.
@@ -159,12 +166,21 @@ impl StateWatcher {
                 None => Detector::RawDiff(baseline.cloned()),
             },
             auto_advance,
+            gated: false,
+            armed: false,
             run: None,
             matched: 0,
             previous: [None, None],
             alternating: 0,
             reported: None,
         }
+    }
+
+    /// Capture on its own only once a reading in the step's mode has failed
+    /// the expectation first.
+    pub(crate) fn gated(mut self) -> Self {
+        self.gated = true;
+        self
     }
 
     /// Judge one reading.
@@ -201,7 +217,8 @@ impl StateWatcher {
                     // The expectation holding is not the meter having settled:
                     // an autoranging meter satisfies "Ω, OL" on every rung it
                     // hunts through. The signature has to hold too.
-                    if self.matched >= STABLE_FRAMES && settled && self.auto_advance {
+                    let armed = self.armed || !self.gated;
+                    if self.matched >= STABLE_FRAMES && settled && self.auto_advance && armed {
                         Verdict::Ready
                     } else {
                         Verdict::Waiting
@@ -209,6 +226,9 @@ impl StateWatcher {
                 }
                 Err(reason) => {
                     self.matched = 0;
+                    if expect.mode.is_none_or(|want| m.mode == want) {
+                        self.armed = true;
+                    }
                     if run >= STABLE_FRAMES && self.reported.as_ref() != Some(&sig) {
                         self.reported = Some(sig);
                         Verdict::Mismatch(reason)
@@ -345,6 +365,26 @@ mod tests {
             assert_eq!(w.feed(&frame(i)), Verdict::Waiting, "frame {i}");
         }
         assert_eq!(w.feed(&frame(7)), Verdict::Ready);
+    }
+
+    /// A gated step reached dial first: open leads already pass "DC V,
+    /// finite", so the pass alone is not the battery. Only a failing reading
+    /// in the right mode arms it, and the wrong mode failing does not.
+    #[test]
+    fn a_gated_step_captures_only_after_a_failing_reading_in_its_mode() {
+        let finite_dcv = Expect::mode("DC V").value(ValueExpect::Finite);
+        let mut w = StateWatcher::for_step(Some(finite_dcv), None, true).gated();
+        assert_eq!(w.feed(&acv(b"  1.234")), Verdict::Waiting);
+        assert_eq!(w.feed(&acv(b"  1.234")), Verdict::Waiting);
+        for i in 0..6 {
+            assert_eq!(w.feed(&dcv(b" 0.0007")), Verdict::Waiting, "frame {i}");
+        }
+
+        let mut w = StateWatcher::for_step(Some(finite_dcv), None, true).gated();
+        assert_eq!(w.feed(&dcv_on(0x01)), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b" 1.6108")), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b" 1.6108")), Verdict::Waiting);
+        assert_eq!(w.feed(&dcv(b" 1.6108")), Verdict::Ready);
     }
 
     /// The wrong dial position settles too, and the operator has to be told

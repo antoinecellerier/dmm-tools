@@ -1302,8 +1302,19 @@ pub(crate) fn run_capture_step(
             // offered at once. A mode the tool just switched to is a change, so
             // this is false there.
             let ask = enter_only(expect, prev.last.as_ref());
-            let timeout = if ask { Duration::ZERO } else { STEP_TIMEOUT };
+            // Something has to go on the probes, and the dial is usually
+            // turned first: Enter is offered at once, and the watcher only
+            // captures on its own once it has seen the reading fail first.
+            let gated = !step.needs.is_empty();
+            let timeout = if ask || gated {
+                Duration::ZERO
+            } else {
+                STEP_TIMEOUT
+            };
             let mut watcher = StateWatcher::for_step(expect, prev.baseline.as_ref(), !ask);
+            if gated {
+                watcher = watcher.gated();
+            }
             match watch_for_state(dmm, input, &mut watcher, timeout, true, &mut errors)? {
                 Watched::Ready(m) => settled = m,
                 // `hint` keeps the wait open, so the timeout never ends it.

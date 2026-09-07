@@ -33,7 +33,12 @@ that line immediately: only the leads move, and open probes wander enough to sat
 expectation on their own — a −0.0013 V wobble is not the battery being connected. The one
 exception is a previous reading of OL where the step expects a finite value: Ω open to Ω
 across the body is a change open leads cannot fake, so that step waits for it. An Enter-only
-step still reports a mismatch, so the wrong dial position is caught. Stability tolerates a meter that
+step still reports a mismatch, so the wrong dial position is caught. A step with `needs`
+(something has to go on the probes) is gated instead: Enter is offered at once, and the
+watcher captures on its own only after a reading in the step's mode has failed the
+expectation first — the dial is usually turned before the leads are placed, and open leads
+pass "DC V, finite" before the battery is on. Continuity going OL to a reading, or NCV from
+level 0 to 1, is the change a gated step captures on. Stability tolerates a meter that
 alternates two states by design: the UT61E+ in AC+DC V sends the AC and DC components in
 turn with a flag toggling between them, so two signatures differing only in flags, each
 holding for `2 × STABLE_FRAMES` frames, count as settled; two rungs alternating do not.

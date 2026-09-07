@@ -33,6 +33,7 @@
 - **Capture walks every range, flag and sub-mode the tool can set** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked. `--no-drive` turns it off.
 - **Capture steps cover every sub-mode** — AC current, AC+DC, LPF and AC mV on the UT61+/UT161, the UT181A's Hz, Peak, dB and second-thermocouple modes, and the rest of the UT171, UT803/UT804 and UT8803 function tables had no step; a UT61+ model is only asked for the positions its own dial has.
 - **`r` at a capture confirmation retakes the step, and a step at the same dial position waits for Enter** — a wobble on open leads counted as the battery being connected, and there was no way back once it had.
+- **A capture step that needs something on the probes waits for the reading to change** — turning the dial first, as one does, captured the open leads before the battery, thermocouple or shorted tips were in place.
 
 ### Bug fixes
 
