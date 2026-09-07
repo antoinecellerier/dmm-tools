@@ -440,14 +440,17 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("Capacitance")),
-            CaptureStep::basic("hz", "Set meter to Hz (press SELECT2 on AC mA or V~ mode).")
+            CaptureStep::basic("hz", "Set meter to the Hz/% dial position.")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("Hz")),
-            CaptureStep::basic("duty", "Hz mode: press SELECT2 again for Duty %.")
-                .samples(3)
-                .verified_if(hw)
-                .expect(Expect::mode("Duty %")),
+            CaptureStep::basic(
+                "duty",
+                "Hz/% position: short-press the USB button for Duty %.",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .expect(Expect::mode("Duty %")),
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .samples(3)
                 .verified_if(hw)
