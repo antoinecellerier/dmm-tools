@@ -1,6 +1,6 @@
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
-use dmm_lib::protocol::Choice;
+use dmm_lib::protocol::{Choice, Setting};
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
     Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, Id, Key, Modifiers,
@@ -27,14 +27,14 @@ const COMPACT_READING_FONT_SIZE: f32 = 28.0;
 /// minimum `.claude/rules/gui.md` sets.
 const MIN_AUX_FONT_SIZE: f32 = 11.0;
 
-/// Largest font the mode selector's popup entries use. The readout itself
+/// Largest font a readout selector's popup entries use. The readout itself
 /// follows the reading — a 200 px big-meter reading puts it at 80 px — but
 /// the popup is a list to pick from, and stays list-sized.
-const MAX_MODE_POPUP_FONT_SIZE: f32 = 18.0;
+const MAX_CHOICE_POPUP_FONT_SIZE: f32 = 18.0;
 
-/// Marks the live entry in the mode selector's popup, in text as well as in
+/// Marks the live entry in a readout selector's popup, in text as well as in
 /// the selection colour.
-const LIVE_MODE_MARK: &str = "\u{25CF}";
+const LIVE_CHOICE_MARK: &str = "\u{25CF}";
 
 /// Format the meter's raw 7-char display string for stable rendering.
 ///
@@ -409,7 +409,27 @@ fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32
     }
 }
 
-/// Whether the mode readout is a selector rather than a plain label.
+/// The lists the two readout dropdowns offer, as the acquisition thread last
+/// reported them. Passed as one value so the reading widgets keep a short
+/// signature as further settings join them.
+#[derive(Clone, Copy, Default)]
+pub struct ReadoutChoices<'a> {
+    /// Modes reachable from the current dial position.
+    pub mode: &'a [Choice],
+    /// `Auto` plus the rungs of the current mode's ladder.
+    pub range: &'a [Choice],
+}
+
+impl ReadoutChoices<'_> {
+    /// Whether either readout has something to pick. The single-line layouts
+    /// draw plain labels inside the live region when neither does, and the
+    /// selector row when one does.
+    fn any_offered(&self) -> bool {
+        mode_switch_offered(self.mode) || mode_switch_offered(self.range)
+    }
+}
+
+/// Whether a readout is a selector rather than a plain label.
 ///
 /// A single choice is the live mode on its own — the single-variant UT181A
 /// dials (Ohm, nS, Cap, Hz, Duty, Pulse Width) report exactly that — so it
@@ -418,16 +438,79 @@ pub(crate) fn mode_switch_offered(choices: &[Choice]) -> bool {
     choices.len() > 1
 }
 
-/// The mode readout under the reading: a plain label, or — when the meter
-/// can be switched to other modes from where its dial sits — a dropdown
+/// One readout dropdown's wording: which setting it drives, the widget id it
+/// keys its popup and focus state under — two dropdowns on the same line must
+/// not share one — the hover text, and the name a screen reader gives it.
+struct ChoiceReadout {
+    setting: Setting,
+    id_salt: &'static str,
+    hover: &'static str,
+    a11y: &'static str,
+}
+
+/// The mode readout: which mode of the current dial position the meter is in.
+const MODE_READOUT: ChoiceReadout = ChoiceReadout {
+    setting: Setting::Mode,
+    id_salt: "mode_select",
+    hover: "Switch the meter to another mode of the current dial position",
+    a11y: "Mode",
+};
+
+/// The range readout beside it: which rung of the current mode's ladder the
+/// meter is on, or `Auto` while it picks the rung itself.
+const RANGE_READOUT: ChoiceReadout = ChoiceReadout {
+    setting: Setting::Range,
+    id_salt: "range_select",
+    hover: "Switch the meter to another range of the current mode",
+    a11y: "Range",
+};
+
+/// What the range readout leaves behind on a meter with no rung to pick.
+///
+/// The two-line layout has always drawn the range as a plain label beside the
+/// mode, so it keeps it; the single-line layouts never drew one, and a meter
+/// that cannot switch ranges must not gain text there.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RangeAtRest {
+    Label,
+    Nothing,
+}
+
+/// The range readout beside the mode one.
+///
+/// The closed text is always the live label the meter reports, so it reads
+/// the same whether the meter picked the rung or the user did; the marked
+/// entry is `Auto` while the meter is auto-ranging and the live rung
+/// otherwise. `at_rest` decides what a meter with nothing to pick gets.
+fn show_range_readout(
+    ui: &mut Ui,
+    m: &Measurement,
+    size: f32,
+    choices: &[Choice],
+    at_rest: RangeAtRest,
+) -> Option<(Setting, u16)> {
+    // A meter that reports no range at all has nothing to label, in any
+    // layout — the UT61E+ temperature and NCV positions, for two.
+    if m.range_label.is_empty() {
+        return None;
+    }
+    if at_rest == RangeAtRest::Nothing && !mode_switch_offered(choices) {
+        return None;
+    }
+    show_choice_readout(ui, &RANGE_READOUT, &m.range_label, size, choices)
+}
+
+/// A readout under the reading: a plain label, or — when the meter lists more
+/// than one value the setting can take from where it sits — a dropdown
 /// listing them, with the live one marked.
 ///
-/// Returns the id of a mode the user picked that differs from the live one.
+/// Returns the setting and the id of a value the user picked that differs
+/// from the live one.
 ///
 /// The dropdown is drawn at the label's size and with no frame at rest, so
 /// it reads as the readout it replaces; hover and the open state keep egui's
 /// own highlight so it still answers as a control. Its popup is capped at
-/// [`MAX_MODE_POPUP_FONT_SIZE`].
+/// [`MAX_CHOICE_POPUP_FONT_SIZE`].
 ///
 /// The open list behaves as a native listbox: focus lands on the live entry
 /// as it opens, Up/Down (Home/End) move it, Enter/Space or a click picks,
@@ -435,10 +518,16 @@ pub(crate) fn mode_switch_offered(choices: &[Choice]) -> bool {
 /// every close. The mechanisms are the ones `color_edit` uses for its
 /// picker: a was-open flag to see the open and close transitions, consumed
 /// keys plus a cancelled focus move, and a focus lock filter on the entry.
-fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> Option<u16> {
+fn show_choice_readout(
+    ui: &mut Ui,
+    readout: &ChoiceReadout,
+    label: &str,
+    size: f32,
+    choices: &[Choice],
+) -> Option<(Setting, u16)> {
     if !mode_switch_offered(choices) {
         ui.label(
-            RichText::new(mode)
+            RichText::new(label)
                 .font(FontId::proportional(size))
                 .color(ui.visuals().weak_text_color()),
         );
@@ -446,7 +535,7 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> 
     }
     let current = choices.iter().find(|c| c.current).map(|c| c.id);
     let mut picked = current;
-    let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_MODE_POPUP_FONT_SIZE);
+    let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_CHOICE_POPUP_FONT_SIZE);
     let ctx = ui.ctx().clone();
     let response = ui
         .scope(|ui| {
@@ -466,7 +555,7 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> 
             // so the list's state can be read before the box is drawn. The
             // salt is wrapped in `Id::new` the way `from_id_salt` wraps it:
             // hashing the bare string gives a different id.
-            let button_id = ui.make_persistent_id(Id::new("mode_select"));
+            let button_id = ui.make_persistent_id(Id::new(readout.id_salt));
             let was_open_key = button_id.with("was_open");
             let was_open: bool = ctx.data(|d| d.get_temp(was_open_key)).unwrap_or(false);
 
@@ -488,10 +577,10 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> 
             }
 
             let mut activated = false;
-            let inner = ComboBox::from_id_salt("mode_select")
+            let inner = ComboBox::from_id_salt(readout.id_salt)
                 .width(0.0)
                 .selected_text(
-                    RichText::new(mode)
+                    RichText::new(label)
                         .font(FontId::proportional(size))
                         .color(text_color),
                 )
@@ -507,7 +596,7 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> 
                         // keep the entries aligned without a figure space
                         // the bundled fonts may not have.
                         let text = if c.current {
-                            format!("{LIVE_MODE_MARK} {}", c.label)
+                            format!("{LIVE_CHOICE_MARK} {}", c.label)
                         } else {
                             format!("   {}", c.label)
                         };
@@ -529,7 +618,7 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> 
                         activated |= entry.clicked();
                         entries.push(entry);
                     }
-                    navigate_mode_entries(&ctx, &entries);
+                    navigate_choice_entries(&ctx, &entries);
                 });
 
             // Enter/Space "clicks" the focused entry without a pointer
@@ -554,16 +643,20 @@ fn show_mode_readout(ui: &mut Ui, mode: &str, size: f32, choices: &[Choice]) -> 
         })
         .inner;
     response
-        .on_hover_text("Switch the meter to another mode of the current dial position")
-        .a11y_label("Mode");
-    if picked == current { None } else { picked }
+        .on_hover_text(readout.hover)
+        .a11y_label(readout.a11y);
+    if picked == current {
+        None
+    } else {
+        picked.map(|id| (readout.setting, id))
+    }
 }
 
-/// Keyboard navigation inside the open mode list: ArrowDown/ArrowUp move
+/// Keyboard navigation inside an open readout list: ArrowDown/ArrowUp move
 /// focus between the entries, clamped at the ends; Home/End jump to the
 /// first and last. Nothing reaches the meter until Enter, Space or a click
 /// picks the focused entry.
-fn navigate_mode_entries(ctx: &Context, entries: &[Response]) {
+fn navigate_choice_entries(ctx: &Context, entries: &[Response]) {
     let Some(i) = entries.iter().position(Response::has_focus) else {
         return;
     };
@@ -602,11 +695,11 @@ fn navigate_mode_entries(ctx: &Context, entries: &[Response]) {
     });
 }
 
-/// Single-line reading with the mode selector beside it.
+/// Single-line reading with the mode and range selectors beside it.
 ///
-/// The value and unit form the live region; the selector, a control, sits
+/// The value and unit form the live region; the selectors, controls, sit
 /// after it in the same row rather than inside it — a screen reader would
-/// otherwise have the dropdown re-announced with every reading update.
+/// otherwise have the dropdowns re-announced with every reading update.
 /// `draw_value` paints the value and unit labels.
 fn show_reading_line_with_selector(
     ui: &mut Ui,
@@ -614,9 +707,9 @@ fn show_reading_line_with_selector(
     scaled: bool,
     draw_value: impl FnOnce(&mut Ui),
     mode_size: f32,
-    mode_choices: &[Choice],
+    choices: ReadoutChoices<'_>,
     tc: &ThemeColors,
-) -> Option<u16> {
+) -> Option<(Setting, u16)> {
     ui.horizontal(|ui| {
         ui.live_region_horizontal(
             live_region_fingerprint(Some(m), scaled),
@@ -627,24 +720,27 @@ fn show_reading_line_with_selector(
             },
         );
         ui.separator();
-        let picked = show_mode_readout(ui, &m.mode, mode_size, mode_choices);
+        let mode = show_choice_readout(ui, &MODE_READOUT, &m.mode, mode_size, choices.mode);
+        // This line has never carried a range label, so a meter with no rung
+        // to pick keeps the line it has: mode, then the badges.
+        let range = show_range_readout(ui, m, mode_size, choices.range, RangeAtRest::Nothing);
         show_flags(ui, m, mode_size, tc, scaled);
-        picked
+        mode.or(range)
     })
     .inner
 }
 
 /// Render the primary reading display at the given font size (two-line layout).
 ///
-/// Returns the mode the user picked from the selector, if any.
+/// Returns the setting and value the user picked from a selector, if any.
 fn show_reading_sized(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
     value_size: f32,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[Choice],
-) -> Option<u16> {
+    choices: ReadoutChoices<'_>,
+) -> Option<(Setting, u16)> {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
 
@@ -674,16 +770,12 @@ fn show_reading_sized(
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
-                let picked = show_mode_readout(ui, &m.mode, mode_size, mode_choices);
-                if !m.range_label.is_empty() {
-                    ui.label(
-                        RichText::new(&*m.range_label)
-                            .font(FontId::proportional(mode_size))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                }
+                let mode = show_choice_readout(ui, &MODE_READOUT, &m.mode, mode_size, choices.mode);
+                // The range has always been a label on this line, so it stays
+                // one on a meter that lists no rung to pick.
+                let range = show_range_readout(ui, m, mode_size, choices.range, RangeAtRest::Label);
                 show_flags(ui, m, mode_size, tc, scaled);
-                picked
+                mode.or(range)
             })
             .inner
         }
@@ -712,15 +804,15 @@ fn show_reading_sized(
 
 /// Render the reading with value and mode on a single line (inline layout).
 ///
-/// Returns the mode the user picked from the selector, if any.
+/// Returns the setting and value the user picked from a selector, if any.
 fn show_reading_inline(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
     value_size: f32,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[Choice],
-) -> Option<u16> {
+    choices: ReadoutChoices<'_>,
+) -> Option<(Setting, u16)> {
     let unit_size = value_size;
     let mode_size = value_size * 0.4;
 
@@ -740,7 +832,7 @@ fn show_reading_inline(
                 );
             };
 
-            let picked = if !mode_switch_offered(mode_choices) {
+            let picked = if !choices.any_offered() {
                 ui.live_region_horizontal(
                     live_region_fingerprint(Some(m), scaled),
                     || live_region_label(Some(m), scaled),
@@ -762,13 +854,7 @@ fn show_reading_inline(
                 ui.scope(|ui| {
                     ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
                     show_reading_line_with_selector(
-                        ui,
-                        m,
-                        scaled,
-                        draw_value,
-                        mode_size,
-                        mode_choices,
-                        tc,
+                        ui, m, scaled, draw_value, mode_size, choices, tc,
                     )
                 })
                 .inner
@@ -803,24 +889,17 @@ fn show_reading_inline(
 /// Render the large primary reading display.
 ///
 /// `scaled` marks the reading as passed through a software transform, so the
-/// SCALE badge and the spoken label say so. `mode_choices` are the modes the
-/// meter can be switched into; when there are any, the mode readout becomes
-/// a selector, and the id of a mode the user picks is returned.
+/// SCALE badge and the spoken label say so. `choices` are the modes and
+/// ranges the meter can be switched to; where there is more than one, that
+/// readout becomes a selector, and a pick comes back as its setting and id.
 pub fn show_reading(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[Choice],
-) -> Option<u16> {
-    show_reading_sized(
-        ui,
-        measurement,
-        BASE_READING_FONT_SIZE,
-        tc,
-        scaled,
-        mode_choices,
-    )
+    choices: ReadoutChoices<'_>,
+) -> Option<(Setting, u16)> {
+    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, tc, scaled, choices)
 }
 
 /// Cached ratios of rendered reading dimensions to font size.
@@ -851,10 +930,10 @@ impl Default for ReadingRatios {
 
 /// Render an extra-large reading that scales to fill available space.
 /// Used when graph and recording panels are hidden ("big meter" mode).
-/// Returns `(scale_factor, measured_ratios, picked_mode)`. The caller should
+/// Returns `(scale_factor, measured_ratios, picked)`. The caller should
 /// only persist `measured_ratios` into the cached state when recalculating
-/// (e.g. on window resize) to avoid frame-to-frame oscillation;
-/// `picked_mode` is the id of a mode the user chose in the selector, as for
+/// (e.g. on window resize) to avoid frame-to-frame oscillation; `picked` is
+/// the setting and value the user chose in a selector, as for
 /// [`show_reading`].
 ///
 /// `base_content_height`: total height of all content below the reading
@@ -867,8 +946,8 @@ pub fn show_reading_large(
     ratios: &ReadingRatios,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[Choice],
-) -> (f32, ReadingRatios, Option<u16>) {
+    choices: ReadoutChoices<'_>,
+) -> (f32, ReadingRatios, Option<(Setting, u16)>) {
     let available_w = ui.available_width();
     let available_h = ui.available_height();
 
@@ -898,9 +977,9 @@ pub fn show_reading_large(
     // Render and measure actual dimensions.
     let before = ui.cursor().top();
     let picked = if use_inline {
-        show_reading_inline(ui, measurement, size, tc, scaled, mode_choices)
+        show_reading_inline(ui, measurement, size, tc, scaled, choices)
     } else {
-        show_reading_sized(ui, measurement, size, tc, scaled, mode_choices)
+        show_reading_sized(ui, measurement, size, tc, scaled, choices)
     };
     let reading_w = ui.min_rect().width();
     let reading_h = ui.cursor().top() - before;
@@ -921,15 +1000,15 @@ pub fn show_reading_large(
 
 /// Render the reading as a compact single line (for narrow layout).
 ///
-/// Returns the mode the user picked from the selector, as for
+/// Returns the setting and value the user picked from a selector, as for
 /// [`show_reading`].
 pub fn show_reading_compact(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
     tc: &ThemeColors,
     scaled: bool,
-    mode_choices: &[Choice],
-) -> Option<u16> {
+    choices: ReadoutChoices<'_>,
+) -> Option<(Setting, u16)> {
     match measurement {
         Some(m) => {
             let value_text = format_value_display(m);
@@ -942,7 +1021,7 @@ pub fn show_reading_compact(
                 );
             };
 
-            let picked = if !mode_switch_offered(mode_choices) {
+            let picked = if !choices.any_offered() {
                 ui.live_region_horizontal(
                     live_region_fingerprint(Some(m), scaled),
                     || live_region_label(Some(m), scaled),
@@ -960,10 +1039,10 @@ pub fn show_reading_compact(
                 );
                 None
             } else {
-                // The selector and badges at the small text size, which is
+                // The selectors and badges at the small text size, which is
                 // what `.small()` resolves to for the plain label.
                 let small = TextStyle::Small.resolve(ui.style()).size;
-                show_reading_line_with_selector(ui, m, scaled, draw_value, small, mode_choices, tc)
+                show_reading_line_with_selector(ui, m, scaled, draw_value, small, choices, tc)
             };
 
             // One summary line rather than the grid: the compact layout is
@@ -1600,10 +1679,56 @@ mod tests {
         ]
     }
 
+    /// Auto plus a two-rung ladder, the meter auto-ranging — what the mock
+    /// reports on its DC V position before anything is picked.
+    fn range_choices() -> Vec<Choice> {
+        vec![
+            choice(0, "Auto", true),
+            choice(1, "2.2V", false),
+            choice(2, "22V", false),
+        ]
+    }
+
+    /// Only the mode readout has something to offer.
+    fn modes(choices: &[Choice]) -> ReadoutChoices<'_> {
+        ReadoutChoices {
+            mode: choices,
+            range: &[],
+        }
+    }
+
+    /// Only the range readout has.
+    fn ranges(choices: &[Choice]) -> ReadoutChoices<'_> {
+        ReadoutChoices {
+            mode: &[],
+            range: choices,
+        }
+    }
+
+    /// A reading on the mock's DC V position: 22 V rung, auto-ranging, so the
+    /// range readout has a label to show whether or not it can be switched.
+    fn ranged_reading() -> Measurement {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(5.678),
+            "V",
+            StatusFlags {
+                auto_range: true,
+                ..StatusFlags::default()
+            },
+        );
+        m.range_label = Cow::Borrowed("22V");
+        m
+    }
+
     /// The layouts the readout appears in, drawn at the side-panel size.
     const LAYOUTS: [&str; 3] = ["two-line", "inline", "compact"];
 
-    fn draw_reading(ui: &mut Ui, layout: &str, m: &Measurement, choices: &[Choice]) -> Option<u16> {
+    fn draw_reading(
+        ui: &mut Ui,
+        layout: &str,
+        m: &Measurement,
+        choices: ReadoutChoices<'_>,
+    ) -> Option<(Setting, u16)> {
         let tc = crate::settings::Settings::default().theme_colors(true);
         match layout {
             "two-line" => {
@@ -1621,7 +1746,7 @@ mod tests {
     /// test can see which widgets were drawn, what they are called, where
     /// they are, and which has the keyboard.
     struct Frame {
-        picked: Option<u16>,
+        picked: Option<(Setting, u16)>,
         nodes: Vec<(NodeId, Node)>,
         focus: Option<NodeId>,
     }
@@ -1629,7 +1754,7 @@ mod tests {
     fn run_frame(
         ctx: &egui::Context,
         events: Vec<egui::Event>,
-        mut draw: impl FnMut(&mut Ui) -> Option<u16>,
+        mut draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
     ) -> Frame {
         ctx.enable_accesskit();
         let mut picked = None;
@@ -1722,7 +1847,7 @@ mod tests {
     fn click(
         ctx: &egui::Context,
         pos: egui::Pos2,
-        mut draw: impl FnMut(&mut Ui) -> Option<u16>,
+        mut draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
     ) -> Frame {
         run_frame(ctx, pointer(pos, None), &mut draw);
         run_frame(ctx, pointer(pos, Some(true)), &mut draw);
@@ -1737,7 +1862,9 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         for layout in LAYOUTS {
             let ctx = egui::Context::default();
-            let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, &[]));
+            let f = run_frame(&ctx, vec![], |ui| {
+                draw_reading(ui, layout, &m, ReadoutChoices::default())
+            });
             assert_eq!(f.picked, None, "{layout}");
             assert!(
                 node_with_role(&f.nodes, Role::ComboBox).is_none(),
@@ -1763,7 +1890,9 @@ mod tests {
         let choices = [choice(0x5111, "DC V", true)];
         for layout in LAYOUTS {
             let ctx = egui::Context::default();
-            let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, &choices));
+            let f = run_frame(&ctx, vec![], |ui| {
+                draw_reading(ui, layout, &m, modes(&choices))
+            });
             assert_eq!(f.picked, None, "{layout}");
             assert!(
                 node_with_role(&f.nodes, Role::ComboBox).is_none(),
@@ -1789,7 +1918,9 @@ mod tests {
         let choices = two_choices();
         for layout in LAYOUTS {
             let ctx = egui::Context::default();
-            let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, &choices));
+            let f = run_frame(&ctx, vec![], |ui| {
+                draw_reading(ui, layout, &m, modes(&choices))
+            });
             assert_eq!(f.picked, None, "{layout}: drawing is not picking");
             let nodes = &f.nodes;
             let (combo_id, combo) = node_with_role(nodes, Role::ComboBox)
@@ -1825,7 +1956,8 @@ mod tests {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         let choices = two_choices();
-        let mut draw = |ui: &mut Ui| show_reading_sized(ui, Some(&m), 200.0, &tc, false, &choices);
+        let mut draw =
+            |ui: &mut Ui| show_reading_sized(ui, Some(&m), 200.0, &tc, false, modes(&choices));
 
         let f = run_frame(&ctx, vec![], &mut draw);
         let combo = centre(
@@ -1837,20 +1969,20 @@ mod tests {
         assert_eq!(f.picked, None, "opening the popup is not a pick");
 
         let f = run_frame(&ctx, vec![], &mut draw);
-        let live =
-            node_labelled(&f.nodes, &format!("{LIVE_MODE_MARK} DC V")).expect("live entry, marked");
+        let live = node_labelled(&f.nodes, &format!("{LIVE_CHOICE_MARK} DC V"))
+            .expect("live entry, marked");
         assert_eq!(live.toggled(), Some(Toggled::True));
         let other = node_labelled(&f.nodes, "   AC V Hz").expect("other entry");
         assert_eq!(other.toggled(), Some(Toggled::False));
         let b = other.bounds().expect("entry bounds");
         let height = (b.y1 - b.y0) as f32;
         assert!(
-            height < 2.0 * MAX_MODE_POPUP_FONT_SIZE,
+            height < 2.0 * MAX_CHOICE_POPUP_FONT_SIZE,
             "popup entry {height} px tall beside an 80 px readout"
         );
 
         let f = click(&ctx, centre(other), &mut draw);
-        assert_eq!(f.picked, Some(0x1121));
+        assert_eq!(f.picked, Some((Setting::Mode, 0x1121)));
     }
 
     /// Re-picking the live mode sends nothing to the meter.
@@ -1862,7 +1994,14 @@ mod tests {
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         let choices = two_choices();
         let mut draw = |ui: &mut Ui| {
-            show_reading_sized(ui, Some(&m), BASE_READING_FONT_SIZE, &tc, false, &choices)
+            show_reading_sized(
+                ui,
+                Some(&m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                modes(&choices),
+            )
         };
 
         let f = run_frame(&ctx, vec![], &mut draw);
@@ -1873,7 +2012,162 @@ mod tests {
         );
         click(&ctx, combo, &mut draw);
         let f = run_frame(&ctx, vec![], &mut draw);
-        let live = node_labelled(&f.nodes, &format!("{LIVE_MODE_MARK} DC V")).expect("live entry");
+        let live =
+            node_labelled(&f.nodes, &format!("{LIVE_CHOICE_MARK} DC V")).expect("live entry");
+        let f = click(&ctx, centre(live), &mut draw);
+        assert_eq!(f.picked, None);
+    }
+
+    // ---- the range selector -----------------------------------------------
+
+    /// A meter that cannot be ranged remotely — and one whose mode has a
+    /// single rung — keeps the plain range label the two-line layout has
+    /// always drawn beside the mode.
+    #[test]
+    fn the_range_readout_stays_a_label_without_choices() {
+        let m = ranged_reading();
+        for choices in [vec![], vec![choice(2, "22V", true)]] {
+            let ctx = egui::Context::default();
+            let f = run_frame(&ctx, vec![], |ui| {
+                draw_reading(ui, "two-line", &m, ranges(&choices))
+            });
+            assert_eq!(f.picked, None);
+            assert!(
+                node_with_role(&f.nodes, Role::ComboBox).is_none(),
+                "{} choices drew a combo box",
+                choices.len()
+            );
+            assert!(
+                f.nodes
+                    .iter()
+                    .any(|(_, n)| n.role() == Role::Label && n.value() == Some("22V")),
+                "{} choices lost the range label",
+                choices.len()
+            );
+        }
+    }
+
+    /// With a ladder to pick from, the range readout is a combo box a screen
+    /// reader calls "Range" whose value is the rung the meter reports.
+    #[test]
+    fn the_range_readout_becomes_a_named_combo_with_choices() {
+        let m = ranged_reading();
+        let choices = range_choices();
+        for layout in LAYOUTS {
+            let ctx = egui::Context::default();
+            let f = run_frame(&ctx, vec![], |ui| {
+                draw_reading(ui, layout, &m, ranges(&choices))
+            });
+            assert_eq!(f.picked, None, "{layout}: drawing is not picking");
+            let combo = node_labelled(&f.nodes, "Range")
+                .unwrap_or_else(|| panic!("{layout}: no range combo"));
+            assert_eq!(combo.role(), Role::ComboBox, "{layout}");
+            assert_eq!(combo.value(), Some("22V"), "{layout}");
+        }
+    }
+
+    /// The single-line layouts never carried a range label, and a meter that
+    /// cannot be ranged must not gain one there.
+    #[test]
+    fn the_single_line_layouts_show_no_range_without_choices() {
+        let m = ranged_reading();
+        for layout in ["inline", "compact"] {
+            let ctx = egui::Context::default();
+            let f = run_frame(&ctx, vec![], |ui| {
+                draw_reading(ui, layout, &m, modes(&two_choices()))
+            });
+            assert!(
+                node_labelled(&f.nodes, "Range").is_none(),
+                "{layout}: a range readout appeared"
+            );
+            assert!(
+                !f.nodes
+                    .iter()
+                    .any(|(_, n)| n.value() == Some("22V") || n.label() == Some("22V")),
+                "{layout}: the range text appeared"
+            );
+        }
+    }
+
+    /// Both readouts on one line are two independent controls: egui keys a
+    /// combo's popup and focus state by its id, and a shared id would have
+    /// them open and close together.
+    #[test]
+    fn the_two_readouts_have_distinct_ids() {
+        let m = ranged_reading();
+        let (modes, ranges) = (two_choices(), range_choices());
+        let both = ReadoutChoices {
+            mode: &modes,
+            range: &ranges,
+        };
+        for layout in LAYOUTS {
+            let ctx = egui::Context::default();
+            let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, both));
+            let mode = node_id_labelled(&f.nodes, "Mode")
+                .unwrap_or_else(|| panic!("{layout}: no mode combo"));
+            let range = node_id_labelled(&f.nodes, "Range")
+                .unwrap_or_else(|| panic!("{layout}: no range combo"));
+            assert_ne!(mode, range, "{layout}");
+        }
+    }
+
+    /// Tab walks the reading line left to right: the mode readout, then the
+    /// range one — the order they are read in.
+    #[test]
+    fn tab_reaches_the_mode_readout_then_the_range_one() {
+        let m = ranged_reading();
+        let (modes, ranges) = (two_choices(), range_choices());
+        let both = ReadoutChoices {
+            mode: &modes,
+            range: &ranges,
+        };
+        let ctx = egui::Context::default();
+        let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, both);
+
+        run_frame(&ctx, vec![], &mut draw);
+        let f = run_frame(&ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
+        assert_eq!(f.focus, node_id_labelled(&f.nodes, "Mode"), "first Tab");
+        let f = run_frame(&ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
+        assert_eq!(f.focus, node_id_labelled(&f.nodes, "Range"), "second Tab");
+    }
+
+    /// Opening the range list and picking a rung reports it against
+    /// `Setting::Range`, so the caller knows which setting to switch.
+    #[test]
+    fn picking_a_range_reports_its_id() {
+        let ctx = egui::Context::default();
+        let m = ranged_reading();
+        let choices = range_choices();
+        let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, ranges(&choices));
+
+        let f = run_frame(&ctx, vec![], &mut draw);
+        let combo = centre(node_labelled(&f.nodes, "Range").expect("range combo"));
+        click(&ctx, combo, &mut draw);
+
+        let f = run_frame(&ctx, vec![], &mut draw);
+        let auto = node_labelled(&f.nodes, &format!("{LIVE_CHOICE_MARK} Auto"))
+            .expect("Auto is marked while the meter auto-ranges");
+        assert_eq!(auto.toggled(), Some(Toggled::True));
+        let rung = node_labelled(&f.nodes, "   22V").expect("rung entry");
+
+        let f = click(&ctx, centre(rung), &mut draw);
+        assert_eq!(f.picked, Some((Setting::Range, 2)));
+    }
+
+    /// Re-picking the marked entry sends nothing to the meter.
+    #[test]
+    fn picking_the_live_range_is_not_a_pick() {
+        let ctx = egui::Context::default();
+        let m = ranged_reading();
+        let choices = range_choices();
+        let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, ranges(&choices));
+
+        let f = run_frame(&ctx, vec![], &mut draw);
+        let combo = centre(node_labelled(&f.nodes, "Range").expect("range combo"));
+        click(&ctx, combo, &mut draw);
+        let f = run_frame(&ctx, vec![], &mut draw);
+        let live =
+            node_labelled(&f.nodes, &format!("{LIVE_CHOICE_MARK} Auto")).expect("live entry");
         let f = click(&ctx, centre(live), &mut draw);
         assert_eq!(f.picked, None);
     }
@@ -1887,7 +2181,7 @@ mod tests {
     /// reading — and Enter opens the list. Returns the frame after opening.
     fn open_with_keyboard(
         ctx: &egui::Context,
-        mut draw: impl FnMut(&mut Ui) -> Option<u16>,
+        mut draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
     ) -> Frame {
         run_frame(ctx, vec![], &mut draw);
         let f = run_frame(ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
@@ -1900,7 +2194,10 @@ mod tests {
     }
 
     /// The list is gone and the readout has the keyboard again.
-    fn assert_closed_on_the_readout(ctx: &egui::Context, draw: impl FnMut(&mut Ui) -> Option<u16>) {
+    fn assert_closed_on_the_readout(
+        ctx: &egui::Context,
+        draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
+    ) {
         let f = run_frame(ctx, vec![], draw);
         assert!(
             node_labelled(&f.nodes, OTHER).is_none(),
@@ -1929,7 +2226,14 @@ mod tests {
     fn opening_the_list_focuses_the_live_entry() {
         let (m, choices, tc) = keyboard_fixture();
         let mut draw = |ui: &mut Ui| {
-            show_reading_sized(ui, Some(&m), BASE_READING_FONT_SIZE, &tc, false, &choices)
+            show_reading_sized(
+                ui,
+                Some(&m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                modes(&choices),
+            )
         };
 
         let ctx = egui::Context::default();
@@ -1958,7 +2262,14 @@ mod tests {
         let (m, choices, tc) = keyboard_fixture();
         let ctx = egui::Context::default();
         let mut draw = |ui: &mut Ui| {
-            show_reading_sized(ui, Some(&m), BASE_READING_FONT_SIZE, &tc, false, &choices)
+            show_reading_sized(
+                ui,
+                Some(&m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                modes(&choices),
+            )
         };
         open_with_keyboard(&ctx, &mut draw);
 
@@ -1985,7 +2296,7 @@ mod tests {
             key(egui::Key::Enter, egui::Modifiers::NONE),
             &mut draw,
         );
-        assert_eq!(f.picked, Some(0x1121));
+        assert_eq!(f.picked, Some((Setting::Mode, 0x1121)));
         assert_closed_on_the_readout(&ctx, &mut draw);
     }
 
@@ -1995,7 +2306,14 @@ mod tests {
         let (m, choices, tc) = keyboard_fixture();
         let ctx = egui::Context::default();
         let mut draw = |ui: &mut Ui| {
-            show_reading_sized(ui, Some(&m), BASE_READING_FONT_SIZE, &tc, false, &choices)
+            show_reading_sized(
+                ui,
+                Some(&m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                modes(&choices),
+            )
         };
         let f = open_with_keyboard(&ctx, &mut draw);
         let live = node_id_labelled(&f.nodes, LIVE).expect("live entry");
@@ -2022,7 +2340,14 @@ mod tests {
         let (m, choices, tc) = keyboard_fixture();
         let ctx = egui::Context::default();
         let mut draw = |ui: &mut Ui| {
-            show_reading_sized(ui, Some(&m), BASE_READING_FONT_SIZE, &tc, false, &choices)
+            show_reading_sized(
+                ui,
+                Some(&m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                modes(&choices),
+            )
         };
         open_with_keyboard(&ctx, &mut draw);
         run_frame(
@@ -2048,7 +2373,14 @@ mod tests {
         for modifiers in [egui::Modifiers::NONE, egui::Modifiers::SHIFT] {
             let ctx = egui::Context::default();
             let mut draw = |ui: &mut Ui| {
-                show_reading_sized(ui, Some(&m), BASE_READING_FONT_SIZE, &tc, false, &choices)
+                show_reading_sized(
+                    ui,
+                    Some(&m),
+                    BASE_READING_FONT_SIZE,
+                    &tc,
+                    false,
+                    modes(&choices),
+                )
             };
             open_with_keyboard(&ctx, &mut draw);
             run_frame(

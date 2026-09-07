@@ -98,6 +98,10 @@ Threshold at ~900px available width:
   label, value, unit, and `@Ns` for MIN/MAX timestamps. Nothing is drawn for
   single-display meters.
 - Mode, range label, and active flags below
+- On meters that can be switched over USB, the mode and range labels are
+  dropdowns naming what the dial position and the live mode offer; everywhere
+  else they stay the plain labels they read as, so nothing appears to be a
+  control that cannot act as one
 - Flags shown as subtle colored badges: AUTO, HOLD, REL, MIN, MAX
 - Low battery warning shown as orange "LOW BAT" badge
 - SCALE badge (same accent as AUTO/HOLD) whenever a software scale is active.
@@ -106,7 +110,10 @@ Threshold at ~900px available width:
 
 ### Remote Control Buttons
 
-Row of buttons below the reading (only shown when connected and receiving data):
+Row of buttons below the reading (only shown when connected and receiving data).
+The buttons mirror the meter's front panel and send a raw press, so their labels
+and tooltips promise a press and nothing more; naming a destination is the
+readout dropdowns' job.
 - **HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK** — highlight blue when the corresponding protocol flag is active
 - **SELECT** — cycles sub-modes (no toggle state, mode change visible in reading)
 - **LIGHT** — toggles backlight (no protocol feedback for state)

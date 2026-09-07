@@ -25,7 +25,7 @@ mod whats_new;
 
 use dmm_lib::measurement::Measurement;
 use dmm_lib::mock::MockMode;
-use dmm_lib::protocol::{Choice, registry};
+use dmm_lib::protocol::{Choice, Setting, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui::{self, Color32};
 use std::sync::atomic::AtomicBool;
@@ -177,6 +177,51 @@ struct CaptureLayout {
     extra_slots: usize,
 }
 
+/// The choice lists the readout dropdowns draw, one per setting the
+/// acquisition thread lists. Adding a setting is a field and two match arms.
+#[derive(Default)]
+pub(super) struct SettingChoices {
+    mode: Vec<Choice>,
+    range: Vec<Choice>,
+}
+
+impl SettingChoices {
+    /// Store the list the acquisition thread sent for `setting`. Settings the
+    /// readout does not draw are dropped rather than kept unused.
+    pub(super) fn set(&mut self, setting: Setting, choices: Vec<Choice>) {
+        match setting {
+            Setting::Mode => self.mode = choices,
+            Setting::Range => self.range = choices,
+            _ => {}
+        }
+    }
+
+    /// Forget every list — the dial may be anywhere by the time the meter is
+    /// back, so nothing here survives a connect or a disconnect.
+    pub(super) fn clear(&mut self) {
+        self.mode.clear();
+        self.range.clear();
+    }
+
+    pub(super) fn readouts(&self) -> display::ReadoutChoices<'_> {
+        display::ReadoutChoices {
+            mode: &self.mode,
+            range: &self.range,
+        }
+    }
+
+    /// Whether the range readout is drawn as a dropdown, which is taller than
+    /// the label it replaces and so changes the big meter's fitted font.
+    pub(super) fn range_offered(&self) -> bool {
+        display::mode_switch_offered(&self.range)
+    }
+
+    /// The same, for the mode readout.
+    pub(super) fn mode_offered(&self) -> bool {
+        display::mode_switch_offered(&self.mode)
+    }
+}
+
 /// The live link to a meter: its state, what the connected protocol told us
 /// about itself, and the channels and flags shared with the acquisition
 /// thread.
@@ -189,9 +234,9 @@ pub(super) struct Connection {
     pub(super) feedback_url: String,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
-    /// Modes the meter can be switched into from its current dial position,
-    /// as last listed by the acquisition thread. Empty when it offers none.
-    pub(super) mode_choices: Vec<Choice>,
+    /// Values the meter can be switched to for each setting the readout
+    /// draws, as last listed by the acquisition thread.
+    pub(super) choices: SettingChoices,
     /// When true, incoming measurements are ignored (connection stays alive).
     pub(super) paused: bool,
     pub(super) last_error: Option<ConnectionIssue>,
@@ -221,7 +266,7 @@ impl Default for Connection {
             experimental: false,
             feedback_url: String::new(),
             supported_commands: Vec::new(),
-            mode_choices: Vec::new(),
+            choices: SettingChoices::default(),
             paused: false,
             last_error: None,
             waiting_timeouts: 0,
@@ -378,13 +423,15 @@ impl App {
         }
     }
 
-    /// Ask the meter to switch to one of the modes in
-    /// `connection.mode_choices`. A refusal comes back as a toast.
-    pub(super) fn select_mode(&mut self, id: u16) {
+    /// Ask the meter to switch `setting` to one of the values
+    /// `connection.choices` listed. A refusal comes back as a toast.
+    pub(super) fn select(&mut self, setting: Setting, id: u16) {
         if let Some(tx) = &self.connection.cmd_tx {
-            let _ = tx.send(RemoteCommand::SelectMode(id));
+            let _ = tx.send(RemoteCommand::Select(setting, id));
         }
-        if self.repin_mock(id) {
+        // Only the mode pin: `settings.mock_mode` names a scenario, and a
+        // range pick leaves the mock in the scenario it is already pinned to.
+        if setting == Setting::Mode && self.repin_mock(id) {
             self.settings.save();
         }
     }
@@ -592,9 +639,10 @@ impl eframe::App for App {
                             .as_ref()
                             .map_or(0usize, |m| m.aux_values.len())
                             .hash(&mut h);
-                        // The mode selector is a framed control, a little
-                        // taller than the plain label it replaces.
-                        display::mode_switch_offered(&self.connection.mode_choices).hash(&mut h);
+                        // The mode and range selectors are framed controls, a
+                        // little taller than the plain labels they replace.
+                        self.connection.choices.mode_offered().hash(&mut h);
+                        self.connection.choices.range_offered().hash(&mut h);
                         self.settings.show_stats.hash(&mut h);
                         self.settings.show_specs.hash(&mut h);
                         self.big_meter_mode.hash(&mut h);
@@ -618,17 +666,17 @@ impl eframe::App for App {
                                 self.meter_fit.content_height
                             };
                             let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                            let (scale, measured_ratios, picked_mode) = display::show_reading_large(
+                            let (scale, measured_ratios, picked) = display::show_reading_large(
                                 ui,
                                 self.last_measurement.as_ref(),
                                 content_h,
                                 &self.meter_fit.reading_ratios,
                                 &tc,
                                 !self.transform.is_identity(),
-                                &self.connection.mode_choices,
+                                self.connection.choices.readouts(),
                             );
-                            if let Some(id) = picked_mode {
-                                self.select_mode(id);
+                            if let Some((setting, id)) = picked {
+                                self.select(setting, id);
                             }
                             let after_reading = ui.cursor().top();
 

@@ -68,7 +68,7 @@ impl App {
                     "RANGE",
                     manual_range,
                     "range",
-                    "Step to the next manual range",
+                    "Press RANGE (manual range, one step)",
                 ),
                 ("AUTO", auto, "auto", "Return the meter to auto-range"),
             ] {

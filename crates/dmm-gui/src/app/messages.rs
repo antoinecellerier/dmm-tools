@@ -173,7 +173,7 @@ impl App {
         self.connection.experimental = false;
         self.connection.feedback_url.clear();
         self.connection.supported_commands.clear();
-        self.connection.mode_choices.clear();
+        self.connection.choices.clear();
         self.connection.paused = false;
         self.connection.reconnect_attempt = 0;
         self.connection.reconnect_last_error = None;
@@ -239,7 +239,7 @@ impl App {
                     self.connection.supported_commands = cmds;
                     // A reconnect may find the dial elsewhere; the thread
                     // re-lists the choices with its first reading.
-                    self.connection.mode_choices.clear();
+                    self.connection.choices.clear();
                     self.connection.device_name = if name.is_empty() {
                         None
                     } else {
@@ -372,8 +372,8 @@ impl App {
                 DmmMessage::CommandFailed(msg) => {
                     self.toast = Some((msg, true, Instant::now()));
                 }
-                DmmMessage::ModeChoices(choices) => {
-                    self.connection.mode_choices = choices;
+                DmmMessage::Choices(setting, choices) => {
+                    self.connection.choices.set(setting, choices);
                 }
             }
         }

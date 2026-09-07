@@ -23,8 +23,8 @@ pub(crate) enum ThreadControl {
 pub(crate) enum RemoteCommand {
     /// A named button command (`hold`, `range`, …) from the remote controls.
     Named(String),
-    /// Switch to one of the modes `Dmm::choices` listed, by its id.
-    SelectMode(u16),
+    /// Switch a setting to one of the values `Dmm::choices` listed, by its id.
+    Select(Setting, u16),
 }
 
 impl std::fmt::Display for RemoteCommand {
@@ -32,7 +32,9 @@ impl std::fmt::Display for RemoteCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Named(name) => write!(f, "Command '{name}'"),
-            Self::SelectMode(_) => f.write_str("Mode switch"),
+            Self::Select(Setting::Mode, _) => f.write_str("Mode switch"),
+            Self::Select(Setting::Range, _) => f.write_str("Range switch"),
+            Self::Select(setting, _) => write!(f, "{setting} switch"),
         }
     }
 }
@@ -119,10 +121,10 @@ pub(crate) enum DmmMessage {
     /// toast, not as a connection issue: the link is fine and the meter is
     /// still streaming, so neither the help text nor a reconnect applies.
     CommandFailed(String),
-    /// Modes the meter can be switched into from its current dial position.
-    /// Sent when the mode changes and after a successful switch; empty for
-    /// families without remote mode selection.
-    ModeChoices(Vec<Choice>),
+    /// Values a setting can be switched to from where the meter sits now.
+    /// Sent when the reading they depend on changes and after a successful
+    /// switch; empty for families that cannot drive the setting.
+    Choices(Setting, Vec<Choice>),
     /// Waiting for meter response (consecutive timeout count).
     WaitingForMeter(u32),
 }
@@ -171,22 +173,81 @@ pub(super) struct ThreadContext {
     pub stop_flag: Arc<AtomicBool>,
 }
 
-/// The mode a reading was in, as far as the mode-choice list is concerned:
-/// the raw word plus the decoded text.
-///
-/// The text is part of the key because the choice list is not always a pure
-/// function of the mode word. The mock device keeps one word per dial position
-/// and cycles between scenarios underneath it (Temp, TempDual and TempDiff all
-/// report 0x0A), and a family whose choices depend on more than the word would
-/// behave the same way. Keying on the word alone leaves the dropdown marking a
-/// mode the meter has already left, so picking the live one does nothing.
-type ModeKey = (u16, Cow<'static, str>);
+/// The settings the acquisition thread lists for the readout dropdowns, in
+/// the order they are drawn. The others stay on the remote-control buttons;
+/// adding one here is what puts it on the readout.
+const LISTED_SETTINGS: [Setting; 2] = [Setting::Mode, Setting::Range];
 
-/// Whether `m` needs its mode choices re-listed, given the mode of the reading
-/// they were last sent for. `None` — a fresh connection, or a mode the user
-/// just selected — always re-lists.
-fn mode_choices_stale(last: Option<&ModeKey>, m: &Measurement) -> bool {
-    last.is_none_or(|(raw, text)| *raw != m.mode_raw || *text != m.mode)
+/// The lists last sent for each of [`LISTED_SETTINGS`], keyed by the reading
+/// they were built from. `None` — a fresh connection, or a setting the user
+/// just changed — forces a re-list.
+type ListedKeys = [Option<ChoiceKey>; LISTED_SETTINGS.len()];
+
+/// What a setting's choice list depends on in the reading it was listed for.
+///
+/// Re-listing is driven by this key moving rather than by every sample: the
+/// list is the same for every reading in between, and building it runs on the
+/// acquisition thread's hot path.
+#[derive(Clone, PartialEq, Eq)]
+enum ChoiceKey {
+    /// The mode word plus the decoded text. The text is part of the key
+    /// because the choice list is not always a pure function of the word. The
+    /// mock device keeps one word per dial position and cycles between
+    /// scenarios underneath it (Temp, TempDual and TempDiff all report 0x0A),
+    /// and a family whose choices depend on more than the word would behave
+    /// the same way. Keying on the word alone leaves the dropdown marking a
+    /// mode the meter has already left, so picking the live one does nothing.
+    Mode(u16, Cow<'static, str>),
+    /// The mode word, the live rung, and whether the meter is auto-ranging.
+    /// The ladder comes from the mode; the mark moves with the rung; and
+    /// auto ↔ manual moves the mark without the rung changing at all.
+    Range(u16, u8, bool),
+}
+
+impl ChoiceKey {
+    /// The key `setting`'s list is built under in `m`.
+    fn of(setting: Setting, m: &Measurement) -> Self {
+        match setting {
+            Setting::Range => Self::Range(m.mode_raw, m.range_raw, m.flags.auto_range),
+            // Everything else follows the dial: what a meter can be switched
+            // to is decided by the mode it is in.
+            _ => Self::Mode(m.mode_raw, m.mode.clone()),
+        }
+    }
+}
+
+/// Whether `setting` needs re-listing for `m`, given the key its list was
+/// last sent under.
+fn choices_stale(last: Option<&ChoiceKey>, setting: Setting, m: &Measurement) -> bool {
+    last != Some(&ChoiceKey::of(setting, m))
+}
+
+/// Send the lists whose key moved with this reading, and record the new keys.
+///
+/// Split out of the acquisition loop so it can be driven from a test without
+/// a device on the other end.
+fn send_stale_choices<T: Transport>(
+    dmm: &dmm_lib::Dmm<T>,
+    m: &Measurement,
+    keys: &mut ListedKeys,
+    msg_tx: &mpsc::Sender<DmmMessage>,
+) {
+    for (slot, setting) in keys.iter_mut().zip(LISTED_SETTINGS) {
+        if !choices_stale(slot.as_ref(), setting, m) {
+            continue;
+        }
+        *slot = Some(ChoiceKey::of(setting, m));
+        let _ = msg_tx.send(DmmMessage::Choices(setting, dmm.choices(setting, m)));
+    }
+}
+
+/// Forget the key of a setting the user just changed, so the next reading
+/// re-lists it. Which entry is live has changed even where the reading has
+/// not — the mock keeps one mode word per dial position.
+fn invalidate(keys: &mut ListedKeys, setting: Setting) {
+    if let Some(i) = LISTED_SETTINGS.iter().position(|s| *s == setting) {
+        keys[i] = None;
+    }
 }
 
 /// Run the measurement loop on a background thread, generic over transport type.
@@ -239,9 +300,7 @@ where
         .with_cancel(move || sleep_stop.load(Ordering::Relaxed));
     let mut protocol_errors: u32 = 0;
     let mut paused = false;
-    // Mode of the last reading whose mode choices were sent. `None` forces
-    // the next reading to re-list them.
-    let mut last_mode: Option<ModeKey> = None;
+    let mut last_keys: ListedKeys = Default::default();
     loop {
         if stop_flag.load(Ordering::Relaxed) || !handle_control(&ctrl_rx, &mut paused) {
             info!("background thread: stopping");
@@ -254,13 +313,12 @@ where
         while let Ok(cmd) = cmd_rx.try_recv() {
             let result = match &cmd {
                 RemoteCommand::Named(name) => stream.dmm_mut().send_command(name),
-                RemoteCommand::SelectMode(id) => stream.dmm_mut().select(Setting::Mode, *id),
+                RemoteCommand::Select(setting, id) => stream.dmm_mut().select(*setting, *id),
             };
             match (result, &cmd) {
-                // Which entry is live has changed even where the mode word
-                // has not (the mock keeps one word per dial position), so
-                // the list is re-sent with the next reading.
-                (Ok(()), RemoteCommand::SelectMode(_)) => last_mode = None,
+                (Ok(()), RemoteCommand::Select(setting, _)) => {
+                    invalidate(&mut last_keys, *setting);
+                }
                 (Ok(()), RemoteCommand::Named(_)) => {}
                 (Err(e), _) => {
                     warn!("background thread: {cmd} failed: {e}");
@@ -281,13 +339,7 @@ where
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
                 protocol_errors = 0;
-                // Only when the mode changes: the list is the same for every
-                // reading in between, and this runs per sample.
-                if mode_choices_stale(last_mode.as_ref(), &m) {
-                    last_mode = Some((m.mode_raw, m.mode.clone()));
-                    let choices = stream.dmm().choices(Setting::Mode, &m);
-                    let _ = msg_tx.send(DmmMessage::ModeChoices(choices));
-                }
+                send_stale_choices(stream.dmm(), &m, &mut last_keys, &msg_tx);
                 if msg_tx.send(DmmMessage::Measurement(m)).is_err() {
                     break;
                 }
@@ -378,7 +430,7 @@ where
                 stream = MeasurementStream::new(&mut dmm, tick);
                 protocol_errors = 0;
                 // The dial may have moved while the link was down.
-                last_mode = None;
+                last_keys = Default::default();
             }
         }
 
@@ -475,14 +527,32 @@ mod tests {
         }
     }
 
+    /// A reading on a given rung, auto-ranging or not.
+    fn ranged(range_raw: u8, auto_range: bool) -> Measurement {
+        Measurement {
+            range_raw,
+            ..Measurement::test_fixture(
+                MeasuredValue::Normal(1.0),
+                "V",
+                StatusFlags {
+                    auto_range,
+                    ..StatusFlags::default()
+                },
+            )
+        }
+    }
+
     /// The re-list has to survive being run per sample: an unchanged mode must
     /// not keep rebuilding and resending the list.
     #[test]
     fn mode_choices_are_listed_once_per_mode() {
         let m = reading(0x0A, "Temperature");
-        assert!(mode_choices_stale(None, &m), "first reading must list");
-        let key = (m.mode_raw, m.mode.clone());
-        assert!(!mode_choices_stale(Some(&key), &m));
+        assert!(
+            choices_stale(None, Setting::Mode, &m),
+            "first reading must list"
+        );
+        let key = ChoiceKey::of(Setting::Mode, &m);
+        assert!(!choices_stale(Some(&key), Setting::Mode, &m));
     }
 
     /// The mock cycles Temp / Temp dual / Temp diff under one mode word, and
@@ -490,20 +560,119 @@ mod tests {
     /// dropdown marking a mode the meter had already left.
     #[test]
     fn mode_choices_are_relisted_when_only_the_mode_text_changes() {
-        let key = (0x0A, Cow::Borrowed("Temperature"));
-        assert!(mode_choices_stale(
+        let key = ChoiceKey::Mode(0x0A, Cow::Borrowed("Temperature"));
+        assert!(choices_stale(
             Some(&key),
+            Setting::Mode,
             &reading(0x0A, "Temperature (dual)")
         ));
     }
 
     #[test]
     fn mode_choices_are_relisted_when_the_mode_word_changes() {
-        let key = (0x0A, Cow::Borrowed("Temperature"));
-        assert!(mode_choices_stale(
+        let key = ChoiceKey::Mode(0x0A, Cow::Borrowed("Temperature"));
+        assert!(choices_stale(
             Some(&key),
+            Setting::Mode,
             &reading(0x00, "Temperature")
         ));
+    }
+
+    /// Stepping the meter to another rung moves the mark in the range list,
+    /// so the list has to be re-sent — while an unchanged rung must not
+    /// re-send it once per sample.
+    #[test]
+    fn range_choices_are_relisted_when_the_rung_changes() {
+        let m = ranged(2, false);
+        let key = ChoiceKey::of(Setting::Range, &m);
+        assert!(!choices_stale(Some(&key), Setting::Range, &m));
+        assert!(choices_stale(Some(&key), Setting::Range, &ranged(3, false)));
+    }
+
+    /// Leaving auto-range moves the mark from `Auto` to the rung the meter
+    /// was already on, so the rung alone cannot key the list.
+    #[test]
+    fn range_choices_are_relisted_when_auto_range_changes() {
+        let key = ChoiceKey::of(Setting::Range, &ranged(2, true));
+        assert!(choices_stale(Some(&key), Setting::Range, &ranged(2, false)));
+    }
+
+    /// A mode change re-lists the ranges too: the ladder belongs to the mode.
+    #[test]
+    fn range_choices_are_relisted_when_the_mode_changes() {
+        let key = ChoiceKey::of(Setting::Range, &ranged(2, true));
+        let mut moved = ranged(2, true);
+        moved.mode_raw = 0x0B;
+        assert!(choices_stale(Some(&key), Setting::Range, &moved));
+    }
+
+    /// Collect the settings a batch of messages listed, with the id of the
+    /// entry each list marked live.
+    fn listed(rx: &mpsc::Receiver<DmmMessage>) -> Vec<(Setting, Option<u16>)> {
+        rx.try_iter()
+            .filter_map(|msg| match msg {
+                DmmMessage::Choices(setting, choices) => {
+                    Some((setting, choices.iter().find(|c| c.current).map(|c| c.id)))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The first reading lists both settings; an unchanged one lists nothing;
+    /// a rung change lists the ranges again, with the new rung marked.
+    #[test]
+    fn a_rung_change_sends_a_fresh_range_list() {
+        let mut dmm = dmm_lib::mock::open_mock_mode(dmm_lib::mock::MockMode::DcV).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let mut keys: ListedKeys = Default::default();
+
+        let m = dmm.request_measurement().unwrap();
+        send_stale_choices(&dmm, &m, &mut keys, &tx);
+        // The mock's DC V position is in no mode group, so its mode list is
+        // empty and marks nothing; its range list is the ladder, on `Auto`.
+        assert_eq!(
+            listed(&rx),
+            vec![(Setting::Mode, None), (Setting::Range, Some(0))],
+            "the first reading lists both settings"
+        );
+
+        send_stale_choices(&dmm, &m, &mut keys, &tx);
+        assert!(listed(&rx).is_empty(), "an unchanged reading lists nothing");
+
+        dmm.select(Setting::Range, 2).unwrap();
+        let m = dmm.request_measurement().unwrap();
+        send_stale_choices(&dmm, &m, &mut keys, &tx);
+        assert_eq!(listed(&rx), vec![(Setting::Range, Some(2))]);
+    }
+
+    /// A successful switch re-lists that setting alone, even where the
+    /// reading it is keyed on has not moved — which entry is live has.
+    #[test]
+    fn a_successful_select_forces_that_settings_re_list() {
+        let mut dmm = dmm_lib::mock::open_mock_mode(dmm_lib::mock::MockMode::DcV).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let mut keys: ListedKeys = Default::default();
+        let m = dmm.request_measurement().unwrap();
+        send_stale_choices(&dmm, &m, &mut keys, &tx);
+        let _ = listed(&rx);
+
+        invalidate(&mut keys, Setting::Range);
+        send_stale_choices(&dmm, &m, &mut keys, &tx);
+        assert_eq!(listed(&rx), vec![(Setting::Range, Some(0))]);
+    }
+
+    /// A setting the thread does not list must not disturb the keys of the
+    /// ones it does.
+    #[test]
+    fn invalidating_an_unlisted_setting_changes_nothing() {
+        let m = ranged(2, true);
+        let mut keys: ListedKeys = [
+            Some(ChoiceKey::of(Setting::Mode, &m)),
+            Some(ChoiceKey::of(Setting::Range, &m)),
+        ];
+        invalidate(&mut keys, Setting::Hold);
+        assert!(keys.iter().all(Option::is_some));
     }
 
     /// A paused thread with nothing to do returns to the caller so queued

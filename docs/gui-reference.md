@@ -40,7 +40,8 @@ choices: **Auto (cycle)** (default) or a specific mode (dcv, acv, ohm,
 cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff,
 temp-diff-rev). Selecting a specific mode pins the mock to that
 measurement type indefinitely; a pick in the reading's mode dropdown
-re-pins it.
+re-pins it (a range pick does not — the mock stays in the scenario it
+is pinned to).
 Remote control buttons (HOLD, REL,
 RANGE, etc.) respond to toggle flags. The SELECT button advances to
 the next mode regardless of the auto-cycle setting.
@@ -81,10 +82,14 @@ success/failure) and expire after 4 seconds.
   to a single summary line. Single-display meters show nothing extra.
 - Mode and range label below in smaller text
 - On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
-  VC-890, and the mock in AC V and temperature), the mode label is a dropdown (`V AC Hz ▾`) of the modes
-  the current dial position allows, the live one marked `●`. Picking one
-  switches the meter; a refused switch shows a toast. Dial positions with a
-  single mode, and other meters, keep the plain label.
+  VC-890, and the mock), the mode and range labels are dropdowns (`V AC Hz ▾`,
+  `22V ▾`) of what the meter offers from where it sits: the mode list holds the
+  modes the current dial position allows, the range list `Auto` plus the rungs
+  of the current mode's ladder. The live entry is marked `●` — `Auto` while the
+  meter is auto-ranging, the live rung otherwise — and the closed label always
+  shows what the meter reports. Picking an entry switches the meter; a refused
+  switch shows a toast. Dial positions with a single mode, modes with a fixed
+  range, and other meters keep the plain label.
 - Active flags shown as colored badges:
   - **AUTO** — auto-range active
   - **HOLD** — display frozen on meter
@@ -105,7 +110,7 @@ A row of buttons shown when connected and receiving data (visible in the
 |---|---|
 | **HOLD** | Toggle hold mode |
 | **REL** | Toggle relative mode |
-| **RANGE** | Cycle manual range |
+| **RANGE** | Press RANGE on the meter: one step into or through the manual range. To jump to a rung, use the range dropdown under the reading. |
 | **AUTO** | Return to auto-range |
 | **MIN/MAX** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. |
 | **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. |
@@ -513,7 +518,7 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
 - Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the **Customize colors** disclosure header, the graph minimap, the recording-panel resize divider, and the left side-panel resize handle.
 - Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the 2D saturation/value square and the 1D hue gradient also accept arrow keys (2 % step, horizontal for saturation/hue, vertical for value).
-- The mode dropdown under the reading opens on Enter or Space with the live mode focused; Up/Down move, Enter picks, Esc or Tab closes.
+- The mode and range dropdowns under the reading open on Enter or Space with the live entry focused; Up/Down move, Enter picks, Esc or Tab closes. Tab reaches the mode dropdown first, then the range one.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
 - The `?` keyboard-shortcut help overlay traps focus inside while open and restores focus to the `?` button when closed (Esc or Ctrl+W). The version label opens a separate **What's New** OS window — that window has its own focus management, but closing it restores focus to the version label in the main window.
 
