@@ -57,6 +57,10 @@ pub(crate) struct CaptureReport {
     /// The gate steps that did not confirm, which is where to start reading.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub gate_failures: Vec<String>,
+    /// Whether the run walked the settings itself after each mode step, so a
+    /// report with no sub-steps says why it has none.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub drive: Option<crate::drive::Drive>,
     pub steps: Vec<StepResult>,
 }
 
@@ -482,6 +486,12 @@ impl Trust {
         }
     }
 
+    /// Whether the run may drive the meter's settings itself: only once the
+    /// gate has shown that mode, range and flags read back correctly.
+    fn drives(&self) -> bool {
+        self.tier == Tier::Trusted
+    }
+
     /// Whether the step is confirmed at the step itself. Gate steps always
     /// are — the rest of the run's confirmations rest on them.
     fn confirm_inline(&self, step: &CaptureStep) -> bool {
@@ -542,6 +552,7 @@ fn run_protocol_capture(
     output_path: &str,
     input: &Input,
     trust: &mut Trust,
+    driver: &mut crate::drive::Driver,
 ) -> Result<ProtocolPass, Box<dyn std::error::Error>> {
     // Convert protocol steps to CLI steps
     let steps: Vec<CaptureStep> = protocol_steps.iter().map(CaptureStep::from).collect();
@@ -571,6 +582,17 @@ fn run_protocol_capture(
             to_review.push(step.id.to_string());
         }
         trust.update(report);
+        // After the gate, and only for a step the operator set by hand: a
+        // command step's own flag is what the sweep would be undoing. A step
+        // the report already holds captures nothing, so a resumed run does
+        // not sweep it — the dial is no longer where its sub-steps assume.
+        if trust.drives()
+            && !step.gate
+            && step.command.is_none()
+            && let Some(last) = &outcome.last
+        {
+            crate::drive::sweep_step(dmm, recorder, step, last, driver, report, output_path)?;
+        }
         prev.last = outcome.last;
         // From the report, so a resumed run gets its baseline from the steps
         // it skipped as already captured. A step that captured nothing leaves
@@ -806,7 +828,7 @@ impl ErrorLog {
         }
     }
 
-    fn into_diagnostics(self) -> Vec<String> {
+    pub(crate) fn into_diagnostics(self) -> Vec<String> {
         self.entries
             .into_iter()
             .map(|(text, count)| {
@@ -867,7 +889,7 @@ pub(crate) fn upsert_step(report: &mut CaptureReport, result: StepResult) {
 ///
 /// The newest are kept: a step spends its wait watching the meter, and the
 /// frames worth reading are the sampled ones at the end of it.
-fn frames_for_step(
+pub(crate) fn frames_for_step(
     events: &[WireEvent],
     step_id: &str,
     diagnostics: &mut Vec<String>,
@@ -890,7 +912,11 @@ fn frames_for_step(
 
 /// Whether the step is worth a maintainer's attention: something didn't
 /// decode, or fewer readings arrived than were asked for.
-fn needs_attention(samples: &[SampleData], requested: usize, diagnostics: &[String]) -> bool {
+pub(crate) fn needs_attention(
+    samples: &[SampleData],
+    requested: usize,
+    diagnostics: &[String],
+) -> bool {
     !diagnostics.is_empty()
         || samples.len() < requested
         || samples.iter().any(|s| s.mode.starts_with("Unknown("))
@@ -2903,11 +2929,13 @@ fn run_freeform_captures(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn cmd_capture(
     output_override: Option<String>,
     filter: Option<Vec<String>>,
     unverified_only: bool,
     sniff: bool,
+    no_drive: bool,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
@@ -2952,6 +2980,7 @@ pub(crate) fn cmd_capture(
     let cli_steps: Vec<CaptureStep> = protocol_steps.iter().map(CaptureStep::from).collect();
     let mut trust = Trust::new(sniff, supported, &cli_steps);
     report.tier = Some(trust.tier);
+    let mut driver = crate::drive::Driver::new(!no_drive);
     let pass = run_protocol_capture(
         &mut dmm,
         &recorder,
@@ -2962,7 +2991,9 @@ pub(crate) fn cmd_capture(
         &output_path,
         &input,
         &mut trust,
+        &mut driver,
     )?;
+    report.drive = Some(driver.state());
 
     run_batch_review(&mut report, &pass.to_review, &output_path, &input)?;
 

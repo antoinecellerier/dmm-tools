@@ -551,15 +551,15 @@ dmm-cli capture [OPTIONS]
 | `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
 | `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
 | `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one. |
+| `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step. |
 | `--list-steps` | | List the selected device's step IDs and exit. |
 | `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use (printed to stdout). |
 
 The steps come from the selected device's protocol, so `--list-steps` shows
 exactly what will run for that meter — pass `--device` to see another one's.
-Steps cover the measurement modes and the flag and button commands. Note that
-the per-range tables are still thinly covered: each mode step captures
-whatever range auto-ranging happened to pick, so ranges the meter doesn't
-select on its own go unverified.
+Steps cover the measurement modes and the flag and button commands. Ranges the
+meter can be told to select are all captured; only receive-only cables leave
+them to auto-ranging.
 
 Each listed step is marked `✓` (confirmed on real hardware) or `·`, and
 `--unverified` runs just the `·` ones; with `--steps` the two narrow together.
@@ -592,6 +592,18 @@ confirmed` and later steps capture without stopping; one you correct or skip
 records `core_semantics: failed` with the IDs in `gate_failures`, and every
 later step keeps asking. A verified family starts out trusted. `tier` in the
 report says where the run ended (`sniff`, `gate` or `trusted`).
+
+On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock) every
+mode step past the gate is followed, without a prompt, by a walk of hold, REL, MIN/MAX,
+peak and every range, filed as `<step>/<setting>:<label>` sub-steps
+(`dcv/range:22V`, `dcv/hold:on`); the meter is left back on auto range with its
+flags off. A command the meter refuses is filed as an error sub-step — a
+refusal of a function the meter accepted elsewhere in the run doesn't count,
+the mode simply hasn't got it — and three refusals stop the sweeps for the
+rest of the run — `drive` in the report reads
+`on`, `off` or `disabled`. Sub-steps are protocol evidence rather than screen
+checks, so they are never confirmed by hand. `--no-drive` opts out, for a
+receive-only cable or a cautious reporter.
 
 Readings captured without a stop are listed once at the end, numbered. Enter
 accepts them all; otherwise give the numbers that did not match and type what

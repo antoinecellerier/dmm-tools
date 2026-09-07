@@ -1,4 +1,5 @@
 mod capture;
+mod drive;
 mod format;
 mod recording;
 mod watch;
@@ -158,6 +159,9 @@ Install completions for your shell:
         /// Trust nothing the parser says: detect steps by raw byte changes and confirm each one
         #[arg(long)]
         sniff: bool,
+        /// Don't let the tool set ranges and flags itself after each mode step
+        #[arg(long)]
+        no_drive: bool,
         /// List all available step IDs and exit
         #[arg(long)]
         list_steps: bool,
@@ -406,7 +410,7 @@ fn main() {
             choice,
             mock_mode,
         } if !device.requires_hardware => cmd_set(device, None, setting, choice, mock_mode),
-        Cmd::Info | Cmd::Debug { .. } | Cmd::Capture { .. } if !device.requires_hardware => {
+        Cmd::Info | Cmd::Debug { .. } if !device.requires_hardware => {
             eprintln!(
                 "{} This command requires real hardware (not supported with --device {}).",
                 style("Error:").red().bold(),
@@ -452,6 +456,7 @@ fn main() {
             steps,
             unverified,
             sniff,
+            no_drive,
             list_steps,
             format,
         } => {
@@ -462,7 +467,9 @@ fn main() {
                 Ok(())
             } else {
                 open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
-                    capture::cmd_capture(output, steps, unverified, sniff, dmm, recorder, device)
+                    capture::cmd_capture(
+                        output, steps, unverified, sniff, no_drive, dmm, recorder, device,
+                    )
                 })
             }
         }
@@ -603,8 +610,18 @@ fn open_recording_with_help(
     device: &'static SelectableDevice,
     adapter: Option<&str>,
 ) -> Result<(BoxedDmm, recording::SharedRecorder), Box<dyn std::error::Error>> {
-    let (transport, protocol) = dmm_lib::open_transport_by_id_auto(device.id, adapter)
-        .map_err(|e| open_error_help(device, e))?;
+    // The mock has no USB link to open, and none to record either — it goes
+    // through the same recorder so `capture` has one code path.
+    let (transport, protocol): (Box<dyn dmm_lib::transport::Transport>, _) =
+        if device.requires_hardware {
+            dmm_lib::open_transport_by_id_auto(device.id, adapter)
+                .map_err(|e| open_error_help(device, e))?
+        } else {
+            (
+                Box::new(dmm_lib::transport::NullTransport),
+                (device.new_protocol)(),
+            )
+        };
     let (transport, recorder) = recording::RecordingTransport::new(transport);
     let dmm = dmm_lib::Dmm::new(
         Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,

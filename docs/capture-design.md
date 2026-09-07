@@ -88,32 +88,52 @@ errored: `core_semantics: failed` with the step ids under `gate_failures`, and t
 at tier 1 — inline confirmation, no remote driving. A resumed run rules on what the loaded
 report already holds. The tier reached is recorded as `tier`.
 
-Remote driving is D, which has not shipped; tier 2 buys the deferred review today.
+Remote driving (D) runs only at tier 2, which also buys the deferred review.
 
 `--sniff` is the tier for a parser nobody trusts yet: `expect` is ignored, so every step
 advances on the payload bytes changing, and a passed gate does not promote the run.
 
-## D. Autonomous sub-steps through `select` (planned)
+## D. Autonomous sub-steps through `select`
 
-For families implementing `choices`/`select` (UT61+, VC-880, VC-890, UT181A), each mode step
-is followed, without a prompt, by a walk of Hold on/off, Rel on/off, every MinMax choice,
-every Peak choice and the Range ladder, capturing K frames at each and verifying the meter
-reports the target before moving on. Sub-steps are filed as `<mode>/hold`,
-`<mode>/range:60V` and so on. This replaces the manual `hold`/`hold_off`/… steps and turns
-"one range per mode" into "every range per mode" at no coordination cost.
+For families implementing `choices`/`select` (UT61+/UT161, UT181A, VC-880,
+VC-890, mock), each mode step is followed, without a prompt, by a walk of Hold
+on/off, Rel on/off, every MinMax choice, every Peak choice and the Range
+ladder, capturing the step's own sample count at each and verifying the meter
+reports the target before moving on. Sub-steps are filed as `<mode>/hold:on`,
+`<mode>/range:60V` and so on, which turns "one range per mode" into "every
+range per mode" at no coordination cost. Mode is never swept: the dial is the
+operator's. Sub-steps are protocol evidence, not screen checks, so they are
+neither confirmed inline nor listed in F's review, and they do not enter the
+coverage arithmetic — they are not steps the device declares.
 
 These paths are hardware-unverified on three of the four families, so:
 
-- Only at tier 2, because driving relies on reading mode, range and flags back correctly.
-- Fail-soft: `CommandRejected` or "did nothing" records the sub-step's `error` and moves on;
-  after a bounded number of failures the sweep disables itself for the rest of the run and
-  says so. A meter is never spammed with a command the protocol may have wrong.
-- The baseline (auto range, flags off) is restored with a read-back before the next mode
-  step; a failed restore is reported so the user can press the button.
-- Range sweeps go through `choices(Range)` only, which cycles to target with read-back and
-  stops when the read-back stops moving. No blind repeated presses.
+- Only at tier 2 and only after a non-gate step, because driving relies on
+  reading mode, range and flags back correctly.
+- Fail-soft: any refusal — `CommandRejected`, `UnsupportedCommand`, a timeout —
+  records the sub-step with `status: error` and its `error`, and is never
+  retried. A setting the meter has already taken a value on earlier in the run
+  is refused because the current mode has no such function — MIN/MAX in
+  continuity — so that refusal is filed but does not count: only an unproven
+  setting's does. One refusal also answers for the setting's remaining choices
+  in that step, which are not asked for. After `DRIVE_FAILURE_BUDGET` = 3
+  counted failures the sweep says `remote control unreliable on this meter`
+  once and disables itself for the rest of the run. At most
+  `MAX_DRIVE_SUBSTEPS_PER_STEP` = 24 sub-steps are filed per mode step.
+- The baseline (auto range, flags off) is restored with a read-back before the
+  next mode step, even once the budget is spent — a meter left latched in HOLD
+  is worse than one more command. A failed restore prints
+  `<setting> could not be reset — press the meter's button` and counts a
+  failure.
+- Range sweeps go through `choices(Range)` only, which cycles to target with
+  read-back and stops when the read-back stops moving. No blind repeated
+  presses.
+- REL is skipped while the reading is OL: the meter is entitled to refuse it
+  there, and the refusal would spend the failure budget.
 
 `--no-drive` opts out, for receive-only cables (CH9325) or a cautious reporter.
+The report records `drive: on | off | disabled` — `off` for `--no-drive` and
+for a family that offered no choice at all, `disabled` when the budget ran out.
 
 ## E. Per-step verification status
 

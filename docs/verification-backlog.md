@@ -196,6 +196,13 @@ real hardware**. Every aspect needs end-to-end verification.
   `set hold on` / `set hold off` and `set rel on` / `set rel off` on two or
   three dial positions. Run them under `RUST_LOG=dmm_lib=debug` and paste
   the `cycle:` lines
+- `dmm-cli --device vc890 capture` exercises all of the above on its own
+  since 2026-09-07: once the gate steps pass, every mode step is followed by
+  `set range`/`hold`/`rel`/`minmax` through each value, filed as
+  `<mode>/<setting>:<label>` sub-steps carrying what the meter read back.
+  Report any sub-step with `status: error` and the
+  `remote control unreliable on this meter` line if it appears — those are
+  the commands this meter refused
 
 **Voltcraft VC-880 / VC650BT**:
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
@@ -271,6 +278,13 @@ real hardware**. Every aspect needs end-to-end verification.
   read back. Then `set hold on` / `set hold off` and `set rel on` /
   `set rel off` on two or three dial positions. Run them under
   `RUST_LOG=dmm_lib=debug` and paste the `cycle:` lines
+- `dmm-cli --device vc880 capture` exercises all of the above on its own
+  since 2026-09-07: once the gate steps pass, every mode step is followed by
+  `set range`/`hold`/`rel`/`minmax` through each value, filed as
+  `<mode>/<setting>:<label>` sub-steps carrying what the meter read back.
+  Report any sub-step with `status: error` and the
+  `remote control unreliable on this meter` line if it appears — those are
+  the commands this meter refused
 
 **UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
 - **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
@@ -562,6 +576,13 @@ own software sends, not hardware confirmation.
   range byte itself is wanted. `dmm-cli --device ut181a command range`
   still steps the ladder a rung at a time from the last range the meter
   reported, so it is the fallback if a named switch is refused
+- `dmm-cli --device ut181a capture` exercises SET_RANGE and the flags on
+  its own since 2026-09-07: once the gate steps pass, every mode step is
+  followed by `set range`/`hold`/`rel`/`minmax` through each value, filed
+  as `<mode>/<setting>:<label>` sub-steps carrying what the meter read
+  back. Report any sub-step with `status: error` and the
+  `remote control unreliable on this meter` line if it appears — those are
+  the commands this meter refused
 - Duty cycle (0x7211) and pulse width (0x7311) range labels — the vendor
   form's range combo holds four items for each (spec §7.1: 60 / 600 / 6000 /
   60000) but no source says what the LCD calls those rungs, so `get range`
