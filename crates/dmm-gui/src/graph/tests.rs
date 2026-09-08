@@ -782,10 +782,10 @@ fn apply_bbox_zoom_sets_state() {
     assert!(g.y_user_set);
     assert!((g.view_center - 15.0).abs() < 1e-9);
     assert!((g.time_window_secs - 10.0).abs() < 1e-9);
-    assert!((g.y_fixed_min - 2.0).abs() < 1e-9);
-    assert!((g.y_fixed_max - 5.0).abs() < 1e-9);
-    assert_eq!(g.y_min_text, "2.0000");
-    assert_eq!(g.y_max_text, "5.0000");
+    assert!((g.y_min.value() - 2.0).abs() < 1e-9);
+    assert!((g.y_max.value() - 5.0).abs() < 1e-9);
+    assert_eq!(g.y_min.text(), "2.0000");
+    assert_eq!(g.y_max.text(), "5.0000");
 }
 
 #[test]

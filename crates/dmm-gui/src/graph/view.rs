@@ -197,7 +197,7 @@ impl Graph {
         with_overlays: bool,
     ) -> Option<(f64, f64)> {
         if self.y_axis_fixed {
-            return Some((self.y_fixed_min, self.y_fixed_max));
+            return Some((self.y_min.value(), self.y_max.value()));
         }
         self.y_min_max_padded(x_min, x_max, with_overlays)
     }
@@ -271,10 +271,8 @@ impl Graph {
         self.view_center = view_center;
         self.time_window_secs = time_window.max(MIN_TIME_WINDOW_SECS);
         self.y_axis_fixed = true;
-        self.y_fixed_min = y_min;
-        self.y_fixed_max = y_max;
-        self.y_min_text = format!("{y_min:.4}");
-        self.y_max_text = format!("{y_max:.4}");
+        self.y_min.set(y_min);
+        self.y_max.set(y_max);
         self.y_user_set = true;
     }
 

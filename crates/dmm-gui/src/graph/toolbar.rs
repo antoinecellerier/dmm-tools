@@ -193,17 +193,15 @@ impl Graph {
                 // Snapshot with the overlays included, so pinning the axis
                 // doesn't jump the view the moment Y:Fixed is pressed.
                 if let Some((y_lo, y_hi)) = self.y_range_for_view_auto(view_min, view_max, true) {
-                    self.y_fixed_min = y_lo;
-                    self.y_fixed_max = y_hi;
-                    self.y_min_text = format!("{y_lo:.4}");
-                    self.y_max_text = format!("{y_hi:.4}");
+                    self.y_min.set(y_lo);
+                    self.y_max.set(y_hi);
                 }
             }
             if self.y_axis_fixed {
                 let field_width = 50.0;
                 let changed_min = text_field(
                     ui,
-                    &mut self.y_min_text,
+                    self.y_min.text_mut(),
                     field_width,
                     "Y axis minimum",
                     "Lower bound of the fixed Y axis",
@@ -215,17 +213,15 @@ impl Graph {
                 );
                 let changed_max = text_field(
                     ui,
-                    &mut self.y_max_text,
+                    self.y_max.text_mut(),
                     field_width,
                     "Y axis maximum",
                     "Upper bound of the fixed Y axis",
                 );
-                if changed_min && let Ok(v) = self.y_min_text.parse::<f64>() {
-                    self.y_fixed_min = v;
+                if changed_min && self.y_min.parse() {
                     self.y_user_set = true;
                 }
-                if changed_max && let Ok(v) = self.y_max_text.parse::<f64>() {
-                    self.y_fixed_max = v;
+                if changed_max && self.y_max.parse() {
                     self.y_user_set = true;
                 }
             }
@@ -272,16 +268,15 @@ impl Graph {
             if self.show_envelope {
                 let changed = text_field(
                     ui,
-                    &mut self.envelope_window_text,
+                    self.envelope_window.text_mut(),
                     30.0,
                     "Min/Max window, seconds",
                     "Window size (seconds) used to compute the Min/Max envelope",
                 );
-                if changed
-                    && let Ok(v) = self.envelope_window_text.parse::<f64>()
-                    && v > 0.0
-                {
-                    self.envelope_window_secs = v;
+                if changed {
+                    // A zero or negative window would bucket every sample
+                    // together, so it is left as a draft.
+                    self.envelope_window.parse_if(|v| v > 0.0);
                 }
                 ui.label(
                     egui::RichText::new("s")
@@ -298,17 +293,13 @@ impl Graph {
             if self.show_ref_line {
                 let changed = text_field(
                     ui,
-                    &mut self.ref_line_text,
+                    self.ref_lines.text_mut(),
                     80.0,
                     "Reference values",
                     "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
                 );
                 if changed {
-                    self.ref_line_values = self
-                        .ref_line_text
-                        .split([',', ';', ' '])
-                        .filter_map(|s| s.trim().parse::<f64>().ok())
-                        .collect();
+                    self.ref_lines.parse();
                 }
                 toggle_chip(
                     ui,

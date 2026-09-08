@@ -3,11 +3,13 @@
 //!
 //! The concerns live in submodules — [`view`] (what slice is shown and the
 //! gestures that move it), [`toolbar`], [`render`] (the main plot),
-//! [`minimap`], [`analysis`] (visible-slice statistics) and [`time`]
+//! [`minimap`], [`analysis`] (visible-slice statistics), [`field`] (the
+//! toolbar's text-edit buffers and the values they parse to) and [`time`]
 //! (axis label formatting) — all of which add methods to the one [`Graph`]
 //! declared here, so the type's public API is unchanged by the split.
 
 mod analysis;
+mod field;
 mod minimap;
 mod render;
 mod time;
@@ -22,6 +24,7 @@ use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
 use crate::theme::ThemeColors;
+use field::{NumberField, NumberListField};
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 
 /// Maximum number of points to keep in the history buffer.
@@ -188,14 +191,9 @@ pub struct Graph {
     pending_break_since: Option<Instant>,
     /// When true, Y axis uses fixed min/max instead of auto-scaling.
     pub y_axis_fixed: bool,
-    /// Fixed Y-axis minimum (editable text buffer for UI).
-    y_min_text: String,
-    /// Fixed Y-axis maximum (editable text buffer for UI).
-    y_max_text: String,
-    /// Parsed fixed Y-axis min.
-    y_fixed_min: f64,
-    /// Parsed fixed Y-axis max.
-    y_fixed_max: f64,
+    /// Fixed Y-axis bounds, as typed and as parsed.
+    y_min: NumberField,
+    y_max: NumberField,
     /// Whether the user has manually set Y-axis values this session.
     y_user_set: bool,
     /// Show mean line overlay.
@@ -203,14 +201,13 @@ pub struct Graph {
     /// Show min/max envelope band.
     pub show_envelope: bool,
     /// Envelope bucket width in seconds (user-configurable).
-    envelope_window_text: String,
-    envelope_window_secs: f64,
+    envelope_window: NumberField,
     /// Reference lines: show horizontal lines at these values.
     pub show_ref_line: bool,
     /// Show trigger crossing markers on reference lines.
     pub show_crossings: bool,
-    ref_line_text: String,
-    ref_line_values: Vec<f64>,
+    /// Values the reference lines are drawn at, as typed and as parsed.
+    ref_lines: NumberListField,
     /// Measurement cursors: two vertical lines with ΔT/ΔV readout.
     pub cursors_active: bool,
     /// Cursor positions in seconds from origin. None = not yet placed.
@@ -267,19 +264,15 @@ impl Graph {
             pending_data_loss: false,
             pending_break_since: None,
             y_axis_fixed: false,
-            y_min_text: "-1".to_string(),
-            y_max_text: "1".to_string(),
-            y_fixed_min: -1.0,
-            y_fixed_max: 1.0,
+            y_min: NumberField::new("-1", -1.0),
+            y_max: NumberField::new("1", 1.0),
             y_user_set: false,
             show_mean: false,
             show_envelope: false,
-            envelope_window_text: "1".to_string(),
-            envelope_window_secs: 1.0,
+            envelope_window: NumberField::new("1", 1.0),
             show_ref_line: false,
             show_crossings: true,
-            ref_line_text: String::new(),
-            ref_line_values: Vec::new(),
+            ref_lines: NumberListField::default(),
             cursors_active: false,
             cursor_a: None,
             cursor_b: None,

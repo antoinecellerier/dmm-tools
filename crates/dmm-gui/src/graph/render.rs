@@ -403,13 +403,13 @@ impl Graph {
 
         let show_envelope = self.show_envelope;
         let (env_min, env_max) = if show_envelope {
-            self.build_envelope(view_min, view_max, self.envelope_window_secs)
+            self.build_envelope(view_min, view_max, self.envelope_window.value())
         } else {
             (Vec::new(), Vec::new())
         };
         let show_mean = self.show_mean;
         let show_ref = self.show_ref_line;
-        let ref_values = self.ref_line_values.clone();
+        let ref_values = self.ref_lines.values().to_vec();
         let show_crossings = self.show_crossings;
         let crossings = if show_ref && show_crossings && !ref_values.is_empty() {
             self.find_crossings(&ref_values, view_min, view_max)
