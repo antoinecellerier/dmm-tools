@@ -611,4 +611,43 @@ mod tests {
             "every transport must stay reachable as a fallback"
         );
     }
+
+    /// Pull the hex value out of `ATTRS{idVendor}=="1a86"` in a udev rule.
+    fn rule_attr(line: &str, name: &str) -> Option<u16> {
+        let value = line.split_once(&format!("ATTRS{{{name}}}==\""))?.1;
+        u16::from_str_radix(value.split_once('"')?.0, 16).ok()
+    }
+
+    /// The shipped udev rules and the transports must name the same devices.
+    /// A missing rule leaves a plugged-in meter root-only on Linux, and a stale
+    /// one hands out access to hardware nothing here opens any more.
+    #[test]
+    fn udev_rules_cover_exactly_the_known_transports() {
+        // The crate is only ever tested from the repository, where the rules
+        // file sits two levels up from crates/dmm-lib.
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../udev/70-dmm-tools.rules");
+        let rules = std::fs::read_to_string(path).expect("read udev/70-dmm-tools.rules");
+
+        let mut in_rules: Vec<String> = rules
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| {
+                let vid = rule_attr(line, "idVendor")?;
+                let pid = rule_attr(line, "idProduct")?;
+                Some(format!("{vid:04x}:{pid:04x}"))
+            })
+            .collect();
+        let mut in_code: Vec<String> = KNOWN_TRANSPORTS
+            .iter()
+            .map(|kt| format!("{:04x}:{:04x}", kt.vid, kt.pid))
+            .collect();
+
+        in_rules.sort_unstable();
+        in_code.sort_unstable();
+        assert_eq!(
+            in_rules, in_code,
+            "udev/70-dmm-tools.rules and KNOWN_TRANSPORTS disagree on vid:pid"
+        );
+    }
 }
