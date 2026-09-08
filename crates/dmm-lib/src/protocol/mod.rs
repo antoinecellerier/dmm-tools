@@ -531,6 +531,28 @@ mod tests {
             .collect()
     }
 
+    /// A family declares the commands it takes in its profile and accepts
+    /// them in `send_command`; the two are edited apart, and a name in the
+    /// profile that the match does not answer only shows up as a refusal on
+    /// real hardware.
+    ///
+    /// Nothing answers the transport, so a command that reaches the wire
+    /// fails as a timeout — only the name lookup is under test.
+    #[test]
+    fn every_advertised_command_is_accepted() {
+        let transport = crate::transport::mock::MockTransport::new(vec![]);
+        for device in registry::DEVICES {
+            let mut proto = (device.new_protocol)();
+            let commands = proto.profile().supported_commands;
+            for &command in commands {
+                if let Err(Error::UnsupportedCommand(msg)) = proto.send_command(&transport, command)
+                {
+                    panic!("{} advertises {command:?} but refused it: {msg}", device.id);
+                }
+            }
+        }
+    }
+
     /// A gate step without an expectation files samples nobody can judge.
     #[test]
     fn every_gate_step_has_an_expect() {
