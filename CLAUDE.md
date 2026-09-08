@@ -13,7 +13,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 
 - `cargo build --workspace`
 - `cargo test --workspace`
-- `cargo clippy --workspace -- -D warnings` (must pass clean)
+- `cargo clippy --workspace --all-targets -- -D warnings` (must pass clean)
 - `cargo fmt --check`
 
 A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite on every commit. Fix failures; never bypass with `--no-verify`.
@@ -43,7 +43,7 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`), `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`) and `.claude/rules/changelog.md` (entry format, sectioning — `CHANGELOG.md`).
 
 ### Code quality
-- All code must pass `cargo clippy --workspace -- -D warnings` and `cargo fmt --check`.
+- All code must pass `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check`.
 - Write tests alongside non-trivial logic, especially protocol parsing and byte manipulation.
 - `unwrap()` only in tests and examples; return `Result` elsewhere.
 - Default new items to `pub(crate)`; widen to `pub` only for a concrete external consumer.

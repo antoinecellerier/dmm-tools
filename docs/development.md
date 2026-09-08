@@ -21,7 +21,7 @@ All tests use `MockTransport` and run without hardware connected.
 ## Linting
 
 ```sh
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 ```
 
@@ -200,7 +200,7 @@ these guidelines. Key points the assistant should follow:
 - **Never fabricate specification data** — mark unknown values as missing
 - **Physical device interaction requires user confirmation** — the assistant
   should describe the required setup and wait, not drive through steps
-- Run `cargo clippy --workspace -- -D warnings` and `cargo test --workspace`
+- Run `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`
   before committing
 
 The `docs/research/` directories contain per-family reverse engineering notes

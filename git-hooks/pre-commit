@@ -6,7 +6,7 @@ set -e
 echo "pre-commit: checking formatting..."
 cargo fmt --check
 echo "pre-commit: running clippy..."
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 echo "pre-commit: running tests..."
 cargo test --workspace
 echo "pre-commit: all checks passed."

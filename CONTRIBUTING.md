@@ -78,7 +78,7 @@ Even "it works" is valuable. If something doesn't work, the output of `RUST_LOG=
 ## Code changes
 
 1. Fork and create a feature branch
-2. Make sure `cargo fmt --check`, `cargo clippy --workspace -- -D warnings`, and `cargo test --workspace` pass (the pre-commit hook runs all three — see [development guide](docs/development.md))
+2. Make sure `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace` pass (the pre-commit hook runs all three — see [development guide](docs/development.md))
 3. Include tests for new functionality
 4. For protocol changes: verify against a real device (`RUST_LOG=dmm_lib=trace dmm-cli debug`)
 5. Open a pull request with a description of what and why
