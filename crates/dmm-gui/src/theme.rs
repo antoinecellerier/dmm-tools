@@ -122,6 +122,31 @@ impl PaletteField {
         }
     }
 
+    /// The settings-panel group this colour is listed under.
+    pub(crate) fn group(self) -> PaletteGroup {
+        match self {
+            Self::Background | Self::Text | Self::Button => PaletteGroup::Ui,
+            Self::GraphLine
+            | Self::GraphGap
+            | Self::GraphMean
+            | Self::GraphRef
+            | Self::GraphCrossing
+            | Self::GraphCursor
+            | Self::GraphEnvelope
+            | Self::GraphOverlay1
+            | Self::GraphOverlay2
+            | Self::GraphOverlay3
+            | Self::PlotBackground
+            | Self::GraphCrosshair => PaletteGroup::Graph,
+            Self::StatusOk
+            | Self::StatusWarning
+            | Self::StatusError
+            | Self::StatusInactive
+            | Self::Accent => PaletteGroup::Status,
+            Self::MinimapViewport => PaletteGroup::Minimap,
+        }
+    }
+
     /// The override slot for this field.
     ///
     /// Pairing the field with its slot here means a call site can't ask for
@@ -150,6 +175,48 @@ impl PaletteField {
             Self::Accent => &mut o.accent,
             Self::MinimapViewport => &mut o.minimap_viewport,
         }
+    }
+}
+
+/// What a group of palette colours affects, as the settings panel heads them.
+///
+/// The panel used to cut `PaletteField::ALL` into groups by index
+/// (`ALL[3..15]`), so a colour inserted anywhere but the end of a group
+/// silently moved into the neighbouring one. Declaring the group on the field
+/// puts a new colour under the right heading by construction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaletteGroup {
+    Ui,
+    Graph,
+    Status,
+    Minimap,
+}
+
+impl PaletteGroup {
+    /// Every group, in settings-panel order.
+    pub(crate) const ALL: &'static [PaletteGroup] = &[
+        PaletteGroup::Ui,
+        PaletteGroup::Graph,
+        PaletteGroup::Status,
+        PaletteGroup::Minimap,
+    ];
+
+    /// Heading shown before the group's swatches.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Ui => "UI:",
+            Self::Graph => "Graph:",
+            Self::Status => "Status:",
+            Self::Minimap => "Minimap:",
+        }
+    }
+
+    /// This group's fields, in `PaletteField::ALL` order.
+    pub(crate) fn fields(self) -> impl Iterator<Item = PaletteField> {
+        PaletteField::ALL
+            .iter()
+            .copied()
+            .filter(move |f| f.group() == self)
     }
 }
 
@@ -737,9 +804,26 @@ mod tests {
             assert!(!seen.contains(&f), "{f:?} listed twice");
             seen.push(f);
         }
-        // The settings panel slices ALL into four groups by index; if the
-        // count changes those slices need revisiting.
+        // Bumping this is the reminder to check the new colour landed under
+        // the heading it should — see `groups_partition_all_in_panel_order`.
         assert_eq!(seen.len(), 21);
+    }
+
+    /// The panel renders group by group, so the concatenated groups have to
+    /// reproduce ALL exactly: every field in exactly one group, and in the
+    /// order the panel used to get from its index slices.
+    #[test]
+    fn groups_partition_all_in_panel_order() {
+        let grouped: Vec<PaletteField> =
+            PaletteGroup::ALL.iter().flat_map(|g| g.fields()).collect();
+        assert_eq!(grouped, PaletteField::ALL);
+    }
+
+    /// The headings, and the order they appear in, are what the user reads.
+    #[test]
+    fn group_headings_are_in_panel_order() {
+        let headings: Vec<&str> = PaletteGroup::ALL.iter().map(|g| g.label()).collect();
+        assert_eq!(headings, ["UI:", "Graph:", "Status:", "Minimap:"]);
     }
 
     /// An override must come back from the field it was written to — the

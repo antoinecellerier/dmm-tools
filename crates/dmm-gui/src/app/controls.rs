@@ -4,7 +4,7 @@ use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
 use crate::settings::{ColorOverrides, ColorPreset, HexColor, ThemeMode};
-use crate::theme::{PaletteField, ThemeColors};
+use crate::theme::{PaletteField, PaletteGroup, ThemeColors};
 
 use super::{App, BigMeterMode};
 
@@ -498,18 +498,14 @@ impl App {
                 let overrides = self.settings.color_overrides.for_mode_mut(dark);
 
                 // Grouped by what the colour affects, in PaletteField::ALL
-                // order. Each row's label, tooltip and override slot come
-                // from the enum, so a colour can't be listed here with
-                // another's tooltip or wired to the wrong override.
-                for (heading, fields) in [
-                    ("UI:", &PaletteField::ALL[..3]),
-                    ("Graph:", &PaletteField::ALL[3..15]),
-                    ("Status:", &PaletteField::ALL[15..20]),
-                    ("Minimap:", &PaletteField::ALL[20..]),
-                ] {
+                // order. Each row's heading, label, tooltip and override slot
+                // come from the enum, so a colour can't be listed here under
+                // the wrong heading, with another's tooltip, or wired to the
+                // wrong override.
+                for &group in PaletteGroup::ALL {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(heading);
-                        for &field in fields {
+                        ui.label(group.label());
+                        for field in group.fields() {
                             changed |= color_edit(ui, field, overrides, preset, dark);
                         }
                     });
