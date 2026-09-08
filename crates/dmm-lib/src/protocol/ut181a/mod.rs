@@ -40,7 +40,7 @@ use log::debug;
 use parse::{decode_mode_word, parse_measurement};
 
 /// Protocol implementation for the UT181A.
-pub struct Ut181aProtocol {
+pub(crate) struct Ut181aProtocol {
     rx_buf: Vec<u8>,
     /// Mode word of the last measurement parsed. SET_MODE, REL and SET_RANGE
     /// are all relative to it — the meter never tells us its dial position

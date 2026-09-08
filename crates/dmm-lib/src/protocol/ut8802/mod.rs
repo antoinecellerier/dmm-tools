@@ -90,7 +90,7 @@ fn lookup_position(code: u8) -> Option<(&'static str, &'static str, &'static str
 const UT8802_COMMANDS: &[&str] = &[];
 
 /// Protocol implementation for the UT8802/UT8802N bench multimeter.
-pub struct Ut8802Protocol {
+pub(crate) struct Ut8802Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
 }

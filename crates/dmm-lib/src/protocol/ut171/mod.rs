@@ -139,7 +139,7 @@ const UT171_CMD_CONNECT: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x0
 const UT171_CMD_PAUSE: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x00, 0x0E, 0x00];
 
 /// Protocol implementation for the UT171A/B/C.
-pub struct Ut171Protocol {
+pub(crate) struct Ut171Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
 }

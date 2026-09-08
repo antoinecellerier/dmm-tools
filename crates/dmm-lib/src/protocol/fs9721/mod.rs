@@ -493,7 +493,7 @@ fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
 }
 
 /// Protocol implementation for UT803/UT804 bench multimeters.
-pub struct Fs9721Protocol {
+pub(crate) struct Fs9721Protocol {
     rx_buf: Vec<u8>,
     model: Fs9721Model,
     profile: DeviceProfile,

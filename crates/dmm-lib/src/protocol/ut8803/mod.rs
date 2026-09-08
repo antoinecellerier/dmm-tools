@@ -113,7 +113,7 @@ fn mode_is_dc(mode_byte: u8) -> bool {
 }
 
 /// Protocol implementation for the UT8803/UT8803E bench multimeter.
-pub struct Ut8803Protocol {
+pub(crate) struct Ut8803Protocol {
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
 }
