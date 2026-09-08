@@ -145,7 +145,7 @@ pub(crate) trait ResponseA11yExt {
     /// Toolbar, etc.). For `ui.scope`-shaped landmarks prefer
     /// [`UiA11yExt::landmark`] which also pins a stable id_salt; use this
     /// chainable form when you have a `Response` already (e.g. the
-    /// response returned from `Panel::show_inside`).
+    /// response returned from `Panel::show`).
     fn a11y_role(self, role: egui::accesskit::Role) -> Self;
 }
 
@@ -187,7 +187,7 @@ pub(crate) trait UiA11yExt {
     /// AT lose the landmark.
     fn landmark<R>(
         &mut self,
-        id_salt: impl std::hash::Hash,
+        id_salt: impl std::hash::Hash + std::fmt::Debug,
         role: egui::accesskit::Role,
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R>;
@@ -206,7 +206,7 @@ pub(crate) trait UiA11yExt {
 impl UiA11yExt for Ui {
     fn landmark<R>(
         &mut self,
-        id_salt: impl std::hash::Hash,
+        id_salt: impl std::hash::Hash + std::fmt::Debug,
         role: egui::accesskit::Role,
         add_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<R> {

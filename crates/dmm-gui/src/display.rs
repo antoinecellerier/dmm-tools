@@ -3,7 +3,7 @@ use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
 use dmm_lib::protocol::{Choice, Setting};
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
-    Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, Id, Key, Modifiers,
+    Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, IdSalt, Key, Modifiers,
     Popup, Rect, Response, RichText, Stroke, TextFormat, TextStyle, Ui,
 };
 use std::borrow::Cow;
@@ -553,9 +553,9 @@ fn show_choice_readout(
 
             // The id `ComboBox::from_id_salt` derives below, known up front
             // so the list's state can be read before the box is drawn. The
-            // salt is wrapped in `Id::new` the way `from_id_salt` wraps it:
-            // hashing the bare string gives a different id.
-            let button_id = ui.make_persistent_id(Id::new(readout.id_salt));
+            // salt is wrapped in `IdSalt::new` the way `from_id_salt` wraps
+            // it: hashing the bare string, or an `Id`, gives a different id.
+            let button_id = ui.make_persistent_id(IdSalt::new(readout.id_salt));
             let was_open_key = button_id.with("was_open");
             let was_open: bool = ctx.data(|d| d.get_temp(was_open_key)).unwrap_or(false);
 
@@ -600,8 +600,9 @@ fn show_choice_readout(
                         } else {
                             format!("   {}", c.label)
                         };
-                        // egui's selectable label reports itself as a plain
-                        // button, so the selected state is set by hand.
+                        // Redundant since egui 0.35 (`selectable_value`
+                        // announces its selected state itself); kept while
+                        // the plain-`Button` toggles still need the helper.
                         let entry = ui
                             .selectable_value(
                                 &mut picked,
@@ -1581,9 +1582,12 @@ mod tests {
         let mut rects = Vec::new();
         for _ in 0..3 {
             rects.clear();
-            let _ = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
+            let mut out = ctx.run_ui(eframe::egui::RawInput::default(), |ui| {
                 rects = show_aux_rows(ui, m, font_size, &tc);
             });
+            // See `run_frame`: epaint 0.36 debug-asserts that texture deltas
+            // were applied before being dropped.
+            out.textures_delta.clear();
         }
         rects
     }
@@ -1783,13 +1787,17 @@ mod tests {
     ) -> Frame {
         ctx.enable_accesskit();
         let mut picked = None;
-        let out = ctx.run_ui(
+        let mut out = ctx.run_ui(
             egui::RawInput {
                 events,
                 ..Default::default()
             },
             |ui| picked = draw(ui),
         );
+        // epaint 0.36 added a `Drop` guard on `TexturesDelta` that
+        // debug-asserts the deltas were applied. This harness renders without
+        // a painter, so discard them explicitly.
+        out.textures_delta.clear();
         let (nodes, focus) = out
             .platform_output
             .accesskit_update

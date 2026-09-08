@@ -2,7 +2,7 @@
 
 Catalogue of accessibility, focus, and modal/popup gaps observed while
 implementing the `dmm-gui` accessibility pass against
-**egui 0.34.1** + **AccessKit 0.24** + **egui_plot 0.35**. Each entry
+**egui 0.36.2** + **AccessKit 0.24** + **egui_plot 0.37**. Each entry
 captures the symptom we hit, the root cause in the egui source (with
 `file:line`), and a concrete suggested fix worth raising upstream.
 
@@ -13,7 +13,7 @@ Each section is self-contained — copy and paste it into a GitHub issue
 and add a minimal repro.
 
 All file references resolve under
-`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/egui-0.34.1/src/`
+`~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/egui-0.36.2/src/`
 unless otherwise noted.
 
 **Local wrapper layer.** The recurring workaround patterns are
@@ -57,13 +57,13 @@ a trivial carve-off to dodge design alignment. Three items split that way
 and **#6** (the `a` halves are independent doc clarifications that do *not*
 fix the underlying gap). **#14** is deliberately *not* split: its two fixes
 are mutually-exclusive alternatives, so choosing between them is itself the
-design decision and it goes to an Issue whole. Resume check for the open PR:
-`gh pr view 8130 --repo emilk/egui --json state,mergedAt`.
+design decision and it goes to an Issue whole. #8130 has since merged and
+shipped in egui 0.35, so nothing is gated on it any more.
 
 | # | Item | PR / Issue | State | Route |
 |---|------|-----------|-------|-------|
-| 3 | Button toggled state → AccessKit | [#8130](https://github.com/emilk/egui/pull/8130) | Approved, awaiting merge | Direct PR ✅ |
-| 2 | Button non-Button role (color-well) | — | **Queued next** (gated on #8130) | Direct PR |
+| 3 | Button toggled state → AccessKit | [#8130](https://github.com/emilk/egui/pull/8130) | Shipped in egui 0.35 (#8130) | Direct PR ✅ |
+| 2 | Button non-Button role (color-well) | — | **Queued next** (gate lifted) | Direct PR |
 | 12 | `Memory::with_temp` borrow accessor | — | Not started | Direct PR |
 | 15 | `Modal::initial_focus` builder | — | Not started | Direct PR |
 | 8a | Add `Context::wants_text_input()` | — | Not started | Direct PR |
@@ -83,9 +83,9 @@ design decision and it goes to an Issue whole. Resume check for the open PR:
 | 7 | `egui_plot::Plot` accessibility | — | Not started | Issue-first (D) |
 | 17 | `Popup::modal(true)` | — | Not started | Issue-first (D) |
 | 18 | Color-slider keyboard support | — | Not started | Issue-first (D) |
-| 19 | `SidePanel` resize handle a11y | — | Not started | Issue-first (D) |
+| 19 | `Panel` resize handle a11y | — | Not started | Issue-first (D) |
 
-_Last updated: 2026-06-23._
+_Last updated: 2026-09-08._
 
 ## Table of contents
 
@@ -113,7 +113,7 @@ _Last updated: 2026-06-23._
 - [Color picker](#color-picker)
   - [18. `color_slider_1d` / `color_slider_2d` are private and mouse-only](#18-color_slider_1d--color_slider_2d-are-private-and-mouse-only)
 - [Resize handles](#resize-handles)
-  - [19. `SidePanel` resize handles are silent and have no public id](#19-sidepanel-resize-handles-are-silent-and-have-no-public-id)
+  - [19. `Panel` resize handles are silent and have no public id](#19-panel-resize-handles-are-silent-and-have-no-public-id)
 
 ---
 
@@ -122,9 +122,10 @@ _Last updated: 2026-06-23._
 ### 1. `Role::Label` silently swallows `set_label` overrides
 
 **Status:** Not started — Issue-first (B). The `set_value`-not-`set_label`
-branch may be intentional; confirm intent before a PR.
+branch may be intentional; confirm intent before a PR. Unchanged as of
+egui 0.36.2 — same branch, at `response.rs:962-968`.
 
-**Where:** `response.rs:930-936`
+**Where:** `response.rs:962-968`
 
 ```rust
 if let Some(label) = info.label {
@@ -159,11 +160,13 @@ where `set_label` works. See `show_top_bar_right` in
 
 ### 2. `Button` cannot carry a non-Button AccessKit role
 
-**Status:** **Queued next** — Direct PR, gated on #8130 merging. Add
-`Button::color_swatch`/`role`. Plumbing exists: `WidgetType::ColorButton →
-Role::ColorWell` already in `response.rs`.
+**Status:** **Queued next** — Direct PR; #8130 has merged, so the gate is
+lifted. Add `Button::color_swatch`/`role`. Plumbing exists:
+`WidgetType::ColorButton → Role::ColorWell` already in `response.rs`.
+Unchanged as of egui 0.36.2 — `Button` still hard-codes `WidgetType::Button`
+in every arm of its `widget_info` (`widgets/button.rs:391-403`).
 
-**Where:** `response.rs:917`, `widgets/button.rs`
+**Where:** `response.rs:949`, `widgets/button.rs:391-403`
 
 The `Button` widget always emits `WidgetType::Button` and so always
 ends up as `Role::Button`. There is no builder method to set a
@@ -176,7 +179,7 @@ picker".
 
 **Workaround we used.** None — accepted the regression so we could
 build a keyboard-navigable color popup (see issue #18 below). See
-`crates/dmm-gui/src/app/controls.rs:694`.
+`crates/dmm-gui/src/app/controls.rs:577`.
 
 **Suggested fix.** Add `Button::role(WidgetType)` (or, more
 specifically, `Button::color_swatch(Color32) -> Self` since color
@@ -186,16 +189,27 @@ buttons are the obvious case).
 
 ### 3. Toggleable `Button`s cannot announce pressed/not-pressed state
 
-**Status:** **Done** — PR [#8130](https://github.com/emilk/egui/pull/8130),
-approved & awaiting merge. First contribution (shipped as
-`Button::selected: Option<bool>`).
+**Status:** **Shipped in egui 0.35** ([#8130](https://github.com/emilk/egui/pull/8130)).
+First contribution, shipped as `Button::selected: Option<bool>`. Verified in
+0.36.2: `Button::selected` at `widgets/button.rs:270`, and `widget_info` now
+emits `WidgetInfo::selected(WidgetType::Button, …)` when it was called
+(`widgets/button.rs:391-403`), which `response.rs:975-981` reads into
+`builder.set_toggled`. `ResponseA11yExt::a11y_toggled` in
+`crates/dmm-gui/src/a11y.rs` is therefore redundant at our
+`selectable_label` / `selectable_value` call sites, which route through
+`Button::selectable` (`ui.rs:1929-1931`, `:1939-1951`, `widgets/button.rs:78-82`).
+It is *not* yet redundant at our plain-`Button` toggles (HOLD, REL, LIVE, …):
+a `Button` that never calls `.selected(..)` still reports
+`WidgetInfo::labeled` (`widgets/button.rs:401`). The helper is left in place;
+switching those call sites to `Button::selected` and retiring it is a
+follow-up.
 
-**Where:** `response.rs:943-948`
+**Where:** `widgets/button.rs:391-403`, `response.rs:975-981`
 
-`WidgetInfo::selected` is read into `builder.set_toggled(...)`, but
-plain `Button` (`atom_ui` path) never sets `info.selected`, so a
+`WidgetInfo::selected` is read into `builder.set_toggled(...)`. Before
+#8130, plain `Button` (`atom_ui` path) never set `info.selected`, so a
 `Button` styled as a toggle (HOLD, REL, RANGE, AUTO, MIN-MAX, PEAK,
-LIVE, etc.) cannot announce its state to a screen reader without
+LIVE, etc.) could not announce its state to a screen reader without
 bypassing `widget_info` entirely.
 
 **Workaround we used.** Added a chainable `Response::a11y_toggled`
@@ -224,9 +238,11 @@ state without re-emitting the click event.
 document `accesskit_node_builder` as the supported post-hoc setter = Direct
 (doc) PR — clarifies an undocumented escape hatch but does **not** fix the
 duplicate-`OutputEvent::Clicked` foot-gun; **4b** new `accesskit_only`
-`widget_info` variant (the actual fix) = Issue-first (D).
+`widget_info` variant (the actual fix) = Issue-first (D). Unchanged as of
+egui 0.36.2 — same clicked/double/triple/focus-gained/changed dispatch into
+`output_event`, at `response.rs:869-894`.
 
-**Where:** `response.rs:837-862`
+**Where:** `response.rs:869-894`
 
 Calling `Response::widget_info` twice on the same response — once
 implicitly by the widget itself, once explicitly by the caller —
@@ -251,9 +267,11 @@ post-hoc state setter, OR add an `accesskit_only` variant of
 ### 5. No public landmark helper; `ui.scope` ids are unstable
 
 **Status:** Not started — Issue-first (D). New public landmark concept;
-align on shape first.
+align on shape first. Unchanged as of egui 0.36.2 — `new_child` still salts
+the child id with `next_auto_id_salt` (`ui.rs:251-260`) and still writes
+`Role::GenericContainer` (`ui.rs:317-319`).
 
-**Where:** `ui.rs:251-361`, `ui.rs:356`
+**Where:** `ui.rs:209-321`, `ui.rs:251-260`, `ui.rs:317-319`
 
 `ui.scope` derives its child id from
 `parent.id.with("child").with(next_auto_id_salt)`, where
@@ -298,9 +316,10 @@ the `Role::GenericContainer` collision.
 document the per-frame re-apply contract on `accesskit_node_builder` = Direct
 (doc) PR — clarifies an undocumented lifetime but does **not** remove the
 re-apply burden; **6b** persistent-label API (the actual fix) =
-Issue-first (D).
+Issue-first (D). Unchanged as of egui 0.36.2 — the builder still writes into
+`this_pass.accesskit_state` (`context.rs:601`), which is re-created every pass.
 
-**Where:** `context.rs:587-609`
+**Where:** `context.rs:600-632`
 
 `Context::accesskit_node_builder` writes into
 `this_pass.accesskit_state`, which is initialised fresh every frame.
@@ -324,9 +343,12 @@ formatted label string in `ctx.data` and re-issue `set_label` +
 ### 7. `egui_plot::Plot` is opaque to assistive tech
 
 **Status:** Not started — Issue-first (D). Cross-crate (egui_plot), large
-new API surface.
+new API surface. Unchanged as of egui_plot 0.37.0 — the crate does not
+mention `accesskit` anywhere, and each axis is still a bare
+`ui.allocate_rect(widget.rect, Sense::drag())`.
 
-**Where:** `egui_plot` crate.
+**Where:** `egui_plot` 0.37.0: `plot.rs:859`, `:871` (axis responses),
+`:1629` (the plot rect).
 
 The `Plot` widget renders a focusable interactive surface but exposes
 no AccessKit label, role, or description. Each axis allocates a
@@ -359,10 +381,10 @@ their ids are not exposed to the caller.
 **8a** add `Context::wants_text_input()` (true only for a focused
 `TextEdit`/`DragValue`) = Direct PR — this is the **substantive fix** for the
 foot-gun; **8b** rename the misleadingly-named existing method = separate
-deprecation, Issue-first (B).
+deprecation, Issue-first (B). Unchanged as of egui 0.36.2 — still
+`self.memory(|m| m.focused().is_some())`.
 
-**Where:** `context.rs` (definition: `self.memory(|m|
-m.focused().is_some())`)
+**Where:** `context.rs:2986-2988`
 
 The name reads as "is a text input focused" but the implementation is
 "is *any* widget focused". Every custom keyboard shim that wants to
@@ -387,9 +409,12 @@ the minimap-focused branch *before* the guard. See
 ### 9. `Focus::begin_pass` snapshots arrow events before widgets can consume them
 
 **Status:** Not started — Issue-first (B). Changes `focus_direction`
-handling for every focusable widget.
+handling for every focusable widget. Unchanged as of egui 0.36.2 —
+`begin_pass` still assigns `focus_direction` from the arrow snapshot
+(`memory/mod.rs:607`) and `end_pass` still commits it without checking
+consumption (`:624-628`).
 
-**Where:** `memory/mod.rs:550-578`, `:594-598`
+**Where:** `memory/mod.rs:570-621`, `:623-628`
 
 `Focus::begin_pass` walks pending input events at the *start* of the
 frame and sets `focus_direction` from arrow-key events. `end_pass`
@@ -420,9 +445,10 @@ keyboard navigation.
 ### 10. `Focus::begin_pass` clears focus on bare Escape unconditionally
 
 **Status:** Not started — Issue-first (B). Changes bare-Escape
-focus-clearing globally.
+focus-clearing globally. Unchanged as of egui 0.36.2 — the
+`Key::Escape if !modifiers.any()` arm still clears `focused_widget` outright.
 
-**Where:** `memory/mod.rs:569` (approx — search for `Key::Escape` in
+**Where:** `memory/mod.rs:599-602` (the `Key::Escape` arm in
 `Focus::begin_pass`)
 
 Bare Escape unconditionally clears `focused_widget`, even when a
@@ -443,14 +469,20 @@ or expose a setting that lets the consumer opt out.
 ### 11. `Memory::set_focus_lock_filter` has a one-frame hole
 
 **Status:** Not started — Issue-first (B). Relaxing the
-`had_focus_last_frame` gate affects all focus-lock users.
+`had_focus_last_frame` gate affects all focus-lock users. Unchanged as of
+egui 0.36.2 — 0.36 rewrote the body as a let-chain and added a redundant
+`focused.id == id` test, but the gate is the same.
 
-**Where:** `memory/mod.rs:866-874`
+**Where:** `memory/mod.rs:903-911`
 
 ```rust
-pub fn set_focus_lock_filter(&mut self, id: Id, filter: EventFilter) {
-    if self.had_focus_last_frame(id) && self.has_focus(id) {
-        // ... apply filter
+pub fn set_focus_lock_filter(&mut self, id: Id, event_filter: EventFilter) {
+    if self.had_focus_last_frame(id)
+        && self.has_focus(id)
+        && let Some(focused) = &mut self.focus_mut().focused_widget
+        && focused.id == id
+    {
+        focused.filter = event_filter;
     }
 }
 ```
@@ -478,13 +510,17 @@ passes immediately.
 ### 12. `Memory::get_temp` forces a clone on read
 
 **Status:** Not started — Direct PR. Additive `Memory::with_temp` borrow
-accessor mirroring `get_temp`.
+accessor mirroring `get_temp`. Unchanged as of egui 0.36.2 — still no borrow
+accessor, and `get_temp` still ends in `.cloned()`.
 
-**Where:** `util/id_type_map.rs:447-450`
+**Where:** `util/id_type_map.rs:446-449`
 
 ```rust
-/// The call clones the value (if found).
-pub fn get_temp<T: 'static + Clone + Send + Sync>(...)
+/// The call clones the value (if found), so make sure it is cheap to clone!
+pub fn get_temp<T: 'static + Clone>(&self, id: Id) -> Option<T> {
+    let key = RawKey::new::<T>(id);
+    self.map.get(&key).and_then(|x| x.get_temp()).cloned()
+}
 ```
 
 There is no `with_temp(&self, id, |&T| -> R) -> Option<R>` borrow API,
@@ -518,13 +554,19 @@ so consumers can borrow without cloning.
 ### 13. `create_widget` surrenders focus on widgets covered by a modal
 
 **Status:** Not started — Issue-first (B). Touches modal focus-surrender
-semantics in `create_widget`.
+semantics in `create_widget`. Restructured in 0.36 — the `allows_interaction`
+test now feeds an `interested_in_focus` local — but the behaviour is unchanged.
 
-**Where:** `context.rs:1253-1256`
+**Where:** `context.rs:1256-1258`, `:1274-1277`
 
 ```rust
-if !w.allows_interaction(...) {
-    self.memory_mut(|m| m.surrender_focus(w.id));
+let interested_in_focus = w.enabled
+    && w.sense.is_focusable()
+    && self.memory(|mem| mem.allows_interaction(w.layer_id));
+// ...
+if allow_focus && !interested_in_focus {
+    // Not interested or allowed input:
+    self.memory_mut(|mem| mem.surrender_focus(w.id));
 }
 ```
 
@@ -559,9 +601,11 @@ start of `ui()` that fires once the modal layer is gone.
 fixes (de-stale `top_modal_layer` vs expose a `top_modal_layer_current_frame()`
 accessor) are mutually-exclusive alternatives — exposing the accessor only
 makes sense if you decide *not* to de-stale, so the choice itself is the
-design decision. Present both options in the Issue.
+design decision. Present both options in the Issue. Unchanged as of egui
+0.36.2 — `top_modal_layer` is still taken from `top_modal_layer_current_frame`
+at `end_pass` (`memory/mod.rs:640`).
 
-**Where:** `memory/mod.rs:610, 661-666`
+**Where:** `memory/mod.rs:640`, `:691-696`, `:995-997`
 
 `Memory::set_modal_layer` writes `top_modal_layer_current_frame`, but
 `top_modal_layer()` reads from `top_modal_layer`, which is only
@@ -586,7 +630,10 @@ unless the caller knows to defer.
 **Status:** Not started — Direct PR *if* first-frame focus lands reliably via
 a deferred one-shot (additive `Modal::initial_focus` builder). That timing
 leans on #14's `top_modal_layer` staleness — if a deferred one-shot is not
-enough, this folds into the #14 Issue rather than shipping alone.
+enough, this folds into the #14 Issue rather than shipping alone. Unchanged
+as of egui 0.36.2 — `containers/modal.rs` is byte-identical to 0.34.1, and the
+builder is still `new`/`default_area`/`frame`/`backdrop_color`/`area` with no
+focus API.
 
 **Where:** `containers/modal.rs`
 
@@ -615,9 +662,10 @@ Modal::show_with_initial_focus(ctx, id, |ui| { ... })
 ### 16. `Modal::should_close` consumes Escape unconditionally
 
 **Status:** Not started — Issue-first (B). Changes when Escape closes a
-modal (TextEdit carve-out).
+modal (TextEdit carve-out). Unchanged as of egui 0.36.2 — `should_close` still
+carves out only `any_popup_open`.
 
-**Where:** `containers/modal.rs` (inside `should_close`)
+**Where:** `containers/modal.rs:151-163`
 
 `Modal::should_close()` returns true on bare Escape whenever it is
 the topmost modal. There is a carve-out for `any_popup_open` but not
@@ -634,14 +682,22 @@ Escape).
 ### 17. `Popup::menu` is not modal and has no built-in Escape handling
 
 **Status:** Not started — Issue-first (D). New `Popup::modal` behavior +
-open-transition API.
+open-transition API. Unchanged as of egui 0.36.2 in the parts that matter:
+`Popup` still never calls `set_modal_layer`, and still exposes no
+open-transition accessor. 0.36 added an unrelated `Popup::interactable(bool)`
+(`popup.rs:378`).
 
-**Where:** `containers/popup.rs`, contrast with `containers/modal.rs:85`
+**Where:** `containers/popup.rs:378`, `:624-626`, contrast with
+`containers/modal.rs:85`, `:155-157`
 
 `Modal::show` calls `Memory::set_modal_layer` so Tab focus stays
 inside it. `Popup::menu` does not — Tab from a focused widget inside
 a popup escapes to the layer below, which is rarely what you want.
-`Popup` also has no built-in Escape handling, while `Modal` does.
+`Popup` does close on bare Escape, but it reads the key with a
+non-consuming `ctx.input(|i| i.key_pressed(Key::Escape))`
+(`popup.rs:625`), so the same press still reaches `Focus::begin_pass` and any
+enclosing `Modal`; `Modal::should_close` consumes it instead
+(`modal.rs:155-157`).
 
 There is also no clean way to detect the "open transition" of a
 popup. `Popup::is_id_open` must be read *before* `show()` to know if
@@ -668,14 +724,17 @@ semantics make it impossible to distinguish.
 ### 18. `color_slider_1d` / `color_slider_2d` are private and mouse-only
 
 **Status:** Not started — Issue-first (D). Biggest gap: keybinding design +
-making private sliders public.
+making private sliders public. Unchanged as of egui 0.36.2 — both sliders are
+still module-private and still driven only by `interact_pointer_pos`
+(`:144`, `:211`). 0.36 reworked the swatch painting
+(`show_srgba_unmultiplied`) but added no keyboard handling.
 
-**Where:** `widgets/color_picker.rs:116, 180`
+**Where:** `widgets/color_picker.rs:138, 202`
 
 `color_slider_1d` and `color_slider_2d` are the actual hue (1D
 gradient) and saturation/value (2D square) widgets behind
-`color_picker_color32` / `color_picker_hsva_2d`. Both are private
-(`pub(crate)`) and only consume `interact_pointer_pos` — they have no
+`color_picker_color32` / `color_picker_hsva_2d`. Both are module-private
+plain `fn`s and only consume `interact_pointer_pos` — they have no
 keyboard handling at all. `color_picker_hsva_2d` is public but the
 sliders inside it cannot be keyboard-navigated, and there is no
 public way to identify them by id from outside the crate.
@@ -710,17 +769,26 @@ rect-shape heuristic.
 
 ## Resize handles
 
-### 19. `SidePanel` resize handles are silent and have no public id
+### 19. `Panel` resize handles are silent and have no public id
 
 **Status:** Not started — Issue-first (D). Multiple decisions: expose handle
-id, built-in keyboard resize, focus indicator, response type.
+id, built-in keyboard resize, focus indicator, response type. Still open as of
+egui 0.36.2 (`SidePanel` and `TopBottomPanel` are one `Panel` type now): the
+handle id is computed by a private `Panel::resize_id`
+(`containers/panel.rs:942-944`) over a private `resize_id_source` field
+(`:234`, set only by the crate-internal `with_resize_id_source` at `:1145`), so
+callers still cannot ask for it. The salt itself is unchanged, so replicating
+it still works.
 
-**Where:** `containers/panel.rs` around `:813,847`,
-`sense.rs:68-70` (FOCUSABLE flag)
+**Where:** `containers/panel.rs:35-37` (the `__resize` salt), `:942-944`,
+`:999`, `:1092`; `sense.rs:81-83` (`click_and_drag` includes FOCUSABLE)
 
-`SidePanel::resizable(true)` allocates an internal resize handle.
-The handle is focusable (`Sense::drag → FOCUSABLE`) but:
-- it has no AccessKit label,
+`Panel::left(..).resizable(true)` allocates an internal resize handle.
+The handle is focusable (`Sense::click_and_drag → FOCUSABLE`) but:
+- it has no AccessKit label — panel handles never call `widget_info`, so they
+  do not even reach the `WidgetType::ResizeHandle → Role::Splitter` mapping
+  that `response.rs:954` already provides and `containers/window.rs:1085`
+  already uses,
 - it has no keyboard resize binding (only mouse drag works),
 - it has no visible focus indicator (its own paint overdraws the
   default focus rect),
@@ -741,8 +809,9 @@ that id. Brittle — any change to the salt internals breaks us
 silently.
 
 **Suggested fix.**
-- Expose the resize handle id via the `SidePanel` builder, OR
+- Expose the resize handle id via the `Panel` builder (make
+  `resize_id`/`resize_id_source` public), OR
 - add built-in keyboard resize (Arrow keys when focused) AND a
   visible focus indicator AND an AccessKit label, OR
-- return a `SidePanelResponse` from `SidePanel::show` that includes
-  the handle id alongside the inner content.
+- include the handle id in what `Panel::show` returns, alongside the inner
+  content.

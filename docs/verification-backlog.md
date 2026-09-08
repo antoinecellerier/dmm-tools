@@ -869,7 +869,7 @@ verification:
   AccessKit's Windows backend is separate from AT-SPI.
 - **VoiceOver on macOS** (NSAccessibility): same checks on the third
   backend.
-- **Hover tooltips are invisible to assistive tech.** egui 0.34 never
+- **Hover tooltips are invisible to assistive tech.** egui 0.36 never
   calls AccessKit's `set_description`, so `on_hover_text` reaches sighted
   users only — any control whose meaning lives solely in its tooltip is
   unexplained to a screen reader. The toolbar chips work around this by

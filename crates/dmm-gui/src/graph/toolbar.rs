@@ -71,7 +71,7 @@ fn group_caption(ui: &mut Ui, text: &str) {
 ///
 /// The chips are `selectable_label`s whose visible text is just the
 /// sub-value's name, so a screen reader would otherwise announce a **Plot:**
-/// chip and a **Show:** chip identically ("T2, button"). egui 0.34 never
+/// chip and a **Show:** chip identically ("T2, button"). egui 0.36 never
 /// calls AccessKit's `set_description`, so the hover text cannot carry the
 /// distinction — it has to be in the name.
 pub(super) fn series_chip_label(series: Option<&str>) -> String {
@@ -379,10 +379,10 @@ impl Graph {
             // `Role::RadioButton` rather than the default button role: exactly
             // one chip is selected at a time, and egui maps its own radio
             // widgets to that role with a toggled state, so AT handling of the
-            // pairing is proven. `a11y_toggled` is still required — egui
-            // 0.34's `selectable_label` is a plain `Button` and reports
-            // `WidgetInfo::labeled`, never `WidgetInfo::selected`, so nothing
-            // sets the AccessKit toggle state for us.
+            // pairing is proven. `a11y_toggled` is redundant here since egui
+            // 0.35 (`selectable_label` announces its selected state itself);
+            // kept until the helper is retired from the plain-`Button`
+            // toggles, which still need it.
             let main_selected = self.selected_series.is_none();
             if ui
                 .selectable_label(main_selected, "Main")

@@ -532,7 +532,7 @@ impl eframe::App for App {
 
         let minimal = self.big_meter_mode == BigMeterMode::Minimal;
         if !minimal {
-            egui::Panel::top("top_bar").show_inside(ui, |ui| {
+            egui::Panel::top("top_bar").show(ui, |ui| {
                 self.show_top_bar(ui, &ctx);
                 self.show_settings_panel(ui);
             });
@@ -592,98 +592,96 @@ impl eframe::App for App {
             let default_margin = ctx.global_style().spacing.window_margin;
             let frame = egui::Frame::central_panel(ctx.global_style().as_ref())
                 .inner_margin(default_margin * margin_scale);
-            let main = egui::CentralPanel::default()
-                .frame(frame)
-                .show_inside(ui, |ui| {
-                    let size = ctx.content_rect();
-                    let fit_inputs = FitInputs {
-                        width: size.width() as u32,
-                        height: size.height() as u32,
-                        mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
-                        aux_values: self
-                            .last_measurement
-                            .as_ref()
-                            .map_or(0, |m| m.aux_values.len()),
-                        mode_offered: self.connection.choices.mode_offered(),
-                        range_offered: self.connection.choices.range_offered(),
-                        show_stats: self.settings.show_stats,
-                        show_specs: self.settings.show_specs,
-                        big_meter_mode: self.big_meter_mode,
-                        transform_editor_open: self.transform_editor.open,
-                        transform_is_identity: self.transform.is_identity(),
-                    };
-                    let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
+            let main = egui::CentralPanel::default().frame(frame).show(ui, |ui| {
+                let size = ctx.content_rect();
+                let fit_inputs = FitInputs {
+                    width: size.width() as u32,
+                    height: size.height() as u32,
+                    mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
+                    aux_values: self
+                        .last_measurement
+                        .as_ref()
+                        .map_or(0, |m| m.aux_values.len()),
+                    mode_offered: self.connection.choices.mode_offered(),
+                    range_offered: self.connection.choices.range_offered(),
+                    show_stats: self.settings.show_stats,
+                    show_specs: self.settings.show_specs,
+                    big_meter_mode: self.big_meter_mode,
+                    transform_editor_open: self.transform_editor.open,
+                    transform_is_identity: self.transform.is_identity(),
+                };
+                let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
 
-                    let panel_rect = ui.max_rect();
-                    let mut add_content = |ui: &mut egui::Ui| {
-                        ui.vertical(|ui| {
-                            // In minimal mode there's nothing below the reading,
-                            // so pass 0 to let the reading fill all available space.
-                            let content_h = if minimal {
-                                0.0
-                            } else {
-                                self.meter_fit.content_height
-                            };
-                            let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                            let (scale, measured_ratios, picked) = display::show_reading_large(
-                                ui,
-                                self.last_measurement.as_ref(),
-                                content_h,
-                                &self.meter_fit.reading_ratios,
-                                &tc,
-                                !self.transform.is_identity(),
-                                self.connection.choices.readouts(),
-                            );
-                            if let Some((setting, id)) = picked {
-                                self.select(setting, id);
-                            }
-                            let after_reading = ui.cursor().top();
-
-                            if !minimal {
-                                self.show_remote_controls(ui, scale);
-                                self.show_transform_row(ui, scale);
-                            }
-                            self.show_connection_help(ui);
-
-                            if self.big_meter_mode == BigMeterMode::Off {
-                                self.show_specs_section_inline(ui, scale);
-
-                                if self.settings.show_stats {
-                                    ui.add_space(12.0 * scale);
-                                    ui.separator();
-                                    self.show_stats_section(ui, false, scale);
-                                }
-                            }
-
-                            // Update cached dimensions on window resize. Run twice
-                            // (by not closing the cache the first time) so the
-                            // second pass uses the measured values from the first.
-                            if needs_recalc && scale > 0.0 {
-                                let total_below_reading = ui.cursor().top() - after_reading;
-                                self.meter_fit.record_pass(
-                                    &fit_inputs,
-                                    total_below_reading / scale,
-                                    measured_ratios,
-                                );
-                            }
-                        });
-                    };
-                    if minimal {
-                        add_content(ui);
-                    } else {
-                        ui.centered_and_justified(add_content);
-                    }
-                    // Overlay toggle button in the bottom-right, outside the
-                    // measured content so it doesn't affect scaling convergence.
-                    // Hide when the panel is too small to avoid overlapping the reading.
-                    if panel_rect.width() > 100.0 && panel_rect.height() > 80.0 {
-                        let btn_rect = egui::Rect::from_min_size(
-                            egui::pos2(panel_rect.right() - 32.0, panel_rect.bottom() - 32.0),
-                            egui::vec2(28.0, 28.0),
+                let panel_rect = ui.max_rect();
+                let mut add_content = |ui: &mut egui::Ui| {
+                    ui.vertical(|ui| {
+                        // In minimal mode there's nothing below the reading,
+                        // so pass 0 to let the reading fill all available space.
+                        let content_h = if minimal {
+                            0.0
+                        } else {
+                            self.meter_fit.content_height
+                        };
+                        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+                        let (scale, measured_ratios, picked) = display::show_reading_large(
+                            ui,
+                            self.last_measurement.as_ref(),
+                            content_h,
+                            &self.meter_fit.reading_ratios,
+                            &tc,
+                            !self.transform.is_identity(),
+                            self.connection.choices.readouts(),
                         );
-                        self.show_big_meter_toggle_at(ui, btn_rect);
-                    }
-                });
+                        if let Some((setting, id)) = picked {
+                            self.select(setting, id);
+                        }
+                        let after_reading = ui.cursor().top();
+
+                        if !minimal {
+                            self.show_remote_controls(ui, scale);
+                            self.show_transform_row(ui, scale);
+                        }
+                        self.show_connection_help(ui);
+
+                        if self.big_meter_mode == BigMeterMode::Off {
+                            self.show_specs_section_inline(ui, scale);
+
+                            if self.settings.show_stats {
+                                ui.add_space(12.0 * scale);
+                                ui.separator();
+                                self.show_stats_section(ui, false, scale);
+                            }
+                        }
+
+                        // Update cached dimensions on window resize. Run twice
+                        // (by not closing the cache the first time) so the
+                        // second pass uses the measured values from the first.
+                        if needs_recalc && scale > 0.0 {
+                            let total_below_reading = ui.cursor().top() - after_reading;
+                            self.meter_fit.record_pass(
+                                &fit_inputs,
+                                total_below_reading / scale,
+                                measured_ratios,
+                            );
+                        }
+                    });
+                };
+                if minimal {
+                    add_content(ui);
+                } else {
+                    ui.centered_and_justified(add_content);
+                }
+                // Overlay toggle button in the bottom-right, outside the
+                // measured content so it doesn't affect scaling convergence.
+                // Hide when the panel is too small to avoid overlapping the reading.
+                if panel_rect.width() > 100.0 && panel_rect.height() > 80.0 {
+                    let btn_rect = egui::Rect::from_min_size(
+                        egui::pos2(panel_rect.right() - 32.0, panel_rect.bottom() - 32.0),
+                        egui::vec2(28.0, 28.0),
+                    );
+                    self.show_big_meter_toggle_at(ui, btn_rect);
+                }
+            });
             main.response.a11y_role(egui::accesskit::Role::Main);
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
@@ -691,7 +689,7 @@ impl eframe::App for App {
                 .default_size(SIDE_PANEL_DEFAULT_WIDTH)
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
-                .show_inside(ui, |ui| {
+                .show(ui, |ui| {
                     self.show_reading_column(ui, ContentLayout::Wide);
                 });
             // egui's `Panel::left(..).resizable(true)` allocates a
@@ -700,7 +698,7 @@ impl eframe::App for App {
             // action. Paint a focus ring and wire up Left/Right arrow keys
             // to resize the panel, consistent with the recording-panel
             // divider. The handle id is derived from the panel id — see
-            // `panel.rs:847` in egui 0.34 for the `__resize` salt.
+            // `resize_widget_id` at `panel.rs:36` in egui 0.36 for the salt.
             let reading_panel_id = egui::Id::new("reading_panel");
             let reading_panel_resize_id = reading_panel_id.with("__resize");
             crate::a11y::set_accessible_label(
@@ -718,9 +716,9 @@ impl eframe::App for App {
                 if delta != 0.0
                     && let Some(mut state) = egui::PanelState::load(&ctx, reading_panel_id)
                 {
-                    let new_width = (state.rect.width() + delta)
+                    let new_width = (state.outer_rect.width() + delta)
                         .clamp(SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH);
-                    state.rect.max.x = state.rect.min.x + new_width;
+                    state.outer_rect.max.x = state.outer_rect.min.x + new_width;
                     ctx.data_mut(|d| d.insert_persisted(reading_panel_id, state));
                 }
                 // Paint a 3px focus indicator on the panel's right edge —
@@ -737,7 +735,7 @@ impl eframe::App for App {
 
             // Wide: center panel for graph + recording
             egui::CentralPanel::default()
-                .show_inside(ui, |ui| {
+                .show(ui, |ui| {
                     self.show_graph_recording_split(ui, false);
                 })
                 .response
@@ -745,7 +743,7 @@ impl eframe::App for App {
         } else {
             // Narrow: single column
             egui::CentralPanel::default()
-                .show_inside(ui, |ui| {
+                .show(ui, |ui| {
                     self.show_reading_column(ui, ContentLayout::Narrow);
                 })
                 .response

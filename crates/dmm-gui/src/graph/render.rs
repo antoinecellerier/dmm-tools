@@ -3,7 +3,8 @@
 
 use eframe::egui::{self, Ui, Vec2b};
 use egui_plot::{
-    AxisHints, HLine, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points, Span, VLine,
+    AxisHints, HLine, HoverPosition, Line, Plot, PlotBounds, PlotPoints, PlotTransform, Points,
+    Span, VLine,
 };
 use std::time::Instant;
 
@@ -437,7 +438,19 @@ impl Graph {
             .custom_y_axes(vec![y_axis])
             .y_axis_min_width(60.0)
             .cursor_color(tc.graph_crosshair())
-            .label_formatter(move |name, point| {
+            .label_formatter(move |pos| {
+                // 0.37 replaced the `(name, point)` pair with `HoverPosition`.
+                // A hover that isn't near a data point used to arrive as an
+                // empty name, so map it back to one and keep the branches below
+                // unchanged.
+                let (name, point) = match pos {
+                    HoverPosition::NearDataPoint {
+                        plot_name,
+                        position,
+                        ..
+                    } => (*plot_name, position),
+                    HoverPosition::Elsewhere { position } => ("", position),
+                };
                 let t = point.x;
                 let time_label = if t < 60.0 {
                     format!("{t:.1} s")
@@ -451,15 +464,18 @@ impl Graph {
                 // this is where the condition gets named. It is also the only
                 // cue that isn't visual.
                 if tooltip_spans.iter().any(|&(a, b)| t >= a && t <= b) {
-                    return format!("{time_label}\noverload");
+                    return Some(format!("{time_label}\noverload"));
                 }
                 // With several traces on the same axes the number alone is
                 // ambiguous, so name the one being hovered. Helper items carry
                 // an empty name and fall through to the plain form.
                 if multi_series && !name.is_empty() {
-                    return format!("{time_label}\n{name}: {:.4} {cursor_unit}", point.y);
+                    return Some(format!(
+                        "{time_label}\n{name}: {:.4} {cursor_unit}",
+                        point.y
+                    ));
                 }
-                format!("{time_label}\n{:.4} {}", point.y, cursor_unit)
+                Some(format!("{time_label}\n{:.4} {}", point.y, cursor_unit))
             });
         let response = plot.show(ui, |plot_ui| {
             // Set exact bounds: our X view range + computed Y range

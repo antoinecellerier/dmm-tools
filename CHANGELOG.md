@@ -38,6 +38,7 @@
 - **UT61E+ NCV shows the detected level** — every detection read as level 0.
 - **Resuming a capture keeps its freeform steps** — a second run numbered from `extra_0` again and overwrote them.
 - **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.
+- **Clicking a theme chip keeps keyboard focus on it** — the focus ring landed on the chip after the one clicked.
 - **UT8802 negative readings show their sign** — the display and CSV dropped the minus; only the JSON value carried it.
 - **A UT181A command the meter refuses is reported as an error** — every command reported as sent, whether the meter acted on it or not.
 - **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.

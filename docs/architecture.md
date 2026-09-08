@@ -142,7 +142,7 @@ methods to it, so no panel owns state of its own.
 
 | Module | Responsibility |
 |--------|---------------|
-| `app/mod.rs` | The `App` struct, `ConnectionState`, construction, and the per-frame `update` that lays the panels out |
+| `app/mod.rs` | The `App` struct, `ConnectionState`, construction, and the per-frame `eframe::App::ui` that lays the panels out |
 | `app/appearance.rs` | Font chain and text styles, theme and colour overrides, zoom levels, always-on-top and decoration commands |
 | `app/connection.rs` | The background acquisition thread: open, poll, reconnect, the per-setting choice lists (re-listed only when the reading they are keyed on moves), and the `DmmMessage`/`ThreadControl` channel types |
 | `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and the connection-help text |

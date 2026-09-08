@@ -17,7 +17,7 @@ pub(super) const SMALL_TEXT_SIZE: f32 = 11.0;
 
 /// Raise egui's small text style to the 11 pt floor.
 ///
-/// `all_styles_mut`, not `style_mut`: egui 0.34 keeps a separate `Style` per
+/// `all_styles_mut`, not `style_mut`: egui 0.36 keeps a separate `Style` per
 /// theme, and `apply_theme` switches between them with `set_visuals`, which
 /// replaces only `style.visuals` and leaves `text_styles` alone. Setting just
 /// the active theme's style would leave the other theme at 9 pt.
