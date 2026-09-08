@@ -23,6 +23,7 @@ use super::{
 use crate::error::Result;
 use crate::flags::StatusFlags;
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring, Settle};
+use crate::protocol::framing;
 use crate::protocol::{CaptureStep, DeviceProfile, Stability};
 use crate::transport::Transport;
 use std::thread;
@@ -34,7 +35,7 @@ use std::time::Duration;
 /// builder at line 3805: command = `0xFF`, data = `[0x00]`, header
 /// `0xAB 0xCD`, length byte `0x04` (= 2 + cmd + 1 data), checksum
 /// `0xAB + 0xCD + 0x04 + 0xFF + 0x00 = 0x027B` (BE).
-const ACK_FRAME: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+const ACK_FRAME: [u8; 7] = framing::build_abcd_be16(0xFF, &[0x00]);
 
 /// Gap between the three ack writes, matching `Thread.Sleep(100)` in
 /// the vendor code.

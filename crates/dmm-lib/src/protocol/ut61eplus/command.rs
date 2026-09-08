@@ -43,16 +43,7 @@ pub enum Command {
 impl Command {
     /// Encode this command into the 6-byte wire format.
     pub fn encode(self) -> [u8; 6] {
-        let cmd = self as u8;
-        let check = cmd as u16 + 379;
-        [
-            0xAB,
-            0xCD,
-            0x03,
-            cmd,
-            (check >> 8) as u8,
-            (check & 0xFF) as u8,
-        ]
+        crate::protocol::framing::build_abcd_be16(self as u8, &[])
     }
 }
 

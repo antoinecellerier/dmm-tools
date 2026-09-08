@@ -153,6 +153,41 @@ pub const HEADER: [u8; 2] = [0xAB, 0xCD];
 /// (length byte value must be >= 2 to hold at least the checksum)
 const MIN_RESPONSE_LEN: usize = 5;
 
+/// Build the `AB CD <len> <cmd> [data] <BE16 checksum>` command frame the
+/// UT61+ family and both Voltcraft meters send — the write side of
+/// [`extract_frame_abcd_be16`].
+///
+/// `N` is the whole frame: header(2) + len(1) + cmd(1) + `data` + checksum(2).
+/// Naming it keeps the frame a plain array, so a `const` ack frame is still a
+/// `const`; getting it wrong fails to compile rather than putting a
+/// wrong-length frame on the wire.
+pub(crate) const fn build_abcd_be16<const N: usize>(cmd: u8, data: &[u8]) -> [u8; N] {
+    assert!(
+        N == data.len() + 6,
+        "frame is header(2) + len(1) + cmd(1) + data + checksum(2)"
+    );
+    let mut frame = [0u8; N];
+    frame[0] = HEADER[0];
+    frame[1] = HEADER[1];
+    // The length byte counts everything after itself: command, data, checksum.
+    frame[2] = (data.len() + 3) as u8;
+    frame[3] = cmd;
+    let mut i = 0;
+    while i < data.len() {
+        frame[4 + i] = data[i];
+        i += 1;
+    }
+    let mut sum: u16 = 0;
+    let mut i = 0;
+    while i < N - 2 {
+        sum += frame[i] as u16;
+        i += 1;
+    }
+    frame[N - 2] = (sum >> 8) as u8;
+    frame[N - 1] = (sum & 0xFF) as u8;
+    frame
+}
+
 /// Find `header` in `buf` and return `(start, remaining)` — the offset of the
 /// header and the slice from it to the end — but only once at least `min_len`
 /// bytes are available from that offset.

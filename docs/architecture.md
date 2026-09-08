@@ -26,7 +26,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |
-| `protocol/framing.rs` | Message framing: find `AB CD`, `0xAC`, or FS9721 index-nibble header, extract payload, validate checksum (or position/index validation) |
+| `protocol/framing.rs` | Message framing: find `AB CD`, `0xAC`, or FS9721 index-nibble header, extract payload, validate checksum (or position/index validation); build the `AB CD` command frame the UT61+ and Voltcraft families send |
 | `protocol/ut61eplus/` | UT61E+ family: `Ut61PlusProtocol`, `Mode` enum, `Command` enum, `tables/` (per-model `ModeTables` impls — one match per mode returning ranges and specs — behind the `DeviceTable` trait) |
 | `protocol/ut8802/` | UT8802 family: `Ut8802Protocol` — streaming protocol with 0x5A trigger, 0xAC 8-byte BCD frames |
 | `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming protocol with 0x5A trigger |

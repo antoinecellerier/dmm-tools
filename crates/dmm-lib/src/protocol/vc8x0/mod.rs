@@ -33,13 +33,9 @@ use log::{debug, warn};
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-/// Build a command frame: `[0xAB, 0xCD, 0x03, cmd, chk_hi, chk_lo]`.
-pub(crate) fn build_command(cmd: u8) -> Vec<u8> {
-    let mut frame = vec![0xAB, 0xCD, 0x03, cmd];
-    let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-    frame.push((sum >> 8) as u8);
-    frame.push((sum & 0xFF) as u8);
-    frame
+/// Build a data-less command frame: `[0xAB, 0xCD, 0x03, cmd, chk_hi, chk_lo]`.
+pub(crate) const fn build_command(cmd: u8) -> [u8; 6] {
+    framing::build_abcd_be16(cmd, &[])
 }
 
 /// The button the vendor DLL calls `Select` (spec §5, "SELECT button (cycle
