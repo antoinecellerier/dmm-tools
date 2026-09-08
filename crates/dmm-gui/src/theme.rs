@@ -616,11 +616,6 @@ impl ThemeColors {
 
     // -- Graph colors --
 
-    /// Live indicator — derives from status_ok().
-    pub(crate) fn live_green(&self) -> Color32 {
-        self.status_ok()
-    }
-
     /// Main data line.
     pub(crate) fn graph_line(&self) -> Color32 {
         self.resolve(self.overrides.graph_line, &self.preset.graph_line)
@@ -1063,17 +1058,6 @@ mod tests {
             tc.minimap_line(),
             Color32::from_rgba_premultiplied(50, 100, 200, 200)
         );
-    }
-
-    #[test]
-    fn live_indicator_derives_from_status_ok() {
-        let overrides = PaletteOverrides {
-            status_ok: Some(HexColor(Color32::from_rgb(0, 255, 128))),
-            ..Default::default()
-        };
-
-        let tc = ThemeColors::new(true, ColorPreset::Default, &overrides);
-        assert_eq!(tc.live_green(), Color32::from_rgb(0, 255, 128));
     }
 
     #[test]

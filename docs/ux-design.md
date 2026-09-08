@@ -122,7 +122,7 @@ readout dropdowns' job.
 
 A **Scale** toggle on a row of its own under the remote controls, opening
 `× [scale] + [offset] → [unit] [Apply] [Off]` when clicked. Styled like the
-remote buttons (accent + bold while a scale is active) but deliberately
+remote buttons (filled while a scale is active) but deliberately
 **kept apart from them**: those buttons mirror and drive the meter's own
 state, whereas this changes nothing on the meter. Sitting them side by side
 would suggest the meter knows about the factor.
@@ -161,7 +161,7 @@ Three components stacked vertically:
 
 **Toolbar:**
 - Time window presets: 5s, 10s, 30s, 1m, 5m, 10m
-- LIVE toggle button (green when active)
+- LIVE toggle button (filled when active)
 - Y:Auto / Y:Fixed toggle — in fixed mode, shows min/max text input fields. Switching to fixed snapshots current auto range unless user previously edited values.
 - The **Plot:** and **Show:** groups below sit together on a row of their own, between the time-window row and the Mean/Min/Max/Ref/Cursors row, and appear only for meters that send sub-values — so the toolbar reads view → what is plotted → what is drawn over it. Each group is a faintly boxed caption plus its chips, so the two are not mistaken for the analysis toggles.
 - **Plot:** chips (only for meters that send sub-values) — pick the series the graph draws: the main reading, or any sub-value in the current frame. Session-only; a label the meter stops sending falls back to Main.

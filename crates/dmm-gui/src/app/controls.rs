@@ -100,18 +100,13 @@ impl App {
                 if !has_cmd(cmd) {
                     continue;
                 }
-                let text = if active {
-                    RichText::new(label)
-                        .font(egui::FontId::proportional(font_size))
-                        .color(active_color)
-                        .strong()
-                } else {
-                    RichText::new(label).font(egui::FontId::proportional(font_size))
-                };
+                // `selected` announces the state and paints the selected fill
+                // when on; the button keeps its frame when off so it still
+                // reads as actionable, unlike `Button::selectable`.
+                let text = RichText::new(label).font(egui::FontId::proportional(font_size));
                 let resp = ui
-                    .add(egui::Button::new(text))
-                    .on_hover_text(tooltip)
-                    .a11y_toggled(active);
+                    .add(egui::Button::new(text).selected(active))
+                    .on_hover_text(tooltip);
                 if resp.clicked() {
                     self.send_command(cmd);
                 }
@@ -139,18 +134,10 @@ impl App {
                 if !has_cmd(cycle_cmd) {
                     continue;
                 }
-                let text = if active {
-                    RichText::new(label)
-                        .font(egui::FontId::proportional(font_size))
-                        .color(active_color)
-                        .strong()
-                } else {
-                    RichText::new(label).font(egui::FontId::proportional(font_size))
-                };
+                let text = RichText::new(label).font(egui::FontId::proportional(font_size));
                 let resp = ui
-                    .add(egui::Button::new(text))
-                    .on_hover_text(tooltip)
-                    .a11y_toggled(active);
+                    .add(egui::Button::new(text).selected(active))
+                    .on_hover_text(tooltip);
                 if resp.clicked() {
                     self.send_command(cycle_cmd);
                 }

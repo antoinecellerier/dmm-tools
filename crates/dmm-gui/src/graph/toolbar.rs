@@ -153,19 +153,20 @@ impl Graph {
 
             ui.add_space(6.0);
 
-            let live_color = if self.live {
-                tc.live_green()
+            // On: the selected fill and text colour come from `selected`,
+            // like the presets beside it. Off: dimmed text in a plain frame,
+            // so it still reads as a button.
+            let live_text = egui::RichText::new("LIVE").small();
+            let live_text = if self.live {
+                live_text
             } else {
-                ui.visuals().weak_text_color()
+                live_text.color(ui.visuals().weak_text_color())
             };
             let live_resp = ui
-                .add(egui::Button::new(
-                    egui::RichText::new("LIVE").color(live_color).small(),
-                ))
+                .add(egui::Button::new(live_text).selected(self.live))
                 .on_hover_text(
                     "Auto-follow the newest samples — off while panning (End to jump back)",
-                )
-                .a11y_toggled(self.live);
+                );
             if live_resp.clicked() {
                 self.live = !self.live;
             }
@@ -379,17 +380,13 @@ impl Graph {
             // `Role::RadioButton` rather than the default button role: exactly
             // one chip is selected at a time, and egui maps its own radio
             // widgets to that role with a toggled state, so AT handling of the
-            // pairing is proven. `a11y_toggled` is redundant here since egui
-            // 0.35 (`selectable_label` announces its selected state itself);
-            // kept until the helper is retired from the plain-`Button`
-            // toggles, which still need it.
+            // pairing is proven.
             let main_selected = self.selected_series.is_none();
             if ui
                 .selectable_label(main_selected, "Main")
                 .on_hover_text("Plot the meter's main reading")
                 .a11y_label(&series_chip_label(None))
                 .a11y_role(egui::accesskit::Role::RadioButton)
-                .a11y_toggled(main_selected)
                 .clicked()
             {
                 choice = Some(None);
@@ -404,7 +401,6 @@ impl Graph {
                     ))
                     .a11y_label(&series_chip_label(Some(label)))
                     .a11y_role(egui::accesskit::Role::RadioButton)
-                    .a11y_toggled(selected)
                     .clicked()
                 {
                     choice = Some(Some(i));
@@ -465,7 +461,6 @@ impl Graph {
                     .selectable_label(shown, label)
                     .on_hover_text(hover)
                     .a11y_label(&overlay_chip_label(label))
-                    .a11y_toggled(shown)
                     .clicked()
                 {
                     toggled = Some(o.label.clone());

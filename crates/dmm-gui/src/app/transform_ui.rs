@@ -15,8 +15,6 @@ use dmm_lib::transform::{FactorError, RAW_LABEL, Transform};
 use eframe::egui::{self, RichText, Ui};
 use std::time::Instant;
 
-use crate::a11y::ResponseA11yExt;
-
 use super::App;
 use super::appearance::SMALL_TEXT_SIZE;
 
@@ -91,7 +89,6 @@ fn parse_field(
 impl App {
     pub(super) fn show_transform_row(&mut self, ui: &mut Ui, scale: f32) {
         let active = !self.transform.is_identity();
-        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         // Floored at the 11 pt minimum: unlike the remote buttons this row
         // holds text the user has to type into, and the big meter's scale
         // factor goes below 0.4 in a small window.
@@ -105,17 +102,12 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 3.0 * scale;
             let label = RichText::new("Scale").font(font.clone());
-            let label = if active {
-                label.color(tc.accent()).strong()
-            } else {
-                label
-            };
+            // `selected` puts the state in the widget info for AT users, whom
+            // the fill alone doesn't reach; the frame stays when off so the
+            // chip still reads as actionable.
             let resp = ui
-                .add(egui::Button::new(label))
-                .on_hover_text(SCALE_HOVER)
-                // The accent colour alone doesn't reach an AT user, and the
-                // button's own text is the same either way.
-                .a11y_toggled(active);
+                .add(egui::Button::new(label).selected(active))
+                .on_hover_text(SCALE_HOVER);
             if resp.clicked() {
                 self.transform_editor.open = !self.transform_editor.open;
             }

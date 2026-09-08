@@ -113,8 +113,8 @@ pub(crate) fn set_live_region_cached(
 }
 
 /// Chainable accessibility helpers on [`Response`]. Lets call sites attach
-/// an AccessKit label or toggled-state directly onto a button/widget chain
-/// instead of stashing the response and calling a separate helper:
+/// an AccessKit label or role directly onto a button/widget chain instead of
+/// stashing the response and calling a separate helper:
 ///
 /// ```ignore
 /// ui.button("?")
@@ -126,20 +126,6 @@ pub(crate) trait ResponseA11yExt {
     /// [`set_accessible_label`] for when to use this (icon-only buttons,
     /// custom-painted widgets, clickable labels with non-descriptive text).
     fn a11y_label(self, label: &str) -> Self;
-
-    /// Tag this response with on/off toggle state for screen readers.
-    /// Use this on plain `egui::Button`s that behave as toggles (HOLD,
-    /// REL, LIVE, etc.) — the button's color change alone does not
-    /// communicate the state to AT users.
-    ///
-    /// Writes the AccessKit toggle state directly via
-    /// `accesskit_node_builder`, bypassing `Response::widget_info`. We
-    /// can't go through `widget_info` here because Button's `atom_ui`
-    /// already calls `widget_info` internally with a labeled (non-selected)
-    /// info, and a second `widget_info` call would push a second
-    /// `OutputEvent::Clicked` on the click frame — causing AT to announce
-    /// the click twice. (egui upstream gap #3.)
-    fn a11y_toggled(self, selected: bool) -> Self;
 
     /// Tag this response with an AccessKit semantic role (Main, Status,
     /// Toolbar, etc.). For `ui.scope`-shaped landmarks prefer
@@ -153,18 +139,6 @@ impl ResponseA11yExt for Response {
     fn a11y_label(self, label: &str) -> Self {
         self.ctx
             .accesskit_node_builder(self.id, |builder| builder.set_label(label));
-        self
-    }
-
-    fn a11y_toggled(self, selected: bool) -> Self {
-        use egui::accesskit::Toggled;
-        self.ctx.accesskit_node_builder(self.id, |builder| {
-            builder.set_toggled(if selected {
-                Toggled::True
-            } else {
-                Toggled::False
-            });
-        });
         self
     }
 

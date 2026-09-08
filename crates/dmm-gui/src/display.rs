@@ -600,16 +600,11 @@ fn show_choice_readout(
                         } else {
                             format!("   {}", c.label)
                         };
-                        // Redundant since egui 0.35 (`selectable_value`
-                        // announces its selected state itself); kept while
-                        // the plain-`Button` toggles still need the helper.
-                        let entry = ui
-                            .selectable_value(
-                                &mut picked,
-                                Some(c.id),
-                                RichText::new(text).font(FontId::proportional(popup_size)),
-                            )
-                            .a11y_toggled(c.current);
+                        let entry = ui.selectable_value(
+                            &mut picked,
+                            Some(c.id),
+                            RichText::new(text).font(FontId::proportional(popup_size)),
+                        );
                         // Focus lands on the live entry as the list opens —
                         // by click, or by Enter/Space on the readout — so a
                         // screen reader announces it and Enter picks it.

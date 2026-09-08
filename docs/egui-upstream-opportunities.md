@@ -19,12 +19,12 @@ unless otherwise noted.
 **Local wrapper layer.** The recurring workaround patterns are
 encapsulated as two extension traits in `crates/dmm-gui/src/a11y.rs`:
 
-- `ResponseA11yExt` — chainable `Response::a11y_label(&str)`,
-  `Response::a11y_toggled(bool)`, `Response::a11y_role(Role)`. Lets
-  call sites attach an AccessKit label, toggle state, or role directly
-  onto an existing widget chain (e.g.
-  `ui.button("?").on_hover_text("…").a11y_label("Settings")`).
-  Workarounds for gaps #2/#3 in `Button` live here.
+- `ResponseA11yExt` — chainable `Response::a11y_label(&str)` and
+  `Response::a11y_role(Role)`. Lets call sites attach an AccessKit
+  label or role directly onto an existing widget chain (e.g.
+  `ui.button("?").on_hover_text("…").a11y_label("Settings")`). The
+  workaround for gap #2 in `Button` lives here; gap #3's
+  `a11y_toggled` was retired once egui shipped `Button::selected`.
 - `UiA11yExt` — `Ui::landmark(id_salt, role, add_contents)` and
   `Ui::live_region_horizontal(fp, make_label, add_contents)`. Both
   bake in the stable-id-salt workaround for gap #5 and the cached
@@ -194,15 +194,13 @@ First contribution, shipped as `Button::selected: Option<bool>`. Verified in
 0.36.2: `Button::selected` at `widgets/button.rs:270`, and `widget_info` now
 emits `WidgetInfo::selected(WidgetType::Button, …)` when it was called
 (`widgets/button.rs:391-403`), which `response.rs:975-981` reads into
-`builder.set_toggled`. `ResponseA11yExt::a11y_toggled` in
-`crates/dmm-gui/src/a11y.rs` is therefore redundant at our
-`selectable_label` / `selectable_value` call sites, which route through
-`Button::selectable` (`ui.rs:1929-1931`, `:1939-1951`, `widgets/button.rs:78-82`).
-It is *not* yet redundant at our plain-`Button` toggles (HOLD, REL, LIVE, …):
-a `Button` that never calls `.selected(..)` still reports
-`WidgetInfo::labeled` (`widgets/button.rs:401`). The helper is left in place;
-switching those call sites to `Button::selected` and retiring it is a
-follow-up.
+`builder.set_toggled`. The local `ResponseA11yExt::a11y_toggled` wrapper was
+**retired 2026-09-08** in favour of `Button::selected`: every toggle in the
+app — the plain-`Button` ones (HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, Scale,
+LIVE) included — now goes through `Button::selectable`
+(`ui.rs:1929-1931`, `:1939-1951`, `widgets/button.rs:78-82`), which sets both
+the selected widget info and the `SELECTED_CLASS` style class, so the toggles
+share one look and one AccessKit path.
 
 **Where:** `widgets/button.rs:391-403`, `response.rs:975-981`
 
@@ -212,13 +210,12 @@ follow-up.
 LIVE, etc.) could not announce its state to a screen reader without
 bypassing `widget_info` entirely.
 
-**Workaround we used.** Added a chainable `Response::a11y_toggled`
-extension (`ResponseA11yExt` in `crates/dmm-gui/src/a11y.rs`) which
-calls `ctx.accesskit_node_builder(id, |b| b.set_toggled(...))`
-directly, bypassing `widget_info`. Call sites:
-`crates/dmm-gui/src/app/controls.rs` and `crates/dmm-gui/src/graph/toolbar.rs`.
-The chainable signature `Response::a11y_toggled(bool) -> Response`
-prefigures the proposed upstream `Button::toggled(bool) -> Self`.
+**Workaround we used** (now removed). A chainable `Response::a11y_toggled`
+extension (`ResponseA11yExt` in `crates/dmm-gui/src/a11y.rs`) called
+`ctx.accesskit_node_builder(id, |b| b.set_toggled(...))` directly,
+bypassing `widget_info`. Its chainable signature
+`Response::a11y_toggled(bool) -> Response` prefigured the upstream
+`Button::selected(bool) -> Self` that replaced it.
 
 We tried using `Response::widget_info(WidgetInfo::selected(...))` for
 this first and discovered it pushes a duplicate `OutputEvent::Clicked`

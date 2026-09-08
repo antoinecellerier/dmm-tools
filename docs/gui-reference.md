@@ -181,7 +181,7 @@ brings the **Plot:**/**Show:** row up for those meters too.
 | Control | Description |
 |---|---|
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
-| **LIVE** | Auto-scroll to latest data (green when active) |
+| **LIVE** | Auto-scroll to latest data (filled when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
 | **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171), or while a software [scale](#scale) is active (which adds **Raw**). Switching restarts the graph, and so does the meter dropping the chosen sub-value for a few readings in a row — the graph returns to **Main**. |

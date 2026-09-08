@@ -332,6 +332,14 @@ Auto-rotate log files by size or time (e.g., new file every hour or every 100 MB
 
 Use cases: multi-day environmental monitoring, production line logging.
 
+### Themable egui widget colours
+
+**Complexity:** Low-medium
+
+The settings palette covers the app's own colours (reading, traces, status), but egui's widget colours — the selected-chip fill and text now used by HOLD/REL/RANGE/LIVE, button frames, the focus ring — come from egui's default `Visuals` and cannot be changed. Expose the ones that carry state (selection fill/stroke at least) as palette fields, applied through `Visuals` in `app/appearance.rs`, with the same AA checks as the existing fields.
+
+Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
+
 ### Session notes in exports
 
 **Complexity:** Low
