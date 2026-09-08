@@ -38,6 +38,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
 | `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |
 | `stats.rs` | `RunningStats` (min/max/avg), `Integrator` (trapezoidal time-integral with gap handling), and `SeriesStats` — the mode/unit-keyed session both the CLI read loop and the GUI drain accumulate into, so the two agree on what starts a new series |
+| `mock/` | `MockProtocol`, the hardware-free meter the GUI, CLI demos and screenshots run against: `scenarios.rs` (one waveform-driven scenario per `MockMode`), `state.rs` (HOLD/REL/range/MIN-MAX/Peak and how they filter a reading), `mod.rs` (the `Protocol` impl). It stands in for a UT61E+ — same mode and range bytes, same spec table — and reaches its settings through `protocol/cycle.rs`, a press being a state change instead of a wire write, so a choice list that works here works on hardware |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
 | `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the "USB cable not found" setup hint and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically, and because the shared prose drifted apart while each binary held its own copy. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
@@ -70,9 +71,9 @@ Remote control has two paths. `send_command()` sends a named button press and re
 back. `choices(Setting, &Measurement)` lists the values a setting (`Mode`, `Range`, `Hold`,
 `Rel`, `MinMax`, `Peak`) can take from where the meter sits, each a `Choice { id, label,
 current }`, and `select(Setting, id)` switches to one, confirmed from the stream. The UT181A
-and the mock answer with direct commands; the UT61+/UT161 and Voltcraft families go through
-`protocol/cycle.rs`. Both default to "unsupported", and the CLI and GUI hide any setting whose
-list has fewer than two entries.
+answers with direct commands; the UT61+/UT161 and Voltcraft families go through
+`protocol/cycle.rs`, and so does the mock, for everything but its mode selector. Both default
+to "unsupported", and the CLI and GUI hide any setting whose list has fewer than two entries.
 
 **Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
 devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation

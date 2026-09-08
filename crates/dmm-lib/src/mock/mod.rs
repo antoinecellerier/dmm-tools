@@ -1,17 +1,30 @@
+//! A meter without hardware: the device the GUI, the CLI demos and the
+//! screenshots run against.
+//!
+//! The mock stands in for a UT61E+, so it emits that family's mode and range
+//! bytes, answers spec lookups from its table, and reaches its settings
+//! through the same [`cycle`] driver the button-cycling families use — a
+//! press being a change to [`state::MeterState`] instead of a wire write,
+//! and a fresh frame being the next synthesised reading. Only the mode
+//! selector is its own (see [`MockProtocol::mode_choices`]).
+//!
+//! [`scenarios`] holds what it measures, [`state`] what its buttons do.
+
+mod scenarios;
+mod state;
+
 use crate::Dmm;
 use crate::error::{Error, Result};
-use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
-use crate::protocol::cycle::FlagSetting;
+use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use crate::protocol::ut61eplus::tables::{self, DeviceTable};
-use crate::protocol::{
-    AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice, DeviceProfile, Protocol, Setting, Stability,
-};
+use crate::protocol::{Choice, DeviceProfile, Protocol, Setting, Stability, unsupported_setting};
 use crate::transport::{NullTransport, Transport};
+use scenarios::{AuxSpec, Scenario, scenarios};
+use state::MeterState;
 use std::borrow::Cow;
-use std::f64::consts::TAU;
 use std::time::{Duration, Instant};
 
 const MOCK_COMMANDS: &[&str] = &[
@@ -240,400 +253,6 @@ impl std::fmt::Display for MockMode {
     }
 }
 
-/// A scenario defines a measurement mode with a time-varying value pattern.
-///
-/// Values are a pure function of elapsed seconds since the scenario started,
-/// so displayed waveforms trace smooth curves regardless of read cadence or
-/// scheduling jitter. Each waveform is periodic over `duration_secs` — it
-/// returns identical values at `t = 0` and `t = duration_secs`, so the
-/// scenario can loop without a visible jump when it wraps.
-struct Scenario {
-    id: MockMode,
-    mode: &'static str,
-    mode_raw: u16,
-    range_raw: u8,
-    unit: &'static str,
-    range_label: &'static str,
-    range_max: f64,
-    duration_secs: f64,
-    value_fn: fn(f64, f64) -> MeasuredValue,
-    /// Secondary readings emitted with every measurement. Empty for the
-    /// single-display scenarios.
-    aux: &'static [AuxSpec],
-}
-
-/// A secondary reading a scenario emits alongside its main value.
-///
-/// Same `(elapsed, duration)` signature as the main `value_fn`, so sub-values
-/// are evaluated at the same instant as the main reading and stay consistent
-/// with it (and with each other) at any read cadence.
-struct AuxSpec {
-    label: &'static str,
-    /// Unit of this sub-value. Empty means "same as the main reading", the
-    /// convention `AuxValue::unit_or` resolves.
-    unit: &'static str,
-    value_fn: fn(f64, f64) -> MeasuredValue,
-}
-
-impl Scenario {
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        id: MockMode,
-        mode: &'static str,
-        mode_raw: u16,
-        range_raw: u8,
-        unit: &'static str,
-        range_label: &'static str,
-        range_max: f64,
-        duration_secs: f64,
-        value_fn: fn(f64, f64) -> MeasuredValue,
-    ) -> Self {
-        // value_fns divide by duration_secs to compute phase. All current
-        // scenarios use 10–20 s; guard against a future 0.0 sneaking in.
-        debug_assert!(duration_secs > 0.0, "scenario duration must be positive");
-        Self {
-            id,
-            mode,
-            mode_raw,
-            range_raw,
-            unit,
-            range_label,
-            range_max,
-            duration_secs,
-            value_fn,
-            aux: &[],
-        }
-    }
-
-    /// Attach secondary readings, mirroring a multi-display meter.
-    fn with_aux(mut self, aux: &'static [AuxSpec]) -> Self {
-        self.aux = aux;
-        self
-    }
-}
-
-/// Triangle wave on `[lo, hi]`, period-1 in phase. `phase = 0` and `phase = 1`
-/// both map to `lo`, so the wave loops continuously.
-fn triangle(phase: f64, lo: f64, hi: f64) -> f64 {
-    let p = phase.rem_euclid(1.0);
-    let span = hi - lo;
-    if p < 0.5 {
-        lo + p * 2.0 * span
-    } else {
-        hi - (p - 0.5) * 2.0 * span
-    }
-}
-
-fn dcv_value(t: f64, duration: f64) -> MeasuredValue {
-    // One full sine cycle per duration.
-    MeasuredValue::Normal(5.0 + 3.0 * (t / duration * TAU).sin())
-}
-
-fn acv_value(t: f64, duration: f64) -> MeasuredValue {
-    // Two sine cycles per duration.
-    MeasuredValue::Normal(120.0 + 2.0 * (t / duration * 2.0 * TAU).sin())
-}
-
-fn ohm_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(triangle(t / duration, 1.0, 10.0))
-}
-
-fn cap_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(triangle(t / duration, 1.0, 20.0))
-}
-
-fn hz_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(60.0 + 0.5 * (t / duration * TAU).sin())
-}
-
-/// T1, the thermocouple every temperature scenario puts on the main display,
-/// in °C: one slow ramp across 20–30 °C per duration.
-///
-/// Named separately from [`temp_value`] so the differential arrangements can
-/// subtract the very same waveform rather than restating the math.
-fn temp_t1_celsius(t: f64, duration: f64) -> f64 {
-    triangle(t / duration, 20.0, 30.0)
-}
-
-fn temp_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(temp_t1_celsius(t, duration))
-}
-
-fn dcma_value(t: f64, duration: f64) -> MeasuredValue {
-    // Two sine cycles per duration.
-    MeasuredValue::Normal(50.0 + 5.0 * (t / duration * 2.0 * TAU).sin())
-}
-
-fn ohm_ol_value(_t: f64, _duration: f64) -> MeasuredValue {
-    MeasuredValue::Overload
-}
-
-fn ncv_value(t: f64, duration: f64) -> MeasuredValue {
-    // Discrete triangle: 0,1,2,3,4,3,2,1 stepped across the duration, so the
-    // level at t=duration is the starting level at t=0.
-    const LEVELS: [u8; 8] = [0, 1, 2, 3, 4, 3, 2, 1];
-    let phase = (t / duration).rem_euclid(1.0);
-    let idx = ((phase * LEVELS.len() as f64) as usize).min(LEVELS.len() - 1);
-    MeasuredValue::NcvLevel(LEVELS[idx])
-}
-
-/// Line frequency behind the `acv-hz` sub-displays, in Hz. Drifts by 0.05 Hz
-/// around 60 — the scale a mains-frequency reading actually moves on.
-///
-/// Three cycles per duration against the main AC voltage's two, so on the
-/// graph the frequency trace visibly runs at its own rate instead of looking
-/// like a rescaled copy of the voltage it sits beside.
-fn acv_line_hz(t: f64, duration: f64) -> f64 {
-    60.0 + 0.05 * (t / duration * 3.0 * TAU).sin()
-}
-
-fn acv_hz_freq_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(acv_line_hz(t, duration))
-}
-
-fn acv_hz_period_value(t: f64, duration: f64) -> MeasuredValue {
-    // Derived from the same frequency so the two sub-displays never disagree,
-    // as they can't on the meter either.
-    MeasuredValue::Normal(1000.0 / acv_line_hz(t, duration))
-}
-
-/// T2, the second thermocouple of the `temp2` scenario, in °C.
-///
-/// Deliberately not derived from T1: two sine cycles per duration with a
-/// smaller swing, against T1's single triangle ramp. The two traces then cross
-/// repeatedly instead of running parallel, which is the point of the scenario —
-/// a graph with two sub-values on it has to show them apart. The 21–25 °C swing
-/// stays inside T1's 20–30 °C band so both share one Y axis.
-///
-/// Named separately from [`temp2_value`] for the same reason as
-/// [`temp_t1_celsius`]: the differential arrangements subtract this waveform.
-fn temp_t2_celsius(t: f64, duration: f64) -> f64 {
-    23.0 + 2.0 * (t / duration * 2.0 * TAU).sin()
-}
-
-fn temp2_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(temp_t2_celsius(t, duration))
-}
-
-/// The `temp-diff` scenario's reading: T1 − T2, the real difference of the two
-/// probes `temp2` displays, at the same elapsed time. All four temperature
-/// scenarios share a duration, so switching between them shows arithmetic that
-/// adds up.
-fn temp_diff_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(temp_t1_celsius(t, duration) - temp_t2_celsius(t, duration))
-}
-
-/// The `temp-diff-rev` scenario's reading: the same difference the other way
-/// round, T2 − T1.
-fn temp_diff_rev_value(t: f64, duration: f64) -> MeasuredValue {
-    MeasuredValue::Normal(temp_t2_celsius(t, duration) - temp_t1_celsius(t, duration))
-}
-
-/// Frequency then period — the order the UT181A's `0x1121` frame sends them.
-const ACV_HZ_AUX: &[AuxSpec] = &[
-    AuxSpec {
-        label: "Frequency",
-        unit: "Hz",
-        value_fn: acv_hz_freq_value,
-    },
-    AuxSpec {
-        label: "Period",
-        unit: "ms",
-        value_fn: acv_hz_period_value,
-    },
-];
-
-/// The second thermocouple of the UT181A's `0x4211` frame.
-const TEMP_DUAL_AUX: &[AuxSpec] = &[AuxSpec {
-    label: "T2",
-    unit: "\u{00B0}C",
-    value_fn: temp2_value,
-}];
-
-fn scenarios() -> Vec<Scenario> {
-    vec![
-        // 22V range
-        Scenario::new(
-            MockMode::DcV,
-            "DC V",
-            0x02,
-            1,
-            "V",
-            "22V",
-            22.0,
-            10.0,
-            dcv_value,
-        ),
-        // 220V range
-        Scenario::new(
-            MockMode::AcV,
-            "AC V",
-            0x00,
-            2,
-            "V",
-            "220V",
-            220.0,
-            10.0,
-            acv_value,
-        ),
-        // 22kΩ range
-        Scenario::new(
-            MockMode::Ohm,
-            "\u{03A9}",
-            0x06,
-            2,
-            "k\u{03A9}",
-            "22k\u{03A9}",
-            22.0,
-            10.0,
-            ohm_value,
-        ),
-        // 22µF range
-        Scenario::new(
-            MockMode::Capacitance,
-            "Capacitance",
-            0x09,
-            3,
-            "\u{00B5}F",
-            "22\u{00B5}F",
-            22.0,
-            10.0,
-            cap_value,
-        ),
-        // 220Hz range
-        Scenario::new(
-            MockMode::Hz,
-            "Hz",
-            0x04,
-            1,
-            "Hz",
-            "220Hz",
-            220.0,
-            8.0,
-            hz_value,
-        ),
-        Scenario::new(
-            MockMode::Temp,
-            "Temp \u{00B0}C",
-            0x0A,
-            0,
-            "\u{00B0}C",
-            "",
-            400.0,
-            8.0,
-            temp_value,
-        ),
-        // 220mA range
-        Scenario::new(
-            MockMode::DcMa,
-            "DC mA",
-            0x0E,
-            1,
-            "mA",
-            "220mA",
-            220.0,
-            8.0,
-            dcma_value,
-        ),
-        // 22MΩ range
-        Scenario::new(
-            MockMode::OhmOl,
-            "\u{03A9}",
-            0x06,
-            5,
-            "M\u{03A9}",
-            "22M\u{03A9}",
-            22.0,
-            2.0,
-            ohm_ol_value,
-        ),
-        Scenario::new(MockMode::Ncv, "NCV", 0x14, 0, "", "", 4.0, 4.0, ncv_value),
-        // Multi-display scenarios, appended so the auto-cycle order of the
-        // single-display ones above is unchanged. They exercise the
-        // `aux_values` path (UT181A, UT171) without the hardware.
-        //
-        // Their mode strings name the sub-displays, as a multi-display meter
-        // does — the UT181A calls `0x1121` "V AC Hz", not "V AC". Without
-        // that, each of these read identically to the single-display scenario
-        // it sits beside, and the mode selector would offer two entries with
-        // the same label.
-        Scenario::new(
-            MockMode::AcVHz,
-            "AC V Hz",
-            0x00,
-            2,
-            "V",
-            "220V",
-            220.0,
-            10.0,
-            acv_value,
-        )
-        .with_aux(ACV_HZ_AUX),
-        Scenario::new(
-            MockMode::TempDual,
-            "Temp \u{00B0}C T1 (T2)",
-            0x0A,
-            0,
-            "\u{00B0}C",
-            "",
-            400.0,
-            8.0,
-            temp_value,
-        )
-        .with_aux(TEMP_DUAL_AUX),
-        // The temperature dial's two arithmetic arrangements, so the mode
-        // group has the four entries a real UT181A offers there. They run on
-        // the same 8 s clock as `temp` and `temp2` and subtract those very
-        // waveforms, so the four readings agree with each other.
-        //
-        // No sub-values: the meter's aux layout in the differential
-        // arrangements is unverified. `aux_labels` in the UT181A decoder
-        // deliberately falls back to the positional "Aux1"/"Aux2" for 0x4231
-        // and 0x4241 because no source says which probe feeds the slot, so
-        // the mock asserts nothing here either.
-        Scenario::new(
-            MockMode::TempDiff,
-            "Temp \u{00B0}C T1-T2",
-            0x0A,
-            0,
-            "\u{00B0}C",
-            "",
-            400.0,
-            8.0,
-            temp_diff_value,
-        ),
-        Scenario::new(
-            MockMode::TempDiffRev,
-            "Temp \u{00B0}C T2-T1",
-            0x0A,
-            0,
-            "\u{00B0}C",
-            "",
-            400.0,
-            8.0,
-            temp_diff_rev_value,
-        ),
-    ]
-}
-
-/// MIN/MAX display cycling state, matching real device behavior.
-/// The meter cycles MAX → MIN → MAX as a 2-state toggle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MinMaxState {
-    Off,
-    Max,
-    Min,
-}
-
-/// Peak display cycling state, matching real device behavior.
-/// The meter cycles P-MAX → P-MIN → P-MAX as a 2-state toggle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PeakState {
-    Off,
-    Max,
-    Min,
-}
-
 /// Mock protocol that generates synthetic measurements without hardware.
 ///
 /// Remote mode selection (`Protocol::choices` / `Protocol::select`)
@@ -651,26 +270,12 @@ pub struct MockProtocol {
     pub(crate) scenario_started: Instant,
     /// When false, stays on the current scenario indefinitely.
     auto_cycle: bool,
-    hold: bool,
-    held_value: Option<MeasuredValue>,
-    /// Elapsed time HOLD was pressed at. Sub-values are functions of time, so
-    /// freezing them means re-evaluating at this instant rather than caching
-    /// each one.
-    held_elapsed: Option<f64>,
-    rel: bool,
-    rel_base: Option<f64>,
-    auto_range: bool,
-    /// The ladder rung RANGE has been stepped to, as a range byte; `None`
-    /// means the scenario's own range, which is what auto-ranging picked.
-    manual_range: Option<u8>,
-    /// Saved auto_range state before MIN/MAX activation (restored on exit).
-    auto_range_before_minmax: bool,
-    minmax_state: MinMaxState,
-    stored_min: Option<f64>,
-    stored_max: Option<f64>,
-    peak_state: PeakState,
-    stored_peak_min: Option<f64>,
-    stored_peak_max: Option<f64>,
+    /// What the buttons have done to the meter, and what that does to a
+    /// reading.
+    state: MeterState,
+    /// The mode last read back, for the cycle driver. There is no dial to
+    /// infer (see [`MockProtocol::dial_positions`]).
+    dial: cycle::DialState,
     profile: DeviceProfile,
     /// The mock stands in for a UT61E+, so it answers spec lookups from the
     /// UT61E+ table rather than carrying a second copy that can drift.
@@ -685,20 +290,8 @@ impl MockProtocol {
             current_scenario: 0,
             scenario_started: Instant::now(),
             auto_cycle: true,
-            hold: false,
-            held_value: None,
-            held_elapsed: None,
-            rel: false,
-            rel_base: None,
-            auto_range: true,
-            manual_range: None,
-            auto_range_before_minmax: true,
-            minmax_state: MinMaxState::Off,
-            stored_min: None,
-            stored_max: None,
-            peak_state: PeakState::Off,
-            stored_peak_min: None,
-            stored_peak_max: None,
+            state: MeterState::default(),
+            dial: cycle::DialState::default(),
             profile: DeviceProfile {
                 family_name: "mock",
                 model_name: "Mock UT61E+",
@@ -740,167 +333,109 @@ impl MockProtocol {
     fn advance_scenario(&mut self) {
         self.current_scenario = (self.current_scenario + 1) % self.scenarios.len();
         self.scenario_started = Instant::now();
-        // The ladder belongs to the mode that was left behind.
-        self.manual_range = None;
+        self.state.leave_scenario();
     }
 
-    /// The live scenario's mode as the UT61E+ table knows it.
-    fn current_table_mode(&self) -> Option<Mode> {
-        u8::try_from(self.current_scenario().mode_raw)
+    /// A scenario's mode byte as the UT61E+ table knows it.
+    fn table_mode(mode_raw: u16) -> Option<Mode> {
+        u8::try_from(mode_raw)
             .ok()
             .and_then(|b| Mode::from_byte(b).ok())
-    }
-
-    /// The manual range ladder of the live scenario's mode — the mock stands
-    /// in for a UT61E+, so the ladder is that meter's, from the same table
-    /// the range labels come from.
-    fn range_ladder(&self) -> Vec<Cow<'static, str>> {
-        match self.current_table_mode() {
-            Some(mode) => tables::range_ladder(&self.table, mode),
-            None => Vec::new(),
-        }
     }
 
     /// The range byte the meter reports: the rung RANGE was stepped to, or
     /// the one auto-ranging picked for the scenario.
     fn reported_range(&self) -> u8 {
-        self.manual_range
-            .unwrap_or(self.current_scenario().range_raw)
+        self.state.reported_range(self.current_scenario().range_raw)
     }
 
-    /// Auto plus the live mode's ladder, for `Protocol::choices`.
-    fn range_choices(&self) -> Vec<Choice> {
-        let ladder = self.range_ladder();
-        if ladder.is_empty() {
-            return Vec::new();
-        }
-        let live = (!self.auto_range).then(|| u16::from(self.reported_range()) + 1);
-        let mut choices = vec![Choice {
-            id: AUTO_RANGE_ID,
-            label: Cow::Borrowed(AUTO_RANGE_LABEL),
-            current: self.auto_range,
-        }];
-        choices.extend(ladder.into_iter().enumerate().map(|(i, label)| {
-            let id = i as u16 + 1;
-            Choice {
-                id,
-                label,
-                current: live == Some(id),
-            }
-        }));
-        choices
-    }
-
-    /// Jump straight to a rung, or back to auto for [`AUTO_RANGE_ID`].
+    /// What the reading calls its range.
     ///
-    /// No walk: nothing here is a button press. The validation is the real
-    /// driver's, though, and so is the refusal under MIN/MAX — the meter
-    /// locks the range while it is recording (verified 2026-03-21).
-    fn select_range(&mut self, id: u16) -> Result<()> {
-        let ladder = self.range_ladder();
-        if ladder.is_empty() || (id != AUTO_RANGE_ID && usize::from(id) > ladder.len()) {
-            return Err(Error::UnsupportedCommand(format!(
-                "range {id} in {}",
-                self.current_scenario().mode
-            )));
+    /// A manually selected rung renames the range the way the meter's own
+    /// reading would. The value and its unit stay the scenario's: the label
+    /// table carries no numeric limit to rescale them with, and a unit
+    /// swapped on its own would put the reading off by a decade.
+    fn range_label(&self, scenario: &Scenario, range_raw: u8) -> Cow<'static, str> {
+        if self.state.on_a_manual_rung()
+            && let Some(info) = Self::table_mode(scenario.mode_raw)
+                .and_then(|mode| self.table.range_info(mode, range_raw))
+        {
+            return Cow::Borrowed(info.label);
         }
-        if self.minmax_state != MinMaxState::Off {
-            return Err(Error::CommandRejected(
-                "MIN/MAX locks the range; leave MIN/MAX before changing it".to_string(),
-            ));
+        Cow::Borrowed(scenario.range_label)
+    }
+
+    /// The mock's own state as a reading, for the cycle driver's benefit.
+    ///
+    /// `Protocol::choices` is handed a reading by the caller, but the mock is
+    /// its own source of truth for what it is measuring and the caller's may
+    /// be stale — so the mode, range and flag fields the driver looks at are
+    /// filled from the live scenario instead. It reads no other field.
+    fn state_frame(&self) -> Measurement {
+        Measurement {
+            mode_raw: self.current_scenario().mode_raw,
+            range_raw: self.reported_range(),
+            flags: self.state.flags(),
+            ..Measurement::from_payload(&[])
         }
-        if id == AUTO_RANGE_ID {
-            self.manual_range = None;
-            self.auto_range = true;
-        } else {
-            self.manual_range = Some((id - 1) as u8);
-            self.auto_range = false;
-        }
+    }
+
+    /// The scenarios reachable from the live one, for `Protocol::choices`.
+    ///
+    /// Not `cycle::mode_choices`: the mock has no dial table to resolve a
+    /// position from, and its ids are scenario indices rather than mode
+    /// bytes — four temperature scenarios all report 0x0A, so a mode byte
+    /// cannot name which one is live. [`MOCK_MODE_GROUPS`] stands in for the
+    /// dial position.
+    fn mode_choices(&self) -> Vec<Choice> {
+        let live = self.current_mode();
+        let Some(group) = MOCK_MODE_GROUPS.iter().find(|g| g.contains(&live)) else {
+            return Vec::new();
+        };
+        group
+            .iter()
+            .filter_map(|&mode| {
+                let scenario = self.scenarios.iter().find(|s| s.id == mode)?;
+                Some(Choice {
+                    id: mode.choice_id()?,
+                    label: Cow::Borrowed(scenario.mode),
+                    current: mode == live,
+                })
+            })
+            .collect()
+    }
+
+    /// Jump the live scenario, for `Protocol::select`.
+    ///
+    /// Not `cycle::select_mode`, for the reason [`Self::mode_choices`] gives:
+    /// there is no ring to walk, so the scenario is switched outright and its
+    /// waveform restarted.
+    fn select_scenario(&mut self, id: u16) -> Result<()> {
+        let scenario = MockMode::from_choice_id(id)
+            .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
+        let Some(idx) = scenario else {
+            return Err(Error::UnsupportedCommand(format!("mode {id:#06x}")));
+        };
+        self.current_scenario = idx;
+        self.scenario_started = Instant::now();
         Ok(())
     }
 
-    /// The states a flag-backed setting offers in the live scenario.
-    ///
-    /// The mock stands in for a UT61E+: HOLD, REL and MIN/MAX everywhere,
-    /// MIN/MAX as the MAX/MIN ring with no AVG, and Peak only where the
-    /// meter reacts to it — `send_command` ignores "peak" on the DC
-    /// scenarios, so offering it there would list a state select cannot
-    /// reach.
-    fn flag_states(&self, setting: FlagSetting) -> &'static [u16] {
-        match setting {
-            FlagSetting::Hold | FlagSetting::Rel => &[0, 1],
-            FlagSetting::MinMax => &[0, 1, 2],
-            FlagSetting::Peak if self.peak_applies() => &[0, 1, 2],
-            FlagSetting::Peak => &[],
-        }
-    }
-
-    /// Whether the Peak command does anything in the live scenario.
-    fn peak_applies(&self) -> bool {
-        !matches!(
-            self.current_scenario().id,
-            MockMode::DcV | MockMode::DcMa | MockMode::OhmOl
-        )
-    }
-
-    /// Which state a flag-backed setting is in, from the mock's own state
-    /// rather than a reading the caller may have kept.
-    fn flag_state(&self, setting: FlagSetting) -> u16 {
-        match setting {
-            FlagSetting::Hold => u16::from(self.hold),
-            FlagSetting::Rel => u16::from(self.rel),
-            FlagSetting::MinMax => match self.minmax_state {
-                MinMaxState::Off => 0,
-                MinMaxState::Max => 1,
-                MinMaxState::Min => 2,
-            },
-            FlagSetting::Peak => match self.peak_state {
-                PeakState::Off => 0,
-                PeakState::Max => 1,
-                PeakState::Min => 2,
-            },
-        }
-    }
-
-    /// Press the setting's button, or send its exit command, until the mock
-    /// is in state `id` — the same presses the real driver would send, so
-    /// MIN/MAX still locks the range and Peak still ends MIN/MAX.
-    fn select_flag(&mut self, setting: FlagSetting, id: u16) -> Result<()> {
-        if !self.flag_states(setting).contains(&id) {
-            return Err(Error::UnsupportedCommand(format!(
-                "{} state {id} in {}",
-                setting.setting(),
-                self.current_scenario().mode
-            )));
-        }
-        let (press, exit) = match setting {
-            FlagSetting::Hold => ("hold", "hold"),
-            FlagSetting::Rel => ("rel", "rel"),
-            FlagSetting::MinMax => ("minmax", "exit_minmax"),
-            FlagSetting::Peak => ("peak", "exit_peak"),
-        };
-        if id == 0 {
-            if self.flag_state(setting) != 0 {
-                self.send_command(&NullTransport, exit)?;
-            }
-            return Ok(());
-        }
-        // One press per state plus one, the same budget `cycle::walk` gives
-        // a ring it is stepping.
-        for _ in 0..self.flag_states(setting).len() + 1 {
-            if self.flag_state(setting) == id {
-                return Ok(());
-            }
-            self.send_command(&NullTransport, press)?;
-        }
-        if self.flag_state(setting) == id {
-            Ok(())
-        } else {
-            Err(Error::CommandRejected(format!(
-                "{} never reached state {id}",
-                setting.setting()
-            )))
-        }
+    /// The scenario's sub-values at `elapsed`.
+    fn aux_values(specs: &'static [AuxSpec], elapsed: f64, duration: f64) -> Vec<AuxValue> {
+        specs
+            .iter()
+            .map(|spec| {
+                let value = (spec.value_fn)(elapsed, duration);
+                AuxValue {
+                    label: Cow::Borrowed(spec.label),
+                    display_raw: Self::format_display(&value),
+                    value,
+                    unit: Cow::Borrowed(spec.unit),
+                    elapsed_secs: None,
+                }
+            })
+            .collect()
     }
 
     /// Elapsed seconds since the current scenario started. Uses
@@ -972,152 +507,39 @@ impl Protocol for MockProtocol {
     }
 
     fn request_measurement(&mut self, _transport: &dyn Transport) -> Result<Measurement> {
-        // Extract scenario data up front to avoid borrow conflict with &mut self.
         let elapsed = self.elapsed_secs();
-        let scenario = &self.scenarios[self.current_scenario];
-        let raw_value = (scenario.value_fn)(elapsed, scenario.duration_secs);
-        let mode: Cow<'static, str> = Cow::Borrowed(scenario.mode);
-        let mode_raw = scenario.mode_raw;
+        // A copy, so the meter state can be borrowed mutably below while the
+        // reading is still being built from the scenario.
+        let scenario = *self.current_scenario();
+        let raw = (scenario.value_fn)(elapsed, scenario.duration_secs);
+        let aux_values = Self::aux_values(
+            scenario.aux,
+            self.state.aux_elapsed(elapsed),
+            scenario.duration_secs,
+        );
+        let value = self.state.apply(raw);
         let range_raw = self.reported_range();
-        let unit: Cow<'static, str> = Cow::Borrowed(scenario.unit);
-        let mut range_label: Cow<'static, str> = Cow::Borrowed(scenario.range_label);
-        // A manually selected rung renames the range the way the meter's own
-        // reading would. The value and its unit stay the scenario's: the
-        // label table carries no numeric limit to rescale them with, and a
-        // unit swapped on its own would put the reading off by a decade.
-        if self.manual_range.is_some()
-            && let Some(info) = self
-                .current_table_mode()
-                .and_then(|mode| self.table.range_info(mode, range_raw))
-        {
-            range_label = Cow::Borrowed(info.label);
-        }
-        let scenario = self.current_scenario();
-        let range_max = scenario.range_max;
-        let duration_secs = scenario.duration_secs;
-        let aux_specs = scenario.aux;
-
-        // Sub-values freeze with the main one under HOLD: evaluate them at the
-        // instant HOLD was pressed. REL, MIN/MAX and Peak act on the main
-        // reading only, as on the meter.
-        let aux_elapsed = match (self.hold, self.held_elapsed) {
-            (true, Some(held)) => held,
-            _ => elapsed,
-        };
-        let aux_values: Vec<AuxValue> = aux_specs
-            .iter()
-            .map(|spec| {
-                let value = (spec.value_fn)(aux_elapsed, duration_secs);
-                AuxValue {
-                    label: Cow::Borrowed(spec.label),
-                    display_raw: Self::format_display(&value),
-                    value,
-                    unit: Cow::Borrowed(spec.unit),
-                    elapsed_secs: None,
-                }
-            })
-            .collect();
-
-        // Apply hold: freeze the value
-        let live_value = if self.hold {
-            self.held_value.clone().unwrap_or(raw_value.clone())
-        } else {
-            raw_value.clone()
-        };
-
-        // Apply rel: subtract baseline
-        let live_value = if self.rel {
-            if let (MeasuredValue::Normal(v), Some(base)) = (&live_value, self.rel_base) {
-                MeasuredValue::Normal(v - base)
-            } else {
-                live_value
-            }
-        } else {
-            live_value
-        };
-
-        // Update stored MIN/MAX values from live reading
-        if self.minmax_state != MinMaxState::Off
-            && let MeasuredValue::Normal(v) = &live_value
-        {
-            self.stored_min = Some(match self.stored_min {
-                Some(prev) => prev.min(*v),
-                None => *v,
-            });
-            self.stored_max = Some(match self.stored_max {
-                Some(prev) => prev.max(*v),
-                None => *v,
-            });
-        }
-
-        // Update stored Peak values from live reading
-        if self.peak_state != PeakState::Off
-            && let MeasuredValue::Normal(v) = &live_value
-        {
-            self.stored_peak_min = Some(match self.stored_peak_min {
-                Some(prev) => prev.min(*v),
-                None => *v,
-            });
-            self.stored_peak_max = Some(match self.stored_peak_max {
-                Some(prev) => prev.max(*v),
-                None => *v,
-            });
-        }
-
-        // Select display value: stored min/max/peak when active, live otherwise.
-        // Real device sends the stored value, not the live reading.
-        let value = match self.minmax_state {
-            MinMaxState::Max => self
-                .stored_max
-                .map(MeasuredValue::Normal)
-                .unwrap_or(live_value.clone()),
-            MinMaxState::Min => self
-                .stored_min
-                .map(MeasuredValue::Normal)
-                .unwrap_or(live_value.clone()),
-            MinMaxState::Off => match self.peak_state {
-                PeakState::Max => self
-                    .stored_peak_max
-                    .map(MeasuredValue::Normal)
-                    .unwrap_or(live_value.clone()),
-                PeakState::Min => self
-                    .stored_peak_min
-                    .map(MeasuredValue::Normal)
-                    .unwrap_or(live_value.clone()),
-                PeakState::Off => live_value,
-            },
-        };
-
-        let display_raw = Self::format_display(&value);
-        let progress = Self::compute_progress(&value, range_max);
-
-        let flags = StatusFlags {
-            hold: self.hold,
-            rel: self.rel,
-            auto_range: self.auto_range,
-            min: self.minmax_state == MinMaxState::Min,
-            max: self.minmax_state == MinMaxState::Max,
-            peak_min: self.peak_state == PeakState::Min,
-            peak_max: self.peak_state == PeakState::Max,
-            ..Default::default()
-        };
 
         let measurement = Measurement {
-            mode,
-            mode_raw,
+            mode: Cow::Borrowed(scenario.mode),
+            mode_raw: scenario.mode_raw,
             range_raw,
+            range_label: self.range_label(&scenario, range_raw),
+            unit: Cow::Borrowed(scenario.unit),
+            display_raw: Self::format_display(&value),
+            progress: Self::compute_progress(&value, scenario.range_max),
             value,
-            unit,
-            range_label,
-            progress,
-            display_raw,
-            flags,
+            flags: self.state.flags(),
             aux_values,
             // The mock has no wire bytes to report.
             ..Measurement::from_payload(&[])
         };
+        // Every reading the cycle driver takes is one of these, so record the
+        // mode from here as the hardware families do from their parser.
+        let positions = self.dial_positions();
+        self.dial.observe(positions, measurement.mode_raw);
 
-        if elapsed >= duration_secs {
+        if elapsed >= scenario.duration_secs {
             if self.auto_cycle {
                 self.advance_scenario();
             } else {
@@ -1137,111 +559,32 @@ impl Protocol for MockProtocol {
     }
 
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
+        let elapsed = self.elapsed_secs();
+        let scenario = *self.current_scenario();
         match command {
             "hold" => {
-                self.hold = !self.hold;
-                if self.hold {
-                    let elapsed = self.elapsed_secs();
-                    let scenario = self.current_scenario();
-                    self.held_value = Some((scenario.value_fn)(elapsed, scenario.duration_secs));
-                    self.held_elapsed = Some(elapsed);
-                } else {
-                    self.held_value = None;
-                    self.held_elapsed = None;
-                }
+                let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
+                self.state.press_hold(value, elapsed);
             }
             "rel" => {
-                self.rel = !self.rel;
-                if self.rel {
-                    let elapsed = self.elapsed_secs();
-                    let scenario = self.current_scenario();
-                    if let MeasuredValue::Normal(v) =
-                        (scenario.value_fn)(elapsed, scenario.duration_secs)
-                    {
-                        self.rel_base = Some(v);
-                    }
-                } else {
-                    self.rel_base = None;
-                }
+                let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
+                self.state.press_rel(value);
             }
-            // The RANGE button engages manual ranging at the rung
-            // auto-ranging had picked, then steps the ladder one rung per
-            // press (verified on a UT61E+ for the first press). A mode with
-            // no ladder ignores it, as DC mV does on the real meter, and so
-            // does MIN/MAX, which locks the range.
             "range" => {
-                let ladder = self.range_ladder();
-                if !ladder.is_empty() && self.minmax_state == MinMaxState::Off {
-                    let next = match self.manual_range {
-                        None => usize::from(self.reported_range()).min(ladder.len() - 1),
-                        Some(rung) => (usize::from(rung) + 1) % ladder.len(),
-                    };
-                    self.manual_range = Some(next as u8);
-                    self.auto_range = false;
-                }
+                let ladder = self.range_ladder(scenario.mode_raw);
+                self.state.press_range(ladder.len(), scenario.range_raw);
             }
-            "auto" => {
-                self.manual_range = None;
-                self.auto_range = true;
-            }
-            "minmax" => {
-                // Mutually exclusive with Peak on the real device.
-                if self.peak_state != PeakState::Off {
-                    self.peak_state = PeakState::Off;
-                    self.stored_peak_min = None;
-                    self.stored_peak_max = None;
-                }
-                // Real device cycles: Off → MAX → MIN → MAX → MIN ...
-                self.minmax_state = match self.minmax_state {
-                    MinMaxState::Off => {
-                        self.auto_range_before_minmax = self.auto_range;
-                        self.auto_range = false;
-                        self.stored_min = None;
-                        self.stored_max = None;
-                        MinMaxState::Max
-                    }
-                    MinMaxState::Max => MinMaxState::Min,
-                    MinMaxState::Min => MinMaxState::Max,
-                };
-            }
-            "exit_minmax" => {
-                self.minmax_state = MinMaxState::Off;
-                self.stored_min = None;
-                self.stored_max = None;
-                self.auto_range = self.auto_range_before_minmax;
-            }
+            "auto" => self.state.set_auto_range(),
+            "minmax" => self.state.press_minmax(),
+            "exit_minmax" => self.state.exit_minmax(),
             "peak" => {
-                // Real device silently ignores Peak on DC modes
-                // (UT61E+ spec §2.7) and never shows Peak and MIN/MAX
-                // together — entering Peak ends MIN/MAX.
-                if matches!(
-                    self.current_scenario().id,
-                    MockMode::DcV | MockMode::DcMa | MockMode::OhmOl
-                ) {
-                    return Ok(());
+                // The meter reacts to Peak only where the mode has one, and
+                // silently ignores the press elsewhere.
+                if scenario.peak_applies() {
+                    self.state.press_peak();
                 }
-                if self.minmax_state != MinMaxState::Off {
-                    self.minmax_state = MinMaxState::Off;
-                    self.stored_min = None;
-                    self.stored_max = None;
-                    self.auto_range = self.auto_range_before_minmax;
-                }
-                // Real device cycles: Off → P-MAX → P-MIN → P-MAX → P-MIN ...
-                self.peak_state = match self.peak_state {
-                    PeakState::Off => {
-                        self.stored_peak_min = None;
-                        self.stored_peak_max = None;
-                        PeakState::Max
-                    }
-                    PeakState::Max => PeakState::Min,
-                    PeakState::Min => PeakState::Max,
-                };
             }
-            "exit_peak" => {
-                self.peak_state = PeakState::Off;
-                self.stored_peak_min = None;
-                self.stored_peak_max = None;
-            }
+            "exit_peak" => self.state.exit_peak(),
             "select" | "select2" => {
                 self.advance_scenario();
             }
@@ -1277,57 +620,148 @@ impl Protocol for MockProtocol {
             .and_then(|mode| self.table.mode_spec_info(mode))
     }
 
-    /// The live scenario's group, or nothing when it isn't in one. The
-    /// argument is ignored: the mock is its own source of truth for what it
-    /// is measuring, and a caller could hand back a stale reading.
+    /// The `current` argument is ignored: the mock is its own source of
+    /// truth for what it is measuring, and a caller could hand back a stale
+    /// reading, so the driver is given [`Self::state_frame`] instead.
     fn choices(&self, setting: Setting, _current: &Measurement) -> Vec<Choice> {
-        if setting == Setting::Range {
-            return self.range_choices();
+        match setting {
+            Setting::Mode => self.mode_choices(),
+            Setting::Range => cycle::range_choices(self, &self.state_frame()),
+            flag => match FlagSetting::of(flag) {
+                Some(flag) => cycle::flag_choices(self, flag, &self.state_frame()),
+                None => Vec::new(),
+            },
         }
-        if let Some(flag) = FlagSetting::of(setting) {
-            let live = self.flag_state(flag);
-            return self
-                .flag_states(flag)
-                .iter()
-                .map(|&id| Choice {
-                    id,
-                    label: flag.label(id),
-                    current: id == live,
-                })
-                .collect();
-        }
-        let live = self.current_mode();
-        let Some(group) = MOCK_MODE_GROUPS.iter().find(|g| g.contains(&live)) else {
-            return Vec::new();
-        };
-        group
-            .iter()
-            .filter_map(|&mode| {
-                let scenario = self.scenarios.iter().find(|s| s.id == mode)?;
-                Some(Choice {
-                    id: mode.choice_id()?,
-                    label: Cow::Borrowed(scenario.mode),
-                    current: mode == live,
-                })
-            })
-            .collect()
     }
 
-    fn select(&mut self, _transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
-        if setting == Setting::Range {
-            return self.select_range(id);
+    fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
+        match setting {
+            Setting::Mode => self.select_scenario(id),
+            Setting::Range => {
+                // The meter locks the range while MIN/MAX records (verified
+                // 2026-03-21), and the walk cannot discover that: the lock
+                // freezes the reading on the rung it caught, so a select of
+                // that very rung would look like it had already arrived.
+                // Only the rungs the walk would otherwise reach are refused,
+                // leaving an unknown id to the driver's own validation.
+                if self.state.minmax_recording()
+                    && cycle::range_choices(self, &self.state_frame())
+                        .iter()
+                        .any(|c| c.id == id)
+                {
+                    return Err(Error::CommandRejected(
+                        "MIN/MAX locks the range; leave MIN/MAX before changing it".to_string(),
+                    ));
+                }
+                cycle::select_range(self, transport, id)
+            }
+            flag => match FlagSetting::of(flag) {
+                Some(flag) => cycle::select_flag(self, transport, flag, id),
+                None => Err(unsupported_setting(setting)),
+            },
         }
-        if let Some(flag) = FlagSetting::of(setting) {
-            return self.select_flag(flag, id);
-        }
-        let scenario = MockMode::from_choice_id(id)
-            .and_then(|mode| self.scenarios.iter().position(|s| s.id == mode));
-        let Some(idx) = scenario else {
-            return Err(Error::UnsupportedCommand(format!("mode {id:#06x}")));
+    }
+}
+
+/// The mock reaches its settings through the same driver the button-cycling
+/// families use, so a choice list or a select that works here works there. A
+/// press is a change to [`MeterState`] rather than a wire write, and the
+/// fresh frame the driver reads back is the next synthesised reading.
+impl CycleMeter for MockProtocol {
+    /// No dial to walk: the mock's ids are scenario indices, not mode bytes
+    /// (see [`MockProtocol::mode_choices`]), so mode walking never applies
+    /// and the inferred position stays unknown.
+    fn dial_positions(&self) -> &'static [cycle::DialPosition] {
+        &[]
+    }
+
+    fn dial_state(&self) -> &cycle::DialState {
+        &self.dial
+    }
+
+    fn dial_state_mut(&mut self) -> &mut cycle::DialState {
+        &mut self.dial
+    }
+
+    /// The button's own command — the one `dmm-cli command` sends.
+    fn press(&mut self, transport: &dyn Transport, button: CycleButton) -> Result<()> {
+        let command = match button {
+            CycleButton::Select => "select",
+            CycleButton::Hz => "select2",
+            CycleButton::Range => "range",
+            CycleButton::Hold => "hold",
+            CycleButton::Rel => "rel",
+            CycleButton::MinMax => "minmax",
+            CycleButton::Peak => "peak",
         };
-        self.current_scenario = idx;
-        self.scenario_started = Instant::now();
-        Ok(())
+        self.send_command(transport, command)
+    }
+
+    fn read(&mut self, transport: &dyn Transport) -> Result<Measurement> {
+        Protocol::request_measurement(self, transport)
+    }
+
+    /// The scenario's own name, so a message names the mode the way the
+    /// reading does. The live scenario answers first: several share a mode
+    /// byte, and the messages are always about the one the mock is in.
+    fn mode_label(&self, mode: u16) -> Cow<'static, str> {
+        let live = self.current_scenario();
+        if live.mode_raw == mode {
+            return Cow::Borrowed(live.mode);
+        }
+        match self.scenarios.iter().find(|s| s.mode_raw == mode) {
+            Some(scenario) => Cow::Borrowed(scenario.mode),
+            None => Cow::Owned(format!("mode {mode:#06x}")),
+        }
+    }
+
+    /// Nothing to wait for: a press lands in the mock's own state and the
+    /// next synthesised reading already shows it, so no stale frame can
+    /// arrive.
+    fn settle(&self) -> cycle::Settle {
+        cycle::Settle {
+            delay: Duration::ZERO,
+            reads: 1,
+        }
+    }
+
+    /// The mock stands in for a UT61E+, so the ladder is that meter's, from
+    /// the same table the range labels come from.
+    fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
+        match Self::table_mode(mode) {
+            Some(mode) => tables::range_ladder(&self.table, mode),
+            None => Vec::new(),
+        }
+    }
+
+    fn set_auto_range(&mut self, transport: &dyn Transport) -> Result<()> {
+        self.send_command(transport, "auto")
+    }
+
+    /// HOLD, REL and MIN/MAX everywhere, MIN/MAX as the MAX/MIN ring with no
+    /// AVG, and Peak only where the live scenario reacts to it — offering it
+    /// elsewhere would list a state select cannot reach.
+    ///
+    /// Keyed on the scenario rather than the `mode` argument: the resistance
+    /// scenarios share mode byte 0x06 and disagree about Peak, so the byte
+    /// alone cannot answer.
+    fn flag_states(&self, setting: FlagSetting, _mode: u16) -> &'static [u16] {
+        match setting {
+            FlagSetting::Hold | FlagSetting::Rel => &[0, 1],
+            FlagSetting::MinMax => &[0, 1, 2],
+            FlagSetting::Peak if self.current_scenario().peak_applies() => &[0, 1, 2],
+            FlagSetting::Peak => &[],
+        }
+    }
+
+    fn exit_flag(&mut self, transport: &dyn Transport, setting: FlagSetting) -> Result<()> {
+        match setting {
+            FlagSetting::MinMax => self.send_command(transport, "exit_minmax"),
+            FlagSetting::Peak => self.send_command(transport, "exit_peak"),
+            // HOLD and REL press their own button back off, so the driver
+            // never asks this of them.
+            other => Err(unsupported_setting(other.setting())),
+        }
     }
 }
 
@@ -1344,6 +778,9 @@ pub fn open_mock_mode(mode: MockMode) -> Result<Dmm<NullTransport>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use scenarios::{
+        scenario_duration, temp_diff_rev_value, temp_diff_value, temp_value, temp2_value,
+    };
 
     /// The table is the single source of truth for `ALL`, `label()`,
     /// `description()` and `FromStr`; `info()` looks a mode up there instead of
@@ -1824,78 +1261,6 @@ mod tests {
     }
 
     #[test]
-    fn test_dcv_is_smooth_function_of_time() {
-        // dcv_value completes one full sine cycle over `duration`, so samples
-        // one period apart must match exactly and samples a quarter period
-        // apart must be symmetric about the centre value. This is what makes
-        // the displayed waveform jitter-free — the value depends only on the
-        // sample time, not on the read cadence.
-        let duration = 10.0;
-        let a = match dcv_value(0.0, duration) {
-            MeasuredValue::Normal(v) => v,
-            _ => panic!("expected Normal"),
-        };
-        let b = match dcv_value(duration, duration) {
-            MeasuredValue::Normal(v) => v,
-            _ => panic!("expected Normal"),
-        };
-        let c = match dcv_value(2.0 * duration, duration) {
-            MeasuredValue::Normal(v) => v,
-            _ => panic!("expected Normal"),
-        };
-        assert!((a - b).abs() < 1e-9, "period mismatch: {a} vs {b}");
-        assert!((b - c).abs() < 1e-9, "period mismatch: {b} vs {c}");
-
-        // Half-period (sin is odd about zero): values symmetric about 5.0.
-        let left = match dcv_value(duration / 4.0, duration) {
-            MeasuredValue::Normal(v) => v,
-            _ => panic!("expected Normal"),
-        };
-        let right = match dcv_value(3.0 * duration / 4.0, duration) {
-            MeasuredValue::Normal(v) => v,
-            _ => panic!("expected Normal"),
-        };
-        assert!(
-            ((left - 5.0) + (right - 5.0)).abs() < 1e-9,
-            "half-period samples should be symmetric about 5.0: {left}, {right}"
-        );
-    }
-
-    #[test]
-    fn test_waveforms_loop_continuously() {
-        // Every scenario must satisfy f(0) == f(duration): when the pattern
-        // wraps back to t=0 the displayed value must not jump. Sub-value
-        // waveforms wrap on the same schedule, so they get the same check.
-        fn assert_loops(start: &MeasuredValue, end: &MeasuredValue, what: &str) {
-            match (start, end) {
-                (MeasuredValue::Normal(a), MeasuredValue::Normal(b)) => {
-                    assert!((a - b).abs() < 1e-9, "{what}: f(0)={a} but f(duration)={b}");
-                }
-                (MeasuredValue::Overload, MeasuredValue::Overload) => {}
-                (MeasuredValue::NcvLevel(a), MeasuredValue::NcvLevel(b)) => {
-                    assert_eq!(a, b, "{what}: ncv level jumps at wrap");
-                }
-                _ => panic!("{what}: variant differs at wrap: {start:?} vs {end:?}"),
-            }
-        }
-
-        for s in scenarios() {
-            assert_loops(
-                &(s.value_fn)(0.0, s.duration_secs),
-                &(s.value_fn)(s.duration_secs, s.duration_secs),
-                &format!("{:?}", s.id),
-            );
-            for spec in s.aux {
-                assert_loops(
-                    &(spec.value_fn)(0.0, s.duration_secs),
-                    &(spec.value_fn)(s.duration_secs, s.duration_secs),
-                    &format!("{:?} aux {}", s.id, spec.label),
-                );
-            }
-        }
-    }
-
-    #[test]
     fn acv_hz_emits_frequency_and_period_sub_values() {
         let mut dmm = open_mock_mode(MockMode::AcVHz).unwrap();
         let m = dmm.request_measurement().unwrap();
@@ -2012,80 +1377,6 @@ mod tests {
         // The probes are shaped to cross, so the difference has to move — a
         // constant zero would satisfy every assertion above.
         assert!(swing > 1.0, "the differential never left {swing} °C");
-    }
-
-    /// Duration of the scenario driving `mode`, for sampling its waveforms.
-    fn scenario_duration(mode: MockMode) -> f64 {
-        scenarios()
-            .into_iter()
-            .find(|s| s.id == mode)
-            .unwrap_or_else(|| panic!("no scenario for {mode:?}"))
-            .duration_secs
-    }
-
-    /// Assert `aux_fn` is not `a * main_fn + b`: fit the line through the two
-    /// samples whose main values are furthest apart, then require some other
-    /// sample to miss it by a visible fraction of the sub-value's own swing.
-    /// A sub-value that passed would be drawn as a parallel copy of the main
-    /// trace, which is exactly what these scenarios exist to avoid.
-    fn assert_not_affine_in_main(
-        main_fn: fn(f64, f64) -> MeasuredValue,
-        aux_fn: fn(f64, f64) -> MeasuredValue,
-        duration: f64,
-        label: &str,
-    ) {
-        const SAMPLES: usize = 32;
-        let points: Vec<(f64, f64)> = (0..SAMPLES)
-            .map(|i| {
-                let t = i as f64 / SAMPLES as f64 * duration;
-                match (main_fn(t, duration), aux_fn(t, duration)) {
-                    (MeasuredValue::Normal(m), MeasuredValue::Normal(a)) => (m, a),
-                    other => panic!("{label}: expected Normal values, got {other:?}"),
-                }
-            })
-            .collect();
-
-        let (x0, y0) = points[0];
-        let &(x1, y1) = points
-            .iter()
-            .max_by(|a, b| {
-                (a.0 - x0)
-                    .abs()
-                    .partial_cmp(&(b.0 - x0).abs())
-                    .expect("waveform produced NaN")
-            })
-            .expect("SAMPLES > 0");
-        assert!((x1 - x0).abs() > 1e-9, "{label}: main waveform is constant");
-        let slope = (y1 - y0) / (x1 - x0);
-        let offset = y0 - slope * x0;
-
-        let worst = points
-            .iter()
-            .map(|&(x, y)| (y - (slope * x + offset)).abs())
-            .fold(0.0_f64, f64::max);
-        let aux_span = points.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max)
-            - points.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
-        assert!(
-            worst > 0.1 * aux_span,
-            "{label}: sub-value is an affine copy of the main value \
-             (worst deviation {worst}, sub-value swing {aux_span})"
-        );
-    }
-
-    #[test]
-    fn sub_values_are_not_affine_copies_of_the_main_waveform() {
-        assert_not_affine_in_main(
-            temp_value,
-            temp2_value,
-            scenario_duration(MockMode::TempDual),
-            "T2",
-        );
-        assert_not_affine_in_main(
-            acv_value,
-            acv_hz_freq_value,
-            scenario_duration(MockMode::AcVHz),
-            "Frequency",
-        );
     }
 
     #[test]
@@ -2471,6 +1762,13 @@ mod tests {
         proto.send_command(&transport, "range").unwrap();
         let m = proto.request_measurement(&transport).unwrap();
         assert_eq!(m.range_label, "22V");
+        // The lock only answers for rungs that exist; an id off the ladder is
+        // still an unknown id, as it is with MIN/MAX off.
+        let err = proto.select(&transport, Setting::Range, 5).unwrap_err();
+        assert!(
+            matches!(err, Error::UnsupportedCommand(_)),
+            "got {err:?}, want UnsupportedCommand"
+        );
 
         proto.send_command(&transport, "exit_minmax").unwrap();
         proto.select(&transport, Setting::Range, 2).unwrap();

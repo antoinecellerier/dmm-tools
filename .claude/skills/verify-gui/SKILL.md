@@ -59,4 +59,4 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 ## References
 
 - WCAG contrast thresholds and the rest of the visual bar: `.claude/rules/gui.md`.
-- Scenario flags: `dmm-gui --help` lists the flags; the `--mock-mode` values come from `MockMode::ALL` in `crates/dmm-lib/src/mock.rs`, and passing an invalid one makes dmm-gui print the valid list.
+- Scenario flags: `dmm-gui --help` lists the flags; the `--mock-mode` values come from `MockMode::ALL` in `crates/dmm-lib/src/mock/mod.rs`, and passing an invalid one makes dmm-gui print the valid list.
