@@ -151,8 +151,9 @@ dmm-cli completions powershell >> $PROFILE
 Four workflows in `.github/workflows/`. None of them need touching to work on
 the crates:
 
-- `ci.yml` — fmt, clippy and tests on every push and pull request, plus a
-  three-target build so platform-specific breakage shows up early.
+- `ci.yml` — fmt, clippy, tests and the dependency policy on every push and pull
+  request, plus a three-target build so platform-specific breakage shows up
+  early.
 - `build-matrix.yml` — the six-target release build, called by the three others.
 - `release.yml` — runs on a `v*` tag, see [Release Process](#release-process).
 - `dev-build.yml` — the nightly prerelease.
@@ -166,6 +167,25 @@ without shellcheck it silently skips the bash inside `run:` blocks:
 ```sh
 actionlint
 ```
+
+### Dependency policy
+
+`ci.yml` runs [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) over the
+dependency graph: RustSec advisories, the licence allow-list in `deny.toml`,
+wildcard version requirements and unknown registries. Locally:
+
+```sh
+cargo install --locked cargo-deny
+cargo deny check
+```
+
+The allow-list holds exactly the SPDX ids the graph needs today, so a new
+dependency on an unlisted licence fails the check — read the licence, decide
+whether it belongs in a GPL-3.0-or-later binary, and only then add the id.
+
+`.github/dependabot.yml` opens weekly update pull requests for the Cargo and
+Actions dependencies, with minor and patch bumps grouped into one PR per
+ecosystem and majors left on their own.
 
 ### Shared build matrix
 

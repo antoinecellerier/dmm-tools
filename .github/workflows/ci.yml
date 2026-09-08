@@ -58,6 +58,23 @@ jobs:
           echo "::add-matcher::.github/actionlint-matcher.json"
           ./actionlint -color
 
+  deny:
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: cargo-deny
+      # Built from source rather than pulled from a prebuilt action, so the
+      # workflow keeps to the actions it already trusts; rust-cache keeps the
+      # binary in ~/.cargo/bin, and cargo install skips an unchanged version.
+      - run: cargo install --locked cargo-deny
+      # Advisories, the deny.toml licence allow-list, wildcard requirements and
+      # unknown registries. cargo-deny reads Cargo.lock; it builds nothing.
+      - run: cargo deny check
+
   # The smoke build comes from the shared release matrix, so what CI compiles
   # cannot drift from what a release ships. `subset: ci` keeps the other three
   # release targets out of pull-request builds, and nothing is packaged unless a

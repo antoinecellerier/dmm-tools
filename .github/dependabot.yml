@@ -1,0 +1,23 @@
+# Weekly dependency pull requests. Minor and patch bumps are grouped into one
+# PR per ecosystem so routine updates cost a single review; a major bump still
+# arrives on its own, because it is the one that needs reading.
+version: 2
+
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

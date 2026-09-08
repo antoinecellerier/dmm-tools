@@ -1,0 +1,51 @@
+# Dependency policy, enforced by `cargo deny check` in ci.yml.
+
+[advisories]
+# RustSec advisories fail the check. Tolerating one means listing its id here
+# with a reason saying why and what unblocks removing it again.
+ignore = [
+    # quick-xml < 0.41 quadratic/allocation DoS on hostile XML. Only reached
+    # through wayland-scanner and zbus_xml, which parse the protocol XML
+    # shipped inside those crates at build time. Unblocked when winit/zbus
+    # move to quick-xml 0.41.
+    { id = "RUSTSEC-2026-0194", reason = "build-time parse of vendored XML only" },
+    { id = "RUSTSEC-2026-0195", reason = "build-time parse of vendored XML only" },
+    # ttf-parser is unmaintained; it comes in via winit's client-side
+    # decorations on Wayland. Unblocked when winit switches font parsers.
+    { id = "RUSTSEC-2026-0192", reason = "transitive via winit, no upgrade path" },
+]
+
+[licenses]
+# Exactly the SPDX ids the current graph needs, so a dependency that drags in
+# another licence fails the check instead of shipping unexamined inside a
+# GPL-3.0-or-later binary. Widen this only after reading the licence.
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "GPL-3.0-or-later", # the workspace crates themselves
+    "ISC",
+    "MIT",
+    "MPL-2.0",         # option-ext; file-level copyleft
+    "OFL-1.1",         # epaint_default_fonts, AND-ed with MIT/Apache-2.0
+    "Ubuntu-font-1.0", # epaint_default_fonts, likewise
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[bans]
+# Duplicate versions are unavoidable in a graph this size and pruning them is
+# churn, not safety.
+multiple-versions = "allow"
+# A wildcard requirement resolves to whatever was published last, which makes
+# builds unreproducible. The workspace's own path dependencies carry no version
+# requirement by design and are exempt.
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
