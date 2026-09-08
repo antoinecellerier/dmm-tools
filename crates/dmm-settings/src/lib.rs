@@ -10,10 +10,11 @@
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform-specific path on macOS and Windows (computed via `directories`).
 //!
-//! It also owns [`write_atomic`]: both binaries persist user data (settings,
-//! capture reports, CSV exports) and all of it must survive a crash mid-write,
-//! so the one durable write helper lives here rather than being reimplemented
-//! per crate.
+//! It also owns [`resolve_device_family`], the precedence both binaries apply
+//! to the file, and [`write_atomic`]: both persist user data (settings, capture
+//! reports, CSV exports) and all of it must survive a crash mid-write, so the
+//! one durable write helper lives here rather than being reimplemented per
+//! crate.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -32,6 +33,43 @@ pub struct SharedSettings {
     /// Empty string means "not set" — consumers should fall back to their own
     /// default (the CLI prints a notice; the GUI fills in from the registry).
     pub device_family: String,
+}
+
+/// Where the device family a tool ended up with came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceSource {
+    /// A `--device` flag on the command line.
+    Cli,
+    /// `device_family` in the shared settings file.
+    Settings,
+    /// Neither was given, so the caller's default stands.
+    Fallback,
+}
+
+/// Which device family to use, and where the choice came from: a `--device`
+/// flag wins, then `device_family` in the settings file, then `fallback`.
+///
+/// Here rather than in either binary because both apply the same rule to the
+/// same file — the CLI prints a notice when it falls through, the GUI fills the
+/// device picker in. `fallback` is passed in because the registry default lives
+/// in `dmm-lib`, which this crate deliberately doesn't depend on.
+pub fn resolve_device_family(
+    cli_device: Option<&str>,
+    saved: Option<&SharedSettings>,
+    fallback: &str,
+) -> (String, DeviceSource) {
+    if let Some(device) = cli_device {
+        return (device.to_string(), DeviceSource::Cli);
+    }
+    // Empty means "not set": that is what a file written before the field
+    // existed deserializes to, and what the GUI writes when nothing is picked.
+    if let Some(family) = saved
+        .map(|s| s.device_family.as_str())
+        .filter(|f| !f.is_empty())
+    {
+        return (family.to_string(), DeviceSource::Settings);
+    }
+    (fallback.to_string(), DeviceSource::Fallback)
 }
 
 /// Return the canonical path to the shared settings file.
@@ -206,6 +244,58 @@ mod tests {
         }"#;
         let s: SharedSettings = serde_json::from_str(json).unwrap();
         assert_eq!(s.device_family, "ut181a");
+    }
+
+    fn saved(family: &str) -> SharedSettings {
+        SharedSettings {
+            device_family: family.to_string(),
+        }
+    }
+
+    #[test]
+    fn the_cli_flag_wins_over_the_settings_file() {
+        let s = saved("ut8803");
+        assert_eq!(
+            resolve_device_family(Some("ut171"), Some(&s), "ut61eplus"),
+            ("ut171".to_string(), DeviceSource::Cli)
+        );
+    }
+
+    #[test]
+    fn the_settings_file_wins_over_the_fallback() {
+        let s = saved("ut8803");
+        assert_eq!(
+            resolve_device_family(None, Some(&s), "ut61eplus"),
+            ("ut8803".to_string(), DeviceSource::Settings)
+        );
+    }
+
+    #[test]
+    fn a_missing_settings_file_falls_back() {
+        assert_eq!(
+            resolve_device_family(None, None, "ut61eplus"),
+            ("ut61eplus".to_string(), DeviceSource::Fallback)
+        );
+    }
+
+    /// A file written before `device_family` existed, or by a GUI where the
+    /// user never picked one, deserializes to the empty string — which is
+    /// "not set", not a device id.
+    #[test]
+    fn an_empty_device_family_falls_back() {
+        let s = saved("");
+        assert_eq!(
+            resolve_device_family(None, Some(&s), "ut61eplus"),
+            ("ut61eplus".to_string(), DeviceSource::Fallback)
+        );
+    }
+
+    #[test]
+    fn the_cli_flag_wins_with_no_settings_file() {
+        assert_eq!(
+            resolve_device_family(Some("ut171"), None, "ut61eplus"),
+            ("ut171".to_string(), DeviceSource::Cli)
+        );
     }
 
     #[test]

@@ -280,37 +280,6 @@ pub(crate) enum StepListFormat {
     Md,
 }
 
-/// Where the effective `--device` value came from. Drives the dim fallback
-/// notice: we only warn when the user picked neither on the CLI nor in the
-/// shared settings file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DeviceSource {
-    Cli,
-    Settings,
-    Fallback,
-}
-
-/// Resolve `--device` precedence: explicit CLI flag → `device_family` in the
-/// shared settings file (written by `dmm-gui`) → registry default.
-///
-/// The final fallback goes through `registry::default_device()` so the CLI
-/// and the registry stay in sync — there's one source of truth for "which
-/// device is the default when nothing is specified".
-fn resolve_device_family(cli_device: Option<&str>) -> (String, DeviceSource) {
-    if let Some(d) = cli_device {
-        return (d.to_string(), DeviceSource::Cli);
-    }
-    if let Some(s) = dmm_settings::SharedSettings::load_if_exists()
-        && !s.device_family.is_empty()
-    {
-        return (s.device_family, DeviceSource::Settings);
-    }
-    (
-        registry::default_device().id.to_string(),
-        DeviceSource::Fallback,
-    )
-}
-
 fn main() {
     env_logger::init();
 
@@ -323,7 +292,13 @@ fn main() {
     let cli =
         Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
 
-    let (device_id, device_source) = resolve_device_family(cli.device.as_deref());
+    // The fallback goes through `registry::default_device()` so the CLI and the
+    // registry stay in sync on which device is the default.
+    let (device_id, device_source) = dmm_settings::resolve_device_family(
+        cli.device.as_deref(),
+        dmm_settings::SharedSettings::load_if_exists().as_ref(),
+        registry::default_device().id,
+    );
     let device = match registry::resolve_device(&device_id) {
         Some(d) => d,
         None => {
@@ -340,7 +315,7 @@ fn main() {
     // settings — nudges toward an explicit choice without blocking. Skipped
     // for commands that don't open a device.
     let opens_device = !matches!(cli.command, Cmd::List | Cmd::Completions { .. });
-    if opens_device && device_source == DeviceSource::Fallback {
+    if opens_device && device_source == dmm_settings::DeviceSource::Fallback {
         eprintln!(
             "{}",
             style(format!(
@@ -2765,29 +2740,6 @@ mod tests {
     fn clap_parse_device_flag_omitted() {
         let cli = Cli::try_parse_from(["dmm-cli", "list"]).unwrap();
         assert_eq!(cli.device, None);
-    }
-
-    #[test]
-    fn resolve_device_cli_takes_precedence() {
-        let (id, src) = resolve_device_family(Some("ut8803"));
-        assert_eq!(id, "ut8803");
-        assert_eq!(src, DeviceSource::Cli);
-    }
-
-    #[test]
-    fn resolve_device_fallback_when_nothing_set() {
-        // Note: this test is environment-sensitive — if the test machine has
-        // a real ~/.config/dmm-tools/settings.json with device_family set,
-        // the resolver will return DeviceSource::Settings instead. That's
-        // still a valid path; what matters is that the CLI arg is absent.
-        let (id, src) = resolve_device_family(None);
-        assert!(matches!(
-            src,
-            DeviceSource::Settings | DeviceSource::Fallback
-        ));
-        if src == DeviceSource::Fallback {
-            assert_eq!(id, registry::default_device().id);
-        }
     }
 
     #[test]

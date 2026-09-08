@@ -270,12 +270,17 @@ impl Settings {
             .and_then(|path| std::fs::read_to_string(&path).ok())
             .and_then(|contents| serde_json::from_str(&contents).ok())
             .unwrap_or_default();
-        // If the loaded file had no device_family (older config, or fresh
-        // install before the user picked one), fall back to the registry
-        // default so the GUI always has a concrete device to display.
-        if s.shared.device_family.is_empty() {
-            s.shared.device_family = dmm_lib::protocol::registry::default_device().id.to_string();
-        }
+        // Through the shared resolver so the GUI and the CLI read the same
+        // file the same way. There is no `--device` to weigh here — that
+        // override is applied in `App::new` — so this is the settings-then-
+        // registry-default half, which leaves the GUI a concrete device to
+        // display for an older config or a fresh install.
+        let (family, _) = dmm_settings::resolve_device_family(
+            None,
+            Some(&s.shared),
+            dmm_lib::protocol::registry::default_device().id,
+        );
+        s.shared.device_family = family;
         s
     }
 
