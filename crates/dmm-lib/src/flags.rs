@@ -120,29 +120,6 @@ pub struct StatusFlags {
 }
 
 impl StatusFlags {
-    /// Parse flags from the three flag bytes (already masked with & 0x0F).
-    ///
-    /// Byte 11 (flag1): bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX
-    /// Byte 12 (flag2): bit0=HV warning, bit1=Low Battery, bit2=!AUTO (inverted)
-    /// Byte 13 (flag3): bit0=bar polarity, bit1=Peak MIN, bit2=Peak MAX, bit3=DC
-    pub fn parse(flag1: u8, flag2: u8, flag3: u8) -> Self {
-        Self {
-            rel: flag1 & 0x01 != 0,
-            hold: flag1 & 0x02 != 0,
-            min: flag1 & 0x04 != 0,
-            max: flag1 & 0x08 != 0,
-            hv_warning: flag2 & 0x01 != 0,
-            low_battery: flag2 & 0x02 != 0,
-            // Inverted: bit2 of flag2 is the MANUAL range indicator.
-            // When clear (0), the meter is in auto-range mode.
-            auto_range: flag2 & 0x04 == 0,
-            dc: flag3 & 0x08 != 0,
-            peak_max: flag3 & 0x04 != 0,
-            peak_min: flag3 & 0x02 != 0,
-            ..Default::default()
-        }
-    }
-
     /// Number of flags in [`StatusFlags::as_pairs`] — i.e. every field.
     pub const COUNT: usize = 16;
 
@@ -236,87 +213,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_no_flags_auto_on() {
-        // All zero → AUTO is on (inverted logic), everything else off
-        let flags = StatusFlags::parse(0x00, 0x00, 0x00);
-        assert!(!flags.hold);
-        assert!(!flags.rel);
-        assert!(flags.auto_range); // inverted: bit clear = auto ON
-        assert!(!flags.min);
-        assert!(!flags.max);
-        assert!(!flags.low_battery);
-    }
-
-    #[test]
-    fn parse_hold_with_auto() {
-        // flag1=0x02 (HOLD), flag2=0x00 (AUTO on)
-        let flags = StatusFlags::parse(0x02, 0x00, 0x00);
-        assert!(flags.hold);
-        assert!(!flags.rel);
-        assert!(flags.auto_range);
-    }
-
-    #[test]
-    fn parse_manual_range() {
-        // flag2=0x04 → AUTO bit set → auto_range OFF
-        let flags = StatusFlags::parse(0x00, 0x04, 0x00);
-        assert!(!flags.auto_range);
-    }
-
-    #[test]
-    fn parse_low_battery() {
-        // flag2=0x02 → LOW BAT
-        let flags = StatusFlags::parse(0x00, 0x02, 0x00);
-        assert!(flags.low_battery);
-        assert!(flags.auto_range); // AUTO still on (bit2 is clear)
-    }
-
-    #[test]
-    fn parse_min_max() {
-        // flag1: bit2=MIN, bit3=MAX
-        let flags = StatusFlags::parse(0x0C, 0x00, 0x00);
-        assert!(flags.min);
-        assert!(flags.max);
-    }
-
-    #[test]
-    fn parse_all_flag1() {
-        // flag1=0x0F: REL + HOLD + MIN + MAX
-        let flags = StatusFlags::parse(0x0F, 0x00, 0x00);
-        assert!(flags.rel);
-        assert!(flags.hold);
-        assert!(flags.min);
-        assert!(flags.max);
-    }
-
-    #[test]
-    fn parse_dc_flag() {
-        // flag3=0x08 → DC
-        let flags = StatusFlags::parse(0x00, 0x00, 0x08);
-        assert!(flags.dc);
-    }
-
-    #[test]
-    fn parse_real_device_hold() {
-        // Real capture: meter on DC V with HOLD active
-        // flag bytes (masked): 0x02, 0x00, 0x01
-        let flags = StatusFlags::parse(0x02, 0x00, 0x01);
-        assert!(flags.hold);
-        assert!(!flags.rel);
-        assert!(flags.auto_range);
-        assert!(!flags.low_battery);
-    }
-
-    #[test]
     fn display_hold_auto() {
-        let flags = StatusFlags::parse(0x02, 0x00, 0x00);
+        let flags = StatusFlags {
+            hold: true,
+            auto_range: true,
+            ..Default::default()
+        };
         assert_eq!(flags.to_string(), "HOLD AUTO");
     }
 
     #[test]
     fn display_empty_when_only_auto() {
         // AUTO alone shouldn't clutter display when it's the default
-        let flags = StatusFlags::parse(0x00, 0x00, 0x00);
+        let flags = StatusFlags {
+            auto_range: true,
+            ..Default::default()
+        };
         assert_eq!(flags.to_string(), "AUTO");
     }
 
