@@ -44,6 +44,42 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// Every mode, in protocol byte order, for callers that walk the whole
+    /// table rather than decode one byte (the specs dump).
+    pub const ALL: &'static [Mode] = &[
+        Mode::AcV,
+        Mode::AcMv,
+        Mode::DcV,
+        Mode::DcMv,
+        Mode::Hz,
+        Mode::DutyCycle,
+        Mode::Ohm,
+        Mode::Continuity,
+        Mode::Diode,
+        Mode::Capacitance,
+        Mode::TempC,
+        Mode::TempF,
+        Mode::DcUa,
+        Mode::AcUa,
+        Mode::DcMa,
+        Mode::AcMa,
+        Mode::DcA,
+        Mode::AcA,
+        Mode::Hfe,
+        Mode::Live,
+        Mode::Ncv,
+        Mode::LozV,
+        Mode::LozV2,
+        Mode::Lpf,
+        Mode::LpfV,
+        Mode::AcDcV,
+        Mode::LpfMv,
+        Mode::AcDcMv,
+        Mode::LpfA,
+        Mode::AcDcA2,
+        Mode::Inrush,
+    ];
+
     pub fn from_byte(b: u8) -> Result<Self, Error> {
         match b {
             0x00 => Ok(Mode::AcV),
@@ -182,43 +218,21 @@ mod tests {
     #[test]
     fn from_byte_roundtrip_via_repr() {
         // Verify that from_byte(variant as u8) == variant for all variants
-        let all_modes = [
-            Mode::AcV,
-            Mode::AcMv,
-            Mode::DcV,
-            Mode::DcMv,
-            Mode::Hz,
-            Mode::DutyCycle,
-            Mode::Ohm,
-            Mode::Continuity,
-            Mode::Diode,
-            Mode::Capacitance,
-            Mode::TempC,
-            Mode::TempF,
-            Mode::DcUa,
-            Mode::AcUa,
-            Mode::DcMa,
-            Mode::AcMa,
-            Mode::DcA,
-            Mode::AcA,
-            Mode::Hfe,
-            Mode::Live,
-            Mode::Ncv,
-            Mode::LozV,
-            Mode::LozV2,
-            Mode::Lpf,
-            Mode::LpfV,
-            Mode::AcDcV,
-            Mode::LpfMv,
-            Mode::AcDcMv,
-            Mode::LpfA,
-            Mode::AcDcA2,
-            Mode::Inrush,
-        ];
-        for mode in &all_modes {
+        for mode in Mode::ALL {
             let byte = *mode as u8;
             assert_eq!(Mode::from_byte(byte).unwrap(), *mode);
         }
+    }
+
+    /// `ALL` is written out by hand next to the enum, so pin it to the
+    /// bytes `from_byte` accepts: a variant added to one and not the other
+    /// would drop out of — or duplicate itself in — the specs dump.
+    #[test]
+    fn all_holds_every_decodable_mode_in_byte_order() {
+        let decoded: Vec<Mode> = (u8::MIN..=u8::MAX)
+            .filter_map(|b| Mode::from_byte(b).ok())
+            .collect();
+        assert_eq!(Mode::ALL, decoded.as_slice());
     }
 
     #[test]
@@ -240,40 +254,7 @@ mod tests {
     #[test]
     fn display_all_modes() {
         // Verify Display doesn't panic and produces non-empty strings
-        let all_modes = [
-            Mode::AcV,
-            Mode::AcMv,
-            Mode::DcV,
-            Mode::DcMv,
-            Mode::Hz,
-            Mode::DutyCycle,
-            Mode::Ohm,
-            Mode::Continuity,
-            Mode::Diode,
-            Mode::Capacitance,
-            Mode::TempC,
-            Mode::TempF,
-            Mode::DcUa,
-            Mode::AcUa,
-            Mode::DcMa,
-            Mode::AcMa,
-            Mode::DcA,
-            Mode::AcA,
-            Mode::Hfe,
-            Mode::Live,
-            Mode::Ncv,
-            Mode::LozV,
-            Mode::LozV2,
-            Mode::Lpf,
-            Mode::LpfV,
-            Mode::AcDcV,
-            Mode::LpfMv,
-            Mode::AcDcMv,
-            Mode::LpfA,
-            Mode::AcDcA2,
-            Mode::Inrush,
-        ];
-        for mode in &all_modes {
+        for mode in Mode::ALL {
             let s = mode.to_string();
             assert!(!s.is_empty(), "{mode:?} should have non-empty display");
         }

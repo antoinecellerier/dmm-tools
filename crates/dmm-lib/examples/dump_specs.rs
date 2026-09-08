@@ -18,40 +18,17 @@ use dmm_lib::protocol::ut61eplus::tables::{
 /// (range byte, spec, optional (range info, range label)) for one mode in the dump.
 type RangeRow<'a> = (u8, &'a SpecInfo, Option<(&'a RangeInfo, &'a str)>);
 
-/// All mode bytes in protocol order (0x00..=0x1E).
-const ALL_MODES: &[(u8, &str)] = &[
-    (0x00, "AC V"),
-    (0x01, "AC mV"),
-    (0x02, "DC V"),
-    (0x03, "DC mV"),
-    (0x04, "Hz"),
-    (0x05, "Duty %"),
-    (0x06, "Ω"),
-    (0x07, "Continuity"),
-    (0x08, "Diode"),
-    (0x09, "Capacitance"),
-    (0x0A, "°C"),
-    (0x0B, "°F"),
-    (0x0C, "DC µA"),
-    (0x0D, "AC µA"),
-    (0x0E, "DC mA"),
-    (0x0F, "AC mA"),
-    (0x10, "DC A"),
-    (0x11, "AC A"),
-    (0x12, "hFE"),
-    (0x13, "Live"),
-    (0x14, "NCV"),
-    (0x15, "LoZ V"),
-    (0x16, "LoZ V2"),
-    (0x17, "LPF"),
-    (0x18, "LPF V"),
-    (0x19, "AC+DC V"),
-    (0x1A, "LPF mV"),
-    (0x1B, "AC+DC mV"),
-    (0x1C, "LPF A"),
-    (0x1D, "AC+DC A"),
-    (0x1E, "Inrush"),
-];
+/// What to call `mode` in a section header.
+///
+/// The enum's own label is what a reading says, and 0x15 and 0x16 both say
+/// "LoZ V" — fine on screen, but this dump is read next to the manual, so the
+/// second one keeps the suffix that tells the two sections apart.
+fn dump_label(mode: Mode) -> &'static str {
+    match mode {
+        Mode::LozV2 => "LoZ V2",
+        other => other.as_static_str(),
+    }
+}
 
 /// Devices to dump (id, display name).
 const DEVICES: &[(&str, &str)] = &[
@@ -142,10 +119,9 @@ fn dump_device(device_id: &str, device_name: &str) {
 
     let mut any_mode = false;
 
-    for &(mode_byte, mode_label) in ALL_MODES {
-        let Ok(mode) = Mode::from_byte(mode_byte) else {
-            continue;
-        };
+    for &mode in Mode::ALL {
+        let mode_byte = mode as u8;
+        let mode_label = dump_label(mode);
         let mode_spec = table.mode_spec_info(mode);
 
         let mut ranges: Vec<RangeRow> = Vec::new();
