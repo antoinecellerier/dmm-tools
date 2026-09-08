@@ -366,7 +366,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let mode = decode_mode_word(mode_word);
     let data = &payload[6..]; // format-dependent value section
 
-    let (value, display_raw, unit, mut aux_values) = match format_type {
+    let (value, display_raw, unit, aux_values) = match format_type {
         // Normal format (0x00)
         0x00 => {
             if data.len() < 13 {
@@ -546,8 +546,6 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
     // COMP extension can also apply to relative/peak, but only documented for
     // normal format. Parse it there only; for other formats, just set the flag.
-    let _ = &mut aux_values; // suppress unused_mut if no COMP
-
     let flags = StatusFlags {
         hold,
         auto_range,
