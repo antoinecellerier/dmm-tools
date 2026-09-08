@@ -203,7 +203,7 @@ with targeted agents resolved most gaps:
 
 6. **UART status FIFO count endianness**: The SLABHIDtoUART.dll
    decompilation shows big-endian FIFO counts in report 0x42, but
-   our cp2110.rs uses little-endian. Needs device verification.
+   our transport/cp2110.rs uses little-endian. Needs device verification.
    [UNVERIFIED]
 
 ## Cross-Reference with Community Sources

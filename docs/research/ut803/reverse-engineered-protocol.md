@@ -22,7 +22,7 @@ Confidence levels:
 Both meters use the WCH CH9325 USB-to-UART HID bridge:
 - VID: 0x1A86, PID: 0xE008
 - 8-byte HID reports with 0xF0+length RX framing
-- Already implemented in `ch9325.rs`
+- Already implemented in `transport/ch9325.rs`
 
 ### 1.2 UART Parameters — [VENDOR]
 

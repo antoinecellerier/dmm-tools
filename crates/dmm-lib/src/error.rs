@@ -41,12 +41,12 @@ pub enum Error {
     /// this message describing adapters we no longer look for.
     #[error(
         "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x})",
-        crate::cp2110::VID,
-        crate::cp2110::PID,
-        crate::ch9329::VID,
-        crate::ch9329::PID,
-        crate::ch9325::VID,
-        crate::ch9325::PID
+        crate::transport::cp2110::VID,
+        crate::transport::cp2110::PID,
+        crate::transport::ch9329::VID,
+        crate::transport::ch9329::PID,
+        crate::transport::ch9325::VID,
+        crate::transport::ch9325::PID
     )]
     NoTransportFound,
 }
@@ -190,9 +190,9 @@ mod tests {
     fn no_transport_message_uses_the_transport_constants() {
         let msg = Error::NoTransportFound.to_string();
         for (vid, pid) in [
-            (crate::cp2110::VID, crate::cp2110::PID),
-            (crate::ch9329::VID, crate::ch9329::PID),
-            (crate::ch9325::VID, crate::ch9325::PID),
+            (crate::transport::cp2110::VID, crate::transport::cp2110::PID),
+            (crate::transport::ch9329::VID, crate::transport::ch9329::PID),
+            (crate::transport::ch9325::VID, crate::transport::ch9325::PID),
         ] {
             assert!(msg.contains(&format!("{vid:#06x}:{pid:#06x}")), "got {msg}");
         }

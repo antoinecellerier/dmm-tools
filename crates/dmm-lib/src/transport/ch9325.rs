@@ -203,8 +203,8 @@ mod tests {
 
     #[test]
     fn vid_shared_with_ch9329_pid_differs() {
-        assert_eq!(VID, crate::ch9329::VID);
-        assert_ne!(PID, crate::ch9329::PID);
+        assert_eq!(VID, crate::transport::ch9329::VID);
+        assert_ne!(PID, crate::transport::ch9329::PID);
     }
 
     #[test]

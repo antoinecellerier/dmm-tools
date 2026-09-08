@@ -440,7 +440,7 @@ From `sys.ini`: interval=3s, duration=60min, skipRepeat=0.
 
 Comparison with our existing CP2110 implementation:
 
-| Aspect | SLAB Library | Our cp2110.rs |
+| Aspect | SLAB Library | Our transport/cp2110.rs |
 |--------|-------------|---------------|
 | Open sequence | Open → GetPartNumber → EnableUART | EnableUART → SetConfig → PurgeRX |
 | Part number check | Yes (must be 0x0A) | No (relies on VID/PID) |
@@ -451,8 +451,8 @@ Comparison with our existing CP2110 implementation:
 | Read buffering | Internal ring buffer | Single report reads |
 | UART status byte order | **Big-endian** FIFO counts | Uses from_le_bytes — **potential bug** |
 
-**Potential bug**: Our `cp2110.rs` UART status parsing at line 122-123
-uses `u16::from_le_bytes` for TX/RX FIFO counts, but the SLAB DLL
+**Potential bug**: Our `transport/cp2110.rs` UART status parsing at line
+122-123 uses `u16::from_le_bytes` for TX/RX FIFO counts, but the SLAB DLL
 decompilation shows `CONCAT11(byte[1], byte[2])` which is big-endian.
 Needs device verification.
 
@@ -507,7 +507,7 @@ Needs device verification.
 | 0x51 vs 0x52 exact semantics | Need USB capture |
 | Status2 byte (offset 13) meaning | Capture-deduced 0x40=DC/0x20=AC; no decompile evidence; needs hardware |
 | Flag bits 4-5 (0x10, 0x20) | Not observed |
-| UART status FIFO count endianness (cp2110.rs potential bug) | Need device test |
+| UART status FIFO count endianness (transport/cp2110.rs potential bug) | Need device test |
 
 ### Cross-Reference with Community Sources
 

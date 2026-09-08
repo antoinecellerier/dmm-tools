@@ -19,10 +19,10 @@ The library crate handles all device communication and data parsing. It has no U
 
 | Module | Responsibility |
 |--------|---------------|
-| `cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
-| `ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
-| `ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
-| `transport.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
+| `transport/mod.rs` | `Transport` trait abstracting HID I/O; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
+| `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
+| `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
+| `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |

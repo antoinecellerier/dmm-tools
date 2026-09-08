@@ -1,7 +1,4 @@
 pub mod binary_help;
-pub(crate) mod ch9325;
-pub(crate) mod ch9329;
-pub(crate) mod cp2110;
 pub mod docs_tables;
 pub mod error;
 pub mod export;
@@ -22,7 +19,7 @@ use error::{Error, Result};
 use log::{info, warn};
 use protocol::Protocol;
 use std::ffi::CString;
-use transport::Transport;
+use transport::{Transport, ch9325, ch9329, cp2110};
 
 /// Top-level handle for communicating with the multimeter.
 pub struct Dmm<T: Transport> {

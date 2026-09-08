@@ -1,3 +1,7 @@
+pub(crate) mod ch9325;
+pub(crate) mod ch9329;
+pub(crate) mod cp2110;
+
 use crate::error::Result;
 
 /// Abstraction over HID transport for testability.

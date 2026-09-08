@@ -133,7 +133,7 @@ as the replacement for hidapi on Android. It has no HID-class helpers, so
 consumers must implement HID report framing themselves.
 
 For this project that cost is small: CP2110's UART-over-HID layer in
-`crates/dmm-lib/src/cp2110.rs` is approximately 150 lines of
+`crates/dmm-lib/src/transport/cp2110.rs` is approximately 150 lines of
 interrupt-report chunking plus `SET_REPORT`/`GET_REPORT` feature handling.
 The translation to `nusb`'s interrupt-transfer and control-transfer
 primitives is mechanical. Two structural choices are available:
@@ -198,12 +198,12 @@ target device is rooted.
 
 ## Option comparison
 
-| Option                                            | Rust-side changes              | Build complexity                    | Runtime prerequisites         |
-|---------------------------------------------------|--------------------------------|-------------------------------------|-------------------------------|
-| A. `nusb`, Android-only CP2110 duplicate, rooted  | Small, self-contained          | Low (pure Rust)                     | Root / Magisk                 |
-| B. `nusb`, `HidIo` trait abstraction, rooted      | Moderate; touches `cp2110.rs`  | Low (pure Rust)                     | Root / Magisk                 |
-| C. JNI to `UsbManager` + `rusb::wrap_sys_device`  | Moderate                       | Medium (Kotlin + JNI)               | None                          |
-| D. Vendored cross-compiled libusb + `hidapi`      | None                           | High (NDK libusb cross-build)       | Root or JNI glue still needed |
+| Option                                            | Rust-side changes                        | Build complexity                    | Runtime prerequisites         |
+|---------------------------------------------------|------------------------------------------|-------------------------------------|-------------------------------|
+| A. `nusb`, Android-only CP2110 duplicate, rooted  | Small, self-contained                    | Low (pure Rust)                     | Root / Magisk                 |
+| B. `nusb`, `HidIo` trait abstraction, rooted      | Moderate; touches `transport/cp2110.rs`  | Low (pure Rust)                     | Root / Magisk                 |
+| C. JNI to `UsbManager` + `rusb::wrap_sys_device`  | Moderate                                 | Medium (Kotlin + JNI)               | None                          |
+| D. Vendored cross-compiled libusb + `hidapi`      | None                                     | High (NDK libusb cross-build)       | Root or JNI glue still needed |
 
 Option A is the lowest-friction path for a proof of concept on hardware
 that is already rooted. Option B is the equivalent with less duplication
