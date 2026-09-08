@@ -150,6 +150,7 @@ methods to it, so no panel owns state of its own.
 | `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/Help/shortcuts/settings group |
 | `app/controls.rs` | The settings panel and the meter's remote-command buttons |
 | `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
+| `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |
 | `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
 | `app/recording_panel.rs` | Record/Export row, sample log, discard prompt, and the graph/recording split |
 | `app/export.rs` | CSV export: rendering the buffer, the save dialog and write off the UI thread, and the result toast |

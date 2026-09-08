@@ -4,9 +4,10 @@
 //! The concerns live in submodules — [`appearance`] (fonts, theme, zoom),
 //! [`connection`] and [`messages`] (the acquisition thread and its channel),
 //! [`plot_input`], [`top_bar`], [`controls`], [`layout`] (the reading column),
-//! [`stats_panel`], [`recording_panel`], [`export`], [`transform_ui`],
-//! [`shortcuts`], [`shortcut_help`] and [`whats_new`] — all of which add
-//! methods to the one [`App`] declared here.
+//! [`meter_fit`] (the big meter's sizing arithmetic), [`stats_panel`],
+//! [`recording_panel`], [`export`], [`transform_ui`], [`shortcuts`],
+//! [`shortcut_help`] and [`whats_new`] — all of which add methods to the one
+//! [`App`] declared here.
 
 mod appearance;
 mod connection;
@@ -14,6 +15,7 @@ mod controls;
 mod export;
 mod layout;
 mod messages;
+mod meter_fit;
 mod plot_input;
 mod recording_panel;
 mod shortcut_help;
@@ -44,6 +46,7 @@ use dmm_lib::stats::SeriesStats;
 use export::ExportOutcome;
 use layout::ContentLayout;
 use messages::ConnectionIssue;
+use meter_fit::{FitInputs, MeterFit, WindowContent};
 use recording_panel::RecordingPanel;
 use transform_ui::TransformEditor;
 
@@ -52,9 +55,6 @@ const TOAST_DURATION_SECS: u64 = 4;
 
 /// Default height of the recording panel (logical pixels).
 const DEFAULT_RECORDING_HEIGHT: f32 = 120.0;
-
-/// Initial estimate for non-reading content height in big meter mode.
-const DEFAULT_METER_CONTENT_HEIGHT: f32 = 200.0;
 
 /// Default width for the side panel in wide layout (logical pixels).
 const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
@@ -117,19 +117,6 @@ struct WhatsNew {
     closed: Arc<AtomicBool>,
     /// Shared commonmark cache for the changelog viewport.
     cache: Arc<Mutex<egui_commonmark::CommonMarkCache>>,
-}
-
-/// Cached inputs of the big-meter fit solver, which sizes the reading to the
-/// window and re-measures only when one of its inputs changes.
-struct MeterFit {
-    /// Cached height of non-reading content at scale=1 for big meter mode.
-    content_height: f32,
-    /// Cached reading dimension ratios for big meter mode.
-    reading_ratios: display::ReadingRatios,
-    /// Cache key for big meter scale. Recalculate when any input changes.
-    cache_key: u64,
-    /// Number of recalculation passes since last cache key change.
-    recalc_passes: u8,
 }
 
 /// Last-applied window chrome, kept so the per-frame paths can skip work that
@@ -377,12 +364,7 @@ impl App {
             applied: AppliedChrome::default(),
             toast: None,
             export_result_rx: None,
-            meter_fit: MeterFit {
-                content_height: DEFAULT_METER_CONTENT_HEIGHT,
-                reading_ratios: display::ReadingRatios::default(),
-                cache_key: 0,
-                recalc_passes: 0,
-            },
+            meter_fit: MeterFit::new(),
             big_meter_mode: BigMeterMode::Off,
             shortcut_help: ShortcutHelp::default(),
             whats_new: WhatsNew::default(),
@@ -557,7 +539,7 @@ impl eframe::App for App {
         }
 
         // Determine layout mode before panels
-        let wide = ctx.content_rect().width() >= 900.0;
+        let wide = meter_fit::is_wide(ctx.content_rect().width());
 
         let meter_only = self.big_meter_mode != BigMeterMode::Off
             || (!self.settings.show_graph && !self.settings.show_recording);
@@ -565,11 +547,6 @@ impl eframe::App for App {
         // Dynamic minimum window size derived from actual rendered content.
         // Reading dimensions come from cached ratios × minimum big meter
         // font size; top bar widths come from previous-frame measurements.
-        let min_font = display::MIN_BIG_METER_FONT_SIZE;
-        let ratios = &self.meter_fit.reading_ratios;
-        let min_scale = min_font / display::BASE_READING_FONT_SIZE;
-        let reading_w = ratios.w * min_font;
-        let reading_h = ratios.h * min_font + self.meter_fit.content_height * min_scale;
         let bar_left_w: f32 =
             ctx.data(|d| d.get_temp(egui::Id::new("top_bar_left_w")).unwrap_or(300.0));
         let bar_right_w: f32 = ctx.data(|d| {
@@ -578,16 +555,14 @@ impl eframe::App for App {
         });
         let bar_min_w = bar_left_w.max(bar_right_w) + 16.0;
 
-        let min_size = if minimal {
-            // Just the reading — no top bar, no buttons.
-            egui::vec2(reading_w, reading_h)
+        let window_content = if minimal {
+            WindowContent::ReadingOnly
         } else if meter_only {
-            // Reading + buttons + top bar.
-            egui::vec2(reading_w.max(bar_min_w), reading_h)
+            WindowContent::Meter
         } else {
-            // Full layout: top bar constrains width, panels need height.
-            egui::vec2(bar_min_w, reading_h)
+            WindowContent::Panels
         };
+        let min_size = self.meter_fit.min_window_size(window_content, bar_min_w);
         // Only when it changes. Its inputs — cached top-bar widths, meter
         // ratios, big-meter mode — are stable across the vast majority of
         // frames, and a viewport command sent every repaint is the same class
@@ -604,12 +579,8 @@ impl eframe::App for App {
         }
         // If the window is smaller than the new minimum (e.g. after exiting
         // minimal mode), grow it to fit.
-        let screen = ctx.content_rect();
-        if screen.width() < min_size.x || screen.height() < min_size.y {
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(
-                screen.width().max(min_size.x),
-                screen.height().max(min_size.y),
-            )));
+        if let Some(grown) = meter_fit::grow_to_fit(ctx.content_rect().size(), min_size) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(grown));
         }
 
         if meter_only {
@@ -617,8 +588,7 @@ impl eframe::App for App {
             // when the window is resized to avoid frame-to-frame oscillation.
             // Shrink panel margins at small window sizes so the reading fills
             // the space tighter.
-            let screen = ctx.content_rect();
-            let margin_scale = (screen.width().min(screen.height()) / 300.0).clamp(0.1, 1.0);
+            let margin_scale = meter_fit::margin_scale(ctx.content_rect().size());
             let default_margin = ctx.global_style().spacing.window_margin;
             let frame = egui::Frame::central_panel(ctx.global_style().as_ref())
                 .inner_margin(default_margin * margin_scale);
@@ -626,37 +596,23 @@ impl eframe::App for App {
                 .frame(frame)
                 .show_inside(ui, |ui| {
                     let size = ctx.content_rect();
-                    use std::hash::{Hash, Hasher};
-                    let cache_key = {
-                        let mut h = std::hash::DefaultHasher::new();
-                        (size.width() as u32).hash(&mut h);
-                        (size.height() as u32).hash(&mut h);
-                        self.last_measurement
+                    let fit_inputs = FitInputs {
+                        width: size.width() as u32,
+                        height: size.height() as u32,
+                        mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
+                        aux_values: self
+                            .last_measurement
                             .as_ref()
-                            .map_or(0u16, |m| m.mode_raw)
-                            .hash(&mut h);
-                        // Sub-value rows change the reading's height without
-                        // changing the mode word (a UT181A entering MIN/MAX),
-                        // so the fitted font has to be re-measured.
-                        self.last_measurement
-                            .as_ref()
-                            .map_or(0usize, |m| m.aux_values.len())
-                            .hash(&mut h);
-                        // The mode and range selectors are framed controls, a
-                        // little taller than the plain labels they replace.
-                        self.connection.choices.mode_offered().hash(&mut h);
-                        self.connection.choices.range_offered().hash(&mut h);
-                        self.settings.show_stats.hash(&mut h);
-                        self.settings.show_specs.hash(&mut h);
-                        self.big_meter_mode.hash(&mut h);
-                        // The Scale row adds a button row, and opening its
-                        // editor adds a second one — both change how much
-                        // room is left for the reading.
-                        self.transform_editor.open.hash(&mut h);
-                        self.transform.is_identity().hash(&mut h);
-                        h.finish()
+                            .map_or(0, |m| m.aux_values.len()),
+                        mode_offered: self.connection.choices.mode_offered(),
+                        range_offered: self.connection.choices.range_offered(),
+                        show_stats: self.settings.show_stats,
+                        show_specs: self.settings.show_specs,
+                        big_meter_mode: self.big_meter_mode,
+                        transform_editor_open: self.transform_editor.open,
+                        transform_is_identity: self.transform.is_identity(),
                     };
-                    let needs_recalc = cache_key != self.meter_fit.cache_key;
+                    let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
 
                     let panel_rect = ui.max_rect();
                     let mut add_content = |ui: &mut egui::Ui| {
@@ -700,26 +656,15 @@ impl eframe::App for App {
                             }
 
                             // Update cached dimensions on window resize. Run twice
-                            // (by not setting meter_last_size the first time) so
-                            // the second pass uses the measured values from the first.
+                            // (by not closing the cache the first time) so the
+                            // second pass uses the measured values from the first.
                             if needs_recalc && scale > 0.0 {
                                 let total_below_reading = ui.cursor().top() - after_reading;
-                                let measured = total_below_reading / scale;
-                                if (self.meter_fit.content_height - measured).abs() < 1.0
-                                    || self.meter_fit.recalc_passes >= 4
-                                {
-                                    // Converged, or max passes reached (e.g. button
-                                    // row wrapping oscillation). Use the larger height
-                                    // so everything fits.
-                                    self.meter_fit.content_height =
-                                        self.meter_fit.content_height.max(measured);
-                                    self.meter_fit.cache_key = cache_key;
-                                    self.meter_fit.recalc_passes = 0;
-                                } else {
-                                    self.meter_fit.content_height = measured;
-                                    self.meter_fit.recalc_passes += 1;
-                                }
-                                self.meter_fit.reading_ratios = measured_ratios;
+                                self.meter_fit.record_pass(
+                                    &fit_inputs,
+                                    total_below_reading / scale,
+                                    measured_ratios,
+                                );
                             }
                         });
                     };
