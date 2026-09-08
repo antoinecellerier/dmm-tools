@@ -122,6 +122,12 @@ cmd_run() {
 	local root disp pid wid i dev=""
 	root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 	[ -f "$root/Cargo.toml" ] || die "no Cargo.toml in $root"
+	local script_dir
+	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	[ -x "$script_dir/blocked-browser.sh" ] || die "missing $script_dir/blocked-browser.sh"
+	# webbrowser splits $BROWSER on ':' and whitespace; a path containing either
+	# would silently fall through to xdg-open and the user's real browser.
+	case "$script_dir" in *[:[:space:]]*) die "skill path must not contain ':' or spaces: $script_dir" ;; esac
 	local args=("$@")
 	for ((i = 0; i < ${#args[@]}; i++)); do
 		case "${args[i]}" in
@@ -139,9 +145,20 @@ cmd_run() {
 	kill_gui
 	(cd "$root" && cargo build -q -p dmm-gui) || die "cargo build -p dmm-gui failed"
 	disp="$(need_display)"
+	# BROWSER keeps the app's hyperlinks off the user's real browser: the
+	# webbrowser crate tries it before xdg-open; the stub logs the URL instead.
+	# A dead session-bus address keeps the CSV save dialog (rfd, via the
+	# xdg-desktop-portal) and AccessKit off the user's desktop; unsetting the
+	# variable is not enough because zbus falls back to $XDG_RUNTIME_DIR/bus.
+	# GDK_BACKEND=x11 pins that fallback (GTK) to DISPLAY: with WAYLAND_DISPLAY
+	# unset, GTK still connects to the default wayland-0 socket, i.e. the user's
+	# compositor. The log is opened for append so the stub's lines survive.
+	: >"$LOG"
 	env -u WAYLAND_DISPLAY DISPLAY="$disp" XDG_SESSION_TYPE=x11 LIBGL_ALWAYS_SOFTWARE=1 \
-		XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$CONFIG/data" RUST_LOG=dmm_gui=info \
-		"$root/target/debug/dmm-gui" "${args[@]}" >"$LOG" 2>&1 &
+		GDK_BACKEND=x11 XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$CONFIG/data" \
+		RUST_LOG=dmm_gui=info BROWSER="$script_dir/blocked-browser.sh" VERIFY_GUI_LOG="$LOG" \
+		DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/verify-gui-no-bus \
+		"$root/target/debug/dmm-gui" "${args[@]}" >>"$LOG" 2>&1 &
 	pid=$!
 	echo "$pid" >"$STATE/gui.pid"
 	wid="$(env -u WAYLAND_DISPLAY DISPLAY="$disp" timeout "$WINDOW_TIMEOUT" \

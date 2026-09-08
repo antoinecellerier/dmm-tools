@@ -18,6 +18,8 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/gui-display.sh *)
 - MUST launch dmm-gui only through `scripts/gui-display.sh`. Never `cargo run -p dmm-gui`, never `target/debug/dmm-gui` directly: winit 0.30 ignores `WINIT_UNIX_BACKEND` and opens on Wayland whenever `WAYLAND_DISPLAY` is set, putting the window on the user's screen.
 - MUST NOT run `xdotool`, `import`, or any other input or capture tool against the user's display (`:0`, `:1`). On GNOME this raises a "Remote Desktop — Allow Remote Interaction" prompt.
 - MUST run `stop` when finished, including after a failure.
+- Hyperlinks in the app (Help / GitHub, Manual, Report feedback) never reach the user's browser: `run` points `BROWSER` at `scripts/blocked-browser.sh`, which appends `blocked browser open: <url>` to the log instead. Grep the log for that line to check a link was activated; do not press Enter on a focused link expecting anything else.
+- The CSV save dialog (Ctrl+E, Export CSV) cannot reach the user's desktop either: `run` gives the app a dead session-bus address and `GDK_BACKEND=x11`, so the desktop-portal dialog is replaced by rfd's zenity fallback on the private display, or by nothing if zenity is absent.
 
 ## Workflow
 
