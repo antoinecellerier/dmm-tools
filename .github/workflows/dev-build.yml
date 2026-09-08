@@ -48,6 +48,7 @@ jobs:
       version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Decide whether to build
         id: check
@@ -64,8 +65,11 @@ jobs:
           # plain release version, and binary_help::version_string appends no
           # commit to it. A dev build from that window would be indistinguishable
           # from the release it shadows, so skip the window entirely.
-          VERSION=$(sed -n '/^\[workspace\.package\]/,/^\[/p' Cargo.toml \
-            | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          # Read through cargo rather than the manifest text: every member
+          # inherits version.workspace, so any of them reports the workspace
+          # version, and a stray version = line elsewhere cannot be picked up.
+          VERSION=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "dmm-cli") | .version')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [ "${VERSION#*-dev}" = "$VERSION" ]; then
             echo "main is at $VERSION, not a -dev version; skipping until the dev bump lands."
