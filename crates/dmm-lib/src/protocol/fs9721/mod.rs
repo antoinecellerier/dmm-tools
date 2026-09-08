@@ -477,6 +477,21 @@ const FS9721_COMMANDS: &[&str] = &[];
 /// layout has no format markers to key on).
 const UT803_MODES: &[u8] = &[0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x9, 0xB, 0xD, 0xE, 0xF];
 
+/// Whether `nibbles` can be a measurement frame for this model.
+///
+/// UT804 frames carry 0xD 0xA markers at nibbles 9-10; the UT803 has no
+/// markers, so a known mode code stands in. The stream filter uses this to
+/// resync, and `Protocol::parse_payload` to refuse a payload that never went
+/// through the stream — the UT803 parser names an unrecognised mode code
+/// "Unknown" rather than failing, so without the gate a golden fixture
+/// holding anything at all would pin a plausible-looking measurement.
+fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
+    match model {
+        Fs9721Model::Ut804 => nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
+        Fs9721Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
+    }
+}
+
 /// Protocol implementation for UT803/UT804 bench multimeters.
 pub struct Fs9721Protocol {
     rx_buf: Vec<u8>,
@@ -527,21 +542,13 @@ impl Protocol for Fs9721Protocol {
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // The FS9721 extractor handles false starts internally (no Err
-        // from framing). The accept_fn filters frames that can't be a
-        // measurement for the model: UT804 frames carry 0xD 0xA markers
-        // at nibbles 9-10; UT803 has no markers, so gate on a known mode
-        // code instead.
+        // from framing); `is_measurement_frame` filters what it hands back.
         let model = self.model;
         let payload = framing::read_frame(
             &mut self.rx_buf,
             transport,
             framing::extract_frame_fs9721,
-            |nibbles| match model {
-                Fs9721Model::Ut804 => {
-                    nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A
-                }
-                Fs9721Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
-            },
+            |nibbles| is_measurement_frame(model, nibbles),
             FrameErrorRecovery::Propagate,
             "fs9721",
             &framing::FS9721_HEADER,
@@ -549,6 +556,22 @@ impl Protocol for Fs9721Protocol {
         match self.model {
             Fs9721Model::Ut803 => parse_measurement_ut803(&payload),
             Fs9721Model::Ut804 => parse_measurement_ut804(&payload),
+        }
+    }
+
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        if !is_measurement_frame(self.model, payload) {
+            return Err(Error::invalid_response(
+                format!(
+                    "fs9721: not a {} measurement frame",
+                    self.profile.model_name
+                ),
+                payload,
+            ));
+        }
+        match self.model {
+            Fs9721Model::Ut803 => parse_measurement_ut803(payload),
+            Fs9721Model::Ut804 => parse_measurement_ut804(payload),
         }
     }
 
@@ -706,6 +729,28 @@ impl Protocol for Fs9721Protocol {
 mod tests {
     use super::*;
     use crate::protocol::test_support::snapshot;
+
+    /// `parse_payload` feeds golden fixtures straight to the parser, past the
+    /// stream filter, so it gates on the same predicate: the UT803 parser
+    /// names an unrecognised mode code "Unknown" rather than failing, and a
+    /// fixture holding a frame the stream would have dropped would pin that
+    /// as a reading.
+    #[test]
+    fn parse_payload_refuses_what_the_stream_filter_drops() {
+        // Mode nibble 0x7 is not a UT803 mode, and nibbles 9-10 are not the
+        // UT804's 0xD 0xA markers.
+        let not_a_frame = [0x0u8; 12];
+        for proto in [
+            Box::new(Fs9721Protocol::new_ut803()) as Box<dyn Protocol>,
+            Box::new(Fs9721Protocol::new_ut804()),
+        ] {
+            assert!(
+                proto.parse_payload(&not_a_frame).is_err(),
+                "{} should refuse it",
+                proto.profile().model_name
+            );
+        }
+    }
 
     /// A step may only ask for a label its own model's parser can report:
     /// the UT803 names its current modes by unit alone, so asking it for

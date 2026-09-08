@@ -2347,6 +2347,15 @@ mod tests {
             })
         }
 
+        fn parse_payload(
+            &self,
+            _payload: &[u8],
+        ) -> dmm_lib::error::Result<dmm_lib::measurement::Measurement> {
+            Err(dmm_lib::error::Error::UnsupportedCommand(
+                "parse_payload: the fake meter has no wire format".to_string(),
+            ))
+        }
+
         fn send_command(
             &mut self,
             _t: &dyn dmm_lib::transport::Transport,

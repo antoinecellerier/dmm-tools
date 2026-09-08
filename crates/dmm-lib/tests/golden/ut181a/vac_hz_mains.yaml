@@ -1,0 +1,9 @@
+# V AC with the Hz secondary display on mains, 600V range - captured from a real UT181A (issue #5)
+raw_hex: "02 0E 03 21 11 03 52 38 6F 43 20 56 41 43 00 00 00 00 00 F6 08 48 42 20 48 7A 00 00 00 00 00 5A D5 F8 9F 41 20 6D 73 00 43 00 00 00 00 3D 06 71 43 56 41 43 00 00 00 00 00"
+mode: V AC Hz
+value: "239.22000122070313"
+unit: VAC
+range_label: 600V
+flags:
+  auto_range: true
+  hv_warning: true

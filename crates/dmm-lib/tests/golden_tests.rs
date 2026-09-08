@@ -1,8 +1,10 @@
 //! Golden file tests for measurement parsing.
 //!
-//! Each `.yaml` file in `tests/golden/<family>/` uses the same format as
-//! capture YAML samples:
-//! - `raw_hex`: hex-encoded raw measurement payload (spaces allowed)
+//! Every subdirectory of `tests/golden/` is named after a registry device id
+//! (`ut61eplus`, `ut804`, …) and its `.yaml` files are parsed by that device's
+//! [`Protocol::parse_payload`]. The format is a capture report's sample
+//! format, so a sample can be copied out of a report unchanged:
+//! - `raw_hex`: the sample's `raw_hex` — the payload the reading was parsed from
 //! - `mode`, `value`, `unit`, `range_label`, `flags`: expected parsed fields
 //!
 //! The `value` field is a string matching capture output:
@@ -16,11 +18,11 @@
 //! test rather than being ignored, so a typo can't silently check nothing.
 
 use dmm_lib::flags::Flag;
-use dmm_lib::protocol::ut61eplus::parse_measurement;
-use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
+use dmm_lib::protocol::Protocol;
+use dmm_lib::protocol::registry::resolve_device;
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A golden test case in capture-compatible YAML format.
 #[derive(Debug, Deserialize)]
@@ -34,6 +36,10 @@ struct GoldenTestCase {
     range_label: String,
     /// Expected flags by snake_case name; omitted names expect false.
     flags: BTreeMap<String, bool>,
+}
+
+fn golden_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden")
 }
 
 /// Decode a hex string (with optional spaces) into bytes.
@@ -66,76 +72,100 @@ fn assert_known_flag_names(stem: &str, flags: &BTreeMap<String, bool>) {
     }
 }
 
+/// The device id each golden subdirectory is named after, sorted.
+fn golden_device_dirs() -> Vec<(String, PathBuf)> {
+    let root = golden_root();
+    let mut dirs: Vec<_> = std::fs::read_dir(&root)
+        .unwrap_or_else(|e| panic!("cannot read golden dir {}: {e}", root.display()))
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            let name = path.file_name()?.to_str()?.to_string();
+            path.is_dir().then_some((name, path))
+        })
+        .collect();
+    dirs.sort();
+    dirs
+}
+
 /// Discover all `.yaml` golden files in the given directory.
-fn discover_golden_files(dir: &Path) -> Vec<std::path::PathBuf> {
+fn discover_golden_files(dir: &Path) -> Vec<PathBuf> {
     let mut files: Vec<_> = std::fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("cannot read golden dir {}: {e}", dir.display()))
         .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-                Some(path)
-            } else {
-                None
-            }
+            let path = entry.ok()?.path();
+            (path.extension().and_then(|s| s.to_str()) == Some("yaml")).then_some(path)
         })
         .collect();
     files.sort();
     files
 }
 
-#[test]
-fn golden_ut61eplus() {
-    let golden_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/golden/ut61eplus");
-    let files = discover_golden_files(&golden_dir);
-    assert!(
-        !files.is_empty(),
-        "no golden files found in {}",
-        golden_dir.display()
+/// Check one fixture against what its device's parser produces.
+fn check_fixture(protocol: &dyn Protocol, stem: &str, path: &Path) {
+    let yaml_str = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    let case: GoldenTestCase = serde_yaml_ng::from_str(&yaml_str)
+        .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()));
+
+    let payload = decode_hex(&case.raw_hex);
+    let measurement = protocol
+        .parse_payload(&payload)
+        .unwrap_or_else(|e| panic!("golden {stem}: parse failed: {e}"));
+
+    assert_eq!(measurement.mode, case.mode, "golden {stem}: mode mismatch");
+    assert_eq!(
+        measurement.value.to_string(),
+        case.value,
+        "golden {stem}: value mismatch"
+    );
+    assert_eq!(measurement.unit, case.unit, "golden {stem}: unit mismatch");
+    assert_eq!(
+        measurement.range_label, case.range_label,
+        "golden {stem}: range_label mismatch"
     );
 
-    let table = Ut61ePlusTable::new();
-    let mut passed = 0;
-
-    for path in &files {
-        let stem = path.file_stem().unwrap().to_string_lossy();
-        let yaml_str = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-        let case: GoldenTestCase = serde_yaml_ng::from_str(&yaml_str)
-            .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()));
-
-        let payload = decode_hex(&case.raw_hex);
-
-        let measurement = parse_measurement(&payload, &table)
-            .unwrap_or_else(|e| panic!("golden {stem}: parse failed: {e}"));
-
-        assert_eq!(measurement.mode, case.mode, "golden {stem}: mode mismatch");
-
-        let actual_value = measurement.value.to_string();
-        assert_eq!(actual_value, case.value, "golden {stem}: value mismatch");
-
-        assert_eq!(measurement.unit, case.unit, "golden {stem}: unit mismatch");
+    // Driven by `as_pairs`, so a flag added to `StatusFlags` is checked by
+    // every fixture from the moment it exists — the hand-written list this
+    // replaced had never gained `loz` or `void`.
+    for (name, actual) in measurement.flags.as_pairs() {
         assert_eq!(
-            measurement.range_label, case.range_label,
-            "golden {stem}: range_label mismatch"
+            actual,
+            case.flags.get(name).copied().unwrap_or(false),
+            "golden {stem}: flags.{name}"
         );
+    }
+    assert_known_flag_names(stem, &case.flags);
+}
 
-        // Driven by `as_pairs`, so a flag added to `StatusFlags` is checked by
-        // every fixture from the moment it exists — the hand-written list this
-        // replaced had never gained `loz` or `void`.
-        for (name, actual) in measurement.flags.as_pairs() {
-            assert_eq!(
-                actual,
-                case.flags.get(name).copied().unwrap_or(false),
-                "golden {stem}: flags.{name}"
-            );
+#[test]
+fn golden_fixtures_parse_as_recorded() {
+    let dirs = golden_device_dirs();
+    assert!(
+        !dirs.is_empty(),
+        "no golden directories in {}",
+        golden_root().display()
+    );
+
+    let mut passed = 0;
+    for (id, dir) in &dirs {
+        let device = resolve_device(id).unwrap_or_else(|| {
+            panic!("golden directory {id:?} is not a device id in the registry")
+        });
+        let protocol = (device.new_protocol)();
+
+        let files = discover_golden_files(dir);
+        assert!(!files.is_empty(), "no golden files in {}", dir.display());
+        for path in &files {
+            let stem = format!("{id}/{}", path.file_stem().unwrap().to_string_lossy());
+            check_fixture(protocol.as_ref(), &stem, path);
+            passed += 1;
         }
-        assert_known_flag_names(&stem, &case.flags);
-
-        passed += 1;
     }
 
-    eprintln!("golden_ut61eplus: {passed}/{} tests passed", files.len());
+    eprintln!(
+        "golden: {passed} fixtures passed across {} devices",
+        dirs.len()
+    );
 }
 
 /// A fixture that misspells a flag name must fail rather than quietly expect

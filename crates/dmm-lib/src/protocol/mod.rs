@@ -6,7 +6,7 @@ pub mod registry;
 pub(crate) mod ut171;
 pub(crate) mod ut181a;
 // `ut61eplus` stays `pub`: the GUI specs panel consumes its tables, the CLI
-// its remote-control commands, and the golden tests its parser.
+// its remote-control commands, and the GUI's export tests its parser.
 pub mod ut61eplus;
 pub(crate) mod ut8802;
 pub(crate) mod ut8803;
@@ -425,6 +425,16 @@ pub trait Protocol: Send {
     /// For polled protocols: sends request + reads response.
     /// For streaming protocols: reads the next frame from the stream.
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement>;
+
+    /// Parse one measurement payload off the wire, with no I/O.
+    ///
+    /// `payload` is exactly what [`Measurement::raw_payload`] carries for this
+    /// family, which is what a `dmm-cli capture` report writes to `raw_hex` —
+    /// so a sample copied out of a report is a golden fixture verbatim.
+    ///
+    /// Required rather than defaulted: a family that skipped it would have its
+    /// golden fixtures silently never run.
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement>;
 
     /// Send a named command ("hold", "range", "auto", etc.).
     /// Returns UnsupportedCommand for unknown commands.

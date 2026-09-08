@@ -126,7 +126,7 @@ impl Default for Ut8803Protocol {
 }
 
 impl Ut8803Protocol {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
             triggered: false,
@@ -166,6 +166,10 @@ impl Protocol for Ut8803Protocol {
             &framing::HEADER,
         )?;
         parse_measurement(&payload)
+    }
+
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload)
     }
 
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
@@ -279,7 +283,7 @@ impl Protocol for Ut8803Protocol {
 /// - bytes 12-13: flags1 (2 bytes)
 /// - bytes 14-15: flags2 (2 bytes)
 /// - byte 16:   flags3 (1 byte)
-pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
+pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     check_len("ut8803", payload, 17)?;
 
     let mode_byte = payload[2];

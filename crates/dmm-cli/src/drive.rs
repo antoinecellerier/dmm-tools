@@ -769,6 +769,9 @@ mod tests {
         ) -> dmm_lib::error::Result<Measurement> {
             self.inner.request_measurement(t)
         }
+        fn parse_payload(&self, payload: &[u8]) -> dmm_lib::error::Result<Measurement> {
+            self.inner.parse_payload(payload)
+        }
         fn send_command(
             &mut self,
             t: &dyn dmm_lib::transport::Transport,

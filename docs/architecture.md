@@ -64,9 +64,9 @@ USB HID ──► Cp2110 or Ch9329 (Box<dyn Transport>) ──► Box<dyn Protoc
 ```
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
-`request_measurement()`, `send_command()`, `choices()`/`select()`, `get_name()`, `profile()`,
-and `capture_steps()`. Each family implements its own framing, parsing, and command encoding
-internally, but all produce the same `Measurement` struct.
+`request_measurement()`, `parse_payload()`, `send_command()`, `choices()`/`select()`,
+`get_name()`, `profile()`, and `capture_steps()`. Each family implements its own framing,
+parsing, and command encoding internally, but all produce the same `Measurement` struct.
 
 Remote control has two paths. `send_command()` sends a named button press and reads nothing
 back. `choices(Setting, &Measurement)` lists the values a setting (`Mode`, `Range`, `Hold`,

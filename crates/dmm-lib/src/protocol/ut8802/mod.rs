@@ -144,6 +144,10 @@ impl Protocol for Ut8802Protocol {
         parse_measurement(&payload)
     }
 
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload)
+    }
+
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
         Err(Error::UnsupportedCommand(command.to_string()))
     }

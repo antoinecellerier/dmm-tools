@@ -346,6 +346,10 @@ impl Protocol for Vc890Protocol {
         Ok(measurement)
     }
 
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload)
+    }
+
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let cmd_byte = super::vc8x0_common::command_byte(command)?;
         debug!("vc890: sending command {command} ({cmd_byte:#04x})");

@@ -227,6 +227,10 @@ impl Protocol for Ut61PlusProtocol {
         Ok(m)
     }
 
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload, self.table.as_ref())
+    }
+
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         let cmd = Self::command_from_name(command)?;
         debug!("sending command: {command}");

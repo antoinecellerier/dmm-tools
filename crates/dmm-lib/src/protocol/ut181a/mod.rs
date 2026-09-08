@@ -273,7 +273,7 @@ impl Default for Ut181aProtocol {
 }
 
 impl Ut181aProtocol {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(256),
             last_mode_raw: None,
@@ -563,6 +563,10 @@ impl Protocol for Ut181aProtocol {
         self.last_mode_raw = Some(measurement.mode_raw);
         self.last_range_raw = Some(measurement.range_raw);
         Ok(measurement)
+    }
+
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -1056,7 +1060,7 @@ fn make_aux(
     }
 }
 
-pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
+pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // Minimum header: type(1) + misc(1) + misc2(1) + mode(2) + range(1) = 6
     check_len("ut181a", payload, 6)?;
 

@@ -338,6 +338,10 @@ impl Protocol for Vc880Protocol {
         Ok(measurement)
     }
 
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload)
+    }
+
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
         use super::vc8x0_common;
         let cmd_byte = vc8x0_common::command_byte(command)?;

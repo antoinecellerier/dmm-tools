@@ -158,7 +158,7 @@ Follow the code-level steps in `docs/development.md`:
 - Add `SelectableDevice` entry in `protocol/registry.rs` — CLI/GUI pick it up automatically
 - Implement `capture_steps()` on the `Protocol` trait — this defines the guided verification workflow for the device. Each step has an `id`, a user-facing `instruction` (e.g., "Set meter to DC V mode"), an optional remote `command` to send, and a `samples` count. The default implementation returns an empty list, so the capture tool will have nothing to walk through unless you define steps. Cover all measurement modes, flag states, and remote commands the device supports. This decouples implementation from testing — someone without the device can define exactly what needs verifying, and someone with the device can run `capture` and walk through it without needing to understand the protocol.
 - Write unit tests using `MockTransport` with byte sequences from the RE phase
-- Add golden test files in `tests/golden/<family>/` using YAML format (matches capture output)
+- Add golden test files in `tests/golden/<device id>/` using YAML format (matches capture output) — the directory is named after the registry id; only samples from a hardware capture go there, so a family gains one with its first capture
 
 ### Specification data
 
@@ -197,7 +197,7 @@ If the device manual includes accuracy/resolution tables per mode and range:
 
    The steps are whatever the device's `Protocol::capture_steps()` returns, so a new device gets its coverage by declaring them there — there is no separate table in the CLI. If the meter has a range button, declare a step for it plus one that restores auto-ranging. Resist declaring a *sweep* of successive presses until you know what the range command does on that meter — the UT61E+'s does not step the range table (see docs/verification-backlog.md), and a sweep that doesn't sweep files data that reads as authoritative range coverage but isn't. Once the gate steps pass, capture walks the ranges and flags `select()` can drive on its own, and switches to a step's mode itself when `choices(Setting::Mode)` offers it from the dial position the run is already at, so declare only what the user must do by hand — and word the instruction for the family without `choices`, where the operator still presses the button. Tag a step with `.needs(&[Need::…])` when its instruction asks for something beyond the meter and its leads — shorted probes, a DC source, a thermocouple, a transistor — so the run can list it up front and drop the step for a reporter who hasn't got one. Order the steps so the dial turns one way through the run, lead changes are grouped, and a gate step follows the mode step it extends. The freeform pass runs afterwards for every device and needs no declaration. Steps start unverified; `--unverified` runs just those, and `--list-steps --format md` prints the checklist the device's verification issue carries — regenerate it, don't hand-edit it, whenever the steps change.
 4. **Test remote commands** (if supported): the capture tool covers these, but ad-hoc testing via `cargo run --bin dmm-cli -- --device <id> command <cmd>` is useful for debugging
-5. **Capture golden test data:** copy verified samples from the capture YAML into `tests/golden/<family>/` for regression testing
+5. **Capture golden test data:** copy verified samples from the capture YAML into `tests/golden/<device id>/` for regression testing — a report's `raw_hex` and parsed fields are the fixture format, so they transfer verbatim
 
 ### Common issues found during hardware verification
 These are real bugs we discovered only through device testing — expect similar issues with any new device:
@@ -235,6 +235,6 @@ Update these files in the same commit as the code:
 | Device tables (mode/range) | `crates/dmm-lib/src/protocol/<family>/tables/` |
 | Spec data (accuracy/resolution) | `crates/dmm-lib/src/protocol/<family>/tables/specs_*.rs` |
 | Device registry entry | `crates/dmm-lib/src/protocol/registry.rs` |
-| Golden test files | `crates/dmm-lib/tests/golden/<family>/` |
+| Golden test files | `crates/dmm-lib/tests/golden/<device id>/` |
 | Verification status | `docs/verification-backlog.md` |
 | Device catalog | `docs/supported-devices.md` |

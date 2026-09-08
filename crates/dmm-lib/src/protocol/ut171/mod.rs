@@ -151,7 +151,7 @@ impl Default for Ut171Protocol {
 }
 
 impl Ut171Protocol {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
             profile: DeviceProfile {
@@ -193,6 +193,10 @@ impl Protocol for Ut171Protocol {
             &framing::HEADER,
         )?;
         parse_measurement(&payload)
+    }
+
+    fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
+        parse_measurement(payload)
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
@@ -322,7 +326,7 @@ impl Protocol for Ut171Protocol {
 /// - byte 10:  unknown
 /// - bytes 11-14: aux value (float32 LE)
 /// - extended frames continue with a third float at bytes 17-20 (unparsed)
-pub fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
+pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     check_len("ut171", payload, 15)?;
 
     let flags_byte = payload[1];

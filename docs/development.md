@@ -95,21 +95,24 @@ GUI specifications panel will display.
 ## Golden File Tests
 
 Golden file tests verify measurement parsing against known-good byte sequences.
-Each `.yaml` file in `crates/dmm-lib/tests/golden/{family}/` uses the same
-format as capture YAML samples (`raw_hex`, `mode`, `value`, `unit`, `range_label`,
-`flags`). This means you can copy a sample directly from a capture report into a
-golden file.
+Each subdirectory of `crates/dmm-lib/tests/golden/` is named after a registry
+device id (`ut61eplus`, `ut804`, …), and its `.yaml` files are parsed by that
+device's `Protocol::parse_payload`. They use the same format as capture YAML
+samples (`raw_hex`, `mode`, `value`, `unit`, `range_label`, `flags`), so you can
+copy a sample directly from a capture report into a golden file.
 
 To add a golden test:
 
-1. Run `dmm-cli --device <family> capture` and complete the steps
+1. Run `dmm-cli --device <id> capture` and complete the steps
 2. Open the capture YAML and find a sample with known-good values
-3. Copy the sample fields into a new `.yaml` file in `tests/golden/{family}/`
+3. Copy the sample fields into a new `.yaml` file in `tests/golden/<id>/`
 4. Run `cargo test --workspace` to verify
 
 Golden tests run as part of the standard test suite. They are the primary
 regression safety net for protocol parsing — add them whenever you verify
-a new mode/range/flag combination against real hardware.
+a new mode/range/flag combination against real hardware. Fixtures come
+only from captures: a hand-built payload belongs in the parser's unit
+tests, so a family has no golden directory until its first hardware run.
 
 ## Shell Completions
 

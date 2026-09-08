@@ -1120,6 +1120,13 @@ impl Protocol for MockProtocol {
         Ok(measurement)
     }
 
+    fn parse_payload(&self, _payload: &[u8]) -> Result<Measurement> {
+        // The mock synthesises readings; there are no wire bytes to decode.
+        Err(Error::UnsupportedCommand(
+            "parse_payload: the mock has no wire format".to_string(),
+        ))
+    }
+
     fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
         match command {
             "hold" => {
