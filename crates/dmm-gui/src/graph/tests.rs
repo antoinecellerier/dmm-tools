@@ -1561,3 +1561,170 @@ fn clear_drops_the_overlays_but_keeps_the_selection() {
     assert_eq!(g.current_series, None);
     assert_eq!(g.selected_series(), Some("T2"));
 }
+
+// ── Minimap coordinate math ─────────────────────────────────────────────────
+
+use super::minimap::{
+    Edge, MinimapDrag, MinimapScale, ViewWindow, drag_target, near_a_bracket, pan, resize,
+};
+
+/// A 400px-wide strip starting at x=100, over a 200-second session.
+fn strip() -> MinimapScale {
+    let rect = egui::Rect::from_min_size(egui::pos2(100.0, 0.0), egui::vec2(400.0, 60.0));
+    MinimapScale::new(rect, 0.0, 200.0)
+}
+
+#[test]
+fn the_strip_maps_the_whole_session_across_its_width() {
+    let s = strip();
+    assert_eq!(s.x_of(0.0), 100.0);
+    assert_eq!(s.x_of(200.0), 500.0);
+    assert_eq!(s.x_of(100.0), 300.0);
+    assert_eq!(s.time_at(300.0), 100.0);
+}
+
+/// A pointer dragged off either end keeps pushing the view to that end
+/// rather than jumping to the far side.
+#[test]
+fn a_time_read_off_the_strip_clamps_to_its_ends() {
+    let s = strip();
+    assert_eq!(s.time_at(-5000.0), 0.0);
+    assert_eq!(s.time_at(5000.0), 200.0);
+}
+
+/// A session with no measurable duration must not divide by zero and put
+/// every point at the same x.
+#[test]
+fn an_instantaneous_session_still_has_a_span() {
+    let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(400.0, 60.0));
+    let s = MinimapScale::new(rect, 12.0, 12.0);
+    assert!(s.span() > 0.0);
+    assert!(s.x_of(12.0).is_finite());
+}
+
+/// Whole sessions compress into 400px, so most overload spans are narrower
+/// than a pixel. Drawing them at their true width would draw nothing.
+#[test]
+fn a_sub_pixel_overload_band_is_widened_to_one_pixel() {
+    let s = strip();
+    let (x0, x1) = s.band_x(100.0, 100.001);
+    assert_eq!(x1 - x0, 1.0);
+    let (x0, x1) = s.band_x(0.0, 100.0);
+    assert_eq!((x0, x1), (100.0, 300.0), "a wide band keeps its width");
+}
+
+#[test]
+fn a_press_grabs_the_bracket_it_lands_on_and_pans_elsewhere() {
+    assert!(drag_target(200.0, 200.0, 400.0) == MinimapDrag::ResizeLeft);
+    assert!(drag_target(406.0, 200.0, 400.0) == MinimapDrag::ResizeRight);
+    assert!(drag_target(300.0, 200.0, 400.0) == MinimapDrag::Pan);
+    // Brackets on top of each other: the nearest edge wins, and a tie goes
+    // to the left one.
+    assert!(drag_target(203.0, 200.0, 210.0) == MinimapDrag::ResizeLeft);
+    assert!(drag_target(207.0, 200.0, 210.0) == MinimapDrag::ResizeRight);
+    assert!(drag_target(205.0, 200.0, 210.0) == MinimapDrag::ResizeLeft);
+
+    assert!(near_a_bracket(408.0, 200.0, 400.0));
+    assert!(!near_a_bracket(300.0, 200.0, 400.0));
+}
+
+#[test]
+fn a_drag_shorter_than_the_deadzone_leaves_the_view_alone() {
+    let w = ViewWindow {
+        center: 100.0,
+        width: 60.0,
+        live: false,
+    };
+    assert_eq!(resize(w, Edge::Left, 0.05, &strip(), 200.0), w);
+}
+
+/// Dragging the left bracket right narrows the window and pins its right
+/// edge, so the data under the right bracket does not move.
+#[test]
+fn dragging_the_left_bracket_pins_the_right_edge() {
+    let w = ViewWindow {
+        center: 100.0,
+        width: 60.0,
+        live: true,
+    };
+    // 0.5 s per pixel over this strip: 20px narrows the window by 10 s.
+    let next = resize(w, Edge::Left, 20.0, &strip(), 200.0);
+    assert!((next.width - 50.0).abs() < 1e-9);
+    assert!((next.center + next.width / 2.0 - 130.0).abs() < 1e-9);
+    assert!(!next.live, "resizing takes the view off live follow");
+}
+
+/// Widening the right bracket past the newest sample is how the user asks
+/// to follow the present again.
+#[test]
+fn widening_the_right_bracket_onto_the_newest_sample_resumes_live() {
+    let w = ViewWindow {
+        center: 100.0,
+        width: 60.0,
+        live: false,
+    };
+    let next = resize(w, Edge::Right, 200.0, &strip(), 200.0);
+    assert!(
+        (next.center - next.width / 2.0 - 70.0).abs() < 1e-9,
+        "left edge pinned"
+    );
+    assert!(next.live);
+    // Short of the end it stays parked.
+    assert!(!resize(w, Edge::Right, 20.0, &strip(), 200.0).live);
+}
+
+/// The window is clamped at both ends of its zoom range, and a drag past
+/// the clamp still leaves the pinned edge where it was.
+#[test]
+fn a_resize_clamps_to_the_zoom_range() {
+    let w = ViewWindow {
+        center: 100.0,
+        width: 60.0,
+        live: false,
+    };
+    let narrow = resize(w, Edge::Left, 10_000.0, &strip(), 200.0);
+    assert_eq!(narrow.width, 2.0);
+    assert!((narrow.center + narrow.width / 2.0 - 130.0).abs() < 1e-9);
+    let wide = resize(w, Edge::Right, 10_000.0, &strip(), 200.0);
+    assert_eq!(wide.width, 3600.0);
+}
+
+/// A window wider than the session has its brackets clamped to the strip's
+/// ends, so a drag has to start from the span the user can actually see or
+/// the first frame jumps.
+#[test]
+fn a_window_wider_than_the_session_snaps_before_resizing() {
+    let w = ViewWindow {
+        center: 5000.0,
+        width: 4000.0,
+        live: false,
+    };
+    let next = resize(w, Edge::Left, 20.0, &strip(), 200.0);
+    assert!(
+        (next.width - 190.0).abs() < 1e-9,
+        "snapped to 200 s, then -10 s"
+    );
+    assert!((next.center + next.width / 2.0 - 200.0).abs() < 1e-9);
+}
+
+#[test]
+fn panning_centres_the_window_on_the_pointer_until_it_reaches_the_end() {
+    let w = ViewWindow {
+        center: 0.0,
+        width: 60.0,
+        live: true,
+    };
+    let next = pan(w, 300.0, &strip(), 200.0);
+    assert_eq!(next.center, 100.0);
+    assert_eq!(next.width, 60.0);
+    assert!(
+        !next.live,
+        "panning back into the history stops live follow"
+    );
+
+    // Far enough right that the window's own right edge covers the newest
+    // sample: resume live rather than parking just short of it.
+    let at_end = pan(w, 500.0, &strip(), 200.0);
+    assert!(at_end.live);
+    assert_eq!(at_end.center, w.center, "live follow picks its own centre");
+}
