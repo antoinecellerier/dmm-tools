@@ -4,8 +4,8 @@ use super::ut171::Ut171Protocol;
 use super::ut181a::Ut181aProtocol;
 use super::ut8802::Ut8802Protocol;
 use super::ut8803::Ut8803Protocol;
-use super::vc880::Vc880Protocol;
-use super::vc890::Vc890Protocol;
+use super::vc8x0::vc880::Vc880Protocol;
+use super::vc8x0::vc890::Vc890Protocol;
 use super::{DeviceFamily, Protocol};
 use crate::mock::MockProtocol;
 

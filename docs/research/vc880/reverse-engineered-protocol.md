@@ -370,7 +370,7 @@ model: §7 introduces its symbol list as „alle möglichen Symbole und Angaben 
 Serie VC800“. We follow the figure. A meter would settle it: see
 `docs/verification-backlog.md`.
 
-**How the implementation uses this.** `crates/dmm-lib/src/protocol/vc880/mod.rs`
+**How the implementation uses this.** `crates/dmm-lib/src/protocol/vc8x0/vc880.rs`
 holds the table as `DIAL`, one entry per position, each a single SHIFT/SETUP
 ring (the VC-880 has no Hz/% button). It is membership only: the shared driver
 in `protocol/cycle.rs` presses `Select` (0x4C) and reads the function code back

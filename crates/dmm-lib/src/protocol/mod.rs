@@ -11,9 +11,7 @@ pub(crate) mod ut181a;
 pub mod ut61eplus;
 pub(crate) mod ut8802;
 pub(crate) mod ut8803;
-pub(crate) mod vc880;
-pub(crate) mod vc890;
-mod vc8x0_common;
+pub(crate) mod vc8x0;
 
 pub use expect::{Expect, RangeExpect, ValueExpect};
 

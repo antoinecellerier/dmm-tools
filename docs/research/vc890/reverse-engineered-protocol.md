@@ -183,7 +183,7 @@ low-pass filter is a SHIFT/SETUP sub-function of V~ here rather than a dial
 position of its own, and this dial has two OFF positions, one at each end of
 the sweep.
 
-**How the implementation uses this.** `crates/dmm-lib/src/protocol/vc890/mod.rs`
+**How the implementation uses this.** `crates/dmm-lib/src/protocol/vc8x0/vc890.rs`
 holds the table as `DIAL`, one entry per position, each a single SHIFT/SETUP
 ring (the VC-890 has no Hz/% button). It is membership only: the shared driver
 in `protocol/cycle.rs` presses `Select` (0x4C) and reads the function code back
