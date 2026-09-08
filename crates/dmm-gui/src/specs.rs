@@ -1,4 +1,4 @@
-use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
+use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, Color32, RichText, Ui};
 
 const MANUAL_TOOLTIP: &str = "Open the manufacturer's manual in your browser";
@@ -193,7 +193,7 @@ pub fn show_manual_only(ui: &mut Ui, url: &str, scale: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dmm_lib::protocol::ut61eplus::tables::AccuracyBand;
+    use dmm_lib::specs::AccuracyBand;
 
     const DC_BAND: &[AccuracyBand] = &[AccuracyBand {
         freq_range: None,

@@ -2,7 +2,7 @@
 //! remote controls, specs and stats — plus the specs section variants and the
 //! big meter toggle that cycles the reading to full screen and back.
 
-use dmm_lib::protocol::ut61eplus::tables::{ModeSpecInfo, SpecInfo};
+use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, RichText, Ui};
 
 use super::{App, BigMeterMode};

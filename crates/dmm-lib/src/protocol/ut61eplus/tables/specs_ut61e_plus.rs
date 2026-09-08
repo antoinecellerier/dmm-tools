@@ -1,7 +1,7 @@
 //! Specification data for the UNI-T UT61E+ (22,000 counts).
 //! Transcribed from references/ut61eplus/ut61e_manual.pdf, section IX.2.
 
-use super::{AccuracyBand, ModeSpecInfo, SpecInfo};
+use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
 // ── DC Voltage (manual page 26) ─────────────────────────────────────────
 

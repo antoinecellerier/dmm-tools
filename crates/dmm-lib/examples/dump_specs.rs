@@ -11,9 +11,10 @@
 
 use dmm_lib::protocol::ut61eplus::mode::Mode;
 use dmm_lib::protocol::ut61eplus::tables::{
-    AccuracyBand, DeviceTable, ModeSpecInfo, RangeInfo, SpecInfo, ut61b_plus::Ut61bPlusTable,
-    ut61d_plus::Ut61dPlusTable, ut61e_plus::Ut61ePlusTable,
+    DeviceTable, RangeInfo, ut61b_plus::Ut61bPlusTable, ut61d_plus::Ut61dPlusTable,
+    ut61e_plus::Ut61ePlusTable,
 };
+use dmm_lib::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
 /// (range byte, spec, optional (range info, range label)) for one mode in the dump.
 type RangeRow<'a> = (u8, &'a SpecInfo, Option<(&'a RangeInfo, &'a str)>);

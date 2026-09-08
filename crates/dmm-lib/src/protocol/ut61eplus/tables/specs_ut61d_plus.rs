@@ -3,7 +3,7 @@
 //! Frequency response for AC modes is 40Hz–1kHz (B+ is 40Hz–500Hz).
 //! Transcribed from references/ut61eplus/ut61e_manual.pdf.
 
-use super::{AccuracyBand, ModeSpecInfo, SpecInfo};
+use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
 // DC specs are identical to UT61B+ — re-export.
 pub use super::specs_ut61b_plus::{

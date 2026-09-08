@@ -9,7 +9,7 @@ use super::mode::Mode;
 use crate::protocol::cycle::{self, DialPosition};
 use std::borrow::Cow;
 
-pub use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
+use crate::specs::{ModeSpecInfo, SpecInfo};
 
 /// Information about a specific measurement range.
 #[derive(Debug, Clone)]
