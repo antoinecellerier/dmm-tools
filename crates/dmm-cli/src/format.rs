@@ -23,122 +23,141 @@ pub fn format_measurement(
     format: &OutputFormat,
     experimental: bool,
     integral: Option<(f64, &str)>,
-    // Column layout for CSV. Ignored by the text and JSON arms, which size
-    // themselves per reading.
+    // Column layout for CSV. The text and JSON formats size themselves per
+    // reading and never see it.
     layout: CsvLayout,
 ) -> std::io::Result<()> {
     match format {
-        OutputFormat::Text => {
-            if let Some((val, unit)) = integral {
-                writeln!(w, "{m} [\u{222b} {val:.4} {unit}]")?;
-            } else {
-                writeln!(w, "{m}")?;
-            }
-            // Sub-values, indented under the reading they belong to. The
-            // UT181A produces these in REL (Reference/Absolute), MIN/MAX
-            // (Max/Average/Min with timestamps) and peak modes, and the UT171
-            // for the AC frequency aux; before this they were parsed and
-            // discarded.
-            let label_w = m
-                .aux_values
-                .iter()
-                .map(|a| a.label.chars().count())
-                .max()
-                .unwrap_or(0);
-            for aux in &m.aux_values {
-                let unit = aux.unit_or(&m.unit);
-                let elapsed = aux
-                    .elapsed_secs
-                    .map(|s| format!(" @{s}s"))
-                    .unwrap_or_default();
-                writeln!(
-                    w,
-                    "  {:<label_w$}  {} {unit}{elapsed}",
-                    aux.label,
-                    aux.value_str()
-                )?;
-            }
-            Ok(())
-        }
-        OutputFormat::Csv => {
-            // Through the csv crate rather than hand-joined with commas, as
-            // the GUI export already does. Several of these fields carry
-            // device-derived text: UT181A units come from `parse_unit_string`,
-            // which maps raw frame bytes to chars with no character-set
-            // validation, and an unrecognised mode byte becomes
-            // `Unknown(0x..)`. One comma or quote in there and every
-            // downstream column shifts.
-            let ts = timestamp_rfc3339(m, wall_clock);
-            // Cells resolved ahead of the writer so the borrowed ones outlive
-            // the record. `--scale` is fixed for the run, so every row carries
-            // the full extra count the layout reserves.
-            let cells = layout.row(m, &ts, integral, layout.extra_slots);
-            let mut wtr = csv::WriterBuilder::new()
-                // One row per call, so the default 8 KiB buffer is dead
-                // weight — a row is well under this.
-                .buffer_capacity(256)
-                .from_writer(w);
-            wtr.write_record(cells.iter().map(|c| c.as_ref()))
-                .map_err(std::io::Error::other)?;
-            wtr.flush()
-        }
-        OutputFormat::Json => {
-            let value = match &m.value {
-                MeasuredValue::Normal(v) => serde_json::json!(v),
-                MeasuredValue::Overload => serde_json::json!("OL"),
-                MeasuredValue::NcvLevel(l) => serde_json::json!({"ncv_level": l}),
-            };
-            // Built from StatusFlags::as_pairs rather than a hand-written
-            // list: the old list had drifted and was missing `loz` and
-            // `void`, so a VC-890 reading the meter had marked invalid was
-            // indistinguishable from a good one in JSON — while the text and
-            // CSV formats reported it.
-            let flags: serde_json::Map<String, serde_json::Value> = m
-                .flags
-                .as_pairs()
-                .into_iter()
-                .map(|(name, set)| (name.to_string(), serde_json::json!(set)))
-                .collect();
-            let mut obj = serde_json::json!({
-                "timestamp": timestamp_rfc3339(m, wall_clock),
-                "mode": m.mode,
-                "value": value,
-                "unit": m.unit,
-                "range": m.range_label,
-                "display_raw": m.display_raw,
-                "progress": m.progress,
-                "experimental": experimental,
-                "flags": flags,
-            });
-            // Omitted entirely when there are none, so output for the
-            // families that never produce sub-values is unchanged.
-            if !m.aux_values.is_empty() {
-                obj["aux"] = serde_json::json!(
-                    m.aux_values
-                        .iter()
-                        .map(|aux| {
-                            let unit = aux.unit_or(&m.unit);
-                            serde_json::json!({
-                                "label": aux.label,
-                                "value": aux.value_str(),
-                                "unit": unit,
-                                "elapsed_secs": aux.elapsed_secs,
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                );
-            }
-            if let Some((val, unit)) = integral {
-                obj["integral"] = serde_json::json!(val);
-                obj["integral_unit"] = serde_json::json!(unit);
-            }
-            writeln!(
-                w,
-                "{}",
-                serde_json::to_string(&obj).map_err(std::io::Error::other)?
-            )
-        }
+        OutputFormat::Text => format_text(w, m, integral),
+        OutputFormat::Csv => format_csv(w, m, wall_clock, integral, layout),
+        OutputFormat::Json => format_json(w, m, wall_clock, experimental, integral),
     }
+}
+
+fn format_text(
+    w: &mut dyn Write,
+    m: &Measurement,
+    integral: Option<(f64, &str)>,
+) -> std::io::Result<()> {
+    if let Some((val, unit)) = integral {
+        writeln!(w, "{m} [\u{222b} {val:.4} {unit}]")?;
+    } else {
+        writeln!(w, "{m}")?;
+    }
+    // Sub-values, indented under the reading they belong to. The UT181A
+    // produces these in REL (Reference/Absolute), MIN/MAX (Max/Average/Min
+    // with timestamps) and peak modes, and the UT171 for the AC frequency
+    // aux; before this they were parsed and discarded.
+    let label_w = m
+        .aux_values
+        .iter()
+        .map(|a| a.label.chars().count())
+        .max()
+        .unwrap_or(0);
+    for aux in &m.aux_values {
+        let unit = aux.unit_or(&m.unit);
+        let elapsed = aux
+            .elapsed_secs
+            .map(|s| format!(" @{s}s"))
+            .unwrap_or_default();
+        writeln!(
+            w,
+            "  {:<label_w$}  {} {unit}{elapsed}",
+            aux.label,
+            aux.value_str()
+        )?;
+    }
+    Ok(())
+}
+
+fn format_csv(
+    w: &mut dyn Write,
+    m: &Measurement,
+    wall_clock: &WallClock,
+    integral: Option<(f64, &str)>,
+    layout: CsvLayout,
+) -> std::io::Result<()> {
+    // Through the csv crate rather than hand-joined with commas, as the GUI
+    // export already does. Several of these fields carry device-derived text:
+    // UT181A units come from `parse_unit_string`, which maps raw frame bytes
+    // to chars with no character-set validation, and an unrecognised mode byte
+    // becomes `Unknown(0x..)`. One comma or quote in there and every
+    // downstream column shifts.
+    let ts = timestamp_rfc3339(m, wall_clock);
+    // Cells resolved ahead of the writer so the borrowed ones outlive the
+    // record. `--scale` is fixed for the run, so every row carries the full
+    // extra count the layout reserves.
+    let cells = layout.row(m, &ts, integral, layout.extra_slots);
+    let mut wtr = csv::WriterBuilder::new()
+        // One row per call, so the default 8 KiB buffer is dead weight — a row
+        // is well under this.
+        .buffer_capacity(256)
+        .from_writer(w);
+    wtr.write_record(cells.iter().map(|c| c.as_ref()))
+        .map_err(std::io::Error::other)?;
+    wtr.flush()
+}
+
+fn format_json(
+    w: &mut dyn Write,
+    m: &Measurement,
+    wall_clock: &WallClock,
+    experimental: bool,
+    integral: Option<(f64, &str)>,
+) -> std::io::Result<()> {
+    let value = match &m.value {
+        MeasuredValue::Normal(v) => serde_json::json!(v),
+        MeasuredValue::Overload => serde_json::json!("OL"),
+        MeasuredValue::NcvLevel(l) => serde_json::json!({"ncv_level": l}),
+    };
+    // Built from StatusFlags::as_pairs rather than a hand-written list: the
+    // old list had drifted and was missing `loz` and `void`, so a VC-890
+    // reading the meter had marked invalid was indistinguishable from a good
+    // one in JSON — while the text and CSV formats reported it.
+    let flags: serde_json::Map<String, serde_json::Value> = m
+        .flags
+        .as_pairs()
+        .into_iter()
+        .map(|(name, set)| (name.to_string(), serde_json::json!(set)))
+        .collect();
+    let mut obj = serde_json::json!({
+        "timestamp": timestamp_rfc3339(m, wall_clock),
+        "mode": m.mode,
+        "value": value,
+        "unit": m.unit,
+        "range": m.range_label,
+        "display_raw": m.display_raw,
+        "progress": m.progress,
+        "experimental": experimental,
+        "flags": flags,
+    });
+    // Omitted entirely when there are none, so output for the families that
+    // never produce sub-values is unchanged.
+    if !m.aux_values.is_empty() {
+        obj["aux"] = serde_json::json!(
+            m.aux_values
+                .iter()
+                .map(|aux| {
+                    let unit = aux.unit_or(&m.unit);
+                    serde_json::json!({
+                        "label": aux.label,
+                        "value": aux.value_str(),
+                        "unit": unit,
+                        "elapsed_secs": aux.elapsed_secs,
+                    })
+                })
+                .collect::<Vec<_>>()
+        );
+    }
+    if let Some((val, unit)) = integral {
+        obj["integral"] = serde_json::json!(val);
+        obj["integral_unit"] = serde_json::json!(unit);
+    }
+    writeln!(
+        w,
+        "{}",
+        serde_json::to_string(&obj).map_err(std::io::Error::other)?
+    )
 }
 
 #[cfg(test)]
