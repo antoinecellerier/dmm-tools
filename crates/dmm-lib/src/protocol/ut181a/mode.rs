@@ -9,7 +9,7 @@
 //! `docs/research/ut181/reverse-engineered-protocol.md`
 //! §6.1 Mode switching (SET_MODE) -- [VENDOR].
 
-use super::{decode_mode_word, lookup_range_label};
+use super::parse::{decode_mode_word, lookup_range_label};
 use crate::protocol::{AUTO_RANGE_ID, AUTO_RANGE_LABEL, Choice};
 use std::borrow::Cow;
 

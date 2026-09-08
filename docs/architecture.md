@@ -32,7 +32,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut8803/` | UT8803 family: `Ut8803Protocol` — streaming protocol with 0x5A trigger |
 | `protocol/fs9721/` | UT803/UT804: `Fs9721Protocol` — streaming, proprietary structured data in FS9721 14-byte framing (CH9325 HID) |
 | `protocol/ut171/` | UT171 family: `Ut171Protocol` — streaming protocol, float32 LE values |
-| `protocol/ut181a/` | UT181A: `Ut181aProtocol` — streaming protocol, device-sent unit strings |
+| `protocol/ut181a/` | UT181A: `Ut181aProtocol` in `mod.rs` (streaming driver, device-sent unit strings); `parse.rs` decodes the normal, REL, MIN/MAX, Peak and COMP payloads, `command.rs` builds the AB CD command frames and reads the OK/ER reply, `mode.rs` holds the dial families SET_MODE and SET_RANGE move within |
 | `protocol/vc8x0/` | Voltcraft VC-880/VC650BT and VC-890: `Vc8x0Protocol<M>` in `mod.rs` implements `Protocol` and `CycleMeter` once over a `Vc8x0Model`; `vc880.rs` (streaming) and `vc890.rs` (polled 0x5E, 60K counts, 66-byte frames) hold each family's tables, dial, frame layout and the drain or ack around its I/O |
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic); `AuxValue` sub-values, with `AuxValue::export_cells` + `Measurement::export_aux_slots` supplying the cells and slot order `export.rs` lays out (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |

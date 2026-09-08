@@ -106,7 +106,7 @@ payload_ptr, payload_len)`. It allocates `payload_len + 7`, writes
 `0xAB 0xCD`, then `payload_len + 3` as a uint16 LE length, then the
 opcode byte, then the payload, then a uint16 LE sum of every byte from
 offset 2 through the end of the payload. That is byte-for-byte the
-`build_command` helper in `crates/dmm-lib/src/protocol/ut181a/mod.rs`.
+`build_command` helper in `crates/dmm-lib/src/protocol/ut181a/command.rs`.
 Every command below is a thin wrapper that fills a small stack buffer
 and calls it.
 

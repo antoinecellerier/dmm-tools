@@ -503,7 +503,7 @@ own software sends, not hardware confirmation.
   (auto-range, HV warning) alongside it. A 31-byte V DC payload
   (`0x3111`, PR #8, second meter) consumes as 6 + 13 + **12**, so the
   12-byte bargraph width holds on another meter and mode. Regression
-  frames in `crates/dmm-lib/src/protocol/ut181a/mod.rs` and
+  frames in `crates/dmm-lib/src/protocol/ut181a/parse.rs` and
   `crates/dmm-lib/tests/golden/ut181a/`.
 - Mode word decoding (79 nibble-encoded uint16 modes) — `0x3111`
   (V DC), `0x4211` (°C) and `0x1121` (V AC Hz) verified on hardware;
