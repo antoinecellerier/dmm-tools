@@ -79,7 +79,7 @@ const CABLE_CHECK: &str = "Check that the USB cable is plugged in and the meter 
 #[cfg(target_os = "linux")]
 const SETUP_HINT: &[&str] = &[
     CABLE_CHECK,
-    "On Linux, ensure the udev rule is installed:",
+    "Ensure the udev rule is installed:",
     "  sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/",
     "  sudo udevadm control --reload-rules",
     "Then replug the cable. On a headless machine, keep a group on the",
@@ -101,7 +101,7 @@ const SETUP_HINT: &[&str] = &[
 #[cfg(target_os = "macos")]
 const SETUP_HINT: &[&str] = &[
     CABLE_CHECK,
-    "On macOS, the cable should be recognized automatically (no driver needed).",
+    "The cable should be recognized automatically (no driver needed).",
     "If the device is not found, check System Settings > Privacy & Security > Input Monitoring.",
 ];
 
