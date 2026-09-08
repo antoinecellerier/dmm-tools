@@ -354,13 +354,11 @@ plus what no step reaches.
 
 **UT8802 / UT8802N**:
 - Frame extraction (8-byte, 0xAC header, no checksum)
-- **Bug, code-confirmed 2026-09-08**: a negative reading is shown and
-  exported unsigned. `display_raw` is built from the BCD digits and the
-  sign bit is applied only to the float, while display and CSV prefer
-  `display_raw` for a normal value (`parse_negative` in the parser tests
-  pins `Normal(-1234.5)` beside `display_raw "1234.5"`). Fix is to put
-  the sign into the display string; needs a `dcv_negative` capture to
-  confirm the meter never sends its own sign
+- ~~Negative reading shown and exported unsigned~~ **Fixed 2026-09-08**:
+  the parser now puts the sign in `display_raw`. The digit nibbles cannot
+  carry a sign and the vendor passes byte 7 bit 7 to its string builder
+  separately (uci_dll_decompiled.txt:24813), so no double sign is
+  possible; the `dcv_negative` capture step still confirms the bit itself
 - 0x5A streaming trigger byte — the vendor DLL only sends 0x5A on the
   QinHeng/CH9325 init path, never to CP2110 devices (2026-06 review);
   does the UT8802 stream without it, and is sending it harmful?

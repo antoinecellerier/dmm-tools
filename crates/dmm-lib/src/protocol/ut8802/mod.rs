@@ -334,6 +334,14 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         chars.insert(insert_pos, '.');
     }
 
+    // The digits never carry a sign: the vendor hands its string builder the
+    // digit string and byte 6 bit 7 separately (uci_dll_decompiled.txt:24813).
+    // Every display and export path prefers `display_raw` for a normal
+    // value, so the sign has to be in the string, not only on the float.
+    if sign_byte & 0x80 != 0 && !overload {
+        chars.insert(0, '-');
+    }
+
     let display_str: String = chars.iter().collect();
 
     // Parse numeric value
@@ -342,13 +350,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     } else {
         let trimmed: String = display_str.chars().filter(|c| !c.is_whitespace()).collect();
         match trimmed.parse::<f64>() {
-            Ok(mut v) => {
-                // Bit 7 of sign byte = polarity (1 = negative)
-                if sign_byte & 0x80 != 0 {
-                    v = -v;
-                }
-                MeasuredValue::Normal(v)
-            }
+            Ok(v) => MeasuredValue::Normal(v),
             Err(_) => {
                 warn!("ut8802: could not parse display value: {display_str:?}");
                 MeasuredValue::Overload
@@ -368,7 +370,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     //   bit 4: HOLD (→ D31)
     //   bit 5: Over (→ D18; not surfaced by StatusFlags)
     //   bit 6: OL   (→ D7)
-    //   bit 7: sign (→ D19, handled above)
+    //   bit 7: sign (→ D19, folded into the display string above)
     //
     // See docs/research/uci-bench-family/reverse-engineered-protocol.md §3.5.
     let auto_range = sign_byte & 0x04 == 0;
@@ -560,13 +562,34 @@ raw_payload=7"#
         }
     }
 
+    /// Bit 7 of the sign byte negates the value, and the sign reaches the
+    /// display string too: display and CSV render `display_raw`, so a
+    /// negative reading used to show and export unsigned.
     #[test]
     fn parse_negative() {
-        // Bit 7 of sign byte = negative
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x80);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-1234.5)).abs() < 1e-6));
-        assert_eq!(m.display_raw.as_deref(), Some("1234.5"));
+        assert_eq!(m.display_raw.as_deref(), Some("-1234.5"));
+    }
+
+    /// The sign goes in front of the blanked leading zero, the way the
+    /// UT61E+ spells its own display, and the number still parses.
+    #[test]
+    fn parse_negative_with_leading_blank() {
+        let payload = make_payload(0x05, [0, 1, 2, 3, 4], 2, 0x02, 0x00, 0x80);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if v == -12.34));
+        assert_eq!(m.display_raw.as_deref(), Some("- 12.34"));
+    }
+
+    /// Overload wins: the sign bit set beside OL adds no `-` to the digits.
+    #[test]
+    fn parse_negative_overload_keeps_the_digits_unsigned() {
+        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0xC0);
+        let m = parse_measurement(&payload).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.display_raw.as_deref(), Some("12345"));
     }
 
     #[test]

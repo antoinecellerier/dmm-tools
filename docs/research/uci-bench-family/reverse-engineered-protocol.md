@@ -191,7 +191,10 @@ replaces the display with the literal `"  0L "`
 [VENDOR]
 
 **Sign**: Byte 7 bit 7 determines polarity. When set, the parsed
-numeric value is negated (multiplied by -1.0). [VENDOR]
+numeric value is negated (multiplied by -1.0). The digit string never
+carries a sign — the vendor passes the bit to its string builder as a
+separate argument (`FUN_1001c950`, line 24813) — so the implementation
+prefixes `-` to `display_raw` itself. [VENDOR]
 
 ### 3.3 Position Code Table -- [KNOWN] + [VENDOR]
 
