@@ -1,0 +1,8 @@
+# V DC with the leads open, 6V range, bargraph but no sub-display - captured from a real UT181A (issue #5 / PR #8, @alexander-magon, 2026-04-07)
+raw_hex: "02 08 01 11 31 01 AF 73 D1 38 40 56 44 43 00 00 00 00 00 60 A2 23 BC 56 44 43 00 00 00 00 00"
+mode: V DC
+value: "0.00009987444354919717"
+unit: VDC
+range_label: 6V
+flags:
+  auto_range: true

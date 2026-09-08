@@ -1,0 +1,8 @@
+# Temperature with two thermocouples, T1 on the main display and T2 alongside it - captured from a real UT181A (issue #5, @diego351, 2026-09-02)
+raw_hex: "02 02 01 11 42 01 F0 ED CA 41 10 B0 43 00 43 00 00 00 00 26 FC C4 41 10 B0 43 00 00 00 00 00 5A"
+mode: °C
+value: "25.366180419921875"
+unit: °C
+range_label: ""
+flags:
+  auto_range: true
