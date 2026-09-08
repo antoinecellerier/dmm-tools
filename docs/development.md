@@ -153,7 +153,7 @@ the crates:
 
 - `ci.yml` — fmt, clippy and tests on every push and pull request, plus a
   three-target build so platform-specific breakage shows up early.
-- `build-matrix.yml` — the six-target release build, called by the two below.
+- `build-matrix.yml` — the six-target release build, called by the three others.
 - `release.yml` — runs on a `v*` tag, see [Release Process](#release-process).
 - `dev-build.yml` — the nightly prerelease.
 
@@ -169,11 +169,14 @@ actionlint
 
 ### Shared build matrix
 
-`release.yml` and `dev-build.yml` both call `build-matrix.yml`, so a nightly dev
-build exercises the same packaging path a release does — a break shows up the
-next morning rather than at tag time. It deliberately does not use
-`Swatinem/rust-cache`: these builds are unattended, and the 10 GB repository
-cache is worth more to `ci.yml`, whose caches decide pull-request turnaround.
+`ci.yml`, `release.yml` and `dev-build.yml` all call `build-matrix.yml`, so a
+nightly dev build exercises the same packaging path a release does — a break
+shows up the next morning rather than at tag time — and the targets CI builds
+cannot drift from the ones a release ships. CI passes `subset: ci` for the
+cheaper three-target build, leaves `upload-artifacts` off so a push or pull
+request compiles the binaries and keeps nothing, and is the only caller setting
+`cache: true`: the 10 GB repository cache is worth more to pull-request
+turnaround than to the unattended release and nightly builds.
 
 ### Dev builds
 

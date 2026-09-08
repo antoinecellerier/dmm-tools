@@ -1,11 +1,8 @@
-# Shared release-binary build, called by release.yml (tagged releases) and
-# dev-build.yml (nightly prereleases). Keeping both on one matrix means a
-# nightly build exercises the exact packaging path that later cuts a release,
-# so a break surfaces the next morning instead of at tag time.
-#
-# Deliberately no Swatinem/rust-cache here: these builds are unattended and the
-# 10 GB repository cache is worth more to ci.yml, whose caches decide PR
-# turnaround. See docs/development.md.
+# Shared binary build, called by release.yml (tagged releases), dev-build.yml
+# (nightly prereleases) and ci.yml (the push/pull-request smoke build). Keeping
+# all three on one matrix means a nightly build exercises the exact packaging
+# path that later cuts a release -- a break surfaces the next morning instead of
+# at tag time -- and CI cannot drift from the targets a release ships.
 name: Build binaries
 
 on:
@@ -15,62 +12,84 @@ on:
         description: "Base name for the archives, e.g. dmm-tools or dmm-tools-dev-abc1234"
         type: string
         default: dmm-tools
+      subset:
+        description: "Targets to build: all (the six release targets) or ci (the three smoke targets)"
+        type: string
+        default: all
+      upload-artifacts:
+        description: "Package and upload the binaries; off for builds that only need to compile"
+        type: boolean
+        default: true
+      cache:
+        description: "Restore and save Swatinem/rust-cache; on for CI, off for unattended builds"
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The matrix is assembled here rather than written inline because a job-level
+  # `if:` cannot read the matrix context: selecting a subset any other way would
+  # still spin up a runner for every excluded target.
+  targets:
+    name: Select targets
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select targets
+        id: select
+        env:
+          SUBSET: ${{ inputs.subset }}
+        run: |
+          # native: the runner can execute what it just built, so the
+          #   embedded-version check below can run there.
+          # ci: part of the cheaper subset ci.yml builds on every push and PR.
+          cat > targets.json <<'JSON'
+          [
+            {"name": "Linux",         "os": "ubuntu-latest",    "target": "x86_64-unknown-linux-gnu",  "slug": "linux-x86_64",    "ext": "tar.gz", "native": true, "ci": true},
+            {"name": "Windows",       "os": "windows-latest",   "target": "x86_64-pc-windows-msvc",    "slug": "windows-x86_64",  "ext": "zip",    "native": true, "ci": true},
+            {"name": "macOS (ARM)",   "os": "macos-latest",     "target": "aarch64-apple-darwin",      "slug": "macos-aarch64",   "ext": "tar.gz", "native": true, "ci": true},
+            {"name": "macOS (Intel)", "os": "macos-latest",     "target": "x86_64-apple-darwin",       "slug": "macos-x86_64",    "ext": "tar.gz"},
+            {"name": "Linux (ARM)",   "os": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "slug": "linux-aarch64",   "ext": "tar.gz", "native": true},
+            {"name": "Windows (ARM)", "os": "windows-latest",   "target": "aarch64-pc-windows-msvc",   "slug": "windows-aarch64", "ext": "zip"}
+          ]
+          JSON
+          case "$SUBSET" in
+            all) INCLUDE=$(jq -c '.' targets.json) ;;
+            ci)  INCLUDE=$(jq -c '[.[] | select(.ci)]' targets.json) ;;
+            *)
+              echo "::error::unknown subset '$SUBSET'; expected 'all' or 'ci'"
+              exit 1
+              ;;
+          esac
+          echo "Building: $(jq -r '[.[].name] | join(", ")' <<<"$INCLUDE")"
+          echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build (${{ matrix.name }})
+    needs: targets
     runs-on: ${{ matrix.os }}
     env:
       ARCHIVE: ${{ inputs.archive-prefix }}-${{ matrix.slug }}
     strategy:
-      # One broken target should not hide the state of the other five.
+      # One broken target should not hide the state of the others.
       fail-fast: false
-      matrix:
-        include:
-          # `native: true` means the runner can execute what it just built, so
-          # the embedded-version check below can run.
-          - name: Linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            slug: linux-x86_64
-            ext: tar.gz
-            native: true
-          - name: Windows
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            slug: windows-x86_64
-            ext: zip
-            native: true
-          - name: macOS (ARM)
-            os: macos-latest
-            target: aarch64-apple-darwin
-            slug: macos-aarch64
-            ext: tar.gz
-            native: true
-          - name: macOS (Intel)
-            os: macos-latest
-            target: x86_64-apple-darwin
-            slug: macos-x86_64
-            ext: tar.gz
-          - name: Linux (ARM)
-            os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            slug: linux-aarch64
-            ext: tar.gz
-            native: true
-          - name: Windows (ARM)
-            os: windows-latest
-            target: aarch64-pc-windows-msvc
-            slug: windows-aarch64
-            ext: zip
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # Off by default: release and nightly builds are unattended, and the 10 GB
+      # repository cache is worth more to the CI call, whose caches decide
+      # pull-request turnaround. See docs/development.md.
+      - uses: Swatinem/rust-cache@v2
+        if: inputs.cache
+        with:
+          key: ${{ matrix.target }}
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -119,7 +138,7 @@ jobs:
           esac
 
       - name: Package (Linux)
-        if: runner.os == 'Linux'
+        if: inputs.upload-artifacts && runner.os == 'Linux'
         run: |
           mkdir -p "$ARCHIVE"
           cp target/${{ matrix.target }}/release/dmm-cli "$ARCHIVE/"
@@ -130,7 +149,7 @@ jobs:
           tar czf "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
 
       - name: Package (macOS)
-        if: runner.os == 'macOS'
+        if: inputs.upload-artifacts && runner.os == 'macOS'
         run: |
           mkdir -p "$ARCHIVE"
           cp target/${{ matrix.target }}/release/dmm-cli "$ARCHIVE/"
@@ -140,7 +159,7 @@ jobs:
           tar czf "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
 
       - name: Package (Windows)
-        if: runner.os == 'Windows'
+        if: inputs.upload-artifacts && runner.os == 'Windows'
         shell: bash
         run: |
           mkdir -p "$ARCHIVE"
@@ -151,6 +170,7 @@ jobs:
           7z a "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
 
       - name: Upload artifact
+        if: inputs.upload-artifacts
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARCHIVE }}

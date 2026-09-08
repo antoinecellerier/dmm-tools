@@ -58,65 +58,16 @@ jobs:
           echo "::add-matcher::.github/actionlint-matcher.json"
           ./actionlint -color
 
+  # The smoke build comes from the shared release matrix, so what CI compiles
+  # cannot drift from what a release ships. `subset: ci` keeps the other three
+  # release targets out of pull-request builds, and nothing is packaged unless a
+  # manual dispatch asks for it — a push or pull request uploads nothing.
   build:
-    name: Build (${{ matrix.name }})
     needs: check
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - name: Linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: dmm-tools-linux-x86_64
-          - name: Windows
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: dmm-tools-windows-x86_64
-          - name: macOS (ARM)
-            os: macos-latest
-            target: aarch64-apple-darwin
-            artifact: dmm-tools-macos-aarch64
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
-      - name: Install Linux dependencies
-        if: runner.os == 'Linux'
-        run: >
-          sudo apt-get update && sudo apt-get install -y
-          libudev-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev
-          libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
-
-      - name: Build
-        run: cargo build --workspace --release --target ${{ matrix.target }}
-
-      - name: Prepare artifacts (Unix)
-        if: runner.os != 'Windows' && inputs.upload_artifacts
-        run: |
-          mkdir -p staging
-          cp target/${{ matrix.target }}/release/dmm-cli staging/
-          cp target/${{ matrix.target }}/release/dmm-gui staging/
-          cp README.md LICENSE staging/
-          cp -r udev staging/ || true
-
-      - name: Prepare artifacts (Windows)
-        if: runner.os == 'Windows' && inputs.upload_artifacts
-        shell: bash
-        run: |
-          mkdir -p staging
-          cp target/${{ matrix.target }}/release/dmm-cli.exe staging/
-          cp target/${{ matrix.target }}/release/dmm-gui.exe staging/
-          cp README.md LICENSE staging/
-
-      - name: Upload artifact
-        if: inputs.upload_artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.artifact }}
-          path: staging/
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-matrix.yml
+    with:
+      subset: ci
+      cache: true
+      upload-artifacts: ${{ inputs.upload_artifacts || false }}
