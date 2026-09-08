@@ -1,0 +1,17 @@
+# Duty cycle 0 % with no signal, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step duty)
+raw_hex: "05 30 20 20 20 20 30 2E 30 00 00 30 30 30"
+mode: "Duty %"
+value: "0"
+unit: "%"
+range_label: "Duty"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

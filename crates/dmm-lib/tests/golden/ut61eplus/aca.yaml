@@ -1,0 +1,17 @@
+# AC 0.024 A on the 20A range (A has no auto-ranging), captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step aca)
+raw_hex: "11 31 20 20 30 2E 30 32 34 00 00 30 34 30"
+mode: "AC A"
+value: "0.024"
+unit: "A"
+range_label: "20A"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

@@ -1,0 +1,17 @@
+# DC 0 mA on the manual 220mA range, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step dcma/range:220mA)
+raw_hex: "0E 31 20 20 20 30 2E 30 30 00 00 30 34 30"
+mode: "DC mA"
+value: "0"
+unit: "mA"
+range_label: "220mA"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

@@ -1,0 +1,17 @@
+# AC+DC V 0.001 V on the 2.2V range, auto-ranging, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acdcv)
+raw_hex: "19 30 20 30 2E 30 30 31 30 00 00 30 30 31"
+mode: "AC+DC V"
+value: "0.001"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

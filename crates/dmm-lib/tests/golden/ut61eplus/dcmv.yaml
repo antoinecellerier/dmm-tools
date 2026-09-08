@@ -1,0 +1,17 @@
+# DC mV -34.70 mV on the 220mV range, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step dcmv)
+raw_hex: "03 30 2D 20 33 34 2E 37 30 02 03 30 34 31"
+mode: "DC mV"
+value: "-34.7"
+unit: "mV"
+range_label: "220mV"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

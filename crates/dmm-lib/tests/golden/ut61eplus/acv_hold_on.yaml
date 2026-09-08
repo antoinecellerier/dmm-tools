@@ -1,0 +1,17 @@
+# AC V 0.0663 V with HOLD on, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acv/hold:on)
+raw_hex: "00 30 20 30 2E 30 36 36 33 00 01 32 30 30"
+mode: "AC V"
+value: "0.0663"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: true
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

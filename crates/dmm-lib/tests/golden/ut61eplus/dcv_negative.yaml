@@ -1,0 +1,17 @@
+# DC V -0.5137 V, a negative reading on the 2.2V range, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step dcv_negative)
+raw_hex: "02 30 2D 30 2E 35 31 33 37 01 00 30 30 31"
+mode: "DC V"
+value: "-0.5137"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

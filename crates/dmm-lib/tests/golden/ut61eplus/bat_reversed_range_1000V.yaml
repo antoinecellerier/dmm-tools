@@ -1,0 +1,17 @@
+# DC V -1.4 V on the manual 1000V range, captured 2026-09-07 from a UT61E+ (ut61eplus-verify4-plan.yaml, step bat_reversed/range:1000V)
+raw_hex: "02 33 2D 20 20 20 31 2E 34 00 00 30 34 31"
+mode: "DC V"
+value: "-1.4"
+unit: "V"
+range_label: "1000V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

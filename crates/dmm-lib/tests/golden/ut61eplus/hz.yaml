@@ -1,0 +1,17 @@
+# Frequency 0 Hz with no signal, 22Hz range, auto-ranging, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step hz)
+raw_hex: "04 30 20 20 20 30 2E 30 30 00 00 30 30 30"
+mode: "Hz"
+value: "0"
+unit: "Hz"
+range_label: "22Hz"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

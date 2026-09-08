@@ -1,0 +1,17 @@
+# Resistance 2.297 MΩ on the 22MΩ range, auto-ranging, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step ohm_body)
+raw_hex: "06 35 20 20 32 2E 32 39 37 00 04 30 30 30"
+mode: "Ω"
+value: "2.297"
+unit: "MΩ"
+range_label: "22MΩ"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

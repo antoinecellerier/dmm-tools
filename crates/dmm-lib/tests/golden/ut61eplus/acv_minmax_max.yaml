@@ -1,0 +1,17 @@
+# AC V 0.0791 V with MAX on, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acv/minmax:max)
+raw_hex: "00 30 20 30 2E 30 37 39 31 00 01 38 34 30"
+mode: "AC V"
+value: "0.0791"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: true
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

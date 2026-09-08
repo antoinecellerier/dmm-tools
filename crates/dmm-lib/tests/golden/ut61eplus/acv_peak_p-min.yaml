@@ -1,0 +1,17 @@
+# AC V -0.6668 V with peak-min on, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acv/peak:p-min)
+raw_hex: "00 30 2D 30 2E 36 36 36 38 00 01 30 34 32"
+mode: "AC V"
+value: "-0.6668"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: true
+  peak_max: false
