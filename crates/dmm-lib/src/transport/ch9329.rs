@@ -115,34 +115,9 @@ impl Transport for Ch9329 {
             return Ok(0);
         }
 
-        // The CH9329 HID report layout is:
-        //   byte 0: report ID (0x00) — may be stripped by hidapi on some platforms
-        //   byte 1: UART data length
-        //   bytes 2+: UART payload
-        //
-        // On Linux/hidraw, hidapi includes the report ID in the buffer.
-        // On Windows/macOS, hidapi may strip it when report ID is 0x00.
-        // We detect this by checking if byte 0 looks like a length (small value)
-        // vs a report ID (0x00).
-        let (payload_len, payload_start) = if n >= 2 && raw[0] == 0x00 {
-            // Report ID present: byte 0 = 0x00 (report ID), byte 1 = length
-            (raw[1] as usize, 2)
-        } else if n >= 1 {
-            // Report ID stripped: byte 0 = length. This is the normal layout
-            // on Windows/macOS, not an anomaly, so it is not worth a log line
-            // of its own — it would fire on every report, and
-            // `framing::read_uart_bytes` calls this up to MAX_EMPTY_READS
-            // (256) times per frame. The `trace!` below records raw[0], which
-            // is what tells the two layouts apart if the data ever looks
-            // wrong and the offset needs platform-specific tuning.
-            (raw[0] as usize, 1)
-        } else {
-            return Ok(0);
-        };
-
-        let available = n.saturating_sub(payload_start);
-        let actual = payload_len.min(available).min(buf.len());
-        buf[..actual].copy_from_slice(&raw[payload_start..payload_start + actual]);
+        let payload = locate_rx_payload(&raw[..n]);
+        let actual = payload.len().min(buf.len());
+        buf[..actual].copy_from_slice(&payload[..actual]);
         trace!(
             "CH9329 RX ({actual} bytes, raw[0]={:#04x}): {:02X?}",
             raw[0],
@@ -164,6 +139,41 @@ impl Transport for Ch9329 {
     fn transport_name(&self) -> &'static str {
         "CH9329"
     }
+}
+
+/// The UART payload carried by one raw CH9329 HID report.
+///
+/// The report layout is:
+///   byte 0: report ID (0x00) — may be stripped by hidapi on some platforms
+///   byte 1: UART data length
+///   bytes 2+: UART payload
+///
+/// On Linux/hidraw, hidapi includes the report ID in the buffer. On
+/// Windows/macOS, hidapi may strip it when the report ID is 0x00. The two
+/// layouts are told apart by whether byte 0 reads as a report ID (0x00) or
+/// as a length.
+///
+/// The result is clamped to the bytes that actually arrived, so a length
+/// byte claiming more than the report holds yields only what is there.
+fn locate_rx_payload(report: &[u8]) -> &[u8] {
+    let (payload_len, payload_start) = if report.len() >= 2 && report[0] == 0x00 {
+        // Report ID present: byte 0 = 0x00 (report ID), byte 1 = length
+        (report[1] as usize, 2)
+    } else if !report.is_empty() {
+        // Report ID stripped: byte 0 = length. This is the normal layout
+        // on Windows/macOS, not an anomaly, so it is not worth a log line
+        // of its own — it would fire on every report, and
+        // `framing::read_uart_bytes` calls this up to MAX_EMPTY_READS
+        // (256) times per frame. The `trace!` in `read_timeout` records
+        // raw[0], which is what tells the two layouts apart if the data
+        // ever looks wrong and the offset needs platform-specific tuning.
+        (report[0] as usize, 1)
+    } else {
+        return &[];
+    };
+
+    let available = report.len().saturating_sub(payload_start);
+    &report[payload_start..payload_start + payload_len.min(available)]
 }
 
 #[cfg(test)]
@@ -198,30 +208,36 @@ mod tests {
         assert_eq!(report[8], 0x00); // padding
     }
 
+    /// Linux/hidraw: hidapi keeps the 0x00 report ID, so byte 1 is the length.
     #[test]
-    fn read_report_parsing_with_report_id() {
-        // Simulate Linux/hidraw where report ID is included
-        let mut raw = [0u8; HID_REPORT_SIZE];
-        raw[0] = 0x00; // report ID
-        raw[1] = 3; // 3 bytes of UART data
-        raw[2] = 0xAB;
-        raw[3] = 0xCD;
-        raw[4] = 0x03;
-        let n = 5; // total bytes read
+    fn rx_payload_with_report_id() {
+        let expected: &[u8] = &[0xAB, 0xCD, 0x03];
+        assert_eq!(locate_rx_payload(&[0x00, 3, 0xAB, 0xCD, 0x03]), expected);
+    }
 
-        // Parse like read_timeout does
-        let (payload_len, payload_start) = if n >= 2 && raw[0] == 0x00 {
-            (raw[1] as usize, 2)
-        } else {
-            (raw[0] as usize, 1)
-        };
+    /// Windows/macOS: hidapi strips the 0x00 report ID, so byte 0 is the
+    /// length and the same payload sits one byte earlier.
+    #[test]
+    fn rx_payload_without_report_id() {
+        let expected: &[u8] = &[0xAB, 0xCD, 0x03];
+        assert_eq!(locate_rx_payload(&[3, 0xAB, 0xCD, 0x03]), expected);
+    }
 
-        assert_eq!(payload_len, 3);
-        assert_eq!(payload_start, 2);
-        let actual = payload_len.min(n - payload_start);
-        assert_eq!(
-            &raw[payload_start..payload_start + actual],
-            &[0xAB, 0xCD, 0x03]
-        );
+    #[test]
+    fn rx_payload_of_empty_report() {
+        assert!(locate_rx_payload(&[]).is_empty());
+        // Header present, but the report declares no UART data.
+        assert!(locate_rx_payload(&[0x00, 0]).is_empty());
+    }
+
+    /// A length byte claiming more than arrived must yield the bytes that are
+    /// there rather than index past the end of the report.
+    #[test]
+    fn rx_payload_length_beyond_report() {
+        let expected: &[u8] = &[0xAB, 0xCD];
+        assert_eq!(locate_rx_payload(&[0x00, 63, 0xAB, 0xCD]), expected);
+        // A lone report-ID byte is read as a zero length in the stripped
+        // layout, which leaves no payload rather than a one-byte overrun.
+        assert!(locate_rx_payload(&[0x00]).is_empty());
     }
 }
