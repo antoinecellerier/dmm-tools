@@ -25,6 +25,31 @@ fn setting_selectable(
         .clicked()
 }
 
+/// One chip in a settings row: the setting it stands for, what it says, what
+/// it says on hover, and whether it is the current selection.
+struct Chip<T> {
+    value: T,
+    selected: bool,
+    label: String,
+    tooltip: String,
+}
+
+/// A caption followed by a run of selectable chips, as every settings row in
+/// the panel draws them. Returns the value of the chip clicked this frame.
+///
+/// The caller keeps its own layout container and its own trailing hint: the
+/// rows differ in whether they wrap and in what they add after the chips.
+fn chip_row<T>(ui: &mut Ui, caption: &str, chips: impl IntoIterator<Item = Chip<T>>) -> Option<T> {
+    ui.label(caption);
+    let mut picked = None;
+    for chip in chips {
+        if setting_selectable(ui, chip.selected, chip.label, &chip.tooltip) {
+            picked = Some(chip.value);
+        }
+    }
+    picked
+}
+
 impl App {
     pub(super) fn show_remote_controls(&mut self, ui: &mut Ui, scale: f32) {
         use super::ConnectionState;
@@ -176,35 +201,36 @@ impl App {
 
         ui.separator();
         ui.horizontal(|ui| {
-            ui.label("Theme:");
-            let mut changed = false;
-            for mode in [ThemeMode::Dark, ThemeMode::Light, ThemeMode::System] {
-                let selected = self.settings.theme == mode;
-                let base = match mode {
-                    ThemeMode::Dark => "Dark",
-                    ThemeMode::Light => "Light",
-                    ThemeMode::System => "System",
-                };
-                let label = if selected && self.settings.overrides.has_theme() {
-                    format!("{base} (--theme)")
-                } else {
-                    base.to_string()
-                };
-                let tooltip = match mode {
-                    ThemeMode::System => {
-                        "Follow the desktop's light/dark setting (Dark if it reports none)"
-                            .to_string()
+            let chips = [ThemeMode::Dark, ThemeMode::Light, ThemeMode::System]
+                .into_iter()
+                .map(|mode| {
+                    let selected = self.settings.theme == mode;
+                    let base = match mode {
+                        ThemeMode::Dark => "Dark",
+                        ThemeMode::Light => "Light",
+                        ThemeMode::System => "System",
+                    };
+                    Chip {
+                        value: mode,
+                        selected,
+                        label: if selected && self.settings.overrides.has_theme() {
+                            format!("{base} (--theme)")
+                        } else {
+                            base.to_string()
+                        },
+                        tooltip: match mode {
+                            ThemeMode::System => {
+                                "Follow the desktop's light/dark setting (Dark if it reports none)"
+                                    .to_string()
+                            }
+                            _ => format!("Use {base} mode for the whole GUI"),
+                        },
                     }
-                    _ => format!("Use {base} mode for the whole GUI"),
-                };
-                if setting_selectable(ui, selected, label, &tooltip) {
-                    self.settings.theme = mode;
-                    // Clear the override — user explicitly chose a theme
-                    self.settings.overrides.theme = None;
-                    changed = true;
-                }
-            }
-            if changed {
+                });
+            if let Some(mode) = chip_row(ui, "Theme:", chips) {
+                self.settings.theme = mode;
+                // Clear the override — user explicitly chose a theme
+                self.settings.overrides.theme = None;
                 self.settings.save();
             }
         });
@@ -212,42 +238,44 @@ impl App {
         // -- Color preset selector --
         let has_overrides = self.settings.color_overrides != ColorOverrides::default();
         ui.horizontal_wrapped(|ui| {
-            ui.label("Colors:");
-            let mut changed = false;
-            for preset in [
+            let chips = [
                 ColorPreset::Default,
                 ColorPreset::HighContrast,
                 ColorPreset::ColorblindSafe,
-            ] {
+            ]
+            .into_iter()
+            .map(|preset| {
                 let selected = self.settings.color_preset == preset;
                 let base = match preset {
                     ColorPreset::Default => "Default",
                     ColorPreset::HighContrast => "High Contrast",
                     ColorPreset::ColorblindSafe => "Colorblind",
                 };
-                let label = if selected && has_overrides {
-                    format!("{base} (customized)")
-                } else {
-                    base.to_string()
-                };
-                let tooltip = match preset {
-                    ColorPreset::Default => "Balanced palette tuned for everyday use",
-                    ColorPreset::HighContrast => {
-                        "Maximum-contrast palette for bright lighting or projectors"
+                Chip {
+                    value: preset,
+                    selected,
+                    label: if selected && has_overrides {
+                        format!("{base} (customized)")
+                    } else {
+                        base.to_string()
+                    },
+                    tooltip: match preset {
+                        ColorPreset::Default => "Balanced palette tuned for everyday use",
+                        ColorPreset::HighContrast => {
+                            "Maximum-contrast palette for bright lighting or projectors"
+                        }
+                        ColorPreset::ColorblindSafe => {
+                            "Palette that stays distinguishable for protan/deutan vision"
+                        }
                     }
-                    ColorPreset::ColorblindSafe => {
-                        "Palette that stays distinguishable for protan/deutan vision"
-                    }
-                };
-                if setting_selectable(ui, selected, &label, tooltip) {
-                    self.settings.color_preset = preset;
-                    // Clear all overrides when switching presets.
-                    self.settings.color_overrides = ColorOverrides::default();
-                    self.applied.ui_colors = None; // force reapply
-                    changed = true;
+                    .to_string(),
                 }
-            }
-            if changed {
+            });
+            if let Some(preset) = chip_row(ui, "Colors:", chips) {
+                self.settings.color_preset = preset;
+                // Clear all overrides when switching presets.
+                self.settings.color_overrides = ColorOverrides::default();
+                self.applied.ui_colors = None; // force reapply
                 self.settings.save();
             }
             if has_overrides {
@@ -309,22 +337,21 @@ impl App {
         });
 
         ui.horizontal_wrapped(|ui| {
-            ui.label("Sample interval:");
-            let mut changed = false;
-            for &ms in &[0u32, 100, 200, 300, 500, 1000, 2000] {
-                let label = format!("{ms}ms");
-                let tooltip = if ms == 0 {
-                    "No rate limit — read as fast as the meter reports (requires reconnect)"
-                        .to_string()
-                } else {
-                    format!("Wait {ms} ms between samples (requires reconnect)")
-                };
-                if setting_selectable(ui, self.settings.sample_interval_ms == ms, label, &tooltip) {
-                    self.settings.sample_interval_ms = ms;
-                    changed = true;
-                }
-            }
-            if changed {
+            let chips = [0u32, 100, 200, 300, 500, 1000, 2000]
+                .into_iter()
+                .map(|ms| Chip {
+                    value: ms,
+                    selected: self.settings.sample_interval_ms == ms,
+                    label: format!("{ms}ms"),
+                    tooltip: if ms == 0 {
+                        "No rate limit — read as fast as the meter reports (requires reconnect)"
+                            .to_string()
+                    } else {
+                        format!("Wait {ms} ms between samples (requires reconnect)")
+                    },
+                });
+            if let Some(ms) = chip_row(ui, "Sample interval:", chips) {
+                self.settings.sample_interval_ms = ms;
                 self.settings.save();
             }
             ui.label(
@@ -335,24 +362,23 @@ impl App {
         });
 
         ui.horizontal_wrapped(|ui| {
-            ui.label("Device:");
-            let mut changed = false;
-            for device in registry::DEVICES {
+            let chips = registry::DEVICES.iter().map(|device| {
                 let selected = self.settings.shared.device_family == device.id;
-                let label = if selected && self.settings.overrides.has_device() {
-                    format!("{} (--device)", device.display_name)
-                } else {
-                    device.display_name.to_string()
-                };
-                let tooltip = format!("Talk to a {} over USB", device.display_name);
-                if setting_selectable(ui, selected, label, &tooltip) {
-                    self.settings.shared.device_family = device.id.to_string();
-                    // Clear the override — user explicitly chose a device
-                    self.settings.overrides.device_family = None;
-                    changed = true;
+                Chip {
+                    value: device.id,
+                    selected,
+                    label: if selected && self.settings.overrides.has_device() {
+                        format!("{} (--device)", device.display_name)
+                    } else {
+                        device.display_name.to_string()
+                    },
+                    tooltip: format!("Talk to a {} over USB", device.display_name),
                 }
-            }
-            if changed {
+            });
+            if let Some(id) = chip_row(ui, "Device:", chips) {
+                self.settings.shared.device_family = id.to_string();
+                // Clear the override — user explicitly chose a device
+                self.settings.overrides.device_family = None;
                 self.settings.save();
                 // Auto-reconnect if currently connected
                 if self.connection.state != super::ConnectionState::Disconnected {
@@ -364,43 +390,36 @@ impl App {
         // Mock mode selector (only shown when mock device is selected)
         if self.selected_device().id == "mock" {
             ui.horizontal_wrapped(|ui| {
-                ui.label("Mock mode:");
-                let mut changed = false;
                 let has_override = self.settings.overrides.has_mock_mode();
-                // "Auto" = cycle through all modes
+                // "Auto" = cycle through all modes, and leads the row.
                 let auto_selected = self.settings.mock_mode.is_empty();
-                let auto_label = if auto_selected && has_override {
-                    "Auto (cycle) (--mock-mode)"
-                } else {
-                    "Auto (cycle)"
-                };
-                if setting_selectable(
-                    ui,
-                    auto_selected,
-                    auto_label,
-                    "Cycle through all synthetic modes to exercise the GUI",
-                ) {
-                    self.settings.mock_mode = String::new();
-                    changed = true;
-                }
-                for mode in MockMode::ALL {
+                let auto = std::iter::once(Chip {
+                    value: String::new(),
+                    selected: auto_selected,
+                    label: if auto_selected && has_override {
+                        "Auto (cycle) (--mock-mode)"
+                    } else {
+                        "Auto (cycle)"
+                    }
+                    .to_string(),
+                    tooltip: "Cycle through all synthetic modes to exercise the GUI".to_string(),
+                });
+                let modes = MockMode::ALL.iter().map(|mode| {
                     let mode_label = mode.label();
                     let selected = self.settings.mock_mode == mode_label;
-                    let label = if selected && has_override {
-                        format!("{mode_label} (--mock-mode)")
-                    } else {
-                        mode_label.to_string()
-                    };
-                    if ui
-                        .selectable_label(selected, label)
-                        .on_hover_text(mode.description())
-                        .clicked()
-                    {
-                        self.settings.mock_mode = mode_label.to_string();
-                        changed = true;
+                    Chip {
+                        value: mode_label.to_string(),
+                        selected,
+                        label: if selected && has_override {
+                            format!("{mode_label} (--mock-mode)")
+                        } else {
+                            mode_label.to_string()
+                        },
+                        tooltip: mode.description().to_string(),
                     }
-                }
-                if changed {
+                });
+                if let Some(mock_mode) = chip_row(ui, "Mock mode:", auto.chain(modes)) {
+                    self.settings.mock_mode = mock_mode;
                     // Clear the override — user explicitly chose a mock mode
                     self.settings.overrides.mock_mode = None;
                     self.settings.save();
@@ -412,25 +431,18 @@ impl App {
         }
 
         ui.horizontal_wrapped(|ui| {
-            ui.label("Zoom:");
-            let mut changed = false;
-            for &level in Self::ZOOM_LEVELS {
-                let tooltip = if level == 100 {
+            let chips = Self::ZOOM_LEVELS.iter().map(|&level| Chip {
+                value: level,
+                selected: self.settings.zoom_pct == level,
+                label: format!("{level}%"),
+                tooltip: if level == 100 {
                     "Scale the GUI to 100% (Ctrl+0, or Ctrl+/- to step)".to_string()
                 } else {
                     format!("Scale the GUI to {level}% (Ctrl+/- to step)")
-                };
-                if setting_selectable(
-                    ui,
-                    self.settings.zoom_pct == level,
-                    format!("{level}%"),
-                    &tooltip,
-                ) {
-                    self.settings.zoom_pct = level;
-                    changed = true;
-                }
-            }
-            if changed {
+                },
+            });
+            if let Some(level) = chip_row(ui, "Zoom:", chips) {
+                self.settings.zoom_pct = level;
                 self.settings.save();
             }
             ui.label(
