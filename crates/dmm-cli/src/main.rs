@@ -376,35 +376,10 @@ fn main() {
             Ok(())
         }
 
-        // Mock device
-        Cmd::Read {
-            interval_ms,
-            format,
-            output,
-            count,
-            integrate,
-            transform,
-            mock_mode,
-        } if !device.requires_hardware => cmd_read_mock(
-            interval_ms,
-            format,
-            output,
-            count,
-            integrate,
-            &transform.to_transform(),
-            mock_mode,
-        ),
-        Cmd::Command { action } if !device.requires_hardware => cmd_command(device, None, action),
-        Cmd::Get {
-            setting,
-            format,
-            mock_mode,
-        } if !device.requires_hardware => cmd_get(device, None, setting, format, mock_mode),
-        Cmd::Set {
-            setting,
-            choice,
-            mock_mode,
-        } if !device.requires_hardware => cmd_set(device, None, setting, choice, mock_mode),
+        // The mock is a registry device with nothing to open, so only the
+        // commands that have no meaning without hardware branch on it here —
+        // `read`, `command`, `get` and `set` pick the mock transport
+        // themselves and take the same arm as every other device.
         Cmd::Info | Cmd::Debug { .. } if !device.requires_hardware => {
             eprintln!(
                 "{} This command requires real hardware (not supported with --device {}).",
@@ -414,7 +389,6 @@ fn main() {
             std::process::exit(1);
         }
 
-        // Real device
         Cmd::Info => cmd_info(device, adapter),
         Cmd::Read {
             interval_ms,
@@ -423,7 +397,7 @@ fn main() {
             count,
             integrate,
             transform,
-            mock_mode: _,
+            mock_mode,
         } => cmd_read(
             device,
             adapter,
@@ -433,18 +407,19 @@ fn main() {
             count,
             integrate,
             &transform.to_transform(),
+            mock_mode,
         ),
         Cmd::Command { action } => cmd_command(device, adapter, action),
         Cmd::Get {
             setting,
             format,
-            mock_mode: _,
-        } => cmd_get(device, adapter, setting, format, None),
+            mock_mode,
+        } => cmd_get(device, adapter, setting, format, mock_mode),
         Cmd::Set {
             setting,
             choice,
-            mock_mode: _,
-        } => cmd_set(device, adapter, setting, choice, None),
+            mock_mode,
+        } => cmd_set(device, adapter, setting, choice, mock_mode),
         Cmd::Debug { count, interval_ms } => cmd_debug(device, adapter, count, interval_ms),
         Cmd::Capture {
             output,
@@ -747,47 +722,42 @@ fn cmd_read(
     count: usize,
     integrate: bool,
     transform: &Transform,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_with_help(device, adapter)?;
-    let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
-    info!("connected, starting measurement loop");
-    run_read_loop(
-        &mut dmm,
-        interval_ms,
-        &format,
-        output_path,
-        count,
-        experimental,
-        Some(device),
-        integrate,
-        transform,
-    )
-}
-
-fn cmd_read_mock(
-    interval_ms: u64,
-    format: OutputFormat,
-    output_path: Option<String>,
-    count: usize,
-    integrate: bool,
-    transform: &Transform,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_mock_device(mock_mode)?;
-    info!("mock device connected, starting measurement loop");
-    // Mock returns instantly — use 100ms floor to simulate ~10 Hz
-    let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
-    run_read_loop(
-        &mut dmm,
-        interval_ms,
-        &format,
-        output_path,
-        count,
-        false,
-        None,
-        integrate,
-        transform,
-    )
+    if device.requires_hardware {
+        let mut dmm = open_with_help(device, adapter)?;
+        let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
+        info!("connected, starting measurement loop");
+        run_read_loop(
+            &mut dmm,
+            interval_ms,
+            &format,
+            output_path,
+            count,
+            experimental,
+            Some(device),
+            integrate,
+            transform,
+        )
+    } else {
+        let mut dmm = open_mock_device(mock_mode)?;
+        info!("mock device connected, starting measurement loop");
+        // Mock returns instantly — use 100ms floor to simulate ~10 Hz
+        let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
+        // No timeout to warn about and nothing experimental to flag: the mock
+        // always answers, and its profile is Verified.
+        run_read_loop(
+            &mut dmm,
+            interval_ms,
+            &format,
+            output_path,
+            count,
+            false,
+            None,
+            integrate,
+            transform,
+        )
+    }
 }
 
 /// Open the mock, pinned to `mock_mode` when one was given.
