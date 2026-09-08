@@ -177,23 +177,23 @@ pub(crate) const COMMANDS: &[&str] = &[
 /// duplicated lines in each protocol. Device-specific steps are appended by
 /// the caller.
 pub(crate) fn capture_steps() -> Vec<CaptureStep> {
-    use crate::protocol::{Expect, Need, ValueExpect};
+    use crate::protocol::steps::{self, Ohms, Volts};
+    use crate::protocol::{Expect, Need};
+
+    let [dcv, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
+        Volts::DcV,
+        CaptureStep::basic("dcv", "Set meter to DC V"),
+        Ohms::Word,
+        CaptureStep::basic(
+            "ohm",
+            "Set meter to Resistance (Ω). Leave leads open (should show OL).",
+        ),
+    );
 
     vec![
-        CaptureStep::basic("dcv", "Set meter to DC V")
-            .gate()
-            .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
-        CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
-            .gate()
-            .needs(&[Need::ShortedLeads])
-            .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
-        CaptureStep::basic(
-            "dcv_negative",
-            "DC V mode: leads reversed on a battery or any DC source (skip if none).",
-        )
-        .gate()
-        .needs(&[Need::DcSource])
-        .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+        dcv,
+        dcv_short,
+        dcv_negative,
         CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
         CaptureStep::basic("acdcv", "Set meter to AC+DC V").expect(Expect::mode("AC+DC V")),
         CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV")),
@@ -203,28 +203,9 @@ pub(crate) fn capture_steps() -> Vec<CaptureStep> {
         CaptureStep::basic("acma", "Set meter to AC mA").expect(Expect::mode("AC mA")),
         CaptureStep::basic("dca", "Set meter to DC A").expect(Expect::mode("DC A")),
         CaptureStep::basic("aca", "Set meter to AC A").expect(Expect::mode("AC A")),
-        CaptureStep::basic(
-            "ohm",
-            "Set meter to Resistance (Ω). Leave leads open (should show OL).",
-        )
-        .gate()
-        .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
-        // Open and shorted leads repeat one digit value, so a digit-order
-        // or digit-value bug hides; a body reading spreads the digits out.
-        CaptureStep::basic(
-            "ohm_body",
-            "Resistance mode: hold one probe tip between the fingers of each \
-             hand (body resistance, hundreds of kΩ).",
-        )
-        .gate()
-        .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
-        CaptureStep::basic(
-            "ohm_short",
-            "Resistance mode: touch the two probe tips together.",
-        )
-        .gate()
-        .needs(&[Need::ShortedLeads])
-        .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+        ohm,
+        ohm_body,
+        ohm_short,
         CaptureStep::basic("cont", "Set meter to Continuity").expect(Expect::mode("Continuity")),
         CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
         CaptureStep::basic("cap", "Set meter to Capacitance").expect(Expect::mode("Capacitance")),

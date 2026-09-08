@@ -3,6 +3,7 @@ mod expect;
 pub(crate) mod framing;
 pub(crate) mod fs9721;
 pub mod registry;
+pub(crate) mod steps;
 pub(crate) mod ut171;
 pub(crate) mod ut181a;
 // `ut61eplus` stays `pub`: the GUI specs panel consumes its tables, the CLI

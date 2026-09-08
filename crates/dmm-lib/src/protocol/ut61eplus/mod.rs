@@ -293,33 +293,31 @@ impl Protocol for Ut61PlusProtocol {
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::flags::Flag;
+        use crate::protocol::steps::{self, Ohms, Volts};
         use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, ValueExpect};
 
         // The list is shared by the whole UT61+/UT161 family, but only the
         // UT61E+ has been run against hardware (docs/verification-backlog.md).
         let hw = self.profile.stability == Stability::Verified;
+        // Every step on this meter takes three samples and shares that
+        // hardware history, the gate steps included.
+        let mark = |s: CaptureStep| s.samples(3).verified_if(hw);
+        let [dcv, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
+            Volts::DcV,
+            CaptureStep::basic("dcv", "Set meter to DC V (V\u{23CF}). Leave leads open."),
+            Ohms::Symbol,
+            CaptureStep::basic(
+                "ohm",
+                "Set meter to \u{03A9}. Leave leads open (should show OL).",
+            ),
+        )
+        .map(mark);
+
         let mut steps = vec![
             // Measurement modes
-            CaptureStep::basic("dcv", "Set meter to DC V (V\u{23CF}). Leave leads open.")
-                .samples(3)
-                .verified_if(hw)
-                .gate()
-                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
-            CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
-                .samples(3)
-                .verified_if(hw)
-                .gate()
-                .needs(&[Need::ShortedLeads])
-                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
-            CaptureStep::basic(
-                "dcv_negative",
-                "DC V mode: leads reversed on a battery or any DC source (skip if none).",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .gate()
-            .needs(&[Need::DcSource])
-            .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+            dcv,
+            dcv_short,
+            dcv_negative,
             // Flags & commands. These run wherever the dial is, so they sit
             // on DC V: at the end of the list the dial was on DC A, a single
             // range where RANGE and AUTO have nothing to do (`auto did
@@ -402,34 +400,9 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("AC mV")),
-            CaptureStep::basic(
-                "ohm",
-                "Set meter to \u{03A9}. Leave leads open (should show OL).",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .gate()
-            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
-            // Open and shorted leads repeat one digit value, so a digit-order
-            // or digit-value bug hides; a body reading spreads the digits out.
-            CaptureStep::basic(
-                "ohm_body",
-                "\u{03A9} mode: hold one probe tip between the fingers of each hand \
-                 (body resistance, hundreds of k\u{03A9}).",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .gate()
-            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
-            CaptureStep::basic(
-                "ohm_short",
-                "\u{03A9} mode: touch the two probe tips together.",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .gate()
-            .needs(&[Need::ShortedLeads])
-            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            ohm,
+            ohm_body,
+            ohm_short,
             CaptureStep::basic(
                 "continuity",
                 "Set meter to continuity (buzzer). Touch probes together.",

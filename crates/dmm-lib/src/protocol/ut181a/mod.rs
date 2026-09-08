@@ -698,26 +698,26 @@ impl Protocol for Ut181aProtocol {
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
         use crate::flags::Flag;
-        use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, ValueExpect};
+        use crate::protocol::steps::{self, Ohms, Volts};
+        use crate::protocol::{CaptureStep, Expect, Need, RangeExpect};
 
-        // Only V DC, V AC and °C have been seen on real hardware (issue #5).
+        // Only V DC, V AC and °C have been seen on real hardware (issue #5),
+        // so the mark sits on the V DC step alone, not on the whole gate.
+        let [vdc, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
+            Volts::VDc,
+            CaptureStep::basic("vdc", "Set meter to V DC").verified(),
+            Ohms::Word,
+            CaptureStep::basic(
+                "ohm",
+                "Set meter to Resistance. Leave leads open (should show OL).",
+            ),
+        );
+
         // Core UT181A modes
         vec![
-            CaptureStep::basic("vdc", "Set meter to V DC")
-                .verified()
-                .gate()
-                .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
-            CaptureStep::basic("dcv_short", "V DC mode: touch the two probe tips together.")
-                .gate()
-                .needs(&[Need::ShortedLeads])
-                .expect(Expect::mode("V DC").value(ValueExpect::Finite)),
-            CaptureStep::basic(
-                "dcv_negative",
-                "V DC mode: leads reversed on a battery or any DC source (skip if none).",
-            )
-            .gate()
-            .needs(&[Need::DcSource])
-            .expect(Expect::mode("V DC").value(ValueExpect::Negative)),
+            vdc,
+            dcv_short,
+            dcv_negative,
             // Each dial family reaches several mode words (spec §6.1); the
             // steps below name them as the meter reports them, one per word,
             // because SET_MODE only ever moves inside the family the dial is
@@ -748,28 +748,9 @@ impl Protocol for Ut181aProtocol {
                 "Set meter to mV AC AC+DC (if the meter has it)",
             )
             .expect(Expect::mode("mV AC AC+DC")),
-            CaptureStep::basic(
-                "ohm",
-                "Set meter to Resistance. Leave leads open (should show OL).",
-            )
-            .gate()
-            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
-            // Open and shorted leads repeat one digit value, so a digit-order
-            // or digit-value bug hides; a body reading spreads the digits out.
-            CaptureStep::basic(
-                "ohm_body",
-                "Resistance mode: hold one probe tip between the fingers of each \
-                 hand (body resistance, hundreds of kΩ).",
-            )
-            .gate()
-            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
-            CaptureStep::basic(
-                "ohm_short",
-                "Resistance mode: touch the two probe tips together.",
-            )
-            .gate()
-            .needs(&[Need::ShortedLeads])
-            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            ohm,
+            ohm_body,
+            ohm_short,
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
             // Nibble 0 = 2 is a second function on these two families, not

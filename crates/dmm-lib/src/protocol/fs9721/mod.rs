@@ -589,7 +589,8 @@ impl Protocol for Fs9721Protocol {
     }
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
-        use crate::protocol::{Expect, Need, ValueExpect};
+        use crate::protocol::steps::{self, Ohms, Volts};
+        use crate::protocol::{Expect, Need};
 
         // The two parsers name the same dial position differently, and a
         // label this model cannot report leaves the step waiting for a state
@@ -608,21 +609,23 @@ impl Protocol for Fs9721Protocol {
             None => step,
         };
 
-        vec![
-            CaptureStep::basic("dcv", "Set meter to DC V")
-                .gate()
-                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
-            CaptureStep::basic("dcv_short", "DC V mode: touch the two probe tips together.")
-                .gate()
-                .needs(&[Need::ShortedLeads])
-                .expect(Expect::mode("DC V").value(ValueExpect::Finite)),
+        // These two models reach OL in a step of their own, after a plain
+        // "turn the dial" one, so the resistance gate is the second of the
+        // pair rather than the step called "ohm".
+        let [dcv, dcv_short, dcv_negative, ohm_ol, ohm_body, ohm_short] = steps::gate_steps(
+            Volts::DcV,
+            CaptureStep::basic("dcv", "Set meter to DC V"),
+            Ohms::Word,
             CaptureStep::basic(
-                "dcv_negative",
-                "Set meter to DC V with leads reversed (negative reading)",
-            )
-            .gate()
-            .needs(&[Need::DcSource])
-            .expect(Expect::mode("DC V").value(ValueExpect::Negative)),
+                "ohm_ol",
+                "Set meter to Resistance (Ω) with open leads (overload)",
+            ),
+        );
+
+        vec![
+            dcv,
+            dcv_short,
+            dcv_negative,
             CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
             // AC+DC is the AC/DC nibble's fourth value; the spec (§5) has it
             // on the UT804 and leaves the UT803 open.
@@ -634,28 +637,9 @@ impl Protocol for Fs9721Protocol {
             CaptureStep::basic("acmv", "Set meter to AC mV (if the meter has it)")
                 .expect(Expect::mode("AC mV")),
             CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
-            CaptureStep::basic(
-                "ohm_ol",
-                "Set meter to Resistance (Ω) with open leads (overload)",
-            )
-            .gate()
-            .expect(Expect::mode("Ω").value(ValueExpect::Overload)),
-            // Open and shorted leads repeat one digit value, so a digit-order
-            // or digit-value bug hides; a body reading spreads the digits out.
-            CaptureStep::basic(
-                "ohm_body",
-                "Resistance mode: hold one probe tip between the fingers of each \
-                 hand (body resistance, hundreds of kΩ).",
-            )
-            .gate()
-            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
-            CaptureStep::basic(
-                "ohm_short",
-                "Resistance mode: touch the two probe tips together.",
-            )
-            .gate()
-            .needs(&[Need::ShortedLeads])
-            .expect(Expect::mode("Ω").value(ValueExpect::Finite)),
+            ohm_ol,
+            ohm_body,
+            ohm_short,
             CaptureStep::basic("cap", "Set meter to Capacitance")
                 .expect(Expect::mode("Capacitance")),
             // Both models name the frequency mode "Frequency", not "Hz".
