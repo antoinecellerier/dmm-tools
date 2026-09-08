@@ -45,24 +45,29 @@ mode/range mappings than UT61E+).
 
 When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so silent use of the wrong protocol is less likely. The notice is suppressed for commands that don't open a device (`list`, `completions`).
 
+<!-- devices:start -->
 | Value | Aliases | Description |
 |---|---|---|
 | `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (default, verified) |
 | `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (experimental) |
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
-| `ut161b` | | UT161B (experimental, same protocol as UT61B+) |
-| `ut161d` | | UT161D (experimental, same protocol as UT61D+) |
-| `ut161e` | `ut161` | UT161E (experimental, same protocol as UT61E+) |
-| `ut8802` | `ut8802n` | UT8802 / UT8802N bench multimeter (experimental) |
-| `ut8803` | `ut8803e` | UT8803 / UT8803E bench multimeter (experimental) |
-| `ut803` | | UT803 bench multimeter, 6000 counts (experimental) |
-| `ut804` | | UT804 bench multimeter, 4000 counts (experimental) |
+| `ut161b` |  | UT161B (experimental) |
+| `ut161d` |  | UT161D (experimental) |
+| `ut161e` | `ut161` | UT161E (experimental) |
+| `ut8802` | `ut8802n` | UT8802 (experimental) |
+| `ut8803` | `ut8803e` | UT8803 (experimental) |
+| `ut803` |  | UT803 (experimental) |
+| `ut804` |  | UT804 (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
-| `ut181a` | `ut181` | UT181A (confirmed on real hardware; still warns as experimental, see below) |
-| `vc880` | `vc-880` | Voltcraft VC-880 handheld DMM (experimental) |
-| `vc650bt` | `vc-650bt` | Voltcraft VC650BT bench DMM (experimental, same protocol as VC-880) |
-| `vc890` | `vc-890` | Voltcraft VC-890 handheld DMM, 60K counts, OLED (experimental) |
-| `mock` | | Simulated device (no hardware required) |
+| `ut181a` | `ut181` | UT181A (experimental) |
+| `vc880` | `vc-880` | Voltcraft VC-880 (experimental) |
+| `vc650bt` | `vc-650bt` | Voltcraft VC650BT (experimental) |
+| `vc890` | `vc-890` | Voltcraft VC-890 (experimental) |
+| `mock` |  | Mock (simulated, no hardware required) |
+<!-- devices:end -->
+
+Display counts, form factor, cable and which models share a protocol table are
+listed in [supported devices](supported-devices.md).
 
 Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
 from vendor software, and most have not yet been verified against real hardware. The UT181A

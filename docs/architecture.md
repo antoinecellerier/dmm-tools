@@ -42,6 +42,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
 | `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the "USB cable not found" setup hint and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically, and because the shared prose drifted apart while each binary held its own copy. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
+| `docs_tables.rs` | The `--device` table `docs/cli-reference.md` publishes, rendered from the registry into markdown. A `dmm-cli` test owns that file's `devices:start`/`devices:end` block and rewrites it under `UPDATE_DOCS=1`, so a new registry entry reaches the reference the same way it reaches `--help`; the README's block stays hand-written and the same test only checks no family or verification issue is missing from it. Separate from `binary_help.rs`: that one is terminal text for the binaries |
 | `lib.rs` | `Dmm` struct: top-level API tying everything together |
 
 **Data flow:**

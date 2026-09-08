@@ -218,12 +218,18 @@ Once verified:
 
 ## Phase 7: Documentation
 
-Update these files in the same commit as the code:
-- `docs/supported-devices.md` — add or update the device entry
+The list of doc touchpoints for a new device — the `/add-device` skill points
+here instead of keeping a second copy. Update these in the same commit as the
+code:
+
+- `README.md` — hand-edit the supported-devices table: it is editorial (abbreviated model runs, per-family status wording), and the `dmm-cli` test only checks that no family and no verification issue is missing from it
+- `docs/cli-reference.md` — the `--device` table is generated, not hand-edited: run `UPDATE_DOCS=1 cargo test -p dmm-cli` once the registry entry lands, and hand-edit the surrounding prose and anything the device adds to the CLI
+- `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
+- `docs/protocol.md` — index entry pointing at the new family's spec
 - `docs/verification-backlog.md` — add pending verification items (or mark as complete)
-- `docs/cli-reference.md` — if the device adds new CLI options or behavior
 - `docs/gui-reference.md` — if the device adds new GUI behavior
 - `docs/architecture.md` — if a new protocol family or transport changes the architecture
+- `CHANGELOG.md` — one `## Unreleased` entry, in user-visible phrasing
 
 ## Quick Reference: File Locations
 

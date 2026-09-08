@@ -2,6 +2,7 @@ pub mod binary_help;
 pub(crate) mod ch9325;
 pub(crate) mod ch9329;
 pub(crate) mod cp2110;
+pub mod docs_tables;
 pub mod error;
 pub mod export;
 pub mod flags;

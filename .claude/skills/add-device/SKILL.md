@@ -24,16 +24,7 @@ The authoritative methodology is `docs/adding-devices.md` — **read it in full 
 
 ## Documentation deliverables (same commits as the change)
 
-Touch **all** of:
-
-- `README.md`
-- `docs/supported-devices.md`
-- `docs/verification-backlog.md`
-- `docs/architecture.md`
-- `docs/cli-reference.md`
-- `docs/gui-reference.md`
-- `CHANGELOG.md` (`## Unreleased`, user-visible phrasing)
-- `docs/protocol.md` (index entry for the new family spec)
+Work through `docs/adding-devices.md` Phase 7 — it holds the one touchpoint list, and it says which table is generated (`UPDATE_DOCS=1 cargo test -p dmm-cli`) and which stays hand-written.
 
 ## GitHub verification issue
 

@@ -114,6 +114,16 @@ a new mode/range/flag combination against real hardware. Fixtures come
 only from captures: a hand-built payload belongs in the parser's unit
 tests, so a family has no golden directory until its first hardware run.
 
+## Generated Doc Tables
+
+Both device tables sit between `<!-- devices:start -->` and `<!-- devices:end -->`
+markers, and a `dmm-cli` test guards each. The one in `docs/cli-reference.md` is
+rendered from the registry: after changing `registry.rs` run
+`UPDATE_DOCS=1 cargo test -p dmm-cli` to rewrite it rather than editing it by
+hand, or the test fails with a diff. The one in `README.md` is hand-written on
+purpose — the test only checks that every protocol family and every
+verification issue still appears in it.
+
 ## Shell Completions
 
 Generate completions for your shell:
