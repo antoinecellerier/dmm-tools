@@ -96,18 +96,26 @@ The GUI's full `Settings` struct includes `SharedSettings` via `#[serde(flatten)
 
 ### dmm-cli
 
-CLI binary using `clap`. Split into three modules:
+CLI binary using `clap`. Its modules:
 
 | Module | Responsibility |
 |--------|---------------|
 | `main.rs` | CLI framework, command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug` subcommands |
-| `capture.rs` | Guided protocol capture tool: types (`CaptureReport`, `StepResult`, `SampleData`), step definitions, interactive prompting, multi-part capture orchestration, YAML report I/O |
+| `capture/mod.rs` | The `capture` command itself: opens the report, runs the passes in order, prints the coverage epilogue |
+| `capture/report.rs` | Report schema and serde (`CaptureReport`, `StepResult`, `SampleData`), the trust tier the gate rules on, and the report file the run reads back and writes out |
+| `capture/step.rs` | One capture step: the definition the run walks, the wait for the state it asks for, and the frames that wait puts on the wire |
+| `capture/session.rs` | The passes a run makes: the meter handshake, the device's own steps and the equipment they ask for, the end-of-run review, and freeform captures |
+| `capture/input.rs` | The run's keyboard (its own reader thread, polled between readings) and the log of parse rejections a step collects |
+| `capture/listing.rs` | What `--list-steps` prints for a device (text and issue checklist), and the check that `--steps` only names steps that device declares |
+| `drive.rs` | Automatic sweeps of the settings the tool can drive, run after a mode step so every range and flag reaches the report unprompted |
+| `plan.rs` | A step list a maintainer writes for one investigation, read from a YAML file and run with `capture --plan` |
+| `recording.rs` | Wire-byte recorder wrapped around a transport: what actually crossed the USB link, including bytes the framing layer rejected |
 | `watch.rs` | Capture step advance logic: when the meter has settled into the state a step asked for, semantic (`expect`) or raw payload diff against the previous step |
 | `format.rs` | Measurement output formatting (text/csv/json) |
 
 All protocol logic lives in the library crate. The `capture` subcommand provides a guided
 interactive wizard for protocol verification, outputting YAML reports with raw bytes.
-Uses `console` crate for colored output and single-key input, `serde_yaml` for report format.
+Uses `console` crate for colored output and single-key input, `serde_yaml_ng` for report format.
 Capture reports are written atomically (temp file + rename) for crash safety.
 The capture workflow's design — detectors, trust tiers, report schema — is in
 `docs/capture-design.md`.

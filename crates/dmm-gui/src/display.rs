@@ -730,6 +730,53 @@ fn show_reading_line_with_selector(
     .inner
 }
 
+/// Single-line reading with no selector on it: value, unit, mode and flags,
+/// all inside the live region.
+///
+/// `mode_size` of 0 is the small text style, the convention `show_flags` uses
+/// for the same choice.
+fn show_reading_line_plain(
+    ui: &mut Ui,
+    m: &Measurement,
+    scaled: bool,
+    draw_value: impl FnOnce(&mut Ui),
+    mode_size: f32,
+    tc: &ThemeColors,
+) {
+    ui.live_region_horizontal(
+        live_region_fingerprint(Some(m), scaled),
+        || live_region_label(Some(m), scaled),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            draw_value(ui);
+            ui.separator();
+            let mut mode = RichText::new(&*m.mode).color(ui.visuals().weak_text_color());
+            if mode_size > 0.0 {
+                ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
+                mode = mode.font(FontId::proportional(mode_size));
+            } else {
+                mode = mode.small();
+            }
+            ui.label(mode);
+            show_flags(ui, m, mode_size, tc, scaled);
+        },
+    );
+}
+
+/// What each layout shows in place of a reading.
+///
+/// Wrap the placeholder + caption in a horizontal scope so the live-region
+/// label is attached to the scope id rather than to the inner `ui.label()`
+/// Response. egui maps Role::Label overrides to set_value, not set_label, so
+/// attaching directly to the label would silently drop the live-region label.
+fn no_reading_placeholder(ui: &mut Ui, scaled: bool, add_contents: impl FnOnce(&mut Ui)) {
+    ui.live_region_horizontal(
+        live_region_fingerprint(None, scaled),
+        || live_region_label(None, scaled),
+        add_contents,
+    );
+}
+
 /// Render the primary reading display at the given font size (two-line layout).
 ///
 /// Returns the setting and value the user picked from a selector, if any.
@@ -780,23 +827,14 @@ fn show_reading_sized(
             .inner
         }
         None => {
-            // Wrap the placeholder + caption in a horizontal scope so the
-            // live-region label is attached to the scope id rather than to
-            // the inner ui.label() Response. egui maps Role::Label
-            // overrides to set_value, not set_label, so attaching directly
-            // to the label would silently drop the live-region label.
-            ui.live_region_horizontal(
-                live_region_fingerprint(None, scaled),
-                || live_region_label(None, scaled),
-                |ui| {
-                    ui.label(
-                        RichText::new(crate::NO_DATA)
-                            .font(FontId::monospace(value_size))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                    ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
-                },
-            );
+            no_reading_placeholder(ui, scaled, |ui| {
+                ui.label(
+                    RichText::new(crate::NO_DATA)
+                        .font(FontId::monospace(value_size))
+                        .color(ui.visuals().weak_text_color()),
+                );
+                ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
+            });
             None
         }
     }
@@ -833,22 +871,7 @@ fn show_reading_inline(
             };
 
             let picked = if !choices.any_offered() {
-                ui.live_region_horizontal(
-                    live_region_fingerprint(Some(m), scaled),
-                    || live_region_label(Some(m), scaled),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
-                        draw_value(ui);
-                        ui.separator();
-                        ui.spacing_mut().item_spacing.x = (mode_size * 0.3).max(2.0);
-                        ui.label(
-                            RichText::new(&*m.mode)
-                                .font(FontId::proportional(mode_size))
-                                .color(ui.visuals().weak_text_color()),
-                        );
-                        show_flags(ui, m, mode_size, tc, scaled);
-                    },
-                );
+                show_reading_line_plain(ui, m, scaled, draw_value, mode_size, tc);
                 None
             } else {
                 ui.scope(|ui| {
@@ -867,20 +890,13 @@ fn show_reading_inline(
             picked
         }
         None => {
-            // See `show_reading_sized` for why the placeholder is wrapped
-            // in a horizontal scope: egui Role::Label silently swallows
-            // accesskit set_label overrides.
-            ui.live_region_horizontal(
-                live_region_fingerprint(None, scaled),
-                || live_region_label(None, scaled),
-                |ui| {
-                    ui.label(
-                        RichText::new(format!("{} No reading", crate::NO_DATA))
-                            .font(FontId::monospace(value_size))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                },
-            );
+            no_reading_placeholder(ui, scaled, |ui| {
+                ui.label(
+                    RichText::new(format!("{} No reading", crate::NO_DATA))
+                        .font(FontId::monospace(value_size))
+                        .color(ui.visuals().weak_text_color()),
+                );
+            });
             None
         }
     }
@@ -1022,21 +1038,7 @@ pub fn show_reading_compact(
             };
 
             let picked = if !choices.any_offered() {
-                ui.live_region_horizontal(
-                    live_region_fingerprint(Some(m), scaled),
-                    || live_region_label(Some(m), scaled),
-                    |ui| {
-                        ui.spacing_mut().item_spacing.x = 2.0;
-                        draw_value(ui);
-                        ui.separator();
-                        ui.label(
-                            RichText::new(&*m.mode)
-                                .color(ui.visuals().weak_text_color())
-                                .small(),
-                        );
-                        show_flags(ui, m, 0.0, tc, scaled);
-                    },
-                );
+                show_reading_line_plain(ui, m, scaled, draw_value, 0.0, tc);
                 None
             } else {
                 // The selectors and badges at the small text size, which is
@@ -1055,27 +1057,50 @@ pub fn show_reading_compact(
             picked
         }
         None => {
-            // See `show_reading_sized` for why the placeholder is wrapped
-            // in a horizontal scope: egui Role::Label silently swallows
-            // accesskit set_label overrides.
-            ui.live_region_horizontal(
-                live_region_fingerprint(None, scaled),
-                || live_region_label(None, scaled),
-                |ui| {
-                    ui.label(
-                        RichText::new(format!("{} No reading", crate::NO_DATA))
-                            .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
-                            .color(ui.visuals().weak_text_color()),
-                    );
-                },
-            );
+            no_reading_placeholder(ui, scaled, |ui| {
+                ui.label(
+                    RichText::new(format!("{} No reading", crate::NO_DATA))
+                        .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
+                        .color(ui.visuals().weak_text_color()),
+                );
+            });
             None
         }
     }
 }
 
+fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors, scaled: bool) {
+    let badge = |ui: &mut Ui, label: &str, color: Color32| {
+        let mut text = RichText::new(label).strong().color(color);
+        if font_size > 0.0 {
+            text = text.font(FontId::proportional(font_size));
+        } else {
+            text = text.small();
+        }
+        ui.label(text);
+    };
+
+    // `badge_order()` puts the hazard first, and `badge_tone` paints it in the
+    // error color rather than the generic warning one — this is the meter
+    // telling the user the probes are on a dangerous potential. Labels come
+    // from `Flag::label()`, the same source as `StatusFlags::Display`, so the
+    // badge, the recording panel and the CSV flags column all say "HV!".
+    // `Flag::Dc` has no label and so paints no badge.
+    for (flag, label) in badge_order()
+        .filter(|f| m.flags.get(*f))
+        .filter_map(|f| f.label().map(|l| (f, l)))
+    {
+        badge(ui, label, badge_tone(flag, tc));
+    }
+    // After the meter's own badges, in the same accent as AUTO/HOLD: this is
+    // the app's state, not the meter's, and it belongs at the end of the row
+    // rather than mixed in among the flags the meter reported.
+    if scaled {
+        badge(ui, "SCALE", tc.accent());
+    }
+}
+
 #[cfg(test)]
-#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 
@@ -2392,36 +2417,5 @@ mod tests {
             assert_eq!(f.picked, None, "{modifiers:?}");
             assert_closed_on_the_readout(&ctx, &mut draw);
         }
-    }
-}
-
-fn show_flags(ui: &mut Ui, m: &Measurement, font_size: f32, tc: &ThemeColors, scaled: bool) {
-    let badge = |ui: &mut Ui, label: &str, color: Color32| {
-        let mut text = RichText::new(label).strong().color(color);
-        if font_size > 0.0 {
-            text = text.font(FontId::proportional(font_size));
-        } else {
-            text = text.small();
-        }
-        ui.label(text);
-    };
-
-    // `badge_order()` puts the hazard first, and `badge_tone` paints it in the
-    // error color rather than the generic warning one — this is the meter
-    // telling the user the probes are on a dangerous potential. Labels come
-    // from `Flag::label()`, the same source as `StatusFlags::Display`, so the
-    // badge, the recording panel and the CSV flags column all say "HV!".
-    // `Flag::Dc` has no label and so paints no badge.
-    for (flag, label) in badge_order()
-        .filter(|f| m.flags.get(*f))
-        .filter_map(|f| f.label().map(|l| (f, l)))
-    {
-        badge(ui, label, badge_tone(flag, tc));
-    }
-    // After the meter's own badges, in the same accent as AUTO/HOLD: this is
-    // the app's state, not the meter's, and it belongs at the end of the row
-    // rather than mixed in among the flags the meter reported.
-    if scaled {
-        badge(ui, "SCALE", tc.accent());
     }
 }
