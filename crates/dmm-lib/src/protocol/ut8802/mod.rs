@@ -92,7 +92,6 @@ const UT8802_COMMANDS: &[&str] = &[];
 /// Protocol implementation for the UT8802/UT8802N bench multimeter.
 pub struct Ut8802Protocol {
     rx_buf: Vec<u8>,
-    triggered: bool,
     profile: DeviceProfile,
 }
 
@@ -106,7 +105,6 @@ impl Ut8802Protocol {
     pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
-            triggered: false,
             profile: DeviceProfile {
                 family_name: "UT8802",
                 model_name: "UNI-T UT8802",
@@ -127,7 +125,6 @@ impl Protocol for Ut8802Protocol {
         // (FUN_1001d360) for other meters. See the UT8803 init for the
         // same correction.
         debug!("ut8802: init (no trigger byte; meter streams unprompted)");
-        self.triggered = true;
         Ok(())
     }
 

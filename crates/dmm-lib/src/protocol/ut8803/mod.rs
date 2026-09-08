@@ -115,7 +115,6 @@ fn mode_is_dc(mode_byte: u8) -> bool {
 /// Protocol implementation for the UT8803/UT8803E bench multimeter.
 pub struct Ut8803Protocol {
     rx_buf: Vec<u8>,
-    triggered: bool,
     profile: DeviceProfile,
 }
 
@@ -129,7 +128,6 @@ impl Ut8803Protocol {
     pub(crate) fn new() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
-            triggered: false,
             profile: DeviceProfile {
                 family_name: "UT8803",
                 model_name: "UNI-T UT8803",
@@ -151,7 +149,6 @@ impl Protocol for Ut8803Protocol {
         // meters (FUN_1001d360, lines 24003-24005). Whether the UT8803
         // tolerates a stray 0x5A is untested on hardware.
         debug!("ut8803: init (no trigger byte; meter streams unprompted)");
-        self.triggered = true;
         Ok(())
     }
 
