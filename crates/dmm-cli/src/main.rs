@@ -80,16 +80,7 @@ enum Cmd {
         transform: TransformArgs,
         /// Pin mock device to a specific mode (only with --device mock).
         /// Without this, mock cycles through all modes automatically.
-        #[arg(
-            long,
-            long_help = "\
-Pin the mock device to a specific measurement mode instead of \
-auto-cycling. Only effective with --device mock.
-
-Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv
-
-Example: --device mock read --mock-mode dcv"
-        )]
+        #[arg(long, long_help = build_mock_mode_help())]
         mock_mode: Option<String>,
     },
     /// Send a button press command to the meter.
@@ -497,6 +488,15 @@ fn build_device_help() -> String {
     dmm_lib::binary_help::device_help("Device to connect to.")
 }
 
+/// Build long help text for --mock-mode from the mock's own mode table.
+fn build_mock_mode_help() -> String {
+    dmm_lib::binary_help::mock_mode_help(
+        "Pin the mock device to a specific measurement mode instead of \
+         auto-cycling. Only effective with --device mock.",
+        "--device mock read --mock-mode dcv",
+    )
+}
+
 /// Resolve the shared settings file path for display in help text.
 /// Returns the platform-specific location via `dmm-settings`, or a
 /// sensible placeholder if the platform config dir is unavailable.
@@ -545,42 +545,17 @@ fn print_no_response_help(device: &SelectableDevice) {
     eprintln!("{}", style(device.activation_instructions).dim());
 }
 
-/// Setup guide URL, for hints printed by binaries installed outside a checkout.
-#[cfg(target_os = "linux")]
-const SETUP_DOC_URL: &str = "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md";
-
 /// Print platform-specific setup instructions when no USB cable is detected.
+///
+/// The hint's indented lines are commands to run or URLs to open; dimming
+/// them keeps the prose that explains them in the foreground.
 fn print_transport_setup_help() {
-    eprintln!("Check that the USB cable is plugged in and the meter is powered on.");
-    #[cfg(target_os = "linux")]
-    {
-        eprintln!("On Linux, ensure the udev rule is installed:");
-        eprintln!(
-            "  {}",
-            style("sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/").dim()
-        );
-        eprintln!("  {}", style("sudo udevadm control --reload-rules").dim());
-        eprintln!("Then replug the cable. On a headless machine, keep a group on the");
-        eprintln!("rule — see {}", style(SETUP_DOC_URL).dim());
-    }
-    #[cfg(target_os = "windows")]
-    {
-        eprintln!("Open Device Manager with the cable plugged in:");
-        eprintln!("  - 'CP2110 USB to UART Bridge' under HID devices: no action needed.");
-        eprintln!("  - 'USB Input Device' under HID devices: no action needed.");
-        eprintln!("  - Yellow warning icon under 'Other devices': install the driver from");
-        eprintln!(
-            "    {}",
-            style("https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers").dim()
-        );
-        eprintln!("  - Nothing appears: try a different USB port.");
-    }
-    #[cfg(target_os = "macos")]
-    {
-        eprintln!("On macOS, the cable should be recognized automatically (no driver needed).");
-        eprintln!(
-            "If the device is not found, check System Settings > Privacy & Security > Input Monitoring."
-        );
+    for line in dmm_lib::binary_help::transport_setup_hint() {
+        if line.starts_with(' ') {
+            eprintln!("{}", style(line).dim());
+        } else {
+            eprintln!("{line}");
+        }
     }
 }
 
@@ -648,8 +623,8 @@ fn warn_if_experimental(
     eprintln!(
         "{}",
         style(format!(
-            "WARNING: {} support is EXPERIMENTAL (unverified against real hardware).",
-            profile.model_name
+            "WARNING: {}",
+            dmm_lib::binary_help::experimental_warning(profile.model_name)
         ))
         .yellow()
         .bold()
@@ -684,8 +659,8 @@ fn open_error_help(
                 eprintln!(
                     "{}",
                     style(format!(
-                        "{} support is experimental — report feedback: {}",
-                        profile.model_name,
+                        "{} Report feedback: {}",
+                        dmm_lib::binary_help::experimental_warning(profile.model_name),
                         profile.feedback_url()
                     ))
                     .yellow()

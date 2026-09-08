@@ -5,7 +5,7 @@
 use dmm_lib::binary_help::{ConnectedAdapters, connected_adapters};
 use dmm_lib::mock::MockMode;
 use eframe::egui::{self, RichText, Ui};
-use log::{error, info};
+use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
@@ -99,7 +99,20 @@ impl App {
             let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
                 None
             } else {
-                self.settings.mock_mode.parse().ok()
+                match self.settings.mock_mode.parse() {
+                    Ok(mode) => Some(mode),
+                    // Only a hand-edited settings file reaches this: clap
+                    // rejects a bad `--mock-mode` and the Settings row writes
+                    // labels. Auto-cycling silently looked like the pin was
+                    // ignored, so say so — the toast takes the first line and
+                    // the log the mode list that follows it.
+                    Err(message) => {
+                        warn!("{message}");
+                        let headline = message.lines().next().unwrap_or_default().to_string();
+                        self.toast = Some((headline, true, Instant::now()));
+                        None
+                    }
+                }
             };
             // Mock returns instantly — enforce a floor to avoid busy-looping
             let mock_interval = sample_interval_ms.max(100);
@@ -426,32 +439,13 @@ impl App {
         if *issue == ConnectionIssue::DeviceNotFound {
             // HID device not found — dongle issue
             ui.label(RichText::new("USB cable not found").color(warn_color));
-            let platform_hint = if cfg!(target_os = "linux") {
-                "Check that the USB cable is plugged in and the meter is on.\n\
-                 On Linux, ensure the udev rule is installed:\n\
-                 sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/\n\
-                 sudo udevadm control --reload-rules\n\
-                 Then replug the cable. On a headless machine, keep a group\n\
-                 on the rule — see the setup guide:\n\
-                 https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md\n\n\
-                 Click \"Connect\" after resolving the issue."
-            } else if cfg!(target_os = "windows") {
-                "Check that the USB cable is plugged in and the meter is on.\n\
-                 Open Device Manager:\n\
-                 \u{2022} 'CP2110 USB to UART Bridge' under HID devices: OK\n\
-                 \u{2022} 'USB Input Device' under HID devices: OK\n\
-                 \u{2022} Yellow icon under 'Other devices': install driver from\n\
-                   silabs.com/developers/usb-to-uart-bridge-vcp-drivers\n\n\
-                 Click \"Connect\" after resolving the issue."
-            } else if cfg!(target_os = "macos") {
-                "Check that the USB cable is plugged in and the meter is on.\n\
-                 The cable should be recognized automatically (no driver needed).\n\
-                 If not found, check System Settings > Privacy & Security > Input Monitoring.\n\n\
-                 Click \"Connect\" after resolving the issue."
-            } else {
-                "Check that the USB cable is plugged in and the meter is on.\n\n\
-                 Click \"Connect\" after resolving the issue."
-            };
+            // The hint's lines come from the library so the CLI's cable-not-found
+            // help and this panel stay the same advice; only the closing line is
+            // the GUI's, since the CLI has no Connect button.
+            let platform_hint = format!(
+                "{}\n\nClick \"Connect\" after resolving the issue.",
+                dmm_lib::binary_help::transport_setup_hint().join("\n")
+            );
             ui.label(
                 RichText::new(platform_hint)
                     .small()
@@ -461,8 +455,8 @@ impl App {
             if profile.stability == dmm_lib::protocol::Stability::Experimental {
                 ui.hyperlink_to(
                     RichText::new(format!(
-                        "{} support is experimental \u{2014} report feedback",
-                        profile.model_name
+                        "{} Report feedback.",
+                        dmm_lib::binary_help::experimental_warning(profile.model_name)
                     ))
                     .small()
                     .color(warn_color),

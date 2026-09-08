@@ -40,7 +40,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `stats.rs` | `RunningStats` (min/max/avg), `Integrator` (trapezoidal time-integral with gap handling), and `SeriesStats` — the mode/unit-keyed session both the CLI read loop and the GUI drain accumulate into, so the two agree on what starts a new series |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
-| `binary_help.rs` | `--version` / `--device` help text shared by both binaries. Lives here because the device list comes from the registry, so a new device reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
+| `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the "USB cable not found" setup hint and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically, and because the shared prose drifted apart while each binary held its own copy. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
 | `lib.rs` | `Dmm` struct: top-level API tying everything together |
 
 **Data flow:**

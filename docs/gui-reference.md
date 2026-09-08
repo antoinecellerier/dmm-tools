@@ -31,10 +31,7 @@ badge appears in the top bar. Clicking it opens the device's
 verification issue on GitHub where you can report feedback.
 
 The **Mock (simulated)** device generates synthetic measurements without
-hardware, cycling through DC V, AC V, Ohms, Capacitance, Hz,
-Temperature, DC mA, Overload, NCV, and multi-display modes (AC V with
-frequency/period, dual-thermocouple temperature and its T1-T2 / T2-T1
-differences).
+hardware, cycling through every mode listed below.
 When Mock is selected, a **Mock mode** row appears in Settings with
 choices: **Auto (cycle)** (default) or a specific mode (dcv, acv, ohm,
 cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff,

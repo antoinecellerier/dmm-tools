@@ -73,9 +73,9 @@ cable are verified too. When connecting to an experimental device, the CLI print
 warning with a link to the device's verification issue on GitHub. Please report findings
 there.
 
-The `mock` device generates synthetic measurements cycling through multiple modes
-(DC V, AC V, Ohms, Capacitance, Hz, Temperature, DC mA, Overload, NCV). It requires
-no USB hardware and is useful for development, demos, and testing output formats.
+The `mock` device generates synthetic measurements, cycling through every mode in the
+Mock Modes table below. It requires no USB hardware and is useful for development,
+demos, and testing output formats.
 Supports the `read`, `command`, `get` and `set` subcommands. The `info`, `debug`, and `capture`
 subcommands require real hardware and will exit with an error when used with `mock`.
 

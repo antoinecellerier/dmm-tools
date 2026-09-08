@@ -35,8 +35,8 @@ struct Args {
     #[arg(long)]
     device: Option<String>,
 
-    /// Pin mock device to a specific mode (only with --device mock)
-    #[arg(long)]
+    /// Pin mock device to a specific mode (implies --device mock)
+    #[arg(long, long_help = build_mock_mode_help())]
     mock_mode: Option<String>,
 
     /// Theme override [dark, light, system]
@@ -60,10 +60,20 @@ fn build_device_help() -> String {
     )
 }
 
+/// Build long help text for --mock-mode from the mock's own mode table.
+fn build_mock_mode_help() -> String {
+    dmm_lib::binary_help::mock_mode_help(
+        "Pin the mock device to a specific measurement mode instead of \
+         auto-cycling. Implies --device mock, and overrides the saved Mock \
+         mode setting for this session.",
+        "dmm-gui --mock-mode dcv",
+    )
+}
+
 /// CLI overrides to apply on top of persisted settings for this session.
 pub struct CliOverrides {
     pub device: Option<String>,
-    pub mock_mode: Option<String>,
+    pub mock_mode: Option<dmm_lib::mock::MockMode>,
     pub theme: Option<settings::ThemeMode>,
     pub renderer: Option<eframe::Renderer>,
     pub adapter: Option<String>,
@@ -103,24 +113,17 @@ fn parse_args() -> CliOverrides {
         }
     });
 
-    // Validate --mock-mode if provided
-    if let Some(ref mode) = args.mock_mode
-        && mode.parse::<dmm_lib::mock::MockMode>().is_err()
-    {
-        let valid: Vec<&str> = dmm_lib::mock::MockMode::ALL
-            .iter()
-            .map(|m| m.label())
-            .collect();
-        Args::command()
-            .error(
-                clap::error::ErrorKind::InvalidValue,
-                format!(
-                    "unknown mock mode '{mode}'. Valid modes: {}",
-                    valid.join(", ")
-                ),
-            )
-            .exit();
-    }
+    // Parse --mock-mode once and carry the mode, not the string: the settings
+    // field is a string only because it is persisted, and re-parsing it later
+    // has to invent an answer for a value already rejected here. The rejection
+    // is the mock's own message, so it names the modes the mock really has.
+    let mock_mode = args.mock_mode.as_deref().map(|raw| {
+        raw.parse::<dmm_lib::mock::MockMode>().unwrap_or_else(|e| {
+            Args::command()
+                .error(clap::error::ErrorKind::InvalidValue, e)
+                .exit()
+        })
+    });
 
     // Parse --renderer if provided
     let renderer = args.renderer.as_deref().map(|r| match r {
@@ -137,7 +140,7 @@ fn parse_args() -> CliOverrides {
     });
 
     // --mock-mode implies --device mock
-    let device = match (device, &args.mock_mode) {
+    let device = match (device, &mock_mode) {
         (d @ Some(_), _) => d,
         (None, Some(_)) => Some("mock".to_string()),
         (None, None) => None,
@@ -145,7 +148,7 @@ fn parse_args() -> CliOverrides {
 
     CliOverrides {
         device,
-        mock_mode: args.mock_mode,
+        mock_mode,
         theme,
         renderer,
         adapter: args.adapter,

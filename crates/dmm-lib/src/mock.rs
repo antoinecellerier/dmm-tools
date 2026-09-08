@@ -183,6 +183,16 @@ impl MockMode {
             .and_then(|i| u16::try_from(i).ok())
     }
 
+    /// Every label, comma-separated: the list `--mock-mode` help and the
+    /// parse error both quote, so the two can't name different modes.
+    pub(crate) fn label_list() -> String {
+        MockMode::ALL
+            .iter()
+            .map(|m| m.label())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// The mode behind a `Protocol::choices` id — the inverse of
     /// [`Self::choice_id`], for a consumer that has to name the scenario it
     /// just picked (the GUI re-pins its Settings row with it).
@@ -217,10 +227,9 @@ impl std::str::FromStr for MockMode {
                 return Ok(info.mode);
             }
         }
-        let valid: Vec<&str> = MockMode::ALL.iter().map(|m| m.label()).collect();
         Err(format!(
             "unknown mock mode: {s}\nValid modes: {}",
-            valid.join(", ")
+            MockMode::label_list()
         ))
     }
 }

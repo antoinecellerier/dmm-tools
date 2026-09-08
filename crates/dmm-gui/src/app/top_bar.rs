@@ -174,8 +174,8 @@ impl App {
                         url,
                     )
                     .on_hover_text(format!(
-                        "{} support is experimental \u{2014} click to report feedback",
-                        profile.model_name
+                        "{} Click to report feedback.",
+                        dmm_lib::binary_help::experimental_warning(profile.model_name)
                     ));
                 }
 

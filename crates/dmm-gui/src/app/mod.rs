@@ -339,7 +339,10 @@ impl App {
         }
         if let Some(mock_mode) = cli.mock_mode {
             settings.overrides.mock_mode = Some(settings.mock_mode.clone());
-            settings.mock_mode = mock_mode;
+            // The label, not what was typed: the Settings row matches on
+            // labels, so an alias (`--mock-mode temp_dual`) would leave the
+            // row showing no selection at all.
+            settings.mock_mode = mock_mode.label().to_string();
         }
         if let Some(theme) = cli.theme {
             settings.overrides.theme = Some(settings.theme);

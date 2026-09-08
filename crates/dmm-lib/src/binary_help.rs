@@ -1,16 +1,16 @@
 //! Help and version text shared by the `dmm-cli` and `dmm-gui` binaries.
 //!
-//! These lived as byte-identical copies in both `main.rs` files. They sit here
-//! rather than in either binary because the device list they render comes from
-//! [`crate::protocol::registry`], which is the authority on what devices
-//! exist — a device added there should reach both binaries' `--help` without
-//! anyone remembering to update two lists.
+//! The lists come from the authorities on what exists (the registry for
+//! devices, [`MockMode::ALL`] for mock scenarios), so an addition there
+//! reaches both binaries' `--help`. The prose (setup hint, experimental
+//! warning) is here because the two copies had already drifted apart.
 //!
 //! The per-crate build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in
 //! rather than read here: `env!` would capture *this* crate's values, not the
 //! binary's.
 
 use crate::list_devices;
+use crate::mock::MockMode;
 use crate::protocol::{Stability, registry};
 
 /// Version text for `--version`, with the git hash appended on dev builds.
@@ -58,6 +58,73 @@ pub fn device_help(intro: &str) -> String {
          Quote names with special characters: --device 'ut61e+'",
     );
     help
+}
+
+/// Long help for a `--mock-mode` flag: `intro`, the mode list, then `example`.
+///
+/// The list is rendered from [`MockMode::ALL`] for the same reason the device
+/// list comes from the registry — the CLI's hardcoded copy had fallen four
+/// modes behind the mock. `intro` and `example` differ between the binaries:
+/// the CLI's flag sits on a subcommand, the GUI's implies `--device mock`.
+pub fn mock_mode_help(intro: &str, example: &str) -> String {
+    format!(
+        "{intro}\n\nModes: {}\n\nExample: {example}",
+        MockMode::label_list()
+    )
+}
+
+/// Line the platform setup hint opens with, whatever the platform.
+const CABLE_CHECK: &str = "Check that the USB cable is plugged in and the meter is powered on.";
+
+#[cfg(target_os = "linux")]
+const SETUP_HINT: &[&str] = &[
+    CABLE_CHECK,
+    "On Linux, ensure the udev rule is installed:",
+    "  sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/",
+    "  sudo udevadm control --reload-rules",
+    "Then replug the cable. On a headless machine, keep a group on the",
+    "rule — see the setup guide:",
+    "  https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md",
+];
+
+#[cfg(target_os = "windows")]
+const SETUP_HINT: &[&str] = &[
+    CABLE_CHECK,
+    "Open Device Manager with the cable plugged in:",
+    "- 'CP2110 USB to UART Bridge' under HID devices: no action needed.",
+    "- 'USB Input Device' under HID devices: no action needed.",
+    "- Yellow warning icon under 'Other devices': install the driver from",
+    "  https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers",
+    "- Nothing appears: try a different USB port.",
+];
+
+#[cfg(target_os = "macos")]
+const SETUP_HINT: &[&str] = &[
+    CABLE_CHECK,
+    "On macOS, the cable should be recognized automatically (no driver needed).",
+    "If the device is not found, check System Settings > Privacy & Security > Input Monitoring.",
+];
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+const SETUP_HINT: &[&str] = &[CABLE_CHECK];
+
+/// What to try when no USB cable was found, one line per step.
+///
+/// `cfg`-selected, so a binary only ever carries its own platform's steps.
+/// An indented line is a command to run or a URL to open — the CLI dims those
+/// to keep the prose in front; the GUI joins the lot with newlines and adds
+/// its own "Click Connect" close.
+pub fn transport_setup_hint() -> &'static [&'static str] {
+    SETUP_HINT
+}
+
+/// The sentence both binaries use to say a protocol is unverified.
+///
+/// Only the claim is shared: each site appends its own call to action (the
+/// CLI a `capture` command, the GUI a link), because they differ in what the
+/// user can do next. Four hand-written spellings had drifted apart here.
+pub fn experimental_warning(model_name: &str) -> String {
+    format!("{model_name} support is experimental (unverified against real hardware).")
 }
 
 /// What the bus held when an `--adapter` selector matched nothing.
@@ -166,6 +233,36 @@ mod tests {
         assert_eq!(
             ConnectedAdapters::Unavailable.lines(),
             ["Run 'dmm-cli list' to see connected devices."]
+        );
+    }
+
+    /// The CLI's copy of this list went four modes stale; rendering it from
+    /// the table is only worth it if every mode really reaches the help.
+    #[test]
+    fn mock_mode_help_lists_every_mode() {
+        let help = mock_mode_help("Pin the mock.", "--mock-mode dcv");
+        assert!(help.starts_with("Pin the mock.\n\nModes: "));
+        for mode in MockMode::ALL {
+            assert!(help.contains(mode.label()), "missing {}", mode.label());
+        }
+        assert!(help.ends_with("Example: --mock-mode dcv"));
+    }
+
+    /// Both binaries render these lines verbatim: the CLI dims the indented
+    /// ones, the GUI joins them with newlines, so a blank line would show up
+    /// as a gap in the middle of the hint.
+    #[test]
+    fn setup_hint_is_printable_on_every_platform() {
+        let hint = transport_setup_hint();
+        assert_eq!(hint.first(), Some(&CABLE_CHECK));
+        assert!(hint.iter().all(|line| !line.trim().is_empty()));
+    }
+
+    #[test]
+    fn experimental_warning_names_the_model() {
+        assert_eq!(
+            experimental_warning("UNI-T UT8803"),
+            "UNI-T UT8803 support is experimental (unverified against real hardware)."
         );
     }
 

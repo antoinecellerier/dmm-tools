@@ -63,7 +63,7 @@ Connect to other device families with `--device`:
 
 ```
 $ dmm-cli --device ut8803 capture
-WARNING: UNI-T UT8803 support is EXPERIMENTAL (unverified against real hardware).
+WARNING: UNI-T UT8803 support is experimental (unverified against real hardware).
 ```
 
 ## Supported devices
