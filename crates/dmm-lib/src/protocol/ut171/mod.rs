@@ -400,6 +400,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     fn make_payload(mode: u8, range: u8, value: f32, flags: u8) -> Vec<u8> {
         make_payload_with_aux(mode, range, value, flags, 0.0)
@@ -423,18 +424,26 @@ mod tests {
         ]
     }
 
+    /// The one payload whose every parsed field is pinned: an ordinary
+    /// auto-ranging V DC reading.
     #[test]
     fn parse_vdc() {
+        // Flags bit 6 clear = AUTO.
         let payload = make_payload(0x02, 0x01, 12.345, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "V DC");
-        assert_eq!(m.unit, "V");
-        assert!(m.flags.auto_range); // bit 6 clear = AUTO
-        if let MeasuredValue::Normal(v) = m.value {
-            assert!((v - 12.345).abs() < 0.01);
-        } else {
-            panic!("expected Normal value");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V DC
+mode_raw=0x02
+range_raw=0x01
+value=Normal(12.345000267028809)
+unit=V
+range_label=
+display_raw=Some("12.345")
+flags=auto_range
+aux=0
+raw_payload=15"#
+        );
     }
 
     /// The wire float is an f32; widening it to f64 and formatting that
@@ -497,17 +506,19 @@ mod tests {
 
     #[test]
     fn parse_hold_flag() {
+        // Flags bit 7 = HOLD; bit 6 still clear, so AUTO stays on.
         let payload = make_payload(0x02, 0x01, 1.0, 0x80);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.hold);
-        assert!(m.flags.auto_range); // bit 6 still clear
+        assert!(m.flags.auto_range);
     }
 
     #[test]
     fn parse_manual_range() {
+        // Flags bit 6 set = manual range.
         let payload = make_payload(0x02, 0x01, 1.0, 0x40);
         let m = parse_measurement(&payload).unwrap();
-        assert!(!m.flags.auto_range); // bit 6 set = manual
+        assert!(!m.flags.auto_range);
     }
 
     #[test]
@@ -521,21 +532,57 @@ mod tests {
     fn parse_unknown_mode_permissive() {
         let payload = make_payload(0x30, 0x01, 1.0, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "Unknown(0x30)");
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x30)
+mode_raw=0x30
+range_raw=0x01
+value=Normal(1.0)
+unit=
+range_label=
+display_raw=Some("1")
+flags=auto_range
+aux=0
+raw_payload=15"#
+        );
     }
 
     #[test]
     fn parse_nan_overload() {
         let payload = make_payload(0x0A, 0x01, f32::NAN, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x0a
+range_raw=0x01
+value=Overload
+unit=Ω
+range_label=
+display_raw=None
+flags=auto_range
+aux=0
+raw_payload=15"#
+        );
     }
 
     #[test]
     fn parse_inf_overload() {
         let payload = make_payload(0x0A, 0x01, f32::INFINITY, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x0a
+range_raw=0x01
+value=Overload
+unit=Ω
+range_label=
+display_raw=None
+flags=auto_range
+aux=0
+raw_payload=15"#
+        );
     }
 
     #[test]
@@ -631,14 +678,20 @@ mod tests {
         // V AC (0x03): aux is the frequency readout in kHz per gulux.
         let payload = make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.aux_values.len(), 1);
-        assert_eq!(m.aux_values[0].label, "Frequency");
-        assert_eq!(m.aux_values[0].unit, "kHz");
-        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
-            assert!((v - 50.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal aux");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V AC
+mode_raw=0x03
+range_raw=0x00
+value=Normal(230.0)
+unit=V
+range_label=
+display_raw=Some("230")
+flags=auto_range
+aux=1
+aux1=Frequency value=Normal(50.0) unit=kHz display_raw=Some("50") elapsed_secs=None
+raw_payload=15"#
+        );
     }
 
     #[test]

@@ -399,6 +399,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     fn make_payload(
         mode: u8,
@@ -440,14 +441,26 @@ mod tests {
         ]
     }
 
+    /// The one payload whose every parsed field is pinned, `range_raw`
+    /// included: this family stores it unmasked (0x31 for range 1) where
+    /// every other masks the 0x30 prefix off (docs/verification-backlog.md).
     #[test]
     fn parse_dcv() {
         let payload = make_payload(0x01, 0x01, b"12.34", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "DC V");
-        assert_eq!(m.unit, "V");
-        assert!(m.flags.dc);
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 12.34).abs() < 1e-6));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x31
+value=Normal(12.34)
+unit=V
+range_label=
+display_raw=Some("12.34")
+flags=auto_range,dc
+aux=0
+raw_payload=17"#
+        );
     }
 
     #[test]
@@ -497,7 +510,19 @@ mod tests {
     fn parse_unknown_mode_permissive() {
         let payload = make_payload(0x20, 0x00, b" 1.23", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "Unknown(0x20)");
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x20)
+mode_raw=0x20
+range_raw=0x30
+value=Normal(1.23)
+unit=
+range_label=
+display_raw=Some(" 1.23")
+flags=auto_range
+aux=0
+raw_payload=17"#
+        );
     }
 
     #[test]
@@ -505,7 +530,19 @@ mod tests {
         // OL = payload[12] bit 2 (D7 of the status word)
         let payload = make_payload(0x08, 0x00, b"    0", 0x04, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x08
+range_raw=0x30
+value=Overload
+unit=Ω
+range_label=
+display_raw=Some("    0")
+flags=auto_range
+aux=0
+raw_payload=17"#
+        );
     }
 
     #[test]
@@ -557,6 +594,9 @@ mod tests {
         let payload = make_payload(0x01, 0x00, b"12.34", 0x08, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v + 12.34).abs() < 1e-6));
+        // The sign reaches the float only; whether the meter also spells it
+        // in the display field is unsettled (docs/verification-backlog.md).
+        assert_eq!(m.display_raw.as_deref(), Some("12.34"));
     }
 
     #[test]
@@ -598,7 +638,19 @@ mod tests {
         // "   OL" is explicitly allowed by the validator
         let payload = make_payload(0x09, 0x00, b"   OL", 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Continuity
+mode_raw=0x09
+range_raw=0x30
+value=Overload
+unit=Ω
+range_label=
+display_raw=Some("   OL")
+flags=auto_range
+aux=0
+raw_payload=17"#
+        );
     }
 
     #[test]

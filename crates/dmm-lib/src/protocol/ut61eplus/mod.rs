@@ -740,6 +740,7 @@ pub fn make_test_measurement(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     /// Each model is asked only for the modes its dial reaches: the E+ has
     /// no temperature or LoZ position, the D+ has both.
@@ -1280,29 +1281,51 @@ mod tests {
         assert!(commands(&meter).is_empty());
     }
 
+    /// DC V on the second rung, with bar-graph digits reading 26.
     #[test]
     fn parse_dc_voltage() {
         let table = Ut61ePlusTable::new();
         let payload = make_payload(0x02, 0x01, b" 12.345", (0x02, 0x06), (0x00, 0x00, 0x00));
         let m = parse_measurement(&payload, &table).unwrap();
-        assert_eq!(m.mode, "DC V");
-        assert_eq!(m.mode_raw, 0x02);
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 12.345).abs() < 1e-6));
-        assert_eq!(m.unit, "V");
-        assert_eq!(m.range_label, "22V");
-        assert!(m.flags.auto_range);
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x01
+value=Normal(12.345)
+unit=V
+range_label=22V
+progress=26
+display_raw=Some(" 12.345")
+flags=auto_range
+aux=0
+raw_payload=14"#
+        );
     }
 
+    /// "OL" in the digits is an overload, whatever the digits parse to.
     #[test]
     fn parse_overload() {
         let table = Ut61ePlusTable::new();
         let payload = make_payload(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
         let m = parse_measurement(&payload, &table).unwrap();
-        assert_eq!(m.mode, "Ω");
-        assert!(matches!(m.value, MeasuredValue::Overload));
-        assert_eq!(m.unit, "Ω");
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x06
+range_raw=0x00
+value=Overload
+unit=Ω
+range_label=220Ω
+progress=0
+display_raw=Some("    OL ")
+flags=auto_range
+aux=0
+raw_payload=14"#
+        );
     }
 
+    /// Flag nibble 1 bit 1 is HOLD; REL (bit 0) stays clear and AUTO is on.
     #[test]
     fn parse_with_hold_flag() {
         let table = Ut61ePlusTable::new();
@@ -1313,6 +1336,7 @@ mod tests {
         assert!(!m.flags.rel);
     }
 
+    /// The meter puts a space between the sign and the digits.
     #[test]
     fn parse_negative_with_space() {
         let table = Ut61ePlusTable::new();
@@ -1340,6 +1364,7 @@ mod tests {
         assert!(s.contains("AUTO"));
     }
 
+    /// A digit in the NCV display is the detection level, not a reading.
     #[test]
     fn parse_ncv() {
         let table = Ut61ePlusTable::new();

@@ -1275,6 +1275,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     fn make_payload(
         mode: u16,
@@ -1299,18 +1300,25 @@ mod tests {
         p
     }
 
+    /// The one payload whose every parsed field is pinned: an ordinary
+    /// auto-ranging V DC reading, precision 0x40 (bits 4-7 = 4 decimals).
     #[test]
     fn parse_vdc() {
         let payload = make_payload(0x3111, 12.345, 0x40, b"VDC\0\0\0\0\0", 0x00, 0x01);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "V DC");
-        assert_eq!(m.unit, "VDC");
-        assert!(m.flags.auto_range);
-        if let MeasuredValue::Normal(v) = m.value {
-            assert!((v - 12.345).abs() < 0.01);
-        } else {
-            panic!("expected Normal value");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V DC
+mode_raw=0x3111
+range_raw=0x00
+value=Normal(12.345000267028809)
+unit=VDC
+range_label=Auto
+display_raw=Some("12.3450")
+flags=auto_range
+aux=0
+raw_payload=19"#
+        );
     }
 
     #[test]
@@ -1329,12 +1337,24 @@ mod tests {
         assert_eq!(m.unit, "~");
     }
 
+    /// Precision bit 0 = +OL, and an overload carries no digits of its own.
     #[test]
     fn parse_overload_precision() {
-        // Precision bit 0 = +OL
         let payload = make_payload(0x5111, 0.0, 0x01, b"~\0\0\0\0\0\0\0", 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x5111
+range_raw=0x00
+value=Overload
+unit=~
+range_label=Auto
+display_raw=None
+flags=
+aux=0
+raw_payload=19"#
+        );
     }
 
     #[test]
@@ -1433,7 +1453,9 @@ mod tests {
     ///
     /// Reaches the normal-format aux walk that the synthetic `make_payload`
     /// frames never do: 26 payload bytes after the 6-byte header = 2 x 13, so
-    /// the aux1 slot is what makes the frame add up.
+    /// the aux1 slot is what makes the frame add up. The meter sends 0xB0 for
+    /// the degree sign (Latin-1), precision 0x10 is the LCD's one decimal,
+    /// and temperature is fixed-range, so no label despite range byte 0x01.
     #[test]
     fn parse_real_frame_temp_dual_probe() {
         let payload = hex(
@@ -1443,22 +1465,20 @@ mod tests {
         assert_eq!(payload.len(), 32);
 
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode_raw, 0x4211);
-        assert_eq!(m.mode, "°C");
-        // Latin-1: the meter sends 0xB0 for the degree sign.
-        assert_eq!(m.unit, "°C");
-        // Precision byte 0x10 => 1 decimal place, matching the LCD.
-        assert_eq!(m.display_raw.as_deref(), Some("25.4"));
-        // Fixed-range family, so no label even though the meter sent range 0x01.
-        assert_eq!(m.range_label, "");
-        assert!(m.flags.auto_range);
-        assert!(!m.flags.hv_warning);
-
-        assert_eq!(m.aux_values.len(), 1);
-        let t2 = &m.aux_values[0];
-        assert_eq!(t2.label, "T2");
-        assert_eq!(t2.unit, "°C");
-        assert_eq!(t2.display_raw.as_deref(), Some("24.6"));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=°C
+mode_raw=0x4211
+range_raw=0x01
+value=Normal(25.366180419921875)
+unit=°C
+range_label=
+display_raw=Some("25.4")
+flags=auto_range
+aux=1
+aux1=T2 value=Normal(24.623119354248047) unit=°C display_raw=Some("24.6") elapsed_secs=None
+raw_payload=32"#
+        );
     }
 
     /// Real UT181A frame: V AC with the Hz secondary display, mains on the
@@ -1467,7 +1487,8 @@ mod tests {
     /// The 51 payload bytes after the header only add up as 13 + 13 + 13 + 12:
     /// main, aux1 and aux2 each carry a precision byte, the bargraph does not
     /// (spec §5.3). Get the bargraph field's size wrong and this frame
-    /// desynchronises.
+    /// desynchronises. misc2 bit 1 is the meter flagging mains voltage, and
+    /// auto-range settled on 600V (range byte 0x03).
     #[test]
     fn parse_real_frame_vac_hz_bargraph() {
         let payload = hex(
@@ -1478,23 +1499,21 @@ mod tests {
         assert_eq!(payload.len(), 57);
 
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode_raw, 0x1121);
-        assert_eq!(m.mode, "V AC Hz");
-        assert_eq!(m.unit, "VAC");
-        assert_eq!(m.display_raw.as_deref(), Some("239.22"));
-        // misc2 bit 1: the meter was flagging mains voltage.
-        assert!(m.flags.hv_warning);
-        assert!(m.flags.auto_range);
-        // Auto-range settled on 600V (range byte 0x03).
-        assert_eq!(m.range_label, "600V");
-
-        assert_eq!(m.aux_values.len(), 2);
-        assert_eq!(m.aux_values[0].label, "Frequency");
-        assert_eq!(m.aux_values[0].unit, "Hz");
-        assert_eq!(m.aux_values[0].display_raw.as_deref(), Some("50.01"));
-        assert_eq!(m.aux_values[1].label, "Period");
-        assert_eq!(m.aux_values[1].unit, "ms");
-        assert_eq!(m.aux_values[1].display_raw.as_deref(), Some("20.00"));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V AC Hz
+mode_raw=0x1121
+range_raw=0x03
+value=Normal(239.22000122070313)
+unit=VAC
+range_label=600V
+display_raw=Some("239.22")
+flags=auto_range,hv_warning
+aux=2
+aux1=Frequency value=Normal(50.008750915527344) unit=Hz display_raw=Some("50.01") elapsed_secs=None
+aux2=Period value=Normal(19.99650001525879) unit=ms display_raw=Some("20.00") elapsed_secs=None
+raw_payload=57"#
+        );
     }
 
     #[test]
@@ -1507,7 +1526,19 @@ mod tests {
     fn parse_nan_overload() {
         let payload = make_payload(0x5111, f32::NAN, 0x00, b"~\0\0\0\0\0\0\0", 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Ω
+mode_raw=0x5111
+range_raw=0x00
+value=Overload
+unit=~
+range_label=Auto
+display_raw=None
+flags=
+aux=0
+raw_payload=19"#
+        );
     }
 
     #[test]
@@ -1522,8 +1553,14 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode_raw, 0x7211);
         assert_eq!(m.mode, "Duty %");
+        // Range byte 0 answers "Auto" before the mode's ladder is consulted,
+        // so this fixed-range mode reads as auto-ranging
+        // (docs/verification-backlog.md).
+        assert_eq!(m.range_label, "Auto");
     }
 
+    /// The precision byte's high nibble is the decimal-place count: the three
+    /// payloads below ask for 4, 2 and 0 places.
     #[test]
     fn display_raw_uses_precision_decimal_places() {
         // precision 0x40 => bits 4-7 = 4 decimal places
@@ -1540,13 +1577,6 @@ mod tests {
         let payload = make_payload(0x5111, 470.0, 0x00, b"~\0\0\0\0\0\0\0", 0x00, 0x01);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.display_raw.as_deref(), Some("470"));
-    }
-
-    #[test]
-    fn display_raw_none_on_overload() {
-        let payload = make_payload(0x5111, 0.0, 0x01, b"~\0\0\0\0\0\0\0", 0x00, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(m.display_raw.is_none());
     }
 
     #[test]
@@ -1655,11 +1685,12 @@ mod tests {
         assert_eq!(lookup_range_label(0x7211, 1), ""); // Duty cycle
     }
 
+    /// The range byte is at payload[5], which `make_payload` sets to 0x00 —
+    /// the meter's autorange.
     #[test]
     fn range_raw_populated() {
         let payload = make_payload(0x3111, 12.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
         let m = parse_measurement(&payload).unwrap();
-        // range byte is at payload[5] which make_payload sets to 0x00
         assert_eq!(m.range_raw, 0x00);
         assert_eq!(m.range_label, "Auto");
     }
@@ -1694,33 +1725,27 @@ mod tests {
         p
     }
 
+    /// The main value is the delta; reference and absolute follow as
+    /// sub-values.
     #[test]
     fn parse_relative_format() {
         let payload = make_relative_payload(0x3112, 2.345, 10.0, 12.345);
         let m = parse_measurement(&payload).unwrap();
-
-        assert_eq!(m.mode, "V DC REL");
-        assert!(m.flags.rel);
-        // Main value is the delta
-        if let MeasuredValue::Normal(v) = m.value {
-            assert!((v - 2.345).abs() < 0.01);
-        } else {
-            panic!("expected Normal value");
-        }
-        // Two aux values: Reference and Absolute
-        assert_eq!(m.aux_values.len(), 2);
-        assert_eq!(m.aux_values[0].label, "Reference");
-        assert_eq!(m.aux_values[1].label, "Absolute");
-        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
-            assert!((v - 10.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal ref value");
-        }
-        if let MeasuredValue::Normal(v) = m.aux_values[1].value {
-            assert!((v - 12.345).abs() < 0.01);
-        } else {
-            panic!("expected Normal abs value");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V DC REL
+mode_raw=0x3112
+range_raw=0x00
+value=Normal(2.3450000286102295)
+unit=VDC
+range_label=Auto
+display_raw=Some("2.345")
+flags=rel,auto_range
+aux=2
+aux1=Reference value=Normal(10.0) unit=VDC display_raw=Some("10.000") elapsed_secs=None
+aux2=Absolute value=Normal(12.345000267028809) unit=VDC display_raw=Some("12.345") elapsed_secs=None
+raw_payload=45"#
+        );
     }
 
     #[test]
@@ -1759,36 +1784,28 @@ mod tests {
         payload
     }
 
+    /// The main value is the current reading; max, average and min follow as
+    /// sub-values, each with the seconds since the mode started.
     #[test]
     fn parse_minmax_format() {
         let payload = minmax_payload(0x3111);
         let m = parse_measurement(&payload).unwrap();
-
-        assert_eq!(m.mode, "V DC");
-        assert!(m.flags.min);
-        assert!(m.flags.max);
-        // Main value = current
-        if let MeasuredValue::Normal(v) = m.value {
-            assert!((v - 5.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal current value");
-        }
-        assert_eq!(m.unit, "VDC");
-
-        // 3 aux values: Max, Average, Min
-        assert_eq!(m.aux_values.len(), 3);
-        assert_eq!(m.aux_values[0].label, "Max");
-        assert_eq!(m.aux_values[0].elapsed_secs, Some(120));
-        assert_eq!(m.aux_values[1].label, "Average");
-        assert_eq!(m.aux_values[1].elapsed_secs, Some(60));
-        assert_eq!(m.aux_values[2].label, "Min");
-        assert_eq!(m.aux_values[2].elapsed_secs, Some(30));
-
-        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
-            assert!((v - 10.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal max value");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V DC
+mode_raw=0x3111
+range_raw=0x00
+value=Normal(5.0)
+unit=VDC
+range_label=Auto
+display_raw=Some("5.000")
+flags=auto_range,min,max
+aux=3
+aux1=Max value=Normal(10.0) unit=VDC display_raw=Some("10.000") elapsed_secs=Some(120)
+aux2=Average value=Normal(7.5) unit=VDC display_raw=Some("7.500") elapsed_secs=Some(60)
+aux3=Min value=Normal(3.0) unit=VDC display_raw=Some("3.000") elapsed_secs=Some(30)
+raw_payload=46"#
+        );
     }
 
     #[test]
@@ -1801,6 +1818,7 @@ mod tests {
         assert!(parse_measurement(&payload).is_err());
     }
 
+    /// The main value is the peak max; the peak min follows as a sub-value.
     #[test]
     fn parse_peak_format() {
         let mbytes = 0x3131u16.to_le_bytes(); // V DC Peak
@@ -1814,24 +1832,20 @@ mod tests {
         payload.extend_from_slice(&full_value(-3.0, 0x30, b"VDC\0\0\0\0\0"));
 
         let m = parse_measurement(&payload).unwrap();
-
-        assert_eq!(m.mode, "V DC Peak");
-        assert!(m.flags.peak_max);
-        assert!(m.flags.peak_min);
-        // Main value = peak max
-        if let MeasuredValue::Normal(v) = m.value {
-            assert!((v - 15.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal peak max value");
-        }
-        // 1 aux: Peak Min
-        assert_eq!(m.aux_values.len(), 1);
-        assert_eq!(m.aux_values[0].label, "Peak Min");
-        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
-            assert!((v + 3.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal peak min value");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V DC Peak
+mode_raw=0x3131
+range_raw=0x00
+value=Normal(15.0)
+unit=VDC
+range_label=Auto
+display_raw=Some("15.000")
+flags=auto_range,peak_max,peak_min
+aux=1
+aux1=Peak Min value=Normal(-3.0) unit=VDC display_raw=Some("-3.000") elapsed_secs=None
+raw_payload=32"#
+        );
     }
 
     #[test]
@@ -1864,9 +1878,10 @@ mod tests {
         assert!(m.flags.record);
     }
 
+    /// A normal-format frame with COMP active carries the two limits as
+    /// sub-values.
     #[test]
     fn parse_comp_extension() {
-        // Normal format with COMP active
         let mbytes = 0x3111u16.to_le_bytes();
         let mut payload = vec![
             0x02, // type
@@ -1884,21 +1899,21 @@ mod tests {
         payload.extend_from_slice(&1.0f32.to_le_bytes()); // low limit
 
         let m = parse_measurement(&payload).unwrap();
-        assert!(m.flags.comp);
-        // Should have COMP High and COMP Low aux values
-        assert_eq!(m.aux_values.len(), 2);
-        assert_eq!(m.aux_values[0].label, "COMP High");
-        assert_eq!(m.aux_values[1].label, "COMP Low");
-        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
-            assert!((v - 10.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal comp high");
-        }
-        if let MeasuredValue::Normal(v) = m.aux_values[1].value {
-            assert!((v - 1.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal comp low");
-        }
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=V DC
+mode_raw=0x3111
+range_raw=0x00
+value=Normal(5.0)
+unit=VDC
+range_label=Auto
+display_raw=Some("5.000")
+flags=auto_range,comp
+aux=2
+aux1=COMP High value=Normal(10.0) unit=VDC display_raw=Some("10") elapsed_secs=None
+aux2=COMP Low value=Normal(1.0) unit=VDC display_raw=Some("1") elapsed_secs=None
+raw_payload=30"#
+        );
     }
 
     #[test]
@@ -1919,11 +1934,9 @@ mod tests {
         assert_eq!(m.mode, "\u{00B0}C");
         assert_eq!(m.aux_values.len(), 1);
         assert_eq!(m.aux_values[0].label, "T2");
-        if let MeasuredValue::Normal(v) = m.aux_values[0].value {
-            assert!((v - 21.0).abs() < 0.01);
-        } else {
-            panic!("expected Normal aux1 value");
-        }
+        assert!(
+            matches!(m.aux_values[0].value, MeasuredValue::Normal(v) if (v - 21.0).abs() < 0.01)
+        );
     }
 
     // --- Remote control: mode selection, REL, range, replies ---------------

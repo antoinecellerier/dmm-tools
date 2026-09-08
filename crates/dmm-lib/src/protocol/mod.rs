@@ -61,9 +61,12 @@ pub(crate) mod test_support {
     /// Every field a parser decides is printed, so a test that pins this
     /// string fails on *any* change to the parsed reading rather than only
     /// on the handful of fields the test thought to assert. The timestamp is
-    /// excluded (it is `Instant::now()`), and the sub-value list and raw
-    /// payload appear as lengths — the payload is the test's own input, and
-    /// no family covered by this helper produces sub-values.
+    /// excluded (it is `Instant::now()`) and the raw payload appears as a
+    /// length — it is the test's own input.
+    ///
+    /// `progress` and the per-sub-value lines are printed only where the
+    /// parser produced them, so a family whose wire carries neither keeps the
+    /// shorter snapshot.
     pub(crate) fn snapshot(m: &Measurement) -> String {
         let flags: Vec<&str> = m
             .flags
@@ -72,6 +75,26 @@ pub(crate) mod test_support {
             .filter(|(_, set)| *set)
             .map(|(name, _)| *name)
             .collect();
+        let progress = match m.progress {
+            Some(p) => format!("progress={p}\n"),
+            None => String::new(),
+        };
+        let aux: String = m
+            .aux_values
+            .iter()
+            .enumerate()
+            .map(|(i, a)| {
+                format!(
+                    "\naux{}={} value={:?} unit={} display_raw={:?} elapsed_secs={:?}",
+                    i + 1,
+                    a.label,
+                    a.value,
+                    a.unit,
+                    a.display_raw,
+                    a.elapsed_secs,
+                )
+            })
+            .collect();
         format!(
             "mode={}\n\
              mode_raw={:#04x}\n\
@@ -79,9 +102,10 @@ pub(crate) mod test_support {
              value={:?}\n\
              unit={}\n\
              range_label={}\n\
+             {progress}\
              display_raw={:?}\n\
              flags={}\n\
-             aux={}\n\
+             aux={}{aux}\n\
              raw_payload={}",
             m.mode,
             m.mode_raw,

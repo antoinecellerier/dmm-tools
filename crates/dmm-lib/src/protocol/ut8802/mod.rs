@@ -407,6 +407,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::test_support::snapshot;
 
     /// Build a 7-byte UT8802 payload from components.
     fn make_payload(
@@ -430,15 +431,25 @@ mod tests {
         ]
     }
 
+    /// The one payload whose every parsed field is pinned: an ordinary DC V
+    /// reading, 200V range, display "1234.5" (dp_pos=1).
     #[test]
     fn parse_dcv() {
-        // DC V 200V, display "1234.5" (dp_pos=1)
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.mode, "DC V");
-        assert_eq!(m.unit, "V");
-        assert_eq!(m.range_label, "200V");
-        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1234.5).abs() < 1e-6));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x05
+range_raw=0x05
+value=Normal(1234.5)
+unit=V
+range_label=200V
+display_raw=Some("1234.5")
+flags=auto_range,dc
+aux=0
+raw_payload=7"#
+        );
     }
 
     #[test]
@@ -523,7 +534,19 @@ mod tests {
         // Digit with 0x0C nibble → overload
         let payload = make_payload(0x01, [0, 0, 0x0C, 0, 0], 0, 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Overload
+unit=mV
+range_label=200mV
+display_raw=Some("  L00")
+flags=auto_range,dc
+aux=0
+raw_payload=7"#
+        );
     }
 
     #[test]
@@ -543,6 +566,7 @@ mod tests {
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x80);
         let m = parse_measurement(&payload).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-1234.5)).abs() < 1e-6));
+        assert_eq!(m.display_raw.as_deref(), Some("1234.5"));
     }
 
     #[test]
@@ -555,29 +579,30 @@ mod tests {
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 1234.5).abs() < 1e-6));
     }
 
+    /// Vendor overload = byte 6 bit 6, with ordinary digits on the wire
+    /// (uci_dll_decompiled.txt:24806-24821).
+    ///
+    /// The bit has to be folded in before the display string is formatted.
+    /// Inserting the decimal point first left the measurement carrying
+    /// `display_raw = "1234.5"` next to `MeasuredValue::Overload`, so anything
+    /// rendering the raw digits showed an over-range input as a plausible
+    /// reading.
     #[test]
     fn overload_from_status_bit() {
-        // Vendor overload = byte 6 bit 6, with ordinary digits on the wire
-        // (uci_dll_decompiled.txt:24806-24821).
         let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
         let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
-    }
-
-    /// The vendor bit has to be folded in before the display string is
-    /// formatted. Inserting the decimal point first left the measurement
-    /// carrying `display_raw = "1234.5"` next to `MeasuredValue::Overload`,
-    /// so anything rendering the raw digits showed an over-range input as a
-    /// plausible reading.
-    #[test]
-    fn status_bit_overload_does_not_produce_a_formatted_number() {
-        let payload = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x40);
-        let m = parse_measurement(&payload).unwrap();
-        assert!(matches!(m.value, MeasuredValue::Overload));
-        let raw = m.display_raw.as_deref().unwrap_or_default();
-        assert!(
-            !raw.contains('.'),
-            "overload display must not be decimal-formatted, got {raw:?}"
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x05
+range_raw=0x05
+value=Overload
+unit=V
+range_label=200V
+display_raw=Some("12345")
+flags=auto_range,dc
+aux=0
+raw_payload=7"#
         );
         // And the export/display path must call it what it is.
         assert_eq!(m.value_export_str(), "OL");
@@ -672,7 +697,19 @@ mod tests {
         // but the parser should handle it gracefully
         let payload = make_payload(0x02, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
-        assert!(m.mode.starts_with("Unknown"));
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=Unknown(0x02)
+mode_raw=0x02
+range_raw=0x02
+value=Normal(12345.0)
+unit=
+range_label=
+display_raw=Some("12345")
+flags=auto_range
+aux=0
+raw_payload=7"#
+        );
     }
 
     #[test]
@@ -691,14 +728,6 @@ mod tests {
     fn parse_payload_too_short() {
         let payload = vec![0x01, 0x12, 0x34];
         assert!(parse_measurement(&payload).is_err());
-    }
-
-    #[test]
-    fn display_raw_preserved() {
-        // Display "12345" with dp_pos=0 (no decimal)
-        let payload = make_payload(0x01, [1, 2, 3, 4, 5], 0, 0x00, 0x00, 0x00);
-        let m = parse_measurement(&payload).unwrap();
-        assert_eq!(m.display_raw.as_deref(), Some("12345"));
     }
 
     #[test]

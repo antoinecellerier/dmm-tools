@@ -354,6 +354,13 @@ plus what no step reaches.
 
 **UT8802 / UT8802N**:
 - Frame extraction (8-byte, 0xAC header, no checksum)
+- **Bug, code-confirmed 2026-09-08**: a negative reading is shown and
+  exported unsigned. `display_raw` is built from the BCD digits and the
+  sign bit is applied only to the float, while display and CSV prefer
+  `display_raw` for a normal value (`parse_negative` in the parser tests
+  pins `Normal(-1234.5)` beside `display_raw "1234.5"`). Fix is to put
+  the sign into the display string; needs a `dcv_negative` capture to
+  confirm the meter never sends its own sign
 - 0x5A streaming trigger byte — the vendor DLL only sends 0x5A on the
   QinHeng/CH9325 init path, never to CP2110 devices (2026-06 review);
   does the UT8802 stream without it, and is sending it harmful?
@@ -404,6 +411,15 @@ plus what no step reaches.
   longer send it. Hardware should confirm the meter streams unprompted.
 - Mode byte mapping (23 position codes, 0x00-0x16)
 - Range byte (0x30 prefix, like UT61E+)
+- `range_raw` is stored unmasked (0x31 for range 1) where every other
+  family masks off the 0x30 prefix — inert until a UT8803 spec table
+  keys on it (noted 2026-09-08)
+- Sign of a negative value: the ASCII display field may carry `-`
+  itself, in which case the sign bit at parse time double-negates; a
+  `dcv_negative` capture settles it (noted 2026-09-08). Until it does,
+  `display_raw` keeps the meter's own digits, so a negative reading
+  shows and exports unsigned where the UT8802 now shows the minus —
+  the capture settles which of the two is right for this meter
 - Unit magnitude prefixes per (mode, range). **Resolved from vendor
   [VENDOR]** (2026-06 review): FUN_1001cdc0 maps (mode, range) → n/µ/m/
   none/k/M and FUN_1001cff0 gives base units (IndR/CapR are ESR in Ω;
@@ -549,6 +565,10 @@ own software sends, not hardware confirmation.
 - Misc2 flags: lead_error (bit 3), comp (bit 4), record (bit 5) — now
   parsed but not yet verified on real hardware. Bits 0 (auto-range) and
   1 (HV warning) confirmed 2026-09-02
+- `lookup_range_label` answers "Auto" for range byte 0 before consulting
+  the mode's ladder, so a fixed-range mode (Duty, °C) with range 0 reads
+  as auto-ranging. The real temperature frame sends 0x01 and decodes to
+  "", so this may only ever hit synthetic frames (noted 2026-09-08)
 - Bargraph value meaning — the misc bit 3 field carries a float32 plus
   its own unit, and in the mains capture it read 241.02 VAC against a
   239.22 VAC main reading, so it is *not* the displayed value. Whether
