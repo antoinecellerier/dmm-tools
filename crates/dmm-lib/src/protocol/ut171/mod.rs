@@ -210,10 +210,6 @@ impl Protocol for Ut171Protocol {
         Ok(())
     }
 
-    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
-        Ok(None)
-    }
-
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }

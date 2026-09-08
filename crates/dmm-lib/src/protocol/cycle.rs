@@ -967,6 +967,42 @@ pub(crate) fn select_flag<M: CycleMeter + ?Sized>(
     walk(meter, transport, &leg, &walk_obs, seen)
 }
 
+/// The whole of `Protocol::choices` for a family that reaches every setting
+/// by pressing a button — the routing from [`Setting`] to the list above is
+/// the same for all of them, so each family forwards here in one line.
+pub(crate) fn choices<M: CycleMeter + ?Sized>(
+    meter: &M,
+    setting: Setting,
+    current: &Measurement,
+) -> Vec<Choice> {
+    match setting {
+        Setting::Mode => mode_choices(meter, current),
+        Setting::Range => range_choices(meter, current),
+        flag => match FlagSetting::of(flag) {
+            Some(flag) => flag_choices(meter, flag, current),
+            None => Vec::new(),
+        },
+    }
+}
+
+/// The whole of `Protocol::select` for such a family, routed like
+/// [`choices`].
+pub(crate) fn select<M: CycleMeter + ?Sized>(
+    meter: &mut M,
+    transport: &dyn Transport,
+    setting: Setting,
+    id: u16,
+) -> Result<()> {
+    match setting {
+        Setting::Mode => select_mode(meter, transport, id),
+        Setting::Range => select_range(meter, transport, id),
+        flag => match FlagSetting::of(flag) {
+            Some(flag) => select_flag(meter, transport, flag, id),
+            None => Err(crate::protocol::unsupported_setting(setting)),
+        },
+    }
+}
+
 /// Panic unless a family's dial table is well formed.
 ///
 /// For family tests to call on their own table: every mistake checked here

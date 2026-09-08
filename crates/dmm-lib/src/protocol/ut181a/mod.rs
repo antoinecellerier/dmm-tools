@@ -614,10 +614,6 @@ impl Protocol for Ut181aProtocol {
         self.send_frame(transport, &frame, command)
     }
 
-    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
-        Ok(None)
-    }
-
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }

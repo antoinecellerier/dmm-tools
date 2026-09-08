@@ -461,10 +461,20 @@ pub trait Protocol: Send {
 
     /// Send a named command ("hold", "range", "auto", etc.).
     /// Returns UnsupportedCommand for unknown commands.
-    fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()>;
+    ///
+    /// The default refuses every command, which is the whole answer for a
+    /// family that only streams.
+    fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
+        Err(Error::UnsupportedCommand(command.to_string()))
+    }
 
     /// Request device name. Returns None if the protocol doesn't support it.
-    fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>>;
+    ///
+    /// Default `None` — only the UT61+ family and the Voltcraft meters have a
+    /// name query on the wire.
+    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
+        Ok(None)
+    }
 
     /// Static device profile information.
     fn profile(&self) -> &DeviceProfile;

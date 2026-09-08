@@ -148,14 +148,6 @@ impl Protocol for Ut8802Protocol {
         parse_measurement(payload)
     }
 
-    fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
-        Err(Error::UnsupportedCommand(command.to_string()))
-    }
-
-    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
-        Ok(None)
-    }
-
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }

@@ -172,16 +172,6 @@ impl Protocol for Ut8803Protocol {
         parse_measurement(payload)
     }
 
-    fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
-        // UT8803 doesn't support remote commands beyond the initial trigger
-        Err(Error::UnsupportedCommand(command.to_string()))
-    }
-
-    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
-        // UT8803 doesn't support name query
-        Ok(None)
-    }
-
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }

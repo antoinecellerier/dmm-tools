@@ -575,15 +575,6 @@ impl Protocol for Fs9721Protocol {
         }
     }
 
-    fn send_command(&mut self, _transport: &dyn Transport, command: &str) -> Result<()> {
-        // UT803/UT804 don't support remote commands over USB
-        Err(Error::UnsupportedCommand(command.to_string()))
-    }
-
-    fn get_name(&mut self, _transport: &dyn Transport) -> Result<Option<String>> {
-        Ok(None)
-    }
-
     fn profile(&self) -> &DeviceProfile {
         &self.profile
     }

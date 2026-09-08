@@ -541,25 +541,11 @@ impl<M: Vc8x0Model> Protocol for Vc8x0Protocol<M> {
     }
 
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
-        match setting {
-            Setting::Mode => cycle::mode_choices(self, current),
-            Setting::Range => cycle::range_choices(self, current),
-            flag => match cycle::FlagSetting::of(flag) {
-                Some(flag) => cycle::flag_choices(self, flag, current),
-                None => Vec::new(),
-            },
-        }
+        cycle::choices(self, setting, current)
     }
 
     fn select(&mut self, transport: &dyn Transport, setting: Setting, id: u16) -> Result<()> {
-        match setting {
-            Setting::Mode => cycle::select_mode(self, transport, id),
-            Setting::Range => cycle::select_range(self, transport, id),
-            flag => match cycle::FlagSetting::of(flag) {
-                Some(flag) => cycle::select_flag(self, transport, flag, id),
-                None => Err(unsupported_setting(setting)),
-            },
-        }
+        cycle::select(self, transport, setting, id)
     }
 }
 
