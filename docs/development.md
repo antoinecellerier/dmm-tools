@@ -143,7 +143,7 @@ dmm-cli completions powershell >> $PROFILE
 4. Update the README screenshot if the GUI has changed
 5. Commit: `git commit -am "Release v0.3.0"`
 6. Tag and push — **confirm with the maintainer first**, this publishes the release: `git tag v0.3.0 && git push && git push origin v0.3.0`
-7. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails if `CHANGELOG.md` has no `## v0.3.0` heading
+7. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails before it builds anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading
 8. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, commit, and push
 
 ## GitHub Actions workflows

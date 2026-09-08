@@ -23,7 +23,38 @@ permissions:
   contents: write
 
 jobs:
+  # A tag whose version the workspace does not carry would publish binaries and
+  # release notes naming a different one, and the tag cannot be corrected once
+  # people have fetched it. Cheaper to catch here than after six builds.
+  check-version:
+    name: Check tag matches Cargo.toml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compare the tag with the workspace version
+        # A branch dispatch is a build-only smoke test: no tag to compare, and
+        # gating the whole job would skip the build that depends on it.
+        if: github.ref_type == 'tag'
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          # The root manifest is virtual, so there is no root package to read:
+          # every member inherits version.workspace, and all of them are checked
+          # here, which also catches one that stopped inheriting.
+          MISMATCH=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r --arg v "$TAG_VERSION" \
+                '.packages[] | select(.version != $v) | "\(.name) \(.version)"')
+          if [ -n "$MISMATCH" ]; then
+            # Annotations stop at the first newline, so keep it to one line.
+            echo "::error::tag ${GITHUB_REF_NAME} does not match Cargo.toml: ${MISMATCH//$'\n'/, }. Set version = \"${TAG_VERSION}\" in the workspace manifest, then re-tag."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches the workspace version ${TAG_VERSION}."
+
   build:
+    needs: check-version
     permissions:
       contents: read
     uses: ./.github/workflows/build-matrix.yml
