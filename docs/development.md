@@ -18,6 +18,12 @@ cargo test --workspace
 
 All tests use `MockTransport` and run without hardware connected.
 
+Tests that would otherwise wait drive session time instead of elapsing it:
+build a `Clock::manual()`, hand it to the `Dmm` (and to `MockProtocol` where
+the mock's waveform matters), then call `clock.advance(d)` and assert on
+`clock.now()`. That is how the stream's pacing tests and the mock's
+time-travel tests stay deterministic and finish instantly.
+
 ## Linting
 
 ```sh

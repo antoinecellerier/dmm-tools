@@ -14,6 +14,7 @@ mod scenarios;
 mod state;
 
 use crate::Dmm;
+use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
@@ -264,10 +265,13 @@ impl std::fmt::Display for MockMode {
 pub struct MockProtocol {
     scenarios: Vec<Scenario>,
     current_scenario: usize,
-    /// Wall-clock instant the current scenario started. Values are evaluated at
+    /// Session instant the current scenario started. Values are evaluated at
     /// `now - scenario_started`, so the waveform is a smooth function of time
     /// regardless of read cadence. On scenario advance, this is reset to `now`.
-    pub(crate) scenario_started: Instant,
+    scenario_started: Instant,
+    /// The session's time base, so a scaled or preseeded run gets the waveform
+    /// a real run of that length would have produced. Real by default.
+    clock: Clock,
     /// When false, stays on the current scenario indefinitely.
     auto_cycle: bool,
     /// What the buttons have done to the meter, and what that does to a
@@ -285,10 +289,12 @@ pub struct MockProtocol {
 impl MockProtocol {
     /// Create a mock protocol that auto-cycles through all scenarios.
     pub fn new() -> Self {
+        let clock = Clock::real();
         Self {
             scenarios: scenarios(),
             current_scenario: 0,
-            scenario_started: Instant::now(),
+            scenario_started: clock.now(),
+            clock,
             auto_cycle: true,
             state: MeterState::default(),
             dial: cycle::DialState::default(),
@@ -321,6 +327,17 @@ impl MockProtocol {
         proto
     }
 
+    /// Run the waveform on `clock` instead of wall time, restarting the
+    /// current scenario at its `now`.
+    ///
+    /// `pub(crate)` because a mock session is built as a whole by
+    /// [`open_mock_clocked`], which hands the same clock to the [`Dmm`].
+    pub(crate) fn with_clock(mut self, clock: Clock) -> Self {
+        self.scenario_started = clock.now();
+        self.clock = clock;
+        self
+    }
+
     /// Return the current scenario's `MockMode`.
     pub fn current_mode(&self) -> MockMode {
         self.scenarios[self.current_scenario].id
@@ -332,7 +349,7 @@ impl MockProtocol {
 
     fn advance_scenario(&mut self) {
         self.current_scenario = (self.current_scenario + 1) % self.scenarios.len();
-        self.scenario_started = Instant::now();
+        self.scenario_started = self.clock.now();
         self.state.leave_scenario();
     }
 
@@ -417,7 +434,7 @@ impl MockProtocol {
             return Err(Error::UnsupportedCommand(format!("mode {id:#06x}")));
         };
         self.current_scenario = idx;
-        self.scenario_started = Instant::now();
+        self.scenario_started = self.clock.now();
         Ok(())
     }
 
@@ -442,7 +459,8 @@ impl MockProtocol {
     /// `checked_duration_since` so a backward clock jump returns 0 instead of
     /// panicking.
     fn elapsed_secs(&self) -> f64 {
-        Instant::now()
+        self.clock
+            .now()
             .checked_duration_since(self.scenario_started)
             .unwrap_or(Duration::ZERO)
             .as_secs_f64()
@@ -544,7 +562,7 @@ impl Protocol for MockProtocol {
                 self.advance_scenario();
             } else {
                 // Loop the pattern without changing mode.
-                self.scenario_started = Instant::now();
+                self.scenario_started = self.clock.now();
             }
         }
 
@@ -767,12 +785,27 @@ impl CycleMeter for MockProtocol {
 
 /// Create a mock Dmm instance that auto-cycles through all scenarios.
 pub fn open_mock() -> Result<Dmm<NullTransport>> {
-    Dmm::new(NullTransport, Box::new(MockProtocol::new()))
+    open_mock_clocked(None, Clock::real())
 }
 
 /// Create a mock Dmm instance pinned to a specific mode.
 pub fn open_mock_mode(mode: MockMode) -> Result<Dmm<NullTransport>> {
-    Dmm::new(NullTransport, Box::new(MockProtocol::with_mode(mode)))
+    open_mock_clocked(Some(mode), Clock::real())
+}
+
+/// Create a mock Dmm instance running on `clock`, pinned to `mode` if given.
+///
+/// The one entry point that takes a clock: both halves of a mock session need
+/// it — the waveform is a function of session time, and the `Dmm` stamps its
+/// readings with the same clock — and the mock is the only device a virtual
+/// clock makes sense for, a real meter being paced by USB.
+pub fn open_mock_clocked(mode: Option<MockMode>, clock: Clock) -> Result<Dmm<NullTransport>> {
+    let protocol = match mode {
+        Some(mode) => MockProtocol::with_mode(mode),
+        None => MockProtocol::new(),
+    };
+    let dmm = Dmm::new(NullTransport, Box::new(protocol.with_clock(clock.clone())))?;
+    Ok(dmm.with_clock(clock))
 }
 
 #[cfg(test)]
@@ -891,18 +924,19 @@ mod tests {
     #[test]
     fn test_mode_cycling() {
         // Values are a function of elapsed time, so triggering auto-advance
-        // requires rewinding the scenario origin past its duration rather than
-        // counting reads. Drive the protocol directly to access private state.
-        let mut proto = MockProtocol::new();
+        // means moving session time past the scenario duration rather than
+        // counting reads. Drive the protocol directly, on a clock the test owns.
+        let clock = Clock::manual();
+        let mut proto = MockProtocol::new().with_clock(clock.clone());
         let transport = NullTransport;
         let first_mode = proto
             .request_measurement(&transport)
             .unwrap()
             .mode
             .into_owned();
-        // Rewind past the current scenario's duration and take a reading,
-        // which triggers auto-advance.
-        proto.scenario_started -= Duration::from_secs(60);
+        // Move past the current scenario's duration and take a reading, which
+        // triggers auto-advance.
+        clock.advance(Duration::from_secs(60));
         let _ = proto.request_measurement(&transport).unwrap();
         let new_mode = proto.request_measurement(&transport).unwrap().mode;
         assert_ne!(first_mode, new_mode.as_ref());
@@ -1057,22 +1091,23 @@ mod tests {
 
     #[test]
     fn test_minmax_reports_stored_values() {
-        // Drive the protocol directly so we can rewind the scenario origin
-        // between reads, giving the MIN/MAX tracker actual variation to follow.
-        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        // Drive the protocol directly so we can move session time between
+        // reads, giving the MIN/MAX tracker actual variation to follow.
+        let clock = Clock::manual();
+        let mut proto = MockProtocol::with_mode(MockMode::DcV).with_clock(clock.clone());
         let transport = NullTransport;
 
         // Advance the waveform a few times before enabling MIN/MAX so the
         // initial stored values are non-zero.
         for _ in 0..5 {
-            proto.scenario_started -= Duration::from_millis(100);
+            clock.advance(Duration::from_millis(100));
             let _ = proto.request_measurement(&transport).unwrap();
         }
 
         proto.send_command(&transport, "minmax").unwrap();
         let mut max_values = Vec::new();
         for _ in 0..10 {
-            proto.scenario_started -= Duration::from_millis(100);
+            clock.advance(Duration::from_millis(100));
             let m = proto.request_measurement(&transport).unwrap();
             if let MeasuredValue::Normal(v) = &m.value {
                 max_values.push(*v);
@@ -1093,7 +1128,7 @@ mod tests {
         proto.send_command(&transport, "minmax").unwrap();
         let mut min_values = Vec::new();
         for _ in 0..10 {
-            proto.scenario_started -= Duration::from_millis(100);
+            clock.advance(Duration::from_millis(100));
             let m = proto.request_measurement(&transport).unwrap();
             if let MeasuredValue::Normal(v) = &m.value {
                 min_values.push(*v);
@@ -1128,14 +1163,15 @@ mod tests {
 
     #[test]
     fn test_with_mode_pins_scenario() {
-        let mut proto = MockProtocol::with_mode(MockMode::Hz);
+        let clock = Clock::manual();
+        let mut proto = MockProtocol::with_mode(MockMode::Hz).with_clock(clock.clone());
         let transport = NullTransport;
         let m1 = proto.request_measurement(&transport).unwrap();
         assert_eq!(m1.mode, "Hz");
-        // Rewind several times past the scenario duration — auto_cycle is off
-        // so we should stay in Hz no matter how much time passes.
+        // Run several times past the scenario duration — auto_cycle is off so
+        // we should stay in Hz no matter how much time passes.
         for _ in 0..5 {
-            proto.scenario_started -= Duration::from_secs(30);
+            clock.advance(Duration::from_secs(30));
             let _ = proto.request_measurement(&transport).unwrap();
         }
         let m2 = proto.request_measurement(&transport).unwrap();
@@ -1381,14 +1417,15 @@ mod tests {
 
     #[test]
     fn hold_freezes_sub_values_with_the_main_value() {
-        let mut proto = MockProtocol::with_mode(MockMode::AcVHz);
+        let clock = Clock::manual();
+        let mut proto = MockProtocol::with_mode(MockMode::AcVHz).with_clock(clock.clone());
         let transport = NullTransport;
         let _ = proto.request_measurement(&transport).unwrap();
         proto.send_command(&transport, "hold").unwrap();
         let held1 = proto.request_measurement(&transport).unwrap();
-        // Advance the waveform by rewinding the origin, as the other
-        // time-travel tests do — well short of the 10 s scenario duration.
-        proto.scenario_started -= Duration::from_secs(2);
+        // Advance the waveform on the session clock, as the other time-travel
+        // tests do — well short of the 10 s scenario duration.
+        clock.advance(Duration::from_secs(2));
         let held2 = proto.request_measurement(&transport).unwrap();
         assert!(held2.flags.hold);
         assert_eq!(held1.aux_values.len(), 2);
@@ -1401,7 +1438,7 @@ mod tests {
         // otherwise the assertions above would pass on a frozen waveform.
         proto.send_command(&transport, "hold").unwrap();
         let live1 = proto.request_measurement(&transport).unwrap();
-        proto.scenario_started -= Duration::from_secs(2);
+        clock.advance(Duration::from_secs(2));
         let live2 = proto.request_measurement(&transport).unwrap();
         assert!(!live2.flags.hold);
         assert_ne!(
@@ -1521,7 +1558,8 @@ mod tests {
     #[test]
     fn select_mode_keeps_an_auto_cycling_mock_cycling() {
         let transport = NullTransport;
-        let mut proto = MockProtocol::new();
+        let clock = Clock::manual();
+        let mut proto = MockProtocol::new().with_clock(clock.clone());
         proto
             .select(
                 &transport,
@@ -1531,7 +1569,7 @@ mod tests {
             .unwrap();
         assert_eq!(proto.current_mode(), MockMode::AcVHz);
         // Run the scenario past its duration: the cycle must advance.
-        proto.scenario_started -= Duration::from_secs(60);
+        clock.advance(Duration::from_secs(60));
         proto.request_measurement(&transport).unwrap();
         assert_ne!(proto.current_mode(), MockMode::AcVHz);
     }

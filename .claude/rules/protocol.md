@@ -14,6 +14,7 @@ paths:
 - Our protocol understanding comes from reverse engineering, not official documentation. See `docs/verification-backlog.md` for what's been verified and what's pending.
 - Per-family protocol specs live in `docs/research/<family>/reverse-engineered-protocol.md`. `docs/protocol.md` is only an index.
 - Reference implementations to cross-check when in doubt: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880).
+- Session time comes from `Dmm::clock()` — `Dmm::request_measurement` stamps every reading with it, so anything that reads elapsed session time takes it from there instead of `Instant::now()`. Hardware timeouts, settle delays and transport bring-up sleeps stay on `Instant` / `thread::sleep`: they pace physical USB, which no clock speeds up.
 - Mocks must match real-device behavior: no impossible flag combinations (e.g. MIN+MAX simultaneously), correct data types for stored vs live values. Mocks that diverge create false confidence.
 
 ## Logging

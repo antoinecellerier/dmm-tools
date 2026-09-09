@@ -729,6 +729,8 @@ fn observe_after_press<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
     let mut last = seen;
     for _ in 0..settle.reads.max(1) {
         if !settle.delay.is_zero() {
+            // Real time, not the session clock: this waits for the meter's own
+            // display to settle, which no clock flag makes faster.
             std::thread::sleep(settle.delay);
         }
         let reading = read_and_observe(meter, transport)?;

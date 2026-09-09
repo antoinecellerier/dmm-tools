@@ -1,4 +1,5 @@
 pub mod binary_help;
+pub mod clock;
 pub mod docs_tables;
 pub mod error;
 pub mod export;
@@ -13,6 +14,7 @@ pub mod transform;
 pub mod transport;
 pub mod wall_clock;
 
+pub use clock::Clock;
 pub use wall_clock::WallClock;
 
 use error::{Error, Result};
@@ -25,6 +27,9 @@ use transport::{Transport, ch9325, ch9329, cp2110};
 pub struct Dmm<T: Transport> {
     transport: T,
     protocol: Box<dyn Protocol>,
+    /// The session's time base. Real unless a mock session was opened with a
+    /// clock of its own; see [`Dmm::clock`].
+    clock: Clock,
 }
 
 impl<T: Transport> Dmm<T> {
@@ -39,7 +44,26 @@ impl<T: Transport> Dmm<T> {
         Ok(Self {
             transport,
             protocol,
+            clock: Clock::real(),
         })
+    }
+
+    /// Stamp this session's readings with `clock` instead of wall time.
+    ///
+    /// `pub(crate)` because the only sessions that run on a non-real clock are
+    /// mock ones, opened through [`mock::open_mock_clocked`].
+    pub(crate) fn with_clock(mut self, clock: Clock) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// The clock this session's readings are stamped with.
+    ///
+    /// Callers that need session time — the pacing loop, a [`WallClock`] for
+    /// export — take it from here rather than reading `Instant::now()`, so a
+    /// scaled or preseeded session stays consistent with its own timestamps.
+    pub fn clock(&self) -> &Clock {
+        &self.clock
     }
 
     /// Access the underlying transport (e.g. for CP2110-specific queries).
@@ -57,6 +81,10 @@ impl<T: Transport> Dmm<T> {
         let mut m = self.protocol.request_measurement(&self.transport)?;
         m.spec = self.protocol.spec_info(m.mode_raw, m.range_raw);
         m.mode_spec = self.protocol.mode_spec_info(m.mode_raw);
+        // Session time is stamped here and nowhere else: the parsers set
+        // `Instant::now()` when they build the measurement, which is the same
+        // thing on a real clock and wrong on any other.
+        m.timestamp = self.clock.now();
         Ok(m)
     }
 
@@ -483,6 +511,32 @@ mod tests {
         );
         assert!(
             matches!(m2.value, measurement::MeasuredValue::Normal(v) if (v - 2.0).abs() < 1e-6)
+        );
+    }
+
+    /// Readings carry session time, not the instant the parser happened to
+    /// build them: a scaled or preseeded session must be able to hand out
+    /// timestamps its own clock agrees with.
+    #[test]
+    fn dmm_stamps_readings_with_its_clock() {
+        let r1 =
+            make_measurement_response(0x02, 0x00, b"  1.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let r2 =
+            make_measurement_response(0x02, 0x00, b"  2.000", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let clock = Clock::manual();
+        let mock = MockTransport::new(vec![r1, r2]);
+        let mut dmm = Dmm::new(mock, Box::new(Ut61PlusProtocol::new()))
+            .unwrap()
+            .with_clock(clock.clone());
+
+        let m1 = dmm.request_measurement().unwrap();
+        assert_eq!(m1.timestamp, clock.now());
+
+        clock.advance(std::time::Duration::from_secs(5));
+        let m2 = dmm.request_measurement().unwrap();
+        assert_eq!(
+            m2.timestamp.saturating_duration_since(m1.timestamp),
+            std::time::Duration::from_secs(5)
         );
     }
 

@@ -127,6 +127,16 @@ pub fn experimental_warning(model_name: &str) -> String {
     format!("{model_name} support is experimental (unverified against real hardware).")
 }
 
+/// What both binaries answer when the clock flags meet a hardware device.
+///
+/// `--mock-clock-scale` and `--mock-clock-preseed` bend session time, and a
+/// real meter is paced by USB: honouring them there would stamp readings with
+/// instants the meter never produced. Shared so the CLI and the GUI refuse
+/// with the same sentence.
+pub const MOCK_CLOCK_MOCK_ONLY: &str = "--mock-clock-scale and --mock-clock-preseed \
+                                        only apply to the mock device. Re-run with \
+                                        --device mock, or without the clock flags.";
+
 /// What the bus held when an `--adapter` selector matched nothing.
 ///
 /// Both binaries print the same lines but only attach their "pick another

@@ -12,6 +12,7 @@
 //! the pacing sleep gives up on that same signal instead of running to term.
 
 use crate::Dmm;
+use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::transport::Transport;
@@ -45,6 +46,9 @@ pub enum StreamEvent {
 /// when `request_measurement` is occasionally slow.
 pub struct MeasurementStream<'a, T: Transport> {
     dmm: &'a mut Dmm<T>,
+    /// The session clock, cloned from the `Dmm` so pacing and the timestamps
+    /// it produces share one time base.
+    clock: Clock,
     tick: Duration,
     next_tick: Option<Instant>,
     consecutive_timeouts: u32,
@@ -55,7 +59,7 @@ pub struct MeasurementStream<'a, T: Transport> {
     cancel: Option<Box<dyn Fn() -> bool + Send + 'static>>,
 }
 
-/// Longest single `thread::sleep` inside a cancellable pacing wait.
+/// Longest single sleep inside a cancellable pacing wait.
 ///
 /// The wait is split into slices so the cancel predicate is polled about this
 /// often. Small enough that shutdown feels immediate, large enough that a slow
@@ -68,6 +72,7 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
     /// allows, useful for `count`-limited bulk reads.
     pub fn new(dmm: &'a mut Dmm<T>, tick: Duration) -> Self {
         Self {
+            clock: dmm.clock().clone(),
             dmm,
             tick,
             next_tick: None,
@@ -140,14 +145,14 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
         if self.tick.is_zero() {
             return;
         }
-        let now = Instant::now();
+        let now = self.clock.now();
         match self.next_tick {
             Some(target) => {
                 if let Some(wait) = target.checked_duration_since(now) {
                     self.sleep_cancellable(wait);
                 }
                 let mut next = target + self.tick;
-                let now2 = Instant::now();
+                let now2 = self.clock.now();
                 if next < now2 {
                     next = now2 + self.tick;
                 }
@@ -163,24 +168,27 @@ impl<'a, T: Transport> MeasurementStream<'a, T> {
 
     /// Sleep for `wait`, returning early if the cancel predicate fires.
     ///
-    /// With no predicate this is a plain `thread::sleep`; the slicing costs
+    /// With no predicate this is a single clock sleep; the slicing costs
     /// nothing when nobody is watching for cancellation.
     fn sleep_cancellable(&self, wait: Duration) {
         let Some(cancel) = &self.cancel else {
-            std::thread::sleep(wait);
+            self.clock.sleep(wait);
             return;
         };
-        let deadline = Instant::now() + wait;
+        let deadline = self.clock.now() + wait;
         loop {
             if cancel() {
                 return;
             }
             // `checked_duration_since` rather than a subtraction: a backward
-            // clock jump must not panic here.
-            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+            // clock jump must not panic here. Nothing remaining ends the wait
+            // too: on a clock that only moves when it is slept on, sleeping
+            // zero would spin forever waiting to pass the deadline.
+            let remaining = deadline.checked_duration_since(self.clock.now());
+            let Some(remaining) = remaining.filter(|r| !r.is_zero()) else {
                 return;
             };
-            std::thread::sleep(remaining.min(CANCEL_POLL_SLICE));
+            self.clock.sleep(remaining.min(CANCEL_POLL_SLICE));
         }
     }
 }
@@ -204,6 +212,17 @@ mod tests {
         let mock = MockTransport::new(responses);
         let protocol = Box::new(Ut61PlusProtocol::new());
         Dmm::new(mock, protocol).unwrap()
+    }
+
+    /// A `Dmm` whose session time the test drives. The pacing waits then cost
+    /// no wall time and land on exact virtual deltas, so these tests assert
+    /// what the pacing did rather than how long it took.
+    fn new_clocked_dmm(responses: Vec<Vec<u8>>, clock: &Clock) -> Dmm<MockTransport> {
+        new_dmm(responses).with_clock(clock.clone())
+    }
+
+    fn two_readings() -> Vec<Vec<u8>> {
+        vec![build_response(b"  1.000"), build_response(b"  2.000")]
     }
 
     #[test]
@@ -250,16 +269,16 @@ mod tests {
 
     #[test]
     fn pacing_sleeps_between_ticks() {
-        let mut dmm = new_dmm(vec![build_response(b"  1.000"), build_response(b"  2.000")]);
+        let clock = Clock::manual();
+        let mut dmm = new_clocked_dmm(two_readings(), &clock);
         let tick = Duration::from_millis(50);
         let mut stream = MeasurementStream::new(&mut dmm, tick);
 
-        let start = Instant::now();
+        let start = clock.now();
         let _ = stream.tick().unwrap();
         let _ = stream.tick().unwrap();
-        let elapsed = start.elapsed();
-        // Second tick should land ~50ms after the first.
-        assert!(elapsed >= tick, "expected >= {tick:?}, got {elapsed:?}");
+        // The first tick fires immediately, the second one interval later.
+        assert_eq!(clock.now().saturating_duration_since(start), tick);
     }
 
     /// A long sample interval used to hold the device open for the whole tick
@@ -269,7 +288,8 @@ mod tests {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
 
-        let mut dmm = new_dmm(vec![build_response(b"  1.000"), build_response(b"  2.000")]);
+        let clock = Clock::manual();
+        let mut dmm = new_clocked_dmm(two_readings(), &clock);
         let stop = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&stop);
         let mut stream = MeasurementStream::new(&mut dmm, Duration::from_secs(10))
@@ -278,41 +298,41 @@ mod tests {
         let _ = stream.tick().unwrap(); // first tick fires immediately
         stop.store(true, Ordering::Relaxed);
 
-        let start = Instant::now();
+        let start = clock.now();
         let _ = stream.tick().unwrap();
+        let waited = clock.now().saturating_duration_since(start);
         assert!(
-            start.elapsed() < Duration::from_secs(1),
-            "cancelled sleep should return promptly, took {:?}",
-            start.elapsed()
+            waited <= CANCEL_POLL_SLICE,
+            "cancelled sleep should give up within a poll slice of the 10 s tick, waited {waited:?}"
         );
     }
 
     /// The predicate must not shorten a wait nobody asked to cancel.
     #[test]
     fn cancel_predicate_that_stays_false_still_paces() {
-        let mut dmm = new_dmm(vec![build_response(b"  1.000"), build_response(b"  2.000")]);
+        let clock = Clock::manual();
+        let mut dmm = new_clocked_dmm(two_readings(), &clock);
+        // Not a multiple of CANCEL_POLL_SLICE: the sliced wait must still add
+        // up to exactly one interval.
         let tick = Duration::from_millis(120);
         let mut stream = MeasurementStream::new(&mut dmm, tick).with_cancel(|| false);
 
-        let start = Instant::now();
+        let start = clock.now();
         let _ = stream.tick().unwrap();
         let _ = stream.tick().unwrap();
-        assert!(
-            start.elapsed() >= tick,
-            "expected >= {tick:?}, got {:?}",
-            start.elapsed()
-        );
+        assert_eq!(clock.now().saturating_duration_since(start), tick);
     }
 
     #[test]
     fn zero_tick_disables_pacing() {
-        let mut dmm = new_dmm(vec![build_response(b"  1.000"), build_response(b"  2.000")]);
+        let clock = Clock::manual();
+        let mut dmm = new_clocked_dmm(two_readings(), &clock);
         let mut stream = MeasurementStream::new(&mut dmm, Duration::ZERO);
 
-        let start = Instant::now();
+        let start = clock.now();
         let _ = stream.tick().unwrap();
         let _ = stream.tick().unwrap();
-        // No sleep: should be fast.
-        assert!(start.elapsed() < Duration::from_millis(50));
+        // Nothing waited, so nothing advanced the session clock.
+        assert_eq!(clock.now().saturating_duration_since(start), Duration::ZERO);
     }
 }

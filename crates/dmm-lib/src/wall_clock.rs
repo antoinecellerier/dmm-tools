@@ -1,3 +1,4 @@
+use crate::clock::Clock;
 use std::time::{Instant, SystemTime};
 
 /// Captures an `(Instant, SystemTime)` origin pair so monotonic `Instant`
@@ -19,9 +20,21 @@ impl WallClock {
     /// The two calls are separated by a handful of nanoseconds, so the pair
     /// defines a stable correspondence for the rest of the session.
     pub fn new() -> Self {
+        Self::from_clock(&Clock::real())
+    }
+
+    /// Capture the origin pair against a session [`Clock`].
+    ///
+    /// The system origin is backdated by the clock's preseed burst: those
+    /// first readings carry session time that is already spent when the
+    /// process starts, so without the backdate a 90 s burst would export 900
+    /// readings all stamped with the launch time. On a real clock the burst is
+    /// zero and this is [`WallClock::new`].
+    pub fn from_clock(clock: &Clock) -> Self {
+        let now = SystemTime::now();
         Self {
-            instant_origin: Instant::now(),
-            system_origin: SystemTime::now(),
+            instant_origin: clock.now(),
+            system_origin: now.checked_sub(clock.preseed()).unwrap_or(now),
         }
     }
 
@@ -62,6 +75,34 @@ mod tests {
         let mapped = wc.wall_time_for(later);
         let delta = mapped.duration_since(wc.system_origin).unwrap();
         assert_eq!(delta, Duration::from_millis(250));
+    }
+
+    /// A preseeded session hands out its first readings instantly. They must
+    /// still export the wall time they stand for, a burst before the live
+    /// readings that follow.
+    #[test]
+    fn preseed_backdates_the_system_origin() {
+        let clock = Clock::real().with_preseed(90.0);
+        let wc = WallClock::from_clock(&clock);
+        let first = clock.now();
+        // The pacing loop spends the burst; 90 s of session time, no waiting.
+        clock.sleep(Duration::from_secs(90));
+        let live = clock.now();
+
+        let span = wc
+            .wall_time_for(live)
+            .duration_since(wc.wall_time_for(first))
+            .expect("the live reading is later than the burst");
+        assert!(span >= Duration::from_secs(90), "burst spanned {span:?}");
+
+        // And the reading taken once the burst is spent carries true wall time.
+        let skew = SystemTime::now()
+            .duration_since(wc.wall_time_for(live))
+            .expect("the live reading is not in the future");
+        assert!(
+            skew < Duration::from_secs(1),
+            "live reading is {skew:?} old"
+        );
     }
 
     #[test]

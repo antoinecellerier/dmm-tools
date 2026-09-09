@@ -52,6 +52,8 @@ where
     // speaks a stream we can't parse doesn't grow `rx_buf` without bound.
     const MAX_RX_BUF: usize = 4096;
 
+    // Real time, not the session clock: this bounds a USB read, and the wire
+    // takes as long as it takes whatever session time is doing.
     let deadline = Instant::now() + Duration::from_millis(READ_TIMEOUT_MS as u64);
 
     for _ in 0..MAX_ATTEMPTS {
