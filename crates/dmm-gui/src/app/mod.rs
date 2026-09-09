@@ -291,6 +291,12 @@ pub struct App {
     /// export. Captured once at construction so every sample across the
     /// session is translated against the same origin.
     wall_clock: dmm_lib::WallClock,
+    /// Time base the session's readings are stamped with — real unless a
+    /// `--mock-clock-*` flag was given. Cloned into the acquisition thread so
+    /// the mock's waveform, the pacing loop and anything here that measures
+    /// session age (the recording duration) agree. UI cadence — toasts,
+    /// repaint, control-channel waits — stays on real time.
+    clock: dmm_lib::Clock,
 
     capture_layout: CaptureLayout,
     /// Profile of the selected device, refreshed only when the selection
@@ -335,12 +341,12 @@ impl App {
             settings.theme = theme;
         }
         settings.overrides.adapter = cli.adapter;
-        Self::from_settings(settings)
+        Self::from_settings(settings, cli.clock)
     }
 
-    /// The app state for `settings`, before any frame. Separate from
-    /// [`App::new`] so tests can build one without an eframe context.
-    fn from_settings(settings: Settings) -> Self {
+    /// The app state for `settings` on `clock`, before any frame. Separate
+    /// from [`App::new`] so tests can build one without an eframe context.
+    fn from_settings(settings: Settings, clock: dmm_lib::Clock) -> Self {
         let graph = Graph::new();
         let initial_device = registry::resolve_device(&settings.shared.device_family)
             .unwrap_or_else(registry::default_device);
@@ -354,7 +360,8 @@ impl App {
             graph,
             session: SeriesStats::new(true),
             recording: Recording::new(),
-            wall_clock: dmm_lib::WallClock::new(),
+            wall_clock: dmm_lib::WallClock::from_clock(&clock),
+            clock,
             capture_layout: CaptureLayout::default(),
             selected_profile: *(initial_device.new_protocol)().profile(),
             selected_profile_id: initial_device.id,
@@ -769,7 +776,7 @@ mod tests {
         settings.mock_mode = mock_mode.to_string();
         // As after `--mock-mode`: the pin on screen is an override.
         settings.overrides.mock_mode = Some(String::new());
-        App::from_settings(settings)
+        App::from_settings(settings, dmm_lib::Clock::real())
     }
 
     fn choice_id_of(mode: MockMode) -> u16 {

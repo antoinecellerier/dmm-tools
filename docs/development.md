@@ -270,3 +270,21 @@ keyboard/click tests never touch your live desktop session or your
 It needs `xvfb`, `xdotool` and `imagemagick` (plus `python3-pil` for pixel
 measurement). `start`, `run`, `key`, `click`, `shot`, `status` and `stop` are the
 individual steps; always finish with `stop`.
+
+Session clock: two hidden `dmm-gui` flags let a run start with history rather
+than wait for it. `--mock-clock-preseed <SECS>` hands out that many seconds of
+session time instantly, and `--mock-clock-scale <FACTOR>` runs what follows at
+`FACTOR` times real speed. Both apply to the mock only — either one implies
+`--device mock`, and an explicit hardware `--device` is refused — and neither
+appears in `--help`.
+
+```sh
+.claude/skills/verify-gui/scripts/gui-display.sh run --mock-mode dcv --mock-clock-preseed 90
+```
+
+The first `shot` after the script's own first-frames wait then shows 90 s of
+readings. Pin a mock mode as above: the auto-cycling mock changes scenario on
+its own schedule and the graph re-anchors on each change, so an unpinned
+preseed leaves only the last scenario's history on screen. The burst is spent
+once per process, so a reconnect does not replay it. `dmm-cli read` takes the
+same two flags, with `--device mock` spelled out.

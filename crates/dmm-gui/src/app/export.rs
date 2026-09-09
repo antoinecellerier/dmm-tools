@@ -161,10 +161,10 @@ mod tests {
     /// `extra_slots` trailing ones, holding one buffered sample per entry of
     /// `aux_counts`.
     fn app_holding(aux_slots: usize, extra_slots: usize, aux_counts: &[usize]) -> App {
-        let mut app = App::from_settings(Settings::default());
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
         app.capture_layout.aux_slots = aux_slots;
         app.capture_layout.extra_slots = extra_slots;
-        app.recording.toggle();
+        app.recording.toggle(std::time::Instant::now());
         for &aux in aux_counts {
             app.recording
                 .push(&measurement(aux), &app.wall_clock, extra_slots.min(aux));

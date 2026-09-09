@@ -372,7 +372,7 @@ mod tests {
             ..Settings::default()
         };
         *settings.color_overrides.for_mode_mut(dark) = overrides;
-        let mut app = App::from_settings(settings);
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         let ctx = egui::Context::default();
         app.apply_theme(&ctx);
         app.apply_color_overrides(&ctx);

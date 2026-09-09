@@ -3,6 +3,7 @@ use dmm_lib::WallClock;
 use dmm_lib::export::{CsvLayout, device_comment};
 use dmm_lib::measurement::Measurement;
 use std::io::Write;
+use std::time::Instant;
 
 /// Render samples as a CSV document, provenance header included.
 ///
@@ -105,7 +106,10 @@ impl Sample {
 pub struct Recording {
     pub active: bool,
     pub samples: Vec<Sample>,
-    pub start_time: Option<DateTime<Local>>,
+    /// Session time the current recording started at, from the caller's
+    /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
+    /// mock run on a bent clock shows a duration its samples agree with.
+    pub start_time: Option<Instant>,
     /// How many samples are known to have reached a CSV file. Compared
     /// against `samples.len()` to tell whether discarding the buffer would
     /// lose anything the user hasn't saved.
@@ -128,13 +132,14 @@ impl Recording {
         }
     }
 
-    pub fn toggle(&mut self) {
+    /// Start or stop recording, `now` being the session time it happens at.
+    pub fn toggle(&mut self, now: Instant) {
         self.active = !self.active;
         if self.active {
             self.samples.clear();
             self.exported_count = 0;
             self.max_aux_seen = 0;
-            self.start_time = Some(Local::now());
+            self.start_time = Some(now);
         }
     }
 
@@ -181,9 +186,14 @@ impl Recording {
         self.samples.len() >= MAX_RECORDING_SAMPLES
     }
 
-    pub fn duration_secs(&self) -> f64 {
+    /// How long the current recording has been running, in session seconds.
+    ///
+    /// `checked_duration_since` rather than subtraction: a `now` from before
+    /// the start reads as zero instead of panicking.
+    pub fn duration_secs(&self, now: Instant) -> f64 {
         self.start_time
-            .map(|start| (Local::now() - start).num_milliseconds() as f64 / 1000.0)
+            .and_then(|start| now.checked_duration_since(start))
+            .map(|d| d.as_secs_f64())
             .unwrap_or(0.0)
     }
 }
@@ -199,6 +209,7 @@ mod tests {
     use super::*;
     use dmm_lib::measurement::{AuxValue, MeasuredValue};
     use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
+    use std::time::Duration;
 
     fn make_measurement(display: &[u8; 7]) -> Measurement {
         let payload: Vec<u8> = vec![
@@ -231,11 +242,25 @@ mod tests {
     #[test]
     fn recording_toggle_starts_and_stops() {
         let mut r = Recording::new();
-        r.toggle();
+        r.toggle(Instant::now());
         assert!(r.active);
         assert!(r.start_time.is_some());
-        r.toggle();
+        r.toggle(Instant::now());
         assert!(!r.active);
+    }
+
+    /// The panel counts session seconds, not real ones: on a scaled or
+    /// preseeded mock clock the duration has to match the samples it labels.
+    #[test]
+    fn duration_follows_the_instant_it_is_given() {
+        let mut r = Recording::new();
+        assert_eq!(r.duration_secs(Instant::now()), 0.0, "nothing recorded yet");
+
+        let start = Instant::now();
+        r.toggle(start);
+        assert_eq!(r.duration_secs(start + Duration::from_secs(90)), 90.0);
+        // A clock that went backwards reads as zero rather than panicking.
+        assert_eq!(r.duration_secs(start - Duration::from_secs(1)), 0.0);
     }
 
     #[test]
@@ -246,7 +271,7 @@ mod tests {
         r.push(&m, &wc, 0);
         assert!(r.samples.is_empty());
 
-        r.toggle(); // start
+        r.toggle(Instant::now()); // start
         r.push(&m, &wc, 0);
         assert_eq!(r.samples.len(), 1);
     }
@@ -255,14 +280,14 @@ mod tests {
     fn recording_toggle_clears_previous() {
         let mut r = Recording::new();
         let wc = WallClock::new();
-        r.toggle();
+        r.toggle(Instant::now());
         let m = make_measurement(b"  1.234");
         r.push(&m, &wc, 0);
         r.push(&m, &wc, 0);
         assert_eq!(r.samples.len(), 2);
 
-        r.toggle(); // stop
-        r.toggle(); // start again — should clear
+        r.toggle(Instant::now()); // stop
+        r.toggle(Instant::now()); // start again — should clear
         assert!(r.samples.is_empty());
     }
 
@@ -276,7 +301,7 @@ mod tests {
 
         assert_eq!(r.unexported_count(), 0, "empty buffer has nothing to lose");
 
-        r.toggle();
+        r.toggle(Instant::now());
         for _ in 0..3 {
             r.push(&m, &wc, 0);
         }
@@ -296,7 +321,7 @@ mod tests {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
-        r.toggle();
+        r.toggle(Instant::now());
         for _ in 0..5 {
             r.push(&m, &wc, 0);
         }
@@ -312,11 +337,11 @@ mod tests {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
-        r.toggle();
+        r.toggle(Instant::now());
         r.push(&m, &wc, 0);
         r.mark_exported(1);
-        r.toggle(); // stop
-        r.toggle(); // start again — buffer cleared
+        r.toggle(Instant::now()); // stop
+        r.toggle(Instant::now()); // start again — buffer cleared
         assert_eq!(r.unexported_count(), 0);
         r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1, "new samples are unexported again");
@@ -328,7 +353,7 @@ mod tests {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
-        r.toggle();
+        r.toggle(Instant::now());
         r.push(&m, &wc, 0);
         r.mark_exported(99);
         assert_eq!(r.unexported_count(), 0);
@@ -340,7 +365,7 @@ mod tests {
     fn recording_auto_stops_when_full() {
         let mut r = Recording::new();
         let wc = WallClock::new();
-        r.toggle();
+        r.toggle(Instant::now());
         let m = make_measurement(b"  1.234");
         // Fill to one below capacity
         for _ in 0..MAX_RECORDING_SAMPLES - 1 {
@@ -358,7 +383,7 @@ mod tests {
     fn recording_push_after_auto_stop_is_noop() {
         let mut r = Recording::new();
         let wc = WallClock::new();
-        r.toggle();
+        r.toggle(Instant::now());
         let m = make_measurement(b"  1.234");
         for _ in 0..MAX_RECORDING_SAMPLES {
             r.push(&m, &wc, 0);
@@ -621,7 +646,7 @@ mod tests {
         ];
 
         assert_eq!(r.max_aux_seen(), 0);
-        r.toggle();
+        r.toggle(Instant::now());
         r.push(&plain, &wc, 0);
         assert_eq!(r.max_aux_seen(), 0);
         r.push(&wide, &wc, 0);
@@ -629,15 +654,14 @@ mod tests {
         r.push(&plain, &wc, 0);
         assert_eq!(r.max_aux_seen(), 2, "the widest sample wins, not the last");
 
-        r.toggle(); // stop
+        r.toggle(Instant::now()); // stop
         assert_eq!(r.max_aux_seen(), 2, "still exportable after stopping");
-        r.toggle(); // start again — buffer cleared
+        r.toggle(Instant::now()); // start again — buffer cleared
         assert_eq!(r.max_aux_seen(), 0);
     }
 
     #[test]
     fn sample_wall_time_derived_from_measurement_timestamp() {
-        use std::time::Duration;
         // Build a WallClock whose origin is "now", then construct two
         // measurements with Instants 500ms apart. The first Sample's wall_time
         // should equal the WallClock's system origin; the second should be

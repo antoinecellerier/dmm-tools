@@ -38,6 +38,7 @@ Run the script rather than reading it:
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh start
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --device mock
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --mock-mode ohms
+${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --mock-mode dcv --mock-clock-preseed 90
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh key ctrl+o
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh click 125 12
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh shot <dir>/before.png
@@ -61,4 +62,4 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 ## References
 
 - WCAG contrast thresholds and the rest of the visual bar: `.claude/rules/gui.md`.
-- Scenario flags: `dmm-gui --help` lists the flags; the `--mock-mode` values come from `MockMode::ALL` in `crates/dmm-lib/src/mock/mod.rs`, and passing an invalid one makes dmm-gui print the valid list.
+- Scenario flags: `dmm-gui --help` lists the flags; the `--mock-mode` values come from `MockMode::ALL` in `crates/dmm-lib/src/mock/mod.rs`, and passing an invalid one makes dmm-gui print the valid list. Two mock-only flags are hidden from `--help`: `--mock-clock-preseed <SECS>` starts the session with that much history, produced instantly, and `--mock-clock-scale <FACTOR>` runs the rest at `FACTOR` times real speed — use them instead of waiting for history, and pin `--mock-mode` alongside, since the auto-cycling mock re-anchors the graph on every scenario change. `docs/development.md` (Headless GUI checks) has the details.

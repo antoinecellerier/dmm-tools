@@ -51,6 +51,18 @@ struct Args {
     /// Use serial number or HID device path from 'dmm-cli list' output.
     #[arg(long, value_name = "SERIAL_OR_PATH")]
     adapter: Option<String>,
+
+    /// Run session time at FACTOR times real time (mock only, implies
+    /// --device mock). Hidden: a contributor tool for screenshots and
+    /// performance runs, documented in docs/development.md.
+    #[arg(long, hide = true, value_name = "FACTOR")]
+    mock_clock_scale: Option<f64>,
+
+    /// Start the session with SECS of history, produced instantly (mock
+    /// only, implies --device mock). Hidden for the same reason as
+    /// --mock-clock-scale.
+    #[arg(long, hide = true, value_name = "SECS")]
+    mock_clock_preseed: Option<f64>,
 }
 
 /// Build long help text for --device from the registry.
@@ -77,6 +89,46 @@ pub struct CliOverrides {
     pub theme: Option<settings::ThemeMode>,
     pub renderer: Option<eframe::Renderer>,
     pub adapter: Option<String>,
+    /// Time base for this session's readings: real unless a `--mock-clock-*`
+    /// flag was given.
+    pub clock: dmm_lib::Clock,
+}
+
+/// Resolve the device and the session clock from the flags that decide them.
+///
+/// Split out of [`parse_args`] because it holds three rules worth testing on
+/// their own: the clock flags are validated like `--theme`, they imply
+/// `--device mock` the way `--mock-mode` does, and they are refused outright
+/// on a hardware device, where bent session time would stamp readings with
+/// instants a USB-paced meter never produced.
+///
+/// `device` is the canonical id `--device` resolved to, `None` when the flag
+/// was not given.
+fn resolve_device_and_clock(
+    device: Option<String>,
+    mock_mode_given: bool,
+    scale: Option<f64>,
+    preseed: Option<f64>,
+) -> Result<(Option<String>, dmm_lib::Clock), String> {
+    let clock = dmm_lib::Clock::from_flags(scale, preseed)
+        .map_err(|e| format!("--mock-clock-scale / --mock-clock-preseed: {e}"))?;
+
+    let hardware = device
+        .as_deref()
+        .and_then(registry::resolve_device)
+        .is_some_and(|d| d.requires_hardware);
+    if !clock.is_real() && hardware {
+        return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.to_string());
+    }
+
+    // --mock-mode and either clock flag each imply --device mock, so
+    // `dmm-gui --mock-clock-preseed 90` is a complete invocation.
+    let device = match device {
+        d @ Some(_) => d,
+        None if mock_mode_given || !clock.is_real() => Some("mock".to_string()),
+        None => None,
+    };
+    Ok((device, clock))
 }
 
 fn parse_args() -> CliOverrides {
@@ -139,12 +191,17 @@ fn parse_args() -> CliOverrides {
         }
     });
 
-    // --mock-mode implies --device mock
-    let device = match (device, &mock_mode) {
-        (d @ Some(_), _) => d,
-        (None, Some(_)) => Some("mock".to_string()),
-        (None, None) => None,
-    };
+    let (device, clock) = resolve_device_and_clock(
+        device,
+        mock_mode.is_some(),
+        args.mock_clock_scale,
+        args.mock_clock_preseed,
+    )
+    .unwrap_or_else(|message| {
+        Args::command()
+            .error(clap::error::ErrorKind::InvalidValue, message)
+            .exit()
+    });
 
     CliOverrides {
         device,
@@ -152,6 +209,7 @@ fn parse_args() -> CliOverrides {
         theme,
         renderer,
         adapter: args.adapter,
+        clock,
     }
 }
 
@@ -301,4 +359,70 @@ fn main() -> eframe::Result<()> {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn resolve(
+        device: Option<&str>,
+        scale: Option<f64>,
+        preseed: Option<f64>,
+    ) -> Result<(Option<String>, dmm_lib::Clock), String> {
+        resolve_device_and_clock(device.map(str::to_string), false, scale, preseed)
+    }
+
+    #[test]
+    fn without_the_clock_flags_the_session_runs_on_wall_time() {
+        let (device, clock) = resolve(None, None, None).expect("no flags");
+        assert_eq!(device, None, "no flag implies no device");
+        assert!(clock.is_real());
+    }
+
+    /// `dmm-gui --mock-clock-preseed 90` has to be a complete invocation, the
+    /// way `--mock-mode dcv` is.
+    #[test]
+    fn a_clock_flag_alone_implies_the_mock_device() {
+        for (scale, preseed) in [(Some(30.0), None), (None, Some(90.0))] {
+            let (device, clock) = resolve(None, scale, preseed).expect("clock flag");
+            assert_eq!(device.as_deref(), Some("mock"));
+            assert!(!clock.is_real());
+        }
+    }
+
+    #[test]
+    fn an_explicit_mock_device_takes_the_clock_flags() {
+        let (device, clock) = resolve(Some("mock"), None, Some(90.0)).expect("mock device");
+        assert_eq!(device.as_deref(), Some("mock"));
+        assert_eq!(clock.preseed(), std::time::Duration::from_secs(90));
+    }
+
+    /// Virtual time on a USB-paced meter would stamp readings with instants it
+    /// never produced, so the flags are refused rather than ignored.
+    #[test]
+    fn a_hardware_device_refuses_the_clock_flags() {
+        assert_eq!(
+            resolve(Some("ut61eplus"), None, Some(90.0)).unwrap_err(),
+            dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY
+        );
+        assert_eq!(
+            resolve(Some("ut61eplus"), Some(30.0), None).unwrap_err(),
+            dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY
+        );
+        // Without the flags the same device is of course fine.
+        assert!(resolve(Some("ut61eplus"), None, None).is_ok());
+    }
+
+    /// The message clap prints has to say which flag was wrong; the value
+    /// itself comes from the shared validator.
+    #[test]
+    fn a_bad_value_is_reported_against_its_flag() {
+        let err = resolve(None, Some(0.0), None).unwrap_err();
+        assert!(
+            err.starts_with("--mock-clock-scale / --mock-clock-preseed: "),
+            "{err}"
+        );
+        assert!(err.contains("got '0'"), "{err}");
+    }
 }

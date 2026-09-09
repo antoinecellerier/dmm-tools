@@ -349,6 +349,12 @@ impl App {
         });
 
         ui.horizontal_wrapped(|ui| {
+            // The clock flags bend session time, which only the mock can be
+            // asked to run on: `main.rs` refuses them beside a hardware
+            // `--device`, and picking a meter here would leave the session
+            // timing its recording and dating its exports by a clock no meter
+            // ever ran on. Pin the row instead.
+            let pinned_to_mock = !self.clock.is_real();
             let chips = registry::DEVICES.iter().map(|device| {
                 let selected = self.settings.shared.device_family == device.id;
                 Chip {
@@ -362,7 +368,22 @@ impl App {
                     tooltip: format!("Talk to a {} over USB", device.display_name),
                 }
             });
-            if let Some(id) = chip_row(ui, "Device:", chips) {
+            let picked = ui
+                .scope(|ui| {
+                    if pinned_to_mock {
+                        ui.disable();
+                    }
+                    chip_row(ui, "Device:", chips)
+                })
+                .inner;
+            if pinned_to_mock {
+                ui.label(
+                    RichText::new("(restart without the clock flags to pick a meter)")
+                        .small()
+                        .color(ui.visuals().weak_text_color()),
+                );
+            }
+            if let Some(id) = picked {
                 self.settings.shared.device_family = id.to_string();
                 // Clear the override — user explicitly chose a device
                 self.settings.overrides.device_family = None;

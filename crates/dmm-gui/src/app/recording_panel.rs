@@ -53,7 +53,7 @@ impl App {
     /// disconnect clears the samples), so reading it later labelled the file
     /// with whatever meter happened to be picked last.
     fn apply_recording_toggle(&mut self) {
-        self.recording.toggle();
+        self.recording.toggle(self.clock.now());
         if self.recording.active {
             self.capture_layout.device = Some(self.selected_device().display_name);
             self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
@@ -139,7 +139,10 @@ impl App {
             }
             let count = self.recording.samples.len();
             if self.recording.active {
-                let status = format!("{count} smp | {:.0}s", self.recording.duration_secs());
+                let status = format!(
+                    "{count} smp | {:.0}s",
+                    self.recording.duration_secs(self.clock.now())
+                );
                 if self.recording.is_full() {
                     let warn = self
                         .settings

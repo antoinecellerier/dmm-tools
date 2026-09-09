@@ -114,17 +114,20 @@ impl App {
                     }
                 }
             };
-            // Mock returns instantly — enforce a floor to avoid busy-looping
+            // Mock returns instantly — enforce a floor to avoid busy-looping.
+            // This is session time now, which is what lets a preseed burst
+            // hand out tick-spaced history without waiting for it.
             let mock_interval = sample_interval_ms.max(100);
+            let clock = self.clock.clone();
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
                 let panic_ctx = ctx_clone.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
-                        move || match mock_mode {
-                            Some(mode) => dmm_lib::mock::open_mock_mode(mode),
-                            None => dmm_lib::mock::open_mock(),
-                        },
+                        // Cloned inside: this closure is re-run on every
+                        // reconnect, and the session clock outlives each
+                        // `Dmm` it opens.
+                        move || dmm_lib::mock::open_mock_clocked(mock_mode, clock.clone()),
                         ThreadContext {
                             msg_tx,
                             ctrl_rx,
