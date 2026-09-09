@@ -44,9 +44,9 @@ the full options table.
 
 - Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
 - All 23 base colors customizable per-theme via UI color pickers or JSON overrides
-- Colors are split: UI chrome (5), graph (12), status indicators (5), minimap (1)
+- Colors are split: UI chrome (6), graph (12), status indicators (4), minimap (1)
 - Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
-- UI chrome colors (background, text, weak text, button, border) modify egui Visuals — plot grid and axis labels follow automatically
+- UI chrome colors (background, text, weak text, button, border, accent) modify egui Visuals — plot grid and axis labels follow automatically
 - Border (separators, panel edges, window frames, plot outline) is pinned only by High Contrast, at 3:1 or better; the other presets keep egui's own faint grey
 - Warnings and errors egui draws itself follow the Warning/Error status colors
 - Button captions, bold headings and hovered text follow the Text color once it is customized (egui's own greys otherwise); the emphasis lift is small enough that a saturated color keeps its hue

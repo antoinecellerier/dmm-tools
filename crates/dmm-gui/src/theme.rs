@@ -18,6 +18,7 @@ pub(crate) enum PaletteField {
     WeakText,
     Button,
     Border,
+    Accent,
     GraphLine,
     GraphGap,
     GraphMean,
@@ -34,7 +35,6 @@ pub(crate) enum PaletteField {
     StatusWarning,
     StatusError,
     StatusInactive,
-    Accent,
     MinimapViewport,
 }
 
@@ -46,6 +46,7 @@ impl PaletteField {
         PaletteField::WeakText,
         PaletteField::Button,
         PaletteField::Border,
+        PaletteField::Accent,
         PaletteField::GraphLine,
         PaletteField::GraphGap,
         PaletteField::GraphMean,
@@ -62,7 +63,6 @@ impl PaletteField {
         PaletteField::StatusWarning,
         PaletteField::StatusError,
         PaletteField::StatusInactive,
-        PaletteField::Accent,
         PaletteField::MinimapViewport,
     ];
 
@@ -74,6 +74,7 @@ impl PaletteField {
             Self::WeakText => "Weak text",
             Self::Button => "Button",
             Self::Border => "Border",
+            Self::Accent => "Accent",
             Self::GraphLine => "Data line",
             Self::GraphGap => "Gap",
             Self::GraphMean => "Mean",
@@ -90,7 +91,6 @@ impl PaletteField {
             Self::StatusWarning => "Warning",
             Self::StatusError => "Error",
             Self::StatusInactive => "Inactive",
-            Self::Accent => "Accent",
             Self::MinimapViewport => "Viewport",
         }
     }
@@ -103,6 +103,7 @@ impl PaletteField {
             Self::WeakText => "Secondary text: mode line, sub-value labels, hints and captions",
             Self::Button => "Button background color",
             Self::Border => "Separators, panel edges, frames and the plot outline",
+            Self::Accent => "Mode badges, and the fill behind selected toggles, chips and text",
             Self::GraphLine => "Data line color on the graph",
             Self::GraphGap => "Color used to mark gaps in recorded data",
             Self::GraphMean => "Mean overlay line color",
@@ -125,7 +126,6 @@ impl PaletteField {
             Self::StatusWarning => "Warning status color",
             Self::StatusError => "Error status color",
             Self::StatusInactive => "Inactive / disconnected status color",
-            Self::Accent => "Mode badges, and the fill behind selected toggles, chips and text",
             Self::MinimapViewport => "Minimap viewport rectangle color",
         }
     }
@@ -133,9 +133,12 @@ impl PaletteField {
     /// The settings-panel group this colour is listed under.
     pub(crate) fn group(self) -> PaletteGroup {
         match self {
-            Self::Background | Self::Text | Self::WeakText | Self::Button | Self::Border => {
-                PaletteGroup::Ui
-            }
+            Self::Background
+            | Self::Text
+            | Self::WeakText
+            | Self::Button
+            | Self::Border
+            | Self::Accent => PaletteGroup::Ui,
             Self::GraphLine
             | Self::GraphGap
             | Self::GraphMean
@@ -148,11 +151,9 @@ impl PaletteField {
             | Self::GraphOverlay3
             | Self::PlotBackground
             | Self::GraphCrosshair => PaletteGroup::Graph,
-            Self::StatusOk
-            | Self::StatusWarning
-            | Self::StatusError
-            | Self::StatusInactive
-            | Self::Accent => PaletteGroup::Status,
+            Self::StatusOk | Self::StatusWarning | Self::StatusError | Self::StatusInactive => {
+                PaletteGroup::Status
+            }
             Self::MinimapViewport => PaletteGroup::Minimap,
         }
     }
@@ -168,6 +169,7 @@ impl PaletteField {
             Self::WeakText => &mut o.weak_text,
             Self::Button => &mut o.button,
             Self::Border => &mut o.border,
+            Self::Accent => &mut o.accent,
             Self::GraphLine => &mut o.graph_line,
             Self::GraphGap => &mut o.graph_gap,
             Self::GraphMean => &mut o.graph_mean,
@@ -184,7 +186,6 @@ impl PaletteField {
             Self::StatusWarning => &mut o.status_warning,
             Self::StatusError => &mut o.status_error,
             Self::StatusInactive => &mut o.status_inactive,
-            Self::Accent => &mut o.accent,
             Self::MinimapViewport => &mut o.minimap_viewport,
         }
     }
@@ -904,6 +905,7 @@ impl ThemeColors {
             PaletteField::WeakText => self.weak_text(),
             PaletteField::Button => self.button(),
             PaletteField::Border => self.border(),
+            PaletteField::Accent => self.accent(),
             PaletteField::GraphLine => self.graph_line(),
             PaletteField::GraphGap => self.graph_gap(),
             PaletteField::GraphMean => self.graph_mean(),
@@ -920,7 +922,6 @@ impl ThemeColors {
             PaletteField::StatusWarning => self.status_warning(),
             PaletteField::StatusError => self.status_error(),
             PaletteField::StatusInactive => self.status_inactive(),
-            PaletteField::Accent => self.accent(),
             PaletteField::MinimapViewport => self.minimap_viewport(),
         }
     }

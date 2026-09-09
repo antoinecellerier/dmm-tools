@@ -14,6 +14,7 @@
 - **The meter's toggle buttons fill in when their mode is on** — HOLD, REL, RANGE, MIN/MAX, Scale and the graph's LIVE kept one grey frame either way, distinguished only by text colour.
 - **Border colour in the Customize colors panel** — separators, panel edges, window frames and the plot outline were egui's fixed grey, all but invisible in High Contrast.
 - **Weak text colour in the Customize colors panel** — the mode line, sub-value labels, hints and captions were fixed per preset, unreadable if you recoloured the background.
+- **Accent sits on the UI row of the Customize colors panel** — it was listed under Status, though it colours the mode badges and the selected toggles and chips.
 - **A custom Accent colour fills the toggles and chips that are on** — HOLD, REL, the settings chips and the graph's toggles kept egui's fixed blue.
 - **A custom Text colour keeps its hue in bold headings** — a saturated red washed out to near-white in the device name, the section headings and What's New.
 - **Dark labels are brighter and secondary text meets AA** — the mode line, sub-value labels and hint captions sat near 2.7:1 dark and 2.9:1 light, below AA.

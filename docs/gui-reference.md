@@ -390,9 +390,9 @@ Select a preset from the "Colors" row in the settings panel. Switching presets r
 
 Available color fields:
 
-- **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`
+- **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`, `accent`
 - **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
-- **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`, `accent`
+- **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`
 - **Minimap:** `minimap_viewport`
 
 Format: `#RRGGBB` or `#RRGGBBAA`.
