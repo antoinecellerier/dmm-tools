@@ -82,6 +82,14 @@ enum Cmd {
         /// Without this, mock cycles through all modes automatically.
         #[arg(long, long_help = build_mock_mode_help())]
         mock_mode: Option<String>,
+        /// Run session time at this multiple of real time (mock only).
+        /// Hidden: a contributor tool for fast runs, not a user-facing knob.
+        #[arg(long, hide = true)]
+        mock_clock_scale: Option<f64>,
+        /// Start the run with this many seconds of readings already behind it,
+        /// produced as fast as the mock answers (mock only). Hidden, as above.
+        #[arg(long, hide = true)]
+        mock_clock_preseed: Option<f64>,
     },
     /// Send a button press command to the meter.
     /// Run with no arguments to list available commands for the selected device.
@@ -373,17 +381,34 @@ fn main() {
             integrate,
             transform,
             mock_mode,
-        } => cmd_read(
-            device,
-            adapter,
-            interval_ms,
-            format,
-            output,
-            count,
-            integrate,
-            &transform.to_transform(),
-            mock_mode,
-        ),
+            mock_clock_scale,
+            mock_clock_preseed,
+        } => {
+            // `from_flags` names the offending value, not the flag it came
+            // from, so that both binaries can reuse the sentence.
+            let clock = match dmm_lib::Clock::from_flags(mock_clock_scale, mock_clock_preseed) {
+                Ok(clock) => clock,
+                Err(msg) => {
+                    eprintln!(
+                        "{} --mock-clock-scale/--mock-clock-preseed: {msg}",
+                        style("Error:").red().bold(),
+                    );
+                    std::process::exit(1);
+                }
+            };
+            cmd_read(
+                device,
+                adapter,
+                interval_ms,
+                format,
+                output,
+                count,
+                integrate,
+                &transform.to_transform(),
+                mock_mode,
+                clock,
+            )
+        }
         Cmd::Command { action } => cmd_command(device, adapter, action),
         Cmd::Get {
             setting,
@@ -698,7 +723,10 @@ fn cmd_read(
     integrate: bool,
     transform: &Transform,
     mock_mode: Option<String>,
+    // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
+    clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    refuse_clock_on_hardware(device, &clock)?;
     if device.requires_hardware {
         let mut dmm = open_with_help(device, adapter)?;
         let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
@@ -715,7 +743,7 @@ fn cmd_read(
             transform,
         )
     } else {
-        let mut dmm = open_mock_device(mock_mode)?;
+        let mut dmm = open_mock_device(mock_mode, clock)?;
         info!("mock device connected, starting measurement loop");
         // Mock returns instantly — use 100ms floor to simulate ~10 Hz
         let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
@@ -735,23 +763,39 @@ fn cmd_read(
     }
 }
 
-/// Open the mock, pinned to `mock_mode` when one was given.
+/// Refuse a bent session clock on a device that is paced by USB.
+///
+/// Checked before the device is opened, so a hardware `--device` with the
+/// clock flags fails with no meter attached and nothing to plug in.
+fn refuse_clock_on_hardware(
+    device: &SelectableDevice,
+    clock: &dmm_lib::Clock,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if device.requires_hardware && !clock.is_real() {
+        return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.into());
+    }
+    Ok(())
+}
+
+/// Open the mock on `clock`, pinned to `mock_mode` when one was given.
 ///
 /// Shared by every subcommand that takes `--mock-mode`, so an unknown mode
 /// name is rejected with the same message (and the same list of valid names)
-/// wherever it is passed.
+/// wherever it is passed. Only `read` has clock flags; the others pass
+/// [`dmm_lib::Clock::real`].
 fn open_mock_device(
     mock_mode: Option<String>,
+    clock: dmm_lib::Clock,
 ) -> Result<dmm_lib::Dmm<dmm_lib::transport::NullTransport>, Box<dyn std::error::Error>> {
-    match mock_mode {
-        Some(mode_str) => {
-            let mode: dmm_lib::mock::MockMode = mode_str
-                .parse()
-                .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?;
-            Ok(dmm_lib::mock::open_mock_mode(mode)?)
-        }
-        None => Ok(dmm_lib::mock::open_mock()?),
-    }
+    let mode = match mock_mode {
+        Some(mode_str) => Some(
+            mode_str
+                .parse::<dmm_lib::mock::MockMode>()
+                .map_err(|e: String| -> Box<dyn std::error::Error> { e.into() })?,
+        ),
+        None => None,
+    };
+    Ok(dmm_lib::mock::open_mock_clocked(mode, clock)?)
 }
 
 /// Shared measurement loop for both real and mock devices.
@@ -819,7 +863,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     }
 
     let tick = Duration::from_millis(interval_ms);
-    let wall_clock = dmm_lib::WallClock::new();
+    // Session time, not wall time, is what the readings carry: a preseeded
+    // run's first readings are minutes old and must export as such.
+    let wall_clock = dmm_lib::WallClock::from_clock(dmm.clock());
     // Min/Max/Avg and the integral are only meaningful within a single mode
     // and unit; `SeriesStats` resets both whenever either moves, so the
     // closing summary only ever covers one comparable series.
@@ -1134,7 +1180,7 @@ fn cmd_get(
         let mut dmm = open_with_help(device, adapter)?;
         run_get(&mut dmm, setting, format)
     } else {
-        let mut dmm = open_mock_device(mock_mode)?;
+        let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
         run_get(&mut dmm, setting, format)
     }
 }
@@ -1152,7 +1198,7 @@ fn cmd_set(
         let mut dmm = open_with_help(device, adapter)?;
         run_set(&mut dmm, setting, choice)
     } else {
-        let mut dmm = open_mock_device(mock_mode)?;
+        let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
         run_set(&mut dmm, setting, choice)
     }
 }
@@ -1730,6 +1776,8 @@ mod tests {
                 integrate,
                 transform,
                 mock_mode,
+                mock_clock_scale,
+                mock_clock_preseed,
             } => {
                 assert_eq!(interval_ms, 0);
                 assert!(matches!(format, OutputFormat::Text));
@@ -1741,6 +1789,35 @@ mod tests {
                 assert_eq!(transform.to_transform(), Transform::default());
                 assert!(transform.to_transform().is_identity());
                 assert!(mock_mode.is_none());
+                // No flag means the wall clock, so `read` paces as it always did.
+                assert!(mock_clock_scale.is_none());
+                assert!(mock_clock_preseed.is_none());
+            }
+            _ => panic!("expected Read"),
+        }
+    }
+
+    /// Hidden, but they still have to parse — nothing in `--help` would catch
+    /// a rename, and the screenshot and perf runs depend on both.
+    #[test]
+    fn clap_parse_read_clock_flags() {
+        let cli = Cli::try_parse_from([
+            "dmm-cli",
+            "read",
+            "--mock-clock-scale",
+            "20",
+            "--mock-clock-preseed",
+            "90",
+        ])
+        .unwrap();
+        match cli.command {
+            Cmd::Read {
+                mock_clock_scale,
+                mock_clock_preseed,
+                ..
+            } => {
+                assert_eq!(mock_clock_scale, Some(20.0));
+                assert_eq!(mock_clock_preseed, Some(90.0));
             }
             _ => panic!("expected Read"),
         }
@@ -1770,6 +1847,8 @@ mod tests {
                 mock_mode: _,
                 integrate: _,
                 transform: _,
+                mock_clock_scale: _,
+                mock_clock_preseed: _,
             } => {
                 assert_eq!(interval_ms, 100);
                 assert!(matches!(format, OutputFormat::Csv));
@@ -1778,6 +1857,22 @@ mod tests {
             }
             _ => panic!("expected Read"),
         }
+    }
+
+    /// A bent clock on a USB-paced meter would stamp readings with instants
+    /// the meter never produced, so `read` refuses before it opens anything.
+    #[test]
+    fn clock_flags_are_refused_on_a_hardware_device() {
+        let hardware = registry::resolve_device("ut61eplus").expect("registry has ut61eplus");
+        let mock = registry::resolve_device("mock").expect("registry has mock");
+        let virtual_clock = dmm_lib::Clock::from_flags(None, Some(90.0)).expect("valid preseed");
+
+        let err = refuse_clock_on_hardware(hardware, &virtual_clock)
+            .expect_err("a hardware device must refuse a virtual clock");
+        assert_eq!(err.to_string(), dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY);
+
+        assert!(refuse_clock_on_hardware(mock, &virtual_clock).is_ok());
+        assert!(refuse_clock_on_hardware(hardware, &dmm_lib::Clock::real()).is_ok());
     }
 
     fn read_transform(args: &[&str]) -> Transform {
