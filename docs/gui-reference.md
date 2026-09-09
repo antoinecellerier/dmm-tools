@@ -399,7 +399,7 @@ Available color fields:
 
 Format: `#RRGGBB` or `#RRGGBBAA`.
 
-Derived colors auto-track their base: cursor dim/delta derive from cursor, minimap line from graph line, recording warning from status_warning. Button hover/active states derive from button. Warnings and errors egui draws itself (the stats panel's "gaps skipped" note) follow `status_warning` and `status_error`. Once `text` is customized, button captions follow it and bold headings and hovered text follow a brightened (dark) or darkened (light) form of it, lifted only far enough to read as emphasis so a saturated color keeps its hue; left alone they keep egui's own greys. Once `accent` is customized, the selected fill of toggles and chips, focus rings and selected text follow it; left alone they keep egui's own blue. `border` is pinned only by the High Contrast preset, which draws separators, panel edges, window frames and the plot outline at 3:1 or better; Default and Colorblind leave them on egui's own faint grey until you pick a color. Plot grid and axis labels follow the UI chrome text color.
+Derived colors auto-track their base: cursor dim/delta from cursor, minimap line from graph line, recording warning from `status_warning`, button hover/active from `button`. egui's own warnings and errors (the stats panel's "gaps skipped" note) use `status_warning` and `status_error`. Customizing `text` also recolors button captions, bold headings and hovered text; customizing `accent` also recolors selected toggles and chips, focus rings and selected text; left alone, both keep egui's defaults. `border` is set only by the High Contrast preset; Default and Colorblind keep egui's faint grey until you pick a color. Plot grid and axis labels follow `text`.
 
 ## Command-Line Options
 

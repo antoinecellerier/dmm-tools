@@ -355,10 +355,9 @@ plus what no step reaches.
 **UT8802 / UT8802N**:
 - Frame extraction (8-byte, 0xAC header, no checksum)
 - ~~Negative reading shown and exported unsigned~~ **Fixed 2026-09-08**:
-  the parser now puts the sign in `display_raw`. The digit nibbles cannot
-  carry a sign and the vendor passes byte 7 bit 7 to its string builder
-  separately (uci_dll_decompiled.txt:24813), so no double sign is
-  possible; the `dcv_negative` capture step still confirms the bit itself
+  the parser now puts the sign in `display_raw`; the digit nibbles cannot
+  carry one (uci_dll_decompiled.txt:24813). The `dcv_negative` capture
+  step still confirms the bit itself
 - 0x5A streaming trigger byte — the vendor DLL only sends 0x5A on the
   QinHeng/CH9325 init path, never to CP2110 devices (2026-06 review);
   does the UT8802 stream without it, and is sending it harmful?
@@ -413,11 +412,10 @@ plus what no step reaches.
   family masks off the 0x30 prefix — inert until a UT8803 spec table
   keys on it (noted 2026-09-08)
 - Sign of a negative value: the ASCII display field may carry `-`
-  itself, in which case the sign bit at parse time double-negates; a
-  `dcv_negative` capture settles it (noted 2026-09-08). Until it does,
-  `display_raw` keeps the meter's own digits, so a negative reading
-  shows and exports unsigned where the UT8802 now shows the minus —
-  the capture settles which of the two is right for this meter
+  itself, in which case the parse-time sign bit double-negates. Until a
+  `dcv_negative` capture settles it, `display_raw` keeps the meter's own
+  digits, so a negative reading shows and exports unsigned where the
+  UT8802 now shows the minus (noted 2026-09-08)
 - Unit magnitude prefixes per (mode, range). **Resolved from vendor
   [VENDOR]** (2026-06 review): FUN_1001cdc0 maps (mode, range) → n/µ/m/
   none/k/M and FUN_1001cff0 gives base units (IndR/CapR are ESR in Ω;
@@ -815,20 +813,6 @@ Reproducible without hardware via the mock's `ncv` scenario. Fixing it means
 routing non-plottable samples through something that carries mode/unit, and
 establishing the time origin without any plottable points. That is also the
 prerequisite for banding NCV — see `docs/future-improvements.md`.
-
-### Minimap trace wobbles as samples arrive — RESOLVED
-
-After the per-pixel min/max decimation (commit 6852831) the minimap trace is
-clean but visibly wobbles back and forth as new samples come in. Likely
-cause: `decimate_columns` buckets points by absolute screen column while
-`MinimapScale` maps the whole, growing session span into the strip, so every
-point drifts left by a sub-pixel amount per sample and hops to the next
-column at a different moment, changing that column's extent frame to frame.
-Candidate fix: grow the strip's time span in steps rather than continuously,
-so points stay put between steps. Resolved 2026-09-09 (commit 4988341): the buckets are
-now cut in session time, stepped between one and 1.25 physical pixels wide,
-so they keep their members while the strip rescales and only slide. The
-user confirmed the progression is visibly cleaner on the live display.
 
 ### GUI accessibility — screen reader walk-through
 

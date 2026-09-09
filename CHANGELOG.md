@@ -11,14 +11,11 @@
 - **Graph plots sub-values and overlays same-unit ones** — **Plot:** picks the primary series; **Show:** toggles each same-unit trace (T2, a REL reference, MIN/MAX extremes), drawn dashed with a key.
 - **Screen readers say which group a graph toolbar chip belongs to** — the **Plot:** and **Show:** chips both announced only the sub-value's name.
 - **Screen readers speak when a MIN/MAX extreme was captured** — the `@12s` beside the value was left out of the spoken reading.
-- **The meter's toggle buttons fill in when their mode is on** — HOLD, REL, RANGE, MIN/MAX, Scale and the graph's LIVE kept one grey frame either way, distinguished only by text colour.
-- **Border colour in the Customize colors panel** — separators, panel edges, window frames and the plot outline were egui's fixed grey, all but invisible in High Contrast.
-- **Weak text colour in the Customize colors panel** — the mode line, sub-value labels, hints and captions were fixed per preset, unreadable if you recoloured the background.
-- **Accent sits on the UI row of the Customize colors panel** — it was listed under Status, though it colours the mode badges and the selected toggles and chips.
+- **The meter's toggle buttons fill in when their mode is on** — HOLD, REL, RANGE, MIN/MAX, Scale and the graph's LIVE kept one grey frame either way.
+- **Border and Weak text colours in the Customize colors panel** — separators, panel edges and the plot outline were egui's fixed grey; the mode line, hints and captions were fixed per preset.
 - **A custom Accent colour fills the toggles and chips that are on** — HOLD, REL, the settings chips and the graph's toggles kept egui's fixed blue.
 - **A custom Text colour keeps its hue in bold headings** — a saturated red washed out to near-white in the device name, the section headings and What's New.
 - **Minimap trace stays smooth as the session grows** — past about one sample per pixel it broke into beads and dashes.
-- **Minimap trace no longer wobbles as samples arrive** — it is condensed over fixed spans of session time rather than screen columns, so it slides as the strip rescales instead of flickering.
 - **Dark labels are brighter and secondary text meets AA** — the mode line, sub-value labels and hint captions sat near 2.7:1 dark and 2.9:1 light, below AA.
 - **The gaps warning in the stats panel meets AA in the light theme** — "⚠ N gaps skipped" sat at 2.8:1 in egui's fixed orange.
 - **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.
@@ -32,7 +29,7 @@
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period), `temp2` (second thermocouple), `temp-diff` and `temp-diff-rev` (their difference) stand in for a UT181A in the CLI and GUI.
-- **A noisy mock mode with spikes** — `--mock-mode noise` traces a DC millivolt signal the smooth scenarios never produced, in the CLI and GUI.
+- **A noisy mock mode with spikes** — `--mock-mode noise`, a DC millivolt signal for checking the graph and minimap, in the CLI and GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
 - **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
 - **Capture steps advance on the meter's own state** — a keypress filed whatever was on screen; a step needing something on the probes waits for the reading to change; `r` retakes one.

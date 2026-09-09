@@ -199,10 +199,9 @@ ecosystem and majors left on their own.
 nightly dev build exercises the same packaging path a release does — a break
 shows up the next morning rather than at tag time — and the targets CI builds
 cannot drift from the ones a release ships. CI passes `subset: ci` for the
-cheaper three-target build, leaves `upload-artifacts` off so a push or pull
-request compiles the binaries and keeps nothing, and is the only caller setting
-`cache: true`: the 10 GB repository cache is worth more to pull-request
-turnaround than to the unattended release and nightly builds.
+cheaper three-target build, leaves `upload-artifacts` off, and is the only
+caller setting `cache: true`: the 10 GB repository cache is worth more to
+pull-request turnaround than to the unattended release and nightly builds.
 
 ### Dev builds
 

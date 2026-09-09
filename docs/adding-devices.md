@@ -218,9 +218,8 @@ Once verified:
 
 ## Phase 7: Documentation
 
-The list of doc touchpoints for a new device — the `/add-device` skill points
-here instead of keeping a second copy. Update these in the same commit as the
-code:
+Update these in the same commit as the code (the `/add-device` skill defers
+to this list):
 
 - `README.md` — hand-edit the supported-devices table: it is editorial (abbreviated model runs, per-family status wording), and the `dmm-cli` test only checks that no family and no verification issue is missing from it
 - `docs/cli-reference.md` — the `--device` table is generated, not hand-edited: run `UPDATE_DOCS=1 cargo test -p dmm-cli` once the registry entry lands, and hand-edit the surrounding prose and anything the device adds to the CLI

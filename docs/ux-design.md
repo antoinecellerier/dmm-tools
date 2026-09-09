@@ -47,10 +47,9 @@ the full options table.
 - Colors are split: UI chrome (6), graph (12), status indicators (4), minimap (1)
 - Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
 - UI chrome colors (background, text, weak text, button, border, accent) modify egui Visuals — plot grid and axis labels follow automatically
-- Border (separators, panel edges, window frames, plot outline) is pinned only by High Contrast, at 3:1 or better; the other presets keep egui's own faint grey
+- Text and Accent reach what egui paints itself (captions, headings, selected fills, focus rings) only once customized, so the stock presets stay egui-native; the heading emphasis lift is small enough that a saturated color keeps its hue
+- Border is pinned only by High Contrast, at 3:1 or better; the other presets keep egui's own faint grey
 - Warnings and errors egui draws itself follow the Warning/Error status colors
-- Button captions, bold headings and hovered text follow the Text color once it is customized (egui's own greys otherwise); the emphasis lift is small enough that a saturated color keeps its hue
-- The selected fill of toggles and chips, focus rings and selected text follow the Accent color once it is customized (egui's own blue otherwise)
 - Preset selection and per-color overrides persist to `settings.json`
 
 ### Top Bar
