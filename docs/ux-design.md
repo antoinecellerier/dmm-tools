@@ -48,6 +48,7 @@ the full options table.
 - Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
 - UI chrome colors (background, text, button) modify egui Visuals — plot grid and axis labels follow automatically
 - Warnings and errors egui draws itself follow the Warning/Error status colors
+- Button captions, bold headings and hovered text follow the Text color once it is customized (egui's own greys otherwise)
 - Preset selection and per-color overrides persist to `settings.json`
 
 ### Top Bar

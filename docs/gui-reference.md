@@ -397,7 +397,7 @@ Available color fields:
 
 Format: `#RRGGBB` or `#RRGGBBAA`.
 
-Derived colors auto-track their base: cursor dim/delta derive from cursor, minimap line from graph line, recording warning from status_warning. Button hover/active states derive from button. Warnings and errors egui draws itself (the stats panel's "gaps skipped" note) follow `status_warning` and `status_error`. Plot grid and axis labels follow the UI chrome text color.
+Derived colors auto-track their base: cursor dim/delta derive from cursor, minimap line from graph line, recording warning from status_warning. Button hover/active states derive from button. Warnings and errors egui draws itself (the stats panel's "gaps skipped" note) follow `status_warning` and `status_error`. Once `text` is customized, button captions follow it and bold headings and hovered text follow a brightened (dark) or darkened (light) form of it; left alone they keep egui's own greys. Plot grid and axis labels follow the UI chrome text color.
 
 ## Command-Line Options
 

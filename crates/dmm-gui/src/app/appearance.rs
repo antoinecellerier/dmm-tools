@@ -12,7 +12,9 @@ use crate::settings::ThemeMode;
 ///
 /// The two flags are not implied by the colours: they decide whether the
 /// scrollbar trough and the open combo box follow the palette or keep egui's
-/// own fill, and a user may override a field to the preset's own colour.
+/// own fill, and a user may override a field to the preset's own colour. Text
+/// needs no such flag — the caption colours already carry the fallback, since
+/// they resolve to egui's own values when Text is not overridden.
 pub(super) type UiColorKey = (
     egui::Color32, // background
     egui::Color32, // text
@@ -21,6 +23,8 @@ pub(super) type UiColorKey = (
     egui::Color32, // plot background
     egui::Color32, // warning
     egui::Color32, // error
+    egui::Color32, // button caption
+    egui::Color32, // emphasised text
     bool,          // background overridden
     bool,          // button overridden
 );
@@ -121,6 +125,8 @@ impl App {
         let plot_bg = tc.plot_background();
         let warning = tc.status_warning();
         let error = tc.status_error();
+        let button_text = tc.button_text();
+        let strong_text = tc.strong_text();
         let key = (
             bg,
             text,
@@ -129,6 +135,8 @@ impl App {
             plot_bg,
             warning,
             error,
+            button_text,
+            strong_text,
             bg_overridden,
             button_overridden,
         );
@@ -183,6 +191,17 @@ impl App {
             // orange is 2.8:1 on the light panel.
             v.warn_fg_color = warning;
             v.error_fg_color = error;
+            // The text colour reached labels only. Button captions and the
+            // caption of a hovered or pressed widget — which is also what
+            // `.strong()` text is drawn with — come from these four strokes,
+            // so a customised text colour never got to them. Both accessors
+            // return egui's own value while Text is unset, so the assignment
+            // is unconditional. Only `.color` is set: the widths are egui's
+            // emphasis on hover (1.5) and press (2.0).
+            v.widgets.inactive.fg_stroke.color = button_text;
+            v.widgets.open.fg_stroke.color = button_text;
+            v.widgets.hovered.fg_stroke.color = strong_text;
+            v.widgets.active.fg_stroke.color = strong_text;
             v.widgets.inactive.bg_fill = button;
             v.widgets.inactive.weak_bg_fill = button;
             v.widgets.hovered.bg_fill = hover;
@@ -366,6 +385,66 @@ mod tests {
                 picked,
                 "dark={dark}"
             );
+        }
+    }
+
+    /// Button captions and `.strong()` text keep egui's own colours until Text
+    /// is customised, then follow it. The stroke *widths* are egui's emphasis
+    /// on hover and press and must survive the recolour.
+    #[test]
+    fn button_captions_track_egui_until_the_text_is_overridden() {
+        for dark in [true, false] {
+            let stock = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let (ctx, _) = themed_app(dark, PaletteOverrides::default());
+            let style = ctx.global_style();
+            let w = &style.visuals.widgets;
+            assert_eq!(
+                w.inactive.fg_stroke.color, stock.widgets.inactive.fg_stroke.color,
+                "dark={dark}"
+            );
+            assert_eq!(
+                w.active.fg_stroke.color, stock.widgets.active.fg_stroke.color,
+                "dark={dark}"
+            );
+
+            let picked = Color32::from_rgb(0x8A, 0xC0, 0xE0);
+            let (ctx, app) = themed_app(
+                dark,
+                PaletteOverrides {
+                    text: Some(HexColor(picked)),
+                    ..Default::default()
+                },
+            );
+            let tc = app.settings.theme_colors(dark);
+            let style = ctx.global_style();
+            let w = &style.visuals.widgets;
+            assert_eq!(w.inactive.fg_stroke.color, picked, "dark={dark}");
+            assert_eq!(w.open.fg_stroke.color, picked, "dark={dark}");
+            assert_eq!(w.hovered.fg_stroke.color, tc.strong_text(), "dark={dark}");
+            assert_eq!(w.active.fg_stroke.color, tc.strong_text(), "dark={dark}");
+            for (name, got, want) in [
+                (
+                    "inactive",
+                    w.inactive.fg_stroke.width,
+                    stock.widgets.inactive.fg_stroke.width,
+                ),
+                (
+                    "hovered",
+                    w.hovered.fg_stroke.width,
+                    stock.widgets.hovered.fg_stroke.width,
+                ),
+                (
+                    "active",
+                    w.active.fg_stroke.width,
+                    stock.widgets.active.fg_stroke.width,
+                ),
+            ] {
+                assert_eq!(got, want, "{name} stroke width changed (dark={dark})");
+            }
         }
     }
 

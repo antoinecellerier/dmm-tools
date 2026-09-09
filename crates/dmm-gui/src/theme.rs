@@ -1,4 +1,4 @@
-use eframe::egui::Color32;
+use eframe::egui::{self, Color32};
 
 use crate::settings::{ColorPreset, HexColor, PaletteOverrides};
 
@@ -505,6 +505,19 @@ fn preset_colors(preset: ColorPreset) -> &'static PresetColors {
     }
 }
 
+/// The `Visuals` egui itself ships for a mode.
+///
+/// Colours the app leaves on egui's values read their fallback from here
+/// rather than from a copied literal, so they keep tracking whatever egui
+/// ships across upgrades instead of freezing at the value of the day.
+fn egui_visuals(dark: bool) -> egui::Visuals {
+    if dark {
+        egui::Visuals::dark()
+    } else {
+        egui::Visuals::light()
+    }
+}
+
 // ── ThemeColors ─────────────────────────────────────────────────────────────
 
 /// Theme-aware color palette. Resolves colors from: override → preset → default.
@@ -560,6 +573,46 @@ impl ThemeColors {
     /// colours don't.
     pub(crate) fn weak_text(&self) -> Color32 {
         self.preset.weak_text.pick(self.dark)
+    }
+
+    /// Caption colour of buttons and of an open combo box
+    /// (`widgets.inactive`/`open.fg_stroke`).
+    ///
+    /// No override slot and no `PaletteField`, like `button_hover_active`: it
+    /// follows the text colour, but only once the user has actually customised
+    /// it. Left alone it returns the caption colour egui itself ships — read
+    /// from `Visuals` rather than copied as a literal, so it keeps tracking
+    /// egui across upgrades (light captions stay egui's gray(60), not the
+    /// palette's gray(80) label text).
+    pub(crate) fn button_text(&self) -> Color32 {
+        if self.overrides.text.is_some() {
+            self.text()
+        } else {
+            egui_visuals(self.dark).widgets.inactive.fg_stroke.color
+        }
+    }
+
+    /// Emphasised text: `.strong()` (the device name, the "Statistics" and
+    /// "Specifications" headings, the help modal's section headings) and the
+    /// caption of a hovered or pressed widget
+    /// (`widgets.hovered`/`active.fg_stroke`).
+    ///
+    /// A customised text colour drives it, pushed 80% of the way to white in
+    /// dark mode and to black in light — close to the 180 → 240 (dark) and
+    /// 80 → 16 (light) relation egui's own defaults hold between normal and
+    /// emphasised text. Unset it is egui's value, read from `Visuals` for the
+    /// same reason as [`ThemeColors::button_text`].
+    pub(crate) fn strong_text(&self) -> Color32 {
+        if self.overrides.text.is_some() {
+            let pole = if self.dark {
+                Color32::WHITE
+            } else {
+                Color32::BLACK
+            };
+            self.text().lerp_to_gamma(pole, 0.8)
+        } else {
+            egui_visuals(self.dark).widgets.active.fg_stroke.color
+        }
     }
 
     /// Button/widget fill color.
@@ -1227,6 +1280,131 @@ mod tests {
                 plain.weak_text(),
                 "weak_text followed an override (dark={dark})"
             );
+        }
+    }
+
+    /// Button captions and emphasised text stay on the values egui ships
+    /// until the user customises Text. Compared against `Visuals`, never a
+    /// literal, so the fallback keeps tracking whatever egui ships.
+    #[test]
+    fn button_and_strong_text_track_egui_when_unset() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let stock = egui_visuals(dark);
+                assert_eq!(
+                    tc.button_text(),
+                    stock.widgets.inactive.fg_stroke.color,
+                    "{preset:?} dark={dark}: button captions left egui's value"
+                );
+                assert_eq!(
+                    tc.strong_text(),
+                    stock.widgets.active.fg_stroke.color,
+                    "{preset:?} dark={dark}: strong text left egui's value"
+                );
+            }
+        }
+    }
+
+    /// Once Text is customised, captions are that colour and emphasised text
+    /// is derived from it — brighter in dark mode, darker in light. Another
+    /// field's override does not pull either off egui's value.
+    #[test]
+    fn strong_text_derives_from_text_override() {
+        let picked = Color32::from_rgb(0x8A, 0xC0, 0xE0);
+        for dark in [true, false] {
+            let overrides = PaletteOverrides {
+                text: Some(HexColor(picked)),
+                ..Default::default()
+            };
+            let tc = ThemeColors::new(dark, ColorPreset::Default, &overrides);
+            assert_eq!(tc.button_text(), picked, "dark={dark}");
+            let strong = tc.strong_text();
+            assert_ne!(strong, picked, "dark={dark}: strong text is not emphasised");
+            let (ls, lp) = (luminance(strong), luminance(picked));
+            if dark {
+                assert!(
+                    ls > lp,
+                    "dark: strong text {strong:?} is not brighter than {picked:?}"
+                );
+            } else {
+                assert!(
+                    ls < lp,
+                    "light: strong text {strong:?} is not darker than {picked:?}"
+                );
+            }
+
+            let elsewhere = PaletteOverrides {
+                background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
+                ..Default::default()
+            };
+            let tc = ThemeColors::new(dark, ColorPreset::Default, &elsewhere);
+            let stock = egui_visuals(dark);
+            assert_eq!(
+                tc.button_text(),
+                stock.widgets.inactive.fg_stroke.color,
+                "dark={dark}: a background override moved the button caption"
+            );
+            assert_eq!(
+                tc.strong_text(),
+                stock.widgets.active.fg_stroke.color,
+                "dark={dark}: a background override moved the strong text"
+            );
+        }
+    }
+
+    /// A user's own pick is their own responsibility, but the *derivation*
+    /// must not itself lose contrast: feeding each preset's own text colour in
+    /// as an override has to leave captions readable on the button fills and
+    /// headings readable on the panel.
+    #[test]
+    fn overridden_text_meets_aa_on_button_fill() {
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let plain = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let overrides = PaletteOverrides {
+                    text: Some(HexColor(plain.text())),
+                    ..Default::default()
+                };
+                let tc = ThemeColors::new(dark, preset, &overrides);
+                let (hover, active) = tc.button_hover_active();
+                let mode = if dark { "dark" } else { "light" };
+
+                for (name, fg, ground) in [
+                    (
+                        "button caption on the button fill",
+                        tc.button_text(),
+                        tc.button(),
+                    ),
+                    ("button caption on the hover fill", tc.button_text(), hover),
+                    ("hovered caption on the hover fill", tc.strong_text(), hover),
+                    // The pressed fill is only a momentary state, and light
+                    // mode drops it 65 per channel — the darkest ground a
+                    // caption lands on. It clears the full 4.5:1 anyway
+                    // (6.93:1 at the worst preset), so it is held to the text
+                    // bar rather than the 3:1 graphical one.
+                    (
+                        "pressed caption on the pressed fill",
+                        tc.strong_text(),
+                        active,
+                    ),
+                    ("heading on the panel", tc.strong_text(), tc.background()),
+                ] {
+                    let ratio = contrast(fg, ground);
+                    assert!(
+                        ratio >= 4.5,
+                        "{preset:?} {mode} mode: {name} {fg:?} on {ground:?} is {ratio:.2}:1, below WCAG AA 4.5:1"
+                    );
+                }
+            }
         }
     }
 
