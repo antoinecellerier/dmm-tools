@@ -369,7 +369,7 @@ Three color presets are available:
 
 Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
 
-**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 22 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
+**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 23 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
 
 **JSON overrides:** Colors can also be edited directly in `settings.json` using hex strings:
 
@@ -390,7 +390,7 @@ Select a preset from the "Colors" row in the settings panel. Switching presets r
 
 Available color fields:
 
-- **UI chrome:** `background`, `text`, `button`, `border`
+- **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`
 - **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
 - **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`, `accent`
 - **Minimap:** `minimap_viewport`

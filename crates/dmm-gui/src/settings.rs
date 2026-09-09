@@ -84,6 +84,8 @@ pub struct PaletteOverrides {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub weak_text: Option<HexColor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub button: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub border: Option<HexColor>,

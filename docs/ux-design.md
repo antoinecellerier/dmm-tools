@@ -43,10 +43,10 @@ the full options table.
 ### Color Palette
 
 - Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
-- All 22 base colors customizable per-theme via UI color pickers or JSON overrides
-- Colors are split: UI chrome (4), graph (12), status indicators (5), minimap (1)
+- All 23 base colors customizable per-theme via UI color pickers or JSON overrides
+- Colors are split: UI chrome (5), graph (12), status indicators (5), minimap (1)
 - Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
-- UI chrome colors (background, text, button, border) modify egui Visuals — plot grid and axis labels follow automatically
+- UI chrome colors (background, text, weak text, button, border) modify egui Visuals — plot grid and axis labels follow automatically
 - Border (separators, panel edges, window frames, plot outline) is pinned only by High Contrast, at 3:1 or better; the other presets keep egui's own faint grey
 - Warnings and errors egui draws itself follow the Warning/Error status colors
 - Button captions, bold headings and hovered text follow the Text color once it is customized (egui's own greys otherwise)
@@ -217,7 +217,7 @@ Three components stacked vertically:
 ### Accessibility
 
 - All colors are theme-aware — darker variants on light backgrounds, brighter on dark
-- WCAG 2.1 AA contrast ratios verified: ≥4.5:1 for text, ≥3:1 for graphical elements. Secondary text (mode line, sub-value labels and timestamps, toolbar and hint captions) is pinned to a per-preset colour that clears 4.5:1 on the panel, the faint frame fill and the text-edit background, instead of egui's default 60 % dimming of the primary text colour — which measured ~2.7:1 dark / ~2.9:1 light
+- WCAG 2.1 AA contrast ratios verified: ≥4.5:1 for text, ≥3:1 for graphical elements. Secondary text (mode line, sub-value labels and timestamps, toolbar and hint captions) is pinned to a per-preset colour that clears 4.5:1 on the panel, the faint frame fill and the text-edit background, instead of egui's default 60 % dimming of the primary text colour — which measured ~2.7:1 dark / ~2.9:1 light. Like every other palette colour it can be customized, and a picked value is the user's own to keep above 4.5:1
 - Dark-mode primary text is gray(180) rather than egui's gray(140): at 140 no dimmer secondary tone still clears 4.5:1, so lifting the primary keeps two visibly distinct text tiers (8.31:1 and 4.79:1 on the gray(27) panel). Light mode is unchanged at gray(80) / gray(112)
 - Minimum font size 11pt throughout (WCAG recommends ≥12px). egui's small text style ships at 9 pt, so it is raised to 11 pt once at startup rather than avoided per call site
 - Flag badges use bold text in addition to color for non-color distinction

@@ -15,6 +15,7 @@ use crate::settings::{ColorPreset, HexColor, PaletteOverrides};
 pub(crate) enum PaletteField {
     Background,
     Text,
+    WeakText,
     Button,
     Border,
     GraphLine,
@@ -42,6 +43,7 @@ impl PaletteField {
     pub(crate) const ALL: &'static [PaletteField] = &[
         PaletteField::Background,
         PaletteField::Text,
+        PaletteField::WeakText,
         PaletteField::Button,
         PaletteField::Border,
         PaletteField::GraphLine,
@@ -69,6 +71,7 @@ impl PaletteField {
         match self {
             Self::Background => "Background",
             Self::Text => "Text",
+            Self::WeakText => "Weak text",
             Self::Button => "Button",
             Self::Border => "Border",
             Self::GraphLine => "Data line",
@@ -97,6 +100,7 @@ impl PaletteField {
         match self {
             Self::Background => "Panel background color",
             Self::Text => "Primary text color",
+            Self::WeakText => "Secondary text: mode line, sub-value labels, hints and captions",
             Self::Button => "Button background color",
             Self::Border => "Separators, panel edges, frames and the plot outline",
             Self::GraphLine => "Data line color on the graph",
@@ -129,7 +133,9 @@ impl PaletteField {
     /// The settings-panel group this colour is listed under.
     pub(crate) fn group(self) -> PaletteGroup {
         match self {
-            Self::Background | Self::Text | Self::Button | Self::Border => PaletteGroup::Ui,
+            Self::Background | Self::Text | Self::WeakText | Self::Button | Self::Border => {
+                PaletteGroup::Ui
+            }
             Self::GraphLine
             | Self::GraphGap
             | Self::GraphMean
@@ -159,6 +165,7 @@ impl PaletteField {
         match self {
             Self::Background => &mut o.background,
             Self::Text => &mut o.text,
+            Self::WeakText => &mut o.weak_text,
             Self::Button => &mut o.button,
             Self::Border => &mut o.border,
             Self::GraphLine => &mut o.graph_line,
@@ -243,7 +250,9 @@ struct PresetColors {
     // -- UI chrome --
     background: ColorPair,
     text: ColorPair,
-    /// Secondary text. Not a `PaletteField` — see `ThemeColors::weak_text`.
+    /// Secondary text. Pinned per preset rather than dimmed from `text`, so
+    /// that each preset's default clears AA on its own panel, faint frame and
+    /// text-edit background — see `ThemeColors::weak_text`.
     weak_text: ColorPair,
     button: ColorPair,
     /// Separators, frames and outlines. `None` leaves them on the grey egui
@@ -585,17 +594,15 @@ impl ThemeColors {
     /// Secondary text: hint captions, the mode line, sub-value labels and
     /// timestamps, toolbar group captions.
     ///
-    /// No override slot and no `PaletteField`: this is derived for contrast,
-    /// not a colour a user picks. It is chosen per preset to clear WCAG AA on
-    /// that preset's backgrounds, and a free-form pick would quietly land
-    /// under 4.5:1 — which is what egui's default does. Unset, it dims the
-    /// text colour to 60% alpha: ~3.8:1 against the Default preset's dark
-    /// panel and ~2.9:1 against its light one, and it was 2.7:1 dark before
-    /// the primary text was lifted to gray(180). For the same reason it does
-    /// not follow a `text` or `background` override, just as the status
-    /// colours don't.
+    /// The preset value is pinned per preset rather than derived from `text`,
+    /// so that each preset's default clears WCAG AA on that preset's
+    /// backgrounds; egui's own derivation — the text colour at 60% alpha —
+    /// lands ~3.8:1 against the Default preset's dark panel and ~2.9:1 against
+    /// its light one. An override wins over it like any other field: a user
+    /// who recolours the background can re-tune the secondary text to match,
+    /// and then owns its contrast.
     pub(crate) fn weak_text(&self) -> Color32 {
-        self.preset.weak_text.pick(self.dark)
+        self.resolve(self.overrides.weak_text, &self.preset.weak_text)
     }
 
     /// Caption colour of buttons and of an open combo box
@@ -856,6 +863,7 @@ impl ThemeColors {
         match field {
             PaletteField::Background => self.background(),
             PaletteField::Text => self.text(),
+            PaletteField::WeakText => self.weak_text(),
             PaletteField::Button => self.button(),
             PaletteField::Border => self.border(),
             PaletteField::GraphLine => self.graph_line(),
@@ -912,7 +920,7 @@ mod tests {
         }
         // Bumping this is the reminder to check the new colour landed under
         // the heading it should — see `groups_partition_all_in_panel_order`.
-        assert_eq!(seen.len(), 22);
+        assert_eq!(seen.len(), 23);
     }
 
     /// The panel renders group by group, so the concatenated groups have to
@@ -1320,24 +1328,45 @@ mod tests {
         }
     }
 
-    /// Weak text is a *derived* colour, not one the user picks: it has no
-    /// `PaletteField`, and overriding text or background must not drag it off
-    /// the value verified above — same rule as the status colours.
+    /// Weak text is picked, not derived: its own override wins over the
+    /// preset, and recolouring text or background moves the *other* two
+    /// fields only, leaving it on the AA-verified preset value until the user
+    /// tunes it themselves.
     #[test]
-    fn weak_text_ignores_text_and_background_overrides() {
-        let overrides = PaletteOverrides {
-            background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
-            text: Some(HexColor(Color32::from_rgb(200, 210, 220))),
-            ..Default::default()
-        };
-        for &dark in &[true, false] {
-            let plain = ThemeColors::new(dark, ColorPreset::Default, &PaletteOverrides::default());
-            let overridden = ThemeColors::new(dark, ColorPreset::Default, &overrides);
-            assert_eq!(
-                overridden.weak_text(),
-                plain.weak_text(),
-                "weak_text followed an override (dark={dark})"
-            );
+    fn weak_text_override_takes_precedence() {
+        let picked = Color32::from_rgb(0x9A, 0x8C, 0x70);
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let plain = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                let tc = ThemeColors::new(
+                    dark,
+                    preset,
+                    &PaletteOverrides {
+                        weak_text: Some(HexColor(picked)),
+                        ..Default::default()
+                    },
+                );
+                assert_eq!(tc.weak_text(), picked, "{preset:?} dark={dark}");
+
+                let neighbours = ThemeColors::new(
+                    dark,
+                    preset,
+                    &PaletteOverrides {
+                        background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
+                        text: Some(HexColor(Color32::from_rgb(200, 210, 220))),
+                        ..Default::default()
+                    },
+                );
+                assert_eq!(
+                    neighbours.weak_text(),
+                    plain.weak_text(),
+                    "{preset:?} dark={dark}: weak_text followed another field's override"
+                );
+            }
         }
     }
 
