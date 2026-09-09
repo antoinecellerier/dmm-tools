@@ -139,6 +139,40 @@ impl Column {
     }
 }
 
+/// Ratio between consecutive minimap bucket widths.
+///
+/// Buckets are re-cut only when the session grows past a step, and between
+/// steps they are between one and this many physical pixels wide. Closer to
+/// one would re-cut more often for a trace that is never noticeably coarser.
+const BUCKET_STEP: f64 = 1.25;
+
+/// Finest bucket ever cut. Below this the session is too short to fill a
+/// strip, so a coarser bucket loses nothing.
+const BUCKET_BASE_SECS: f64 = 1e-3;
+
+/// Width in seconds of the minimap's time buckets for a strip where one
+/// physical pixel spans `secs_per_px`.
+///
+/// The smallest `BUCKET_BASE_SECS × BUCKET_STEP^k` that is at least a pixel
+/// wide. Stepping the width geometrically rather than tracking the scale
+/// exactly is what keeps bucket membership fixed while the session grows: a
+/// point's bucket depends only on its time and the current width, so a new
+/// sample moves the buckets on screen without recomposing them. A degenerate
+/// scale falls back to the base width.
+pub(super) fn bucket_secs(secs_per_px: f64) -> f64 {
+    if !secs_per_px.is_finite() || secs_per_px <= BUCKET_BASE_SECS {
+        return BUCKET_BASE_SECS;
+    }
+    let k = (secs_per_px / BUCKET_BASE_SECS).log(BUCKET_STEP).ceil();
+    let width = BUCKET_BASE_SECS * BUCKET_STEP.powf(k);
+    // Rounding in the logarithm can land one step short of the pixel.
+    if width < secs_per_px {
+        width * BUCKET_STEP
+    } else {
+        width
+    }
+}
+
 /// Condense screen-space points to the vertical extent of each physical pixel
 /// column: two points, its lowest and highest sample, or one when the column
 /// is flat.
@@ -414,16 +448,27 @@ impl Graph {
                 let range = (hi - lo).max(1e-10);
                 (lo, range)
             });
-        // Each segment is thinned to one min/max column per physical pixel and
+        // Each segment is thinned to one min/max column per time bucket and
         // drawn as a single polyline. Drawn point by point instead, once the
         // history passed a sample per pixel the semi-transparent segments
         // blended twice at their joints and thinned to nothing between them —
         // the trace read as beads and dashes. One path feathers once, joins
         // properly, and the per-column extremes keep the spikes.
+        //
+        // The buckets are fixed spans of session time, not screen columns.
+        // The strip maps the whole session, so every sample shrinks the scale
+        // and slides each older point left by an amount proportional to its
+        // age; bucketed by screen column, points hopped columns at different
+        // moments and the column extents flickered frame to frame — the trace
+        // visibly wobbled. Bucketed by time, a bucket's extent is fixed and
+        // only its position slides, smoothly, under the antialiasing. The
+        // width is stepped so it stays between one and `BUCKET_STEP` physical
+        // pixels: never denser than a column, and re-bucketed only at a step.
         let pixels_per_point = ui.ctx().pixels_per_point();
+        let bucket = bucket_secs(scale.time_per_px() / pixels_per_point.max(0.1) as f64);
         for seg in raw_segments {
             let projected = seg.iter().map(|&[t, v]| {
-                let x = scale.x_of(t);
+                let x = (t / bucket) as f32;
                 let y_frac = match y_map {
                     Some((y_lo, range)) => ((v - y_lo) / range) as f32,
                     None => 0.5,
@@ -431,9 +476,12 @@ impl Graph {
                 let y = rect.bottom() - y_frac * rect.height();
                 egui::pos2(x, y)
             });
-            let points = decimate_columns(projected, pixels_per_point);
+            let mut points = decimate_columns(projected, 1.0);
             if points.len() < 2 {
                 continue;
+            }
+            for p in &mut points {
+                p.x = scale.x_of(p.x as f64 * bucket);
             }
             painter.add(egui::Shape::line(
                 points,

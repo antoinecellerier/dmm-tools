@@ -1565,8 +1565,8 @@ fn clear_drops_the_overlays_but_keeps_the_selection() {
 // ── Minimap coordinate math ─────────────────────────────────────────────────
 
 use super::minimap::{
-    Edge, MinimapDrag, MinimapScale, ViewWindow, decimate_columns, drag_target, near_a_bracket,
-    pan, resize,
+    Edge, MinimapDrag, MinimapScale, ViewWindow, bucket_secs, decimate_columns, drag_target,
+    near_a_bracket, pan, resize,
 };
 
 /// A 400px-wide strip starting at x=100, over a 200-second session.
@@ -1905,4 +1905,64 @@ fn the_exit_end_faces_the_next_column() {
         (40.0, 30.0),
         "the next column is further up the screen"
     );
+}
+
+/// A bucket is never narrower than the pixel it is drawn in — that would put
+/// two extents in one column and bring the beads back — and never so wide
+/// that the trace goes coarse.
+#[test]
+fn a_bucket_is_at_least_a_pixel_and_less_than_a_step_wider() {
+    let mut secs_per_px = 0.002;
+    while secs_per_px < 100.0 {
+        let bucket = bucket_secs(secs_per_px);
+        assert!(bucket >= secs_per_px, "{bucket} < {secs_per_px}");
+        assert!(bucket < secs_per_px * 1.25, "{bucket} vs {secs_per_px}");
+        secs_per_px *= 1.03;
+    }
+}
+
+/// The whole point: while the session grows within a step, the bucket width
+/// does not move, so the buckets keep their members and the trace slides
+/// instead of flickering.
+#[test]
+fn the_bucket_width_holds_still_between_steps() {
+    let mut widths = std::collections::BTreeSet::new();
+    let mut secs_per_px = 0.1;
+    while secs_per_px <= 1.0 {
+        widths.insert(bucket_secs(secs_per_px).to_bits());
+        secs_per_px += 0.001;
+    }
+    // A decade at ×1.25 per step is log(10)/log(1.25) ≈ 10.3 steps.
+    assert!(
+        widths.len() <= 12,
+        "{} distinct widths over a decade",
+        widths.len()
+    );
+}
+
+#[test]
+fn a_degenerate_scale_falls_back_to_the_finest_bucket() {
+    for bad in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+        assert_eq!(bucket_secs(bad), bucket_secs(0.0), "{bad}");
+    }
+    assert!(bucket_secs(0.0) > 0.0);
+}
+
+/// Adding a sample must not recompose the buckets already on screen: keyed
+/// on time rather than on screen column, the earlier output is a prefix of
+/// the later one, save for the bucket the new sample joins.
+#[test]
+fn a_new_sample_leaves_earlier_buckets_untouched() {
+    let bucket = bucket_secs(0.15);
+    let sample = |i: usize| {
+        let t = i as f64 * 0.1;
+        egui::pos2((t / bucket) as f32, (i as f32 * 0.7).sin() * 20.0)
+    };
+    let before = decimate_columns((0..600).map(sample), 1.0);
+    let after = decimate_columns((0..601).map(sample), 1.0);
+    // Everything up to the last bucket of `before` is reproduced exactly.
+    let last_x = before.last().map(|p| p.x).expect("non-empty");
+    let stable = before.iter().take_while(|p| p.x < last_x).count();
+    assert!(stable > 300, "prefix of only {stable} points");
+    assert_eq!(&before[..stable], &after[..stable]);
 }

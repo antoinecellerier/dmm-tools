@@ -18,7 +18,7 @@ paths:
 - User-initiated actions (export, clear, connect) need visible feedback — toast, status message, or log line. Silent success is a UX bug.
 - Think through boundary conditions before writing code: extreme window sizes (very wide, very narrow, quarter-screen, maximized), high zoom, empty/no-data state, mode transitions.
 - Sample timestamps come from the session clock (`App.clock`, cloned into the mock's open closure), not `Instant::now()`; UI cadence — toasts, `request_repaint_after`, control-channel waits — stays on real time. On the private display use `--mock-clock-preseed <SECS>` / `--mock-clock-scale <FACTOR>` (mock-only, hidden from `--help`) instead of waiting for history to accumulate.
-- Graph rendering has two tiers. The minimap uses a full-history segment cache invalidated by the monotonic `history_version` counter, thinned to per-pixel min/max columns and drawn as one polyline per segment; the main graph builds segments from the visible slice via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) must also iterate only the visible slice — do not regress them to full-history scans.
+- Graph rendering has two tiers. The minimap uses a full-history segment cache invalidated by the monotonic `history_version` counter, thinned to min/max columns over fixed session-time buckets about a pixel wide (`bucket_secs`) and drawn as one polyline per segment — never bucket by screen column, the strip rescales every sample and the trace flickers; the main graph builds segments from the visible slice via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) must also iterate only the visible slice — do not regress them to full-history scans.
 
 ## Semantics
 
