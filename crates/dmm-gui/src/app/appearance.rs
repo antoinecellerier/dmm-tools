@@ -8,25 +8,31 @@ use super::App;
 use crate::settings::ThemeMode;
 
 /// Memo key for [`App::apply_color_overrides`]: every colour it pins into
-/// egui's `Visuals`, plus whether Background and Button are overridden.
+/// egui's `Visuals`, plus whether the palette pins a Border and whether
+/// Background and Button are overridden.
 ///
-/// The two flags are not implied by the colours: they decide whether the
-/// scrollbar trough and the open combo box follow the palette or keep egui's
-/// own fill, and a user may override a field to the preset's own colour. Text
+/// Those three are not implied by the colours: they decide whether the open
+/// combo box, the hover/press border strokes and the scrollbar trough follow
+/// the palette or keep egui's own values, and a user may override a field to
+/// the value it already had. The border is carried as an `Option` rather than
+/// a colour and a flag because the tuple is at the twelve-element ceiling
+/// `PartialEq` is implemented up to; `None` means egui's own grey, which
+/// depends only on the mode, and a mode change clears the memo outright. Text
 /// needs no such flag — the caption colours already carry the fallback, since
 /// they resolve to egui's own values when Text is not overridden.
 pub(super) type UiColorKey = (
-    egui::Color32, // background
-    egui::Color32, // text
-    egui::Color32, // weak text
-    egui::Color32, // button
-    egui::Color32, // plot background
-    egui::Color32, // warning
-    egui::Color32, // error
-    egui::Color32, // button caption
-    egui::Color32, // emphasised text
-    bool,          // background overridden
-    bool,          // button overridden
+    egui::Color32,         // background
+    egui::Color32,         // text
+    egui::Color32,         // weak text
+    egui::Color32,         // button
+    Option<egui::Color32>, // border, None while it is egui's own
+    egui::Color32,         // plot background
+    egui::Color32,         // warning
+    egui::Color32,         // error
+    egui::Color32,         // button caption
+    egui::Color32,         // emphasised text
+    bool,                  // background overridden
+    bool,                  // button overridden
 );
 
 /// Size of `TextStyle::Small`, in points before zoom.
@@ -122,6 +128,8 @@ impl App {
         let text = tc.text();
         let weak_text = tc.weak_text();
         let button = tc.button();
+        let border = tc.border();
+        let border_pinned = tc.border_pinned();
         let plot_bg = tc.plot_background();
         let warning = tc.status_warning();
         let error = tc.status_error();
@@ -132,6 +140,7 @@ impl App {
             text,
             weak_text,
             button,
+            border_pinned.then_some(border),
             plot_bg,
             warning,
             error,
@@ -170,6 +179,24 @@ impl App {
         } else {
             let w = &stock.widgets.open;
             (w.bg_fill, w.weak_bg_fill)
+        };
+        // Three more strokes on the same rule. `border()` is already egui's
+        // separator grey while nothing pins one, and that is exactly what
+        // `noninteractive.bg_stroke` and `window_stroke` ship as, so those two
+        // take it unconditionally. The open combo box's outline and the
+        // emphasis egui puts on a hovered or pressed widget are *not* that
+        // grey — egui darkens them in light mode — so they wait for a border
+        // the palette actually pins, and take the emphasised text colour when
+        // pressed.
+        let (open_stroke, hover_stroke, active_stroke) = if border_pinned {
+            (border, border, strong_text)
+        } else {
+            let w = &stock.widgets;
+            (
+                w.open.bg_stroke.color,
+                w.hovered.bg_stroke.color,
+                w.active.bg_stroke.color,
+            )
         };
         ctx.global_style_mut(|style| {
             let v = &mut style.visuals;
@@ -212,6 +239,16 @@ impl App {
             v.widgets.noninteractive.weak_bg_fill = trough_weak;
             v.widgets.open.bg_fill = open;
             v.widgets.open.weak_bg_fill = open_weak;
+            // Separators, panel edges, the toolbar group boxes and the plot
+            // outline all come off `noninteractive.bg_stroke`; `window_stroke`
+            // frames the colour picker, the help modal and the discard modal.
+            // Only `.color` again: the widths are egui's, including the 0 on
+            // `inactive` that leaves a resting button unoutlined.
+            v.widgets.noninteractive.bg_stroke.color = border;
+            v.window_stroke.color = border;
+            v.widgets.open.bg_stroke.color = open_stroke;
+            v.widgets.hovered.bg_stroke.color = hover_stroke;
+            v.widgets.active.bg_stroke.color = active_stroke;
         });
     }
 
@@ -442,6 +479,87 @@ mod tests {
                     w.active.fg_stroke.width,
                     stock.widgets.active.fg_stroke.width,
                 ),
+            ] {
+                assert_eq!(got, want, "{name} stroke width changed (dark={dark})");
+            }
+        }
+    }
+
+    /// Separators, panel edges and window frames stay on egui's grey under the
+    /// Default preset and follow the Border colour once it is customised —
+    /// hover emphasis included. The stroke *widths* are egui's and must
+    /// survive the recolour, the 0 on `inactive` above all: widening it would
+    /// put an outline round every resting button.
+    #[test]
+    fn borders_track_egui_until_the_border_is_overridden() {
+        for dark in [true, false] {
+            let stock = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let (ctx, _) = themed_app(dark, PaletteOverrides::default());
+            let style = ctx.global_style();
+            let v = &style.visuals;
+            assert_eq!(
+                v.widgets.noninteractive.bg_stroke.color,
+                stock.widgets.noninteractive.bg_stroke.color,
+                "dark={dark}"
+            );
+            assert_eq!(
+                v.window_stroke.color, stock.window_stroke.color,
+                "dark={dark}"
+            );
+            assert_eq!(
+                v.widgets.open.bg_stroke.color, stock.widgets.open.bg_stroke.color,
+                "dark={dark}"
+            );
+            assert_eq!(
+                v.widgets.hovered.bg_stroke.color, stock.widgets.hovered.bg_stroke.color,
+                "dark={dark}"
+            );
+            drop(style);
+
+            let picked = Color32::from_rgb(0x30, 0x90, 0xC0);
+            let (ctx, app) = themed_app(
+                dark,
+                PaletteOverrides {
+                    border: Some(HexColor(picked)),
+                    ..Default::default()
+                },
+            );
+            let tc = app.settings.theme_colors(dark);
+            let style = ctx.global_style();
+            let v = &style.visuals;
+            assert_eq!(
+                v.widgets.noninteractive.bg_stroke.color, picked,
+                "dark={dark}"
+            );
+            assert_eq!(v.window_stroke.color, picked, "dark={dark}");
+            assert_eq!(v.widgets.open.bg_stroke.color, picked, "dark={dark}");
+            assert_eq!(v.widgets.hovered.bg_stroke.color, picked, "dark={dark}");
+            assert_eq!(
+                v.widgets.active.bg_stroke.color,
+                tc.strong_text(),
+                "dark={dark}"
+            );
+            for (name, got, want) in [
+                (
+                    "noninteractive",
+                    v.widgets.noninteractive.bg_stroke.width,
+                    stock.widgets.noninteractive.bg_stroke.width,
+                ),
+                (
+                    "inactive",
+                    v.widgets.inactive.bg_stroke.width,
+                    stock.widgets.inactive.bg_stroke.width,
+                ),
+                (
+                    "hovered",
+                    v.widgets.hovered.bg_stroke.width,
+                    stock.widgets.hovered.bg_stroke.width,
+                ),
+                ("window", v.window_stroke.width, stock.window_stroke.width),
             ] {
                 assert_eq!(got, want, "{name} stroke width changed (dark={dark})");
             }

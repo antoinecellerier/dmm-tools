@@ -369,7 +369,7 @@ Three color presets are available:
 
 Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
 
-**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 21 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
+**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 22 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
 
 **JSON overrides:** Colors can also be edited directly in `settings.json` using hex strings:
 
@@ -390,14 +390,14 @@ Select a preset from the "Colors" row in the settings panel. Switching presets r
 
 Available color fields:
 
-- **UI chrome:** `background`, `text`, `button`
+- **UI chrome:** `background`, `text`, `button`, `border`
 - **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
 - **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`, `accent`
 - **Minimap:** `minimap_viewport`
 
 Format: `#RRGGBB` or `#RRGGBBAA`.
 
-Derived colors auto-track their base: cursor dim/delta derive from cursor, minimap line from graph line, recording warning from status_warning. Button hover/active states derive from button. Warnings and errors egui draws itself (the stats panel's "gaps skipped" note) follow `status_warning` and `status_error`. Once `text` is customized, button captions follow it and bold headings and hovered text follow a brightened (dark) or darkened (light) form of it; left alone they keep egui's own greys. Plot grid and axis labels follow the UI chrome text color.
+Derived colors auto-track their base: cursor dim/delta derive from cursor, minimap line from graph line, recording warning from status_warning. Button hover/active states derive from button. Warnings and errors egui draws itself (the stats panel's "gaps skipped" note) follow `status_warning` and `status_error`. Once `text` is customized, button captions follow it and bold headings and hovered text follow a brightened (dark) or darkened (light) form of it; left alone they keep egui's own greys. `border` is pinned only by the High Contrast preset, which draws separators, panel edges, window frames and the plot outline at 3:1 or better; Default and Colorblind leave them on egui's own faint grey until you pick a color. Plot grid and axis labels follow the UI chrome text color.
 
 ## Command-Line Options
 

@@ -16,6 +16,7 @@ pub(crate) enum PaletteField {
     Background,
     Text,
     Button,
+    Border,
     GraphLine,
     GraphGap,
     GraphMean,
@@ -42,6 +43,7 @@ impl PaletteField {
         PaletteField::Background,
         PaletteField::Text,
         PaletteField::Button,
+        PaletteField::Border,
         PaletteField::GraphLine,
         PaletteField::GraphGap,
         PaletteField::GraphMean,
@@ -68,6 +70,7 @@ impl PaletteField {
             Self::Background => "Background",
             Self::Text => "Text",
             Self::Button => "Button",
+            Self::Border => "Border",
             Self::GraphLine => "Data line",
             Self::GraphGap => "Gap",
             Self::GraphMean => "Mean",
@@ -95,6 +98,7 @@ impl PaletteField {
             Self::Background => "Panel background color",
             Self::Text => "Primary text color",
             Self::Button => "Button background color",
+            Self::Border => "Separators, panel edges, frames and the plot outline",
             Self::GraphLine => "Data line color on the graph",
             Self::GraphGap => "Color used to mark gaps in recorded data",
             Self::GraphMean => "Mean overlay line color",
@@ -125,7 +129,7 @@ impl PaletteField {
     /// The settings-panel group this colour is listed under.
     pub(crate) fn group(self) -> PaletteGroup {
         match self {
-            Self::Background | Self::Text | Self::Button => PaletteGroup::Ui,
+            Self::Background | Self::Text | Self::Button | Self::Border => PaletteGroup::Ui,
             Self::GraphLine
             | Self::GraphGap
             | Self::GraphMean
@@ -156,6 +160,7 @@ impl PaletteField {
             Self::Background => &mut o.background,
             Self::Text => &mut o.text,
             Self::Button => &mut o.button,
+            Self::Border => &mut o.border,
             Self::GraphLine => &mut o.graph_line,
             Self::GraphGap => &mut o.graph_gap,
             Self::GraphMean => &mut o.graph_mean,
@@ -241,6 +246,9 @@ struct PresetColors {
     /// Secondary text. Not a `PaletteField` — see `ThemeColors::weak_text`.
     weak_text: ColorPair,
     button: ColorPair,
+    /// Separators, frames and outlines. `None` leaves them on the grey egui
+    /// itself ships — see `ThemeColors::border`.
+    border: Option<ColorPair>,
     // -- Status indicators --
     status_ok: ColorPair,
     status_warning: ColorPair,
@@ -285,6 +293,9 @@ const PRESET_DEFAULT: PresetColors = PresetColors {
     // gray(253), 4.95:1 on gray(255).
     weak_text: ColorPair::new(Color32::from_gray(135), Color32::from_gray(112)),
     button: ColorPair::new(Color32::from_gray(60), Color32::from_gray(230)),
+    // Decorative in this preset: separators and frames stay on egui's own
+    // grey rather than a copy of it.
+    border: None,
     status_ok: ColorPair::new(
         Color32::from_rgb(60, 180, 75),
         // 5.34:1 on gray(248); the previous (0,140,30) was 4.15:1 (< AA 4.5)
@@ -372,6 +383,16 @@ const PRESET_HIGH_CONTRAST: PresetColors = PresetColors {
     // this preset has room for a visibly dimmer secondary tone.
     weak_text: ColorPair::new(Color32::from_gray(130), Color32::from_gray(110)),
     button: ColorPair::new(Color32::from_gray(50), Color32::from_gray(215)),
+    // The one preset that pins a border, and the reason the field exists:
+    // egui's gray(60)/gray(190) separators sit near 1.6:1 on this preset's
+    // black and white panels, so panel edges and the plot outline all but
+    // vanish exactly where they are wanted most. 5.32:1 on gray(0) and
+    // 4.54:1 on gray(255) — well past the 3:1 bar for a graphical element,
+    // and still a line rather than a second text tier.
+    border: Some(ColorPair::new(
+        Color32::from_gray(128),
+        Color32::from_gray(118),
+    )),
     status_ok: ColorPair::new(Color32::from_rgb(0, 230, 0), Color32::from_rgb(0, 130, 0)),
     status_warning: ColorPair::new(
         Color32::from_rgb(255, 160, 0),
@@ -432,6 +453,8 @@ const PRESET_COLORBLIND_SAFE: PresetColors = PresetColors {
     // only the hues differ.
     weak_text: ColorPair::new(Color32::from_gray(135), Color32::from_gray(112)),
     button: ColorPair::new(Color32::from_gray(60), Color32::from_gray(230)),
+    // Same grounds as PRESET_DEFAULT, so the same decision: egui's grey.
+    border: None,
     status_ok: ColorPair::new(
         Color32::from_rgb(0, 180, 160),
         Color32::from_rgb(0, 120, 100),
@@ -620,6 +643,40 @@ impl ThemeColors {
         self.resolve(self.overrides.button, &self.preset.button)
     }
 
+    /// Separators, panel edges, window and popup frames, the toolbar group
+    /// boxes and the plot outline
+    /// (`widgets.noninteractive`/`open.bg_stroke` and `window_stroke`).
+    ///
+    /// The preset colour is an `Option`, unlike every other field: Default and
+    /// Colorblind leave it `None`, where the border keeps the grey egui itself
+    /// ships. That value is read from `Visuals` rather than copied in as a
+    /// literal, so it keeps tracking egui across upgrades instead of freezing
+    /// at the grey of the day — and a decorative border is one of the few
+    /// places where egui's own restraint is the right default. Only High
+    /// Contrast pins a colour.
+    pub(crate) fn border(&self) -> Color32 {
+        match (self.overrides.border, &self.preset.border) {
+            (Some(h), _) => h.0,
+            (None, Some(pair)) => pair.pick(self.dark),
+            (None, None) => {
+                egui_visuals(self.dark)
+                    .widgets
+                    .noninteractive
+                    .bg_stroke
+                    .color
+            }
+        }
+    }
+
+    /// Whether the palette pins the border rather than deferring to egui.
+    ///
+    /// The strokes egui emphasises a hovered or pressed widget with follow the
+    /// palette only once it has a border of its own to follow; left on egui's
+    /// grey they keep egui's own emphasis.
+    pub(crate) fn border_pinned(&self) -> bool {
+        self.overrides.border.is_some() || self.preset.border.is_some()
+    }
+
     /// Derive hover/active button states from the base button color.
     pub(crate) fn button_hover_active(&self) -> (Color32, Color32) {
         let base = self.button();
@@ -800,6 +857,7 @@ impl ThemeColors {
             PaletteField::Background => self.background(),
             PaletteField::Text => self.text(),
             PaletteField::Button => self.button(),
+            PaletteField::Border => self.border(),
             PaletteField::GraphLine => self.graph_line(),
             PaletteField::GraphGap => self.graph_gap(),
             PaletteField::GraphMean => self.graph_mean(),
@@ -854,7 +912,7 @@ mod tests {
         }
         // Bumping this is the reminder to check the new colour landed under
         // the heading it should — see `groups_partition_all_in_panel_order`.
-        assert_eq!(seen.len(), 21);
+        assert_eq!(seen.len(), 22);
     }
 
     /// The panel renders group by group, so the concatenated groups have to
@@ -1354,6 +1412,80 @@ mod tests {
                 stock.widgets.active.fg_stroke.color,
                 "dark={dark}: a background override moved the strong text"
             );
+        }
+    }
+
+    /// Presets that pin no border keep the grey egui ships for separators.
+    /// Compared against `Visuals`, never a literal, so the fallback keeps
+    /// tracking whatever egui ships.
+    #[test]
+    fn border_tracks_egui_when_unset() {
+        for preset in [ColorPreset::Default, ColorPreset::ColorblindSafe] {
+            for dark in [true, false] {
+                let tc = ThemeColors::new(dark, preset, &PaletteOverrides::default());
+                assert_eq!(
+                    tc.border(),
+                    egui_visuals(dark).widgets.noninteractive.bg_stroke.color,
+                    "{preset:?} dark={dark}: border left egui's value"
+                );
+                assert!(
+                    !tc.border_pinned(),
+                    "{preset:?} dark={dark}: border reported as pinned"
+                );
+            }
+        }
+    }
+
+    /// The reason the field exists: borders are a graphical element, so
+    /// `.claude/rules/gui.md` asks for 3:1 — against the panel they separate
+    /// and against the plot area they outline. Only High Contrast is held to
+    /// it; the other presets defer to egui, whose grey is deliberately faint.
+    #[test]
+    fn high_contrast_border_meets_graphical_contrast() {
+        for dark in [true, false] {
+            let tc = ThemeColors::new(
+                dark,
+                ColorPreset::HighContrast,
+                &PaletteOverrides::default(),
+            );
+            assert!(
+                tc.border_pinned(),
+                "dark={dark}: High Contrast pins no border"
+            );
+            let border = tc.border();
+            for (name, ground) in [
+                ("panel background", tc.background()),
+                ("plot background", tc.plot_background()),
+            ] {
+                let ratio = contrast(border, ground);
+                assert!(
+                    ratio >= 3.0,
+                    "HighContrast {} mode: border {border:?} on {name} {ground:?} is {ratio:.2}:1, below 3:1",
+                    if dark { "dark" } else { "light" },
+                );
+            }
+        }
+    }
+
+    /// An override wins over both the preset's own border and egui's grey, and
+    /// pins the field in either case.
+    #[test]
+    fn border_override_takes_precedence() {
+        let picked = Color32::from_rgb(0x30, 0x90, 0xC0);
+        for preset in [
+            ColorPreset::Default,
+            ColorPreset::HighContrast,
+            ColorPreset::ColorblindSafe,
+        ] {
+            for dark in [true, false] {
+                let overrides = PaletteOverrides {
+                    border: Some(HexColor(picked)),
+                    ..Default::default()
+                };
+                let tc = ThemeColors::new(dark, preset, &overrides);
+                assert_eq!(tc.border(), picked, "{preset:?} dark={dark}");
+                assert!(tc.border_pinned(), "{preset:?} dark={dark}");
+            }
         }
     }
 

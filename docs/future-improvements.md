@@ -349,7 +349,7 @@ the selection. The box-zoom rectangle is hardcoded `DARK_BLUE` + `WHITE`
 inside egui_plot 0.37, so it needs either `allow_boxed_zoom(false)` at the
 call site or an `egui-upstream-opportunities.md` item asking egui_plot to
 read `Visuals::selection`. Borders and separators are handled separately, by
-a planned Border palette field.
+the palette's Border field.
 
 Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
 

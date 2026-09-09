@@ -19,13 +19,14 @@ use crate::theme::ThemeColors;
 /// `faint_bg_color`, well clear of `selection.bg_fill`: the frame is only a
 /// container, and a selected chip inside it must still read as selected.
 ///
-/// The border is decorative and deliberately left as-is. It is
-/// `widgets.noninteractive.bg_stroke` — the same stroke egui draws separators
-/// with — which lands around 1.6:1 against the panel in dark mode and 1.8:1 in
-/// light, under WCAG's 3:1 threshold for graphical elements. Nothing depends
-/// on seeing it: the grouping is carried by the **Plot:**/**Show:** caption
-/// text inside each box, and every chip states its own group in its
-/// accessible name.
+/// The border is `widgets.noninteractive.bg_stroke` — the same stroke egui
+/// draws separators with, and the palette's Border colour. It is decorative
+/// under the presets that leave that colour at egui's own grey, landing around
+/// 1.6:1 against the panel in dark mode and 1.8:1 in light, under WCAG's 3:1
+/// threshold for graphical elements; the High Contrast preset pins a border
+/// that clears 3:1. Nothing depends on seeing it either way: the grouping is
+/// carried by the **Plot:**/**Show:** caption text inside each box, and every
+/// chip states its own group in its accessible name.
 fn group_frame(ui: &Ui) -> egui::Frame {
     egui::Frame::new()
         .corner_radius(4)

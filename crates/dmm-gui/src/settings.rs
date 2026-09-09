@@ -85,6 +85,8 @@ pub struct PaletteOverrides {
     pub text: Option<HexColor>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub button: Option<HexColor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub border: Option<HexColor>,
     // -- Graph colors --
     #[serde(skip_serializing_if = "Option::is_none")]
     pub graph_line: Option<HexColor>,

@@ -12,6 +12,7 @@
 - **Screen readers say which group a graph toolbar chip belongs to** — the **Plot:** and **Show:** chips both announced only the sub-value's name.
 - **Screen readers speak when a MIN/MAX extreme was captured** — the `@12s` beside the value was left out of the spoken reading.
 - **The meter's toggle buttons fill in when their mode is on** — HOLD, REL, RANGE, MIN/MAX, Scale and the graph's LIVE kept one grey frame either way, distinguished only by text colour.
+- **Border colour in the Customize colors panel** — separators, panel edges, window frames and the plot outline were egui's fixed grey, all but invisible in High Contrast.
 - **Dark labels are brighter and secondary text meets AA** — the mode line, sub-value labels and hint captions sat near 2.7:1 dark and 2.9:1 light, below AA.
 - **The gaps warning in the stats panel meets AA in the light theme** — "⚠ N gaps skipped" sat at 2.8:1 in egui's fixed orange.
 - **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.
