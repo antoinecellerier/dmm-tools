@@ -7,6 +7,24 @@ use eframe::egui;
 use super::App;
 use crate::settings::ThemeMode;
 
+/// Memo key for [`App::apply_color_overrides`]: every colour it pins into
+/// egui's `Visuals`, plus whether Background and Button are overridden.
+///
+/// The two flags are not implied by the colours: they decide whether the
+/// scrollbar trough and the open combo box follow the palette or keep egui's
+/// own fill, and a user may override a field to the preset's own colour.
+pub(super) type UiColorKey = (
+    egui::Color32, // background
+    egui::Color32, // text
+    egui::Color32, // weak text
+    egui::Color32, // button
+    egui::Color32, // plot background
+    egui::Color32, // warning
+    egui::Color32, // error
+    bool,          // background overridden
+    bool,          // button overridden
+);
+
 /// Size of `TextStyle::Small`, in points before zoom.
 ///
 /// egui ships 9 pt, under the 11 pt floor in `.claude/rules/gui.md`. `.small()`
@@ -93,12 +111,27 @@ impl App {
     pub(super) fn apply_color_overrides(&mut self, ctx: &egui::Context) {
         let dark = self.resolve_dark(ctx);
         let tc = self.settings.theme_colors(dark);
+        let overrides = self.settings.color_overrides.for_mode(dark);
+        let bg_overridden = overrides.background.is_some();
+        let button_overridden = overrides.button.is_some();
         let bg = tc.background();
         let text = tc.text();
         let weak_text = tc.weak_text();
         let button = tc.button();
         let plot_bg = tc.plot_background();
-        let key = (bg, text, weak_text, button, plot_bg);
+        let warning = tc.status_warning();
+        let error = tc.status_error();
+        let key = (
+            bg,
+            text,
+            weak_text,
+            button,
+            plot_bg,
+            warning,
+            error,
+            bg_overridden,
+            button_overridden,
+        );
 
         if self.applied.ui_colors == Some(key) {
             return;
@@ -106,6 +139,30 @@ impl App {
         self.applied.ui_colors = Some(key);
 
         let (hover, active) = tc.button_hover_active();
+        // Two fills egui paints from its own palette follow the palette only
+        // when the field driving them is overridden: the scrollbar trough
+        // (`noninteractive`) follows Background, the open combo box (`open`)
+        // follows Button. Otherwise they keep the value egui ships — read
+        // from `Visuals` rather than copied as a literal, so it keeps
+        // tracking egui across upgrades, and assigned either way so that
+        // clearing an override restores it without a theme switch.
+        let stock = if dark {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        };
+        let (trough, trough_weak) = if bg_overridden {
+            (bg, bg)
+        } else {
+            let w = &stock.widgets.noninteractive;
+            (w.bg_fill, w.weak_bg_fill)
+        };
+        let (open, open_weak) = if button_overridden {
+            (button, button)
+        } else {
+            let w = &stock.widgets.open;
+            (w.bg_fill, w.weak_bg_fill)
+        };
         ctx.global_style_mut(|style| {
             let v = &mut style.visuals;
             v.panel_fill = bg;
@@ -121,12 +178,21 @@ impl App {
             // and it is used for real information (mode line, sub-value labels
             // and timestamps, toolbar captions, hint captions).
             v.weak_text_color = Some(weak_text);
+            // egui draws warnings and errors from these two fields; the app
+            // has the same two colours in the palette, and the stock light
+            // orange is 2.8:1 on the light panel.
+            v.warn_fg_color = warning;
+            v.error_fg_color = error;
             v.widgets.inactive.bg_fill = button;
             v.widgets.inactive.weak_bg_fill = button;
             v.widgets.hovered.bg_fill = hover;
             v.widgets.hovered.weak_bg_fill = hover;
             v.widgets.active.bg_fill = active;
             v.widgets.active.weak_bg_fill = active;
+            v.widgets.noninteractive.bg_fill = trough;
+            v.widgets.noninteractive.weak_bg_fill = trough_weak;
+            v.widgets.open.bg_fill = open;
+            v.widgets.open.weak_bg_fill = open_weak;
         });
     }
 
@@ -199,6 +265,109 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::{HexColor, PaletteOverrides, Settings};
+    use eframe::egui::Color32;
+
+    /// The state the first frame leaves in `Visuals`: an app whose current
+    /// mode carries `overrides`, after one theme and one override pass on a
+    /// fresh context.
+    fn themed_app(dark: bool, overrides: PaletteOverrides) -> (egui::Context, App) {
+        let mut settings = Settings {
+            theme: if dark {
+                ThemeMode::Dark
+            } else {
+                ThemeMode::Light
+            },
+            ..Settings::default()
+        };
+        *settings.color_overrides.for_mode_mut(dark) = overrides;
+        let mut app = App::from_settings(settings);
+        let ctx = egui::Context::default();
+        app.apply_theme(&ctx);
+        app.apply_color_overrides(&ctx);
+        (ctx, app)
+    }
+
+    /// The colours egui draws warning and error text with are the palette's,
+    /// so the stats panel's "⚠ N gaps skipped" is the Warning colour: egui's
+    /// own orange measures 2.8:1 on the light panel, under the AA bar.
+    #[test]
+    fn warning_and_error_text_use_the_status_colours() {
+        for dark in [true, false] {
+            let (ctx, app) = themed_app(dark, PaletteOverrides::default());
+            let tc = app.settings.theme_colors(dark);
+            let visuals = &ctx.global_style().visuals;
+            assert_eq!(visuals.warn_fg_color, tc.status_warning(), "dark={dark}");
+            assert_eq!(visuals.error_fg_color, tc.status_error(), "dark={dark}");
+        }
+    }
+
+    /// The scrollbar trough stays on egui's fill until Background is
+    /// customised. Compared against `Visuals`, never a literal, so the
+    /// fallback keeps tracking whatever egui ships.
+    #[test]
+    fn the_scrollbar_trough_tracks_egui_until_the_background_is_overridden() {
+        for dark in [true, false] {
+            let stock = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let (ctx, _) = themed_app(dark, PaletteOverrides::default());
+            assert_eq!(
+                ctx.global_style().visuals.widgets.noninteractive.bg_fill,
+                stock.widgets.noninteractive.bg_fill,
+                "dark={dark}"
+            );
+
+            let picked = Color32::from_rgb(0x21, 0x30, 0x40);
+            let (ctx, _) = themed_app(
+                dark,
+                PaletteOverrides {
+                    background: Some(HexColor(picked)),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(
+                ctx.global_style().visuals.widgets.noninteractive.bg_fill,
+                picked,
+                "dark={dark}"
+            );
+        }
+    }
+
+    /// Same rule for the fill an open combo box draws itself with: egui's
+    /// until Button is customised, then the palette's.
+    #[test]
+    fn the_open_combo_box_tracks_egui_until_the_button_is_overridden() {
+        for dark in [true, false] {
+            let stock = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let (ctx, _) = themed_app(dark, PaletteOverrides::default());
+            assert_eq!(
+                ctx.global_style().visuals.widgets.open.weak_bg_fill,
+                stock.widgets.open.weak_bg_fill,
+                "dark={dark}"
+            );
+
+            let picked = Color32::from_rgb(0x40, 0x30, 0x21);
+            let (ctx, _) = themed_app(
+                dark,
+                PaletteOverrides {
+                    button: Some(HexColor(picked)),
+                    ..Default::default()
+                },
+            );
+            assert_eq!(
+                ctx.global_style().visuals.widgets.open.weak_bg_fill,
+                picked,
+                "dark={dark}"
+            );
+        }
+    }
 
     /// Ubuntu-Light has no rightwards arrow, so without the monospace face in
     /// the chain the Scale row and its toast render tofu boxes. It has to sit

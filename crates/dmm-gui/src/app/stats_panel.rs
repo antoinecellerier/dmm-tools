@@ -222,13 +222,14 @@ impl App {
         if self.session.integrator.skipped_intervals == 0 {
             return;
         }
+        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         ui.label(
             RichText::new(format!(
                 "\u{26A0} {} gaps >2s skipped",
                 self.session.integrator.skipped_intervals
             ))
             .font(egui::FontId::proportional(font_size))
-            .color(ui.visuals().warn_fg_color),
+            .color(tc.status_warning()),
         )
         .on_hover_text(
             "Intervals between samples longer than 2 s are not integrated. \

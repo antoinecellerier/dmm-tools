@@ -29,7 +29,7 @@ use dmm_lib::measurement::Measurement;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{Choice, Setting, registry};
 use dmm_lib::transform::Transform;
-use eframe::egui::{self, Color32};
+use eframe::egui;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -40,7 +40,7 @@ use crate::display;
 use crate::graph::Graph;
 use crate::recording::Recording;
 use crate::settings::{Settings, ThemeMode};
-use appearance::{font_definitions, install_text_styles};
+use appearance::{UiColorKey, font_definitions, install_text_styles};
 use connection::RemoteCommand;
 use dmm_lib::stats::SeriesStats;
 use export::ExportOutcome;
@@ -127,9 +127,8 @@ struct AppliedChrome {
     os_ppp: Option<f32>,
     /// Last applied theme (to avoid re-setting every frame).
     theme: Option<ThemeMode>,
-    /// Last applied UI chrome colors (bg, text, weak_text, button, plot_bg) to
-    /// avoid per-frame Visuals mutation.
-    ui_colors: Option<(Color32, Color32, Color32, Color32, Color32)>,
+    /// Last applied UI chrome colors, to avoid per-frame Visuals mutation.
+    ui_colors: Option<UiColorKey>,
     /// Last minimum window size pushed to the windowing system, so the
     /// viewport command is only re-sent when it actually changes.
     min_size: Option<egui::Vec2>,

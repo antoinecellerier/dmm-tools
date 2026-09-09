@@ -332,11 +332,24 @@ Auto-rotate log files by size or time (e.g., new file every hour or every 100 MB
 
 Use cases: multi-day environmental monitoring, production line logging.
 
-### Themable egui widget colours
+### Maybe: egui's special-cased colours
 
-**Complexity:** Low-medium
+**Complexity:** Low
 
-The settings palette covers the app's own colours (reading, traces, status), but egui's widget colours — the selected-chip fill and text now used by HOLD/REL/RANGE/LIVE, button frames, the focus ring — come from egui's default `Visuals` and cannot be changed. Expose the ones that carry state (selection fill/stroke at least) as palette fields, applied through `Visuals` in `app/appearance.rs`, with the same AA checks as the existing fields.
+Four colours stay on egui's shipped values on purpose, because they are
+egui's own idiom rather than the app's: the selection fill and text (toggle
+buttons, chips, combo rows, checkbox ticks, focus rings, text selection, the
+shift-drag rubber band), the text caret, hyperlinks, and egui_plot's
+right-drag box-zoom rectangle. The numbers, should it ever be wanted: the
+stock selection fill measures 2.33:1 dark and 1.55:1 light on the panel,
+below the 3:1 bar for a graphical element, and the light hyperlink colour
+2.77:1. The cheapest route is to follow Accent when Accent is overridden
+(7.80:1 dark / 5.41:1 light in the Default preset), with the caret following
+the selection. The box-zoom rectangle is hardcoded `DARK_BLUE` + `WHITE`
+inside egui_plot 0.37, so it needs either `allow_boxed_zoom(false)` at the
+call site or an `egui-upstream-opportunities.md` item asking egui_plot to
+read `Visuals::selection`. Borders and separators are handled separately, by
+a planned Border palette field.
 
 Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
 

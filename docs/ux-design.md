@@ -45,8 +45,9 @@ the full options table.
 - Three curated presets: Default (warm), High Contrast (bold), Colorblind-safe (blue/orange/purple)
 - All 21 base colors customizable per-theme via UI color pickers or JSON overrides
 - Colors are split: UI chrome (3), graph (12), status indicators (5), minimap (1)
-- Derived colors auto-track their base (cursor dim/delta, minimap line, live indicator, recording warning, button hover/active)
+- Derived colors auto-track their base (cursor dim/delta, minimap line, recording warning, button hover/active)
 - UI chrome colors (background, text, button) modify egui Visuals — plot grid and axis labels follow automatically
+- Warnings and errors egui draws itself follow the Warning/Error status colors
 - Preset selection and per-color overrides persist to `settings.json`
 
 ### Top Bar
