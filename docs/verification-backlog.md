@@ -816,7 +816,7 @@ routing non-plottable samples through something that carries mode/unit, and
 establishing the time origin without any plottable points. That is also the
 prerequisite for banding NCV — see `docs/future-improvements.md`.
 
-### Minimap trace wobbles as samples arrive
+### Minimap trace wobbles as samples arrive — RESOLVED
 
 After the per-pixel min/max decimation (commit 6852831) the minimap trace is
 clean but visibly wobbles back and forth as new samples come in. Likely
@@ -825,8 +825,10 @@ cause: `decimate_columns` buckets points by absolute screen column while
 point drifts left by a sub-pixel amount per sample and hops to the next
 column at a different moment, changing that column's extent frame to frame.
 Candidate fix: grow the strip's time span in steps rather than continuously,
-so points stay put between steps. Reproduce on the private display with the
-mock and the session clock flags (`--mock-clock-preseed`) once they land.
+so points stay put between steps. Resolved 2026-09-09 (commit 4988341): the buckets are
+now cut in session time, stepped between one and 1.25 physical pixels wide,
+so they keep their members while the strip rescales and only slide. The
+user confirmed the progression is visibly cleaner on the live display.
 
 ### GUI accessibility — screen reader walk-through
 
