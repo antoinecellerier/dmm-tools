@@ -17,7 +17,7 @@ paths:
 - Icon-only or custom-painted interactive widgets need an AccessKit label via `accesskit_node_builder`. Buttons with text get this automatically; icon buttons and custom widgets do not.
 - User-initiated actions (export, clear, connect) need visible feedback — toast, status message, or log line. Silent success is a UX bug.
 - Think through boundary conditions before writing code: extreme window sizes (very wide, very narrow, quarter-screen, maximized), high zoom, empty/no-data state, mode transitions.
-- Graph rendering has two tiers. The minimap uses a full-history segment cache invalidated by the monotonic `history_version` counter; the main graph builds segments from the visible slice via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) must also iterate only the visible slice — do not regress them to full-history scans.
+- Graph rendering has two tiers. The minimap uses a full-history segment cache invalidated by the monotonic `history_version` counter, thinned to per-pixel min/max columns and drawn as one polyline per segment; the main graph builds segments from the visible slice via `visible_index_range()` binary search. Per-frame helpers (stats, y-bounds, envelope, crossings) must also iterate only the visible slice — do not regress them to full-history scans.
 
 ## Semantics
 

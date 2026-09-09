@@ -17,6 +17,7 @@
 - **Accent sits on the UI row of the Customize colors panel** — it was listed under Status, though it colours the mode badges and the selected toggles and chips.
 - **A custom Accent colour fills the toggles and chips that are on** — HOLD, REL, the settings chips and the graph's toggles kept egui's fixed blue.
 - **A custom Text colour keeps its hue in bold headings** — a saturated red washed out to near-white in the device name, the section headings and What's New.
+- **Minimap trace stays smooth as the session grows** — past about one sample per pixel it broke into beads and dashes.
 - **Dark labels are brighter and secondary text meets AA** — the mode line, sub-value labels and hint captions sat near 2.7:1 dark and 2.9:1 light, below AA.
 - **The gaps warning in the stats panel meets AA in the light theme** — "⚠ N gaps skipped" sat at 2.8:1 in egui's fixed orange.
 - **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.

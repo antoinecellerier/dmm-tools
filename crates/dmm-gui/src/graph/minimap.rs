@@ -87,6 +87,131 @@ impl MinimapScale {
     }
 }
 
+/// One physical pixel column of the trace, reduced to the vertical extent of
+/// the samples that landed in it.
+#[derive(Clone, Copy)]
+struct Column {
+    key: f32,
+    y_min: f32,
+    y_max: f32,
+}
+
+impl Column {
+    fn new(key: f32, y: f32) -> Self {
+        Self {
+            key,
+            y_min: y,
+            y_max: y,
+        }
+    }
+
+    fn add(&mut self, y: f32) {
+        self.y_min = self.y_min.min(y);
+        self.y_max = self.y_max.max(y);
+    }
+
+    fn mid_y(&self) -> f32 {
+        (self.y_min + self.y_max) / 2.0
+    }
+
+    /// Whether `y_min` is the extreme closer to `y`.
+    fn min_is_nearer(&self, y: f32) -> bool {
+        (self.y_min - y).abs() <= (self.y_max - y).abs()
+    }
+
+    /// Push the column's extent as one vertical run, leaving on `y_min` when
+    /// `exit_min` (the other extreme is where the path enters). Returns the y
+    /// the path leaves the column on.
+    fn push(&self, exit_min: bool, ppp: f32, out: &mut Vec<egui::Pos2>) -> f32 {
+        let x = (self.key + 0.5) / ppp;
+        if self.y_min == self.y_max {
+            out.push(egui::pos2(x, self.y_min));
+            return self.y_min;
+        }
+        let (enter, exit) = if exit_min {
+            (self.y_max, self.y_min)
+        } else {
+            (self.y_min, self.y_max)
+        };
+        out.push(egui::pos2(x, enter));
+        out.push(egui::pos2(x, exit));
+        exit
+    }
+}
+
+/// Condense screen-space points to the vertical extent of each physical pixel
+/// column: two points, its lowest and highest sample, or one when the column
+/// is flat.
+///
+/// The strip holds the whole session, so past a sample per pixel there is
+/// nothing left to draw between neighbours — only how far the trace reaches
+/// in each column, which keeps every spike at full height while cutting the
+/// point count to twice the strip's pixel width. Columns are keyed on the
+/// physical pixel grid (`x * pixels_per_point`) and x is snapped to the
+/// column centre, so a column is one lit pixel rather than a smear across
+/// two.
+///
+/// The two points are ordered so the path leaves each column on the extreme
+/// nearer the next column, never on the far one: the path then alternates a
+/// vertical run with a rightward step, and no two consecutive segments can
+/// point in exactly opposite directions. That matters because epaint's join
+/// (`Path::add_open_points`) normalises the sum of the two segment normals,
+/// which for an exact reversal is the zero vector, and the corner tessellates
+/// into a twisted, half-lit strip. Emitting the samples in time order put an
+/// exact reversal in every column holding a local extremum — a crest drew
+/// dim and thin. Time order within a column is not preserved, which costs
+/// nothing: at pixel resolution only the column's extent is visible.
+///
+/// Input is assumed to be in time order, which is how the segment cache
+/// builds it.
+pub(super) fn decimate_columns(
+    points: impl Iterator<Item = egui::Pos2>,
+    pixels_per_point: f32,
+) -> Vec<egui::Pos2> {
+    // A zero, negative or non-finite scale would put every point in one
+    // column (or none at all); logical pixels are the sane fallback.
+    let ppp = if pixels_per_point.is_finite() && pixels_per_point > 0.0 {
+        pixels_per_point
+    } else {
+        1.0
+    };
+
+    let mut out = Vec::new();
+    // A column can only be emitted once the *next* one is complete, since
+    // that is what decides which way round its two points go — so one
+    // finished column waits in `pending` while `cur` fills.
+    let mut pending: Option<Column> = None;
+    let mut cur: Option<Column> = None;
+    let mut exit_y: Option<f32> = None;
+
+    for p in points {
+        let key = (p.x * ppp).floor();
+        if let Some(c) = cur.as_mut()
+            && c.key == key
+        {
+            c.add(p.y);
+            continue;
+        }
+        let done = cur.replace(Column::new(key, p.y));
+        if let (Some(prev), Some(done)) = (pending, done) {
+            exit_y = Some(prev.push(prev.min_is_nearer(done.mid_y()), ppp, &mut out));
+        }
+        pending = done;
+    }
+
+    if let Some(last) = cur {
+        if let Some(prev) = pending {
+            exit_y = Some(prev.push(prev.min_is_nearer(last.mid_y()), ppp, &mut out));
+        }
+        // Nothing follows the last column, so it enters on the extreme
+        // nearer where the path came from and leaves on the far one. A lone
+        // column has no incoming step and can go either way round.
+        let exit_min = exit_y.is_some_and(|y| !last.min_is_nearer(y));
+        last.push(exit_min, ppp, &mut out);
+    }
+    out
+}
+
 /// The slice of the history the main graph shows, as the minimap's drags
 /// move it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -289,25 +414,31 @@ impl Graph {
                 let range = (hi - lo).max(1e-10);
                 (lo, range)
             });
+        // Each segment is thinned to one min/max column per physical pixel and
+        // drawn as a single polyline. Drawn point by point instead, once the
+        // history passed a sample per pixel the semi-transparent segments
+        // blended twice at their joints and thinned to nothing between them —
+        // the trace read as beads and dashes. One path feathers once, joins
+        // properly, and the per-column extremes keep the spikes.
+        let pixels_per_point = ui.ctx().pixels_per_point();
         for seg in raw_segments {
-            let points: Vec<egui::Pos2> = seg
-                .iter()
-                .map(|&[t, v]| {
-                    let x = scale.x_of(t);
-                    let y_frac = match y_map {
-                        Some((y_lo, range)) => ((v - y_lo) / range) as f32,
-                        None => 0.5,
-                    };
-                    let y = rect.bottom() - y_frac * rect.height();
-                    egui::pos2(x, y)
-                })
-                .collect();
-            for window in points.windows(2) {
-                painter.line_segment(
-                    [window[0], window[1]],
-                    egui::Stroke::new(1.0_f32, line_color),
-                );
+            let projected = seg.iter().map(|&[t, v]| {
+                let x = scale.x_of(t);
+                let y_frac = match y_map {
+                    Some((y_lo, range)) => ((v - y_lo) / range) as f32,
+                    None => 0.5,
+                };
+                let y = rect.bottom() - y_frac * rect.height();
+                egui::pos2(x, y)
+            });
+            let points = decimate_columns(projected, pixels_per_point);
+            if points.len() < 2 {
+                continue;
             }
+            painter.add(egui::Shape::line(
+                points,
+                egui::Stroke::new(1.5_f32, line_color),
+            ));
         }
 
         // Draw viewport indicator as [ ] bracket markers

@@ -1565,7 +1565,8 @@ fn clear_drops_the_overlays_but_keeps_the_selection() {
 // ── Minimap coordinate math ─────────────────────────────────────────────────
 
 use super::minimap::{
-    Edge, MinimapDrag, MinimapScale, ViewWindow, drag_target, near_a_bracket, pan, resize,
+    Edge, MinimapDrag, MinimapScale, ViewWindow, decimate_columns, drag_target, near_a_bracket,
+    pan, resize,
 };
 
 /// A 400px-wide strip starting at x=100, over a 200-second session.
@@ -1727,4 +1728,181 @@ fn panning_centres_the_window_on_the_pointer_until_it_reaches_the_end() {
     let at_end = pan(w, 500.0, &strip(), 200.0);
     assert!(at_end.live);
     assert_eq!(at_end.center, w.center, "live follow picks its own centre");
+}
+
+// ── Minimap trace decimation ────────────────────────────────────────────────
+
+/// A whole session compresses into a 640px strip, so a long run puts
+/// thousands of samples on one pixel column. All that can be seen of them is
+/// how far up and down the column they reach.
+#[test]
+fn a_dense_column_collapses_to_its_extremes() {
+    let dense = (0..1000).map(|i| egui::pos2(0.3, (i % 100) as f32));
+    let out = decimate_columns(dense, 1.0);
+
+    assert_eq!(out.len(), 2, "one vertical run, not a point per sample");
+    assert!(out.iter().any(|p| p.y == 0.0), "column minimum survives");
+    assert!(out.iter().any(|p| p.y == 99.0), "column maximum survives");
+    assert!(
+        out.iter().all(|p| p.x == 0.5),
+        "every point sits on the column centre"
+    );
+
+    let flat = decimate_columns((0..1000).map(|_| egui::pos2(0.3, 7.0)), 1.0);
+    assert_eq!(flat, vec![egui::pos2(0.5, 7.0)], "a flat column is a point");
+}
+
+/// The overview exists to show the excursions, so a single sample far from
+/// its neighbours must not be averaged or dropped away.
+#[test]
+fn a_lone_spike_in_a_flat_run_survives() {
+    let flat_with_spike = (0..200).map(|i| {
+        let y = if i == 137 { 99.0 } else { 10.0 };
+        egui::pos2(i as f32 * 0.01, y)
+    });
+    let out = decimate_columns(flat_with_spike, 1.0);
+
+    assert!(out.iter().any(|p| p.y == 99.0), "the spike is still drawn");
+}
+
+/// A short session has fewer samples than columns; nothing may be lost, and
+/// each point moves only onto its column's centre.
+#[test]
+fn one_point_per_column_passes_through_snapped_to_the_column_centres() {
+    let sparse = (0..5).map(|i| egui::pos2(i as f32 + 0.2, i as f32 * 3.0));
+    let out = decimate_columns(sparse, 1.0);
+
+    assert_eq!(out.len(), 5);
+    let xs: Vec<f32> = out.iter().map(|p| p.x).collect();
+    let ys: Vec<f32> = out.iter().map(|p| p.y).collect();
+    assert_eq!(xs, vec![0.5, 1.5, 2.5, 3.5, 4.5]);
+    assert_eq!(ys, vec![0.0, 3.0, 6.0, 9.0, 12.0]);
+}
+
+/// On a HiDPI screen a logical pixel is two physical ones, so the columns
+/// halve — and the polyline still has to come out left to right.
+#[test]
+fn columns_follow_the_physical_pixel_grid_and_stay_in_order() {
+    let out = decimate_columns(
+        [
+            egui::pos2(0.2, 1.0),
+            egui::pos2(0.4, 2.0),
+            egui::pos2(0.7, 3.0),
+        ]
+        .into_iter(),
+        2.0,
+    );
+
+    let xs: Vec<f32> = out.iter().map(|p| p.x).collect();
+    assert_eq!(
+        xs,
+        vec![0.25, 0.25, 0.75],
+        "0.2 and 0.4 share a half-pixel column, 0.7 opens the next"
+    );
+    assert!(
+        out.windows(2).all(|w| w[0].x <= w[1].x),
+        "columns come out left to right"
+    );
+    assert_eq!(out[2].y, 3.0);
+}
+
+/// egui reports the pixel density from the window; a missing or nonsense one
+/// must not fold the whole trace into a single column.
+#[test]
+fn a_nonsense_pixel_density_falls_back_to_logical_pixels() {
+    let points = [egui::pos2(0.5, 1.0), egui::pos2(1.5, 2.0)];
+    for ppp in [0.0, -2.0, f32::NAN] {
+        let out = decimate_columns(points.into_iter(), ppp);
+        assert_eq!(out.len(), 2, "ppp {ppp}");
+        assert_eq!(out[0].x, 0.5);
+        assert_eq!(out[1].x, 1.5);
+    }
+}
+
+#[test]
+fn an_empty_history_gives_no_points_and_a_single_sample_gives_one() {
+    assert!(decimate_columns(std::iter::empty(), 1.0).is_empty());
+
+    let one = decimate_columns(std::iter::once(egui::pos2(7.3, 4.0)), 1.0);
+    assert_eq!(one, vec![egui::pos2(7.5, 4.0)]);
+}
+
+/// epaint tessellates a corner between two exactly opposite segments into a
+/// twisted, half-lit strip, so the polyline must never double back on
+/// itself — nor repeat a point, which is the same corner with no direction
+/// at all. Dense noisy data is where the old time-ordered output hit this on
+/// nearly every column.
+#[test]
+fn the_polyline_never_doubles_back() {
+    let sample = |i: i32| {
+        let x = i as f32 * 200.0 / 3000.0;
+        // A one-sample spike every few hundred samples, on top of a sine
+        // dense enough to put ~15 samples in every column.
+        let spike = if i % 613 == 0 { 45.0 } else { 0.0 };
+        egui::pos2(x, 60.0 + 20.0 * (x * 0.15).sin() + spike)
+    };
+    let out = decimate_columns((0..3000).map(sample), 1.0);
+
+    // Two segments can only be exactly opposite when both are vertical, and
+    // a column contributes at most one vertical run, so the invariant to
+    // hold is that no three points in a row share an x — plus no repeated
+    // point, which is a corner with no direction at all.
+    for w in out.windows(3) {
+        assert!(
+            w[0].x != w[1].x || w[1].x != w[2].x,
+            "two vertical segments in a row at x {}",
+            w[1].x
+        );
+    }
+    for w in out.windows(2) {
+        assert!(w[0] != w[1], "zero-length segment at {:?}", w[0]);
+    }
+
+    // Nothing was lost on the way: every column still reaches as far up and
+    // down as its samples did.
+    let mut extents: std::collections::HashMap<i32, (f32, f32)> = std::collections::HashMap::new();
+    for p in (0..3000).map(sample) {
+        let e = extents.entry(p.x.floor() as i32).or_insert((p.y, p.y));
+        e.0 = e.0.min(p.y);
+        e.1 = e.1.max(p.y);
+    }
+    for (col, (y_min, y_max)) in extents {
+        let x = col as f32 + 0.5;
+        assert!(out.contains(&egui::pos2(x, y_min)), "column {col} minimum");
+        assert!(out.contains(&egui::pos2(x, y_max)), "column {col} maximum");
+    }
+}
+
+/// Which end of a column's vertical run comes second decides how the step to
+/// the next column runs: leaving on the end facing that column keeps the
+/// step short and stops the path from reversing into it.
+#[test]
+fn the_exit_end_faces_the_next_column() {
+    let column = |x: f32, y_min: f32, y_max: f32| {
+        [egui::pos2(x + 0.1, y_min), egui::pos2(x + 0.2, y_max)].into_iter()
+    };
+
+    let down = decimate_columns(
+        column(0.0, 10.0, 12.0)
+            .chain(column(1.0, 30.0, 40.0))
+            .chain(column(2.0, 50.0, 52.0)),
+        1.0,
+    );
+    assert_eq!(
+        (down[2].y, down[3].y),
+        (30.0, 40.0),
+        "the next column is further down the screen"
+    );
+
+    let up = decimate_columns(
+        column(0.0, 10.0, 12.0)
+            .chain(column(1.0, 30.0, 40.0))
+            .chain(column(2.0, 0.0, 2.0)),
+        1.0,
+    );
+    assert_eq!(
+        (up[2].y, up[3].y),
+        (40.0, 30.0),
+        "the next column is further up the screen"
+    );
 }
