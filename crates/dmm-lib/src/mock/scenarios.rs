@@ -44,7 +44,10 @@ impl Scenario {
     /// The UT61E+ the mock stands in for silently ignores Peak on DC
     /// (spec §2.7), so the DC scenarios ignore it too.
     pub(super) fn peak_applies(&self) -> bool {
-        !matches!(self.id, MockMode::DcV | MockMode::DcMa | MockMode::OhmOl)
+        !matches!(
+            self.id,
+            MockMode::DcV | MockMode::DcMa | MockMode::OhmOl | MockMode::Noise
+        )
     }
 }
 
@@ -176,6 +179,58 @@ pub(super) fn temp_diff_value(t: f64, duration: f64) -> MeasuredValue {
 /// round, T2 − T1.
 pub(super) fn temp_diff_rev_value(t: f64, duration: f64) -> MeasuredValue {
     MeasuredValue::Normal(temp_t2_celsius(t, duration) - temp_t1_celsius(t, duration))
+}
+
+/// Noise samples per second: one fresh value per 100 ms, the cadence a
+/// reading arrives on, so a spike occupies exactly one displayed sample
+/// instead of smearing across its neighbours.
+const NOISE_STEPS_PER_SEC: f64 = 10.0;
+
+/// Spike strides, in steps. Coprime and offset so the two trains never land
+/// on the same step within a period (`noise_spikes_are_single_samples`
+/// checks it) — a step carrying both would show as neither spike.
+const NOISE_SPIKE_UP: (u64, u64) = (73, 5);
+const NOISE_SPIKE_DOWN: (u64, u64) = (111, 41);
+
+/// One reproducible pseudo-random value per step index, in [-0.5, 0.5).
+///
+/// splitmix64's finalizer, written out: `dmm-lib` carries no utility crates,
+/// and what the waveform needs is a hash that decorrelates neighbouring
+/// indices, not a stateful generator — state would make the reading depend on
+/// how often it was sampled.
+fn noise_hash(i: u64) -> f64 {
+    let mut z = i.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    // Top 53 bits: as many as an f64 mantissa holds exactly.
+    (z >> 11) as f64 / (1u64 << 53) as f64 - 0.5
+}
+
+/// The `noise` scenario's reading, in mV: a slow drift with per-sample noise
+/// on it and the occasional single-sample spike.
+///
+/// Every other scenario traces a smooth curve, which survives any amount of
+/// decimation — so none of them can tell whether the minimap's per-bucket
+/// min/max is working. Here a spike one sample wide has to stay visible once
+/// a bucket covers dozens of samples, and the noise band has to stay a band
+/// rather than collapsing to a line.
+///
+/// Still a pure function of elapsed time like the rest: the noise is a hash
+/// of the step index, and the index is taken within the period, so `t` and
+/// `t + duration` read the same.
+fn noise_value(t: f64, duration: f64) -> MeasuredValue {
+    let cycle_t = t.rem_euclid(duration);
+    let base = 12.0 + 1.5 * (cycle_t / duration * TAU).sin();
+    let i = (cycle_t * NOISE_STEPS_PER_SEC) as u64;
+    let mut v = base + noise_hash(i);
+    if i % NOISE_SPIKE_UP.0 == NOISE_SPIKE_UP.1 {
+        v += 8.0;
+    }
+    if i % NOISE_SPIKE_DOWN.0 == NOISE_SPIKE_DOWN.1 {
+        v -= 6.0;
+    }
+    MeasuredValue::Normal(v)
 }
 
 /// Frequency then period — the order the UT181A's `0x1121` frame sends them.
@@ -376,6 +431,24 @@ pub(super) fn scenarios() -> Vec<Scenario> {
             value_fn: temp_diff_rev_value,
             aux: &[],
         },
+        // Appended last for the reason the block above was: the auto-cycle
+        // order of everything before it stays unchanged.
+        //
+        // The one scenario that is not a smooth curve, and the one that runs
+        // a minute — the spike trains need room to repeat, and a graph filled
+        // with a minute of 100 ms samples is what the minimap has to condense.
+        Scenario {
+            id: MockMode::Noise,
+            mode: "DC mV",
+            mode_raw: 0x03,
+            range_raw: 0,
+            unit: "mV",
+            range_label: "220mV",
+            range_max: 220.0,
+            duration_secs: 60.0,
+            value_fn: noise_value,
+            aux: &[],
+        },
     ]
 }
 
@@ -520,6 +593,90 @@ mod tests {
             worst > 0.1 * aux_span,
             "{label}: sub-value is an affine copy of the main value \
              (worst deviation {worst}, sub-value swing {aux_span})"
+        );
+    }
+
+    fn normal(value: MeasuredValue, what: &str) -> f64 {
+        match value {
+            MeasuredValue::Normal(v) => v,
+            other => panic!("{what}: expected Normal, got {other:?}"),
+        }
+    }
+
+    /// Every noise step index within one period, sampled mid-step so the
+    /// value sits inside the 100 ms the index covers.
+    fn noise_steps() -> impl Iterator<Item = (u64, f64)> {
+        let duration = scenario_duration(MockMode::Noise);
+        let steps = (duration * NOISE_STEPS_PER_SEC) as u64;
+        (0..steps).map(move |i| {
+            let t = (i as f64 + 0.5) / NOISE_STEPS_PER_SEC;
+            (i, normal(noise_value(t, duration), "noise"))
+        })
+    }
+
+    /// `test_waveforms_loop_continuously` only checks the wrap point, which a
+    /// hash-driven waveform can pass while being different everywhere else —
+    /// so check the whole period, and check it twice for purity.
+    #[test]
+    fn noise_repeats_exactly_and_wraps_with_its_period() {
+        let duration = scenario_duration(MockMode::Noise);
+        for (i, v) in noise_steps() {
+            let t = (i as f64 + 0.5) / NOISE_STEPS_PER_SEC;
+            let again = normal(noise_value(t, duration), "noise");
+            assert_eq!(v, again, "noise_value is not pure at t={t}");
+            let wrapped = normal(noise_value(t + duration, duration), "noise");
+            assert!(
+                (v - wrapped).abs() < 1e-9,
+                "t={t} reads {v} but t+{duration} reads {wrapped}"
+            );
+        }
+    }
+
+    /// The scenario exists to give the graph and the minimap something that
+    /// decimates badly: a band the drift and noise never leave, and spikes
+    /// one sample wide that clear it.
+    #[test]
+    fn noise_spikes_are_single_samples() {
+        // Drift 12 ± 1.5, noise ± 0.5.
+        let band = 10.0..=14.0;
+        let mut up = 0;
+        let mut down = 0;
+        for (i, v) in noise_steps() {
+            let is_up = i % NOISE_SPIKE_UP.0 == NOISE_SPIKE_UP.1;
+            let is_down = i % NOISE_SPIKE_DOWN.0 == NOISE_SPIKE_DOWN.1;
+            assert!(!(is_up && is_down), "step {i} carries both spikes");
+            if is_up {
+                up += 1;
+                assert!(v > 17.0, "up spike at step {i} only reached {v}");
+            } else if is_down {
+                down += 1;
+                assert!(v < 9.0, "down spike at step {i} only reached {v}");
+            } else {
+                assert!(band.contains(&v), "step {i} left the band at {v}");
+            }
+        }
+        assert!(up > 0 && down > 0, "{up} up spikes, {down} down spikes");
+    }
+
+    /// A hash that returned the same value for neighbouring indices would
+    /// pass every check above while drawing a staircase, not noise.
+    #[test]
+    fn noise_actually_varies_between_steps() {
+        let quiet: Vec<f64> = noise_steps()
+            .filter(|(i, _)| {
+                i % NOISE_SPIKE_UP.0 != NOISE_SPIKE_UP.1
+                    && i % NOISE_SPIKE_DOWN.0 != NOISE_SPIKE_DOWN.1
+            })
+            .map(|(_, v)| v)
+            .collect();
+        let jumps = quiet
+            .windows(2)
+            .filter(|w| (w[1] - w[0]).abs() > 0.1)
+            .count();
+        assert!(
+            jumps > quiet.len() / 2,
+            "only {jumps} of {} steps moved",
+            quiet.len()
         );
     }
 

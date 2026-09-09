@@ -104,6 +104,7 @@ By default, the mock device cycles through all modes automatically. Use
 | `temp2` | Temperature with a second thermocouple (T2) |
 | `temp-diff` | Temperature difference T1-T2 |
 | `temp-diff-rev` | Temperature difference T2-T1 |
+| `noise` | DC mV, noisy with spikes (for graph and minimap checks) |
 
 **Examples:**
 

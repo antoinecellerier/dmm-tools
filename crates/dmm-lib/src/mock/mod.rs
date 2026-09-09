@@ -58,6 +58,7 @@ pub enum MockMode {
     TempDual,
     TempDiff,
     TempDiffRev,
+    Noise,
 }
 
 /// One row of the mode table: everything `MockMode` exposes for a variant.
@@ -72,8 +73,9 @@ struct MockModeInfo {
 
 /// Every mode, in auto-cycle order. The order of the first nine entries is
 /// load-bearing for the GUI demo and several tests; the multi-display and
-/// differential modes were appended so it stayed unchanged.
-const MODES: [MockModeInfo; 13] = [
+/// differential modes, and the noisy one after them, were appended so it
+/// stayed unchanged.
+const MODES: [MockModeInfo; 14] = [
     MockModeInfo {
         mode: MockMode::DcV,
         label: "dcv",
@@ -151,6 +153,12 @@ const MODES: [MockModeInfo; 13] = [
         label: "temp-diff-rev",
         description: "Temperature difference T2-T1",
         aliases: &["tempdiffrev", "temp_diff_rev"],
+    },
+    MockModeInfo {
+        mode: MockMode::Noise,
+        label: "noise",
+        description: "DC mV, noisy with spikes (for graph and minimap checks)",
+        aliases: &["noisy", "spikes"],
     },
 ];
 
@@ -1211,6 +1219,9 @@ mod tests {
             "temp_diff_rev".parse::<MockMode>().unwrap(),
             MockMode::TempDiffRev
         );
+        assert_eq!("noise".parse::<MockMode>().unwrap(), MockMode::Noise);
+        assert_eq!("noisy".parse::<MockMode>().unwrap(), MockMode::Noise);
+        assert_eq!("spikes".parse::<MockMode>().unwrap(), MockMode::Noise);
         assert!("invalid".parse::<MockMode>().is_err());
     }
 
