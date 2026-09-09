@@ -1470,4 +1470,64 @@ raw_payload=14"#
             );
         }
     }
+
+    /// Frames from a UT61B+ capture reported 2026-09-09 (v0.6.0 report, steps
+    /// `dcv`, `acv`, `ohm`, `dcma`). The meter showed volts on both voltage
+    /// steps while range byte 0 was read as 60mV, labelling them a thousandth
+    /// low; the other modes were already right and must stay so.
+    #[test]
+    fn parse_ut61b_plus_capture_frames() {
+        let table = tables::ut61b_plus::Ut61bPlusTable::new();
+
+        let dcv = [
+            0x02, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ];
+        assert_eq!(
+            snapshot(&parse_measurement(&dcv, &table).unwrap()),
+            r#"mode=DC V
+mode_raw=0x02
+range_raw=0x00
+value=Normal(0.0)
+unit=V
+range_label=6V
+progress=0
+display_raw=Some("  0.000")
+flags=auto_range
+aux=0
+raw_payload=14"#
+        );
+
+        let acv = [
+            0x00, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x33, 0x37, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ];
+        assert_eq!(
+            snapshot(&parse_measurement(&acv, &table).unwrap()),
+            r#"mode=AC V
+mode_raw=0x00
+range_raw=0x00
+value=Normal(0.037)
+unit=V
+range_label=6V
+progress=0
+display_raw=Some("  0.037")
+flags=auto_range
+aux=0
+raw_payload=14"#
+        );
+
+        // Open leads on the top resistance rung: index 5 of six, unchanged.
+        let ohm = [
+            0x06, 0x35, 0x20, 0x20, 0x20, 0x4F, 0x2E, 0x4C, 0x20, 0x03, 0x00, 0x30, 0x30, 0x30,
+        ];
+        let m = parse_measurement(&ohm, &table).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("MΩ", "60MΩ"));
+        assert_eq!(m.progress, Some(30));
+
+        let dcma = [
+            0x0E, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ];
+        let m = parse_measurement(&dcma, &table).unwrap();
+        assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("mA", "60mA"));
+    }
 }

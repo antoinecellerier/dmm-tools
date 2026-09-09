@@ -22,22 +22,8 @@ pub use super::specs_ut61b_plus::{DC_MA_MODE, DC_MA_SPECS, DC_UA_MODE, DC_UA_SPE
 // ── AC Voltage (manual page 27, D+ freq response 40Hz–1kHz) ────────
 
 // Same accuracy values as B+, different frequency label.
-// ±(1.2%+5) merged for 60mV/600mV; ±(1.0%+3) merged for 6V/60V/600V
+// ±(1.0%+3) merged for 6V/60V/600V; the mV rows are AC_MV_SPECS
 pub static AC_V_SPECS: &[SpecInfo] = &[
-    SpecInfo {
-        resolution: "0.01mV",
-        accuracy: &[AccuracyBand {
-            freq_range: Some("40Hz\u{2013}1kHz"),
-            accuracy: "1.2%+5",
-        }],
-    },
-    SpecInfo {
-        resolution: "0.1mV",
-        accuracy: &[AccuracyBand {
-            freq_range: Some("40Hz\u{2013}1kHz"),
-            accuracy: "1.2%+5",
-        }],
-    },
     SpecInfo {
         resolution: "0.001V",
         accuracy: &[AccuracyBand {
@@ -278,7 +264,7 @@ mod tests {
     #[test]
     fn shared_specs_accessible() {
         // Verify re-exports work
-        assert_eq!(DC_V_SPECS.len(), 6);
+        assert_eq!(DC_V_SPECS.len(), 4);
         assert_eq!(OHM_SPECS.len(), 6);
     }
 

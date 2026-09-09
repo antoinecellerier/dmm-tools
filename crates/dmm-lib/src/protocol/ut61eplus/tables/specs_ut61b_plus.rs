@@ -5,22 +5,10 @@ use crate::specs::{AccuracyBand, ModeSpecInfo, SpecInfo};
 
 // ── DC Voltage (manual page 26) ─────────────────────────────────────────
 
-// Range order matches ut61b_plus.rs: 60mV, 600mV, 6V, 60V, 600V, 1000V
+// Range order matches ut61b_plus.rs: 6V, 60V, 600V, 1000V. The manual's DC
+// voltage table also lists 60mV and 600mV; those rows belong to the separate
+// DC mV mode (0x03) and live in DC_MV_SPECS.
 pub static DC_V_SPECS: &[SpecInfo] = &[
-    SpecInfo {
-        resolution: "0.01mV",
-        accuracy: &[AccuracyBand {
-            freq_range: None,
-            accuracy: "0.8%+5",
-        }],
-    },
-    SpecInfo {
-        resolution: "0.1mV",
-        accuracy: &[AccuracyBand {
-            freq_range: None,
-            accuracy: "0.8%+5",
-        }],
-    },
     SpecInfo {
         resolution: "0.001V",
         accuracy: &[AccuracyBand {
@@ -59,23 +47,9 @@ pub static DC_V_MODE: ModeSpecInfo = ModeSpecInfo {
 
 // ── AC Voltage (manual page 27) ─────────────────────────────────────────
 
-// Range order: 60mV, 600mV, 6V, 60V, 600V, 750V
+// Range order: 6V, 60V, 600V, 750V; the mV rows are AC_MV_SPECS
 // UT61B+ frequency response: 40Hz–500Hz (single band)
 pub static AC_V_SPECS: &[SpecInfo] = &[
-    SpecInfo {
-        resolution: "0.01mV",
-        accuracy: &[AccuracyBand {
-            freq_range: Some("40Hz\u{2013}500Hz"),
-            accuracy: "1.2%+5",
-        }],
-    },
-    SpecInfo {
-        resolution: "0.1mV",
-        accuracy: &[AccuracyBand {
-            freq_range: Some("40Hz\u{2013}500Hz"),
-            accuracy: "1.2%+5",
-        }],
-    },
     SpecInfo {
         resolution: "0.001V",
         accuracy: &[AccuracyBand {
@@ -536,13 +510,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dc_v_has_6_ranges() {
-        assert_eq!(DC_V_SPECS.len(), 6);
+    fn dc_v_has_4_ranges() {
+        assert_eq!(DC_V_SPECS.len(), 4);
     }
 
     #[test]
-    fn ac_v_has_6_ranges_single_band() {
-        assert_eq!(AC_V_SPECS.len(), 6);
+    fn ac_v_has_4_ranges_single_band() {
+        assert_eq!(AC_V_SPECS.len(), 4);
         for spec in AC_V_SPECS {
             assert_eq!(spec.accuracy.len(), 1, "UT61B+ has single freq band");
         }

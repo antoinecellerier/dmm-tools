@@ -89,6 +89,52 @@ The manual (§VII) gives each button one line and no per-function list, so
 this is the only record. `choices()` still offers these settings there;
 narrowing it to what the meter accepts is a separate pass.
 
+### UT61B+ — first hardware report
+
+A third-party UT61B+ capture reported 2026-09-09 by @ChrisTheExpie in
+[issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19) is the
+family's first device evidence outside the in-house UT61E+. It was taken with
+v0.6.0, which records parsed samples but no wire frames, so everything below
+rests on the decoded steps and the reporter's screen confirmations.
+
+Settled by that report:
+
+- The meter names itself `UT61B+` (GetName 0x5F) and speaks the UT61E+'s
+  protocol unchanged — AB CD framing, BE16 checksum, 14-byte payload, mode
+  bytes 0x00/02/03/04/05/06/07/08/09/0C/0E/10/14, and all three flag nibbles.
+  Over a CH9329 cable, the first UT61+ family run on that bridge.
+- HOLD (0x4A), REL (0x48), MIN/MAX (0x41), ExitMinMax (0x42), RANGE (0x46)
+  and AUTO (0x47) each moved the expected flag on the next frame.
+- Ascending range-index order at every rung auto-ranging reached: index 0 is
+  the bottom of DC V, AC V, Ω, capacitance, µA, mA and A, and index 5 the top
+  of the six-rung Ω ladder (O.L on open leads).
+- Bar graph full scale is 30 (O.L on Ω), matching the manual's 31 segments
+  for 6,000-count models.
+- **DC V/AC V range 0 is 6V, not 60mV** — fixed the same day in
+  `ut61b_plus.rs`, and the same shape applied to `ut61d_plus.rs` as
+  [DEDUCED]. Every voltage read a thousandth low because the deduced table
+  put the mV ranges at indices 0-1. The E+ needed the same correction in
+  March; there the spare entry sat at index 4, where the meter never lands.
+
+Left open on this model. All of it wants a re-run on a build that records
+wire frames and drives the range sweep:
+
+- **V rungs 1-3** (60V, 600V, 1000V; AC 750V) — the run never left range 0,
+  and the 0.6.0 `range` step is a single press, not a sweep.
+- **The Hz ladder.** Steps `hz` (reached from V~) and `extra_0` (the Hz dial
+  position) both reported range index 0 while displaying `0.0` and `0.00`.
+  One index cannot carry both full scales, so the code's five invented Hz
+  ranges do not describe the meter.
+- **NCV levels.** The frame `14 30 20 20 20 2D 2D 2D 2D 00 00 30 34 30` is
+  four dashes, which the current counting rule reads as level 4; whether that
+  is a level or the B+'s idle display (the E+ idles at `EF`) is unknown.
+  Needs one frame taken with no field nearby.
+- **The Hz dial position's cycle button.** The reporter reached Duty % from
+  it with SELECT; `ut61b_plus.rs` gives that ring Hz/% (0x49). Issue #7's
+  dial-table ask covers it.
+- **Golden fixtures.** None taken from this report — the `ut61b+` golden set
+  waits for a capture on a build carrying the range fix.
+
 ### Modes not yet tested with real signals
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
@@ -751,11 +797,14 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   blocked on D+ hardware for index ordering (issue #7).
 - **UT61B+/D+ frequency ranges in code are invented structure** — the
   manual gives only a 10.00 Hz–10.00 MHz span, no discrete ranges, and
-  the code's five ranges top out at 600 kHz. Issue #7.
-- **UT61B+/D+ "[DEDUCED] ascending" range-index ordering is
-  unverifiable from the manual** and is in tension with the only
-  verified family data point (E+ puts 220mV at index 4, after the
-  V ranges). Issue #7.
+  the code's five ranges top out at 600 kHz. The 2026-09-09 UT61B+
+  capture now contradicts the structure outright: two Hz readings at
+  range index 0 with different full scales. Issue #7.
+- **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
+  not part of the V ladder** — settled for the B+ by the 2026-09-09
+  capture (index 0 is each ladder's bottom rung; DC V/AC V range 0 is
+  6V). The rungs above 0 and the whole D+ table are still [DEDUCED].
+  Issue #7.
 - **Golden YAML fidelity (2026-06 review):** the three UT61E+ golden
   captures look synthetic — the DC V case lacks the DC-indicator bit
   (verified set on real DC V) and bar-graph bytes are 00 00 despite

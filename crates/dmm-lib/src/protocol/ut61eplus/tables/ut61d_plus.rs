@@ -14,10 +14,12 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// Does NOT have: hFE, LPF, AC+DC, Inrush.
 ///
 /// Range values from the UT61+ Series User Manual, range index
-/// ordering is [DEDUCED] (ascending assumed).
+/// ordering is [DEDUCED] (ascending assumed). No UT61D+ has been connected;
+/// the V tables follow the UT61B+, whose bottom rung was verified by a
+/// capture on 2026-09-09 — see issue #7.
 pub struct Ut61dPlusTable {
-    dc_v: [RangeInfo; 6],
-    ac_v: [RangeInfo; 6],
+    dc_v: [RangeInfo; 4],
+    ac_v: [RangeInfo; 4],
     dc_mv: [RangeInfo; 2],
     ac_mv: [RangeInfo; 2],
     ohm: [RangeInfo; 6],
@@ -40,23 +42,12 @@ pub struct Ut61dPlusTable {
 impl Ut61dPlusTable {
     pub fn new() -> Self {
         Self {
-            // 6 ranges: 60mV, 600mV, 6V, 60V, 600V, 1000V
-            dc_v: [
-                r("60mV", "mV"),
-                r("600mV", "mV"),
-                r("6V", "V"),
-                r("60V", "V"),
-                r("600V", "V"),
-                r("1000V", "V"),
-            ],
-            ac_v: [
-                r("60mV", "mV"),
-                r("600mV", "mV"),
-                r("6V", "V"),
-                r("60V", "V"),
-                r("600V", "V"),
-                r("750V", "V"),
-            ],
+            // Four ranges, [DEDUCED] from the UT61B+ capture (2026-09-09):
+            // same 6,000-count table shape, so range byte 0 is 6V here too and
+            // 60mV/600mV belong to the mV modes (0x03/0x01) on their own dial
+            // position. Unverified on a UT61D+ — issue #7.
+            dc_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("1000V", "V")],
+            ac_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("750V", "V")],
             dc_mv: [r("60mV", "mV"), r("600mV", "mV")],
             ac_mv: [r("60mV", "mV"), r("600mV", "mV")],
             // 6 ranges: 600Ω, 6kΩ, 60kΩ, 600kΩ, 6MΩ, 60MΩ
@@ -313,29 +304,41 @@ mod tests {
     #[test]
     fn dcv_ranges() {
         let t = table();
-        // 6 ranges: 60mV, 600mV, 6V, 60V, 600V, 1000V
-        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().label, "60mV");
-        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().unit, "mV");
+        // 4 ranges: 6V, 60V, 600V, 1000V
+        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().label, "6V");
+        assert_eq!(t.range_info(Mode::DcV, 0).unwrap().unit, "V");
 
-        assert_eq!(t.range_info(Mode::DcV, 1).unwrap().label, "600mV");
-        assert_eq!(t.range_info(Mode::DcV, 2).unwrap().label, "6V");
-        assert_eq!(t.range_info(Mode::DcV, 3).unwrap().label, "60V");
-        assert_eq!(t.range_info(Mode::DcV, 4).unwrap().label, "600V");
+        assert_eq!(t.range_info(Mode::DcV, 1).unwrap().label, "60V");
+        assert_eq!(t.range_info(Mode::DcV, 2).unwrap().label, "600V");
 
-        let last = t.range_info(Mode::DcV, 5).unwrap();
+        let last = t.range_info(Mode::DcV, 3).unwrap();
         assert_eq!(last.label, "1000V");
         assert_eq!(last.unit, "V");
 
-        assert!(t.range_info(Mode::DcV, 6).is_none());
+        assert!(t.range_info(Mode::DcV, 4).is_none());
     }
 
     // --- AC Voltage ---
     #[test]
     fn acv_ranges() {
         let t = table();
-        assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "60mV");
-        assert_eq!(t.range_info(Mode::AcV, 5).unwrap().label, "750V");
-        assert!(t.range_info(Mode::AcV, 6).is_none());
+        assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "6V");
+        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "750V");
+        assert!(t.range_info(Mode::AcV, 4).is_none());
+    }
+
+    /// The D+ shares the B+'s V ladder: range 0 is 6V, and the mV ranges are
+    /// their own modes. [DEDUCED] from the UT61B+ capture — issue #7.
+    #[test]
+    fn voltage_range_0_is_volts_not_millivolts() {
+        let t = table();
+        for mode in [Mode::DcV, Mode::AcV] {
+            let r0 = t.range_info(mode, 0).unwrap();
+            assert_eq!(r0.label, "6V", "{mode:?} range 0");
+            assert_eq!(r0.unit, "V", "{mode:?} range 0");
+        }
+        assert_eq!(t.range_info(Mode::DcMv, 0).unwrap().label, "60mV");
+        assert_eq!(t.range_info(Mode::AcMv, 0).unwrap().label, "60mV");
     }
 
     // --- Resistance ---

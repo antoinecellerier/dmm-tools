@@ -258,6 +258,12 @@ simply never sets certain flag bits on models that lack the feature.
 (UT61E+, UT161E) have different range tables. The range byte encoding
 is the same: 0x30 prefix, mask with `& 0x0F` to get index.
 
+A UT61B+ capture reported 2026-09-09 (issue #19) confirmed that the
+6,000-count ladders ascend and that index 0 is the bottom rung in Ω,
+capacitance, µA, mA and A — auto-ranging sat there with the leads open or
+shorted, and the display's decimal count matches each bottom rung's full
+scale. Voltage is the exception, below.
+
 ### 5.1 DC Voltage
 
 | Range | 6,000-count (B+/D+) | 22,000-count (E+) |
@@ -273,6 +279,13 @@ The *index* column is the manual's own row order, not the wire encoding. On
 the UT61E+ the wire indices for DC V are 0=2.2V, 1=22V, 2=220V, 3=1000V —
 [VERIFIED] 2026-03-21 and re-walked 2026-09-07 (section 6.1). Its 220 mV
 full scale belongs to the separate DC mV mode, not to a DC V range index.
+
+The UT61B+ works the same way. Its wire indices are 0=6V, 1=60V, 2=600V,
+3=1000V, with index 0 [VERIFIED] by the 2026-09-09 capture — DC V and AC V
+both sent range byte 0 while displaying three decimals (`  0.000`, `  0.037`)
+and the meter's screen read volts. The rungs above 0 stay [DEDUCED]; 60 mV
+and 600 mV are the mV modes on their own dial position. The UT61D+ shares
+the table shape and is assumed to match, unverified — issue #7.
 
 ### 5.2 AC Voltage
 
@@ -361,16 +374,20 @@ commands have no effect on models lacking the corresponding feature:
 | GetMeasurement | 0x5E | Yes | Yes | Yes |
 | Hold | 0x4A | Yes | Yes | Yes |
 | Range | 0x46 | Yes | Yes | Yes |
-| Auto | 0x47 | [DEDUCED] | [DEDUCED] | Yes (§6.1) |
-| Rel | 0x48 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
-| MinMax | 0x41 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
-| ExitMinMax | 0x42 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
+| Auto | 0x47 | [VERIFIED]* | [DEDUCED] | Yes (§6.1) |
+| Rel | 0x48 | [VERIFIED]* | [DEDUCED] | [DEDUCED] |
+| MinMax | 0x41 | [VERIFIED]* | [DEDUCED] | [DEDUCED] |
+| ExitMinMax | 0x42 | [VERIFIED]* | [DEDUCED] | [DEDUCED] |
 | Select | 0x4C | [DEDUCED] | [DEDUCED] | [DEDUCED] |
 | Select2 | 0x49 | [DEDUCED] | [DEDUCED] | [DEDUCED] |
 | Light | 0x4B | [DEDUCED] | [DEDUCED] | [DEDUCED] |
 | PeakMinMax | 0x4D | No effect | [DEDUCED] | [DEDUCED] |
 | ExitPeak | 0x4E | No effect | [DEDUCED] | [DEDUCED] |
-| GetName | 0x5F | [UNVERIFIED] | [UNVERIFIED] | [UNVERIFIED] |
+| GetName | 0x5F | [VERIFIED]* | [UNVERIFIED] | [UNVERIFIED] |
+
+\* UT61B+ capture, 2026-09-09 (issue #19): each command moved the flag the
+tool expected on the next frame, and GetName answered `UT61B+`. Hold and
+Range were already [VENDOR]-confirmed and behaved the same way there.
 
 ### 6.1 Range and Auto semantics — [VERIFIED] (UT61E+, 2026-09-07)
 
@@ -410,10 +427,14 @@ possible from the vendor software.
    values but not which range index maps to which. Ascending order
    is [DEDUCED] except on the UT61E+ DC V ladder, where it is
    [VERIFIED] (section 6.1: one rung up per RANGE press, 1000V wraps
-   to 2.2V).
+   to 2.2V), and at the bottom rungs a UT61B+ auto-ranged into
+   (section 5).
 
-2. **6,000-count bar graph encoding** — 31 segments (from manual),
-   but wire encoding unknown for offsets 12-13. [UNVERIFIED]
+2. **6,000-count bar graph encoding** — 31 segments (from manual).
+   The 2026-09-09 UT61B+ capture carries the bar in the same bytes as
+   the E+ (payload 9-10, decimal `b9*10 + b10`), reading 30 at O.L and
+   1 at 4% of range — consistent with 31 segments counted 0-30. Never
+   walked against a moving input. [UNVERIFIED]
 
 3. **LoZ mode byte** — whether UT61D+ sends 0x15, 0x16, or both
    for its single LoZ dial position. [UNVERIFIED]
@@ -429,6 +450,18 @@ possible from the vendor software.
 
 7. **UT61B+ Peak command rejection** — whether PeakMinMax (0x4D) is
    silently ignored or returns an error. [UNVERIFIED]
+
+8. **Frequency ladder on 6,000-count models** — the 2026-09-09 UT61B+
+   capture reported range index 0 in Hz from both the V~ position and
+   the Hz dial position, displaying `0.0` in one and `0.00` in the
+   other. One index cannot carry both full scales, so the code's five
+   invented Hz ranges do not describe the meter. [UNVERIFIED]
+
+9. **NCV display on the UT61B+** — the same capture sent `   ----` in
+   NCV (mode 0x14). Four dashes read as detection level 4 under the
+   counting rule the UT61E+ taught (§13 of the manual), but the B+ may
+   simply idle at four dashes where the E+ idles at `EF`. Needs one
+   frame taken with no field nearby. [UNVERIFIED]
 
 ---
 
@@ -447,7 +480,7 @@ possible from the vendor software.
 | LoZ modes 0x15 vs 0x16 behavior | **VENDOR** | SI multiplier code paths differ |
 | LoZ mode byte sent by UT61D+ | **UNVERIFIED** | Requires device |
 | Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
-| Range index → full-scale mapping | **DEDUCED** (E+ DC V **VERIFIED**) | Ascending order assumed; E+ DC V walked on the device 2026-09-07 |
+| Range index → full-scale mapping | **DEDUCED** (E+ DC V, B+ bottom rungs **VERIFIED**) | Ascending order assumed; E+ DC V walked on the device 2026-09-07, B+ bottom rungs from the 2026-09-09 capture |
 | Commands beyond 0x5E/0x4A/0x46 | **DEDUCED** | UT61E+ device testing |
 
 ---

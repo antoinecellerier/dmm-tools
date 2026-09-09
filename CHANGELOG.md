@@ -42,6 +42,7 @@
 
 ### Bug fixes
 
+- **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
 - **UT61E+ NCV shows the detected level** — every detection read as level 0.
 - **Resuming a capture keeps its freeform steps** — a second run numbered from `extra_0` again and overwrote them.
 - **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.

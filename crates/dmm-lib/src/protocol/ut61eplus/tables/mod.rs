@@ -372,9 +372,10 @@ mod tests {
 
     #[test]
     fn ut61b_plus_dcv_specs() {
-        // Range 0 = 60mV on the 6,000-count UT61B+.
-        let spec = Ut61bPlusTable::new().spec_info(Mode::DcV, 0).unwrap();
-        assert_eq!(spec.resolution, "0.01mV");
+        // Range 0 = 6V on the 6,000-count UT61B+; 60mV is the DC mV mode.
+        let t = Ut61bPlusTable::new();
+        assert_eq!(t.spec_info(Mode::DcV, 0).unwrap().resolution, "0.001V");
+        assert_eq!(t.spec_info(Mode::DcMv, 0).unwrap().resolution, "0.01mV");
     }
 
     /// UT161B has no table of its own — `Ut61PlusProtocol::for_model` hands it
@@ -385,7 +386,7 @@ mod tests {
         assert_eq!(t.model_name(), "UNI-T UT61B+");
         assert_eq!(
             t.spec_info(Mode::DcV, 0).map(|s| s.resolution),
-            Some("0.01mV")
+            Some("0.001V")
         );
     }
 
