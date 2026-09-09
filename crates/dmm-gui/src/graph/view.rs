@@ -344,7 +344,7 @@ impl Graph {
             let rect = egui::Rect::from_two_pos(start, current);
             let visuals = ui.visuals();
             let fill = visuals.selection.bg_fill.linear_multiply(0.25);
-            let stroke = egui::Stroke::new(1.0_f32, visuals.selection.stroke.color);
+            let stroke = egui::Stroke::new(1.0_f32, crate::a11y::focus_ring_color(visuals));
             ui.painter().rect_filled(rect, 0.0, fill);
             ui.painter()
                 .rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);

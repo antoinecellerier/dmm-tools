@@ -17,16 +17,38 @@ pub(crate) fn set_role(ui: &Ui, id: egui::Id, role: egui::accesskit::Role) {
         .accesskit_node_builder(id, |builder| builder.set_role(role));
 }
 
+/// Whichever of the two selection colours stands out against the panel.
+///
+/// Neither one alone works in both palettes: egui's own `selection.stroke` is
+/// a pale blue that reads well on either panel while its `bg_fill` sits at
+/// 2.33:1 dark / 1.55:1 light, but once the user pins an Accent the app makes
+/// the fill the Accent and the stroke the *background* colour, so that the
+/// caption of a selected toggle can be read on the fill — and a ring in the
+/// background colour is no ring at all. Every selection-coloured cue the app
+/// paints on the panel takes its colour from here for that reason, focus
+/// rings and the graph's zoom rubber band alike.
+pub(crate) fn focus_ring_color(visuals: &egui::Visuals) -> egui::Color32 {
+    let panel = visuals.panel_fill;
+    let on_panel = |c: egui::Color32| crate::theme::contrast(c, panel);
+    let selection = &visuals.selection;
+    if on_panel(selection.bg_fill) > on_panel(selection.stroke.color) {
+        selection.bg_fill
+    } else {
+        selection.stroke.color
+    }
+}
+
 /// Paint a high-contrast focus ring around `response` when it has keyboard
 /// focus. Use for custom-painted widgets (color swatches, minimap, split
-/// dividers) whose own paint overdraws the default focus rectangle.
+/// dividers) whose own paint overdraws the default focus rectangle, and for
+/// text fields: egui draws their focused frame in `selection.stroke`, which
+/// is the background colour once an Accent is pinned (`appearance.rs`).
 pub(crate) fn paint_focus_ring(ui: &Ui, response: &Response) {
     if response.has_focus() {
-        let stroke_color = ui.visuals().selection.stroke.color;
         ui.painter().rect_stroke(
             response.rect.expand(2.0),
             2.0,
-            egui::Stroke::new(2.0_f32, stroke_color),
+            egui::Stroke::new(2.0_f32, focus_ring_color(ui.visuals())),
             egui::StrokeKind::Outside,
         );
     }
@@ -204,6 +226,40 @@ impl UiA11yExt for Ui {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A focus ring is a graphical element, so `.claude/rules/gui.md` asks for
+    /// 3:1 on the panel it is drawn over — with egui's own selection colours
+    /// and with the pair `apply_color_overrides` installs once the user pins
+    /// an Accent, where the selection *stroke* is the background colour and
+    /// only the fill is visible.
+    #[test]
+    fn the_focus_ring_stays_visible_on_the_panel() {
+        for dark in [true, false] {
+            let stock = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let accent = if dark {
+                egui::Color32::from_rgb(100, 180, 255)
+            } else {
+                egui::Color32::from_rgb(0, 100, 200)
+            };
+            let mut pinned = stock.clone();
+            pinned.selection.bg_fill = accent;
+            pinned.selection.stroke.color = pinned.panel_fill;
+
+            for (name, visuals) in [("egui's own", &stock), ("Accent pinned", &pinned)] {
+                let ring = focus_ring_color(visuals);
+                let ratio = crate::theme::contrast(ring, visuals.panel_fill);
+                assert!(
+                    ratio >= 3.0,
+                    "{name} (dark={dark}): focus ring {ring:?} on panel {:?} is {ratio:.2}:1, below 3:1",
+                    visuals.panel_fill
+                );
+            }
+        }
+    }
 
     fn arrow(key: egui::Key) -> egui::Event {
         egui::Event::Key {

@@ -336,20 +336,24 @@ Use cases: multi-day environmental monitoring, production line logging.
 
 **Complexity:** Low
 
-Four colours stay on egui's shipped values on purpose, because they are
-egui's own idiom rather than the app's: the selection fill and text (toggle
-buttons, chips, combo rows, checkbox ticks, focus rings, text selection, the
-shift-drag rubber band), the text caret, hyperlinks, and egui_plot's
-right-drag box-zoom rectangle. The numbers, should it ever be wanted: the
-stock selection fill measures 2.33:1 dark and 1.55:1 light on the panel,
-below the 3:1 bar for a graphical element, and the light hyperlink colour
-2.77:1. The cheapest route is to follow Accent when Accent is overridden
-(7.80:1 dark / 5.41:1 light in the Default preset), with the caret following
-the selection. The box-zoom rectangle is hardcoded `DARK_BLUE` + `WHITE`
-inside egui_plot 0.37, so it needs either `allow_boxed_zoom(false)` at the
-call site or an `egui-upstream-opportunities.md` item asking egui_plot to
-read `Visuals::selection`. Borders and separators are handled separately, by
-the palette's Border field.
+The selection fill and text (toggle buttons, chips, combo rows, focus rings,
+text selection, the shift-drag rubber band) now follow Accent once Accent is
+customised, with selected text drawn in the Background colour; left alone
+they keep egui's own blue, which measures 2.33:1 dark and 1.55:1 light on the
+panel, below the 3:1 bar for a graphical element.
+
+Three colours still stay on egui's shipped values on purpose, because they
+are egui's own idiom rather than the app's: the text caret, hyperlinks, and
+egui_plot's right-drag box-zoom rectangle. The numbers, should it ever be
+wanted: the light hyperlink colour is 2.77:1 on the panel, and the cheapest
+route for both it and the caret is to follow Accent the way the selection now
+does (7.80:1 dark / 5.41:1 light in the Default preset). The box-zoom
+rectangle is hardcoded `DARK_BLUE` + `WHITE` inside egui_plot 0.37, so it
+needs either `allow_boxed_zoom(false)` at the call site or an
+`egui-upstream-opportunities.md` item asking egui_plot to read
+`Visuals::selection`. Borders and separators are handled separately, by the
+palette's Border field, and checkbox ticks by the Text field — egui 0.36
+draws them from the widget's `fg_stroke`, not from `Visuals::selection`.
 
 Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
 

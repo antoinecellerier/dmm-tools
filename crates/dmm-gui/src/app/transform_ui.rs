@@ -133,6 +133,9 @@ impl App {
                         .font(font.clone())
                         .hint_text(hint),
                 );
+                // egui's own focused frame is invisible under a pinned
+                // Accent; the ring is the field's only keyboard cue then.
+                crate::a11y::paint_focus_ring(ui, &resp);
                 // Enter, never `.changed()`: committing per keystroke would
                 // clear the graph and the statistics on every digit typed.
                 resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter))

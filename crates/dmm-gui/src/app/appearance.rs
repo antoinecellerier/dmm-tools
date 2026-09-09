@@ -8,32 +8,41 @@ use super::App;
 use crate::settings::ThemeMode;
 
 /// Memo key for [`App::apply_color_overrides`]: every colour it pins into
-/// egui's `Visuals`, plus whether the palette pins a Border and whether
-/// Background and Button are overridden.
+/// egui's `Visuals`, plus whether the palette pins a Border and a selection
+/// colour and whether Background and Button are overridden.
 ///
-/// Those three are not implied by the colours: they decide whether the open
-/// combo box, the hover/press border strokes and the scrollbar trough follow
-/// the palette or keep egui's own values, and a user may override a field to
-/// the value it already had. The border is carried as an `Option` rather than
-/// a colour and a flag because the tuple is at the twelve-element ceiling
-/// `PartialEq` is implemented up to; `None` means egui's own grey, which
-/// depends only on the mode, and a mode change clears the memo outright. Text
-/// needs no such flag — the caption colours already carry the fallback, since
-/// they resolve to egui's own values when Text is not overridden.
-pub(super) type UiColorKey = (
-    egui::Color32,         // background
-    egui::Color32,         // text
-    egui::Color32,         // weak text
-    egui::Color32,         // button
-    Option<egui::Color32>, // border, None while it is egui's own
-    egui::Color32,         // plot background
-    egui::Color32,         // warning
-    egui::Color32,         // error
-    egui::Color32,         // button caption
-    egui::Color32,         // emphasised text
-    bool,                  // background overridden
-    bool,                  // button overridden
-);
+/// Those four are not implied by the colours: they decide whether the open
+/// combo box, the hover/press border strokes, the selection fill and the
+/// scrollbar trough follow the palette or keep egui's own values, and a user
+/// may override a field to the value it already had. Border and selection are
+/// carried as `Option`s rather than a colour and a flag each; `None` means
+/// egui's own value, which depends only on the mode, and a mode change clears
+/// the memo outright. Text needs no such flag — the caption colours already
+/// carry the fallback, since they resolve to egui's own values when Text is
+/// not overridden.
+///
+/// A struct rather than the tuple this used to be: the tuple had reached the
+/// twelve-element ceiling `PartialEq` is implemented up to, and named fields
+/// make a mismatch between the key and what the function actually assigns
+/// findable.
+#[derive(PartialEq, Clone, Copy)]
+pub(super) struct UiColorKey {
+    background: egui::Color32,
+    text: egui::Color32,
+    weak_text: egui::Color32,
+    button: egui::Color32,
+    /// `None` while the border is egui's own grey.
+    border: Option<egui::Color32>,
+    /// `None` while the selection is egui's own blue.
+    selection: Option<egui::Color32>,
+    plot_background: egui::Color32,
+    warning: egui::Color32,
+    error: egui::Color32,
+    button_text: egui::Color32,
+    strong_text: egui::Color32,
+    background_overridden: bool,
+    button_overridden: bool,
+}
 
 /// Size of `TextStyle::Small`, in points before zoom.
 ///
@@ -124,6 +133,7 @@ impl App {
         let overrides = self.settings.color_overrides.for_mode(dark);
         let bg_overridden = overrides.background.is_some();
         let button_overridden = overrides.button.is_some();
+        let accent_overridden = overrides.accent.is_some();
         let bg = tc.background();
         let text = tc.text();
         let weak_text = tc.weak_text();
@@ -135,20 +145,22 @@ impl App {
         let error = tc.status_error();
         let button_text = tc.button_text();
         let strong_text = tc.strong_text();
-        let key = (
-            bg,
+        let accent = tc.accent();
+        let key = UiColorKey {
+            background: bg,
             text,
             weak_text,
             button,
-            border_pinned.then_some(border),
-            plot_bg,
+            border: border_pinned.then_some(border),
+            selection: accent_overridden.then_some(accent),
+            plot_background: plot_bg,
             warning,
             error,
             button_text,
             strong_text,
-            bg_overridden,
+            background_overridden: bg_overridden,
             button_overridden,
-        );
+        };
 
         if self.applied.ui_colors == Some(key) {
             return;
@@ -197,6 +209,27 @@ impl App {
                 w.hovered.bg_stroke.color,
                 w.active.bg_stroke.color,
             )
+        };
+        // The same rule again for `selection`, driven by Accent. egui fills a
+        // selected `Button`/`selectable_label` — the meter's HOLD/REL/AUTO
+        // toggles, the settings and graph chips — with `selection.bg_fill` and
+        // redraws its caption in `selection.stroke.color`; the text-selection
+        // highlight reads the same pair, and the app's own focus ring takes
+        // whichever of the two is visible on the panel
+        // (`a11y::focus_ring_color`). Selected text goes on the background
+        // colour rather than the text colour: it sits *on* the accent, so it
+        // needs the contrast the palette already guarantees between those two
+        // (`text_colors_meet_wcag_aa_in_both_themes`). The stroke width is
+        // egui's.
+        //
+        // egui strokes the frame of a focused `TextEdit` with the same
+        // colour, and that one sits on the panel rather than on the accent,
+        // so it disappears here: the graph toolbar and Scale fields paint
+        // `a11y::paint_focus_ring` over it for a cue that survives an Accent.
+        let (selection_fill, selection_text) = if accent_overridden {
+            (accent, bg)
+        } else {
+            (stock.selection.bg_fill, stock.selection.stroke.color)
         };
         ctx.global_style_mut(|style| {
             let v = &mut style.visuals;
@@ -249,6 +282,8 @@ impl App {
             v.widgets.open.bg_stroke.color = open_stroke;
             v.widgets.hovered.bg_stroke.color = hover_stroke;
             v.widgets.active.bg_stroke.color = active_stroke;
+            v.selection.bg_fill = selection_fill;
+            v.selection.stroke.color = selection_text;
         });
     }
 
@@ -563,6 +598,47 @@ mod tests {
             ] {
                 assert_eq!(got, want, "{name} stroke width changed (dark={dark})");
             }
+        }
+    }
+
+    /// The fill behind a selected toggle or chip, and the colour egui redraws
+    /// its caption in, stay on egui's blue until Accent is customised. The
+    /// stroke *width* is egui's and must survive the recolour.
+    #[test]
+    fn the_selection_tracks_egui_until_the_accent_is_overridden() {
+        for dark in [true, false] {
+            let stock = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let (ctx, _) = themed_app(dark, PaletteOverrides::default());
+            let style = ctx.global_style();
+            let selection = &style.visuals.selection;
+            assert_eq!(selection.bg_fill, stock.selection.bg_fill, "dark={dark}");
+            assert_eq!(
+                selection.stroke.color, stock.selection.stroke.color,
+                "dark={dark}"
+            );
+            drop(style);
+
+            let picked = Color32::from_rgb(0x22, 0xC5, 0x5E);
+            let (ctx, app) = themed_app(
+                dark,
+                PaletteOverrides {
+                    accent: Some(HexColor(picked)),
+                    ..Default::default()
+                },
+            );
+            let tc = app.settings.theme_colors(dark);
+            let style = ctx.global_style();
+            let selection = &style.visuals.selection;
+            assert_eq!(selection.bg_fill, picked, "dark={dark}");
+            assert_eq!(selection.stroke.color, tc.background(), "dark={dark}");
+            assert_eq!(
+                selection.stroke.width, stock.selection.stroke.width,
+                "selection stroke width changed (dark={dark})"
+            );
         }
     }
 

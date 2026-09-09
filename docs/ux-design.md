@@ -49,7 +49,8 @@ the full options table.
 - UI chrome colors (background, text, weak text, button, border) modify egui Visuals — plot grid and axis labels follow automatically
 - Border (separators, panel edges, window frames, plot outline) is pinned only by High Contrast, at 3:1 or better; the other presets keep egui's own faint grey
 - Warnings and errors egui draws itself follow the Warning/Error status colors
-- Button captions, bold headings and hovered text follow the Text color once it is customized (egui's own greys otherwise)
+- Button captions, bold headings and hovered text follow the Text color once it is customized (egui's own greys otherwise); the emphasis lift is small enough that a saturated color keeps its hue
+- The selected fill of toggles and chips, focus rings and selected text follow the Accent color once it is customized (egui's own blue otherwise)
 - Preset selection and per-color overrides persist to `settings.json`
 
 ### Top Bar

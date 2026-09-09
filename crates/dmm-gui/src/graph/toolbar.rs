@@ -108,13 +108,15 @@ fn toggle_chip(ui: &mut Ui, on: &mut bool, label: &str, hover: &str) -> bool {
 /// text, returning `changed()`. Parsing stays at the call site — each field
 /// accepts a different shape of value.
 fn text_field(ui: &mut Ui, text: &mut String, width: f32, hint: &str, hover: &str) -> bool {
-    ui.add(
+    let resp = ui.add(
         egui::TextEdit::singleline(text)
             .desired_width(width)
             .hint_text(hint),
-    )
-    .on_hover_text(hover)
-    .changed()
+    );
+    // egui's own focused frame is invisible under a pinned Accent; the ring
+    // is the field's only keyboard cue then (`a11y::paint_focus_ring`).
+    crate::a11y::paint_focus_ring(ui, &resp);
+    resp.on_hover_text(hover).changed()
 }
 
 impl Graph {

@@ -125,7 +125,7 @@ impl PaletteField {
             Self::StatusWarning => "Warning status color",
             Self::StatusError => "Error status color",
             Self::StatusInactive => "Inactive / disconnected status color",
-            Self::Accent => "Accent color used by active toggles and highlights",
+            Self::Accent => "Mode badges, and the fill behind selected toggles, chips and text",
             Self::MinimapViewport => "Minimap viewport rectangle color",
         }
     }
@@ -550,6 +550,44 @@ fn egui_visuals(dark: bool) -> egui::Visuals {
     }
 }
 
+/// WCAG 2.1 relative luminance of an sRGB colour.
+fn luminance(c: Color32) -> f64 {
+    fn lin(c: u8) -> f64 {
+        let c = c as f64 / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
+}
+
+/// WCAG 2.1 contrast ratio between two colours (1.0..=21.0).
+///
+/// The palette's own contrast assertions live in this module's tests; this is
+/// the same function, out of `#[cfg(test)]` because [`crate::a11y`] picks the
+/// more visible of two candidate focus-ring colours at runtime.
+pub(crate) fn contrast(a: Color32, b: Color32) -> f64 {
+    let (la, lb) = (luminance(a), luminance(b));
+    let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
+    (hi + 0.05) / (lo + 0.05)
+}
+
+/// How far [`ThemeColors::strong_text`] pushes a customised text colour
+/// towards white (dark mode) or black (light) to emphasise it.
+///
+/// The lift has to buy visible emphasis without eating the hue, and those two
+/// pull against each other: the fraction that survives is `1 - LIFT`, so 0.8
+/// left a fifth of it. A saturated red (255,60,60) came out (255,216,216) —
+/// a pale pink indistinguishable from white, which is what every `.strong()`
+/// heading, the device name and the What's New window's bold runs turned into.
+/// 0.4 keeps 60% of the spread — (255,138,138), still plainly the red the user
+/// picked — and still separates from the body text (grey 180 → 210,
+/// 80 → 48 light). It is deliberately a smaller step than egui's own
+/// 180 → 255 / 60 → 0: egui moves between two greys, where hue cannot be lost.
+const STRONG_TEXT_LIFT: f32 = 0.4;
+
 // ── ThemeColors ─────────────────────────────────────────────────────────────
 
 /// Theme-aware color palette. Resolves colors from: override → preset → default.
@@ -627,10 +665,10 @@ impl ThemeColors {
     /// caption of a hovered or pressed widget
     /// (`widgets.hovered`/`active.fg_stroke`).
     ///
-    /// A customised text colour drives it, pushed 80% of the way to white in
-    /// dark mode and to black in light — close to the 180 → 240 (dark) and
-    /// 80 → 16 (light) relation egui's own defaults hold between normal and
-    /// emphasised text. Unset it is egui's value, read from `Visuals` for the
+    /// A customised text colour drives it, pushed [`STRONG_TEXT_LIFT`] of the
+    /// way to white in dark mode and to black in light — far enough to read as
+    /// emphasis, near enough that a saturated text colour keeps its hue rather
+    /// than washing out. Unset it is egui's value, read from `Visuals` for the
     /// same reason as [`ThemeColors::button_text`].
     pub(crate) fn strong_text(&self) -> Color32 {
         if self.overrides.text.is_some() {
@@ -639,7 +677,7 @@ impl ThemeColors {
             } else {
                 Color32::BLACK
             };
-            self.text().lerp_to_gamma(pole, 0.8)
+            self.text().lerp_to_gamma(pole, STRONG_TEXT_LIFT)
         } else {
             egui_visuals(self.dark).widgets.active.fg_stroke.color
         }
@@ -1224,30 +1262,15 @@ mod tests {
         assert_eq!(tc.button(), Color32::from_rgb(80, 80, 80));
     }
 
-    /// WCAG 2.1 relative luminance of an sRGB color.
-    fn luminance(c: Color32) -> f64 {
-        fn lin(c: u8) -> f64 {
-            let c = c as f64 / 255.0;
-            if c <= 0.04045 {
-                c / 12.92
-            } else {
-                ((c + 0.055) / 1.055).powf(2.4)
-            }
-        }
-        0.2126 * lin(c.r()) + 0.7152 * lin(c.g()) + 0.0722 * lin(c.b())
-    }
-
-    /// WCAG 2.1 contrast ratio between two colors (1.0..=21.0).
-    fn contrast(a: Color32, b: Color32) -> f64 {
-        let (la, lb) = (luminance(a), luminance(b));
-        let (hi, lo) = if la > lb { (la, lb) } else { (lb, la) };
-        (hi + 0.05) / (lo + 0.05)
-    }
-
     /// Every color used to render text must meet WCAG 2.1 AA (>= 4.5:1)
     /// against its preset's panel background, in both themes. Catches
     /// dark-tuned colors that fail on light backgrounds — historically the
     /// largest source of rework in this project.
+    ///
+    /// The accent row covers a second case: `apply_color_overrides` fills a
+    /// selected toggle or chip with the accent and draws its caption in the
+    /// background colour, so accent-against-background is also the contrast of
+    /// selected text on the selection fill.
     #[test]
     fn text_colors_meet_wcag_aa_in_both_themes() {
         for preset in [
@@ -1398,33 +1421,56 @@ mod tests {
     }
 
     /// Once Text is customised, captions are that colour and emphasised text
-    /// is derived from it — brighter in dark mode, darker in light. Another
-    /// field's override does not pull either off egui's value.
+    /// is derived from it — brighter in dark mode, darker in light, and still
+    /// the same hue. The second half is what `STRONG_TEXT_LIFT` is for: at 0.8
+    /// a saturated red (255,60,60) emphasised to (255,216,216), a pink no one
+    /// could tell from white, so the derivation has to keep most of the
+    /// channel spread it started with. Another field's override does not pull
+    /// either colour off egui's value.
     #[test]
     fn strong_text_derives_from_text_override() {
-        let picked = Color32::from_rgb(0x8A, 0xC0, 0xE0);
-        for dark in [true, false] {
-            let overrides = PaletteOverrides {
-                text: Some(HexColor(picked)),
-                ..Default::default()
-            };
-            let tc = ThemeColors::new(dark, ColorPreset::Default, &overrides);
-            assert_eq!(tc.button_text(), picked, "dark={dark}");
-            let strong = tc.strong_text();
-            assert_ne!(strong, picked, "dark={dark}: strong text is not emphasised");
-            let (ls, lp) = (luminance(strong), luminance(picked));
-            if dark {
+        /// Distance between the brightest and dimmest channel — how much of
+        /// the colour is hue rather than brightness.
+        fn spread(c: Color32) -> i32 {
+            let [r, g, b, _] = c.to_array();
+            i32::from(r.max(g).max(b)) - i32::from(r.min(g).min(b))
+        }
+
+        for picked in [
+            Color32::from_rgb(0x8A, 0xC0, 0xE0),
+            Color32::from_rgb(255, 60, 60),
+        ] {
+            for dark in [true, false] {
+                let overrides = PaletteOverrides {
+                    text: Some(HexColor(picked)),
+                    ..Default::default()
+                };
+                let tc = ThemeColors::new(dark, ColorPreset::Default, &overrides);
+                assert_eq!(tc.button_text(), picked, "dark={dark}");
+                let strong = tc.strong_text();
+                assert_ne!(strong, picked, "dark={dark}: strong text is not emphasised");
+                let (ls, lp) = (luminance(strong), luminance(picked));
+                if dark {
+                    assert!(
+                        ls > lp,
+                        "dark: strong text {strong:?} is not brighter than {picked:?}"
+                    );
+                } else {
+                    assert!(
+                        ls < lp,
+                        "light: strong text {strong:?} is not darker than {picked:?}"
+                    );
+                }
                 assert!(
-                    ls > lp,
-                    "dark: strong text {strong:?} is not brighter than {picked:?}"
-                );
-            } else {
-                assert!(
-                    ls < lp,
-                    "light: strong text {strong:?} is not darker than {picked:?}"
+                    spread(strong) * 2 >= spread(picked),
+                    "dark={dark}: strong text {strong:?} keeps only {} of {picked:?}'s {} channel spread — the hue has washed out",
+                    spread(strong),
+                    spread(picked)
                 );
             }
+        }
 
+        for dark in [true, false] {
             let elsewhere = PaletteOverrides {
                 background: Some(HexColor(Color32::from_rgb(10, 20, 30))),
                 ..Default::default()
@@ -1521,7 +1567,9 @@ mod tests {
     /// A user's own pick is their own responsibility, but the *derivation*
     /// must not itself lose contrast: feeding each preset's own text colour in
     /// as an override has to leave captions readable on the button fills and
-    /// headings readable on the panel.
+    /// headings readable on the panel. This is also the floor on
+    /// `STRONG_TEXT_LIFT`, which trades emphasis for hue: lower it far enough
+    /// and the emphasised captions stop separating from the fills below them.
     #[test]
     fn overridden_text_meets_aa_on_button_fill() {
         for preset in [
@@ -1550,7 +1598,7 @@ mod tests {
                     // The pressed fill is only a momentary state, and light
                     // mode drops it 65 per channel — the darkest ground a
                     // caption lands on. It clears the full 4.5:1 anyway
-                    // (6.93:1 at the worst preset), so it is held to the text
+                    // (5.36:1 at the worst preset), so it is held to the text
                     // bar rather than the 3:1 graphical one.
                     (
                         "pressed caption on the pressed fill",

@@ -724,7 +724,7 @@ impl eframe::App for App {
                 // the standard focus ring is invisible on the thin vline
                 // egui uses to draw the panel boundary.
                 let panel_rect = reading_panel.response.rect;
-                let stroke_color = ui.visuals().selection.stroke.color;
+                let stroke_color = crate::a11y::focus_ring_color(ui.visuals());
                 ui.painter().vline(
                     panel_rect.right(),
                     panel_rect.y_range(),
