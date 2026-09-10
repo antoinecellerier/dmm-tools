@@ -40,7 +40,7 @@ HID bridge chips appear across the supported devices:
 - **CP2110** (Silicon Labs) — bidirectional HID-to-UART, used by
   UT61+/UT161 and the UCI bench DMMs (UT8802/UT8803).
 - **CH9329** (WCH) — bidirectional, driverless, found on newer UT-D09
-  cables for UT181A / UT171 / UT243.
+  cables for UT181A / UT171 / UT243, and reported on a UT61B+.
 - **CH9325** (QinHeng / HE2325U) — **receive-only** HID bridge used by
   UT803/UT804 and some UT-D04 cables. Can stream meter data to the
   host but cannot send commands back.
