@@ -342,8 +342,9 @@ pub(crate) fn run_capture_step(
         // Anything typed before the step was announced answered the last
         // prompt, not this step's wait.
         input.drain_keys();
-        // The frame the watcher accepted, kept as the step's first sample: it is
-        // the one reading known to be in the state the step asked for.
+        // The frame the watcher accepted, kept as the step's first sample: it
+        // is the one reading known to be in the state the step asked for.
+        // `--settle` drops it below — there it is the transient.
         let mut settled: Option<Measurement> = None;
 
         // A retake re-samples; it does not press the button again, which on a
@@ -428,6 +429,13 @@ pub(crate) fn run_capture_step(
             }
         }
 
+        // The wait covers the operator's own changes as much as the tool's:
+        // whatever ended this step's wait, `--settle` says the reading behind
+        // it needs longer. The frame that ended the wait was read before it,
+        // so a run that waits reads its whole batch afterwards.
+        if driver.wait_to_settle() {
+            settled = None;
+        }
         let mut measurements: Vec<Measurement> = settled.into_iter().collect();
         let wanted = step.samples.saturating_sub(measurements.len());
         measurements.extend(capture_samples(dmm, wanted, &mut errors));
@@ -817,5 +825,82 @@ mod tests {
             matches!((range_pos, auto_pos), (Some(r), Some(a)) if a > r),
             "AUTO must come after RANGE"
         );
+    }
+
+    /// `--settle` covers a step the operator paced as much as a driven
+    /// sub-step: whatever ended the wait, the reading behind it may still be
+    /// moving. The frame the watcher accepted was read before the delay, so a
+    /// settling run files only what it read after it.
+    #[test]
+    fn a_settling_step_files_only_what_it_read_after_the_wait() {
+        use crate::capture::input::Input;
+        use crate::drive::Driver;
+
+        // Same reading with HOLD on, as the meter sends it (flag nibbles
+        // "201"): a state the baseline has not seen, so the watcher takes it.
+        let held = |display: &[u8]| {
+            let mut payload = vec![0x02, 0x30];
+            payload.extend_from_slice(display);
+            payload.extend_from_slice(&[0x00, 0x00, b'2', b'0', b'1']);
+            frame(&payload)
+        };
+        let step = CaptureStep {
+            id: "hold",
+            instruction: "press HOLD",
+            command: Some("hold"),
+            samples: 2,
+            expect: None,
+            verified: true,
+            gate: false,
+            needs: &[],
+        };
+
+        let filed = |settle: Duration| {
+            let mut responses = vec![measurement_frame(); 3]; // the baseline
+            responses.extend(vec![measurement_frame(); 3]); // drained by the press
+            responses.extend(vec![held(b"  5.678"); 3]); // ends the watcher's wait
+            responses.extend(vec![held(b"  1.234"); 2]); // what it settles to
+            let mut dmm = dmm_replaying(responses);
+            // The step's frames are recorded through the transport the
+            // recorder wraps; this one only has to exist.
+            let (_unused, recorder) = crate::recording::RecordingTransport::new(Box::new(
+                dmm_lib::transport::NullTransport,
+            ));
+            let mut report = CaptureReport::default();
+            let mut driver = Driver::new(false).settling(settle);
+            run_capture_step(
+                &mut dmm,
+                &recorder,
+                &step,
+                &mut report,
+                false,
+                &Input::piped(),
+                &PrevState::default(),
+                &Trust::new(false, true, &[]),
+                &mut driver,
+            )
+            .unwrap();
+            let displays: Vec<String> = report.steps[0]
+                .samples
+                .iter()
+                .map(|s| s.display_raw.clone())
+                .collect();
+            displays
+        };
+
+        // Without it the accepted frame leads, transient and all.
+        let straight_off = filed(Duration::ZERO);
+        assert_eq!(
+            straight_off.first().map(String::as_str),
+            Some("  5.678"),
+            "got {straight_off:?}"
+        );
+
+        let settled = filed(Duration::from_millis(50));
+        assert!(
+            settled.iter().all(|d| d == "  1.234"),
+            "the frame that ended the wait must not be filed: {settled:?}"
+        );
+        assert_eq!(settled.len(), step.samples, "got {settled:?}");
     }
 }

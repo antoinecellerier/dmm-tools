@@ -33,7 +33,7 @@
 - **A noisy mock mode with spikes** — `--mock-mode noise`, a DC millivolt signal for checking the graph and minimap, in the CLI and GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
 - **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
-- **Capture steps advance on the meter's own state** — a keypress filed whatever was on screen; a step needing something on the probes waits for the reading to change; `r` retakes one.
+- **Capture steps advance on the meter's own state** — a keypress filed whatever was on screen; a step needing something on the probes waits for the reading to change; `r` retakes one; `--settle` waits out a reading that needs longer.
 - **Capture sets every range, flag and sub-mode it can** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked; `--no-drive` turns it off.
 - **Capture confirms the first few steps and reviews the rest at the end** — every step stopped for an Enter; `--sniff` keeps per-step checks for a parser nobody trusts yet.
 - **Capture reports carry every wire byte and parse error** — a step the tool couldn't decode was saved empty.

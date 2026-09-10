@@ -16,6 +16,7 @@ use console::style;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::protocol::Setting;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// The settings a sweep walks, in the order it walks them.
 ///
@@ -56,6 +57,9 @@ pub(crate) enum Drive {
 /// per step.
 pub(crate) struct Driver {
     enabled: bool,
+    /// How long to leave the meter alone before sampling, whether the change
+    /// was the tool's or the operator's. Zero unless `--settle` asked for it.
+    settle: Duration,
     failures: u32,
     /// Some setting offered more than one value, so `Off` can be told from a
     /// family that simply cannot be driven.
@@ -70,10 +74,35 @@ impl Driver {
     pub(crate) fn new(enabled: bool) -> Self {
         Driver {
             enabled,
+            settle: Duration::ZERO,
             failures: 0,
             offered: false,
             proven: Vec::new(),
         }
+    }
+
+    /// Wait this long before sampling anything.
+    ///
+    /// A reading can take seconds to settle after a range switch — the
+    /// UT61E+'s top two Ω rungs read 50x high 200 ms after the press and come
+    /// down over several seconds — and the sampler is otherwise straight off
+    /// the press, or off the frame that ended a step's wait. Waiting for the
+    /// reading to hold still instead would never finish on leads with nothing
+    /// stable across them.
+    pub(crate) fn settling(mut self, settle: Duration) -> Self {
+        self.settle = settle;
+        self
+    }
+
+    /// Leave the meter alone for the settle time, if one was asked for.
+    /// Returns whether it waited, which is what tells a caller that a frame
+    /// it read before the wait is the transient the operator asked to skip.
+    pub(crate) fn wait_to_settle(&self) -> bool {
+        if self.settle.is_zero() {
+            return false;
+        }
+        std::thread::sleep(self.settle);
+        true
     }
 
     /// Record that the setting took a value the read-back showed.
@@ -251,6 +280,7 @@ pub(crate) fn sweep_step(
                 choice,
                 step.samples,
                 driver.proven(setting),
+                driver,
                 report,
             )?;
             if driven.hit {
@@ -391,6 +421,7 @@ fn drive_choice(
     choice: &dmm_lib::protocol::Choice,
     samples_wanted: usize,
     proven: bool,
+    settle: &Driver,
     report: &mut CaptureReport,
 ) -> Result<Driven, Box<dyn std::error::Error>> {
     let instruction = sub_step_instruction(setting, &choice.label);
@@ -399,7 +430,10 @@ fn drive_choice(
     let selected = dmm.select(setting, choice.id);
     let mut errors = ErrorLog::default();
     let measurements = match &selected {
-        Ok(()) => capture_samples(dmm, samples_wanted, &mut errors),
+        Ok(()) => {
+            settle.wait_to_settle();
+            capture_samples(dmm, samples_wanted, &mut errors)
+        }
         Err(_) => Vec::new(),
     };
     let samples: Vec<SampleData> = measurements
@@ -689,6 +723,37 @@ mod tests {
                     .unwrap_or_default()
             );
         }
+    }
+
+    /// `--settle` leaves the meter alone before sampling; without it the
+    /// sampler reads straight off the press, which on a range that takes
+    /// seconds to settle files the transient (a UT61E+'s top Ω rungs read 50x
+    /// high 200 ms after the press, 2026-09-10). It says whether it waited,
+    /// so a caller knows its pre-wait frame is the transient.
+    #[test]
+    fn a_settle_time_delays_sampling_and_zero_does_not() {
+        use std::time::Instant;
+        let settle = Duration::from_millis(120);
+        let driver = Driver::new(true).settling(settle);
+
+        let started = Instant::now();
+        assert!(
+            driver.wait_to_settle(),
+            "a settle time has to be waited out"
+        );
+        assert!(
+            started.elapsed() >= settle,
+            "settle time was not waited out"
+        );
+
+        // The default costs nothing: every run that does not ask pays no delay.
+        let started = Instant::now();
+        assert!(!Driver::new(true).wait_to_settle());
+        assert!(started.elapsed() < settle);
+
+        // `--no-drive` still honours it: nothing the tool presses is what it
+        // turns off, not the wait before a reading is filed.
+        assert!(Driver::new(false).settling(settle).wait_to_settle());
     }
 
     /// A meter on the mock's AC V ring, which offers the "AC V Hz" sub-mode

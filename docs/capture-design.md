@@ -52,6 +52,14 @@ step whose flag flipped proves that setting for the sweeps (D), the way a sweep 
 A dial-only step captures without a keypress: read the instruction, turn the dial, and the
 samples appear. The per-step confirmation prompt after them is what F defers to the end of the run.
 
+Stability is the state holding still, not the value: the signature leaves the digits out, so a
+reading still on its way satisfies it. `--settle MS` waits that long before every sample — a
+step's own and a sub-step's (D) — and drops the frame that ended the wait, which was read
+before it. Off by default, because waiting for the digits to hold still instead would never
+finish on leads with nothing stable across them, and `r` is the operator's guard when nobody
+asked for a delay. Evidence: a UT61E+'s top two Ω rungs read 50x high 200 ms after a RANGE
+press and come down over several seconds (2026-09-10).
+
 ## B. Full wire trace and parse diagnostics
 
 A recording layer wraps the transport and logs every read and write with a timestamp and the

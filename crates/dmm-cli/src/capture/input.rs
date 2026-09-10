@@ -43,6 +43,13 @@ impl Input {
         Input { keys: Some(rx) }
     }
 
+    /// A keyboard nobody is at, for tests: `start` would read the real
+    /// terminal whenever the test binary keeps one (`--nocapture`).
+    #[cfg(test)]
+    pub(crate) fn piped() -> Self {
+        Input { keys: None }
+    }
+
     /// Whether keys can be polled without blocking — false for a piped run,
     /// which has to be asked rather than watched.
     pub(crate) fn is_tty(&self) -> bool {

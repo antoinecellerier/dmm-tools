@@ -559,6 +559,7 @@ dmm-cli capture [OPTIONS]
 | `--plan <FILE>` | | Run the steps in a plan file instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
 | `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one. |
 | `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step. |
+| `--settle <MS>` | `0` | Wait this long before every sample, for readings that settle slowly. |
 | `--list-steps` | | List the selected device's step IDs and exit. |
 | `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use (printed to stdout). |
 
@@ -584,6 +585,13 @@ or needs something on the probes; the latter still captures on its own once
 the reading has changed from a failing one, as continuity going OL to a
 reading does. A button step whose flag does not flip is recorded as
 `did nothing` rather than filing the reading from before the press.
+
+A step samples as soon as its wait ends, and that wait watches the state, not
+the digits — so a reading still on its way files the transient. A UT61E+'s
+top two Ω rungs read fifty times high 200 ms after the range changes and take
+seconds to come down. `--settle 3000` waits three seconds before every sample,
+driven sub-steps included, and files nothing read before the wait. It costs
+that much per step, so pair it with `--steps`.
 
 Each sample is read back for you to check against the screen, sub-values
 included (`239.22 VAC [AUTO HV!] (Frequency 50.01 Hz, Period 20.00 ms)`).

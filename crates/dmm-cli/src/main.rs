@@ -165,6 +165,9 @@ Install completions for your shell:
         /// Don't let the tool set ranges and flags itself after each mode step
         #[arg(long)]
         no_drive: bool,
+        /// Wait MS before sampling any step, for readings that settle slowly
+        #[arg(long, value_name = "MS", default_value_t = 0)]
+        settle: u64,
         /// List all available step IDs and exit
         #[arg(long)]
         list_steps: bool,
@@ -428,6 +431,7 @@ fn main() {
             plan,
             sniff,
             no_drive,
+            settle,
             list_steps,
             format,
         } => {
@@ -439,7 +443,16 @@ fn main() {
             } else {
                 open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
                     capture::cmd_capture(
-                        output, steps, unverified, sniff, no_drive, plan, dmm, recorder, device,
+                        output,
+                        steps,
+                        unverified,
+                        sniff,
+                        no_drive,
+                        std::time::Duration::from_millis(settle),
+                        plan,
+                        dmm,
+                        recorder,
+                        device,
                     )
                 })
             }

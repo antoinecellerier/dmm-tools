@@ -27,6 +27,7 @@ pub(crate) fn cmd_capture(
     unverified_only: bool,
     sniff: bool,
     no_drive: bool,
+    settle: std::time::Duration,
     plan_path: Option<String>,
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
@@ -91,7 +92,7 @@ pub(crate) fn cmd_capture(
         .collect();
     let mut trust = Trust::new(sniff, supported, &gate_scope);
     report.tier = Some(trust.tier);
-    let mut driver = crate::drive::Driver::new(!no_drive);
+    let mut driver = crate::drive::Driver::new(!no_drive).settling(settle);
     let pass = run_protocol_capture(
         &mut dmm,
         &recorder,
