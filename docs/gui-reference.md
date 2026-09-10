@@ -202,9 +202,10 @@ brings the **Plot:**/**Show:** row up for those meters too.
 - Overloads shown as a filled band in the error colour, drawn at their true
   duration; the crosshair reports `overload` inside one
 - Timeline is continuous across reconnects (data is not cleared)
-- History buffer holds ~10,000 points (oldest dropped). A change of mode or
-  unit clears the graph — including auto-range crossing a decade (Ω→kΩ), and
-  including a change of plotted series
+- History buffer holds up to the configured buffer size (default 500K points,
+  ~14 h at 10 Hz; oldest dropped). A change of mode or unit clears the graph —
+  including auto-range crossing a decade (Ω→kΩ), and including a change of
+  plotted series
 - Sub-values sharing the plotted series' unit are drawn beside it as extra
   dashed/dotted lines, up to four. Selecting a sub-value adds the meter's main
   reading as one of them when the units match, so choosing T2 still shows T1.
@@ -309,8 +310,9 @@ UT61E+). Other devices show only the Manual link.
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values
-- Buffer holds up to 500K samples (~14 hours at 10 Hz). Recording
-  auto-stops when the buffer is full and shows a toast notification.
+- Buffer holds up to the configured buffer size (default 500K samples,
+  ~14 hours at 10 Hz). Recording auto-stops when the buffer is full and shows
+  a toast notification.
 
 **CSV format:**
 
@@ -355,6 +357,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Auto-connect** | on | Connect to meter automatically on startup |
 | **Query device name** | on | Ask meter for its name on connect (causes a beep) |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
+| **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size, which keeps every sample it took. Editing `settings.json` by hand accepts any size from 1K to 50M. Hover shows the memory and hours a size buys — a 500K recording is ~140 MB single-display, ~420 MB with four sub-values. |
 | **Device** | UT61E+ | Device family. See the description for supported models and Mock. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |

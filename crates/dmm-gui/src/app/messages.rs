@@ -17,6 +17,7 @@ use super::connection::{
 use super::plot_input::{PlotInput, resolve_plot_input};
 use super::{App, ConnectionState};
 use crate::graph::PlotSample;
+use crate::settings::format_sample_count;
 
 /// Why the GUI currently has no readings to show.
 ///
@@ -78,6 +79,36 @@ fn adapter_not_found_help(selector: &str) -> String {
 }
 
 impl App {
+    /// Say that lowering Buffer size ended the capture that was running.
+    ///
+    /// Deliberately not the full-buffer wording: that names the new bound,
+    /// which here is *smaller* than what the buffer holds — a capture keeps
+    /// every sample it took, so quoting the bound would read as if the
+    /// difference had been thrown away.
+    pub(super) fn buffer_shrunk_toast(&mut self) {
+        let kept = format_sample_count(self.recording.samples.len());
+        self.toast = Some((
+            format!(
+                "Recording stopped \u{2014} its {kept} samples are kept, Export CSV saves them"
+            ),
+            true,
+            Instant::now(),
+        ));
+    }
+
+    /// Say that the recording stopped because it filled the buffer, at the
+    /// size the user configured.
+    pub(super) fn buffer_full_toast(&mut self) {
+        self.toast = Some((
+            format!(
+                "Recording stopped \u{2014} buffer full ({} samples)",
+                format_sample_count(self.settings.max_samples)
+            ),
+            true,
+            Instant::now(),
+        ));
+    }
+
     pub(super) fn connect(&mut self, ctx: &egui::Context) {
         self.disconnect();
 
@@ -351,11 +382,7 @@ impl App {
                     // count it appended is what this sample carries.
                     let extra_aux = self.transform.extra_aux_count();
                     if self.recording.push(&m, &self.wall_clock, extra_aux) {
-                        self.toast = Some((
-                            "Recording stopped \u{2014} buffer full (500K samples)".to_string(),
-                            true,
-                            Instant::now(),
-                        ));
+                        self.buffer_full_toast();
                     }
 
                     // Specs are attached to each measurement by `Dmm::request_measurement`;

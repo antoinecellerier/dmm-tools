@@ -347,7 +347,12 @@ impl App {
     /// The app state for `settings` on `clock`, before any frame. Separate
     /// from [`App::new`] so tests can build one without an eframe context.
     fn from_settings(settings: Settings, clock: dmm_lib::Clock) -> Self {
-        let graph = Graph::new();
+        let mut graph = Graph::new();
+        // One setting bounds both stores of the sample stream.
+        graph.set_max_points(settings.max_samples);
+        let mut recording = Recording::new();
+        // A fresh buffer holds nothing, so this cannot stop anything.
+        recording.set_max_samples(settings.max_samples);
         let initial_device = registry::resolve_device(&settings.shared.device_family)
             .unwrap_or_else(registry::default_device);
         Self {
@@ -359,7 +364,7 @@ impl App {
             transform_editor: TransformEditor::default(),
             graph,
             session: SeriesStats::new(true),
-            recording: Recording::new(),
+            recording,
             wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
             capture_layout: CaptureLayout::default(),

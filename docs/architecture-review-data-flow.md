@@ -41,10 +41,10 @@ Background thread calls `dmm.request_measurement()` in a paced loop, sends
 
 UI thread drains all pending messages per frame via `try_iter()` in `drain_messages()`.
 Each measurement is dispatched to:
-- `graph.push()` — stores `(Instant, f64)` in a 10K-point `VecDeque`
+- `graph.push()` — stores `(Instant, f64)` in a `VecDeque` bounded by the configurable buffer size (default 500K)
 - `stats.push()` — running min/max/avg
 - `integrator.push()` — trapezoidal integration
-- `recording.push()` — stores full `Sample` in a 500K-entry `Vec`
+- `recording.push()` — stores full `Sample` in a `Vec` bounded by the same buffer size
 - `last_measurement` — keeps the most recent `Measurement` (moved, not cloned)
 
 Key files:
@@ -74,8 +74,8 @@ Three parallel stores of the same measurement stream:
 
 | Store | Type | Cap | Loses |
 |-------|------|-----|-------|
-| `graph.history` | `VecDeque<DataPoint>` | 10K | mode, unit, flags, display |
-| `recording.samples` | `Vec<Sample>` | 500K | `Instant` timestamp, raw payload |
+| `graph.history` | `VecDeque<DataPoint>` | configurable (default 500K) | mode, unit, flags, display |
+| `recording.samples` | `Vec<Sample>` | configurable (default 500K) | `Instant` timestamp, raw payload |
 | `last_measurement` | `Option<Measurement>` | 1 | history |
 
 Fed independently in `drain_messages()` (mod.rs:639-663). Graph discards metadata

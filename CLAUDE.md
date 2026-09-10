@@ -57,7 +57,7 @@ Subsystem-specific rules live in path-scoped rule files that load when their fil
 - Use `checked_duration_since()` instead of `duration_since()` — the latter panics on backward clock jumps (VM suspend, NTP correction).
 - Background threads must propagate errors to the main thread via channel; wrap bodies in `catch_unwind` rather than silently failing.
 - Write data files atomically: write to `.tmp`, then `fs::rename`. Protects user data (settings, captures, CSV exports) against kill signals and disk-full mid-write.
-- Bound buffer growth. Current caps: graph history 10K points, recording 500K samples. New buffers need an explicit bound too.
+- Bound buffer growth. The graph history and the recording share one user-configurable bound (`max_samples`, default 500K samples). New buffers need an explicit bound too.
 
 ### Commit discipline
 - **Never push without explicit per-push permission.** One "commit and push" authorizes that push only — re-ask for the next. Same for `--force`, tags, and opening or merging PRs. A plan that mentions pushing is not the permission; ask when the commits are ready.

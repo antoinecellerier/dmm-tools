@@ -469,11 +469,13 @@ fn steady_unit_keeps_history() {
 
 #[test]
 fn max_points_evicts_oldest() {
+    const KEEP: usize = 100;
     let mut g = Graph::new();
-    for i in 0..MAX_POINTS + 100 {
+    g.set_max_points(KEEP);
+    for i in 0..KEEP + 100 {
         g.push(i as f64, Instant::now(), "DC V", "V", None);
     }
-    assert_eq!(g.len(), MAX_POINTS);
+    assert_eq!(g.len(), KEEP);
 }
 
 /// A signal sitting exactly on the reference value used to report a
@@ -1098,9 +1100,11 @@ fn overlays_stay_in_lockstep_with_history() {
 /// trace it accompanies.
 #[test]
 fn max_points_evicts_overlay_values_too() {
+    const KEEP: usize = 100;
     let mut g = Graph::new();
+    g.set_max_points(KEEP);
     let t0 = Instant::now();
-    for i in 0..MAX_POINTS + 100 {
+    for i in 0..KEEP + 100 {
         push_aux(
             &mut g,
             i as f64,
@@ -1110,8 +1114,8 @@ fn max_points_evicts_overlay_values_too() {
         );
     }
     let values = g.overlay_values("T2");
-    assert_eq!(values.len(), MAX_POINTS);
-    assert_eq!(g.len(), MAX_POINTS);
+    assert_eq!(values.len(), KEEP);
+    assert_eq!(g.len(), KEEP);
     assert_eq!(values.first().copied().flatten(), Some(100.5));
 }
 
@@ -1991,7 +1995,11 @@ fn lcg(state: &mut u64) -> u64 {
 #[test]
 fn incremental_level_matches_a_rebuild() {
     const WIDTH: f64 = 0.05;
+    const KEEP: usize = 1_000;
     let mut g = Graph::new();
+    // Small enough that the run evicts thousands of times without buffering
+    // the default half a million points.
+    g.set_max_points(KEEP);
     let t0 = Instant::now();
     let mut t = t0;
     let mut rng = 0x1234_5678_9abc_def0_u64;
@@ -2029,7 +2037,7 @@ fn incremental_level_matches_a_rebuild() {
             );
         }
     }
-    assert!(g.len() == MAX_POINTS, "the run must have evicted");
+    assert!(g.len() == KEEP, "the run must have evicted");
     assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
 }
 
@@ -2103,11 +2111,13 @@ fn level_polylines_match_the_raw_point_path() {
 #[test]
 fn eviction_trims_buckets_and_gaps_exactly() {
     const WIDTH: f64 = 0.05;
+    const KEEP: usize = 500;
     let mut g = Graph::new();
+    g.set_max_points(KEEP);
     let t0 = Instant::now();
     let at = |i: u64| t0 + Duration::from_millis(i * 10);
 
-    for i in 0..MAX_POINTS as u64 {
+    for i in 0..KEEP as u64 {
         if i == 6 {
             g.push_break(at(i));
         }
@@ -2122,7 +2132,7 @@ fn eviction_trims_buckets_and_gaps_exactly() {
     assert_eq!(level.gaps().count(), 1);
 
     // One more sample evicts the spike, which forces the rescan.
-    g.push(1.0, at(MAX_POINTS as u64), "DC V", "V", None);
+    g.push(1.0, at(KEEP as u64), "DC V", "V", None);
     let level = g.minimap_level.as_ref().expect("cut");
     assert!(
         level.value_range().expect("samples").1 < 50.0,
@@ -2137,7 +2147,7 @@ fn eviction_trims_buckets_and_gaps_exactly() {
 
     // Evicting the point the band hangs from takes the band with it.
     for i in 1..=5 {
-        g.push(1.0, at(MAX_POINTS as u64 + i), "DC V", "V", None);
+        g.push(1.0, at(KEEP as u64 + i), "DC V", "V", None);
     }
     assert_eq!(
         g.minimap_level.as_ref().expect("cut").gaps().count(),
@@ -2145,6 +2155,51 @@ fn eviction_trims_buckets_and_gaps_exactly() {
         "a band whose opening point was evicted has nothing left to hang from"
     );
     assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
+}
+
+/// Lowering the Buffer size setting has to take the graph down to it at once,
+/// and take everything that indexes the history with it — the overlay traces
+/// and the minimap's buckets both, or the strip would draw points the plot no
+/// longer has.
+#[test]
+fn graph_set_max_points_evicts_down_and_keeps_overlays_in_lockstep() {
+    const WIDTH: f64 = 0.05;
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..50u64 {
+        push_aux(
+            &mut g,
+            i as f64,
+            t0 + Duration::from_millis(i * 10),
+            None,
+            &[("T2", Some(i as f64 + 0.5))],
+        );
+    }
+    g.ensure_level(WIDTH);
+
+    g.set_max_points(20);
+    assert_eq!(g.len(), 20);
+    let values = g.overlay_values("T2");
+    assert_eq!(values.len(), 20);
+    assert_eq!(
+        values.first().copied().flatten(),
+        Some(30.5),
+        "the oldest sub-value went with the point it belonged to"
+    );
+    assert!(
+        g.minimap_level.is_none(),
+        "a bulk drop recuts the level instead of rescanning a bucket per point"
+    );
+    g.ensure_level(WIDTH);
+    assert_eq!(
+        g.minimap_level.as_ref().and_then(|l| l.value_range()),
+        Some((30.0, 49.0)),
+        "the recut strip covers the points that are left, and no older ones"
+    );
+    assert!(
+        g.history.capacity() < 1024,
+        "lowering the bound hands the memory back, not just the points"
+    );
 }
 
 /// An overload shorter than a bucket still has to break the trace, or the
@@ -2254,6 +2309,10 @@ fn push_and_frame_cost_do_not_scale_with_history() {
         // What a ~500px strip would ask for at this session length.
         let width = points as f64 * 0.01 / 500.0;
         let mut g = Graph::new();
+        // Bound at exactly what the run holds, so both sizes are measured
+        // pushing into a full buffer: otherwise the short run would never
+        // evict and the comparison would be push against push-plus-evict.
+        g.set_max_points(points as usize);
         let t0 = Instant::now();
         let at = |i: u64| t0 + Duration::from_millis(i * 10);
         let value = |i: u64| (i as f64 * 0.017).sin() * 10.0;
@@ -2283,18 +2342,17 @@ fn push_and_frame_cost_do_not_scale_with_history() {
         (push, frame)
     }
 
-    let (push_short, frame_short) = measure(1_000);
-    let (push_long, frame_long) = measure(MAX_POINTS as u64);
+    let (push_short, frame_short) = measure(50_000);
+    let (push_long, frame_long) = measure(500_000);
     let ratio =
         |short: Duration, long: Duration| long.as_secs_f64() / short.as_secs_f64().max(1e-9);
     println!(
-        "1K: push {push_short:?}, frames {frame_short:?}\n\
-         {}K: push {push_long:?}, frames {frame_long:?}\n\
+        "50K: push {push_short:?}, frames {frame_short:?}\n\
+         500K: push {push_long:?}, frames {frame_long:?}\n\
          ratios: push {:.2}x, frame {:.2}x",
-        MAX_POINTS / 1_000,
         ratio(push_short, push_long),
         ratio(frame_short, frame_long),
     );
-    assert!(ratio(push_short, push_long) < 3.0, "push cost grew");
-    assert!(ratio(frame_short, frame_long) < 3.0, "frame cost grew");
+    assert!(ratio(push_short, push_long) < 2.0, "push cost grew");
+    assert!(ratio(frame_short, frame_long) < 2.0, "frame cost grew");
 }

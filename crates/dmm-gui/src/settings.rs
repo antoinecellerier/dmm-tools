@@ -4,6 +4,70 @@ use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Samples the graph history and a recording each keep by default: ~14 hours
+/// at 10 Hz, which is as long as most bench sessions run.
+pub(crate) const DEFAULT_MAX_SAMPLES: usize = 500_000;
+
+/// Floor for [`Settings::max_samples`]. Below a few thousand points the graph
+/// evicts faster than the user can look away, so a hand-edited zero would
+/// leave the app looking broken rather than frugal.
+pub(crate) const MIN_MAX_SAMPLES: usize = 1_000;
+
+/// Ceiling for [`Settings::max_samples`], ten times the largest size the row
+/// offers.
+///
+/// Not a judgement about what is sensible — a hand-edited file is welcome to
+/// ask for far more than the chips do. It is there so a slipped digit or a
+/// corrupted file asks for a buffer some machine could hold, rather than one
+/// that fills memory until the process is killed.
+pub(crate) const MAX_MAX_SAMPLES: usize = 50_000_000;
+
+fn default_max_samples() -> usize {
+    DEFAULT_MAX_SAMPLES
+}
+
+/// Bytes one point costs in the graph's history: a `DataPoint` plus the
+/// `VecDeque` slack it sits in.
+const GRAPH_BYTES_PER_POINT: usize = 48;
+/// Bytes one point costs per sub-value trace drawn beside the plotted one
+/// (`Option<f64>`, kept in lockstep with the history).
+const GRAPH_BYTES_PER_OVERLAY_POINT: usize = 16;
+/// Bytes one recorded sample costs for the meter's main reading: about 240
+/// inline plus its `display_raw` heap string.
+const RECORDING_BYTES_PER_SAMPLE: usize = 280;
+/// Bytes each sub-value adds to a recorded sample: an `AuxValue`'s two `Cow`
+/// strings, its own `display_raw` and the value.
+const RECORDING_BYTES_PER_AUX: usize = 140;
+
+/// `n` as the settings row writes it: "500K", "1.5M", "2M".
+pub(crate) fn format_sample_count(n: usize) -> String {
+    let (scaled, suffix) = if n >= 1_000_000 {
+        (n as f64 / 1_000_000.0, "M")
+    } else if n >= 1_000 {
+        (n as f64 / 1_000.0, "K")
+    } else {
+        return n.to_string();
+    };
+    let s = format!("{scaled:.1}");
+    format!("{}{suffix}", s.strip_suffix(".0").unwrap_or(&s))
+}
+
+/// What a bound of `n` samples costs in memory, for a meter currently sending
+/// `aux` sub-values with `overlays` of them drawn beside the plotted series.
+///
+/// Both copies of the stream are counted: the graph's history, which is
+/// always kept, and a recording at its full length — the worst case the user
+/// opts into by pressing Record. The recording dominates, and it grows with
+/// the meter: a UT181A's four sub-values roughly triple its per-sample cost.
+///
+/// Decimal MB, matching the figures quoted in the docs.
+pub(crate) fn buffer_memory_estimate(n: usize, overlays: usize, aux: usize) -> String {
+    let per_point = GRAPH_BYTES_PER_POINT + overlays * GRAPH_BYTES_PER_OVERLAY_POINT;
+    let per_sample = RECORDING_BYTES_PER_SAMPLE + aux * RECORDING_BYTES_PER_AUX;
+    let bytes = n.saturating_mul(per_point + per_sample);
+    format!("\u{2248}{} MB", bytes.div_ceil(1_000_000))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ThemeMode {
     #[default]
@@ -210,6 +274,11 @@ pub struct Settings {
     pub zoom_pct: u32,
     /// Delay between measurement requests in milliseconds (0 = fastest possible).
     pub sample_interval_ms: u32,
+    /// Samples to keep, bounding the graph history and a recording alike —
+    /// they hold the same stream, so one number is what the user has to
+    /// reason about. Applied live; see `MIN_MAX_SAMPLES` for the floor.
+    #[serde(default = "default_max_samples")]
+    pub max_samples: usize,
     /// Mock mode to pin to (e.g. "dcv", "acv"). Empty string = auto-cycle.
     /// Only meaningful when device_family is "mock".
     pub mock_mode: String,
@@ -245,6 +314,7 @@ impl Default for Settings {
             hide_decorations: false,
             zoom_pct: 100,
             sample_interval_ms: 0,
+            max_samples: DEFAULT_MAX_SAMPLES,
             mock_mode: String::new(),
             color_preset: ColorPreset::Default,
             color_overrides: ColorOverrides::default(),
@@ -285,7 +355,16 @@ impl Settings {
             dmm_lib::protocol::registry::default_device().id,
         );
         s.shared.device_family = family;
+        s.sanitize();
         s
+    }
+
+    /// Pull values a hand-edited config file could put out of range back in.
+    ///
+    /// Separate from `load()` so it is testable without a config file on
+    /// disk, and so every future clamp has one place to live.
+    fn sanitize(&mut self) {
+        self.max_samples = self.max_samples.clamp(MIN_MAX_SAMPLES, MAX_MAX_SAMPLES);
     }
 
     pub fn save(&self) {
@@ -379,6 +458,7 @@ mod tests {
             hide_decorations: true,
             zoom_pct: 150,
             sample_interval_ms: 500,
+            max_samples: 2_000_000,
             mock_mode: "dcv".to_string(),
             color_preset: ColorPreset::HighContrast,
             color_overrides: ColorOverrides::default(),
@@ -396,6 +476,7 @@ mod tests {
         assert!(deserialized.hide_decorations);
         assert_eq!(deserialized.zoom_pct, 150);
         assert_eq!(deserialized.sample_interval_ms, 500);
+        assert_eq!(deserialized.max_samples, 2_000_000);
         assert_eq!(deserialized.color_preset, ColorPreset::HighContrast);
         assert_eq!(deserialized.shared.device_family, "ut8803");
     }
@@ -411,11 +492,55 @@ mod tests {
         assert!(s.auto_connect);
         assert_eq!(s.zoom_pct, 100);
         assert_eq!(s.sample_interval_ms, 0);
+        // A config file written before the buffer became configurable must
+        // land on the default bound, not on zero.
+        assert_eq!(s.max_samples, DEFAULT_MAX_SAMPLES);
         // Color fields default correctly
         assert_eq!(s.color_preset, ColorPreset::Default);
         assert_eq!(s.color_overrides, ColorOverrides::default());
         // New optional fields default to None
         assert!(s.last_seen_version.is_none());
+    }
+
+    /// The settings row only offers sane sizes, but the file is editable by
+    /// hand and a two-digit bound would look like a broken graph.
+    #[test]
+    fn a_hand_edited_buffer_size_is_floored() {
+        let mut s: Settings = serde_json::from_str(r#"{"max_samples":5}"#).unwrap();
+        assert_eq!(s.max_samples, 5, "serde takes the file at its word");
+        s.sanitize();
+        assert_eq!(s.max_samples, MIN_MAX_SAMPLES);
+    }
+
+    /// The other end of the same problem: a slipped digit asking for a buffer
+    /// no machine holds would fill memory until the process is killed.
+    #[test]
+    fn a_hand_edited_buffer_size_is_capped() {
+        let mut s: Settings = serde_json::from_str(r#"{"max_samples":100000000000}"#).unwrap();
+        s.sanitize();
+        assert_eq!(s.max_samples, MAX_MAX_SAMPLES);
+        // A size beyond the chips but within reason is left alone.
+        let mut s: Settings = serde_json::from_str(r#"{"max_samples":8000000}"#).unwrap();
+        s.sanitize();
+        assert_eq!(s.max_samples, 8_000_000);
+    }
+
+    #[test]
+    fn sample_counts_read_as_the_chips_label_them() {
+        assert_eq!(format_sample_count(999), "999");
+        assert_eq!(format_sample_count(1_000), "1K");
+        assert_eq!(format_sample_count(100_000), "100K");
+        assert_eq!(format_sample_count(500_000), "500K");
+        assert_eq!(format_sample_count(1_000_000), "1M");
+        assert_eq!(format_sample_count(1_500_000), "1.5M");
+        assert_eq!(format_sample_count(5_000_000), "5M");
+    }
+
+    /// Both copies of the stream are counted, and the recording's share grows
+    /// with the meter's sub-values: 500K × (48 + 280 + 4 × 140) bytes.
+    #[test]
+    fn memory_estimate_counts_graph_and_recording() {
+        assert_eq!(buffer_memory_estimate(500_000, 0, 4), "\u{2248}444 MB");
     }
 
     #[test]

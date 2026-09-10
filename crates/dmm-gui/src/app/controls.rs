@@ -3,7 +3,9 @@ use dmm_lib::protocol::registry;
 use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
-use crate::settings::{ColorOverrides, ColorPreset, HexColor, ThemeMode};
+use crate::settings::{
+    ColorOverrides, ColorPreset, HexColor, ThemeMode, buffer_memory_estimate, format_sample_count,
+};
 use crate::theme::{PaletteField, PaletteGroup, ThemeColors};
 
 use super::{App, BigMeterMode};
@@ -48,6 +50,22 @@ fn chip_row<T>(ui: &mut Ui, caption: &str, chips: impl IntoIterator<Item = Chip<
         }
     }
     picked
+}
+
+/// What a bound of `n` samples costs, as the **Buffer size** row states it:
+/// the memory both copies of the stream take, and how long the bound lasts at
+/// the current sample interval.
+fn buffer_cost(n: usize, overlays: usize, aux: usize, interval_ms: u32) -> (String, String) {
+    // The same wire-time floor `Graph::set_sample_interval_ms` assumes for a
+    // 0 ms interval, so the row and the gap detector agree on the rate.
+    let interval_secs = (interval_ms as f64 / 1000.0).max(0.1);
+    let hours = n as f64 * interval_secs / 3600.0;
+    let span = if hours < 10.0 {
+        format!("{hours:.1} h")
+    } else {
+        format!("{hours:.0} h")
+    };
+    (buffer_memory_estimate(n, overlays, aux), span)
 }
 
 impl App {
@@ -343,6 +361,50 @@ impl App {
             }
             ui.label(
                 RichText::new("(requires reconnect)")
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
+        });
+
+        ui.horizontal_wrapped(|ui| {
+            // The cost of a bound depends on what this meter is sending right
+            // now: a UT181A's four sub-values roughly triple the recording's
+            // per-sample size and add a trace to the graph's.
+            let overlays = self.graph.overlays_len();
+            let aux = self
+                .last_measurement
+                .as_ref()
+                .map_or(0, |m| m.aux_values.len());
+            let interval_ms = self.settings.sample_interval_ms;
+            let chips = [100_000usize, 500_000, 1_000_000, 2_000_000, 5_000_000]
+                .into_iter()
+                .map(|n| {
+                    let (memory, span) = buffer_cost(n, overlays, aux, interval_ms);
+                    Chip {
+                        value: n,
+                        selected: self.settings.max_samples == n,
+                        label: format_sample_count(n),
+                        tooltip: format!(
+                            "Keep up to {} samples in the graph and a recording \u{2014} {memory}, \
+                             about {span} at the current sample interval",
+                            format_sample_count(n)
+                        ),
+                    }
+                });
+            if let Some(n) = chip_row(ui, "Buffer size:", chips) {
+                self.settings.max_samples = n;
+                self.settings.save();
+                // Live: the graph evicts down to the new bound on the spot,
+                // and a recording already past it stops rather than losing
+                // the samples it has.
+                self.graph.set_max_points(n);
+                if self.recording.set_max_samples(n) {
+                    self.buffer_shrunk_toast();
+                }
+            }
+            let (memory, span) = buffer_cost(self.settings.max_samples, overlays, aux, interval_ms);
+            ui.label(
+                RichText::new(format!("({memory}, about {span})"))
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );

@@ -25,13 +25,11 @@ use eframe::egui::{self, Ui};
 use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
+use crate::settings::DEFAULT_MAX_SAMPLES;
 use crate::theme::ThemeColors;
 use field::{NumberField, NumberListField};
 use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
-
-/// Maximum number of points to keep in the history buffer.
-const MAX_POINTS: usize = 10_000;
 
 /// Maximum number of same-unit sub-values drawn beside the plotted series.
 ///
@@ -138,6 +136,10 @@ pub const TIME_WINDOWS: &[(f64, &str)] = &[
 /// Real-time scrolling graph with minimap navigation.
 pub struct Graph {
     history: VecDeque<DataPoint>,
+    /// Points the history keeps before the oldest are dropped. Shared with
+    /// the recording buffer through the Buffer size setting, and changed
+    /// under a running session by [`Graph::set_max_points`].
+    max_points: usize,
     /// Same-unit sub-value traces, in lockstep with `history`.
     overlays: Vec<OverlaySeries>,
     current_mode: Option<String>,
@@ -244,7 +246,11 @@ pub struct Graph {
 impl Graph {
     pub fn new() -> Self {
         Self {
-            history: VecDeque::with_capacity(MAX_POINTS),
+            // Not the bound: half a million points is 24 MB claimed up front
+            // for a session that may last a minute. The deque doubles a
+            // handful of times over an afternoon instead.
+            history: VecDeque::with_capacity(1024),
+            max_points: DEFAULT_MAX_SAMPLES,
             overlays: Vec::new(),
             current_mode: None,
             current_unit: String::new(),
@@ -297,6 +303,62 @@ impl Graph {
             // the level's segments no longer match what the main plot draws.
             self.minimap_level = None;
         }
+    }
+
+    /// Change how many points the history keeps, dropping the oldest at once
+    /// when the new bound is below what is already in it.
+    ///
+    /// Lowering it is a user's answer to memory pressure, so it has to take
+    /// effect now rather than at the next sample — and give the memory back,
+    /// which `pop_front` alone never does.
+    pub fn set_max_points(&mut self, n: usize) {
+        self.max_points = n;
+        if self.history.len() <= n {
+            return;
+        }
+        // Drop the level rather than evict into it. One eviction costs a
+        // front-bucket rescan whenever the point leaving was that bucket's
+        // extreme, which on a ramp is every point: draining a bucket that way
+        // is quadratic, and dropping millions of points froze the settings
+        // panel for half a minute. A recut is one pass, on the next frame.
+        self.minimap_level = None;
+        self.evict_to(n);
+        self.history.shrink_to_fit();
+        for o in &mut self.overlays {
+            o.values.shrink_to_fit();
+        }
+    }
+
+    /// Drop the oldest points until at most `keep` are left, taking each
+    /// overlay's matching value and the minimap's bucket with them.
+    ///
+    /// `push_sample` asks for one below the bound — it is about to add a
+    /// point — while `set_max_points` asks for the bound itself, after
+    /// dropping the level. For the one point a push sheds, evicting into the
+    /// level is cheaper than the full pass a recut costs.
+    fn evict_to(&mut self, keep: usize) {
+        while self.history.len() > keep {
+            let Some(oldest) = self.history.pop_front() else {
+                break;
+            };
+            for o in &mut self.overlays {
+                o.values.pop_front();
+            }
+            let first_seq = self.pushed_total.saturating_sub(self.history.len() as u64);
+            if let Some(level) = &mut self.minimap_level {
+                level.evict(
+                    oldest.value,
+                    self.history.iter().map(|p| p.value),
+                    first_seq,
+                );
+            }
+        }
+    }
+
+    /// Sub-value traces drawn beside the plotted series — what the Buffer
+    /// size hint multiplies its per-point cost by.
+    pub fn overlays_len(&self) -> usize {
+        self.overlays.len()
     }
 
     /// Push a single-series sample.
@@ -389,22 +451,8 @@ impl Graph {
             (None, _) => self.last_display_raw = None,
         }
 
-        while self.history.len() >= MAX_POINTS {
-            let Some(oldest) = self.history.pop_front() else {
-                break;
-            };
-            for o in &mut self.overlays {
-                o.values.pop_front();
-            }
-            let first_seq = self.pushed_total.saturating_sub(self.history.len() as u64);
-            if let Some(level) = &mut self.minimap_level {
-                level.evict(
-                    oldest.value,
-                    self.history.iter().map(|p| p.value),
-                    first_seq,
-                );
-            }
-        }
+        // One short of the bound: this sample is about to take the last slot.
+        self.evict_to(self.max_points.saturating_sub(1));
 
         // Register sub-values seen for the first time, back-filled with
         // `None` for every point already in history — a COMP High/Low that

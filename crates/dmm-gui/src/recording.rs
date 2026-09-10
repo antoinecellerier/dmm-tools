@@ -1,3 +1,4 @@
+use crate::settings::DEFAULT_MAX_SAMPLES;
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::export::{CsvLayout, device_comment};
@@ -39,14 +40,6 @@ pub fn render_csv(
     }
     Ok(buf)
 }
-
-/// Maximum recording samples (~14 hours at 10Hz).
-///
-/// A `Sample` is roughly 280 bytes — about 240 inline plus the `display_raw`
-/// heap string — so a full buffer holds on the order of 140 MB. (The figure
-/// quoted here used to be 22 MB, which was never achievable at this struct
-/// size.)
-const MAX_RECORDING_SAMPLES: usize = 500_000;
 
 /// A single recorded sample.
 ///
@@ -119,6 +112,15 @@ pub struct Recording {
     /// connected — this is the floor that keeps a capture exportable in full
     /// after the meter is unplugged.
     max_aux_seen: usize,
+    /// Samples this recording stops at, from the Buffer size setting (which
+    /// bounds the graph history by the same number).
+    ///
+    /// A sample carrying only the meter's main reading is roughly 280 bytes —
+    /// about 240 inline plus the `display_raw` heap string — so the default
+    /// 500K is on the order of 140 MB. Each sub-value the meter sends adds
+    /// another ~140 bytes, which puts a four-sub-value meter (UT181A) at
+    /// ~850 bytes per sample, or ~420 MB at the same bound.
+    max_samples: usize,
 }
 
 impl Recording {
@@ -129,7 +131,23 @@ impl Recording {
             start_time: None,
             exported_count: 0,
             max_aux_seen: 0,
+            max_samples: DEFAULT_MAX_SAMPLES,
         }
+    }
+
+    /// Change the sample bound. Returns `true` if an active recording was
+    /// stopped because it already held at least `n` samples.
+    ///
+    /// The buffered samples are left alone: a recording never throws away
+    /// what it has captured, so lowering the bound past a running capture
+    /// ends it rather than truncating it.
+    pub fn set_max_samples(&mut self, n: usize) -> bool {
+        self.max_samples = n;
+        let stopped = self.active && self.samples.len() >= n;
+        if stopped {
+            self.active = false;
+        }
+        stopped
     }
 
     /// Start or stop recording, `now` being the session time it happens at.
@@ -170,11 +188,11 @@ impl Recording {
     /// `extra_aux` is the caller's current [`Sample::extra_aux`]: how many of
     /// this reading's trailing sub-values software appended.
     pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> bool {
-        if self.active && self.samples.len() < MAX_RECORDING_SAMPLES {
+        if self.active && self.samples.len() < self.max_samples {
             self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
             self.samples
                 .push(Sample::from_measurement(m, wall_clock, extra_aux));
-            if self.samples.len() >= MAX_RECORDING_SAMPLES {
+            if self.samples.len() >= self.max_samples {
                 self.active = false;
                 return true;
             }
@@ -183,7 +201,7 @@ impl Recording {
     }
 
     pub fn is_full(&self) -> bool {
-        self.samples.len() >= MAX_RECORDING_SAMPLES
+        self.samples.len() >= self.max_samples
     }
 
     /// How long the current recording has been running, in session seconds.
@@ -366,16 +384,19 @@ mod tests {
         let mut r = Recording::new();
         let wc = WallClock::new();
         r.toggle(Instant::now());
+        // A bound of its own, so the test doesn't buffer half a million
+        // samples to prove the stop.
+        r.set_max_samples(100);
         let m = make_measurement(b"  1.234");
         // Fill to one below capacity
-        for _ in 0..MAX_RECORDING_SAMPLES - 1 {
+        for _ in 0..99 {
             assert!(!r.push(&m, &wc, 0));
             assert!(r.active);
         }
         // The push that hits capacity should auto-stop and return true
         assert!(r.push(&m, &wc, 0));
         assert!(!r.active);
-        assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
+        assert_eq!(r.samples.len(), 100);
         assert!(r.is_full());
     }
 
@@ -384,14 +405,53 @@ mod tests {
         let mut r = Recording::new();
         let wc = WallClock::new();
         r.toggle(Instant::now());
+        r.set_max_samples(100);
         let m = make_measurement(b"  1.234");
-        for _ in 0..MAX_RECORDING_SAMPLES {
+        for _ in 0..100 {
             r.push(&m, &wc, 0);
         }
         assert!(!r.active);
         // Further pushes should be no-ops
         assert!(!r.push(&m, &wc, 0));
-        assert_eq!(r.samples.len(), MAX_RECORDING_SAMPLES);
+        assert_eq!(r.samples.len(), 100);
+    }
+
+    /// Lowering the Buffer size setting under a running recording ends it —
+    /// and keeps every sample it had already captured, which is the whole
+    /// point of a recording being separate from the graph's history.
+    #[test]
+    fn recording_lowering_the_cap_below_the_buffer_auto_stops() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        r.toggle(Instant::now());
+        let m = make_measurement(b"  1.234");
+        for _ in 0..50 {
+            r.push(&m, &wc, 0);
+        }
+        assert!(
+            r.set_max_samples(20),
+            "the running capture had to be stopped"
+        );
+        assert!(!r.active);
+        assert_eq!(r.samples.len(), 50, "captured samples are never discarded");
+        assert!(r.is_full());
+    }
+
+    #[test]
+    fn recording_raising_the_cap_keeps_it_running() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        r.toggle(Instant::now());
+        r.set_max_samples(100);
+        let m = make_measurement(b"  1.234");
+        for _ in 0..50 {
+            r.push(&m, &wc, 0);
+        }
+        assert!(!r.set_max_samples(1_000));
+        assert!(r.active);
+        assert!(!r.is_full());
+        assert!(!r.push(&m, &wc, 0));
+        assert_eq!(r.samples.len(), 51);
     }
 
     #[test]
