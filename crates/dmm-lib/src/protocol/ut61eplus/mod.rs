@@ -323,9 +323,12 @@ impl Protocol for Ut61PlusProtocol {
             // Gate decided. A gate step is never swept — the step after it
             // assumes the state it left — so each ladder gets a plain step of
             // its own, in the mode the run is already in.
-            CaptureStep::basic("ohm_ranges", "\u{03A9} mode: leave the leads as they are.")
-                .samples(3)
-                .expect(Expect::mode("\u{03A9}")),
+            CaptureStep::basic(
+                "ohm_ranges",
+                "Set meter to \u{03A9}. Leads open or shorted, either will do.",
+            )
+            .samples(3)
+            .expect(Expect::mode("\u{03A9}")),
             // The rest of the resistance dial position, while the leads are
             // still there.
             CaptureStep::basic(
@@ -351,7 +354,7 @@ impl Protocol for Ut61PlusProtocol {
             // which have always assumed the dial is here.
             CaptureStep::basic(
                 "dcv_ranges",
-                "Set meter back to DC V (V\u{23CF}). Leave leads open.",
+                "Set meter to DC V (V\u{23CF}). Leave leads open.",
             )
             .samples(3)
             .expect(Expect::mode("DC V")),
