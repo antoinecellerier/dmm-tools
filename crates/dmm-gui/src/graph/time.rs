@@ -63,10 +63,14 @@ pub(super) fn format_time_axis_label(value: f64, step_size: f64) -> String {
         let rem = s - h * 3600.0;
         let m = (rem / 60.0).floor();
         let sec = rem - m * 60.0;
-        if sec_decimals > 0 {
-            format!("{h:.0}h {m:.0}m {sec:.sec_decimals$}s")
-        } else {
+        // Same rule as under an hour: the seconds go only when there are
+        // none. Dropping them for every whole-second step labelled a 1 m
+        // window six times over as "23h 59m" once a session ran past an
+        // hour.
+        if sec_decimals == 0 && sec.abs() < 0.5 {
             format!("{h:.0}h {m:.0}m")
+        } else {
+            format!("{h:.0}h {m:.0}m {sec:.sec_decimals$}s")
         }
     }
 }

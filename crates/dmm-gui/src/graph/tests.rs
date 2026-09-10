@@ -1031,6 +1031,14 @@ fn time_axis_label_hour_integer_step() {
     assert_eq!(format_time_axis_label(3720.0, 60.0), "1h 2m");
 }
 
+/// A 1 m window past the first hour has 10 s grid marks: without the seconds
+/// every mark in it read "23h 59m".
+#[test]
+fn time_axis_label_hour_keeps_whole_seconds() {
+    assert_eq!(format_time_axis_label(86350.0, 10.0), "23h 59m 10s");
+    assert_eq!(format_time_axis_label(86400.0, 10.0), "24h 0m");
+}
+
 #[test]
 fn time_axis_label_hour_subsecond_step() {
     // Unlikely in practice but the formatter should not drop the
