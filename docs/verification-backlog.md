@@ -80,8 +80,8 @@ runs) and again by @ChrisTheExpie on a real UT61B+ (2026-09-10, CH9329,
 issue #19), each sweep ending in `<button> did nothing`.
 The two meters refused the same commands in the same modes:
 
-- **REL:** continuity, Hz, Duty %, NCV.
-- **MIN/MAX:** continuity, capacitance, Hz, Duty % and NCV.
+- **REL:** continuity, Hz, Duty %, NCV and AC+DC V.
+- **MIN/MAX:** continuity, diode, capacitance, Hz, Duty % and NCV.
 - **HOLD:** NCV.
 - **RANGE:** capacitance and Hz. Both have multi-rung tables and auto-ranging
   reaches those rungs; it is only the button that does nothing.
@@ -91,23 +91,29 @@ The two meters refused the same commands in the same modes:
 `tables/mod.rs`, and spec §6.2. The manual (§VII) gives each button one line
 and no per-function list, so the meters are the only record.
 
-**The bar for that list: two meters refusing it with a real reading on
-screen.** Both halves earn their place, and three things that look like
-refusals do not clear it:
+**The bar for that list: a refusal reproduced with a real reading on screen,
+on every meter that can be asked.** Both halves earn their place:
 
-- **A refusal over OL says nothing about the mode.** This meter refuses REL
-  whenever the display reads OL, whatever the mode — `dcmv/rel:on` was refused
-  over OL in the 2026-03 run and taken in all three later runs where DC mV had
-  a value. HOLD is unaffected: diode's HOLD frames carry the flag over OL.
-- **Diode is on neither list.** All five MIN/MAX refusals across the two
-  meters, and every REL attempt, happened over OL, because open leads in diode
-  read OL. Nothing is known about diode with a diode connected — worth one
-  run.
-- **AC+DC V is not on the REL list.** Our UT61E+ refused it twice with 0.07 V
-  and 0.08 V showing, which is a clean observation, but the mode does not
-  exist on the UT61B+, so no second meter can agree — and one meter is not
-  enough to take a working button away. MIN/MAX there works and says so:
-  `acdcv/minmax:min` read back 0.0652 V with the MIN flag set. Re-ask our E+.
+- **A refusal of REL over OL says nothing about the mode.** This meter refuses
+  REL whenever the display reads OL, whatever the mode — `dcmv/rel:on` was
+  refused over OL in the 2026-03 run and taken in all three later runs where
+  DC mV had a value. **HOLD and MIN/MAX are not affected**: diode's HOLD
+  frames carry the flag over OL, and `dcmv/minmax` was taken twice over OL.
+  Tallying every REL and MIN/MAX sub-step by what was on screen, `dcmv` + REL
+  is the only case in any capture where the outcome differs by screen state.
+- **Diode, settled for MIN/MAX on 2026-09-10** with a Schottky forward-biased
+  at 0.1968 V (`ut61eplus-diode.yaml`): REL and MIN/MAX both refused, HOLD
+  taken. It is the first diode evidence not confounded by OL, since open leads
+  there read OL. MIN/MAX joins the list — the UT61B+ had already refused it
+  five times, and OL is no confound for that button, so two meters agree.
+  **REL stays offered**: one meter, and the UT61B+ has the mode and has never
+  been asked with a diode fitted. That is the outstanding ask on issue #19.
+- **AC+DC V joins the REL list**, on three refusals with a real reading:
+  2026-09-07 at 0.07 V and 0.08 V, and 2026-09-10 at 0.0005-0.0175 V
+  (`ut61eplus-acdcv.yaml`). That is every meter that has the mode — the
+  UT61B+ has no such dial position, so three runs on the only meter with it is
+  the ceiling, not a shortfall. HOLD and MIN/MAX both work there, so it is REL
+  specifically: `acdcv/minmax:min` read back 0.0652 V with the MIN flag set.
 
 Narrowing `choices()` reaches `dmm-cli get`/`set` and the capture sweep, and
 nothing else. The GUI's HOLD/REL/MIN-MAX/PEAK buttons come from
@@ -130,6 +136,32 @@ The sweep skips REL while the reading is OL, so some rows read as absent
 rather than refused in a given run: `continuity/rel:on` was only attempted in
 the runs where the probes were still touching (2026-03 and
 `ut61eplus-verify4.yaml`), and both of those refused it.
+
+### UT61E+ — range ladders walked end to end (2026-09-10)
+
+`capture --unverified` on our UT61E+ ran the two steps added that day
+(`ohm_ranges`, `dcv_ranges`), and a `--steps acdcv` run walked a third ladder.
+Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
+
+- **Every rung of Ω, DC V and AC+DC V is [VERIFIED]**, one rung per RANGE
+  press, ascending, with no press skipped or repeated: Ω 0-6 (220Ω, 2.2kΩ,
+  22kΩ, 220kΩ, 2.2MΩ, 22MΩ, 220MΩ) and DC V and AC+DC V 0-3 (2.2V, 22V, 220V,
+  1000V). Each rung is identified by the decimal count the meter sent there,
+  which on a 22,000-count display names the full scale outright. AC+DC V
+  shares the DC V table, as `ut61e_plus.rs` has it.
+- That closes the 2026-09-07 worry that RANGE could not be swept: the blind
+  six-press sweep that produced indices 0, 2, 0, 0, 0, 0 was the old code
+  pressing without reading back. `choices(Range)` walks to target with a
+  read-back per press and gets every rung.
+- HOLD, REL, MIN and MAX were all taken in Ω, DC V and AC+DC V except REL in
+  AC+DC V (above).
+- **The top Ω rungs settle slowly.** With the probes shorted, 22MΩ read
+  0.081 MΩ (81 counts) and 220MΩ read 0.18 MΩ (18 counts), and both were seen
+  on the meter to drop back over several seconds. The sweep samples about
+  200 ms after the press, so **range sub-step values on slow-settling ranges
+  are transients, not measurements**. It does not touch the rung-to-label
+  mapping, which is the decimal placement, nor the golden fixtures, which
+  assert the parse of a frame whatever it held.
 
 ### UT61B+ — hardware reports
 

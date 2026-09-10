@@ -542,28 +542,44 @@ const HOLD_DEAD: &[Mode] = &[Mode::Ncv];
 
 /// Modes where a REL press (0x48) leaves the flag where it was.
 ///
-/// The bar for this list is two meters refusing it with a real reading on
-/// screen. The second half matters: this meter also refuses REL whenever the
-/// display reads OL, whatever the mode — `dcmv/rel:on` was refused over OL in
-/// one run and taken in the three where DC mV had a value — so a refusal only
-/// ever seen over OL says nothing about the mode. That is why diode is not
-/// here: open leads in diode read OL, and nobody has asked it otherwise.
+/// The bar is a refusal reproduced with a real reading on screen, on every
+/// meter that can be asked. The reading matters: this meter also refuses REL
+/// whenever the display shows OL, whatever the mode — `dcmv/rel:on` was
+/// refused over OL in one run and taken in the three where DC mV had a value
+/// — so a refusal only ever seen over OL says nothing about the mode.
 ///
-/// AC+DC V refused it on our UT61E+ twice with 0.07 V and 0.08 V on screen,
-/// but that mode does not exist on the UT61B+, so no second meter can agree.
-/// One meter is not enough to take a working button away, so it stays
-/// offered — see `docs/verification-backlog.md`.
-const REL_DEAD: &[Mode] = &[Mode::Continuity, Mode::Hz, Mode::DutyCycle, Mode::Ncv];
+/// AC+DC V is here on three refusals from our UT61E+ (2026-09-07 twice at
+/// 0.07 V and 0.08 V, 2026-09-10 again), which is every meter that has the
+/// mode — the UT61B+ has no such position. HOLD and MIN/MAX both work there,
+/// so it is REL specifically, not a mode that ignores commands.
+///
+/// Diode is deliberately absent. Our UT61E+ refused it once with a Schottky
+/// forward-biased at 0.1968 V (2026-09-10), which is the first diode REL
+/// evidence that is not confounded by OL — but it is one meter, and unlike
+/// AC+DC V the UT61B+ has the mode and can be asked. See
+/// `docs/verification-backlog.md`.
+const REL_DEAD: &[Mode] = &[
+    Mode::Continuity,
+    Mode::Hz,
+    Mode::DutyCycle,
+    Mode::Ncv,
+    Mode::AcDcV,
+];
 
 /// Modes where a MIN/MAX press (0x41) leaves the flags where they were.
 ///
-/// Same bar as [`REL_DEAD`]: two meters, a real reading in view. Capacitance
-/// is here and takes REL — the two buttons do not go together. Diode is not:
-/// all five refusals across both meters were over OL. AC+DC V is not either,
-/// and there the meter said so outright — `acdcv/minmax:min` read 0.0652 V
-/// back with the MIN flag set.
+/// Unlike REL, MIN/MAX is not confounded by an OL reading: `dcmv/minmax` was
+/// taken twice over OL, and continuity and diode give the same answer over OL
+/// as over a value. So the UT61B+'s five diode refusals count, and our UT61E+
+/// added a sixth over a Schottky at 0.1968 V (2026-09-10) — two meters, and
+/// diode is here.
+///
+/// Capacitance is here and takes REL: the two buttons do not go together.
+/// AC+DC V is not, and there the meter said so outright — `acdcv/minmax:min`
+/// read 0.0652 V back with the MIN flag set.
 const MINMAX_DEAD: &[Mode] = &[
     Mode::Continuity,
+    Mode::Diode,
     Mode::Capacitance,
     Mode::Hz,
     Mode::DutyCycle,
@@ -1291,14 +1307,14 @@ mod tests {
         // (mode byte, HOLD, REL, MIN/MAX) — true means the meter takes it.
         let cases = [
             (0x07u8, true, false, false), // continuity
-            // Diode and AC+DC V keep everything: the refusals seen there were
-            // over OL, or on one meter only. See REL_DEAD and MINMAX_DEAD.
-            (0x08, true, true, true),    // diode
+            // Diode keeps REL: one meter has refused it on a real reading,
+            // and the other has the mode and has not been asked.
+            (0x08, true, true, false),   // diode
             (0x09, true, true, false),   // capacitance
             (0x04, true, false, false),  // Hz
             (0x05, true, false, false),  // duty %
             (0x14, false, false, false), // NCV
-            (0x19, true, true, true),    // AC+DC V
+            (0x19, true, false, true),   // AC+DC V
             (0x02, true, true, true),    // DC V, the control
         ];
         for (mode, hold, rel, minmax) in cases {

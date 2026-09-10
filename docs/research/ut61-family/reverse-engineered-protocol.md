@@ -454,32 +454,36 @@ Each row below is a press whose flag did not move on the next frame.
 | Mode | Hold 0x4A | Rel 0x48 | MinMax 0x41 | Range 0x46 |
 |------|:---------:|:--------:|:-----------:|:----------:|
 | Continuity (0x07) | Yes | **No effect** | **No effect** | fixed range |
-| Diode (0x08) | Yes | untested | untested | fixed range |
+| Diode (0x08) | Yes | no effect on one meter | **No effect** | fixed range |
 | Capacitance (0x09) | Yes | Yes | **No effect** | **No effect** |
 | Hz (0x04) | Yes | **No effect** | **No effect** | **No effect** |
 | Duty % (0x05) | Yes | **No effect** | **No effect** | fixed range |
 | NCV (0x14) | **No effect** | **No effect** | **No effect** | no table |
-| AC+DC V (0x19) | Yes | one meter only | Yes | Yes |
+| AC+DC V (0x19) | Yes | **No effect** | Yes | Yes |
 | Every other mode | Yes | Yes | Yes | Yes (section 6.1) |
 
 "Fixed range" means the mode has one rung, so there is nothing for 0x46 to
 step; "No effect" in that column means the mode has several rungs and the
 button still does not move between them — auto-ranging is the only way there.
 
-**A refusal only counts when a real reading was on screen.** The meter also
+**A refusal of Rel only counts when a real reading was on screen.** The meter
 refuses Rel whenever the display shows OL, whatever the mode: `dcmv/rel:on`
-was refused over OL in the 2026-03 run and taken in all three later runs
-where DC mV had a value. Hold is not affected — diode's Hold frames carry the
-flag over OL.
+was refused over OL in the 2026-03 run and taken in all three later runs where
+DC mV had a value. Hold and MinMax are not affected — diode's Hold frames
+carry the flag over OL, and `dcmv/minmax` was taken twice over OL.
 
-That is why **diode reads "untested" in both middle columns**: every refusal
-recorded there, five across the two meters, was over OL, because open leads
-in diode read OL. Nothing is known about diode with a diode connected.
+**Diode**, asked on 2026-09-10 with a Schottky forward-biased at 0.1968 V,
+refused both Rel and MinMax. That is the first diode evidence not confounded
+by OL, since open leads there read OL. MinMax is settled: the UT61B+ had
+already refused it five times and OL is no confound for that button, so two
+meters agree. Rel is one meter — the UT61B+ has the mode and has never been
+asked with a diode fitted, which is the outstanding ask on issue #19.
 
-**AC+DC V** refused Rel twice on one UT61E+ with 0.07 V and 0.08 V showing.
-That mode does not exist on the UT61B+, so no second meter can corroborate
-it, and one meter is not enough to call a button dead. MinMax there works and
-says so: `acdcv/minmax:min` read 0.0652 V back with the MIN flag set.
+**AC+DC V** refused Rel on all three runs that reached it — 2026-09-07 twice
+at 0.07 V and 0.08 V, and 2026-09-10 again — which is every meter that has
+the mode, the UT61B+ having no such dial position. Hold and MinMax both work
+there, so it is Rel specifically: `acdcv/minmax:min` read 0.0652 V back with
+the MIN flag set.
 
 The rows in bold are the ones the code acts on (`HOLD_DEAD`, `REL_DEAD`,
 `MINMAX_DEAD` in `ut61eplus/mod.rs`, `FAMILY_FIXED_RANGE_MODES` in
