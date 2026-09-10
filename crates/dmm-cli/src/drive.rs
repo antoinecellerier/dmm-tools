@@ -296,6 +296,32 @@ pub(crate) fn sweep_step(
 ///
 /// Returns whether the tool switched. False leaves the step exactly as it was
 /// before: the instruction is asked, and the operator turns the dial.
+/// [`switch_mode`], sourcing the reading it works from.
+///
+/// `prev` is what an earlier step in this run left on screen. It is empty
+/// whenever there was no earlier step — the first step of any run, every step
+/// of a `--steps` run, and the one after a skip or a resume — and the switch
+/// used to be skipped there, so `capture --steps acdcv` asked the operator to
+/// press SELECT by hand, on the very form of the command a verification issue
+/// hands a reporter. The meter is right here, so ask it where it is.
+pub(crate) fn switch_mode_from(
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    step: &CaptureStep,
+    prev: Option<&Measurement>,
+    driver: &mut Driver,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let last = match prev {
+        Some(m) => m.clone(),
+        // A meter that will not answer has nothing to switch; the step's own
+        // wait reports that far better than this would.
+        None => match dmm.request_measurement() {
+            Ok(m) => m,
+            Err(_) => return Ok(false),
+        },
+    };
+    switch_mode(dmm, step, &last, driver)
+}
+
 pub(crate) fn switch_mode(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     step: &CaptureStep,
@@ -704,6 +730,18 @@ mod tests {
         let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
         let mut driver = Driver::new(true);
         assert!(switch_mode(&mut dmm, &mode_step("AC V Hz"), &last, &mut driver).unwrap());
+        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V Hz");
+        assert_eq!(driver.failures, 0);
+    }
+
+    /// Nothing earlier in the run left a reading, which is every step of a
+    /// `--steps` run. The tool takes one rather than making the operator
+    /// press the button.
+    #[test]
+    fn a_step_with_no_earlier_reading_still_switches() {
+        let (mut dmm, _) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut driver = Driver::new(true);
+        assert!(switch_mode_from(&mut dmm, &mode_step("AC V Hz"), None, &mut driver).unwrap());
         assert_eq!(dmm.request_measurement().unwrap().mode, "AC V Hz");
         assert_eq!(driver.failures, 0);
     }

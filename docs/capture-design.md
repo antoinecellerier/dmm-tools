@@ -164,7 +164,10 @@ These paths are hardware-unverified on three of the four families, so:
 
 A step whose `expect.mode` sits on the current dial position's ring — duty from Hz, Hz
 from AC V, continuity, diode and capacitance from Ω on the UT61E+ — is switched to by the
-tool before the step is watched, so the operator turns the dial and nothing else. A mode
+tool before the step is watched, so the operator turns the dial and nothing else. Which
+ring the meter is on comes from the previous step's last reading, or from a fresh reading
+when there was no previous step — the first step of a run, every step of a `--steps` run,
+and the one after a skip or a resume. A mode
 off the ring is asked for as before, and a refused switch prints what to do by hand and
 counts against the same failure budget.
 

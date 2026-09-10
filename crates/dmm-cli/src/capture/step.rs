@@ -329,11 +329,8 @@ pub(crate) fn run_capture_step(
 
     // A mode a button on the meter reaches — continuity from Ω, duty
     // from Hz — is the tool's to switch to; only the dial is the operator's.
-    if interactive
-        && trust.drives()
-        && let Some(last) = &prev.last
-    {
-        crate::drive::switch_mode(dmm, step, last, driver)?;
+    if interactive && trust.drives() {
+        crate::drive::switch_mode_from(dmm, step, prev.last.as_ref(), driver)?;
     }
 
     // One pass per attempt: `r` at the confirmation prompt drops the samples
