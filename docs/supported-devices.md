@@ -6,7 +6,11 @@ Currently supported and experimental devices all use USB HID-to-UART
 bridges. Three bridge chips are supported: Silicon Labs CP2110
 (VID `0x10C4`, PID `0xEA80`), WCH CH9329 (VID `0x1A86`, PID `0xE429`),
 and WCH CH9325 (VID `0x1A86`, PID `0xE008`). The tool auto-detects
-which bridge is present. The CP2110 is confirmed working with a UT61E+;
+which bridge is present, and which meter is behind it: rather than being
+told the family up front, it identifies the meter from the bytes it
+sends ([detection-design.md](detection-design.md)). The replies it keys
+on are so far confirmed on the UT61+ family; the others come from the
+vendor traces. The CP2110 is confirmed working with a UT61E+;
 the CH9329 is confirmed by three reporters, on two UT181A units and a
 UT61B+; the CH9325 has never been run on a meter. Future candidates
 include devices using Bluetooth LE and USB serial.

@@ -79,22 +79,29 @@ to "unsupported", and the CLI and GUI hide any setting whose list has fewer than
 **Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
 devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation
 instructions, and a factory function that creates the correct `Protocol` instance. The CLI
-and GUI resolve user input via `resolve_device()` and use `open_device_by_id()` to connect —
-they never match on `DeviceFamily` variants or instantiate protocol types directly.
-`open_device_by_id_auto()` returns a `Box<dyn Transport>`, trying the cable the selected entry's
+and GUI resolve user input via `resolve_selection()` — `Selection::Auto` for `AUTO_DEVICE_ID`
+(`"auto"`), `Selection::Device` for anything `resolve_device()` knows — and connect via
+`open_device_by_id_auto()`; they never match on `DeviceFamily` variants or instantiate protocol
+types directly. That opener returns a `Box<dyn Transport>`, trying the cable the selected entry's
 `DeviceFamily` ships with first (`preferred_transports()` in `lib.rs`, sourced from the cable table
 in `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
 CP2110 and time out on every read — and the fallback keeps unusual cable pairings working.
-When the user names no device, `detect.rs` identifies the meter on the opened transport instead: a
-probe cascade sends each family's trigger in turn and classifies whatever comes back, resolving a
-UT61+ name frame to its registry entry. The cascade and its failure modes are in
-`docs/detection-design.md`.
+
+Handed `"auto"` instead of an entry, the same opener identifies the meter first: `detect.rs` runs
+a probe cascade on the opened transport, sending each family's trigger in turn and classifying
+whatever comes back, and a UT61+ name frame resolves to its registry entry. The cascade and its
+failure modes are in `docs/detection-design.md`. `open_auto()` is that path with the `Detected`
+entry handed back, so a caller can name the meter it picked; `open_transport()` is its split half
+— a bridge and its name, no protocol chosen — for a caller that must wrap the transport before
+the probe bytes flow, and pairs with `detect::detect_device()`. `devices_on_bridge()` inverts
+`preferred_transports()` to list the meters that could have been on a bridge nothing answered on,
+and `find_by_model_name()` maps an open session's `model_name` back to its entry.
 Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
 
 ### dmm-settings
 
-Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` only; no UI, no device, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location), `SharedSettings::load_if_exists()` for reading the file, `resolve_device_family()` — the `--device` flag → `device_family` → caller's default precedence both binaries apply, returning a `DeviceSource` so the CLI can print its fallback notice — and `write_atomic()`, the `.tmp` + fsync + rename helper both binaries use to persist user data (settings, capture reports, CSV exports) without risking a torn file. The registry default is passed into `resolve_device_family()` rather than looked up, keeping the crate free of a `dmm-lib` dependency.
+Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` only; no UI, no device, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location), `SharedSettings::load_if_exists()` for reading the file, `resolve_device_family()` — the `--device` flag → `device_family` → caller's default precedence both binaries apply, returning a `DeviceSource` so the CLI can print its fallback notice — and `write_atomic()`, the `.tmp` + fsync + rename helper both binaries use to persist user data (settings, capture reports, CSV exports) without risking a torn file. The fallback is passed into `resolve_device_family()` rather than looked up — a registry id, or `AUTO_DEVICE_ID` to let detection settle it — keeping the crate free of a `dmm-lib` dependency.
 
 The GUI's full `Settings` struct includes `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON stays flat (`device_family` at the top level alongside `theme`, `show_graph`, etc.). The CLI deserializes the same file directly into `SharedSettings`, silently ignoring any GUI-only fields. Because both sides reference exactly one Rust type for the shared fields, renaming or retyping `device_family` breaks both compilations simultaneously — the contract is compile-enforced.
 

@@ -2,6 +2,53 @@
 
 Items that need real components or specific setups to verify.
 
+## Device auto-detection
+
+Detection identifies the meter from the bytes it sends instead of being
+told which family to expect (`crates/dmm-lib/src/detect.rs`; the algorithm
+and its failure modes are in `docs/detection-design.md`). What each family
+is probed with, and how well that probe is backed:
+
+| Family | Detection sends | Expects back | Hardware status |
+|---|---|---|---|
+| UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | Name reply verified in 12 of our captures (CP2110) |
+| UT61B+ | same | same, the name being `UT61B+` | Verified over CH9329 ([issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
+| UT61D+, UT161B/D/E | same | same, the name being the model | Unverified — no report has named one of these meters |
+| UT181A | `AB CD 04 00 05 01 0A 00` (SET_MONITOR) | 2-byte-LE frames, type `0x02`, payload ≥ 31 bytes | The reply is verified on hardware ([PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8), [issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)), never through the detector |
+| UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 16- or 22-byte payload | Deduced from the vendor traces, unverified |
+| UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
+| UT8803 | nothing — the meter streams | `AB CD` frame, byte 3 `0x02`, 21-byte checksum | Deduced from the vendor traces, unverified |
+| UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | an FS9721 frame — UT804 by its `D`/`A` marker nibbles, otherwise UT803's mode nibbles | Deduced from the vendor traces, unverified |
+| VC-880 | nothing — the meter streams once PC is pressed | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
+| VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
+
+Open questions, each needing a meter:
+
+- **UT181A and UT171 payload lengths overlap** (19 bytes without aux or
+  bargraph against 16/22), so a short frame is attributed to whichever
+  probe went out last. Splitting them by parse needs UT171 hardware.
+- **The UT171 connect frame is UT181A opcode `0x0A`, start recording.** The
+  cascade identifies a UT181A with Communication ON in the step before, and
+  one with Communication OFF ignores everything — that no UT181A ever starts
+  a recording during detection is reasoned, not observed. The ordering only
+  covers a meter that answers inside its own ~600 ms window: a reply that
+  finishes arriving later is classified in the connect step instead, where
+  `0x0A` has already gone out and a short frame reads as a UT171. No UT181A
+  reply has been timed through the detector.
+- **What `0x5F` (Get Name) does to a VC-880, VC-890, UT171 or UT181A** is
+  unknown; step 1 sends it to whatever is on the cable.
+- **What SET_MONITOR (`0x05`) does to a UT171** is unknown; it goes out
+  before the UT171's own connect frame.
+- **The UT61D+ and UT161B/D/E reported names are unverified.** An
+  unrecognised name falls back to the UT61E+ tables and is logged, so a
+  reporter's `RUST_LOG=dmm_lib=debug` output is what turns one into a
+  registry alias.
+- **Does a UT61+ beep on `0x5F`?** If it does, every auto connect beeps
+  once, whatever the GUI's name-query setting says.
+- **Does a VC-890 answer `0x5E` on the first attempt?** The vendor software
+  retries the name request up to 10 times with a buffer flush between
+  attempts, so a single poll may not be enough.
+
 ## Pending Verification
 
 ### UT61+ remote mode selection (cycle-to-target)

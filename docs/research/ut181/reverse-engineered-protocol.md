@@ -648,6 +648,10 @@ UT8803. Discrimination approaches:
    device starts streaming type 0x02 packets, it's a UT181A.
 3. **User selection**: Let the user specify the device model.
 
+The implemented algorithm uses the monitor-mode approach, with the payload
+length splitting a UT181A stream from a UT171 one; it is written up in
+[docs/detection-design.md](../../detection-design.md).
+
 ### 11.2 Communication Mode
 
 The meter requires "Communication ON" in settings before USB works.

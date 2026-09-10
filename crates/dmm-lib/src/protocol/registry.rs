@@ -266,6 +266,34 @@ pub static DEVICES: &[SelectableDevice] = &[
     },
 ];
 
+/// The `--device` / `device_family` value that names no meter and asks for
+/// the one on the cable to be identified instead (`crate::detect`).
+///
+/// Deliberately not a [`DEVICES`] entry: it selects no protocol, and every
+/// place that needs one has to go through detection first. The tests below
+/// keep it from ever colliding with a real id or alias.
+pub const AUTO_DEVICE_ID: &str = "auto";
+
+/// What a user-supplied device string resolved to.
+#[derive(Clone, Copy)]
+pub enum Selection {
+    /// Identify the meter from the bytes it sends.
+    Auto,
+    /// A meter the user named.
+    Device(&'static SelectableDevice),
+}
+
+impl std::fmt::Debug for Selection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // SelectableDevice is a table of function pointers with no Debug of
+        // its own; the id is what identifies it in a failed assertion.
+        match self {
+            Self::Auto => f.write_str("Auto"),
+            Self::Device(d) => write!(f, "Device({:?})", d.id),
+        }
+    }
+}
+
 /// Find a device by exact ID match.
 pub fn find_device(id: &str) -> Option<&'static SelectableDevice> {
     DEVICES.iter().find(|d| d.id == id)
@@ -282,6 +310,18 @@ pub fn resolve_device(s: &str) -> Option<&'static SelectableDevice> {
     DEVICES
         .iter()
         .find(|d| d.aliases.iter().any(|a| a.to_lowercase() == lower))
+}
+
+/// Resolve a device string the same way [`resolve_device`] does, but with
+/// [`AUTO_DEVICE_ID`] answering [`Selection::Auto`] instead of nothing.
+///
+/// Both binaries resolve through this, so `auto` reaches them as a choice
+/// rather than as an unknown device.
+pub fn resolve_selection(s: &str) -> Option<Selection> {
+    if s.trim().eq_ignore_ascii_case(AUTO_DEVICE_ID) {
+        return Some(Selection::Auto);
+    }
+    resolve_device(s).map(Selection::Device)
 }
 
 /// Resolve the ASCII model name a UT61+/UT161 meter answers Get Name
@@ -366,6 +406,46 @@ mod tests {
     #[test]
     fn resolve_unknown() {
         assert!(resolve_device("nonexistent").is_none());
+    }
+
+    /// `auto` selects no meter, so no meter may answer to it: an entry that
+    /// did would shadow detection and be unreachable by its own name.
+    #[test]
+    fn no_device_answers_to_auto() {
+        for device in DEVICES {
+            assert!(
+                !device.id.eq_ignore_ascii_case(AUTO_DEVICE_ID),
+                "device id {:?} collides with {AUTO_DEVICE_ID:?}",
+                device.id
+            );
+            for alias in device.aliases {
+                assert!(
+                    !alias.eq_ignore_ascii_case(AUTO_DEVICE_ID),
+                    "alias {alias:?} of {} collides with {AUTO_DEVICE_ID:?}",
+                    device.id
+                );
+            }
+        }
+    }
+
+    /// The CLI flag and the settings file are both user-typed.
+    #[test]
+    fn resolve_selection_auto_is_case_insensitive() {
+        assert!(matches!(resolve_selection("AUTO"), Some(Selection::Auto)));
+        assert!(matches!(resolve_selection("auto"), Some(Selection::Auto)));
+    }
+
+    #[test]
+    fn resolve_selection_names_a_device() {
+        let Some(Selection::Device(d)) = resolve_selection("ut61e+") else {
+            panic!("ut61e+ must resolve to a device");
+        };
+        assert_eq!(d.id, "ut61eplus");
+    }
+
+    #[test]
+    fn resolve_selection_unknown() {
+        assert!(resolve_selection("nonexistent").is_none());
     }
 
     /// Auto-detection picks the entry from the name the meter reports, so

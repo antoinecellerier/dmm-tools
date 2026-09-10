@@ -118,7 +118,7 @@ re-initialize after re-opening.
 error on the UT61E+'s CP2110. UNI-T likely locked this report out in the
 device's HID descriptor.
 
-### 1.6 CH9329 Alternate Transport — [VENDOR + DEDUCED; VERIFIED on a UT181A]
+### 1.6 CH9329 Alternate Transport — [VENDOR + DEDUCED; VERIFIED on a UT181A and a UT61B+]
 
 Some UT-D09 cables (sold by UNI-T for UT181A, UT171 series, UT243) use a
 WCH CH9329 instead of a CP2110. Vendor software includes `CH9329DLL.dll`
@@ -140,12 +140,15 @@ the HID report framing differs.
 Initialization requires no feature reports — the chip is ready for data
 transfer as soon as the HID device is opened.
 
-**[VERIFIED on a UT181A]** The HID framing above was deduced from the
-CH9329 datasheet and the vendor `CH9329DLL.dll` filename, then confirmed
-on a real UT181A by two reporters (issue #5, 2026-04-07 and 2026-09-02):
-the meter streams over it and honours the host's start command, so the
-UART bytes match the CP2110 path. No report yet covers a CH9329 cable on
-a UT61+ meter.
+**[VERIFIED on a UT181A and a UT61B+]** The HID framing above was deduced
+from the CH9329 datasheet and the vendor `CH9329DLL.dll` filename, then
+confirmed on a real UT181A by two reporters (issue #5, 2026-04-07 and
+2026-09-02): the meter streams over it and honours the host's start
+command, so the UART bytes match the CP2110 path. Two UT61B+ captures by
+@ChrisTheExpie (issue #19, 2026-09-09 and 2026-09-10) confirm the same for
+this family — the second recorded the Get Name handshake itself over the
+CH9329: `AB CD 03 5F 01 DA` out, `AB CD 04 FF 00 02 7B` and the name frame
+back.
 
 ---
 

@@ -29,9 +29,12 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SharedSettings {
-    /// Device family ID from the registry (e.g. `"ut61eplus"`, `"ut8803"`).
-    /// Empty string means "not set" — consumers should fall back to their own
-    /// default (the CLI prints a notice; the GUI fills in from the registry).
+    /// Device family ID from the registry (e.g. `"ut61eplus"`, `"ut8803"`), or
+    /// `"auto"` to ask the binary to work out which meter is on the cable
+    /// instead of naming one.
+    /// Empty string means "not set" — consumers should fall back to the default
+    /// they hand [`resolve_device_family`] (the CLI prints a notice; the GUI
+    /// fills the device picker in).
     pub device_family: String,
 }
 

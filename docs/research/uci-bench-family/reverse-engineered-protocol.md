@@ -703,6 +703,12 @@ An implementation could:
 3. If no response: listen for unprompted streaming data
 4. Detect 0xAC vs 0xABCD from first frame header
 
+The implemented algorithm is a wider version of this — Get Name (`0x5F`)
+rather than a measurement request, so the reply names the exact model, and
+the unprompted families recognised in whichever listen window they first
+speak; it is written up in
+[docs/detection-design.md](../../detection-design.md).
+
 ---
 
 ## 8. Confidence Summary

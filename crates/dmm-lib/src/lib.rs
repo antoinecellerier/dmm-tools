@@ -21,6 +21,7 @@ pub use wall_clock::WallClock;
 use error::{Error, Result};
 use log::{info, warn};
 use protocol::Protocol;
+use protocol::registry::{self, SelectableDevice, Selection};
 use std::ffi::CString;
 use transport::{Transport, ch9325, ch9329, cp2110};
 
@@ -198,6 +199,10 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
 /// Tries transports in order (CP2110, CH9329, CH9325).
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
 ///
+/// `id` may be [`registry::AUTO_DEVICE_ID`], in which case the meter is
+/// identified from the bytes it sends; a caller that wants to know which one
+/// it was calls [`open_auto`] instead.
+///
 /// When `adapter` is `Some`, selects a specific USB adapter by serial number
 /// or HID device path (as shown by [`list_devices`]). When `None`, picks the
 /// first matching adapter (and logs a warning if multiple are found).
@@ -211,24 +216,102 @@ pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box
 /// Lets a caller wrap the transport — recording wire bytes, say — before the
 /// init handshake runs, so those bytes are observable too. Pass the pair to
 /// [`Dmm::new`] to finish opening the device.
+///
+/// With [`registry::AUTO_DEVICE_ID`] the detection probe runs here, before the
+/// transport is handed back, so its bytes go out unwrapped. A caller that must
+/// see them wraps the transport itself: [`open_transport`] then
+/// [`detect::detect_device`].
 pub fn open_transport_by_id_auto(
     id: &str,
     adapter: Option<&str>,
 ) -> Result<(Box<dyn Transport>, Box<dyn Protocol>)> {
-    let entry =
-        protocol::registry::find_device(id).ok_or_else(|| Error::UnknownDevice(id.to_string()))?;
+    match selection_by_id(id)? {
+        Selection::Auto => {
+            let (transport, detected) = open_detected(adapter)?;
+            Ok((transport, (detected.device.new_protocol)()))
+        }
+        Selection::Device(entry) => {
+            let (transport, _bridge) = open_transport(preferred_transports(entry.family), adapter)?;
+            Ok((transport, (entry.new_protocol)()))
+        }
+    }
+}
 
+/// Open the meter on the cable without being told which one it is.
+///
+/// Opens the first bridge found, identifies the meter on it
+/// ([`detect::detect_device`]) and opens it with the entry that came back.
+/// The [`detect::Detected`] is returned as well, so a caller can tell the user
+/// which meter was picked and what name it reported.
+pub fn open_auto(adapter: Option<&str>) -> Result<(Dmm<Box<dyn Transport>>, detect::Detected)> {
+    let (transport, detected) = open_detected(adapter)?;
+    let protocol = (detected.device.new_protocol)();
+    Ok((Dmm::new(transport, protocol)?, detected))
+}
+
+/// Resolve a device id for the open path: [`registry::AUTO_DEVICE_ID`], or an
+/// exact registry id.
+///
+/// Exact rather than [`registry::resolve_selection`]'s alias matching, because
+/// this is the internal id a binary already resolved once — the aliases are
+/// for what the user typed.
+fn selection_by_id(id: &str) -> Result<Selection> {
+    if id.eq_ignore_ascii_case(registry::AUTO_DEVICE_ID) {
+        return Ok(Selection::Auto);
+    }
+    registry::find_device(id)
+        .map(Selection::Device)
+        .ok_or_else(|| Error::UnknownDevice(id.to_string()))
+}
+
+/// Open a bridge with no family in mind and identify the meter behind it.
+fn open_detected(adapter: Option<&str>) -> Result<(Box<dyn Transport>, detect::Detected)> {
+    // No family, so no cable to prefer: whichever bridge answers first is the
+    // one the meter is probed through.
+    let (transport, bridge) = open_transport(&[], adapter)?;
+    let detected = detect::detect_device(&*transport, bridge)?;
+    Ok((transport, detected))
+}
+
+/// Open a USB bridge and hand back the transport alone, with no protocol.
+///
+/// `preferred` orders the cables to try — [`preferred_transports`] for a known
+/// family, empty when the meter has not been identified yet. The returned name
+/// is the bridge's (`"CP2110"`, `"CH9329"`, `"CH9325"`), which
+/// [`detect::detect_device`] needs to know which probes are worth sending.
+///
+/// This is the split half of [`open_transport_by_id_auto`]: a caller that
+/// wants to wrap the transport before *any* byte flows — recording the
+/// detection probe itself, say — opens it here and detects separately.
+pub fn open_transport(
+    preferred: &[&'static str],
+    adapter: Option<&str>,
+) -> Result<(Box<dyn Transport>, &'static str)> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
 
     let (device, kt) = match adapter {
         Some(adapter) => open_with_adapter(&api, adapter),
-        None => open_first_match(&api, entry.family),
+        None => open_first_match(&api, preferred),
     }?;
     info!(
         "found {} adapter (VID={:#06x} PID={:#06x})",
         kt.name, kt.vid, kt.pid
     );
-    Ok(((kt.init)(device)?, (entry.new_protocol)()))
+    Ok(((kt.init)(device)?, kt.name))
+}
+
+/// The hardware meters reachable over `bridge`, the inverse of
+/// [`preferred_transports`].
+///
+/// What the "no meter answered" help lists: with nothing identified on a
+/// bridge, these are the meters that could have been on it, and their
+/// activation instructions are what the user has to act on.
+pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
+    registry::DEVICES
+        .iter()
+        .filter(|d| d.requires_hardware)
+        .filter(|d| preferred_transports(d.family).contains(&bridge))
+        .collect()
 }
 
 /// Open a specific adapter identified by serial number or HID path.
@@ -272,11 +355,12 @@ fn open_with_adapter(
     }
 }
 
-/// Open the first matching adapter, preferring the cable the selected device
-/// family actually ships with. Warns if multiple adapters are found.
+/// Open the first matching adapter, `preferred` naming the cables to try
+/// first — the ones the selected family ships with, or nothing at all when no
+/// family has been selected. Warns if multiple adapters are found.
 fn open_first_match(
     api: &hidapi::HidApi,
-    family: protocol::DeviceFamily,
+    preferred: &[&'static str],
 ) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
     let match_count: usize = api
         .device_list()
@@ -288,16 +372,21 @@ fn open_first_match(
         .count();
 
     if match_count > 1 {
+        // Nothing to prefer when the meter is still unknown — the probe runs
+        // on whichever bridge opens first.
+        let preference = if preferred.is_empty() {
+            ""
+        } else {
+            " Preferring the cable this meter uses."
+        };
         warn!(
-            "Multiple USB adapters found ({match_count} devices). \
-             Preferring the cable this meter uses. \
+            "Multiple USB adapters found ({match_count} devices).{preference} \
              Specify an adapter to select a specific device."
         );
     }
 
     // Preferred cables first, then everything else as a fallback so an
     // unusual pairing still connects.
-    let preferred = preferred_transports(family);
     let ordered = preferred
         .iter()
         .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
@@ -662,6 +751,58 @@ mod tests {
             KNOWN_TRANSPORTS.len(),
             "every transport must stay reachable as a fallback"
         );
+    }
+
+    /// Every bridge carries meters, so the "no meter answered" help always has
+    /// something to list — an empty list would print a bare failure.
+    #[test]
+    fn every_bridge_carries_meters() {
+        for kt in KNOWN_TRANSPORTS {
+            assert!(
+                !devices_on_bridge(kt.name).is_empty(),
+                "no device lists {} as its cable",
+                kt.name
+            );
+        }
+        assert!(devices_on_bridge("no such bridge").is_empty());
+    }
+
+    /// The CH9325 UT-D04 is the FS9721 meters' cable and nothing else's; the
+    /// help it prints must not offer a UT61+ setup to a UT803 owner.
+    #[test]
+    fn ch9325_carries_exactly_the_fs9721_meters() {
+        let on_bridge: Vec<&str> = devices_on_bridge("CH9325").iter().map(|d| d.id).collect();
+        let fs9721: Vec<&str> = registry::DEVICES
+            .iter()
+            .filter(|d| d.family == protocol::DeviceFamily::Fs9721)
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(on_bridge, fs9721);
+    }
+
+    /// The mock needs no cable, and offering it as a candidate on a bridge
+    /// that answered nothing would send the user looking for a meter that
+    /// does not exist.
+    #[test]
+    fn no_bridge_lists_the_mock() {
+        for kt in KNOWN_TRANSPORTS {
+            assert!(devices_on_bridge(kt.name).iter().all(|d| d.id != "mock"));
+        }
+    }
+
+    /// The open path takes ids a binary already resolved, plus `auto`.
+    #[test]
+    fn selection_by_id_accepts_auto_and_exact_ids() {
+        assert!(matches!(selection_by_id("auto"), Ok(Selection::Auto)));
+        assert!(matches!(selection_by_id("AUTO"), Ok(Selection::Auto)));
+        let Ok(Selection::Device(d)) = selection_by_id("ut8803") else {
+            panic!("ut8803 must resolve");
+        };
+        assert_eq!(d.id, "ut8803");
+        assert!(matches!(
+            selection_by_id("nonexistent"),
+            Err(Error::UnknownDevice(_))
+        ));
     }
 
     /// Pull the hex value out of `ATTRS{idVendor}=="1a86"` in a udev rule.
