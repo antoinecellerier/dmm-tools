@@ -164,13 +164,24 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   captures taken before these steps existed, so riding on `hw` would claim it
   had walked ladders it has never seen. `capture --unverified` therefore asks
   the E+ for nothing and the B+ for exactly these two.
+- **A resistor across the probes confirms the decode across rungs, and all
+  three overload spellings at once** (`ut61eplus-ohm-82k.yaml`, 82 kΩ marked,
+  reading 80.45 kΩ on auto). The three rungs it overflows produced
+  `  OL.  ` at 220Ω, ` .OL   ` at 2.2kΩ and `  O.L  ` at 22kΩ — the whole of
+  §5.8 in one run on one meter, rather than inferred across seven captures.
+  Of the four rungs it fits, 2.2MΩ settled to `0.0820` MΩ, matching the
+  80.45 kΩ auto-range reading through a different unit and decimal count.
 - **The top Ω rungs settle slowly.** With the probes shorted, 22MΩ read
   0.081 MΩ (81 counts) and 220MΩ read 0.18 MΩ (18 counts), and both were seen
   on the meter to drop back over several seconds. The sweep samples about
   200 ms after the press, so **range sub-step values on slow-settling ranges
   are transients, not measurements**. It does not touch the rung-to-label
   mapping, which is the decimal placement, nor the golden fixtures, which
-  assert the parse of a frame whatever it held.
+  assert the parse of a frame whatever it held. With the 82 kΩ resistor the
+  scale of it showed: 220MΩ filed 4.38 MΩ, fifty times the true value, and
+  220kΩ filed two OL frames before the reading came down into range.
+  `capture --settle MS` was added for this; waiting for the reading to hold
+  still instead would never finish on leads with nothing stable across them.
 
 ### UT61B+ — hardware reports
 
