@@ -169,8 +169,11 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   reading 80.45 kΩ on auto). The three rungs it overflows produced
   `  OL.  ` at 220Ω, ` .OL   ` at 2.2kΩ and `  O.L  ` at 22kΩ — the whole of
   §5.8 in one run on one meter, rather than inferred across seven captures.
-  Of the four rungs it fits, 2.2MΩ settled to `0.0820` MΩ, matching the
-  80.45 kΩ auto-range reading through a different unit and decimal count.
+  Re-run with `--settle 3000` (`ut61eplus-ohm-82k-settled.yaml`), every rung
+  it fits decodes to the same resistance: `80.46` kΩ at 220kΩ, `0.0804` MΩ at
+  2.2MΩ, `0.08` MΩ at 220MΩ, against `80.45` kΩ on auto. Different unit,
+  different decimal count, one resistor — which is the check shorted probes
+  could not make, since every rung then reads zero.
 - **The top Ω rungs settle slowly.** With the probes shorted, 22MΩ read
   0.081 MΩ (81 counts) and 220MΩ read 0.18 MΩ (18 counts), and both were seen
   on the meter to drop back over several seconds. The sweep samples about
@@ -182,6 +185,21 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   220kΩ filed two OL frames before the reading came down into range.
   `capture --settle MS` was added for this; waiting for the reading to hold
   still instead would never finish on leads with nothing stable across them.
+
+### Capture leaves the meter manually ranged
+
+The sweep restores each setting it drove, and `docs/capture-design.md` says
+the baseline is auto range with the flags off. It is not, at the end of a run:
+the range walk restores Auto, then the MIN/MAX walk locks the range again (as
+the meter does while recording), and leaving MIN/MAX by 0x42 does not put
+auto-ranging back. Seen 2026-09-10 — one `ohm_ranges` run ended manual, and
+the next run opened on a manually ranged meter, which cost it the `22MΩ` rung
+because that rung was then the current choice and the sweep only walks the
+others.
+
+Not harmful — the operator's next dial turn clears it — but it makes a
+resumed or repeated run cover a different set of rungs than a fresh one.
+Re-asserting Auto after the flag sweeps would fix it.
 
 ### UT61B+ — hardware reports
 
