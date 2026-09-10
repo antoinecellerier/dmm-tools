@@ -119,6 +119,13 @@ the button — but it can stop `set` reaching a state the meter does have.
 1000V manual and stayed there, although the manual's AC V table lists LPF on
 every range. Not encoded.
 
+The mock follows the same matrix from 2026-09-10, since a mock that offers a
+control the meter ignores is the false confidence `.claude/rules/protocol.md`
+warns about. One divergence is left and predates this: the mock offers Peak in
+Hz, Ω, capacitance, temperature and NCV, where the E+ offers it only in the
+five pure-AC modes (`AC_PEAK_MODES`). `Scenario::peak_applies` is what would
+narrow it.
+
 The sweep skips REL while the reading is OL, so some rows read as absent
 rather than refused in a given run: `continuity/rel:on` was only attempted in
 the runs where the probes were still touching (2026-03 and

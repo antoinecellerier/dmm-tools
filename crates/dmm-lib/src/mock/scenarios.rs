@@ -49,6 +49,28 @@ impl Scenario {
             MockMode::DcV | MockMode::DcMa | MockMode::OhmOl | MockMode::Noise
         )
     }
+
+    /// Whether HOLD does anything here. The meter this mock stands in for
+    /// ignores it in NCV alone — see `HOLD_DEAD` in the UT61+ protocol and
+    /// the flag matrix in `docs/verification-backlog.md`.
+    pub(super) fn hold_applies(&self) -> bool {
+        !matches!(self.id, MockMode::Ncv)
+    }
+
+    /// Whether REL does anything here (`REL_DEAD`). Continuity, duty and
+    /// AC+DC V are on that list too; the mock has no scenario for them.
+    pub(super) fn rel_applies(&self) -> bool {
+        !matches!(self.id, MockMode::Hz | MockMode::Ncv)
+    }
+
+    /// Whether MIN/MAX does anything here (`MINMAX_DEAD`). Continuity, diode
+    /// and duty are on that list too, and the mock has no scenario for them.
+    pub(super) fn minmax_applies(&self) -> bool {
+        !matches!(
+            self.id,
+            MockMode::Capacitance | MockMode::Hz | MockMode::Ncv
+        )
+    }
 }
 
 /// A secondary reading a scenario emits alongside its main value.

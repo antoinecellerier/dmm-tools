@@ -764,19 +764,22 @@ impl CycleMeter for MockProtocol {
         self.send_command(transport, "auto")
     }
 
-    /// HOLD, REL and MIN/MAX everywhere, MIN/MAX as the MAX/MIN ring with no
-    /// AVG, and Peak only where the live scenario reacts to it — offering it
-    /// elsewhere would list a state select cannot reach.
+    /// Each flag only where the live scenario reacts to it — offering one
+    /// elsewhere would list a state select cannot reach, and would tell
+    /// anyone developing against the mock that a control works where the real
+    /// meter ignores it. MIN/MAX is the MAX/MIN ring, with no AVG.
     ///
     /// Keyed on the scenario rather than the `mode` argument: the resistance
     /// scenarios share mode byte 0x06 and disagree about Peak, so the byte
     /// alone cannot answer.
     fn flag_states(&self, setting: FlagSetting, _mode: u16) -> &'static [u16] {
+        let scenario = self.current_scenario();
         match setting {
-            FlagSetting::Hold | FlagSetting::Rel => &[0, 1],
-            FlagSetting::MinMax => &[0, 1, 2],
-            FlagSetting::Peak if self.current_scenario().peak_applies() => &[0, 1, 2],
-            FlagSetting::Peak => &[],
+            FlagSetting::Hold if scenario.hold_applies() => &[0, 1],
+            FlagSetting::Rel if scenario.rel_applies() => &[0, 1],
+            FlagSetting::MinMax if scenario.minmax_applies() => &[0, 1, 2],
+            FlagSetting::Peak if scenario.peak_applies() => &[0, 1, 2],
+            _ => &[],
         }
     }
 
