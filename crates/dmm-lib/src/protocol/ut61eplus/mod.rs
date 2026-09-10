@@ -346,9 +346,14 @@ impl Protocol for Ut61PlusProtocol {
             .verified_if(hw)
             .needs(&[Need::ShortedLeads])
             .expect(Expect::mode("Continuity").value(ValueExpect::Finite)),
+            // Open leads read OL, and the meter refuses REL over OL in any
+            // mode, so the old wording ("leave leads open") guaranteed that
+            // this step's REL and MIN/MAX sub-steps said nothing about diode
+            // — which is exactly what happened until 2026-09-10.
             CaptureStep::basic(
                 "diode",
-                "Set meter to diode. Leave leads open (should show OL).",
+                "Set meter to diode. A diode across the probes if you have one, \
+                 otherwise leave the leads open (OL).",
             )
             .samples(3)
             .verified_if(hw)
