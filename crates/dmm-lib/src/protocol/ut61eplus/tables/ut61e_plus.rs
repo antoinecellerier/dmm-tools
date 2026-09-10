@@ -226,9 +226,10 @@ impl ModeTables for Ut61ePlusTable {
     /// 2026-03-21, AC mV 2026-09-07 (three presses, range byte and AUTO
     /// annunciator unmoved); see the "Range tables" section of
     /// docs/verification-backlog.md. The table's second entry (2.2V) is
-    /// another model's, so the length alone would not say so.
+    /// another model's, so the length alone would not say so. Capacitance and
+    /// Hz are dead on every model of the family and come from the shared list.
     fn range_is_fixed(&self, mode: Mode) -> bool {
-        matches!(mode, Mode::DcMv | Mode::AcMv)
+        super::FAMILY_FIXED_RANGE_MODES.contains(&mode) || matches!(mode, Mode::DcMv | Mode::AcMv)
     }
 
     fn peak_modes(&self) -> &'static [Mode] {

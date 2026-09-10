@@ -80,6 +80,15 @@ pub trait DeviceTable: Send {
     }
 }
 
+/// Modes where the RANGE button (0x46) does nothing on any model of the family.
+///
+/// [VERIFIED] on two meters: a RANGE press left a UT61E+ in Auto in both
+/// (`ut61eplus-verify4.yaml`, steps `capacitance/range:22nF` and
+/// `hz/range:22Hz`) and a UT61B+ likewise (issue #19, the same steps at 60nF
+/// and 60Hz). The tables still name these modes' rungs — auto-ranging reaches
+/// them and a reading has to be labelled; it is only the button that is dead.
+pub(crate) const FAMILY_FIXED_RANGE_MODES: &[Mode] = &[Mode::Capacitance, Mode::Hz];
+
 /// The AC modes where Peak is offered on the models that have it.
 ///
 /// Verified on a UT61E+ only for AC mV, where 0x4D activates while DC V
@@ -165,9 +174,11 @@ pub(crate) trait ModeTables: Send {
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_>;
 
-    /// Modes this model's RANGE button cannot change. Default: none.
-    fn range_is_fixed(&self, _mode: Mode) -> bool {
-        false
+    /// Modes this model's RANGE button cannot change. Default:
+    /// [`FAMILY_FIXED_RANGE_MODES`]. A model that fixes more of them
+    /// overrides this and folds the default back in.
+    fn range_is_fixed(&self, mode: Mode) -> bool {
+        FAMILY_FIXED_RANGE_MODES.contains(&mode)
     }
 
     /// Modes where Peak works on this model. Default: none.

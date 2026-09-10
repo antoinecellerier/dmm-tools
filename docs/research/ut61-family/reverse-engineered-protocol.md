@@ -389,6 +389,9 @@ commands have no effect on models lacking the corresponding feature:
 tool expected on the next frame, and GetName answered `UT61B+`. Hold and
 Range were already [VENDOR]-confirmed and behaved the same way there.
 
+"Yes" in this table means the model has the command at all. Which *modes*
+accept it is section 6.2 — several accept it nowhere useful.
+
 ### 6.1 Range and Auto semantics — [VERIFIED] (UT61E+, 2026-09-07)
 
 Walked on the in-house UT61E+ with `dmm-cli set range`, which presses the
@@ -415,6 +418,52 @@ walks off → MAX → MIN, one press per step; the ring never comes back to off
 ExitMinMax (0x42) is what leaves. PeakMinMax (0x4D) walks P-MAX → P-MIN the
 same way in AC V, and ExitPeak (0x4E) leaves. Hold (0x4A) and Rel (0x48)
 each toggle on one press.
+
+### 6.2 Which modes take which command — [VERIFIED] (UT61E+ and UT61B+)
+
+The command table above is per model. It is also per *mode*: a press in the
+wrong mode is accepted on the wire and changes nothing on screen. Section 6
+used to say the vendor command matrix listed no mode restriction on 0x4A,
+0x48 or 0x41; two meters have since contradicted that, refusing the same
+commands in the same modes — a UT61E+ over CP2110 (2026-09-07,
+`ut61eplus-verify4.yaml`) and a UT61B+ over CH9329 (2026-09-10, issue #19).
+Each row below is a press whose flag did not move on the next frame.
+
+| Mode | Hold 0x4A | Rel 0x48 | MinMax 0x41 | Range 0x46 |
+|------|:---------:|:--------:|:-----------:|:----------:|
+| Continuity (0x07) | Yes | **No effect** | **No effect** | fixed range |
+| Diode (0x08) | Yes | untested | untested | fixed range |
+| Capacitance (0x09) | Yes | Yes | **No effect** | **No effect** |
+| Hz (0x04) | Yes | **No effect** | **No effect** | **No effect** |
+| Duty % (0x05) | Yes | **No effect** | **No effect** | fixed range |
+| NCV (0x14) | **No effect** | **No effect** | **No effect** | no table |
+| AC+DC V (0x19) | Yes | one meter only | Yes | Yes |
+| Every other mode | Yes | Yes | Yes | Yes (section 6.1) |
+
+"Fixed range" means the mode has one rung, so there is nothing for 0x46 to
+step; "No effect" in that column means the mode has several rungs and the
+button still does not move between them — auto-ranging is the only way there.
+
+**A refusal only counts when a real reading was on screen.** The meter also
+refuses Rel whenever the display shows OL, whatever the mode: `dcmv/rel:on`
+was refused over OL in the 2026-03 run and taken in all three later runs
+where DC mV had a value. Hold is not affected — diode's Hold frames carry the
+flag over OL.
+
+That is why **diode reads "untested" in both middle columns**: every refusal
+recorded there, five across the two meters, was over OL, because open leads
+in diode read OL. Nothing is known about diode with a diode connected.
+
+**AC+DC V** refused Rel twice on one UT61E+ with 0.07 V and 0.08 V showing.
+That mode does not exist on the UT61B+, so no second meter can corroborate
+it, and one meter is not enough to call a button dead. MinMax there works and
+says so: `acdcv/minmax:min` read 0.0652 V back with the MIN flag set.
+
+The rows in bold are the ones the code acts on (`HOLD_DEAD`, `REL_DEAD`,
+`MINMAX_DEAD` in `ut61eplus/mod.rs`, `FAMILY_FIXED_RANGE_MODES` in
+`tables/mod.rs`); the rest stay offered. The D+ and the UT161 models are
+[DEDUCED] to match: section 1 establishes that all six run the same command
+code.
 
 ---
 

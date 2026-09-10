@@ -43,6 +43,7 @@
 
 ### Bug fixes
 
+- **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, capacitance, Hz, duty and NCV offered controls that did nothing.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
 - **UT61E+ NCV shows the detected level** — every detection read as level 0.
 - **Resuming a capture keeps its freeform steps** — a second run numbered from `extra_0` again and overwrote them.

@@ -499,6 +499,45 @@ const SELECT_SETTLE_DELAY: Duration = Duration::from_millis(150);
 /// the meter answers a press the same way whichever button sent it.
 const SELECT_SETTLE_READS: usize = 3;
 
+/// Modes where a HOLD press (0x4A) leaves the flag where it was.
+///
+/// [VERIFIED] on a UT61E+ (`ut61eplus-verify4.yaml`, step `ncv/hold:on`) and a
+/// UT61B+ (issue #19, same step): "HOLD did nothing in off". Everywhere else
+/// HOLD took, continuity, diode, capacitance, Hz, duty and AC+DC V included,
+/// and diode's frames carry the HOLD flag over an OL reading — so OL is no
+/// bar to HOLD, only to REL.
+const HOLD_DEAD: &[Mode] = &[Mode::Ncv];
+
+/// Modes where a REL press (0x48) leaves the flag where it was.
+///
+/// The bar for this list is two meters refusing it with a real reading on
+/// screen. The second half matters: this meter also refuses REL whenever the
+/// display reads OL, whatever the mode — `dcmv/rel:on` was refused over OL in
+/// one run and taken in the three where DC mV had a value — so a refusal only
+/// ever seen over OL says nothing about the mode. That is why diode is not
+/// here: open leads in diode read OL, and nobody has asked it otherwise.
+///
+/// AC+DC V refused it on our UT61E+ twice with 0.07 V and 0.08 V on screen,
+/// but that mode does not exist on the UT61B+, so no second meter can agree.
+/// One meter is not enough to take a working button away, so it stays
+/// offered — see `docs/verification-backlog.md`.
+const REL_DEAD: &[Mode] = &[Mode::Continuity, Mode::Hz, Mode::DutyCycle, Mode::Ncv];
+
+/// Modes where a MIN/MAX press (0x41) leaves the flags where they were.
+///
+/// Same bar as [`REL_DEAD`]: two meters, a real reading in view. Capacitance
+/// is here and takes REL — the two buttons do not go together. Diode is not:
+/// all five refusals across both meters were over OL. AC+DC V is not either,
+/// and there the meter said so outright — `acdcv/minmax:min` read 0.0652 V
+/// back with the MIN flag set.
+const MINMAX_DEAD: &[Mode] = &[
+    Mode::Continuity,
+    Mode::Capacitance,
+    Mode::Hz,
+    Mode::DutyCycle,
+    Mode::Ncv,
+];
+
 impl cycle::CycleMeter for Ut61PlusProtocol {
     fn dial_positions(&self) -> &'static [cycle::DialPosition] {
         self.table.dial_positions()
@@ -563,17 +602,28 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
         self.press_command(transport, Command::Auto)
     }
 
-    /// HOLD, REL and MIN/MAX are taken in every mode — the family's command
-    /// matrix (research spec §6) lists no mode restriction on 0x4A, 0x48 or
-    /// 0x41, and remote mode switching was verified on a UT61E+ under an
-    /// active MIN/MAX. Peak is the one that depends on both model and mode.
+    /// Which states each flag command can be driven to in `mode`.
+    ///
+    /// We used to answer "every state in every mode", on the reading that the
+    /// family's command matrix (research spec §6) lists no mode restriction on
+    /// 0x4A, 0x48 or 0x41. Two meters have since contradicted that: a UT61E+
+    /// (CP2110, 2026-09-07) and a UT61B+ (CH9329, 2026-09-10, issue #19)
+    /// refused the same commands in the same modes, each press leaving the
+    /// flag where it was. [`REL_DEAD`], [`MINMAX_DEAD`] and [`HOLD_DEAD`] are
+    /// that list. Peak depends on the model as well, so it stays with the
+    /// table.
     fn flag_states(&self, setting: cycle::FlagSetting, mode: u16) -> &'static [u16] {
+        let named = u8::try_from(mode).map(Mode::from_byte);
+        let dead = |modes: &[Mode]| matches!(named, Ok(Ok(m)) if modes.contains(&m));
         match setting {
+            cycle::FlagSetting::Hold if dead(HOLD_DEAD) => &[],
+            cycle::FlagSetting::Rel if dead(REL_DEAD) => &[],
+            cycle::FlagSetting::MinMax if dead(MINMAX_DEAD) => &[],
             cycle::FlagSetting::Hold | cycle::FlagSetting::Rel => &[0, 1],
             // MAX then MIN, the order the meter's own 2-state ring cycles in.
             // No AVG: the UT61E+ reports none over USB.
             cycle::FlagSetting::MinMax => &[0, 1, 2],
-            cycle::FlagSetting::Peak => match u8::try_from(mode).map(Mode::from_byte) {
+            cycle::FlagSetting::Peak => match named {
                 Ok(Ok(mode)) if self.table.peak_modes().contains(&mode) => &[0, 1, 2],
                 _ => &[],
             },
@@ -1184,6 +1234,59 @@ mod tests {
 
         let max = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (F_MAX, MANUAL, 0));
         assert!(proto.choices(Setting::MinMax, &max)[1].current);
+    }
+
+    /// The modes where a press leaves the flag where it was offer nothing to
+    /// press. Both a UT61E+ (2026-09-07) and a UT61B+ (issue #19, 2026-09-10)
+    /// refused these, mode for mode.
+    #[test]
+    fn a_dead_flag_offers_nothing_to_switch_to() {
+        let proto = Ut61PlusProtocol::new();
+        // (mode byte, HOLD, REL, MIN/MAX) — true means the meter takes it.
+        let cases = [
+            (0x07u8, true, false, false), // continuity
+            // Diode and AC+DC V keep everything: the refusals seen there were
+            // over OL, or on one meter only. See REL_DEAD and MINMAX_DEAD.
+            (0x08, true, true, true),    // diode
+            (0x09, true, true, false),   // capacitance
+            (0x04, true, false, false),  // Hz
+            (0x05, true, false, false),  // duty %
+            (0x14, false, false, false), // NCV
+            (0x19, true, true, true),    // AC+DC V
+            (0x02, true, true, true),    // DC V, the control
+        ];
+        for (mode, hold, rel, minmax) in cases {
+            let m = make_test_measurement(mode, 0x00, b" 12.345", (0, 0), (0, MANUAL, 0));
+            for (setting, want, name) in [
+                (Setting::Hold, hold, "HOLD"),
+                (Setting::Rel, rel, "REL"),
+                (Setting::MinMax, minmax, "MIN/MAX"),
+            ] {
+                assert_eq!(
+                    !proto.choices(setting, &m).is_empty(),
+                    want,
+                    "{name} in mode {mode:#04x}"
+                );
+            }
+        }
+    }
+
+    /// RANGE is dead in capacitance and Hz on every model of the family, so
+    /// no ladder is offered there even though both tables name their rungs.
+    #[test]
+    fn capacitance_and_hz_offer_no_range_ladder() {
+        for model in ["ut61e+", "ut61b+", "ut61d+"] {
+            let proto = Ut61PlusProtocol::for_model(model).expect("known model");
+            for mode in [0x09u8, 0x04] {
+                let m = make_test_measurement(mode, 0x00, b"   0.00", (0, 0), (0, 0, 0));
+                assert!(
+                    proto.choices(Setting::Range, &m).is_empty(),
+                    "{model} mode {mode:#04x} should offer no range"
+                );
+                // The rungs are still named, for whatever auto-ranging picks.
+                assert!(!m.range_label.is_empty(), "{model} mode {mode:#04x} label");
+            }
+        }
     }
 
     /// Peak activates on AC mV and does nothing on DC V, verified 2026-03-21

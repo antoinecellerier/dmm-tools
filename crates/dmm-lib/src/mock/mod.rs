@@ -1679,13 +1679,15 @@ mod tests {
 
     /// A manual rung relabels the range only: the value and its unit stay the
     /// scenario's, since swapping the unit alone would move the reading a
-    /// decade.
+    /// decade. Resistance, because its rungs cross Ω/kΩ/MΩ — Hz used to stand
+    /// here, but RANGE is dead in Hz on the real meter and the mock follows.
     #[test]
     fn a_manual_rung_keeps_the_scenarios_value_and_unit() {
         let transport = NullTransport;
-        let mut proto = MockProtocol::with_mode(MockMode::Hz);
+        let mut proto = MockProtocol::with_mode(MockMode::Ohm);
         let before = proto.request_measurement(&transport).unwrap();
-        proto.select(&transport, Setting::Range, 3).unwrap();
+        // Rung 5 is 2.2MΩ, two decades off the scenario's own kΩ reading.
+        proto.select(&transport, Setting::Range, 5).unwrap();
         let after = proto.request_measurement(&transport).unwrap();
         assert_eq!(after.unit, before.unit);
         assert_ne!(after.range_label, before.range_label, "the rung shows");
