@@ -293,37 +293,41 @@ fn a_brief_overload_is_not_widened() {
     );
 }
 
-/// The minimap reads its bands from the same cache it draws the trace
-/// from, so the cache has to carry gaps — an earlier version of that
+/// The minimap reads its bands from the same level it draws the trace
+/// from, so the level has to carry the gaps — an earlier version of that
 /// field was write-only and was removed.
 #[test]
-fn the_cache_carries_gaps_for_the_minimap() {
+fn the_level_carries_gaps_for_the_minimap() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     g.push(1.0, t0, "DC V", "V", None);
     g.push_break(t0 + Duration::from_millis(50));
     g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
 
-    g.ensure_cache();
-    assert_eq!(g.cached_segments.len(), 2, "trace splits either side");
-    let kinds: Vec<GapKind> = g.cached_gaps.iter().map(|&(_, _, k)| k).collect();
+    let mut level = g.build_level(0.01);
+    assert_eq!(level.runs().count(), 2, "trace splits either side");
+    let kinds: Vec<GapKind> = level.gaps().map(|(_, _, k)| k).collect();
     assert_eq!(kinds, vec![GapKind::Overload]);
 }
 
-/// The cache is keyed on history_version; a new sample must invalidate it
-/// or the minimap would keep drawing a stale set of bands.
+/// The level is grown a sample at a time rather than rebuilt per frame, so
+/// a break arriving after it was cut has to reach it — otherwise the
+/// minimap would keep drawing the set of bands it was cut with.
 #[test]
-fn the_cache_refreshes_when_a_break_arrives() {
+fn the_level_follows_a_break_as_it_arrives() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     g.push(1.0, t0, "DC V", "V", None);
-    g.ensure_cache();
-    assert!(g.cached_gaps.is_empty());
+    g.push(1.5, t0 + Duration::from_millis(10), "DC V", "V", None);
+    g.ensure_level(0.01);
+    assert_eq!(g.minimap_level.as_ref().expect("cut").gaps().count(), 0);
 
     g.push_break(t0 + Duration::from_millis(50));
     g.push(2.0, t0 + Duration::from_millis(100), "DC V", "V", None);
-    g.ensure_cache();
-    assert_eq!(g.cached_gaps.len(), 1);
+    let mut level = g.minimap_level.clone().expect("still cut");
+    assert_eq!(level.gaps().count(), 1);
+    assert_eq!(level.runs().count(), 2);
+    assert_eq!(g.minimap_level, Some(g.build_level(0.01)));
 }
 
 /// An overload before any data has nothing to anchor to.
@@ -1566,7 +1570,7 @@ fn clear_drops_the_overlays_but_keeps_the_selection() {
 
 use super::minimap::{
     Edge, MinimapDrag, MinimapScale, ViewWindow, bucket_secs, decimate_columns, drag_target,
-    near_a_bracket, pan, resize,
+    level_polyline, near_a_bracket, pan, resize,
 };
 
 /// A 400px-wide strip starting at x=100, over a 200-second session.
@@ -1965,4 +1969,332 @@ fn a_new_sample_leaves_earlier_buckets_untouched() {
     let stable = before.iter().take_while(|p| p.x < last_x).count();
     assert!(stable > 300, "prefix of only {stable} points");
     assert_eq!(&before[..stable], &after[..stable]);
+}
+
+// ── Minimap bucket level ────────────────────────────────────────────────────
+
+use super::view::pad_range;
+
+/// A deterministic LCG. The level's contract — appending equals rebuilding —
+/// only shows up over a long, messy stream, and a flaky one would be useless.
+fn lcg(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *state >> 33
+}
+
+/// The whole design rests on this: a level grown one sample at a time must be
+/// indistinguishable from one cut in a single pass over the same history. The
+/// stream mixes steady cadence, silences past the gap threshold, overloads,
+/// dropouts and a repeated timestamp, and runs long enough to evict.
+#[test]
+fn incremental_level_matches_a_rebuild() {
+    const WIDTH: f64 = 0.05;
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let mut t = t0;
+    let mut rng = 0x1234_5678_9abc_def0_u64;
+
+    g.push(0.0, t, "DC V", "V", None);
+    g.ensure_level(WIDTH);
+
+    for i in 0..12_000_u64 {
+        let r = lcg(&mut rng);
+        let step_ms = match r % 100 {
+            // A silence well past the 1 s threshold: a dropout.
+            0 => 1_500 + r % 500,
+            // Two samples stamped alike — the meter's clock has finite
+            // resolution and the bucket must not care.
+            1 => 0,
+            _ => 90 + r % 20,
+        };
+        t += Duration::from_millis(step_ms);
+        match r % 211 {
+            7 => g.push_break(t),
+            13 => {
+                g.push_break(t);
+                g.push_data_loss();
+            }
+            _ => {}
+        }
+        let v = (i as f64 * 0.017).sin() * 10.0 + (r % 1_000) as f64 * 0.001;
+        g.push(v, t, "DC V", "V", None);
+
+        if i % 97 == 0 {
+            assert_eq!(
+                g.minimap_level,
+                Some(g.build_level(WIDTH)),
+                "level diverged from a rebuild after {i} samples"
+            );
+        }
+    }
+    assert!(g.len() == MAX_POINTS, "the run must have evicted");
+    assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
+}
+
+/// The level exists to draw exactly what projecting every raw point drew, for
+/// a cost that follows the strip's width instead of the history length. Both
+/// the polylines and the Y range the strip scales them by must come out
+/// identical to the full-history path they replaced.
+#[test]
+fn level_polylines_match_the_raw_point_path() {
+    const WIDTH: f64 = 0.5;
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let mut rng = 0xfeed_face_dead_beef_u64;
+    let mut t = t0;
+    for i in 0..2_000_u64 {
+        let r = lcg(&mut rng);
+        t += Duration::from_millis(if r.is_multiple_of(97) {
+            1_800
+        } else {
+            90 + r % 20
+        });
+        if r.is_multiple_of(173) {
+            g.push_break(t);
+        }
+        g.push(
+            (i as f64 * 0.031).sin() * 5.0 + (r % 500) as f64 * 0.002,
+            t,
+            "DC V",
+            "V",
+            None,
+        );
+    }
+
+    // The Y range: folded bucket extremes against the scan over every point.
+    let mut level = g.build_level(WIDTH);
+    let (data_min, data_max) = g.data_time_range();
+    let padded = level.value_range().map(|(lo, hi)| pad_range(lo, hi));
+    assert_eq!(padded, g.y_min_max_padded(data_min, data_max, false));
+
+    let rect = egui::Rect::from_min_size(egui::pos2(10.0, 5.0), egui::vec2(400.0, 60.0));
+    let y_map = padded.map(|(lo, hi)| (lo, (hi - lo).max(1e-10)));
+    let y_of = |v: f64| -> f32 {
+        let y_frac = match y_map {
+            Some((lo, range)) => ((v - lo) / range) as f32,
+            None => 0.5,
+        };
+        rect.bottom() - y_frac * rect.height()
+    };
+
+    // The path as it was before the level: every point of every segment
+    // projected and decimated.
+    let oracle: Vec<Vec<egui::Pos2>> = g
+        .build_segments_for_range(0, g.len())
+        .0
+        .iter()
+        .map(|seg| {
+            decimate_columns(
+                seg.iter()
+                    .map(|&[t, v]| egui::pos2((t / WIDTH) as f32, y_of(v))),
+                1.0,
+            )
+        })
+        .collect();
+    let drawn: Vec<Vec<egui::Pos2>> = level.runs().map(|run| level_polyline(run, y_of)).collect();
+    assert_eq!(drawn, oracle);
+}
+
+/// Eviction has to leave the level exactly where a rebuild of what remains
+/// would: the front bucket rescanned when the sample that left was one of its
+/// extremes, and a band dropped once the point that opened it is gone.
+#[test]
+fn eviction_trims_buckets_and_gaps_exactly() {
+    const WIDTH: f64 = 0.05;
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |i: u64| t0 + Duration::from_millis(i * 10);
+
+    for i in 0..MAX_POINTS as u64 {
+        if i == 6 {
+            g.push_break(at(i));
+        }
+        // A spike in the very first bucket: nothing else comes near it, so
+        // the front bucket's extreme can only survive by mistake.
+        let v = if i == 0 { 50.0 } else { 1.0 + (i % 7) as f64 };
+        g.push(v, at(i), "DC V", "V", None);
+    }
+    g.ensure_level(WIDTH);
+    let level = g.minimap_level.as_ref().expect("cut");
+    assert_eq!(level.value_range().expect("samples").1, 50.0);
+    assert_eq!(level.gaps().count(), 1);
+
+    // One more sample evicts the spike, which forces the rescan.
+    g.push(1.0, at(MAX_POINTS as u64), "DC V", "V", None);
+    let level = g.minimap_level.as_ref().expect("cut");
+    assert!(
+        level.value_range().expect("samples").1 < 50.0,
+        "the spike must leave with the point that made it"
+    );
+    assert_eq!(
+        level.gaps().count(),
+        1,
+        "the band's opening point is still in"
+    );
+    assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
+
+    // Evicting the point the band hangs from takes the band with it.
+    for i in 1..=5 {
+        g.push(1.0, at(MAX_POINTS as u64 + i), "DC V", "V", None);
+    }
+    assert_eq!(
+        g.minimap_level.as_ref().expect("cut").gaps().count(),
+        0,
+        "a band whose opening point was evicted has nothing left to hang from"
+    );
+    assert_eq!(g.minimap_level, Some(g.build_level(WIDTH)));
+}
+
+/// An overload shorter than a bucket still has to break the trace, or the
+/// strip would draw straight through a stretch the meter never measured.
+#[test]
+fn a_break_inside_a_bucket_splits_it() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push_break(t0 + Duration::from_micros(500));
+    g.push(2.0, t0 + Duration::from_micros(500), "DC V", "V", None);
+
+    let mut level = g.build_level(0.001);
+    assert_eq!(level.len(), 2, "the break opens a bucket of its own");
+    let runs: Vec<Vec<i64>> = level
+        .runs()
+        .map(|run| run.iter().map(|b| b.key).collect())
+        .collect();
+    assert_eq!(
+        runs,
+        vec![vec![0], vec![0]],
+        "two polylines, both in the same time bucket"
+    );
+}
+
+/// The strip steps its bucket width geometrically as the session grows, and
+/// a step recuts the level — but only a step, or every frame would pay for a
+/// rebuild.
+#[test]
+fn a_width_step_recuts_the_level() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..40_u64 {
+        g.push(
+            i as f64,
+            t0 + Duration::from_millis(i * 10),
+            "DC V",
+            "V",
+            None,
+        );
+    }
+
+    g.ensure_level(0.01);
+    let fine = g.minimap_level.as_ref().expect("cut").len();
+    g.ensure_level(0.01);
+    let level = g.minimap_level.as_ref().expect("cut");
+    assert_eq!(level.width(), 0.01);
+    assert_eq!(level.len(), fine, "the same width keeps the level as cut");
+
+    g.ensure_level(0.05);
+    let level = g.minimap_level.as_ref().expect("recut");
+    assert_eq!(level.width(), 0.05);
+    assert!(level.len() < fine, "a wider bucket holds more samples");
+}
+
+/// Both start a new session: the level's buckets and its sequence numbers
+/// describe history that no longer exists.
+#[test]
+fn clear_and_mode_change_drop_the_level() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push(2.0, t0 + Duration::from_millis(10), "DC V", "V", None);
+    g.ensure_level(0.01);
+    assert!(g.minimap_level.is_some());
+
+    g.clear();
+    assert!(g.minimap_level.is_none());
+    assert_eq!(g.pushed_total, 0);
+
+    g.push(1.0, t0, "DC V", "V", None);
+    g.ensure_level(0.01);
+    g.push(100.0, t0 + Duration::from_millis(10), "Ohm", "Ω", None);
+    assert!(
+        g.minimap_level.is_none(),
+        "a mode change restarts the trace"
+    );
+    assert_eq!(g.pushed_total, 1, "and the sequence numbers with it");
+}
+
+/// Where the trace breaks was decided against the old threshold, so the
+/// level's runs would no longer match what the main plot draws.
+#[test]
+fn a_threshold_change_drops_the_level() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.set_sample_interval_ms(100);
+    g.ensure_level(0.01);
+
+    g.set_sample_interval_ms(100);
+    assert!(
+        g.minimap_level.is_some(),
+        "the same interval leaves the threshold where it was"
+    );
+    g.set_sample_interval_ms(1_000);
+    assert!(g.minimap_level.is_none());
+}
+
+/// The point of the level: neither a push nor a frame may cost more because
+/// the session has been running longer. The bucket width follows the strip,
+/// so both histories reduce to the same number of buckets.
+#[test]
+#[ignore = "timing-sensitive; run with --release"]
+fn push_and_frame_cost_do_not_scale_with_history() {
+    fn measure(points: u64) -> (Duration, Duration) {
+        // What a ~500px strip would ask for at this session length.
+        let width = points as f64 * 0.01 / 500.0;
+        let mut g = Graph::new();
+        let t0 = Instant::now();
+        let at = |i: u64| t0 + Duration::from_millis(i * 10);
+        let value = |i: u64| (i as f64 * 0.017).sin() * 10.0;
+        for i in 0..points {
+            g.push(value(i), at(i), "DC V", "V", None);
+        }
+        g.ensure_level(width);
+
+        let start = Instant::now();
+        for i in points..points + 1_000 {
+            g.push(value(i), at(i), "DC V", "V", None);
+        }
+        let push = start.elapsed();
+
+        let start = Instant::now();
+        let mut sink = 0.0_f64;
+        for _ in 0..100 {
+            let level = g.minimap_level.as_mut().expect("cut");
+            let (lo, _) = level.value_range().expect("samples");
+            sink += lo;
+            for run in level.runs() {
+                sink += level_polyline(run, |v| v as f32).len() as f64;
+            }
+        }
+        let frame = start.elapsed();
+        assert!(sink.is_finite());
+        (push, frame)
+    }
+
+    let (push_short, frame_short) = measure(1_000);
+    let (push_long, frame_long) = measure(MAX_POINTS as u64);
+    let ratio =
+        |short: Duration, long: Duration| long.as_secs_f64() / short.as_secs_f64().max(1e-9);
+    println!(
+        "1K: push {push_short:?}, frames {frame_short:?}\n\
+         {}K: push {push_long:?}, frames {frame_long:?}\n\
+         ratios: push {:.2}x, frame {:.2}x",
+        MAX_POINTS / 1_000,
+        ratio(push_short, push_long),
+        ratio(frame_short, frame_long),
+    );
+    assert!(ratio(push_short, push_long) < 3.0, "push cost grew");
+    assert!(ratio(frame_short, frame_long) < 3.0, "frame cost grew");
 }

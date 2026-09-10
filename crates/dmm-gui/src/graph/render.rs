@@ -116,20 +116,10 @@ impl Graph {
                 && let Some(kind) = self.breaks_before(prev, point)
                 && !current_segment.is_empty()
             {
-                let gap_start = self.elapsed_secs(prev);
-                // An interruption can be two things end to end: a stretch the
-                // meter reported on, then a stretch it didn't. Losing the link
-                // mid-overload is exactly that, and folding the silence into
-                // the band would claim the meter was over range for a period
-                // it never reported at all.
-                match (kind, point.break_last_sample) {
-                    (GapKind::Overload, Some(last)) if point.break_had_data_loss => {
-                        let heard_until = self.elapsed_secs(last);
-                        gaps.push((gap_start, heard_until, GapKind::Overload));
-                        gaps.push((heard_until, t, GapKind::NoData));
-                    }
-                    _ => gaps.push((gap_start, t, kind)),
-                }
+                // Through the same helper the minimap's level appends with,
+                // so the plot's bands and the strip's cannot come to describe
+                // one interruption differently.
+                gaps.extend(self.gap_entries(prev, point, kind).into_iter().flatten());
                 segments.push(std::mem::take(&mut current_segment));
             }
 

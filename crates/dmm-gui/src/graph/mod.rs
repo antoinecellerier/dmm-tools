@@ -3,13 +3,15 @@
 //!
 //! The concerns live in submodules — [`view`] (what slice is shown and the
 //! gestures that move it), [`toolbar`], [`render`] (the main plot),
-//! [`minimap`], [`analysis`] (visible-slice statistics), [`field`] (the
-//! toolbar's text-edit buffers and the values they parse to) and [`time`]
-//! (axis label formatting) — all of which add methods to the one [`Graph`]
-//! declared here, so the type's public API is unchanged by the split.
+//! [`minimap`], [`level`] (the minimap's bucketed trace), [`analysis`]
+//! (visible-slice statistics), [`field`] (the toolbar's text-edit buffers and
+//! the values they parse to) and [`time`] (axis label formatting) — all of
+//! which add methods to the one [`Graph`] declared here, so the type's public
+//! API is unchanged by the split.
 
 mod analysis;
 mod field;
+mod level;
 mod minimap;
 mod render;
 mod time;
@@ -25,6 +27,7 @@ use std::time::Instant;
 
 use crate::theme::ThemeColors;
 use field::{NumberField, NumberListField};
+use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 
 /// Maximum number of points to keep in the history buffer.
@@ -215,19 +218,15 @@ pub struct Graph {
     cursor_b: Option<f64>,
     /// Which cursor to place next on click.
     cursor_next_is_b: bool,
-    /// Cached segment data for minimap (full history), rebuilt only when
-    /// `history_version` changes.
-    cached_segments: Vec<Vec<[f64; 2]>>,
-    /// Full-history gaps, for the minimap's overload bands. (An earlier
-    /// version of this field was write-only and removed; the minimap now
-    /// reads it.)
-    cached_gaps: Vec<(f64, f64, GapKind)>,
-    /// Monotonic counter incremented on every push/clear/mode-change.
-    /// Used as the cache key instead of `history.len()` because a
-    /// push_back+pop_front leaves the length unchanged but the data differs.
-    history_version: u64,
-    /// Version when the cache was last rebuilt.
-    cache_version: u64,
+    /// The minimap's whole-session trace, bucketed at whatever width its
+    /// strip last asked for. `None` until the strip first draws, and again
+    /// whenever the buckets stop meaning what they did — see `clear` and
+    /// `set_sample_interval_ms`.
+    minimap_level: Option<MinimapLevel>,
+    /// Samples pushed since the trace last restarted, so that a point keeps
+    /// an identity across eviction: `history[0]` is
+    /// `pushed_total - history.len()`. The level's bands are dropped by it.
+    pushed_total: u64,
     /// Current minimap drag state.
     minimap_drag: MinimapDrag,
     /// Press origin (screen pixels) when a Shift+drag bbox-zoom is in progress.
@@ -277,10 +276,8 @@ impl Graph {
             cursor_a: None,
             cursor_b: None,
             cursor_next_is_b: false,
-            cached_segments: Vec::new(),
-            cached_gaps: Vec::new(),
-            history_version: 0,
-            cache_version: 0,
+            minimap_level: None,
+            pushed_total: 0,
             minimap_drag: MinimapDrag::None,
             bbox_zoom_start_px: None,
             bbox_zoom_current_px: None,
@@ -292,7 +289,14 @@ impl Graph {
     /// Update gap detection threshold based on sample interval.
     pub fn set_sample_interval_ms(&mut self, ms: u32) {
         let interval_secs = (ms as f64 / 1000.0).max(0.1); // 0ms → use ~100ms wire time
-        self.gap_threshold_secs = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
+        let threshold = (interval_secs * GAP_MULTIPLIER).max(GAP_MINIMUM_SECS);
+        if threshold != self.gap_threshold_secs {
+            self.gap_threshold_secs = threshold;
+            // Called on every connect, and history survives a reconnect — but
+            // where the trace breaks was decided against the old threshold, so
+            // the level's segments no longer match what the main plot draws.
+            self.minimap_level = None;
+        }
     }
 
     /// Push a single-series sample.
@@ -368,7 +372,8 @@ impl Graph {
             self.cursor_next_is_b = false;
             self.bbox_zoom_start_px = None;
             self.bbox_zoom_current_px = None;
-            self.invalidate_cache();
+            self.minimap_level = None;
+            self.pushed_total = 0;
             self.last_display_raw = None;
         }
         // Track the most recent raw display string so the a11y plot
@@ -384,10 +389,20 @@ impl Graph {
             (None, _) => self.last_display_raw = None,
         }
 
-        if self.history.len() >= MAX_POINTS {
-            self.history.pop_front();
+        while self.history.len() >= MAX_POINTS {
+            let Some(oldest) = self.history.pop_front() else {
+                break;
+            };
             for o in &mut self.overlays {
                 o.values.pop_front();
+            }
+            let first_seq = self.pushed_total.saturating_sub(self.history.len() as u64);
+            if let Some(level) = &mut self.minimap_level {
+                level.evict(
+                    oldest.value,
+                    self.history.iter().map(|p| p.value),
+                    first_seq,
+                );
             }
         }
 
@@ -408,13 +423,32 @@ impl Graph {
             });
         }
 
-        self.history.push_back(DataPoint {
+        let point = DataPoint {
             time: now,
             value,
             break_before: self.pending_break.take(),
             break_last_sample: self.pending_break_since.take(),
             break_had_data_loss: std::mem::take(&mut self.pending_data_loss),
-        });
+        };
+        // Everything the minimap's level needs, decided against the point
+        // before this one exactly as `build_segments_for_range` decides it for
+        // a consecutive pair — so appending and rebuilding cannot disagree.
+        let seq = self.pushed_total;
+        let t = self.elapsed_secs(point.time);
+        let prev_time = self.history.back().map(|p| p.time);
+        let break_kind = prev_time.and_then(|prev| self.breaks_before(prev, &point));
+        let gaps = match (prev_time, break_kind) {
+            (Some(prev), Some(kind)) => self.gap_entries(prev, &point, kind),
+            _ => [None, None],
+        };
+        self.history.push_back(point);
+        if let Some(level) = &mut self.minimap_level {
+            level.append(t, value, break_kind);
+            for (start, end, kind) in gaps.into_iter().flatten() {
+                level.push_gap(start, end, kind, seq);
+            }
+        }
+        self.pushed_total += 1;
         for o in &mut self.overlays {
             let v = sample
                 .overlays
@@ -429,7 +463,6 @@ impl Graph {
                 .all(|o| o.values.len() == self.history.len()),
             "overlay series out of lockstep with history"
         );
-        self.history_version += 1;
     }
 
     /// Offer the sub-values the meter is currently sending, as
@@ -504,10 +537,6 @@ impl Graph {
             return;
         }
         self.pending_break = Some(GapKind::Overload);
-        // The break only becomes visible once the next point lands, but the
-        // caches key on this counter — bump it so a stale segment list built
-        // before the overload isn't reused.
-        self.invalidate_cache();
     }
 
     /// Record that data was genuinely lost — the link dropped, or
@@ -523,7 +552,6 @@ impl Graph {
         self.pending_data_loss = true;
         if self.pending_break.is_none() {
             self.pending_break = Some(GapKind::NoData);
-            self.invalidate_cache();
         }
     }
 
@@ -552,25 +580,40 @@ impl Graph {
         self.minimap_drag = MinimapDrag::None;
         self.bbox_zoom_start_px = None;
         self.bbox_zoom_current_px = None;
-        self.invalidate_cache();
+        self.minimap_level = None;
+        self.pushed_total = 0;
     }
 
-    fn invalidate_cache(&mut self) {
-        self.history_version += 1;
-    }
-
-    /// Rebuild the cached full-history segments and gaps (for the minimap)
-    /// only if history has changed since the last rebuild.
+    /// Cut the minimap's level to `width`, keeping the one already cut when
+    /// the strip's scale has not stepped past it.
     ///
-    /// The main graph builds its own over the visible slice; this is the
-    /// whole-history pass the minimap needs.
-    fn ensure_cache(&mut self) {
-        if self.cache_version != self.history_version {
-            let (segments, gaps) = self.build_segments_for_range(0, self.history.len());
-            self.cached_segments = segments;
-            self.cached_gaps = gaps;
-            self.cache_version = self.history_version;
+    /// A recut is one pass over the history — what the strip used to pay
+    /// every frame — and falls only on the ~70 geometric width steps a
+    /// session takes and on window resizes. Because it runs the same `append`
+    /// the per-sample path does, a recut level and a grown one are identical
+    /// by construction.
+    pub(super) fn ensure_level(&mut self, width: f64) {
+        if self.minimap_level.as_ref().map(|l| l.width()) != Some(width) {
+            self.minimap_level = Some(self.build_level(width));
         }
+    }
+
+    /// Bucket the whole history at `width`, from scratch.
+    fn build_level(&self, width: f64) -> MinimapLevel {
+        let mut level = MinimapLevel::new(width);
+        let first_seq = self.pushed_total.saturating_sub(self.history.len() as u64);
+        let mut prev_time: Option<Instant> = None;
+        for (i, point) in self.history.iter().enumerate() {
+            let break_kind = prev_time.and_then(|prev| self.breaks_before(prev, point));
+            level.append(self.elapsed_secs(point.time), point.value, break_kind);
+            if let (Some(prev), Some(kind)) = (prev_time, break_kind) {
+                for (start, end, k) in self.gap_entries(prev, point, kind).into_iter().flatten() {
+                    level.push_gap(start, end, k, first_seq + i as u64);
+                }
+            }
+            prev_time = Some(point.time);
+        }
+        level
     }
 
     fn elapsed_secs(&self, t: Instant) -> f64 {
@@ -629,6 +672,36 @@ impl Graph {
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
         (elapsed > self.gap_threshold_secs).then_some(GapKind::NoData)
+    }
+
+    /// The band(s) one interruption draws, between `prev` and `point`.
+    ///
+    /// An interruption can be two things end to end: a stretch the meter
+    /// reported on, then a stretch it didn't. Losing the link mid-overload is
+    /// exactly that, and folding the silence into the band would claim the
+    /// meter was over range for a period it never reported at all.
+    ///
+    /// Shared by the main graph's segment builder and the minimap level's
+    /// per-sample append, so the two cannot come to different conclusions
+    /// about the same interruption.
+    fn gap_entries(
+        &self,
+        prev: Instant,
+        point: &DataPoint,
+        kind: GapKind,
+    ) -> [Option<(f64, f64, GapKind)>; 2] {
+        let start = self.elapsed_secs(prev);
+        let end = self.elapsed_secs(point.time);
+        match (kind, point.break_last_sample) {
+            (GapKind::Overload, Some(last)) if point.break_had_data_loss => {
+                let heard_until = self.elapsed_secs(last);
+                [
+                    Some((start, heard_until, GapKind::Overload)),
+                    Some((heard_until, end, GapKind::NoData)),
+                ]
+            }
+            _ => [Some((start, end, kind)), None],
+        }
     }
 
     /// Combined render: toolbar + main graph + minimap.

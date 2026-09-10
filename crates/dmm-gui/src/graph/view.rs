@@ -6,6 +6,17 @@ use egui_plot::PlotTransform;
 
 use super::{Graph, TIME_WINDOWS};
 
+/// The 10% breathing room the auto Y range leaves around the data.
+///
+/// Shared with the minimap, which pads the extremes its bucket level already
+/// carries instead of scanning the history for them — the strip's scale has to
+/// come out bit-identical either way.
+pub(super) fn pad_range(y_min: f64, y_max: f64) -> (f64, f64) {
+    let range = (y_max - y_min).max(1e-6);
+    let pad = range * 0.1;
+    (y_min - pad, y_max + pad)
+}
+
 impl Graph {
     /// Handle keyboard shortcuts for graph navigation.
     ///
@@ -140,10 +151,10 @@ impl Graph {
     /// Compute min/max Y over the visible slice, with 10% padding.
     ///
     /// `with_overlays` includes the sub-value traces drawn beside the plotted
-    /// series, so they are framed rather than clipped. The minimap passes
-    /// `false`: it is a main-series overview, and its scan already covers the
-    /// whole history — multiplying it by the overlay count is the O(n) budget
-    /// the two-tier rendering contract exists to protect.
+    /// series, so they are framed rather than clipped. The minimap doesn't
+    /// come through here at all: it is a main-series overview and reads its
+    /// extremes off its bucket level, which is what keeps the whole-history
+    /// tier off the per-frame scan budget.
     pub(super) fn y_min_max_padded(
         &self,
         x_min: f64,
@@ -173,9 +184,7 @@ impl Graph {
         if y_min.is_infinite() {
             return None;
         }
-        let range = (y_max - y_min).max(1e-6);
-        let pad = range * 0.1;
-        Some((y_min - pad, y_max + pad))
+        Some(pad_range(y_min, y_max))
     }
 
     /// Auto-scaled Y range (ignoring fixed mode setting). Used to snapshot

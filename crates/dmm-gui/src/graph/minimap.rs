@@ -3,7 +3,9 @@
 
 use eframe::egui::{self, Ui};
 
+use super::level::Bucket;
 use super::time::{format_time_label, nice_time_interval};
+use super::view::pad_range;
 use super::{GapKind, Graph};
 use crate::a11y::ResponseA11yExt;
 use crate::theme::ThemeColors;
@@ -246,6 +248,24 @@ pub(super) fn decimate_columns(
     out
 }
 
+/// One run of the bucket level, projected to the strip's x/y grid.
+///
+/// Each bucket contributes its two extremes at the centre of its own column,
+/// which is where `decimate_columns` would have put the samples themselves —
+/// it keeps nothing but a column's extent, so handing it the extents directly
+/// draws the same polyline for a cost that follows the strip's width instead
+/// of the session's length. `y_of` projects a value to screen y; x stays in
+/// bucket keys for the caller to map back to time.
+pub(super) fn level_polyline(run: &[Bucket], y_of: impl Fn(f64) -> f32) -> Vec<egui::Pos2> {
+    decimate_columns(
+        run.iter().flat_map(|b| {
+            let x = b.key as f32 + 0.5;
+            [egui::pos2(x, y_of(b.y_min)), egui::pos2(x, y_of(b.y_max))]
+        }),
+        1.0,
+    )
+}
+
 /// The slice of the history the main graph shows, as the minimap's drags
 /// move it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -372,21 +392,11 @@ impl Graph {
             return;
         }
 
-        self.ensure_cache();
-        let raw_segments = &self.cached_segments;
         let (data_min, data_max) = self.data_time_range();
         let (view_min, view_max) = self.view_bounds();
 
         let line_color = tc.minimap_line();
         let overload_fill = tc.graph_overload_fill();
-        // Same spans the main plot bands, including one still open.
-        let overload_spans: Vec<(f64, f64)> = self
-            .cached_gaps
-            .iter()
-            .filter(|(_, _, kind)| *kind == GapKind::Overload)
-            .map(|&(a, b, _)| (a, b))
-            .chain(self.pending_overload_span())
-            .collect();
 
         // Allocate rect for minimap + label space below, with margin for bracket strokes
         let label_height = 14.0;
@@ -413,8 +423,31 @@ impl Graph {
         let painter = ui.painter_at(full_rect);
         let scale = MinimapScale::new(rect, data_min, data_max);
 
+        // The buckets are fixed spans of session time, not screen columns.
+        // The strip maps the whole session, so every sample shrinks the scale
+        // and slides each older point left by an amount proportional to its
+        // age; bucketed by screen column, points hopped columns at different
+        // moments and the column extents flickered frame to frame — the trace
+        // visibly wobbled. Bucketed by time, a bucket's extent is fixed and
+        // only its position slides, smoothly, under the antialiasing. The
+        // width is stepped so it stays between one and `BUCKET_STEP` physical
+        // pixels: never denser than a column, and re-bucketed only at a step.
+        let pixels_per_point = ui.ctx().pixels_per_point();
+        let bucket = bucket_secs(scale.time_per_px() / pixels_per_point.max(0.1) as f64);
+        self.ensure_level(bucket);
+
         // Background
         painter.rect_filled(rect, 0.0, ui.visuals().extreme_bg_color);
+
+        // Same spans the main plot bands, including one still open.
+        let overload_spans: Vec<(f64, f64)> = self
+            .minimap_level
+            .iter()
+            .flat_map(|level| level.gaps())
+            .filter(|(_, _, kind)| *kind == GapKind::Overload)
+            .map(|(a, b, _)| (a, b))
+            .chain(self.pending_overload_span())
+            .collect();
 
         // Overload bands, matching the main plot so the two read the same way.
         // Behind the trace, like the background.
@@ -429,11 +462,11 @@ impl Graph {
 
         // Draw data lines.
         //
-        // The Y range is identical for every point in every segment because it
-        // covers the whole history (`data_min..data_max`). Compute it once
-        // before the loop — pulling this call inside the per-point closure
-        // turned the minimap into an O(n²) hot spot, which dominated frame
-        // time once the history filled.
+        // The Y range covers the whole history, so it is the same for every
+        // bucket and the level already carries the extremes it needs — the
+        // strip pays no scan for it at all. Recomputing it inside the
+        // projection once turned the minimap into an O(n²) hot spot that
+        // dominated frame time.
         //
         // Deliberately the *auto* range, not the main plot's: a pinned Y range
         // (a Shift-drag box zoom, or a user-entered fixed range) is chosen to
@@ -443,50 +476,41 @@ impl Graph {
         // minimap exists to give disappears exactly when zooming in makes it
         // most useful.
         let y_map = self
-            .y_range_for_view_auto(data_min, data_max, false)
+            .minimap_level
+            .as_ref()
+            .and_then(|level| level.value_range())
+            .map(|(lo, hi)| pad_range(lo, hi))
             .map(|(lo, hi)| {
                 let range = (hi - lo).max(1e-10);
                 (lo, range)
             });
-        // Each segment is thinned to one min/max column per time bucket and
-        // drawn as a single polyline. Drawn point by point instead, once the
-        // history passed a sample per pixel the semi-transparent segments
-        // blended twice at their joints and thinned to nothing between them —
-        // the trace read as beads and dashes. One path feathers once, joins
-        // properly, and the per-column extremes keep the spikes.
-        //
-        // The buckets are fixed spans of session time, not screen columns.
-        // The strip maps the whole session, so every sample shrinks the scale
-        // and slides each older point left by an amount proportional to its
-        // age; bucketed by screen column, points hopped columns at different
-        // moments and the column extents flickered frame to frame — the trace
-        // visibly wobbled. Bucketed by time, a bucket's extent is fixed and
-        // only its position slides, smoothly, under the antialiasing. The
-        // width is stepped so it stays between one and `BUCKET_STEP` physical
-        // pixels: never denser than a column, and re-bucketed only at a step.
-        let pixels_per_point = ui.ctx().pixels_per_point();
-        let bucket = bucket_secs(scale.time_per_px() / pixels_per_point.max(0.1) as f64);
-        for seg in raw_segments {
-            let projected = seg.iter().map(|&[t, v]| {
-                let x = (t / bucket) as f32;
-                let y_frac = match y_map {
-                    Some((y_lo, range)) => ((v - y_lo) / range) as f32,
-                    None => 0.5,
-                };
-                let y = rect.bottom() - y_frac * rect.height();
-                egui::pos2(x, y)
-            });
-            let mut points = decimate_columns(projected, 1.0);
-            if points.len() < 2 {
-                continue;
+        let y_of = |v: f64| -> f32 {
+            let y_frac = match y_map {
+                Some((y_lo, range)) => ((v - y_lo) / range) as f32,
+                None => 0.5,
+            };
+            rect.bottom() - y_frac * rect.height()
+        };
+        // Each run of buckets between two interruptions is drawn as a single
+        // polyline. Drawn point by point instead, once the history passed a
+        // sample per pixel the semi-transparent segments blended twice at
+        // their joints and thinned to nothing between them — the trace read as
+        // beads and dashes. One path feathers once, joins properly, and the
+        // per-bucket extremes keep the spikes.
+        if let Some(level) = self.minimap_level.as_mut() {
+            for run in level.runs() {
+                let mut points = level_polyline(run, y_of);
+                if points.len() < 2 {
+                    continue;
+                }
+                for p in &mut points {
+                    p.x = scale.x_of(p.x as f64 * bucket);
+                }
+                painter.add(egui::Shape::line(
+                    points,
+                    egui::Stroke::new(1.5_f32, line_color),
+                ));
             }
-            for p in &mut points {
-                p.x = scale.x_of(p.x as f64 * bucket);
-            }
-            painter.add(egui::Shape::line(
-                points,
-                egui::Stroke::new(1.5_f32, line_color),
-            ));
         }
 
         // Draw viewport indicator as [ ] bracket markers
