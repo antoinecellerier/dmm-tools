@@ -416,3 +416,110 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod spec_tables {
+    //! Section 9 of the family spec prints every rung of every table and says
+    //! it is generated from the source, but nothing generated it: commit
+    //! 6406037 corrected the UT61B+/UT61D+ voltage ladders in code and §5.1
+    //! and left §9 printing the six-rung ones for a day. This reads the rows
+    //! back and holds them to the tables.
+
+    use super::*;
+    use crate::protocol::ut61eplus::mode::Mode;
+    use std::collections::{BTreeSet, HashMap};
+
+    /// The `### <model>` heading, its `Source: \`<file>.rs\`` line and the
+    /// table beneath it, for each model section of §9.
+    fn sections(spec: &str) -> Vec<(String, Vec<String>)> {
+        let mut out = Vec::new();
+        let mut current: Option<(String, Vec<String>)> = None;
+        for line in spec.lines() {
+            if let Some(rest) = line.strip_prefix("Source: `") {
+                if let Some(done) = current.take() {
+                    out.push(done);
+                }
+                let file = rest.split('`').next().unwrap_or_default().to_string();
+                current = Some((file, Vec::new()));
+            } else if line.starts_with("### ") || line.starts_with("## ") {
+                if let Some(done) = current.take() {
+                    out.push(done);
+                }
+            } else if let Some((_, rows)) = current.as_mut()
+                && line.starts_with("| `")
+            {
+                rows.push(line.to_string());
+            }
+        }
+        out.extend(current);
+        out
+    }
+
+    /// `| \`dc_v\` | DcV, AcDcV | 0 | 2.2V | V | 2.2 | -2.2 |` — every mode
+    /// the row's ladder is shared by, its index, label and unit.
+    fn parse(row: &str) -> (Vec<String>, u8, String, String) {
+        let cells: Vec<&str> = row.trim_matches('|').split('|').map(str::trim).collect();
+        let modes = cells[1].split(',').map(|m| m.trim().to_string()).collect();
+        (
+            modes,
+            cells[2].parse().expect("index"),
+            cells[3].to_string(),
+            cells[4].to_string(),
+        )
+    }
+
+    fn mode_named(name: &str) -> Mode {
+        *Mode::ALL
+            .iter()
+            .find(|m| format!("{m:?}") == name)
+            .unwrap_or_else(|| panic!("spec names a mode that does not exist: {name}"))
+    }
+
+    fn table_for(source: &str) -> Box<dyn DeviceTable> {
+        match source {
+            "ut61e_plus.rs" => Box::new(ut61e_plus::Ut61ePlusTable::new()),
+            "ut61b_plus.rs" => Box::new(ut61b_plus::Ut61bPlusTable::new()),
+            "ut61d_plus.rs" => Box::new(ut61d_plus::Ut61dPlusTable::new()),
+            other => panic!("spec section 9 names an unknown source file: {other}"),
+        }
+    }
+
+    #[test]
+    fn spec_section_9_matches_the_range_tables() {
+        let spec = include_str!(
+            "../../../../../../docs/research/ut61-family/reverse-engineered-protocol.md"
+        );
+        let sections = sections(spec);
+        assert_eq!(sections.len(), 3, "expected one section per model");
+
+        for (source, rows) in sections {
+            let table = table_for(&source);
+            // Keyed by mode byte: `Mode` is not `Ord`.
+            let mut printed: HashMap<u8, BTreeSet<u8>> = HashMap::new();
+            for row in &rows {
+                let (modes, idx, label, unit) = parse(row);
+                for name in modes {
+                    let mode = mode_named(&name);
+                    let info = table
+                        .range_info(mode, idx)
+                        .unwrap_or_else(|| panic!("{source}: {name} has no rung {idx}"));
+                    assert_eq!(info.label, label, "{source}: {name} rung {idx} label");
+                    assert_eq!(info.unit, unit, "{source}: {name} rung {idx} unit");
+                    printed.entry(mode as u8).or_default().insert(idx);
+                }
+            }
+            // The other direction: a rung added in code must reach the spec.
+            for &mode in Mode::ALL {
+                let want: BTreeSet<u8> = (0..table.ranges(mode).len() as u8).collect();
+                if want.is_empty() {
+                    continue;
+                }
+                assert_eq!(
+                    printed.get(&(mode as u8)).cloned().unwrap_or_default(),
+                    want,
+                    "{source}: section 9 does not print every rung of {mode:?}"
+                );
+            }
+        }
+    }
+}

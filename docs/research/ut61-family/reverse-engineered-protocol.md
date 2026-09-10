@@ -567,7 +567,12 @@ they were removed from the code; no production code ever read them, only the
 table files' own tests. They are kept
 here so the numbers stay findable if a software overload check or bar-graph
 scaling is built later. Which range *index* maps to which row is [DEDUCED]
-(section 7, item 1).
+except where section 5 says otherwise (section 7, item 1).
+
+The label, unit and index of every row are held to the source tables by
+`spec_section_9_matches_the_range_tables` in
+`crates/dmm-lib/src/protocol/ut61eplus/tables/mod.rs`, in both directions.
+The full-scale columns are not: nothing in the code carries them any more.
 
 Columns: `Table` is the range table name in the source file; `Modes` lists
 the `Mode` variants that share it (derived modes reuse their base mode's
@@ -639,22 +644,18 @@ on this model; the 2.2V rows of `dc_mv`/`ac_mv` belong to other models.
 
 ### UT61B+ (6,000 counts)
 
-Source: `ut61b_plus.rs` (49 ranges).
+Source: `ut61b_plus.rs` (45 ranges).
 
 | Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
 |---|---|---|---|---|---|---|
-| `dc_v` | DcV | 0 | 60mV | mV | 60 | -60 |
-| `dc_v` | DcV | 1 | 600mV | mV | 600 | -600 |
-| `dc_v` | DcV | 2 | 6V | V | 6 | -6 |
-| `dc_v` | DcV | 3 | 60V | V | 60 | -60 |
-| `dc_v` | DcV | 4 | 600V | V | 600 | -600 |
-| `dc_v` | DcV | 5 | 1000V | V | 1000 | -1000 |
-| `ac_v` | AcV | 0 | 60mV | mV | 60 | -60 |
-| `ac_v` | AcV | 1 | 600mV | mV | 600 | -600 |
-| `ac_v` | AcV | 2 | 6V | V | 6 | -6 |
-| `ac_v` | AcV | 3 | 60V | V | 60 | -60 |
-| `ac_v` | AcV | 4 | 600V | V | 600 | -600 |
-| `ac_v` | AcV | 5 | 750V | V | 750 | -750 |
+| `dc_v` | DcV | 0 | 6V | V | 6 | -6 |
+| `dc_v` | DcV | 1 | 60V | V | 60 | -60 |
+| `dc_v` | DcV | 2 | 600V | V | 600 | -600 |
+| `dc_v` | DcV | 3 | 1000V | V | 1000 | -1000 |
+| `ac_v` | AcV | 0 | 6V | V | 6 | -6 |
+| `ac_v` | AcV | 1 | 60V | V | 60 | -60 |
+| `ac_v` | AcV | 2 | 600V | V | 600 | -600 |
+| `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
 | `dc_mv` | DcMv | 0 | 60mV | mV | 60 | -60 |
 | `dc_mv` | DcMv | 1 | 600mV | mV | 600 | -600 |
 | `ac_mv` | AcMv | 0 | 60mV | mV | 60 | -60 |
@@ -695,22 +696,18 @@ Source: `ut61b_plus.rs` (49 ranges).
 
 ### UT61D+ (6,000 counts)
 
-Source: `ut61d_plus.rs` (53 ranges).
+Source: `ut61d_plus.rs` (49 ranges).
 
 | Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
 |---|---|---|---|---|---|---|
-| `dc_v` | DcV | 0 | 60mV | mV | 60 | -60 |
-| `dc_v` | DcV | 1 | 600mV | mV | 600 | -600 |
-| `dc_v` | DcV | 2 | 6V | V | 6 | -6 |
-| `dc_v` | DcV | 3 | 60V | V | 60 | -60 |
-| `dc_v` | DcV | 4 | 600V | V | 600 | -600 |
-| `dc_v` | DcV | 5 | 1000V | V | 1000 | -1000 |
-| `ac_v` | AcV | 0 | 60mV | mV | 60 | -60 |
-| `ac_v` | AcV | 1 | 600mV | mV | 600 | -600 |
-| `ac_v` | AcV | 2 | 6V | V | 6 | -6 |
-| `ac_v` | AcV | 3 | 60V | V | 60 | -60 |
-| `ac_v` | AcV | 4 | 600V | V | 600 | -600 |
-| `ac_v` | AcV | 5 | 750V | V | 750 | -750 |
+| `dc_v` | DcV | 0 | 6V | V | 6 | -6 |
+| `dc_v` | DcV | 1 | 60V | V | 60 | -60 |
+| `dc_v` | DcV | 2 | 600V | V | 600 | -600 |
+| `dc_v` | DcV | 3 | 1000V | V | 1000 | -1000 |
+| `ac_v` | AcV | 0 | 6V | V | 6 | -6 |
+| `ac_v` | AcV | 1 | 60V | V | 60 | -60 |
+| `ac_v` | AcV | 2 | 600V | V | 600 | -600 |
+| `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
 | `dc_mv` | DcMv | 0 | 60mV | mV | 60 | -60 |
 | `dc_mv` | DcMv | 1 | 600mV | mV | 600 | -600 |
 | `ac_mv` | AcMv | 0 | 60mV | mV | 60 | -60 |
