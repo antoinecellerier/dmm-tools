@@ -479,13 +479,16 @@ const UT803_MODES: &[u8] = &[0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x9, 0xB, 0xD, 0xE, 0
 
 /// Whether `nibbles` can be a measurement frame for this model.
 ///
+/// `pub(crate)` for [`crate::detect`], which splits a UT803 from a UT804 on
+/// the CH9325 bridge with the same two checks rather than a table of its own.
+///
 /// UT804 frames carry 0xD 0xA markers at nibbles 9-10; the UT803 has no
 /// markers, so a known mode code stands in. The stream filter uses this to
 /// resync, and `Protocol::parse_payload` to refuse a payload that never went
 /// through the stream — the UT803 parser names an unrecognised mode code
 /// "Unknown" rather than failing, so without the gate a golden fixture
 /// holding anything at all would pin a plausible-looking measurement.
-fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
+pub(crate) fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
     match model {
         Fs9721Model::Ut804 => nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
         Fs9721Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),

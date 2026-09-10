@@ -36,6 +36,16 @@ pub enum Error {
     #[error("adapter not found: {0}")]
     AdapterNotFound(String),
 
+    /// Auto-detection ran its whole probe cascade and nothing on the far end
+    /// of the cable answered with a frame we recognise.
+    ///
+    /// The message names the *cable*, never the bridge chip: the user plugged
+    /// in a USB cable and has no reason to know whether it carries a CP2110,
+    /// a CH9329 or a CH9325. `bridge` is carried for the logs and for help
+    /// text that lists the meters reachable over that bridge.
+    #[error("no meter answered over the USB cable")]
+    DeviceNotIdentified { bridge: &'static str },
+
     /// The IDs come from the transport modules themselves rather than being
     /// spelled out here, so a corrected PID or a fourth bridge can't leave
     /// this message describing adapters we no longer look for.
@@ -117,7 +127,9 @@ impl Error {
         match self {
             Self::NoTransportFound => ErrorKind::DeviceNotFound,
             Self::Hid(_) => ErrorKind::Transport,
-            Self::Timeout => ErrorKind::Timeout,
+            // Nothing answered the probes — the same shape as a timeout, and
+            // the same cure: reconnect once transmission is enabled.
+            Self::Timeout | Self::DeviceNotIdentified { .. } => ErrorKind::Timeout,
             Self::InvalidResponse { .. } | Self::ChecksumMismatch { .. } | Self::UnknownMode(_) => {
                 ErrorKind::Protocol
             }
@@ -136,6 +148,19 @@ mod tests {
     #[test]
     fn kind_maps_timeout() {
         assert_eq!(Error::Timeout.kind(), ErrorKind::Timeout);
+    }
+
+    /// The GUI reconnect loop keys off `Timeout`: a meter whose
+    /// transmission mode was still off answers the next probe, so this must
+    /// not land in `Configuration` (which stops retrying). The message must
+    /// stay chip-free — the user plugged in a cable, not a CH9329.
+    #[test]
+    fn kind_maps_not_identified() {
+        let err = Error::DeviceNotIdentified { bridge: "CH9329" };
+        assert_eq!(err.kind(), ErrorKind::Timeout);
+        let msg = err.to_string();
+        assert!(msg.contains("USB cable"), "got {msg}");
+        assert!(!msg.contains("CH9329"), "got {msg}");
     }
 
     #[test]

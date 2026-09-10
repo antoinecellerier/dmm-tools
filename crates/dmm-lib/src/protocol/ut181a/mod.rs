@@ -27,7 +27,10 @@
 
 mod command;
 pub(crate) mod mode;
-mod parse;
+// `parse` is `pub(crate)` only so `crate::detect`'s tests can reuse the real
+// frames pinned in this module's own tests; every item inside it stays
+// `pub(super)`.
+pub(crate) mod parse;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;

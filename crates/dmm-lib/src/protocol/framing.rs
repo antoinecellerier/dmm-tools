@@ -532,6 +532,68 @@ pub fn extract_frame_fs9721(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     }
 }
 
+/// Build a valid UT181A/UT171 frame (2-byte LE length, LE checksum) around
+/// `payload` — the write side of [`extract_frame_abcd_2byte_le16`].
+///
+/// Shared with the detection tests, which need the same frames to arrive from
+/// a probe rather than from a parser's own transport.
+#[cfg(test)]
+pub(crate) fn test_frame_le16(payload: &[u8]) -> Vec<u8> {
+    let len_val = (payload.len() + 2) as u16;
+    let mut frame = vec![0xAB, 0xCD];
+    frame.extend_from_slice(&len_val.to_le_bytes());
+    frame.extend_from_slice(payload);
+    let sum = sum16(&frame[2..]);
+    frame.extend_from_slice(&sum.to_le_bytes());
+    frame
+}
+
+/// Build a valid 21-byte UT8803 frame; `body` becomes bytes 2..19, so
+/// `body[1]` is the frame-type byte the extractor requires to be 0x02.
+#[cfg(test)]
+pub(crate) fn test_frame_ut8803(body: &[u8; 17]) -> Vec<u8> {
+    let mut frame = vec![0xAB, 0xCD];
+    frame.extend_from_slice(body);
+    let sum = sum16(&frame);
+    frame.push((sum >> 8) as u8);
+    frame.push((sum & 0xFF) as u8);
+    frame
+}
+
+/// A UT8803 body whose type byte is set; the rest is filler.
+#[cfg(test)]
+pub(crate) fn test_ut8803_body() -> [u8; 17] {
+    let mut body = [0u8; 17];
+    body[1] = 0x02; // frame type = measurement
+    body[2] = 0x01; // mode
+    body[3] = 0x31; // range
+    body[6..11].copy_from_slice(b"12.34");
+    body
+}
+
+/// Build a valid UT8802 frame from components.
+/// Frame: [0xAC, position, d1d2, d3d4, d5xx, dp_flags, status, sign]
+#[cfg(test)]
+pub(crate) fn test_frame_ut8802(
+    position: u8,
+    digits: [u8; 5],
+    dp_pos: u8,
+    acdc_bits: u8,
+    status: u8,
+    sign_flags: u8,
+) -> Vec<u8> {
+    vec![
+        0xAC,
+        position,
+        (digits[0] << 4) | digits[1],
+        (digits[2] << 4) | digits[3],
+        digits[4], // high nibble unused
+        (acdc_bits << 4) | dp_pos,
+        status,
+        sign_flags,
+    ]
+}
+
 /// Build a valid AB CD BE16 frame (UT61E+ wire format) around `payload`:
 /// length byte = payload + 2 checksum bytes, checksum = 16-bit BE sum.
 ///
@@ -552,38 +614,6 @@ pub(crate) fn test_frame_be16(payload: &[u8]) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::transport::mock::MockTransport;
-
-    /// Build a valid 21-byte UT8803 frame; `body` becomes bytes 2..19, so
-    /// `body[1]` is the frame-type byte the extractor requires to be 0x02.
-    fn make_frame_ut8803(body: &[u8; 17]) -> Vec<u8> {
-        let mut frame = vec![0xAB, 0xCD];
-        frame.extend_from_slice(body);
-        let sum: u16 = frame.iter().map(|&b| b as u16).sum();
-        frame.push((sum >> 8) as u8);
-        frame.push((sum & 0xFF) as u8);
-        frame
-    }
-
-    /// Build a valid UT181A/UT171 frame (2-byte LE length, LE checksum).
-    fn make_frame_le16(payload: &[u8]) -> Vec<u8> {
-        let len_val = (payload.len() + 2) as u16;
-        let mut frame = vec![0xAB, 0xCD];
-        frame.extend_from_slice(&len_val.to_le_bytes());
-        frame.extend_from_slice(payload);
-        let sum: u16 = frame[2..].iter().map(|&b| b as u16).sum();
-        frame.extend_from_slice(&sum.to_le_bytes());
-        frame
-    }
-
-    /// A UT8803 body whose type byte is set; the rest is filler.
-    fn ut8803_body() -> [u8; 17] {
-        let mut body = [0u8; 17];
-        body[1] = 0x02; // frame type = measurement
-        body[2] = 0x01; // mode
-        body[3] = 0x31; // range
-        body[6..11].copy_from_slice(b"12.34");
-        body
-    }
 
     #[test]
     fn extract_valid_frame() {
@@ -728,7 +758,7 @@ mod tests {
     /// 20 of the 21 bytes: still incomplete, and `consumed` stays 0.
     #[test]
     fn ut8803_one_byte_short_is_incomplete() {
-        let frame = make_frame_ut8803(&ut8803_body());
+        let frame = test_frame_ut8803(&test_ut8803_body());
         let truncated = &frame[..frame.len() - 1];
         assert!(extract_frame_ut8803(truncated).unwrap().is_none());
     }
@@ -737,7 +767,7 @@ mod tests {
     /// bytes before it, or the read loop re-scans them forever.
     #[test]
     fn ut8803_leading_garbage() {
-        let frame = make_frame_ut8803(&ut8803_body());
+        let frame = test_frame_ut8803(&test_ut8803_body());
         let mut buf = vec![0xFF, 0xFE, 0xFD];
         buf.extend_from_slice(&frame);
         let (payload, consumed) = extract_frame_ut8803(&buf).unwrap().unwrap();
@@ -748,7 +778,7 @@ mod tests {
     /// As `extract_bad_checksum`, for the UT8803's own sum.
     #[test]
     fn ut8803_bad_checksum() {
-        let mut frame = make_frame_ut8803(&ut8803_body());
+        let mut frame = test_frame_ut8803(&test_ut8803_body());
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
         assert!(matches!(
@@ -793,7 +823,7 @@ mod tests {
     #[test]
     fn le16_leading_garbage() {
         let payload = vec![0x02, 0x00, 0x11, 0x31];
-        let frame = make_frame_le16(&payload);
+        let frame = test_frame_le16(&payload);
         let mut buf = vec![0xFF, 0xFE, 0xFD];
         buf.extend_from_slice(&frame);
         let (p, consumed) = extract_frame_abcd_2byte_le16(&buf).unwrap().unwrap();
@@ -805,7 +835,7 @@ mod tests {
     /// little-endian read of the corrupted trailer, not a byte-swap of it.
     #[test]
     fn le16_bad_checksum() {
-        let mut frame = make_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
+        let mut frame = test_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
         let last = frame.len() - 1;
         frame[last] ^= 0xFF;
         assert!(matches!(
@@ -820,7 +850,7 @@ mod tests {
     /// As `abcd_be16_one_byte_short_is_incomplete`, for the 2-byte length.
     #[test]
     fn le16_one_byte_short_is_incomplete() {
-        let frame = make_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
+        let frame = test_frame_le16(&[0x02, 0x00, 0x11, 0x31]);
         let truncated = &frame[..frame.len() - 1];
         assert!(extract_frame_abcd_2byte_le16(truncated).unwrap().is_none());
     }
@@ -1014,32 +1044,10 @@ mod tests {
 
     // --- UT8802 frame extractor tests ---
 
-    /// Build a valid UT8802 frame from components.
-    /// Frame: [0xAC, position, d1d2, d3d4, d5xx, dp_flags, status, sign]
-    fn make_ut8802_frame(
-        position: u8,
-        digits: [u8; 5],
-        dp_pos: u8,
-        acdc_bits: u8,
-        status: u8,
-        sign_flags: u8,
-    ) -> Vec<u8> {
-        vec![
-            0xAC,
-            position,
-            (digits[0] << 4) | digits[1],
-            (digits[2] << 4) | digits[3],
-            digits[4], // high nibble unused
-            (acdc_bits << 4) | dp_pos,
-            status,
-            sign_flags,
-        ]
-    }
-
     #[test]
     fn ut8802_valid_frame() {
         // DC V 200V range, display "12345", decimal pos 1
-        let frame = make_ut8802_frame(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let frame = test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
         let (payload, consumed) = extract_frame_ut8802(&frame).unwrap().unwrap();
         assert_eq!(consumed, 8);
         assert_eq!(payload.len(), 7); // bytes 1..8
@@ -1049,7 +1057,7 @@ mod tests {
     #[test]
     fn ut8802_leading_garbage() {
         let mut buf = vec![0xFF, 0xFE, 0xFD];
-        buf.extend_from_slice(&make_ut8802_frame(
+        buf.extend_from_slice(&test_frame_ut8802(
             0x01,
             [0, 0, 2, 0, 0],
             3,
@@ -1078,28 +1086,28 @@ mod tests {
     #[test]
     fn ut8802_invalid_position_code() {
         // 0x02 is a gap in the position code space
-        let frame = make_ut8802_frame(0x02, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+        let frame = test_frame_ut8802(0x02, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
         assert!(extract_frame_ut8802(&frame).is_err());
     }
 
     #[test]
     fn ut8802_invalid_bcd_nibble() {
         // 0x0F is not a valid BCD nibble
-        let frame = make_ut8802_frame(0x01, [0x0F, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+        let frame = test_frame_ut8802(0x01, [0x0F, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
         assert!(extract_frame_ut8802(&frame).is_err());
     }
 
     #[test]
     fn ut8802_invalid_decimal_position() {
         // Decimal position 5 is out of range (max 4)
-        let frame = make_ut8802_frame(0x01, [1, 2, 3, 4, 5], 5, 0x00, 0x00, 0x00);
+        let frame = test_frame_ut8802(0x01, [1, 2, 3, 4, 5], 5, 0x00, 0x00, 0x00);
         assert!(extract_frame_ut8802(&frame).is_err());
     }
 
     #[test]
     fn ut8802_overload_nibble_accepted() {
         // 0x0C is a valid BCD nibble (overload indicator 'L')
-        let frame = make_ut8802_frame(0x01, [0, 0, 0, 0x0C, 0], 0, 0x00, 0x00, 0x00);
+        let frame = test_frame_ut8802(0x01, [0, 0, 0, 0x0C, 0], 0, 0x00, 0x00, 0x00);
         let result = extract_frame_ut8802(&frame).unwrap();
         assert!(result.is_some());
     }
@@ -1107,7 +1115,7 @@ mod tests {
     #[test]
     fn ut8802_nibble_0a_accepted() {
         // 0x0A is treated as '0' — should be accepted
-        let frame = make_ut8802_frame(0x01, [0x0A, 0, 0, 0, 0], 0, 0x00, 0x00, 0x00);
+        let frame = test_frame_ut8802(0x01, [0x0A, 0, 0, 0, 0], 0, 0x00, 0x00, 0x00);
         let result = extract_frame_ut8802(&frame).unwrap();
         assert!(result.is_some());
     }
@@ -1120,7 +1128,7 @@ mod tests {
             0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D,
         ];
         for &pos in valid_positions {
-            let frame = make_ut8802_frame(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+            let frame = test_frame_ut8802(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
             assert!(
                 extract_frame_ut8802(&frame).unwrap().is_some(),
                 "position {pos:#04x} should be valid"
@@ -1134,7 +1142,7 @@ mod tests {
             0x00, 0x02, 0x07, 0x08, 0x0F, 0x15, 0x17, 0x1E, 0x20, 0x21, 0x26, 0x2E, 0xFF,
         ];
         for &pos in invalid_positions {
-            let frame = make_ut8802_frame(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
+            let frame = test_frame_ut8802(pos, [1, 2, 3, 4, 5], 1, 0x00, 0x00, 0x00);
             assert!(
                 extract_frame_ut8802(&frame).is_err(),
                 "position {pos:#04x} should be invalid"
@@ -1148,7 +1156,7 @@ mod tests {
         // then the real frame. The extractor should error on the false header;
         // read_frame's skip-and-retry should advance past it to the real frame.
         let false_frame = vec![0xAC, 0x00, 0x12, 0x34, 0x50, 0x01, 0x00, 0x00]; // pos 0x00 = invalid
-        let real_frame = make_ut8802_frame(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let real_frame = test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
 
         // First: the extractor should error on the false frame
         assert!(extract_frame_ut8802(&false_frame).is_err());

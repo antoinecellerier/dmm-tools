@@ -576,7 +576,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::protocol::test_support::snapshot;
 
@@ -775,12 +775,18 @@ raw_payload=19"#
     /// the aux1 slot is what makes the frame add up. The meter sends 0xB0 for
     /// the degree sign (Latin-1), precision 0x10 is the LCD's one decimal,
     /// and temperature is fixed-range, so no label despite range byte 0x01.
-    #[test]
-    fn parse_real_frame_temp_dual_probe() {
-        let payload = hex(
+    /// The frame's bytes, named so `crate::detect`'s tests can put the same
+    /// real capture on the wire instead of a second copy of it.
+    pub(crate) fn real_frame_temp_dual_probe() -> Vec<u8> {
+        hex(
             "02 02 01 11 42 01 F0 ED CA 41 10 B0 43 00 43 00 00 00 00 26 FC C4 41 \
              10 B0 43 00 00 00 00 00 5A",
-        );
+        )
+    }
+
+    #[test]
+    fn parse_real_frame_temp_dual_probe() {
+        let payload = real_frame_temp_dual_probe();
         assert_eq!(payload.len(), 32);
 
         let m = parse_measurement(&payload).unwrap();
@@ -808,13 +814,18 @@ raw_payload=32"#
     /// (spec §5.3). Get the bargraph field's size wrong and this frame
     /// desynchronises. misc2 bit 1 is the meter flagging mains voltage, and
     /// auto-range settled on 600V (range byte 0x03).
-    #[test]
-    fn parse_real_frame_vac_hz_bargraph() {
-        let payload = hex(
+    /// As [`real_frame_temp_dual_probe`], for the V AC frame.
+    pub(crate) fn real_frame_vac_hz() -> Vec<u8> {
+        hex(
             "02 0E 03 21 11 03 52 38 6F 43 20 56 41 43 00 00 00 00 00 F6 08 48 42 \
              20 48 7A 00 00 00 00 00 5A D5 F8 9F 41 20 6D 73 00 43 00 00 00 00 3D \
              06 71 43 56 41 43 00 00 00 00 00",
-        );
+        )
+    }
+
+    #[test]
+    fn parse_real_frame_vac_hz_bargraph() {
+        let payload = real_frame_vac_hz();
         assert_eq!(payload.len(), 57);
 
         let m = parse_measurement(&payload).unwrap();

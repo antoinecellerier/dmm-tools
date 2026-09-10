@@ -156,6 +156,7 @@ Follow the code-level steps in `docs/development.md`:
 - Set `Stability::Experimental` in `DeviceProfile` until verified against real hardware
 - Set `max_aux_values` in `DeviceProfile` to the most sub-values one frame can carry (0 for single-display meters) — the CLI and GUI size their fixed sub-value columns from it
 - Add `SelectableDevice` entry in `protocol/registry.rs` — CLI/GUI pick it up automatically
+- Add a `classify` arm in `crates/dmm-lib/src/detect.rs` so detection can identify the family from its frames, with a test fixture of the bytes it accepts — real ones where hardware exists, the vendor trace otherwise. `docs/detection-design.md` has the check order the arm has to fit into
 - Implement `capture_steps()` on the `Protocol` trait — this defines the guided verification workflow for the device. Each step has an `id`, a user-facing `instruction` (e.g., "Set meter to DC V mode"), an optional remote `command` to send, and a `samples` count. The default implementation returns an empty list, so the capture tool will have nothing to walk through unless you define steps. Cover all measurement modes, flag states, and remote commands the device supports. This decouples implementation from testing — someone without the device can define exactly what needs verifying, and someone with the device can run `capture` and walk through it without needing to understand the protocol.
 - Write unit tests using `MockTransport` with byte sequences from the RE phase
 - Add golden test files in `tests/golden/<device id>/` using YAML format (matches capture output) — the directory is named after the registry id; only samples from a hardware capture go there, so a family gains one with its first capture
@@ -225,7 +226,8 @@ to this list):
 - `docs/cli-reference.md` — the `--device` table is generated, not hand-edited: run `UPDATE_DOCS=1 cargo test -p dmm-cli` once the registry entry lands, and hand-edit the surrounding prose and anything the device adds to the CLI
 - `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
 - `docs/protocol.md` — index entry pointing at the new family's spec
-- `docs/verification-backlog.md` — add pending verification items (or mark as complete)
+- `docs/detection-design.md` — a row in the cascade table for the probe the family answers to, or in its unprompted line if the meter streams by itself
+- `docs/verification-backlog.md` — add pending verification items (or mark as complete), including a line under "Device auto-detection" for what detection sends this family and what it expects back
 - `docs/gui-reference.md` — if the device adds new GUI behavior
 - `docs/architecture.md` — if a new protocol family or transport changes the architecture
 - `CHANGELOG.md` — one `## Unreleased` entry, in user-visible phrasing
@@ -240,6 +242,7 @@ to this list):
 | Device tables (mode/range) | `crates/dmm-lib/src/protocol/<family>/tables/` |
 | Spec data (accuracy/resolution) | `crates/dmm-lib/src/protocol/<family>/tables/specs_*.rs` |
 | Device registry entry | `crates/dmm-lib/src/protocol/registry.rs` |
+| Detection cascade arm | `crates/dmm-lib/src/detect.rs` |
 | Golden test files | `crates/dmm-lib/tests/golden/<device id>/` |
 | Verification status | `docs/verification-backlog.md` |
 | Device catalog | `docs/supported-devices.md` |

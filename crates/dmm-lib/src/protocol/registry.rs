@@ -284,6 +284,26 @@ pub fn resolve_device(s: &str) -> Option<&'static SelectableDevice> {
         .find(|d| d.aliases.iter().any(|a| a.to_lowercase() == lower))
 }
 
+/// Resolve the ASCII model name a UT61+/UT161 meter answers Get Name
+/// (`0x5F`) with — "UT61E+", "UT61B+" — to its registry entry.
+///
+/// Only [`DeviceFamily::Ut61EPlus`] entries are considered: the name frame is
+/// that family's alone, so matching the whole registry would let a meter that
+/// happens to report "mock" or "UT171" pick an entry whose framing it does not
+/// speak. `display_name` first, then aliases, both case-insensitive — the
+/// display names are exactly what the meters send.
+pub fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice> {
+    let wanted = name.trim().to_lowercase();
+    let family = || {
+        DEVICES
+            .iter()
+            .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+    };
+    family()
+        .find(|d| d.display_name.to_lowercase() == wanted)
+        .or_else(|| family().find(|d| d.aliases.iter().any(|a| a.to_lowercase() == wanted)))
+}
+
 /// Returns the default device entry ("ut61eplus").
 pub fn default_device() -> &'static SelectableDevice {
     find_device("ut61eplus").expect("ut61eplus must be in DEVICES")
@@ -346,6 +366,37 @@ mod tests {
     #[test]
     fn resolve_unknown() {
         assert!(resolve_device("nonexistent").is_none());
+    }
+
+    /// Auto-detection picks the entry from the name the meter reports, so
+    /// every model in the family has to be reachable by its own display name
+    /// — a new entry whose name does not round-trip would be detected as a
+    /// plain UT61E+ and decoded with the wrong table.
+    #[test]
+    fn reported_names_round_trip_for_the_whole_family() {
+        for device in DEVICES
+            .iter()
+            .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+        {
+            let found = device_for_reported_name(device.display_name)
+                .unwrap_or_else(|| panic!("{} does not round-trip", device.display_name));
+            assert_eq!(found.id, device.id);
+        }
+    }
+
+    /// The meter's ASCII is uppercase, but the lookup must not depend on it.
+    #[test]
+    fn reported_name_is_case_insensitive() {
+        assert_eq!(device_for_reported_name("ut61b+").unwrap().id, "ut61b+");
+    }
+
+    /// A UT181A never sends a name frame; if something else ever put that
+    /// string in one, falling back to the UT61E+ tables beats decoding
+    /// LE16 frames as BE16 ones.
+    #[test]
+    fn reported_name_ignores_other_families() {
+        assert!(device_for_reported_name("UT181A").is_none());
+        assert!(device_for_reported_name("mock").is_none());
     }
 
     #[test]

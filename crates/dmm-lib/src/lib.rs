@@ -1,5 +1,6 @@
 pub mod binary_help;
 pub mod clock;
+pub mod detect;
 pub mod docs_tables;
 pub mod error;
 pub mod export;

@@ -86,6 +86,10 @@ they never match on `DeviceFamily` variants or instantiate protocol types direct
 in `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
 CP2110 and time out on every read — and the fallback keeps unusual cable pairings working.
+When the user names no device, `detect.rs` identifies the meter on the opened transport instead: a
+probe cascade sends each family's trigger in turn and classifies whatever comes back, resolving a
+UT61+ name frame to its registry entry. The cascade and its failure modes are in
+`docs/detection-design.md`.
 Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
 
 ### dmm-settings

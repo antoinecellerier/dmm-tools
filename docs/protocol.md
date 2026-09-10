@@ -48,6 +48,9 @@ HID bridge chips appear across the supported devices:
 See each per-family doc for the HID report layout and any chip-specific
 initialization sequence.
 
+For how the library works out which family is on the wire from the bytes
+it sends, see [detection-design.md](detection-design.md).
+
 For verification status and the outstanding hardware-testing backlog,
 see [verification-backlog.md](verification-backlog.md).
 
