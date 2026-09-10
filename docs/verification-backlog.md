@@ -148,13 +148,22 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   22kΩ, 220kΩ, 2.2MΩ, 22MΩ, 220MΩ) and DC V and AC+DC V 0-3 (2.2V, 22V, 220V,
   1000V). Each rung is identified by the decimal count the meter sent there,
   which on a 22,000-count display names the full scale outright. AC+DC V
-  shares the DC V table, as `ut61e_plus.rs` has it.
+  shares the DC V table, as `ut61e_plus.rs` has it. The probes were shorted
+  throughout, so every rung read zero: the decimal placement is verified, the
+  decoding of a non-zero value at each rung is not. A resistor of 1k-100k
+  across the probes would settle that in one run — it lands inside five of the
+  seven rungs and each must decode to the same resistance.
 - That closes the 2026-09-07 worry that RANGE could not be swept: the blind
   six-press sweep that produced indices 0, 2, 0, 0, 0, 0 was the old code
   pressing without reading back. `choices(Range)` walks to target with a
   read-back per press and gets every rung.
 - HOLD, REL, MIN and MAX were all taken in Ω, DC V and AC+DC V except REL in
   AC+DC V (above).
+- Both steps are marked verified **for the UT61E+ only**. The family-wide
+  `hw` flag cannot express that: the UT61B+ is `Stability::Verified` too, on
+  captures taken before these steps existed, so riding on `hw` would claim it
+  had walked ladders it has never seen. `capture --unverified` therefore asks
+  the E+ for nothing and the B+ for exactly these two.
 - **The top Ω rungs settle slowly.** With the probes shorted, 22MΩ read
   0.081 MΩ (81 counts) and 220MΩ read 0.18 MΩ (18 counts), and both were seen
   on the meter to drop back over several seconds. The sweep samples about

@@ -295,6 +295,12 @@ impl Protocol for Ut61PlusProtocol {
         // The list is shared by the whole UT61+/UT161 family, but only the
         // UT61E+ has been run against hardware (docs/verification-backlog.md).
         let hw = self.profile.stability == Stability::Verified;
+        // The two ladder steps cannot ride on that flag. It is family-wide,
+        // and the UT61B+ is verified too but has not run them — they were
+        // added on 2026-09-10 and only our UT61E+ has walked them since
+        // (docs/verification-backlog.md, "UT61E+ — range ladders walked end
+        // to end"). Without this the B+'s outstanding ask would disappear.
+        let ladders = self.profile.model_name == "UNI-T UT61E+";
         // Every step on this meter takes three samples and shares that
         // hardware history, the gate steps included.
         let mark = |s: CaptureStep| s.samples(3).verified_if(hw);
@@ -328,6 +334,7 @@ impl Protocol for Ut61PlusProtocol {
                 "Set meter to \u{03A9}. Leads open or shorted, either will do.",
             )
             .samples(3)
+            .verified_if(ladders)
             .expect(Expect::mode("\u{03A9}")),
             // The rest of the resistance dial position, while the leads are
             // still there.
@@ -357,6 +364,7 @@ impl Protocol for Ut61PlusProtocol {
                 "Set meter to DC V (V\u{23CF}). Leave leads open.",
             )
             .samples(3)
+            .verified_if(ladders)
             .expect(Expect::mode("DC V")),
             // Flags & commands. These run wherever the dial is, so they sit
             // on DC V: at the end of the list the dial was on DC A, a single
@@ -1296,6 +1304,29 @@ mod tests {
 
         let max = make_test_measurement(0x02, 0x01, b" 12.345", (0, 0), (F_MAX, MANUAL, 0));
         assert!(proto.choices(Setting::MinMax, &max)[1].current);
+    }
+
+    /// A step is verified where it has *run*, which is not the same as its
+    /// family being verified. The UT61B+ reached `Stability::Verified` on the
+    /// issue #19 captures, and those were taken before the two ladder steps
+    /// existed — so it must still be asked for them while the UT61E+ is not.
+    #[test]
+    fn the_ladder_steps_are_verified_only_where_they_have_run() {
+        let unverified = |model: &str| -> Vec<&'static str> {
+            Ut61PlusProtocol::for_model(model)
+                .expect("known model")
+                .capture_steps()
+                .into_iter()
+                .filter(|s| !s.verified)
+                .map(|s| s.id)
+                .collect()
+        };
+        assert!(
+            unverified("ut61e+").is_empty(),
+            "the UT61E+ has run every step it declares: {:?}",
+            unverified("ut61e+")
+        );
+        assert_eq!(unverified("ut61b+"), vec!["ohm_ranges", "dcv_ranges"]);
     }
 
     /// The modes where a press leaves the flag where it was offer nothing to
