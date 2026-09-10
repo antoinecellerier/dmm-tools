@@ -537,6 +537,7 @@ fn show_choice_readout(
     let mut picked = current;
     let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_CHOICE_POPUP_FONT_SIZE);
     let ctx = ui.ctx().clone();
+    let row_height = ctx.fonts_mut(|f| f.row_height(&FontId::proportional(size)));
     let response = ui
         .scope(|ui| {
             let widgets = &mut ui.visuals_mut().widgets;
@@ -547,6 +548,14 @@ fn show_choice_readout(
             let spacing = ui.spacing_mut();
             spacing.icon_width = (size * 0.8).max(8.0);
             spacing.icon_spacing = (size * 0.25).max(2.0);
+            // `ComboBox::show_ui` lays the box out in a nested `ui.horizontal`,
+            // whose row starts `interact_size.y` (~18 px) tall and pushes
+            // taller content down rather than over the row above (the quirk
+            // noted on the sub-value grid). Start that row at the box's own
+            // height — egui's text-or-icon height plus the button padding —
+            // so a big-meter readout stays centred beside its label.
+            let box_height = row_height.max(spacing.icon_width) + 2.0 * spacing.button_padding.y;
+            spacing.interact_size.y = spacing.interact_size.y.max(box_height);
             // The interactive colour, not the label's weak one: this is a
             // control, and it has to clear the text contrast bar as one.
             let text_color = ui.visuals().text_color();
@@ -1617,6 +1626,87 @@ mod tests {
                     label.center().y,
                     value.center().y
                 );
+            }
+        }
+    }
+
+    /// Rects of the readout row's three kinds of widget — mode label, range
+    /// dropdown, AUTO badge — laid out the way the big-meter rows lay them
+    /// out, in a headless egui context. `wrapped` picks the two-line row
+    /// (`horizontal_wrapped` under the reading) over the inline one (a
+    /// `horizontal` after the value and a separator).
+    fn layout_readout_row(value_size: f32, wrapped: bool) -> [egui::Rect; 3] {
+        let ctx = egui::Context::default();
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let m = Measurement::test_fixture(
+            MeasuredValue::Normal(50.001),
+            "mA",
+            StatusFlags {
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        let mode_size = value_size * 0.4;
+        let ranges = range_choices();
+        let mut rects = [egui::Rect::NOTHING; 3];
+        for _ in 0..2 {
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let mut row = |ui: &mut Ui| {
+                    let mode = ui
+                        .scope(|ui| show_choice_readout(ui, &MODE_READOUT, "DC mA", mode_size, &[]))
+                        .response
+                        .rect;
+                    let range = ui
+                        .scope(|ui| {
+                            show_choice_readout(ui, &RANGE_READOUT, "220mA", mode_size, &ranges)
+                        })
+                        .response
+                        .rect;
+                    let badge = ui
+                        .scope(|ui| show_flags(ui, &m, mode_size, &tc, false))
+                        .response
+                        .rect;
+                    rects = [mode, range, badge];
+                };
+                if wrapped {
+                    ui.label(RichText::new("50.001mA").font(FontId::monospace(value_size)));
+                    ui.horizontal_wrapped(row);
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("50.001mA").font(FontId::monospace(value_size)));
+                        ui.separator();
+                        row(ui);
+                    });
+                }
+            });
+            out.textures_delta.clear();
+        }
+        rects
+    }
+
+    /// The range dropdown and the AUTO badge must sit level with the mode
+    /// label at any reading size.
+    ///
+    /// Regression test for the big-meter offset: `ComboBox::show_ui` lays
+    /// the box out in a nested `ui.horizontal`, whose row starts
+    /// `interact_size.y` (~18 px) tall and pushes taller content down, so at
+    /// a 130 px reading the dropdown hung about 23 px below its label — and,
+    /// in the wrapped row, dragged the badge after it half as far.
+    #[test]
+    fn readout_dropdown_and_badge_share_a_baseline() {
+        // 36.0 is the side-panel reading size, 130.0 a big-meter one.
+        for wrapped in [false, true] {
+            for size in [36.0_f32, 130.0] {
+                let [mode, range, badge] = layout_readout_row(size, wrapped);
+                for (name, rect) in [("dropdown", range), ("badge", badge)] {
+                    let delta = (rect.center().y - mode.center().y).abs();
+                    assert!(
+                        delta <= 1.0,
+                        "{name} at {size} px (wrapped: {wrapped}): centre {} vs label centre {} (delta {delta} px)",
+                        rect.center().y,
+                        mode.center().y
+                    );
+                }
             }
         }
     }
