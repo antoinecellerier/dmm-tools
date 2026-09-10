@@ -738,6 +738,46 @@ mod tests {
         }
     }
 
+    /// Families whose gate is still split across their step list.
+    ///
+    /// `Trust::drives()` only turns on once every gate step has reported, and
+    /// a gate step is never swept itself, so a step scheduled among them is
+    /// one whose ranges and flags nobody walks. The UT61+ list lost the AC V,
+    /// DC mV and AC mV ladders that way (issue #19) and has been reordered.
+    ///
+    /// The four below still are, for two different reasons:
+    /// - `ut181a`, `vc880`, `vc650bt`, `vc890` declare `choices`, so they do
+    ///   lose coverage. Each fix needs that family's own dial order and a
+    ///   hardware run — tracked in `docs/verification-backlog.md`.
+    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut171` declare no `choices`,
+    ///   so nothing is swept whatever the order and they cost nothing.
+    const SPLIT_GATE: &[&str] = &[
+        "ut8802", "ut8803", "ut803", "ut804", "ut171", "ut181a", "vc880", "vc650bt", "vc890",
+    ];
+
+    #[test]
+    fn every_device_finishes_its_gate_before_any_other_step() {
+        for device in dmm_lib::protocol::registry::DEVICES {
+            if SPLIT_GATE.contains(&device.id) {
+                continue;
+            }
+            let steps = (device.new_protocol)().capture_steps();
+            let Some(last_gate) = steps.iter().rposition(|s| s.gate) else {
+                continue;
+            };
+            let stragglers: Vec<&str> = steps[..last_gate]
+                .iter()
+                .filter(|s| !s.gate)
+                .map(|s| s.id)
+                .collect();
+            assert!(
+                stragglers.is_empty(),
+                "{}: {stragglers:?} run before the gate closes and can never be swept",
+                device.id
+            );
+        }
+    }
+
     /// `extra` is the freeform pass, not a protocol step. A device declaring
     /// it would make `--steps extra` ambiguous.
     #[test]

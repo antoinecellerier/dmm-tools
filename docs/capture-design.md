@@ -107,6 +107,17 @@ at tier 1 — inline confirmation, no remote driving. A resumed run rules on wha
 report already holds. The tier reached is recorded as `tier`.
 
 Remote driving (D) runs only at tier 2, which also buys the deferred review.
+That makes where a family puts its gate steps load-bearing: the run reaches
+tier 2 only when the *last* of them reports, and a gate step is never swept
+itself, so any step scheduled among them is one whose ranges and flags nobody
+walks. Declare the whole block first. The UT61+ list used to split it and lost
+the AC V, DC mV and AC mV ladders for it (issue #19); a test in
+`crates/dmm-cli/src/capture/step.rs` now holds the order, with the families
+still to fix named in its allow-list.
+
+A ladder the gate steps themselves sit on needs a plain step of its own after
+the block — `ohm_ranges`, `dcv_ranges` on the UT61+ — since the gate step that
+established the mode cannot be swept.
 
 `--sniff` is the tier for a parser nobody trusts yet: `expect` is ignored, so every step
 advances on the payload bytes changing, and a passed gate does not promote the run.

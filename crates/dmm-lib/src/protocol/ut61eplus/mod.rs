@@ -300,10 +300,51 @@ impl Protocol for Ut61PlusProtocol {
         .map(mark);
 
         let mut steps = vec![
-            // Measurement modes
+            // The six gate steps first, both trios, so the gate is decided by
+            // step six and every step after it can be driven. Split across the
+            // list, as they used to be, the run reached AC V, DC mV and AC mV
+            // while still ungated and swept none of them (issue #19).
             dcv,
             dcv_short,
             dcv_negative,
+            ohm,
+            ohm_body,
+            ohm_short,
+            // Gate decided. A gate step is never swept — the step after it
+            // assumes the state it left — so each ladder gets a plain step of
+            // its own, in the mode the run is already in.
+            CaptureStep::basic("ohm_ranges", "\u{03A9} mode: leave the leads as they are.")
+                .samples(3)
+                .expect(Expect::mode("\u{03A9}")),
+            // The rest of the resistance dial position, while the leads are
+            // still there.
+            CaptureStep::basic(
+                "continuity",
+                "Set meter to continuity (buzzer). Touch probes together.",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .needs(&[Need::ShortedLeads])
+            .expect(Expect::mode("Continuity").value(ValueExpect::Finite)),
+            CaptureStep::basic(
+                "diode",
+                "Set meter to diode. Leave leads open (should show OL).",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .expect(Expect::mode("Diode")),
+            CaptureStep::basic("capacitance", "Set meter to capacitance. Leave leads open.")
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("Capacitance")),
+            // Back to volts for its ladder and for the button steps below,
+            // which have always assumed the dial is here.
+            CaptureStep::basic(
+                "dcv_ranges",
+                "Set meter back to DC V (V\u{23CF}). Leave leads open.",
+            )
+            .samples(3)
+            .expect(Expect::mode("DC V")),
             // Flags & commands. These run wherever the dial is, so they sit
             // on DC V: at the end of the list the dial was on DC A, a single
             // range where RANGE and AUTO have nothing to do (`auto did
@@ -386,28 +427,6 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("AC mV")),
-            ohm,
-            ohm_body,
-            ohm_short,
-            CaptureStep::basic(
-                "continuity",
-                "Set meter to continuity (buzzer). Touch probes together.",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .needs(&[Need::ShortedLeads])
-            .expect(Expect::mode("Continuity").value(ValueExpect::Finite)),
-            CaptureStep::basic(
-                "diode",
-                "Set meter to diode. Leave leads open (should show OL).",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("Diode")),
-            CaptureStep::basic("capacitance", "Set meter to capacitance. Leave leads open.")
-                .samples(3)
-                .verified_if(hw)
-                .expect(Expect::mode("Capacitance")),
             CaptureStep::basic("hz", "Set meter to the Hz/% dial position.")
                 .samples(3)
                 .verified_if(hw)

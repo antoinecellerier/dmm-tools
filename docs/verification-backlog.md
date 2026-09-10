@@ -135,6 +135,30 @@ wire frames and drives the range sweep:
 - **Golden fixtures.** None taken from this report — the `ut61b+` golden set
   waits for a capture on a build carrying the range fix.
 
+### Capture: gate steps placed after other steps
+
+The capture run drives the meter's own settings only once every gate step has
+reported, and it never sweeps a gate step itself. A family that scatters its
+six gate steps through its list therefore has every step *before* the last of
+them go unswept — no range ladder, no flag sub-steps. The UT61+ list did, and
+lost the AC V, DC mV and AC mV ladders in the 2026-09-10 UT61B+ run (issue
+#19) before being reordered; `ohm_ranges` and `dcv_ranges` were added so the
+two ladders the gate steps sit on get swept as well.
+
+Still split, each needing that family's own dial order and a hardware run:
+
+- **UT181A** — `vdc_acdc`, `vdc_peak`, `vac`, `vac_hz`, `vac_lpf`, `vac_dbv`,
+  `vac_dbm`, `mvdc`, `mvdc_peak`, `mvac`, `mvac_hz`, `mvac_peak`, `mvac_acdc`.
+  Issue #5.
+- **VC-880 / VC650BT / VC-890** — `acv`, `acdcv`, `dcmv`, `dcua`, `acua`,
+  `dcma`, `acma`, `dca`, `aca`.
+
+The UT8802, UT8803, UT803, UT804 and UT171 lists are split too, but those
+families declare no `choices`, so nothing would be swept whatever the order.
+The allow-list in `every_device_finishes_its_gate_before_any_other_step`
+(`crates/dmm-cli/src/capture/step.rs`) names all of them; deleting an entry is
+how a fix lands.
+
 ### Modes not yet tested with real signals
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
