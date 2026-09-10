@@ -41,6 +41,10 @@
 - **`capture --unverified` and `--plan` run what an issue asks for** — a reporter copied a hand-written `--steps` list, and an edge case waited for a release; `--list-steps --format md` prints the issue's checklist.
 - **Capture steps cover every sub-mode** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB modes had no step; a model is asked only for its own dial positions.
 
+### Library
+
+- **The UT61B+ is a verified model** — thanks to [@ChrisTheExpie](https://github.com/ChrisTheExpie) for the captures.
+
 ### Bug fixes
 
 - **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, capacitance, Hz, duty and NCV offered controls that did nothing.

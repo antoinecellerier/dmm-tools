@@ -57,7 +57,7 @@ impl Ut61PlusProtocol {
     ///
     /// Recognized model strings (case-insensitive):
     /// - "ut61e+" (Verified), "ut161e" -> UT61E+ table
-    /// - "ut61b+", "ut161b" -> UT61B+ table
+    /// - "ut61b+" (Verified), "ut161b" -> UT61B+ table
     /// - "ut61d+", "ut161d" -> UT61D+ table
     ///
     /// Several models share a table — the UT161x meters are believed to speak
@@ -80,10 +80,15 @@ impl Ut61PlusProtocol {
                     "UNI-T UT161E",
                     false,
                 ),
+                // Verified by two captures reported in issue #19, 2026-09-09
+                // and 2026-09-10: every mode its dial reaches decoded
+                // correctly, every command moved the flag it should, and the
+                // second run passed the gate outright. The rungs still open
+                // are the two ladder steps, which stay unverified.
                 "ut61b+" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT61B+",
-                    false,
+                    true,
                 ),
                 "ut161b" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
@@ -111,20 +116,25 @@ impl Ut61PlusProtocol {
     /// prefer [`Ut61PlusProtocol::for_model`], which keeps the two separate.
     pub fn with_table(table: Box<dyn DeviceTable>) -> Self {
         let model_name = table.model_name();
-        // UT61E+ is the only model verified against real hardware.
-        let verified = model_name == "UNI-T UT61E+";
+        // The models hardware has answered for. A UT161B shares the B+ table
+        // but not its evidence, which is why `for_model` is the way in.
+        let verified = matches!(model_name, "UNI-T UT61E+" | "UNI-T UT61B+");
         Self::with_profile(table, model_name, verified)
     }
 
     fn with_profile(table: Box<dyn DeviceTable>, model_name: &'static str, verified: bool) -> Self {
-        // Everything except the UT61E+ is based on RE of the vendor software
-        // plus manual specs, so it reports as experimental and points at the
-        // family verification issue.
-        let (stability, verification_issue) = if verified {
-            (Stability::Verified, None)
+        // A model no meter has answered for is RE of the vendor software plus
+        // manual specs, so it reports as experimental.
+        let stability = if verified {
+            Stability::Verified
         } else {
-            (Stability::Experimental, Some(7))
+            Stability::Experimental
         };
+        // The family issue stays on every model but the UT61E+, verified or
+        // not: the UT61B+ is decoded correctly everywhere it was looked at,
+        // and its range rungs above the ones auto-ranging reached are still
+        // open there.
+        let verification_issue = (model_name != "UNI-T UT61E+").then_some(7);
         Self {
             table,
             rx_buf: Vec::with_capacity(64),

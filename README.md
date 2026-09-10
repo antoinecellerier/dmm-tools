@@ -71,7 +71,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 <!-- devices:start -->
 | Family | Models | Status |
 |--------|--------|--------|
-| UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
+| UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+, UT61B+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
 | UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UT181A | UT181A | [✅ Confirmed working — some modes still unverified](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | UT803/UT804 | UT803, UT804 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |

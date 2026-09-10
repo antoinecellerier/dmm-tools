@@ -411,19 +411,21 @@ mod tests {
         }
     }
 
-    /// Only the UT61E+ is fully verified on real hardware. The UT181A has
-    /// partial hardware coverage but is held at Experimental on purpose (see
-    /// its profile); everything else must stay flagged so the GUI shows the
-    /// EXPERIMENTAL badge and links to the verification issue.
+    /// The models real hardware has answered for: our UT61E+, and the UT61B+
+    /// from two captures reported in issue #19 (2026-09-09 and 2026-09-10).
+    /// The UT181A has partial hardware coverage but is held at Experimental on
+    /// purpose (see its profile); everything else must stay flagged so the GUI
+    /// shows the EXPERIMENTAL badge and links to the verification issue.
     #[test]
-    fn only_ut61eplus_is_verified() {
+    fn only_hardware_backed_models_are_verified() {
+        const VERIFIED: &[&str] = &["ut61eplus", "ut61b+"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
             }
             let protocol = (device.new_protocol)();
             let profile = protocol.profile();
-            let expected = if device.id == "ut61eplus" {
+            let expected = if VERIFIED.contains(&device.id) {
                 Stability::Verified
             } else {
                 Stability::Experimental

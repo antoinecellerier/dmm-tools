@@ -49,7 +49,7 @@ When the CLI falls through to the final fallback (you passed no `--device` and h
 | Value | Aliases | Description |
 |---|---|---|
 | `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (default, verified) |
-| `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (experimental) |
+| `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (verified) |
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
 | `ut161b` |  | UT161B (experimental) |
 | `ut161d` |  | UT161D (experimental) |

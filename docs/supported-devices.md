@@ -20,10 +20,10 @@ implementing `ModeTables` with the correct tables — no protocol changes.
 |-------|-------|--------|--------|-------|
 | **UT61E+** | UNI-T | 22000 | ✅ Tested | Reference device |
 | **UT61D+** | UNI-T | 6000 | Untested | Adds temperature and LoZ ACV |
-| **UT61B+** | UNI-T | 6000 | Untested | Base model, 10A max current |
+| **UT61B+** | UNI-T | 6000 | ✅ Tested | Base model, 10A max current; verified from community captures ([issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
 | **UT161E** | UNI-T | 22000 | Untested | Same as UT61E+ |
 | **UT161D** | UNI-T | 6000 | Untested | Same as UT61D+ |
-| **UT161B** | UNI-T | 6000 | Untested | Same as UT61B+ |
+| **UT161B** | UNI-T | 6000 | Untested | Same table as the UT61B+, but no report of its own |
 | **UT60BT** | UNI-T | — | Untested | Bluetooth variant; same serial protocol over BT serial |
 
 ### Independent research findings
