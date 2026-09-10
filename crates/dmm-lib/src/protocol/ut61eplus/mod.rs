@@ -670,6 +670,20 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     }
 }
 
+/// Whether the display spells overload.
+///
+/// The 7-char field is a segment dump: the meter lights the decimal point
+/// belonging to the rung it is on and puts `O` and `L` in the digit slots
+/// either side of it, so the point lands anywhere among the letters. All
+/// three forms are on record, on both meters and across ranges — ` .OL   `
+/// (E+ 2.2MΩ and diode, B+ diode), `  O.L  ` (E+ 22kΩ, B+ 60MΩ) and
+/// `  OL.  ` (E+ 220kΩ, 220MΩ, 220mV and continuity). Dropping the point is
+/// what makes the middle one read as overload rather than fall through to
+/// the "could not parse" branch.
+fn is_overload(display_compact: &str) -> bool {
+    display_compact.replace('.', "").contains("OL")
+}
+
 /// Decode the three UT61+ flag bytes (already masked with `& 0x0F`).
 ///
 /// - byte 11 (`flag1`): bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX
@@ -746,7 +760,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
             display_compact.parse::<u8>().unwrap_or(0)
         };
         MeasuredValue::NcvLevel(level)
-    } else if display_compact == "OL" || display_compact.contains("OL") {
+    } else if is_overload(&display_compact) {
         MeasuredValue::Overload
     } else {
         match display_compact.parse::<f64>() {
@@ -1575,6 +1589,29 @@ raw_payload=14"#
         assert!(s.contains("V"));
         assert!(s.contains("HOLD"));
         assert!(s.contains("AUTO"));
+    }
+
+    /// Every form the overload display takes, taken off the captures named
+    /// in `is_overload`. `O.L` used to miss the check and reach `Overload`
+    /// only through the "could not parse" fallback, which would have
+    /// swallowed a corrupt display just as quietly.
+    #[test]
+    fn overload_is_read_wherever_the_decimal_point_lands() {
+        let table = Ut61ePlusTable::new();
+        for display in [b" .OL   ", b"  O.L  ", b"  OL.  ", b"    OL "] {
+            let payload = make_payload(0x06, 0x00, display, (0x00, 0x00), (0x00, 0x00, 0x00));
+            let m = parse_measurement(&payload, &table).unwrap();
+            assert!(
+                matches!(m.value, MeasuredValue::Overload),
+                "display {:?}: {:?}",
+                String::from_utf8_lossy(display),
+                m.value
+            );
+        }
+        // A reading that merely contains the letters is still a reading.
+        let payload = make_payload(0x06, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let m = parse_measurement(&payload, &table).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(_)), "{:?}", m.value);
     }
 
     /// A digit in the NCV display is the detection level, not a reading.

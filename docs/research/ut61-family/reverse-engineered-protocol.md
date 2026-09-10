@@ -364,6 +364,28 @@ Same across all models:
 
 ---
 
+### 5.8 Overload display — [VERIFIED] (UT61E+ and UT61B+)
+
+The 7-character display field is a segment dump, not a formatted number: the
+meter lights the decimal point belonging to the rung it is on and writes `O`
+and `L` into the digit slots either side of it. Overload therefore reaches the
+wire in three shapes, and which one depends on the range rather than the
+model:
+
+| Display | Seen on |
+|---------|---------|
+| ` .OL   ` | E+ Ω 2.2MΩ, E+ diode, B+ diode |
+| `  O.L  ` | E+ Ω 22kΩ, B+ Ω 60MΩ |
+| `  OL.  ` | E+ Ω 220kΩ and 220MΩ, E+ DC mV 220mV, E+ continuity |
+
+Both UT61B+ reports agree with each other and all five of our UT61E+
+captures show the same pattern. A parser must ignore the point rather than
+match a fixed string.
+
+The point's position is also a second reading of the range byte: the B+'s
+`  O.L ` in Ω sits where a 60.00 MΩ rung puts its decimal, which is range
+byte 5, exactly as section 9 has it.
+
 ## 6. Commands — [VENDOR]
 
 All models accept the same command set (same `CustomDmm.dll`). Some
@@ -394,9 +416,9 @@ accept it is section 6.2 — several accept it nowhere useful.
 
 ### 6.1 Range and Auto semantics — [VERIFIED] (UT61E+, 2026-09-07)
 
-Walked on the in-house UT61E+ with `dmm-cli set range`, which presses the
-command and re-reads the range byte (leads open and with 1.5 V DC applied,
-V⎓ and V~ dial positions):
+Walked on our UT61E+ with `dmm-cli set range`, which presses the command and
+re-reads the range byte (leads open and with 1.5 V DC applied, V⎓ and V~ dial
+positions):
 
 - **Range (0x46)** steps the ladder. From auto-range the first press engages
   *manual* ranging on the rung the meter is already showing — it does not
