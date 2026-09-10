@@ -1,0 +1,24 @@
+# Hz on the Hz/% dial position with no signal
+# Captured 2026-09-10 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev report, step hz).
+raw_hex: "04 30 20 20 20 30 2E 30 30 00 00 30 30 30"
+mode: "Hz"
+value: "0"
+unit: "Hz"
+range_label: "60Hz"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

@@ -1,0 +1,24 @@
+# AC mV picking up 11.72mV, 60mV range
+# Captured 2026-09-10 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev report, step acmv).
+raw_hex: "01 30 20 20 31 31 2E 37 32 00 05 30 30 30"
+mode: "AC mV"
+value: "11.72"
+unit: "mV"
+range_label: "60mV"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

@@ -1,0 +1,24 @@
+# DC mV on the mV dial position, 60mV range
+# Captured 2026-09-10 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev report, step dcmv).
+raw_hex: "03 30 20 20 20 31 2E 34 33 00 00 30 30 30"
+mode: "DC mV"
+value: "1.43"
+unit: "mV"
+range_label: "60mV"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

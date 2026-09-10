@@ -1,0 +1,24 @@
+# Body resistance 1.226 MΩ, 6MΩ range - the rung between the two the first report reached
+# Captured 2026-09-10 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev report, step ohm_body).
+raw_hex: "06 34 20 20 31 2E 32 32 36 00 06 30 30 30"
+mode: "Ω"
+value: "1.226"
+unit: "MΩ"
+range_label: "6MΩ"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

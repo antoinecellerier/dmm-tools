@@ -1,0 +1,24 @@
+# DC V after one RANGE press: manual ranging, no flag badge
+# Captured 2026-09-10 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev report, step range).
+raw_hex: "02 31 20 2D 20 39 2E 33 33 00 04 30 34 31"
+mode: "DC V"
+value: "-9.33"
+unit: "V"
+range_label: "60V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

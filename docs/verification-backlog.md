@@ -12,10 +12,10 @@ dropdown work on the UT61+/UT161 family. The meter takes no set-mode command, so
 (0x49) and re-reads the mode byte until the target shows, planning from a
 per-model dial table recorded in
 `docs/research/ut61-family/reverse-engineered-protocol.md` §3.1. The UT61E+
-table, its ring orders and the settle timing were verified on the in-house
+table, its ring orders and the settle timing were verified on our own
 meter the same day, every position and every entry (Completed table below).
 
-Observed 2026-09-07 on the in-house E+, and deliberate: once the meter is in
+Observed 2026-09-07 on our E+, and deliberate: once the meter is in
 Hz (0x04), `get mode` lists only `Hz, Duty %` and `set mode "AC V"` is
 refused as unknown there. The mode byte carries no dial information, and the
 driver does not guess between dial positions that do not nest, so from Hz it
@@ -41,7 +41,7 @@ Shipped 2026-09-07: `Setting::Hold`, `Rel`, `MinMax` and `Peak` reach a
 named state by pressing the family's own button (0x4A, 0x48, 0x41, 0x4D)
 and reading the flag back, leaving MIN/MAX and Peak by 0x42 and 0x4E.
 
-**Verified the same day on the in-house UT61E+**, leads open, V⎓ and V~ dial
+**Verified the same day on our UT61E+**, leads open, V⎓ and V~ dial
 positions, `RUST_LOG=dmm_lib=debug`:
 
 - `set hold on` then `set hold off`: one press each, each confirmed on the
@@ -66,7 +66,7 @@ AC mV, and DC V is still the one mode confirmed not to react (2026-03-21,
 showed the Peak row offered in AC V and AC A and absent in DC V, DC A and
 DC mV — but that listing is the code's own table (`AC_PEAK_MODES` in
 `tables/mod.rs`, the five pure-AC modes), so it is a cross-check, not
-evidence about the meter. Left to check on the in-house meter: AC µA and
+evidence about the meter. Left to check on our meter: AC µA and
 AC mA, and AC+DC V and LPF V, which the code refuses with `peak cannot be
 set in <mode> on this meter`. Every mode where the meter reacts but the
 list is empty (or the reverse) is a table fix.
@@ -75,65 +75,129 @@ The UT61B+ is offered no Peak at all, from the family spec's flag matrix
 (§4, blank Peak cells) and command matrix (§6, "No effect"); the UT61D+ is
 offered the same AC modes as the E+. Both unverified — issue #7.
 
-Where the buttons do nothing — observed 2026-09-07 on the in-house UT61E+,
-each sweep ending in `<button> did nothing`:
+Where the buttons do nothing — **VERIFIED** on our UT61E+ (2026-09-07, four
+runs) and again by @ChrisTheExpie on a real UT61B+ (2026-09-10, CH9329,
+issue #19), each sweep ending in `<button> did nothing`.
+The two meters refused the same commands in the same modes:
 
-- **REL:** AC+DC V (open leads), Hz, Duty % and NCV.
-- **MIN/MAX:** continuity, diode, capacitance, Hz, Duty % and NCV.
+- **REL:** continuity, Hz, Duty %, NCV.
+- **MIN/MAX:** continuity, capacitance, Hz, Duty % and NCV.
 - **HOLD:** NCV.
-- **RANGE:** capacitance and Hz, single-range on this model.
-- **AUTO:** LPF V — the meter came up in 1000V manual and stayed there,
-  although the manual's AC V table lists LPF on every range.
+- **RANGE:** capacitance and Hz. Both have multi-rung tables and auto-ranging
+  reaches those rungs; it is only the button that does nothing.
 
-The manual (§VII) gives each button one line and no per-function list, so
-this is the only record. `choices()` still offers these settings there;
-narrowing it to what the meter accepts is a separate pass.
+`choices()` was narrowed to match on 2026-09-10: `HOLD_DEAD`, `REL_DEAD` and
+`MINMAX_DEAD` in `ut61eplus/mod.rs`, `FAMILY_FIXED_RANGE_MODES` in
+`tables/mod.rs`, and spec §6.2. The manual (§VII) gives each button one line
+and no per-function list, so the meters are the only record.
 
-### UT61B+ — first hardware report
+**The bar for that list: two meters refusing it with a real reading on
+screen.** Both halves earn their place, and three things that look like
+refusals do not clear it:
 
-A third-party UT61B+ capture reported 2026-09-09 by @ChrisTheExpie in
-[issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19) is the
-family's first device evidence outside the in-house UT61E+. It was taken with
-v0.6.0, which records parsed samples but no wire frames, so everything below
-rests on the decoded steps and the reporter's screen confirmations.
+- **A refusal over OL says nothing about the mode.** This meter refuses REL
+  whenever the display reads OL, whatever the mode — `dcmv/rel:on` was refused
+  over OL in the 2026-03 run and taken in all three later runs where DC mV had
+  a value. HOLD is unaffected: diode's HOLD frames carry the flag over OL.
+- **Diode is on neither list.** All five MIN/MAX refusals across the two
+  meters, and every REL attempt, happened over OL, because open leads in diode
+  read OL. Nothing is known about diode with a diode connected — worth one
+  run.
+- **AC+DC V is not on the REL list.** Our UT61E+ refused it twice with 0.07 V
+  and 0.08 V showing, which is a clean observation, but the mode does not
+  exist on the UT61B+, so no second meter can agree — and one meter is not
+  enough to take a working button away. MIN/MAX there works and says so:
+  `acdcv/minmax:min` read back 0.0652 V with the MIN flag set. Re-ask our E+.
 
-Settled by that report:
+Narrowing `choices()` reaches `dmm-cli get`/`set` and the capture sweep, and
+nothing else. The GUI's HOLD/REL/MIN-MAX/PEAK buttons come from
+`supported_commands` and press through `send_command`, as does
+`dmm-cli command <name>`, so a wrong entry here cannot stop anyone pressing
+the button — but it can stop `set` reaching a state the meter does have.
+
+**AUTO in LPF V** is a separate E+-only observation: the meter came up in
+1000V manual and stayed there, although the manual's AC V table lists LPF on
+every range. Not encoded.
+
+The sweep skips REL while the reading is OL, so some rows read as absent
+rather than refused in a given run: `continuity/rel:on` was only attempted in
+the runs where the probes were still touching (2026-03 and
+`ut61eplus-verify4.yaml`), and both of those refused it.
+
+### UT61B+ — hardware reports
+
+Two UT61B+ captures by @ChrisTheExpie in
+[issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19), both over
+a CH9329 cable, are the family's device evidence beyond our own UT61E+:
+
+- **2026-09-09, v0.6.0** — parsed samples, no wire frames, with the reporter
+  confirming the LCD beside them.
+- **2026-09-10, v0.7.0-dev (6406037)** — wire frames throughout, driven range
+  and flag sweeps, and a gate that passed outright
+  (`core_semantics: confirmed`).
+
+Together they carried the model to `Stability::Verified`: every mode its dial
+reaches was captured and decoded correctly, and every command moved the flag it
+should. The family issue stays linked on it for the rungs below.
+
+Settled:
 
 - The meter names itself `UT61B+` (GetName 0x5F) and speaks the UT61E+'s
   protocol unchanged — AB CD framing, BE16 checksum, 14-byte payload, mode
   bytes 0x00/02/03/04/05/06/07/08/09/0C/0E/10/14, and all three flag nibbles.
-  Over a CH9329 cable, the first UT61+ family run on that bridge.
+  The 2026-09-10 run recorded the handshake itself: `AB CD 03 5F 01 DA` out,
+  `AB CD 04 FF 00 02 7B` and `AB CD 08 55 54 36 31 42 2B 02 FD` back. First
+  UT61+ family run on the CH9329 bridge.
 - HOLD (0x4A), REL (0x48), MIN/MAX (0x41), ExitMinMax (0x42), RANGE (0x46)
-  and AUTO (0x47) each moved the expected flag on the next frame.
-- Ascending range-index order at every rung auto-ranging reached: index 0 is
-  the bottom of DC V, AC V, Ω, capacitance, µA, mA and A, and index 5 the top
-  of the six-rung Ω ladder (O.L on open leads).
-- Bar graph full scale is 30 (O.L on Ω), matching the manual's 31 segments
-  for 6,000-count models.
+  and AUTO (0x47) each moved the expected flag on the next frame, and MIN/MAX
+  cycles MAX then MIN as on the E+.
+- Ascending range-index order, and these rungs are now [VERIFIED] rather than
+  deduced — each identified by the decimal count the meter sent there:
+  **DC V 0 (6V) and 1 (60V)** (`  0.000` open, `- 9.33` on a 9V battery),
+  **AC V 0** (6V), **Ω 0, 4 and 5** (600Ω shorted, 6MΩ across the body at
+  `  1.226`, 60MΩ O.L open), **µA 0 and 1** (600µA, 6000µA), **mA 0 and 1**
+  (60mA, 600mA), **A 0 and 1** (6A, 10A — the B+ tops out where the E+ has
+  20A).
+- Bar graph full scale is 30 across modes (`-9.33` on 60V → 4, `11.72` on
+  60mV → 5, Ω O.L → 30), matching the manual's 31 segments for 6,000-count
+  models.
 - **DC V/AC V range 0 is 6V, not 60mV** — fixed the same day in
   `ut61b_plus.rs`, and the same shape applied to `ut61d_plus.rs` as
   [DEDUCED]. Every voltage read a thousandth low because the deduced table
   put the mV ranges at indices 0-1. The E+ needed the same correction in
   March; there the spare entry sat at index 4, where the meter never lands.
+  The 2026-09-10 run confirms the fix on the meter.
+- ~~**NCV levels.**~~ — **VERIFIED** 2026-09-10 by @ChrisTheExpie on a real
+  UT61B+ (CH9329). The dash count is the level: the 2026-09-09 frame
+  `14 30 20 20 20 2D 2D 2D 2D 00 00 30 34 30` is four dashes and the reporter
+  confirmed all four bars on the LCD, and the 2026-09-10 run sent one dash
+  next to a weaker field. That report printed `NCV:0` for the four-dash frame
+  only because dash counting (5daf64a) landed after v0.6.0. Both frames are
+  golden fixtures. The B+'s no-field display is still unseen — the E+ idles at
+  `EF`.
+- **Duty % is reached from the Hz/% dial position with the USB short-press**,
+  as `ut61b_plus.rs`'s Hz/% ring (0x49) says. The reporter's first run used
+  the button from V~ instead, which is why the earlier note read SELECT.
+- **Golden fixtures**: 31 in `crates/dmm-lib/tests/golden/ut61b+/`, lifted
+  from both reports.
 
-Left open on this model. All of it wants a re-run on a build that records
-wire frames and drives the range sweep:
+Left open on this model:
 
-- **V rungs 1-3** (60V, 600V, 1000V; AC 750V) — the run never left range 0,
-  and the 0.6.0 `range` step is a single press, not a sweep.
-- **The Hz ladder.** Steps `hz` (reached from V~) and `extra_0` (the Hz dial
-  position) both reported range index 0 while displaying `0.0` and `0.00`.
-  One index cannot carry both full scales, so the code's five invented Hz
-  ranges do not describe the meter.
-- **NCV levels.** The frame `14 30 20 20 20 2D 2D 2D 2D 00 00 30 34 30` is
-  four dashes, which the current counting rule reads as level 4; whether that
-  is a level or the B+'s idle display (the E+ idles at `EF`) is unknown.
-  Needs one frame taken with no field nearby.
-- **The Hz dial position's cycle button.** The reporter reached Duty % from
-  it with SELECT; `ut61b_plus.rs` gives that ring Hz/% (0x49). Issue #7's
-  dial-table ask covers it.
-- **Golden fixtures.** None taken from this report — the `ut61b+` golden set
-  waits for a capture on a build carrying the range fix.
+- **V rungs 2-3** (600V, 1000V; AC 750V) and **Ω rungs 1-3** (6kΩ, 60kΩ,
+  600kΩ) — neither run swept them, because the capture's gate steps sat on
+  exactly those two modes (see the next section). The `dcv_ranges` and
+  `ohm_ranges` steps added since are what settles them; they are the only two
+  steps `--unverified` still asks this model for.
+- **Capacitance rungs 1-6** and **the mV ladder** — auto-ranging never left
+  rung 0 with open leads, and RANGE is dead in capacitance (below).
+- **The Hz ladder.** Range index 0 carried two different full scales across
+  the two runs: `0.0` (one decimal) from the V~ Hz path on 2026-09-09 and
+  `0.00` / `49.98` (two decimals) from the Hz/% dial position on 2026-09-10.
+  One index cannot mean both, so either the index is pinned at 0 in Hz and the
+  rung shows only in the decimal placement, or the two paths range
+  differently. The code's five invented Hz ranges describe neither. Settling
+  it needs one frame on a signal above 60 Hz, to see whether the range byte
+  ever leaves 0.
 
 ### Capture: gate steps placed after other steps
 
@@ -764,9 +828,9 @@ and AC mV (open leads, ~8.7 mV noise).
 
 ### UT61E+ RANGE command (0x46) — RESOLVED
 
-Resolved 2026-09-07 on the in-house UT61E+ (CP2110 cable,
-`RUST_LOG=dmm_lib=debug`) with `dmm-cli get range` / `set range`, which press
-0x46 and re-read the range byte until the target rung shows.
+Resolved 2026-09-07 on our UT61E+ (CP2110 cable, `RUST_LOG=dmm_lib=debug`)
+with `dmm-cli get range` / `set range`, which press 0x46 and re-read the range
+byte until the target rung shows.
 
 - **The first press from auto engages manual ranging on the rung the meter
   is already in** — it does not step. Every further press steps exactly one
@@ -814,7 +878,7 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **AC V top range: 750V vs 1000V conflict (2026-06 review).** The
   UT61+ Series manual's AC tables end at 1000V (E+ column: 1000.0V),
   but the code uses 750V for E+/B+/D+ (from the vendor decompile).
-  Testable on the in-house UT61E+: dial AC V, manual-range up to the
+  Testable on our UT61E+: dial AC V, manual-range up to the
   top range, and read the range byte + display.
 - **UT61D+ amps: manual lists 6.000A and 20.00A; code has only 20A**
   (`ut61d_plus.rs` dc_a/ac_a copied from E+). Needs the 6A range row;
@@ -822,13 +886,27 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **UT61B+/D+ frequency ranges in code are invented structure** — the
   manual gives only a 10.00 Hz–10.00 MHz span, no discrete ranges, and
   the code's five ranges top out at 600 kHz. The 2026-09-09 UT61B+
-  capture now contradicts the structure outright: two Hz readings at
-  range index 0 with different full scales. Issue #7.
+  capture contradicts the structure outright: two Hz readings at range
+  index 0 with different full scales. The 2026-09-10 re-run cannot break
+  the tie — it read `0.00` and `49.98` at index 0, both the 60Hz rung —
+  and RANGE is dead in Hz on both meters, so the button cannot walk the
+  ladder either. Needs one frame on a signal above 60 Hz. Issue #7.
 - **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
-  not part of the V ladder** — settled for the B+ by the 2026-09-09
-  capture (index 0 is each ladder's bottom rung; DC V/AC V range 0 is
-  6V). The rungs above 0 and the whole D+ table are still [DEDUCED].
-  Issue #7.
+  not part of the V ladder** — settled for the B+: index 0 is each
+  ladder's bottom rung, and the 2026-09-10 capture pinned DC V 0–1,
+  AC V 0, Ω 0/4/5, µA 0–1, mA 0–1 and A 0–1 by the decimal count the
+  meter sent at each. DC V 2–3, Ω 1–3, capacitance 1–6 and the whole
+  D+ table are still [DEDUCED]. Issue #7.
+- **UT61B+/D+ mV ladders are offered to the RANGE driver, untested** —
+  `range_is_fixed` covers DC mV and AC mV on the E+, where RANGE is dead
+  (2026-09-07), but the 6,000-count tables give both modes two rungs and
+  no run has pressed RANGE there. The `dcv_ranges` step does not reach
+  them; the mV position needs its own. Issue #7.
+- **UT61B+ golden set taken 2026-09-10** — 31 fixtures in
+  `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the two issue #19
+  reports: every mode the dial reaches, both current ladders driven to
+  their top rung, HOLD/REL/MIN/MAX/manual-range in DC V, both overload
+  spellings and both NCV levels seen.
 - **Golden YAML fidelity (2026-06 review):** the three UT61E+ golden
   captures look synthetic — the DC V case lacks the DC-indicator bit
   (verified set on real DC V) and bar-graph bytes are 00 00 despite
