@@ -185,6 +185,14 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   220kΩ filed two OL frames before the reading came down into range.
   `capture --settle MS` was added for this; waiting for the reading to hold
   still instead would never finish on leads with nothing stable across them.
+- **A delay after the press cannot cover HOLD, REL or MIN/MAX**, which act on
+  the live reading rather than on the meter's next one. `ohm_ranges/hold:on`
+  filed 12.59 kΩ three times on the 82 kΩ resistor
+  (`ut61eplus-ohm-82k-settled-2.yaml`, 2026-09-10): the press followed the
+  220MΩ rung handing back to auto, so the meter froze a reading still on its
+  way down and every later sample read the frozen value. Settling **before**
+  the press is what would fix it — the wait is on the wrong side of the button
+  for these three.
 
 ### Capture leaves the meter manually ranged
 
