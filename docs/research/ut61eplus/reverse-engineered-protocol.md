@@ -144,11 +144,11 @@ transfer as soon as the HID device is opened.
 from the CH9329 datasheet and the vendor `CH9329DLL.dll` filename, then
 confirmed on a real UT181A by two reporters (issue #5, 2026-04-07 and
 2026-09-02): the meter streams over it and honours the host's start
-command, so the UART bytes match the CP2110 path. Two UT61B+ captures by
-@ChrisTheExpie (issue #19, 2026-09-09 and 2026-09-10) confirm the same for
-this family — the second recorded the Get Name handshake itself over the
-CH9329: `AB CD 03 5F 01 DA` out, `AB CD 04 FF 00 02 7B` and the name frame
-back.
+command, so the UART bytes match the CP2110 path. Three UT61B+ captures by
+@ChrisTheExpie (issue #19, 2026-09-09, 2026-09-10 and 2026-09-11) confirm
+the same for this family — the second recorded the Get Name handshake itself
+over the CH9329: `AB CD 03 5F 01 DA` out, `AB CD 04 FF 00 02 7B` and the name
+frame back.
 
 ---
 

@@ -226,8 +226,8 @@ manual says SELECT cycles between them.
 
 This model has no AC+DC and no LPF, so its V~ position has no SELECT ring at
 all, and it splits the E+'s single Ω position in two. No temperature, no hFE,
-no LoZ. Both ring contents and ring order are **[UNVERIFIED]** — no UT61B+
-has been connected.
+no LoZ. Both ring contents and ring order are **[UNVERIFIED]** — the three
+UT61B+ captures (issue #19) never pressed SELECT through a ring.
 
 ---
 
@@ -262,7 +262,8 @@ A UT61B+ capture reported 2026-09-09 (issue #19) confirmed that the
 6,000-count ladders ascend and that index 0 is the bottom rung in Ω,
 capacitance, µA, mA and A — auto-ranging sat there with the leads open or
 shorted, and the display's decimal count matches each bottom rung's full
-scale. Voltage is the exception, below.
+scale. Voltage is the exception, below. A third capture on 2026-09-11 walked
+the whole Ω and DC V ladders with RANGE, one rung per press.
 
 ### 5.1 DC Voltage
 
@@ -281,11 +282,13 @@ the UT61E+ the wire indices for DC V are 0=2.2V, 1=22V, 2=220V, 3=1000V —
 full scale belongs to the separate DC mV mode, not to a DC V range index.
 
 The UT61B+ works the same way. Its wire indices are 0=6V, 1=60V, 2=600V,
-3=1000V, with index 0 [VERIFIED] by the 2026-09-09 capture — DC V and AC V
-both sent range byte 0 while displaying three decimals (`  0.000`, `  0.037`)
-and the meter's screen read volts. The rungs above 0 stay [DEDUCED]; 60 mV
-and 600 mV are the mV modes on their own dial position. The UT61D+ shares
-the table shape and is assumed to match, unverified — issue #7.
+3=1000V, all four [VERIFIED] for DC V by the 2026-09-11 RANGE walk, which
+loses one decimal per rung (`  0.001`, `   0.00`, `    0.0`, `     0 `). In
+AC V, index 0 is [VERIFIED] by the 2026-09-09 capture (`  0.037` with the
+screen reading volts) and index 2 by 236.6 V of mains on 2026-09-11; indices
+1 and 3 stay [DEDUCED]. 60 mV and 600 mV are the mV modes on their own dial
+position. The UT61D+ shares the table shape and is assumed to match,
+unverified — issue #7.
 
 ### 5.2 AC Voltage
 
@@ -306,6 +309,9 @@ LoZ ACV ranges (UT61D+ only): 600.0 V and 1000 V.
 | 5 | 60.00 MΩ (10 kΩ) | 22.000 MΩ (1 kΩ) |
 | 6 | — | 220.00 MΩ (10 kΩ) |
 
+All six 6,000-count rungs are [VERIFIED] on a UT61B+ by the 2026-09-11 RANGE
+walk, each identified by the decimal its overload dump lights (section 5.8).
+
 ### 5.4 Capacitance
 
 | Range | 6,000-count | 22,000-count |
@@ -318,6 +324,9 @@ LoZ ACV ranges (UT61D+ only): 600.0 V and 1000 V.
 | 5 | 6.000 mF (1 µF) | 2.2000 mF (100 nF) |
 | 6 | 60.00 mF (10 µF) | 22.000 mF (1 µF) |
 | 7 | — | 220.00 mF (10 µF) |
+
+Rung 5 is [VERIFIED] on a UT61B+ at 4.514 mF on 2026-09-11; with rung 0 above,
+that leaves 1-4 and 6 [DEDUCED].
 
 ### 5.5 Current
 
@@ -374,13 +383,14 @@ model:
 
 | Display | Seen on |
 |---------|---------|
-| ` .OL   ` | E+ Ω 2.2MΩ, E+ diode, B+ diode |
-| `  O.L  ` | E+ Ω 22kΩ, B+ Ω 60MΩ |
-| `  OL.  ` | E+ Ω 220kΩ and 220MΩ, E+ DC mV 220mV, E+ continuity |
+| ` .OL   ` | E+ Ω 2.2MΩ, E+ diode, B+ diode, B+ Ω 6kΩ and 6MΩ |
+| `  O.L  ` | E+ Ω 22kΩ, B+ Ω 60kΩ and 60MΩ |
+| `  OL.  ` | E+ Ω 220kΩ and 220MΩ, E+ DC mV 220mV, E+ continuity, B+ Ω 600Ω and 600kΩ |
 
-Both UT61B+ reports agree with each other and all five of our UT61E+
-captures show the same pattern. A parser must ignore the point rather than
-match a fixed string.
+All three UT61B+ reports agree with each other and all five of our UT61E+
+captures show the same pattern; the 2026-09-11 Ω walk showed all three shapes
+on one meter in one run, as the E+'s 82 kΩ run did. A parser must ignore the
+point rather than match a fixed string.
 
 The point's position is also a second reading of the range byte: the B+'s
 `  O.L ` in Ω sits where a 60.00 MΩ rung puts its decimal, which is range
@@ -502,7 +512,8 @@ possible from the vendor software.
    values but not which range index maps to which. Ascending order
    is [DEDUCED] except on the UT61E+ DC V ladder, where it is
    [VERIFIED] (section 6.1: one rung up per RANGE press, 1000V wraps
-   to 2.2V), and at the bottom rungs a UT61B+ auto-ranged into
+   to 2.2V), on the UT61B+ Ω and DC V ladders, walked the same way on
+   2026-09-11, and at the bottom rungs a UT61B+ auto-ranged into
    (section 5).
 
 2. **6,000-count bar graph encoding** — 31 segments (from manual).

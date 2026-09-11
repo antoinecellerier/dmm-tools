@@ -1,0 +1,24 @@
+# Ω OL driven to the manual 600kΩ rung - the point after L, as 600.0 puts it
+# Captured 2026-09-11 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev 88e80ed report, step ohm_ranges/range:600kΩ).
+raw_hex: "06 33 20 20 20 4F 4C 2E 20 03 00 30 34 30"
+mode: "Ω"
+value: "OL"
+unit: "kΩ"
+range_label: "600kΩ"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

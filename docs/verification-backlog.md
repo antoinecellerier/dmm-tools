@@ -160,6 +160,8 @@ on every meter that can be asked.** Both halves earn their place:
   five times, and OL is no confound for that button, so two meters agree.
   **REL stays offered**: one meter, and the UT61B+ has the mode and has never
   been asked with a diode fitted. That is the outstanding ask on issue #19.
+  The 2026-09-11 B+ run fitted a diode, but as a freeform extra, which the
+  sweep never drives, so no REL was sent and the ask stands.
 - **AC+DC V joins the REL list**, on three refusals with a real reading:
   2026-09-07 at 0.07 V and 0.08 V, and 2026-09-10 at 0.0005-0.0175 V
   (`ut61eplus-acdcv.yaml`). That is every meter that has the mode — the
@@ -269,8 +271,8 @@ Re-asserting Auto after the flag sweeps would fix it.
 
 ### UT61B+ — hardware reports
 
-Two UT61B+ captures by @ChrisTheExpie in
-[issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19), both over
+Three UT61B+ captures by @ChrisTheExpie in
+[issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19), all over
 a CH9329 cable, are the family's device evidence beyond our own UT61E+:
 
 - **2026-09-09, v0.6.0** — parsed samples, no wire frames, with the reporter
@@ -278,6 +280,9 @@ a CH9329 cable, are the family's device evidence beyond our own UT61E+:
 - **2026-09-10, v0.7.0-dev (6406037)** — wire frames throughout, driven range
   and flag sweeps, and a gate that passed outright
   (`core_semantics: confirmed`).
+- **2026-09-11, v0.7.0-dev (88e80ed)** — a `capture --unverified` run, driven,
+  trusted tier, walking the two ladder steps the model was still asked for,
+  plus three freeform extras (a diode, a capacitor, live mains AC V).
 
 Together they carried the model to `Stability::Verified`: every mode its dial
 reaches was captured and decoded correctly, and every command moved the flag it
@@ -295,12 +300,20 @@ Settled:
   and AUTO (0x47) each moved the expected flag on the next frame, and MIN/MAX
   cycles MAX then MIN as on the E+.
 - Ascending range-index order, and these rungs are now [VERIFIED] rather than
-  deduced — each identified by the decimal count the meter sent there:
-  **DC V 0 (6V) and 1 (60V)** (`  0.000` open, `- 9.33` on a 9V battery),
-  **AC V 0** (6V), **Ω 0, 4 and 5** (600Ω shorted, 6MΩ across the body at
-  `  1.226`, 60MΩ O.L open), **µA 0 and 1** (600µA, 6000µA), **mA 0 and 1**
-  (60mA, 600mA), **A 0 and 1** (6A, 10A — the B+ tops out where the E+ has
-  20A).
+  deduced — each identified by the decimal the meter lit there: **every Ω rung
+  0-5** and **every DC V rung 0-3**, walked with RANGE on 2026-09-11 one rung
+  per press and read back from the overload shape (`   OL. ` at 600Ω and
+  600kΩ, `  .OL  ` at 6kΩ and 6MΩ, `   O.L ` at 60kΩ and 60MΩ) or, at 0 V,
+  from the decimal count (`  0.001`, `   0.00`, `    0.0`, `     0 ` for 6V,
+  60V, 600V and 1000V); **AC V 0** (6V) and **AC V 2** (600V, 236.6 V of mains
+  with the HV warning lit — the first HV-warning frame from a B+);
+  **capacitance 5** (6mF, a real capacitor at 4.514 mF, LCD-confirmed);
+  **µA 0 and 1** (600µA, 6000µA), **mA 0 and 1** (60mA, 600mA), **A 0 and 1**
+  (6A, 10A — the B+ tops out where the E+ has 20A).
+- **Diode reads 0.516 V with a diode fitted** (2026-09-11, LCD-confirmed) —
+  the model's first finite diode frame; the earlier one is OL.
+- HOLD, MIN and MAX were taken in Ω over OL, and HOLD, REL, MIN and MAX in
+  DC V at 0 V, with the same nibbles as on the E+ (2026-09-11).
 - Bar graph full scale is 30 across modes (`-9.33` on 60V → 4, `11.72` on
   60mV → 5, Ω O.L → 30), matching the manual's 31 segments for 6,000-count
   models.
@@ -321,18 +334,30 @@ Settled:
 - **Duty % is reached from the Hz/% dial position with the USB short-press**,
   as `ut61b_plus.rs`'s Hz/% ring (0x49) says. The reporter's first run used
   the button from V~ instead, which is why the earlier note read SELECT.
-- **Golden fixtures**: 31 in `crates/dmm-lib/tests/golden/ut61b+/`, lifted
-  from both reports.
+- **Golden fixtures**: 45 in `crates/dmm-lib/tests/golden/ut61b+/`, lifted
+  from all three reports.
 
 Left open on this model:
 
-- **V rungs 2-3** (600V, 1000V; AC 750V) and **Ω rungs 1-3** (6kΩ, 60kΩ,
-  600kΩ) — neither run swept them, because the capture's gate steps sat on
-  exactly those two modes (see the next section). The `dcv_ranges` and
-  `ohm_ranges` steps added since are what settles them; they are the only two
-  steps `--unverified` still asks this model for.
-- **Capacitance rungs 1-6** and **the mV ladder** — auto-ranging never left
-  rung 0 with open leads, and RANGE is dead in capacitance (below).
+- **AC V rung 3 (750V)** and the AC V RANGE walk — the `acv` step was not part
+  of the 2026-09-11 `--unverified` run, which asked only for the two ladder
+  steps still unverified on this model.
+- **Capacitance rungs 1-4 and 6** and **the mV ladder** — auto-ranging never
+  left rung 0 with open leads, and RANGE is dead in capacitance (below); rung
+  5 came from a capacitor held to the leads on 2026-09-11.
+- **The 600Ω manual rung.** The 2026-09-11 walk pressed RANGE four times from
+  600kΩ auto and read back 3 (manual), 4, 5, 0 — then, with no further press,
+  the next poll 150 ms later reported rung 1 (6kΩ), still flagged manual, and
+  all three samples of the step sat there. Five transitions for four presses.
+  Either the meter leaves the 600Ω rung on its own when overloaded with open
+  leads, or the fourth press registered twice on the CH9329 path; the file
+  cannot say which, and the tool filed the step `needs_attention`. The E+
+  holds its 220Ω rung over OL (the 82 kΩ run, 2026-09-10), so this is not
+  family behaviour. The ask is one press of the meter's own RANGE button to
+  600Ω with the leads open, watching whether it stays.
+- **REL in diode with a diode fitted**, still unasked — the diode came as a
+  freeform extra on 2026-09-11, and the sweep never drives extras, so no REL
+  was sent.
 - **The Hz ladder.** Range index 0 carried two different full scales across
   the two runs: `0.0` (one decimal) from the V~ Hz path on 2026-09-09 and
   `0.00` / `49.98` (two decimals) from the Hz/% dial position on 2026-09-10.

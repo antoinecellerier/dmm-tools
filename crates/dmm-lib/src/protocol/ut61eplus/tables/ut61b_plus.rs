@@ -6,9 +6,10 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// Device table for the UNI-T UT61B+ (and UT161B).
 ///
 /// 6,000-count (3¾ digit) model. Range values from the UT61+ Series User
-/// Manual. Ascending index order is [VERIFIED] at the rungs a UT61B+ capture
-/// reached (2026-09-09): the bottom rung of DC V, AC V, Ω, capacitance, µA,
-/// mA and A, and the top rung of Ω. The rungs between are [DEDUCED].
+/// Manual. Ascending index order is [VERIFIED] at the rungs three UT61B+
+/// captures reached (2026-09-09 to 2026-09-11, issue #19): every Ω rung,
+/// every DC V rung, AC V 0 and 2, capacitance 0 and 5, and µA, mA and A 0-1.
+/// Still [DEDUCED]: AC V 1 and 3, capacitance 1-4 and 6, and both mV tables.
 ///
 /// Key differences from UT61E+ (22,000-count):
 /// - DC/AC V: 4 ranges (6V..1000V) vs 4 (2.2V..1000V)

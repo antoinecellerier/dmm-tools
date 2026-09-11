@@ -1,0 +1,24 @@
+# AC V 236.6 V mains on the 600V rung with the HV warning lit, bar graph 11 of 30
+# Captured 2026-09-11 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev 88e80ed report, step extra_2).
+raw_hex: "00 32 20 20 32 33 36 2E 36 01 01 30 31 30"
+mode: "AC V"
+value: "236.6"
+unit: "V"
+range_label: "600V"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: true
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

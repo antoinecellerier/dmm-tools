@@ -1,0 +1,24 @@
+# Capacitance 4.514 mF, auto-ranging on the 6mF rung - the first rung above 60nF seen on this model
+# Captured 2026-09-11 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev 88e80ed report, step extra_1).
+raw_hex: "09 35 20 20 34 2E 35 31 34 00 00 30 30 30"
+mode: "Capacitance"
+value: "4.514"
+unit: "mF"
+range_label: "6mF"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false
