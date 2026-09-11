@@ -1,0 +1,23 @@
+# Resistance 12.73 kΩ with HOLD on - a reading frozen on its way down from 220MΩ to the 82 kΩ resistor, captured 2026-09-10 from a UT61E+ (ut61eplus-ohm-82k-settled.yaml, step ohm_ranges/hold:on)
+raw_hex: "06 33 20 20 31 32 2E 37 33 01 06 32 30 30"
+mode: "Ω"
+value: "12.73"
+unit: "kΩ"
+range_label: "220kΩ"
+flags:
+  hold: true
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

@@ -1,0 +1,23 @@
+# Resistance 80.46 kΩ on the manual 220kΩ range, the same 82 kΩ resistor, captured 2026-09-10 from a UT61E+ (ut61eplus-ohm-82k-settled.yaml, step ohm_ranges/range:220kΩ)
+raw_hex: "06 33 20 20 38 30 2E 34 36 01 06 30 34 30"
+mode: "Ω"
+value: "80.46"
+unit: "kΩ"
+range_label: "220kΩ"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

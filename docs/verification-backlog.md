@@ -245,6 +245,12 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   way down and every later sample read the frozen value. Settling **before**
   the press is what would fix it — the wait is on the wrong side of the button
   for these three.
+- **Golden fixtures**: 20 in `crates/dmm-lib/tests/golden/ut61eplus/` from these
+  runs (2026-09-11) — the 82 kΩ resistor at the four rungs it fits and the three
+  overload shapes at the rungs it does not, the AC+DC V ladder above 2.2V, HOLD, REL
+  and MIN/MAX in Ω and AC+DC V, the Schottky diode with and without HOLD, and a
+  `- 0.000` frame. The hand-built `ohm_overload` fixture, whose `OL` carried no
+  decimal point, is replaced by the real 220Ω frame.
 
 ### Capture leaves the meter manually ranged
 
@@ -1044,11 +1050,13 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   reports: every mode the dial reaches, both current ladders driven to
   their top rung, HOLD/REL/MIN/MAX/manual-range in DC V, both overload
   spellings and both NCV levels seen.
-- **Golden YAML fidelity (2026-06 review):** the three UT61E+ golden
-  captures look synthetic — the DC V case lacks the DC-indicator bit
-  (verified set on real DC V) and bar-graph bytes are 00 00 despite
-  non-zero readings. Re-capture from the real meter
-  (`dmm-cli capture`) so the goldens match verified device behavior.
+- **Golden YAML fidelity (2026-06 review):** two hand-built UT61E+ fixtures
+  remain, `dcv_5.678` and `ncv_3` — the DC V case lacks the DC-indicator bit
+  (verified set on real DC V) and bar-graph bytes are 00 00 despite a
+  non-zero reading. Re-capture from the real meter (`dmm-cli capture`) so
+  the goldens match verified device behavior. The third, `ohm_overload`,
+  whose `OL` had no decimal point, was replaced on 2026-09-11 by the real
+  220Ω frame from the 82 kΩ run.
 - **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
   The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
   the current reading; one rung per press and the 1000V→2.2V wrap were

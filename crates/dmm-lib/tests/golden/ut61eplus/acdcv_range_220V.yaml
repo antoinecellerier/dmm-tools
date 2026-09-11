@@ -1,0 +1,23 @@
+# AC+DC V 0.05 V on the manual 220V range, captured 2026-09-10 from a UT61E+ (ut61eplus-acdcv.yaml, step acdcv/range:220V)
+raw_hex: "19 32 20 20 20 30 2E 30 35 00 00 30 34 30"
+mode: "AC+DC V"
+value: "0.05"
+unit: "V"
+range_label: "220V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

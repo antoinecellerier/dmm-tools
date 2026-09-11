@@ -1,0 +1,23 @@
+# Diode 0.1968 V, a Schottky forward-biased - the first finite diode reading, captured 2026-09-10 from a UT61E+ (ut61eplus-diode.yaml, step diode)
+raw_hex: "08 30 20 30 2E 31 39 36 38 04 04 30 34 30"
+mode: "Diode"
+value: "0.1968"
+unit: "V"
+range_label: "Diode"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

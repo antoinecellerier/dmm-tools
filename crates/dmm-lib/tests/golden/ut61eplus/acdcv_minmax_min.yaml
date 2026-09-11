@@ -1,0 +1,23 @@
+# AC+DC V 0.0198 V with MIN on, DC annunciator lit, captured 2026-09-10 from a UT61E+ (ut61eplus-acdcv.yaml, step acdcv/minmax:min)
+raw_hex: "19 30 20 30 2E 30 31 39 38 00 00 34 34 38"
+mode: "AC+DC V"
+value: "0.0198"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: true
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: true
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

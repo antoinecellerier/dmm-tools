@@ -1,0 +1,23 @@
+# Resistance 0.00 kΩ with REL on, the 82 kΩ resistor as reference, captured 2026-09-10 from a UT61E+ (ut61eplus-ohm-82k-settled.yaml, step ohm_ranges/rel:on)
+raw_hex: "06 33 20 20 20 30 2E 30 30 01 06 31 34 30"
+mode: "Ω"
+value: "0"
+unit: "kΩ"
+range_label: "220kΩ"
+flags:
+  hold: false
+  rel: true
+  auto_range: false
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

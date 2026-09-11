@@ -1,0 +1,23 @@
+# AC+DC V 0.06 V with HOLD on, auto-ranging kept, captured 2026-09-10 from a UT61E+ (ut61eplus-acdcv.yaml, step acdcv/hold:on)
+raw_hex: "19 31 20 20 20 30 2E 30 36 00 00 32 30 30"
+mode: "AC+DC V"
+value: "0.06"
+unit: "V"
+range_label: "22V"
+flags:
+  hold: true
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false

@@ -1,0 +1,23 @@
+# Resistance 80.45 kΩ on the 220kΩ range, auto-ranging, an 82 kΩ resistor across the probes, captured 2026-09-10 from a UT61E+ (ut61eplus-ohm-82k-settled.yaml, step ohm_ranges/range:Auto)
+raw_hex: "06 33 20 20 38 30 2E 34 35 01 06 30 30 30"
+mode: "Ω"
+value: "80.45"
+unit: "kΩ"
+range_label: "220kΩ"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  avg: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false
+  lead_error: false
+  comp: false
+  record: false
+  loz: false
+  void: false
