@@ -141,6 +141,12 @@ const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 /// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4).
 const RESPONSE_MEASUREMENT: u8 = 0x02;
 
+/// Longest measurement payload this meter can send: the extended frame, whose
+/// length field is `0x17` = 23 = 21 payload bytes + the 2-byte checksum
+/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4, §5.2). Anything
+/// longer is some other family's frame — the UT181A's, on this framing.
+const MAX_MEASUREMENT_PAYLOAD: usize = 21;
+
 /// Known UT171 command frames (complete wire bytes from RE docs).
 /// Frame format: AB CD len_lo len_hi payload chk_lo chk_hi, where the
 /// LE16 length counts payload + checksum (same framing as UT181A).
@@ -407,14 +413,18 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
 /// Detection for the UT171.
 ///
-/// Consulted after the UT181A, which claims the frames only it can send and
-/// the ones its own trigger elicited: what is left is a UT171's. The connect
-/// frame is UT181A opcode `0x0A` (start recording), which is why the cascade
-/// sends SET_MONITOR first — see `docs/detection-design.md`.
+/// The UT181A speaks the same framing with the same measurement type byte, so
+/// this rule claims only what its twin cannot have sent — see
+/// [`recognise`] and `docs/detection-design.md`.
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut171,
     label: "ut171 connect",
     trigger: Some(send_connect),
+    // The connect frame is UT181A opcode `0x0A` (start recording), so a
+    // UT181A sharing this cable gets its own window — and its own chance to
+    // be identified — before this one goes out.
+    send_after: &[DeviceFamily::Ut181a],
+    checksummed: true,
     recognise,
 };
 
@@ -423,12 +433,32 @@ fn send_connect(transport: &dyn Transport) -> Result<()> {
     transport.write(UT171_CMD_CONNECT)
 }
 
+/// A measurement frame this meter could have sent, and that its twin the
+/// UT181A could not.
+///
+/// Two things rule the UT181A out, both local to this family: a payload
+/// longer than [`MAX_MEASUREMENT_PAYLOAD`] is a shape no UT171 frame takes,
+/// and a frame arriving right after SET_MONITOR is the one that command just
+/// asked for.
 fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
     for start in framing::abcd_header_offsets(buf) {
         let Ok(Some((payload, _))) = framing::extract_frame_abcd_2byte_le16(&buf[start..]) else {
             continue;
         };
         if payload.first() != Some(&RESPONSE_MEASUREMENT) {
+            continue;
+        }
+        if payload.len() > MAX_MEASUREMENT_PAYLOAD {
+            debug!(
+                "detect: an LE16 measurement payload of {} bytes is longer than a UT171 frame",
+                payload.len()
+            );
+            continue;
+        }
+        if probing.last() == Some(DeviceFamily::Ut181a) {
+            // SET_MONITOR has just gone out and this is what came back: the
+            // UT181A streams the same shape, and the frame it was asked for
+            // is its own.
             continue;
         }
         if !probing.has_sent(DeviceFamily::Ut171) {
@@ -799,8 +829,8 @@ raw_payload=15"#
     }
 
     /// A measurement frame short enough for either family is a UT171 once the
-    /// connect frame has gone out — the UT181A fingerprint, consulted first,
-    /// has already declined it.
+    /// connect frame has gone out: SET_MONITOR went out before it and a
+    /// UT181A would have answered that one.
     #[test]
     fn a_measurement_frame_after_the_connect_is_a_ut171() {
         let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
@@ -828,6 +858,34 @@ raw_payload=15"#
                 reported_name: None,
             })
         );
+    }
+
+    /// Past the extended frame's 21 payload bytes (§3.4/§5.2) no UT171 frame
+    /// exists — that length belongs to the UT181A, whose framing is the same.
+    #[test]
+    fn a_payload_longer_than_the_extended_frame_is_not_a_ut171() {
+        let mut payload = make_payload(0x01, 0x01, 1.0, 0x00);
+        payload.resize(MAX_MEASUREMENT_PAYLOAD + 4, 0);
+        let frame = framing::test_frame_le16(&payload);
+        for probing in [
+            Probing::default(),
+            Probing {
+                sent: vec![DeviceFamily::Ut171],
+            },
+        ] {
+            assert_eq!(recognised(&frame, &probing), None);
+        }
+    }
+
+    /// The UT181A streams this very shape, and SET_MONITOR was the last thing
+    /// sent: the frame it asked for is its own.
+    #[test]
+    fn a_measurement_frame_right_after_set_monitor_is_not_a_ut171() {
+        let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        let probing = Probing {
+            sent: vec![DeviceFamily::Ut181a],
+        };
+        assert_eq!(recognised(&frame, &probing), None);
     }
 
     /// The meter's short replies share the measurement type byte, so they

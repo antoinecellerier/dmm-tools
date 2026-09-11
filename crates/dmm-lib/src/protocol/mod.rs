@@ -210,14 +210,16 @@ impl std::str::FromStr for DeviceFamily {
 /// What one family contributes to auto-detection.
 ///
 /// The engine in [`crate::detect`] owns the listen windows, the receive
-/// buffer and the order the fingerprints are consulted in; everything
+/// buffer and the ranking of what the rules answer; everything
 /// family-specific — the bytes a probe sends, the frame shapes that identify
-/// the meter — lives in the family module, built from the constants it
-/// already puts on the wire. `docs/detection-design.md` is the algorithm and
-/// the reasons behind its shape.
+/// the meter, the order constraint a trigger imposes — lives in the family
+/// module, built from the constants it already puts on the wire. Which
+/// fingerprints run at all comes from [`registry::DEVICES`], whose entries
+/// point here. `docs/detection-design.md` is the algorithm and the reasons
+/// behind its shape.
 pub(crate) struct Fingerprint {
-    /// The family this recognises. The engine's tables key their invariants
-    /// on it, and the rules that depend on what has been sent compare it.
+    /// The family this recognises: what the log and the ambiguity warning
+    /// name, and what the rules that depend on what has been sent compare.
     pub(crate) family: DeviceFamily,
     /// Log label: what the probe is, e.g. `"ut61+ get name"`.
     pub(crate) label: &'static str,
@@ -226,6 +228,16 @@ pub(crate) struct Fingerprint {
     /// [`Protocol::init`] sends, so a meter that answers a probe is left in
     /// the state opening it would have produced anyway.
     pub(crate) trigger: Option<fn(&dyn Transport) -> Result<()>>,
+    /// Families whose trigger must have gone out before this one may be sent.
+    /// The UT171 declares `&[DeviceFamily::Ut181a]`: its connect frame is
+    /// UT181A opcode `0x0A` (start recording), so a UT181A gets its own
+    /// chance to answer first. A family not on the bridge is ignored —
+    /// there is nothing to protect there.
+    pub(crate) send_after: &'static [DeviceFamily],
+    /// Whether the extractor this rule uses validates a checksum. Ranks its
+    /// evidence above a rule that only pattern-matches (UT8802, FS9721) when
+    /// two of them claim the same bytes.
+    pub(crate) checksummed: bool,
     /// Classify the whole receive buffer. Called after every read, so it has
     /// to tolerate partial frames and scan every candidate offset itself: a
     /// bridge can deliver one UART byte per report, and the buffer is never
@@ -244,9 +256,9 @@ pub(crate) enum Evidence {
         reported_name: Option<String>,
     },
     /// The family is settled but no frame named the model: open `fallback`
-    /// unless something better arrives before the window ends. Weaker
-    /// fingerprints are not consulted afterwards — a UT61+ reading must never
-    /// be second-guessed by the checksum-less UT8802 rule.
+    /// unless something better arrives before the window ends. It outranks a
+    /// model claimed by a rule that validates no checksum — a UT61+ reading
+    /// must never be second-guessed by the checksum-less UT8802 rule.
     FamilyOnly {
         /// Registry id to open when nothing names the model.
         fallback: &'static str,

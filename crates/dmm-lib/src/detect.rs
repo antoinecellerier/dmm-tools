@@ -10,16 +10,15 @@
 //!
 //! What each family sends and what it recognises is the family's own
 //! [`Fingerprint`], next to the constants it already puts on the wire; this
-//! module is the engine that runs them, and the two tables below are the
-//! order it runs them in. The reasoning behind both lives in
-//! `docs/detection-design.md`.
+//! module is the engine that runs them. Which fingerprints run, and the order
+//! their triggers go out in, is derived: membership and preference from
+//! [`registry::DEVICES`], the one hard ordering constraint from the
+//! fingerprint that needs it. Nothing here names a family. The reasoning
+//! lives in `docs/detection-design.md`.
 
 use crate::error::{Error, Result};
 use crate::protocol::registry::{self, SelectableDevice};
-use crate::protocol::{
-    DeviceFamily, Evidence, Fingerprint, Probing, fs9721, ut61eplus, ut171, ut181a, ut8802, ut8803,
-    vc8x0,
-};
+use crate::protocol::{DeviceFamily, Evidence, Fingerprint, Probing};
 use crate::transport::Transport;
 use log::{debug, info, warn};
 use std::time::{Duration, Instant};
@@ -67,44 +66,6 @@ const MAX_EMPTY_READS: usize = 256;
 /// the oldest bytes are dropped so growth stays bounded.
 const MAX_RX_BUF: usize = 4096;
 
-/// Every family's fingerprint, in the order they are consulted, strictest
-/// format first.
-///
-/// The order is about which extractor is willing to accept another family's
-/// bytes. The checksummed UT8803 leads: a UT61+ DC V frame also carries
-/// `0x02` at byte 3, but it is 19 bytes long, so its checksum cannot pass
-/// there. The 2-byte-LE pair comes next, UT181A before UT171 because the
-/// UT181A claims only what its own trigger elicited or what only it can send,
-/// leaving the rest to the UT171. The 1-byte BE16 families follow, because a
-/// UT8803 frame's byte 2 is a mode byte that their extractor would read as a
-/// length; the Voltcraft pair before the UT61+, whose bare reading settles
-/// only the family and ends the walk — nothing may sit below it that a
-/// stray frame could still name. The checksum-less `0xAC` UT8802 rule is
-/// last: its validation accepts roughly 1% of random input, and a UT181A
-/// frame is full of arbitrary float32 bytes.
-static FINGERPRINTS: [&Fingerprint; 8] = [
-    &ut8803::FINGERPRINT,
-    &ut181a::FINGERPRINT,
-    &ut171::FINGERPRINT,
-    &vc8x0::VC880_FINGERPRINT,
-    &vc8x0::VC890_FINGERPRINT,
-    &ut61eplus::FINGERPRINT,
-    &ut8802::FINGERPRINT,
-    &fs9721::FINGERPRINT,
-];
-
-/// The fingerprints that have something to send, in the order they send it.
-///
-/// Get Name first because it is the most verified probe and the fastest to
-/// answer; SET_MONITOR before the UT171 connect so a UT181A is identified
-/// before it can be sent `0x0A`, which is its own *start recording* opcode.
-static CASCADE: [&Fingerprint; 4] = [
-    &ut61eplus::FINGERPRINT,
-    &ut181a::FINGERPRINT,
-    &ut171::FINGERPRINT,
-    &vc8x0::VC890_FINGERPRINT,
-];
-
 /// A family settled by a frame that named no model.
 #[derive(Clone, Copy)]
 struct FamilyEvidence {
@@ -114,23 +75,76 @@ struct FamilyEvidence {
     fallback: &'static str,
 }
 
-/// The fingerprints worth running on `bridge`, in [`FINGERPRINTS`] order:
-/// those of the families the registry places on that cable.
+/// The fingerprints worth running on `bridge`, in registry order and each one
+/// once: the ones the entries the registry places on that cable point at.
 ///
 /// That is what keeps the AB CD probes off the CH9325, whose FS9721 meters
 /// they mean nothing to, and the FS9721 rule off every other bridge, where
 /// its frames cannot arrive — without this module knowing either bridge by
-/// name.
+/// name. A family has one fingerprint and several entries point at it, so the
+/// list is deduplicated by identity.
 fn fingerprints_on(bridge: &str) -> Vec<&'static Fingerprint> {
-    let families: Vec<DeviceFamily> = crate::devices_on_bridge(bridge)
+    let mut carried: Vec<&'static Fingerprint> = Vec::new();
+    for fp in crate::devices_on_bridge(bridge)
         .iter()
-        .map(|d| d.family)
-        .collect();
-    FINGERPRINTS
+        .filter_map(|d| d.fingerprint)
+    {
+        if !carried.iter().any(|seen| std::ptr::eq(*seen, fp)) {
+            carried.push(fp);
+        }
+    }
+    carried
+}
+
+/// The triggers `carried` has to send, in the order they go out.
+///
+/// Registry order is the preference, because [`registry::DEVICES`] lists the
+/// most common meters first: that is what puts the UT61+ Get Name — the
+/// best-verified probe and the fastest to answer — at the head of the
+/// cascade, without this module saying so.
+///
+/// The one hard constraint is a fingerprint's own [`Fingerprint::send_after`]:
+/// it waits until every family it names has had its trigger taken. The UT171
+/// connect frame is UT181A opcode `0x0A` (start recording), so SET_MONITOR
+/// goes first and a UT181A is identified before the opcode reaches it. A
+/// named family whose trigger does not go out on this bridge is ignored —
+/// there is nothing there to wait for.
+fn probe_order(carried: &[&'static Fingerprint]) -> Vec<&'static Fingerprint> {
+    let mut pending: Vec<&'static Fingerprint> = carried
         .iter()
         .copied()
-        .filter(|fp| families.contains(&fp.family))
-        .collect()
+        .filter(|fp| fp.trigger.is_some())
+        .collect();
+    let sending: Vec<DeviceFamily> = pending.iter().map(|fp| fp.family).collect();
+    let mut ordered: Vec<&'static Fingerprint> = Vec::with_capacity(pending.len());
+
+    while !pending.is_empty() {
+        // The earliest entry still waiting for nothing. One at a time,
+        // rescanning from the top, so a probe that was deferred goes out as
+        // soon as its constraint is met rather than at the back of the queue.
+        let ready = pending.iter().position(|fp| {
+            fp.send_after.iter().all(|needed| {
+                !sending.contains(needed) || ordered.iter().any(|o| o.family == *needed)
+            })
+        });
+        match ready {
+            Some(i) => ordered.push(pending.remove(i)),
+            None => {
+                // The declarations contradict each other, so no order
+                // satisfies them. Registry order at least still sends every
+                // probe, which beats sending none — and the contradiction is
+                // a code bug the log has to name.
+                let labels: Vec<&str> = pending.iter().map(|fp| fp.label).collect();
+                warn!(
+                    "detect: the send-after rules of {} cannot all be met; falling back to \
+                     registry order",
+                    labels.join(", ")
+                );
+                ordered.append(&mut pending);
+            }
+        }
+    }
+    ordered
 }
 
 /// Identify the meter answering on `transport`, `bridge` being the USB bridge
@@ -141,11 +155,7 @@ fn fingerprints_on(bridge: &str) -> Vec<&'static Fingerprint> {
 /// slowly still gets the whole cascade's worth of time.
 pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
     let carried = fingerprints_on(bridge);
-    let probes: Vec<&'static Fingerprint> = CASCADE
-        .iter()
-        .copied()
-        .filter(|fp| carried.iter().any(|c| c.family == fp.family))
-        .collect();
+    let probes = probe_order(&carried);
     // A bridge no probe belongs to gets one listen window per family it
     // carries instead: those meters stream on their own, and the window
     // sends nothing — which is what makes probing such a bridge blind safe.
@@ -264,7 +274,7 @@ fn listen(
                         reported_name: name,
                     }));
                 }
-                // Unreachable while the tables below hold: every id a
+                // Unreachable while the registry holds: every id a
                 // fingerprint returns is one `DEVICES` carries.
                 None => warn!("detect: the {family} rule claims {id:?}, which is no registry id"),
             },
@@ -286,13 +296,49 @@ fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
     }
 }
 
-/// Classify everything received so far: the first fingerprint that
-/// recognises anything wins.
+/// How much a rule's answer is worth, weakest first.
 ///
-/// That is what arbitrates between families — [`FINGERPRINTS`] is ordered
-/// strictest first — and it is also why [`Evidence::FamilyOnly`] ends the
-/// walk: a UT61+ reading must not be second-guessed by the checksum-less
-/// UT8802 rule sitting below it.
+/// This is what arbitrates when two rules claim the same bytes, in place of a
+/// hand-ordered list of families: the ranking is a property of the evidence,
+/// which each rule already knows about itself.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum Strength {
+    /// A model claimed by a rule whose extractor validates no checksum
+    /// (UT8802, FS9721). The `0xAC` format passes roughly 1% of random
+    /// bytes, and a UT181A frame is full of arbitrary float32 bytes.
+    Unchecksummed,
+    /// A checksummed frame that settles the family but names no model — a
+    /// bare UT61+ reading. Above an unchecksummed claim, below anything that
+    /// picks a model with a checksum behind it.
+    FamilyOnly,
+    /// A model claimed from a frame whose checksum held.
+    Checksummed,
+    /// A model the meter named itself. Only the UT61+ name frame reaches
+    /// here, and it is what tells the siblings of that family apart.
+    Named,
+}
+
+/// What one rule's answer is worth: a checksum behind it, and whether the
+/// meter named itself, are all it takes to rank it.
+fn strength(fp: &Fingerprint, evidence: &Evidence) -> Strength {
+    match evidence {
+        Evidence::Model {
+            reported_name: Some(_),
+            ..
+        } => Strength::Named,
+        Evidence::Model { .. } if fp.checksummed => Strength::Checksummed,
+        Evidence::Model { .. } => Strength::Unchecksummed,
+        Evidence::FamilyOnly { .. } => Strength::FamilyOnly,
+    }
+}
+
+/// Classify everything received so far: every rule runs, and the strongest
+/// evidence wins.
+///
+/// Two rules claiming the same bytes at the same [`Strength`] for *different*
+/// families is a coincidence — a 2^-16 checksum collision, or a rule that
+/// claims too much — and nothing is identified from it: the warning names
+/// both and the caller keeps listening.
 ///
 /// Extractor errors are ignored inside every recogniser: to a classifier
 /// "this is not that format here" is the answer, not a failure, and a
@@ -302,9 +348,40 @@ fn classify(
     recognisers: &[&'static Fingerprint],
     probing: &Probing,
 ) -> Option<(DeviceFamily, Evidence)> {
-    recognisers
-        .iter()
-        .find_map(|fp| (fp.recognise)(buf, probing).map(|evidence| (fp.family, evidence)))
+    let mut best: Option<(Strength, DeviceFamily, Evidence)> = None;
+    let mut tied_with: Option<DeviceFamily> = None;
+
+    for fp in recognisers {
+        let Some(evidence) = (fp.recognise)(buf, probing) else {
+            continue;
+        };
+        let rank = strength(fp, &evidence);
+        if let Some((top, family, _)) = &best {
+            if rank < *top {
+                continue;
+            }
+            if rank == *top {
+                if *family != fp.family {
+                    tied_with = Some(fp.family);
+                }
+                continue;
+            }
+        }
+        // Strictly stronger than anything seen, which also settles any tie
+        // between the weaker claims below it.
+        tied_with = None;
+        best = Some((rank, fp.family, evidence));
+    }
+
+    let (_, family, evidence) = best?;
+    if let Some(other) = tied_with {
+        warn!(
+            "detect: the {family} and {other} rules claim the same bytes with equal \
+             confidence; identifying neither and listening on"
+        );
+        return None;
+    }
+    Some((family, evidence))
 }
 
 /// The registry entry a fingerprint's fallback id names.
@@ -580,9 +657,11 @@ mod tests {
         ));
     }
 
-    /// The full cascade, in the order the design fixes: Get Name first
-    /// (most verified, fastest), SET_MONITOR before the UT171 connect so a
-    /// UT181A is never sent `0x0A`, then the VC-890 ack burst and poll.
+    /// The full cascade as it comes out of the registry and the rules: Get
+    /// Name first (the registry's first entry, and the most verified probe),
+    /// SET_MONITOR before the UT171 connect because the UT171 asks to be sent
+    /// after it, then the VC-890 ack burst and poll. Pinned byte for byte, so
+    /// a registry reshuffle that moves a probe fails here.
     #[test]
     fn the_probes_go_out_in_the_designed_order() {
         let mock = MockTransport::new(vec![]);
@@ -636,70 +715,214 @@ mod tests {
         assert_eq!(buf.len(), MAX_RX_BUF);
     }
 
-    /// A meter the registry can open but no fingerprint recognises is one
-    /// `--device auto` silently never finds.
-    #[test]
-    fn every_hardware_family_has_one_fingerprint() {
-        for device in registry::DEVICES.iter().filter(|d| d.requires_hardware) {
-            let found = FINGERPRINTS
-                .iter()
-                .filter(|fp| fp.family == device.family)
-                .count();
-            assert_eq!(found, 1, "{} has {found} fingerprints", device.id);
-        }
-    }
-
-    /// Two rules for one family would make the weaker one unreachable, and
-    /// which of them ran would depend on the table order alone.
-    #[test]
-    fn no_family_is_fingerprinted_twice() {
-        for (i, fp) in FINGERPRINTS.iter().enumerate() {
-            for other in &FINGERPRINTS[i + 1..] {
-                assert_ne!(
-                    fp.family, other.family,
-                    "{} and {} share a family",
-                    fp.label, other.label
-                );
-            }
-        }
-    }
-
-    /// The registry, not this module, says which rules a bridge gets: the
-    /// CH9325 carries the FS9721 family alone, and no AB CD bridge carries it.
+    /// The registry, not this module, says which rules a bridge gets, and in
+    /// which order: exactly the families `devices_on_bridge` yields there,
+    /// each one once though six registry entries share the UT61+'s.
     #[test]
     fn the_registry_decides_which_fingerprints_a_bridge_gets() {
         let families = |bridge: &str| -> Vec<DeviceFamily> {
             fingerprints_on(bridge).iter().map(|fp| fp.family).collect()
         };
+        // The CH9325 is the FS9721 meters' cable and nothing else's.
         assert_eq!(families("CH9325"), vec![DeviceFamily::Fs9721]);
+        // Every AB CD family: the UT61+, the two bench meters, the LE16 twins
+        // and the Voltcraft pair.
+        assert_eq!(
+            families("CP2110"),
+            vec![
+                DeviceFamily::Ut61EPlus,
+                DeviceFamily::Ut8802,
+                DeviceFamily::Ut8803,
+                DeviceFamily::Ut171,
+                DeviceFamily::Ut181a,
+                DeviceFamily::Vc880,
+                DeviceFamily::Vc890,
+            ]
+        );
+        // The CH9329 carries the three handhelds seen on it — a UT61B+ is
+        // verified there (issue #19) — and not the CP2110-only bench meters.
+        assert_eq!(
+            families("CH9329"),
+            vec![
+                DeviceFamily::Ut61EPlus,
+                DeviceFamily::Ut171,
+                DeviceFamily::Ut181a,
+            ]
+        );
         for bridge in ["CP2110", "CH9329"] {
-            let on_bridge = families(bridge);
-            assert!(!on_bridge.contains(&DeviceFamily::Fs9721), "{bridge}");
-            // Get Name goes out on both: a UT61B+ is verified over CH9329.
-            assert!(on_bridge.contains(&DeviceFamily::Ut61EPlus), "{bridge}");
-            // And SET_MONITOR before the UT171 connect on both — the order
-            // that keeps `0x0A` away from a UT181A, on whichever cable it has.
-            assert!(on_bridge.contains(&DeviceFamily::Ut181a), "{bridge}");
-            assert!(on_bridge.contains(&DeviceFamily::Ut171), "{bridge}");
+            assert!(
+                !families(bridge).contains(&DeviceFamily::Fs9721),
+                "{bridge}"
+            );
         }
         assert!(fingerprints_on("no such bridge").is_empty());
     }
 
-    /// A cascade entry is a fingerprint with something to send, and the
-    /// window it opens only recognises what its own table row does.
+    /// The `0x0A` constraint, derived: whatever the registry order, the
+    /// UT181A's SET_MONITOR goes out before the UT171 connect — on whichever
+    /// cable the two share.
     #[test]
-    fn every_cascade_entry_sends_something_and_is_recognised() {
-        for fp in CASCADE {
-            assert!(
-                fp.trigger.is_some(),
-                "{} is in the cascade but sends nothing",
-                fp.label
-            );
-            let listed = FINGERPRINTS
+    fn the_ut181a_is_probed_before_the_ut171() {
+        for bridge in ["CP2110", "CH9329"] {
+            let order: Vec<DeviceFamily> = probe_order(&fingerprints_on(bridge))
                 .iter()
-                .filter(|f| f.family == fp.family)
-                .count();
-            assert_eq!(listed, 1, "{} is listed {listed} times", fp.label);
+                .map(|fp| fp.family)
+                .collect();
+            let at = |family| {
+                order
+                    .iter()
+                    .position(|f| *f == family)
+                    .unwrap_or_else(|| panic!("{family} sends nothing on {bridge}"))
+            };
+            assert!(
+                at(DeviceFamily::Ut181a) < at(DeviceFamily::Ut171),
+                "{bridge}"
+            );
         }
+    }
+
+    /// Recognises nothing: a synthetic fingerprint is only ever asked what it
+    /// sends and what it waits for.
+    fn recognise_nothing(_buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+        None
+    }
+
+    fn send_nothing(_transport: &dyn Transport) -> Result<()> {
+        Ok(())
+    }
+
+    /// A trigger that waits for a family no bridge here carries.
+    static WAITS_FOR_AN_ABSENT_FAMILY: Fingerprint = Fingerprint {
+        family: DeviceFamily::Vc890,
+        label: "waits for the mock",
+        trigger: Some(send_nothing),
+        send_after: &[DeviceFamily::Mock],
+        checksummed: true,
+        recognise: recognise_nothing,
+    };
+
+    static FIRST_IN_A_CYCLE: Fingerprint = Fingerprint {
+        family: DeviceFamily::Ut171,
+        label: "first in a cycle",
+        trigger: Some(send_nothing),
+        send_after: &[DeviceFamily::Ut181a],
+        checksummed: true,
+        recognise: recognise_nothing,
+    };
+
+    static SECOND_IN_A_CYCLE: Fingerprint = Fingerprint {
+        family: DeviceFamily::Ut181a,
+        label: "second in a cycle",
+        trigger: Some(send_nothing),
+        send_after: &[DeviceFamily::Ut171],
+        checksummed: true,
+        recognise: recognise_nothing,
+    };
+
+    /// A family that is not on this bridge cannot be waited for: there is no
+    /// trigger of its to go out first, so the constraint is moot.
+    #[test]
+    fn a_send_after_naming_an_absent_family_is_ignored() {
+        let order = probe_order(&[&WAITS_FOR_AN_ABSENT_FAMILY]);
+        assert_eq!(order.len(), 1);
+        assert_eq!(order[0].label, "waits for the mock");
+    }
+
+    /// Two triggers each waiting for the other satisfy no order. Registry
+    /// order still sends both, which beats sending neither.
+    #[test]
+    fn a_cycle_falls_back_to_registry_order() {
+        let order: Vec<&str> = probe_order(&[&FIRST_IN_A_CYCLE, &SECOND_IN_A_CYCLE])
+            .iter()
+            .map(|fp| fp.label)
+            .collect();
+        assert_eq!(order, vec!["first in a cycle", "second in a cycle"]);
+    }
+
+    /// A rule that always claims `evidence`, for the ranking tests.
+    macro_rules! claiming {
+        ($name:ident, $family:expr, $checksummed:expr, $evidence:expr) => {
+            static $name: Fingerprint = Fingerprint {
+                family: $family,
+                label: stringify!($name),
+                trigger: None,
+                send_after: &[],
+                checksummed: $checksummed,
+                recognise: |_buf: &[u8], _probing: &Probing| Some($evidence),
+            };
+        };
+    }
+
+    claiming!(
+        NAMED,
+        DeviceFamily::Ut61EPlus,
+        true,
+        Evidence::Model {
+            id: "ut61b+",
+            reported_name: Some("UT61B+".to_string()),
+        }
+    );
+    claiming!(
+        CHECKSUMMED,
+        DeviceFamily::Ut8803,
+        true,
+        Evidence::Model {
+            id: "ut8803",
+            reported_name: None,
+        }
+    );
+    claiming!(
+        FAMILY_ONLY,
+        DeviceFamily::Vc880,
+        true,
+        Evidence::FamilyOnly { fallback: "vc880" }
+    );
+    claiming!(
+        UNCHECKSUMMED,
+        DeviceFamily::Ut8802,
+        false,
+        Evidence::Model {
+            id: "ut8802",
+            reported_name: None,
+        }
+    );
+    claiming!(
+        RIVAL_CHECKSUMMED,
+        DeviceFamily::Ut171,
+        true,
+        Evidence::Model {
+            id: "ut171",
+            reported_name: None,
+        }
+    );
+
+    /// The ranking, in place of the old hand-ordered table: a named model
+    /// beats a checksummed one, which beats a settled family, which beats a
+    /// model claimed with no checksum behind it. Order in the slice is
+    /// deliberately the reverse of the ranking.
+    #[test]
+    fn the_strongest_evidence_wins_whatever_the_order() {
+        let rules: [&'static Fingerprint; 4] = [&UNCHECKSUMMED, &FAMILY_ONLY, &CHECKSUMMED, &NAMED];
+        let probing = Probing::default();
+        let family =
+            |rules: &[&'static Fingerprint]| classify(b"", rules, &probing).map(|(f, _)| f);
+
+        assert_eq!(family(&rules), Some(DeviceFamily::Ut61EPlus));
+        assert_eq!(family(&rules[..3]), Some(DeviceFamily::Ut8803));
+        assert_eq!(family(&rules[..2]), Some(DeviceFamily::Vc880));
+        assert_eq!(family(&rules[..1]), Some(DeviceFamily::Ut8802));
+    }
+
+    /// Two families claiming the same bytes just as strongly is a
+    /// coincidence, not an identification — the window keeps listening.
+    #[test]
+    fn two_families_tied_at_the_top_identify_nothing() {
+        let probing = Probing::default();
+        assert!(classify(b"", &[&CHECKSUMMED, &RIVAL_CHECKSUMMED], &probing).is_none());
+        // The tie is only between the leaders: something stronger settles it.
+        assert_eq!(
+            classify(b"", &[&CHECKSUMMED, &RIVAL_CHECKSUMMED, &NAMED], &probing).map(|(f, _)| f),
+            Some(DeviceFamily::Ut61EPlus)
+        );
     }
 }

@@ -472,6 +472,8 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut181a,
     label: "ut181a set monitor",
     trigger: Some(send_set_monitor),
+    send_after: &[],
+    checksummed: true,
     recognise,
 };
 

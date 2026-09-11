@@ -59,49 +59,69 @@ own.
 | 4 | 3× `AB CD 04 FF 00 02 7B` then `AB CD 03 5E 01 D9` (VC-890 poll) | VC-890 |
 | any | — (nothing sent) | UT8803, UT8802, VC-880 |
 
-The order is load-bearing, and it is ordered by what each probe costs on the *other* meters:
-`0x5F` first because it is the best-verified and the fastest to answer, and the UT181A trigger
-before the UT171 connect so that a UT181A with Communication ON is already identified when the
-`0x0A` opcode that would start a recording on it goes out.
+The order is load-bearing, and it is derived rather than written down. Registry order is the
+preference — `DEVICES` lists the most common meters first, which is what puts `0x5F` at the head,
+the best-verified probe and the fastest to answer. The one hard constraint is the UT171
+fingerprint's own `send_after: &[Ut181a]`, which holds the connect frame back until the UT181A
+trigger has gone out, so that a UT181A with Communication ON is already identified when the `0x0A`
+opcode that would start a recording on it arrives. A family named in `send_after` that the bridge
+does not carry is ignored — there is nothing there to wait for — and constraints that contradict
+each other fall back to registry order with a WARN, since sending every probe in a suspect order
+beats sending none.
 
 Each step logs at DEBUG — the probe sent, and what a rule identified — and the result is
 one INFO line, so `RUST_LOG=dmm_lib=debug` is the whole story when a reporter's meter is not
 recognised.
 
-## Check order
+## Evidence strength
 
 A family's `Fingerprint` (`protocol/mod.rs`) is a log label, an optional trigger — byte-identical
-to what the family's own `init` sends — and a rule that classifies the whole receive buffer with
-that family's extractor and constants. `detect.rs` holds the two tables: `FINGERPRINTS`, the order
-the rules are consulted in, and `CASCADE`, the order the triggers go out in.
+to what the family's own `init` sends — the families that trigger has to follow (`send_after`),
+whether its extractor validates a checksum, and a rule that classifies the whole receive buffer
+with that family's constants. Which of them run is the registry's call: every `DEVICES` entry
+points at its family's fingerprint, and detection runs the ones the bridge carries, in table order.
 
 A rule answers `Evidence::Model` (a registry id, plus the name where the meter sent one) or
-`Evidence::FamilyOnly` (the family is settled, no model named). The first rule that answers at all
-wins, and a `FamilyOnly` ends the walk — the weaker rules below it never get to second-guess it.
-Rules run after every read, against every candidate offset in the buffer, and extractor errors are
-ignored throughout: to a classifier "this is not that format here" is the answer, not a failure,
-and a checksum mismatch at one offset says nothing about the next.
+`Evidence::FamilyOnly` (the family is settled, no model named). Every carried rule runs after
+every read, against every candidate offset in the buffer, and the strongest answer wins:
 
-`FINGERPRINTS` is ordered strictest format first, because the ordering is about which extractor is
-willing to accept another family's bytes:
+| Rank | Evidence | Where it comes from |
+|---|---|---|
+| 4 | a model the meter named itself | the UT61+ name frame, the only one that picks an exact sibling |
+| 3 | a model from a frame whose checksum held | UT8803, UT171, UT181A, VC-880, VC-890 |
+| 2 | `FamilyOnly` — a checksummed frame naming no model | a bare 14-byte UT61+ reading |
+| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), FS9721 |
 
-1. `ut8803` — byte 3 is `0x02` and the 21-byte checksum holds. A UT61+ DC V frame also carries
-   `0x02` at byte 3, but it is 19 bytes long, so its checksum fails there.
-2. `ut181a`, then `ut171` — the 2-byte-LE pair, whose framing and measurement type byte (`0x02`)
-   are identical and whose payload lengths overlap. The UT181A takes a payload ≥ 31 bytes (only it
-   can send one) and anything its own trigger elicited; the UT171, consulted next, takes the rest,
-   with a WARN when nothing had been sent yet. Payload `[0] == 0x01` is an OK/ER reply and is
-   ignored. Neither can fire on the other families: a UT61+ name frame reads a length of `0x5508`,
-   a VC-880 frame `0x0124`.
-3. `vc880` and `vc890`, then `ut61eplus` — the 1-byte BE16 families, after the LE16 pair because a
-   UT8803 frame's byte 2 is a mode byte that reads as a plausible length here. Payload `[0] == 0x01`
-   with length 34 is `vc880`, length 61 `vc890`. `FF 00` is an ack — skipped. Printable ASCII of
-   length 3..=20 is a UT61+ name; a 14-byte payload is a UT61+ reading, which settles the family
-   only (`FamilyOnly`, fallback `ut61eplus`) and ends the walk — which is why the UT61+ rule sits
-   below every rule a stray frame could still satisfy.
-4. `ut8802` last — `0xAC` offsets, two consecutive `extract_frame_ut8802` hits exactly 8 bytes
-   apart. That format's validation passes roughly 1% of random bytes and UT181A frames carry
-   arbitrary float32 payload, which is also why a `FamilyOnly` above it stops the walk.
+A `FamilyOnly` at the top is remembered rather than acted on: the window keeps listening, and a
+name frame arriving in it outranks the fallback (see
+[Names and the registry](#names-and-the-registry)). When the window ends with nothing stronger,
+that fallback is what detection returns rather than the next probe going out — the family is
+settled, and every trigger left in the cascade belongs to another one. Two *different* families
+tied at the top identify nothing: a WARN names both and the window keeps listening, because a
+tie is a 2^-16 checksum collision or a rule claiming too much, not a meter.
+Extractor errors are ignored throughout: to a classifier "this is not that format here" is the
+answer, not a failure, and a checksum mismatch at one offset says nothing about the next.
+
+The overlaps the ranking arbitrates, each rule declining what is not its own:
+
+- `ut8803` — byte 3 is `0x02` and the 21-byte checksum holds. A UT61+ DC V frame also carries
+  `0x02` at byte 3, but it is 19 bytes long, so its checksum fails there.
+- `ut181a` and `ut171` — the 2-byte-LE pair, whose framing and measurement type byte (`0x02`) are
+  identical and whose payload lengths overlap. The UT181A takes a payload ≥ 31 bytes (only it can
+  send one) and anything its own trigger elicited. The UT171 declines exactly those two: a payload
+  past 21 bytes is longer than its own extended frame
+  ([ut171 §3.4/§5.2](research/ut171/reverse-engineered-protocol.md)), and a frame arriving right
+  after SET_MONITOR is the one that command asked for. It takes the rest, with a WARN when nothing
+  had been sent yet. Payload `[0] == 0x01` is an OK/ER reply and is ignored. Neither can fire on
+  the other families: a UT61+ name frame reads a length of `0x5508`, a VC-880 frame `0x0124`.
+- `vc880`, `vc890` and `ut61eplus` — the 1-byte BE16 families. A UT8803 frame's byte 2 is a mode
+  byte that reads as a plausible length here, which is what the checksum settles. Payload
+  `[0] == 0x01` with length 34 is `vc880`, length 61 `vc890`. `FF 00` is an ack — skipped.
+  Printable ASCII of length 3..=20 is a UT61+ name; a 14-byte payload is a UT61+ reading, which
+  settles the family only (`FamilyOnly`, fallback `ut61eplus`).
+- `ut8802` — `0xAC` offsets, two consecutive `extract_frame_ut8802` hits exactly 8 bytes apart.
+  That format's validation passes roughly 1% of random bytes and UT181A frames carry arbitrary
+  float32 payload, which is why an unchecksummed claim ranks below even a settled family.
 
 `fs9721` is the CH9325's rule and is the only one consulted there; the AB CD rules are the other
 bridges' (see [Bridges and adapters](#bridges-and-adapters)).
@@ -153,12 +173,12 @@ worth. Extractor errors are ignored, never propagated.
 | Failure mode | Cause | What the user sees | Mitigation |
 |---|---|---|---|
 | Nothing answers | Meter off; Communication OFF (UT171/UT181A); PC button not pressed (VC-880); wrong cable; CH9325 at the wrong baud; a meter whose arm is wrong | `DeviceNotIdentified` after ~2.6 s | Help lists the activation instructions of every family on that bridge and ends with how to name the meter yourself and where to report it; `--device <id>` pins a model and skips probing; in the GUI a first failure shows the help and waits for Connect, while a drop mid-session reconnects and re-probes on its own |
-| Misidentification from junk | Random bytes passing a lax extractor (the `0xAC` 8-byte UT8802 format passes ~1% of random input); garbage from a wrong CH9325 baud | Wrong parser, later checksum or parse errors | Checksummed formats first, strictest first; UT8802 needs two consecutive frames 8 bytes apart; `0xAC` only when no `AB CD` frame classified; the "Detected X" notice tells the user what was picked and that `--device` overrides it |
+| Misidentification from junk | Random bytes passing a lax extractor (the `0xAC` 8-byte UT8802 format passes ~1% of random input); garbage from a wrong CH9325 baud | Wrong parser, later checksum or parse errors | Checksummed evidence outranks a pattern match, and a named model outranks both; UT8802 needs two consecutive frames 8 bytes apart, so its claim only stands when no `AB CD` rule made a stronger one; the "Detected X" notice tells the user what was picked and that `--device` overrides it |
 | Stale frame from an earlier session | CH9329 does not purge RX on open; a UT61+ mid-poll or a UT181A left streaming | Family evidence arriving before the probe reply | A name frame outranks a measurement frame within the window; a lone 14-byte UT61+ frame falls back to `ut61eplus` with `reported_name: None` and a WARN |
-| UT181A vs UT171 ambiguity | Same framing and type byte; payload lengths overlap (UT181A 19 bytes without aux or bargraph, UT171 16/22) | Wrong one of the two | Payload ≥ 31 → UT181A; else the step that elicited the stream decides; a ≤ 22-byte frame before any LE16 trigger → UT171 with a WARN; recorded in the backlog; parse-based arbitration once UT171 hardware exists |
+| UT181A vs UT171 ambiguity | Same framing and type byte; payload lengths overlap (UT181A 19 bytes without aux or bargraph, UT171 16/22) | Wrong one of the two | Payload ≥ 31 → UT181A; a payload past 21 bytes is past the UT171's extended frame, and a frame right after SET_MONITOR is the UT181A's, so the UT171 rule declines both; what is left before any LE16 trigger → UT171 with a WARN; recorded in the backlog; parse-based arbitration once UT171 hardware exists |
 | VC650BT reported as VC-880 | The two Voltcraft meters speak a byte-identical protocol, so no frame tells them apart | The wrong name on screen, readings unaffected | Pick the VC650BT chip or `--device vc650bt` to carry the right name; same tables either way |
 | Unknown UT61+ name | UT61D+/UT161x/UT60BT names never seen; a future model | Reading works, tables may be off | Fall back to `ut61eplus` tables, keep `reported_name`, notice "meter reports X, using UT61E+ tables"; ask the user to report the name; registry aliases absorb spelling variants. What the GUI saves is that fallback entry, and its toast names the model the meter reported, which is what the user has to quote |
-| Probe side effect on the wrong meter | The UT171 connect is UT181A opcode `0x0A` (start recording); SET_MONITOR `0x05` meaning on a UT171 unknown; `0x5F` on VC-8x0/UT171/UT181A unknown | A recording started, a beep, or nothing | Order: `0x5F` first (most verified, replies within 200 ms), the UT181A trigger before the UT171 connect so a UT181A with Communication ON never receives `0x0A`; one with it OFF ignores everything; each exposure listed in the backlog for reporters to confirm; `--device` avoids probing entirely |
+| Probe side effect on the wrong meter | The UT171 connect is UT181A opcode `0x0A` (start recording); SET_MONITOR `0x05` meaning on a UT171 unknown; `0x5F` on VC-8x0/UT171/UT181A unknown | A recording started, a beep, or nothing | Order: `0x5F` first (registry order puts the most common meter first, and it is the most verified probe, replying within 200 ms), the UT171's `send_after` putting the UT181A trigger before the connect, so a UT181A with Communication ON that answers inside its own window is identified before `0x0A` goes out — a reply that only finishes arriving after that window's deadline is not, and the backlog carries the gap; one with Communication OFF ignores everything; each exposure listed in the backlog for reporters to confirm; `--device` avoids probing entirely |
 | Probe changes meter state | SET_MONITOR left on; the VC-890 ack burst | None expected | SET_MONITOR is what the UT181A init sends anyway; the acks are what the vendor software sends before every command |
 | Slow or sparse replies | UT8803 streams at 2–3 Hz; VC-880 rate unknown; UT61+ name seen within 191 ms | A missed frame in a short window | Windows ≥ 600 ms; the buffer persists across steps, so a streamer gets the whole ≈2.6 s budget and a frame split across a window boundary survives |
 | Byte-at-a-time delivery | CP2110 delivers one UART byte per HID report | Partial frames | Accumulate and re-classify after every read; never clear the buffer on a step boundary |
@@ -171,13 +191,15 @@ worth. Extractor errors are ignored, never propagated.
 ## Adding a family
 
 A family joins detection with four things: a `Fingerprint` exported from its own module, built
-from the constants it already sends and parses with, and listed in `FINGERPRINTS` by how strict
-its extractor is against the rules already there — and in `CASCADE` as well if it has something to
-send; a test beside that rule, over real bytes where hardware exists and the vendor trace
-otherwise; a row in the cascade table above, or in its unprompted line if the meter streams by
-itself; and a line in the backlog's
+from the constants it already sends and parses with, declaring whether its extractor checks a
+checksum and which families its trigger has to follow, and pointed at from every one of that
+family's `DEVICES` entries — nothing is added to `detect.rs`; a test beside that rule, over real
+bytes where hardware exists and the vendor trace otherwise; a row in the cascade table above, or
+in its unprompted line if the meter streams by itself; and a line in the backlog's
 [Device auto-detection](verification-backlog.md#device-auto-detection) section saying what is
 sent, what is expected back, and whether hardware has confirmed it. A family that needs a trigger
 also owns the question of what that trigger does to every other meter on the same bridge — the
-`0x0A` collision between the UT171 connect and UT181A start recording is why the cascade order,
-not just its contents, is part of the design.
+`0x0A` collision between the UT171 connect and UT181A start recording is why `send_after` is a
+field on the fingerprint rather than a comment. A rule that another family's frames could satisfy
+is the rule's own problem too: it declines what its spec cannot produce rather than relying on
+being asked second.

@@ -396,6 +396,8 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut8803,
     label: "ut8803 stream",
     trigger: None,
+    send_after: &[],
+    checksummed: true,
     recognise,
 };
 

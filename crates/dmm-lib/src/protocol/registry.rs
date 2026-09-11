@@ -6,7 +6,9 @@ use super::ut8802::Ut8802Protocol;
 use super::ut8803::Ut8803Protocol;
 use super::vc8x0::vc880::Vc880Protocol;
 use super::vc8x0::vc890::Vc890Protocol;
-use super::{DeviceFamily, Protocol};
+use super::{
+    DeviceFamily, Fingerprint, Protocol, fs9721, ut61eplus, ut171, ut181a, ut8802, ut8803, vc8x0,
+};
 use crate::mock::MockProtocol;
 
 /// A selectable device in the GUI device picker and CLI --device flag.
@@ -25,6 +27,15 @@ pub struct SelectableDevice {
     pub family: DeviceFamily,
     /// Factory: create a Protocol instance configured for this device.
     pub new_protocol: fn() -> Box<dyn Protocol>,
+    /// The family's auto-detection rule (`crate::detect`), `None` for a
+    /// device that is never on a cable. Every entry of a family points at the
+    /// same static: it is the family that is recognised, not the model — the
+    /// rule picks the entry itself, from the name the meter reports.
+    ///
+    /// Having it here is what lets detection derive both its membership and
+    /// its order from this table, the way `new_protocol` already gives the
+    /// opener its parser.
+    pub(crate) fingerprint: Option<&'static Fingerprint>,
     /// URL to manufacturer's product page (for "Manual" hyperlink in GUI).
     pub manual_url: Option<&'static str>,
 }
@@ -101,6 +112,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
         new_protocol: new_ut61eplus,
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     },
     SelectableDevice {
@@ -111,6 +123,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
         new_protocol: new_ut61bplus,
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     },
     SelectableDevice {
@@ -121,6 +134,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
         new_protocol: new_ut61dplus,
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
     },
     SelectableDevice {
@@ -131,6 +145,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
         new_protocol: new_ut161b, // same table as UT61B+
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     SelectableDevice {
@@ -141,6 +156,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
         new_protocol: new_ut161d, // same table as UT61D+
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     SelectableDevice {
@@ -151,6 +167,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT61EPLUS,
         family: DeviceFamily::Ut61EPlus,
         new_protocol: new_ut161e, // same table as UT61E+
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
     },
     // Other families
@@ -162,6 +179,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT8803, // same setup as UT8803
         family: DeviceFamily::Ut8802,
         new_protocol: factory::<Ut8802Protocol>,
+        fingerprint: Some(&ut8802::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8802"),
     },
     SelectableDevice {
@@ -172,6 +190,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT8803,
         family: DeviceFamily::Ut8803,
         new_protocol: factory::<Ut8803Protocol>,
+        fingerprint: Some(&ut8803::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
     },
     SelectableDevice {
@@ -182,6 +201,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT803,
         family: DeviceFamily::Fs9721,
         new_protocol: || Box::new(Fs9721Protocol::new_ut803()),
+        fingerprint: Some(&fs9721::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
     },
     SelectableDevice {
@@ -192,6 +212,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT803,
         family: DeviceFamily::Fs9721,
         new_protocol: || Box::new(Fs9721Protocol::new_ut804()),
+        fingerprint: Some(&fs9721::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
     },
     SelectableDevice {
@@ -202,6 +223,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT171,
         family: DeviceFamily::Ut171,
         new_protocol: factory::<Ut171Protocol>,
+        fingerprint: Some(&ut171::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut171-series/"),
     },
     SelectableDevice {
@@ -212,6 +234,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_UT181A,
         family: DeviceFamily::Ut181a,
         new_protocol: factory::<Ut181aProtocol>,
+        fingerprint: Some(&ut181a::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut181a/"),
     },
     // Voltcraft
@@ -223,6 +246,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_VC880,
         family: DeviceFamily::Vc880,
         new_protocol: factory::<Vc880Protocol>,
+        fingerprint: Some(&vc8x0::VC880_FINGERPRINT),
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc880-handheld-multimeter-digital-calibrated-to-manufacturers-standards-no-certificate-data-logger-cat-iii-124609",
         ),
@@ -235,6 +259,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_VC880, // same protocol as VC-880
         family: DeviceFamily::Vc880,
         new_protocol: || Box::new(Vc880Protocol::for_model("Voltcraft VC650BT")),
+        fingerprint: Some(&vc8x0::VC880_FINGERPRINT),
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
         ),
@@ -247,6 +272,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_VC880, // same activation as VC-880
         family: DeviceFamily::Vc890,
         new_protocol: factory::<Vc890Protocol>,
+        fingerprint: Some(&vc8x0::VC890_FINGERPRINT),
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
         ),
@@ -260,6 +286,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_MOCK,
         family: DeviceFamily::Mock,
         new_protocol: factory::<MockProtocol>,
+        fingerprint: None,
         manual_url: Some(
             "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#mock-modes",
         ),
@@ -585,5 +612,43 @@ mod tests {
                 device.id
             );
         }
+    }
+
+    /// A meter this table can open but that points at no fingerprint is one
+    /// `--device auto` silently never finds.
+    #[test]
+    fn every_hardware_device_carries_a_fingerprint() {
+        for device in DEVICES.iter().filter(|d| d.requires_hardware) {
+            assert!(
+                device.fingerprint.is_some(),
+                "{} joins no detection cascade",
+                device.id
+            );
+        }
+    }
+
+    /// Detection recognises a family, not a model — so the siblings of one
+    /// family share a single rule, and a second rule for it would be dead
+    /// code whichever of the two ran first.
+    #[test]
+    fn one_family_has_one_fingerprint() {
+        for device in DEVICES {
+            let Some(fingerprint) = device.fingerprint else {
+                continue;
+            };
+            assert_eq!(fingerprint.family, device.family, "{}", device.id);
+            for other in DEVICES.iter().filter(|d| d.family == device.family) {
+                let same = other
+                    .fingerprint
+                    .is_some_and(|f| std::ptr::eq(f, fingerprint));
+                assert!(same, "{} and {} disagree", device.id, other.id);
+            }
+        }
+    }
+
+    /// The mock is on no cable, so nothing can identify it from the wire.
+    #[test]
+    fn the_mock_carries_no_fingerprint() {
+        assert!(find_device("mock").unwrap().fingerprint.is_none());
     }
 }

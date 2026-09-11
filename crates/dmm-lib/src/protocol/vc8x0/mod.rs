@@ -682,6 +682,8 @@ pub(crate) static VC880_FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Vc880,
     label: "vc-880 stream",
     trigger: None,
+    send_after: &[],
+    checksummed: true,
     recognise: recognise_vc880,
 };
 
@@ -691,6 +693,8 @@ pub(crate) static VC890_FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Vc890,
     label: "vc-890 poll",
     trigger: Some(vc890::request_live),
+    send_after: &[],
+    checksummed: true,
     recognise: recognise_vc890,
 };
 

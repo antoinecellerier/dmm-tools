@@ -560,6 +560,8 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut61EPlus,
     label: "ut61+ get name",
     trigger: Some(send_get_name),
+    send_after: &[],
+    checksummed: true,
     recognise,
 };
 

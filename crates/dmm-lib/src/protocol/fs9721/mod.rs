@@ -714,6 +714,8 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Fs9721,
     label: "fs9721 stream",
     trigger: None,
+    send_after: &[],
+    checksummed: false,
     recognise,
 };
 
