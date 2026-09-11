@@ -67,10 +67,6 @@ const MAX_EMPTY_READS: usize = 256;
 /// the oldest bytes are dropped so growth stays bounded.
 const MAX_RX_BUF: usize = 4096;
 
-/// Bridge whose meters use FS9721 framing, spelled as `KNOWN_TRANSPORTS`
-/// spells it.
-const CH9325_BRIDGE: &str = "CH9325";
-
 /// Every family's fingerprint, in the order they are consulted, strictest
 /// format first.
 ///
@@ -118,21 +114,33 @@ struct FamilyEvidence {
     fallback: &'static str,
 }
 
+/// The fingerprints worth running on `bridge`, in [`FINGERPRINTS`] order:
+/// those of the families the registry places on that cable.
+///
+/// That is what keeps the AB CD probes off the CH9325, whose FS9721 meters
+/// they mean nothing to, and the FS9721 rule off every other bridge, where
+/// its frames cannot arrive — without this module knowing either bridge by
+/// name.
+fn fingerprints_on(bridge: &str) -> Vec<&'static Fingerprint> {
+    let families: Vec<DeviceFamily> = crate::devices_on_bridge(bridge)
+        .iter()
+        .map(|d| d.family)
+        .collect();
+    FINGERPRINTS
+        .iter()
+        .copied()
+        .filter(|fp| families.contains(&fp.family))
+        .collect()
+}
+
 /// Identify the meter answering on `transport`, `bridge` being the USB bridge
-/// it is reached through (`"CP2110"`, `"CH9329"`, `"CH9325"`).
+/// it is reached through, spelled as `KNOWN_TRANSPORTS` spells it.
 ///
 /// Sends each family's trigger in turn and classifies everything that comes
 /// back; the receive buffer persists across steps, so a meter that speaks
 /// slowly still gets the whole cascade's worth of time.
 pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
-    // The CH9325 carries the FS9721 family and nothing else, and no other
-    // bridge carries it: the AB CD probes mean nothing to an FS9721 meter,
-    // and its own frames cannot arrive anywhere else.
-    let carried: Vec<&'static Fingerprint> = FINGERPRINTS
-        .iter()
-        .copied()
-        .filter(|fp| (fp.family == DeviceFamily::Fs9721) == (bridge == CH9325_BRIDGE))
-        .collect();
+    let carried = fingerprints_on(bridge);
     let probes: Vec<&'static Fingerprint> = CASCADE
         .iter()
         .copied()
@@ -654,6 +662,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The registry, not this module, says which rules a bridge gets: the
+    /// CH9325 carries the FS9721 family alone, and no AB CD bridge carries it.
+    #[test]
+    fn the_registry_decides_which_fingerprints_a_bridge_gets() {
+        let families = |bridge: &str| -> Vec<DeviceFamily> {
+            fingerprints_on(bridge).iter().map(|fp| fp.family).collect()
+        };
+        assert_eq!(families("CH9325"), vec![DeviceFamily::Fs9721]);
+        for bridge in ["CP2110", "CH9329"] {
+            let on_bridge = families(bridge);
+            assert!(!on_bridge.contains(&DeviceFamily::Fs9721), "{bridge}");
+            // Get Name goes out on both: a UT61B+ is verified over CH9329.
+            assert!(on_bridge.contains(&DeviceFamily::Ut61EPlus), "{bridge}");
+            // And SET_MONITOR before the UT171 connect on both — the order
+            // that keeps `0x0A` away from a UT181A, on whichever cable it has.
+            assert!(on_bridge.contains(&DeviceFamily::Ut181a), "{bridge}");
+            assert!(on_bridge.contains(&DeviceFamily::Ut171), "{bridge}");
+        }
+        assert!(fingerprints_on("no such bridge").is_empty());
     }
 
     /// A cascade entry is a fingerprint with something to send, and the

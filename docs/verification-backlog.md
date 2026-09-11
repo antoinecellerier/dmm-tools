@@ -49,6 +49,10 @@ Open questions, each needing a meter:
 - **Does a VC-890 answer `0x5E` on the first attempt?** The vendor software
   retries the name request up to 10 times with a buffer flush between
   attempts, so a single poll may not be enough.
+- **Opening after detection runs the family's `init` again**, so a UT181A
+  receives SET_MONITOR twice and a UT171 its connect frame twice per auto
+  open. Harmless on paper — both are what the meter was already sent — but
+  no meter has been watched doing it.
 
 ## Pending Verification
 

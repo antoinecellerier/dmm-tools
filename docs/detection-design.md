@@ -120,10 +120,15 @@ help. Its `Display` names the USB cable, never the bridge chip.
 
 ## Bridges and adapters
 
-CP2110 and CH9329 run the same cascade; the shortcut issue #9 assumed (CH9329 means UT181A)
-does not hold. CH9325 is receive-only past its init, which already sends `0x5A`, so detection
-there is a single listen window with the UT804 marker checked first (`nibbles[9] == 0xD` and
-`nibbles[10] == 0xA`), then UT803's mode-nibble set.
+Which rules a bridge gets is the registry's call, not `detect.rs`'s: `preferred_transports()` in
+`lib.rs` lists the cables each family is found on, and detection runs only the fingerprints of the
+families listed on the bridge it opened — the same list the "no meter answered" help draws on. The
+shortcut issue #9 assumed (CH9329 means UT181A) does not hold: a UT61B+ is verified over CH9329
+and older UT181A units ship the CP2110, so CP2110 and CH9329 run the same cascade. The CH9325
+carries the FS9721 family alone; it is receive-only past its init, which already sends `0x5A`, so
+detection there is a single listen window with the UT804 marker checked first (`nibbles[9] == 0xD`
+and `nibbles[10] == 0xA`), then UT803's mode-nibble set. A family seen on a new cable joins
+detection there by being listed on it.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a

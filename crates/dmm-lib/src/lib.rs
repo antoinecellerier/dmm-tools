@@ -138,24 +138,29 @@ struct KnownTransport {
     init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
 }
 
-/// The USB cable(s) a device family is known to ship with, most likely first.
+/// The USB cables a device family is found on, most likely first.
 ///
 /// Sourced from the cable table in `docs/supported-devices.md`: the CP2110
-/// UT-D09 covers UT61x+/UT161x/UT171x/UT880x and the Voltcraft meters, the
-/// CH9329 UT-D09 variant is sold for the UT181A and UT171 series, and the
-/// CH9325 UT-D04 is what the UT803/UT804 use.
+/// UT-D09 covers UT61x+/UT161x/UT171x/UT880x, the Voltcraft meters and older
+/// UT181A units; the CH9329 UT-D09 variant is sold for the UT181A and UT171
+/// series and is confirmed on a UT61B+ (issue #19); the CH9325 UT-D04 is
+/// what the UT803/UT804 use.
 ///
-/// This only orders the candidates — [`open_first_match`] still falls back to
-/// the remaining transports, so an unusual cable keeps working. Without it,
-/// selecting a UT803 on a bench that also has a UT61E+ attached opens the
-/// UT61E+'s CP2110 and every read times out.
+/// Two things read it. Opening only orders the candidates —
+/// [`open_first_match`] still falls back to the remaining transports, so an
+/// unusual cable keeps working; without the order, selecting a UT803 on a
+/// bench that also has a UT61E+ attached opens the UT61E+'s CP2110 and every
+/// read times out. Detection takes it literally: a bridge is probed only
+/// with the fingerprints of the families listed on it, and the "no meter
+/// answered" help lists those same families — so a cable a family is seen
+/// on belongs here, whether or not it is the likely one.
 fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static str] {
     use protocol::DeviceFamily as F;
     match family {
-        F::Ut61EPlus | F::Ut8802 | F::Ut8803 | F::Vc880 | F::Vc890 => &["CP2110"],
+        F::Ut8802 | F::Ut8803 | F::Vc880 | F::Vc890 => &["CP2110"],
+        F::Ut61EPlus | F::Ut171 => &["CP2110", "CH9329"],
+        F::Ut181a => &["CH9329", "CP2110"],
         F::Fs9721 => &["CH9325"],
-        F::Ut181a => &["CH9329"],
-        F::Ut171 => &["CP2110", "CH9329"],
         F::Mock => &[],
     }
 }
@@ -778,6 +783,18 @@ mod tests {
             .map(|d| d.id)
             .collect();
         assert_eq!(on_bridge, fs9721);
+    }
+
+    /// A UT61B+ is verified over the CH9329 (issue #19), so the help for a
+    /// silent CH9329 must offer the UT61+ setup — and detection must send
+    /// Get Name there.
+    #[test]
+    fn ch9329_carries_the_ut61plus_family() {
+        assert!(
+            devices_on_bridge("CH9329")
+                .iter()
+                .any(|d| d.family == protocol::DeviceFamily::Ut61EPlus)
+        );
     }
 
     /// The mock needs no cable, and offering it as a candidate on a bridge

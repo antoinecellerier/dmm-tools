@@ -324,7 +324,7 @@ transport layer.
 
 | Cable | Chip | VID:PID | Direction | Notes |
 |-------|------|---------|-----------|-------|
-| **UT-D09** (CP2110) | CP2110 | `10C4:EA80` | Bidirectional | Used by UT61x+, UT161x, UT171x, UT880x |
+| **UT-D09** (CP2110) | CP2110 | `10C4:EA80` | Bidirectional | Used by UT61x+, UT161x, UT171x, UT880x, the Voltcraft meters and older UT181A units |
 | **UT-D09** (CH9329) | CH9329 | `1A86:E429` | Bidirectional | Sold for UT181A, UT171 series, UT243; confirmed working on a UT181A and on a UT61B+ |
 | **UT-D04** | CH9325 / HE2325U | `1A86:E008` | RX only | Used by older UNI-T meters (UT61E original, etc.) |
 | **UT-D02** | RS232 level converter | N/A | Bidirectional | Serial port, no USB |
