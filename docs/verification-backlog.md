@@ -19,7 +19,7 @@ is probed with, and how well that probe is backed:
 | UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
 | UT8803 | nothing — the meter streams | `AB CD` frame, byte 3 `0x02`, 21-byte checksum | Deduced from the vendor traces, unverified |
 | UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | an FS9721 frame — UT804 by its `D`/`A` marker nibbles, otherwise UT803's mode nibbles | Deduced from the vendor traces, unverified |
-| VC-880 | nothing — the meter streams once PC is pressed | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
+| VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
 
 Open questions, each needing a meter:

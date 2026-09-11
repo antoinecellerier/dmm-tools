@@ -577,6 +577,13 @@ type BoxedDmm = dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>;
 /// where the opener could hand it to them, and a run only ever opens one meter.
 static AUTO_DETECTED: OnceLock<dmm_lib::detect::Detected> = OnceLock::new();
 
+/// How the help for a silent cable ends: the way to bypass detection, and
+/// the ask that turns an unrecognised meter into a registry fix.
+const NOT_IDENTIFIED_SELF_HELP: &str = "\nIf the meter is on and transmitting but still not recognised, name it:\n  \
+     dmm-cli --device <id> ...      (dmm-cli --help lists the ids)\n\
+     and please report it with RUST_LOG=dmm_lib=debug output at\n  \
+     https://github.com/antoinecellerier/dmm-tools/issues";
+
 /// Whether this selection means opening a USB cable. Auto does: there is
 /// nothing to detect without one.
 fn requires_hardware(selection: Selection) -> bool {
@@ -614,12 +621,15 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static SelectableDevi
     let device = detected.device;
     // A name the registry doesn't carry still identifies the family, and the
     // tables in use are then someone else's — say whose, and how to override.
+    // Either way the line ends with the exact option that skips the probe next
+    // time, so the user never has to look the id up.
     let note = match &detected.reported_name {
         Some(name) if name != device.display_name => format!(
-            " (the meter reports {name:?}; using {} tables \u{2014} pass --device to override)",
-            device.display_name
+            " (the meter reports {name:?}; using {} tables \u{2014} pass --device {} to keep them, \
+             or another id to override)",
+            device.display_name, device.id
         ),
-        _ => String::new(),
+        _ => format!(" (pass --device {} to skip detection next time)", device.id),
     };
     eprintln!(
         "{}",
@@ -822,6 +832,9 @@ fn open_error_help(
                 for line in instructions.lines() {
                     eprintln!("{}", style(format!("  {line}")).dim());
                 }
+            }
+            for line in NOT_IDENTIFIED_SELF_HELP.lines() {
+                eprintln!("{}", style(line).yellow());
             }
             "device not identified".into()
         }

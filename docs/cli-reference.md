@@ -40,9 +40,10 @@ mode/range mappings than UT61E+).
 `auto`, the default, identifies the meter from the frames it answers with instead of
 being told ([how detection works](detection-design.md)). A meter that answers the first
 probe costs about 200 ms; nothing answering at all costs ~2.6 s and then lists what to
-switch on for every meter that cable could carry. `--device <id>` pins a model and
+switch on for every meter that cable could carry, how to name the meter with `--device` when it
+is already transmitting, and where to report it. `--device <id>` pins a model and
 skips probing entirely. The name probe makes a UT61+/UT161 beep once per connect; a pinned
-family stays silent.
+model stays silent.
 
 **Device resolution precedence** (highest to lowest):
 
@@ -52,7 +53,7 @@ family stays silent.
 
 `dmm-gui` also writes the meter it detects into `device_family`, so after one GUI session on that cable the CLI opens that meter directly instead of probing for it.
 
-When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so it is clear no model was named. That notice is suppressed for commands that don't open a device (`list`, `completions`). Every detected open adds a second dim line naming the meter that was found, and the model name the meter reported when it differs from the entry's.
+When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so it is clear no model was named. That notice is suppressed for commands that don't open a device (`list`, `completions`). Every detected open adds a second dim line naming the meter that was found, the exact `--device <id>` that pins it for later runs, and the model name the meter reported when it differs from the entry's.
 
 <!-- devices:start -->
 | Value | Aliases | Description |
