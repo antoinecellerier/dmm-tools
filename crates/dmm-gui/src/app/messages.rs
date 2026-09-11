@@ -119,6 +119,10 @@ fn not_identified_help(bridge: &str) -> String {
         msg.push_str(steps);
         msg.push('\n');
     }
+    msg.push_str(
+        "\nAlready transmitting and still not recognised? Pick its model in Settings \
+         (\u{2699}) and please report it.\n",
+    );
     msg
 }
 
@@ -925,6 +929,11 @@ mod tests {
         // The mock is not on any bridge, so it is never offered as a cure for
         // a silent cable.
         assert!(!help.contains("Mock"), "got {help}");
+        assert!(
+            help.trim_end()
+                .ends_with("Pick its model in Settings (\u{2699}) and please report it."),
+            "the help must end with the way out: {help}"
+        );
     }
 
     /// The USB-cable help used to be selected on the thread side, before the
