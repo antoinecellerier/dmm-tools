@@ -213,11 +213,12 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   read-back per press and gets every rung.
 - HOLD, REL, MIN and MAX were all taken in Ω, DC V and AC+DC V except REL in
   AC+DC V (above).
-- Both steps are marked verified **for the UT61E+ only**. The family-wide
-  `hw` flag cannot express that: the UT61B+ is `Stability::Verified` too, on
-  captures taken before these steps existed, so riding on `hw` would claim it
-  had walked ladders it has never seen. `capture --unverified` therefore asks
-  the E+ for nothing and the B+ for exactly these two.
+- Both steps were marked verified **for the UT61E+ only** until 2026-09-11,
+  when the UT61B+ walked them too (issue #19). A verified model that has not
+  run a step must not be marked verified for it by the family-wide `hw` flag,
+  which is what kept `capture --unverified` asking the B+ for exactly these
+  two; with both verified models through every step, it asks neither for
+  anything and the per-model flag is gone.
 - **A resistor across the probes confirms the decode across rungs, and all
   three overload spellings at once** (`ut61eplus-ohm-82k.yaml`, 82 kΩ marked,
   reading 80.45 kΩ on auto). The three rungs it overflows produced
@@ -1061,20 +1062,21 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   ladder either. Needs one frame on a signal above 60 Hz. Issue #7.
 - **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
   not part of the V ladder** — settled for the B+: index 0 is each
-  ladder's bottom rung, and the 2026-09-10 capture pinned DC V 0–1,
-  AC V 0, Ω 0/4/5, µA 0–1, mA 0–1 and A 0–1 by the decimal count the
-  meter sent at each. DC V 2–3, Ω 1–3, capacitance 1–6 and the whole
-  D+ table are still [DEDUCED]. Issue #7.
+  ladder's bottom rung; the 2026-09-10 capture pinned DC V 0–1, AC V 0,
+  Ω 0/4/5, µA 0–1, mA 0–1 and A 0–1 by the decimal count the meter sent
+  at each, and the 2026-09-11 RANGE walk the rest of Ω and DC V, plus
+  AC V 2 and capacitance 5. AC V 1 and 3, capacitance 1–4 and 6, and the
+  whole D+ table are still [DEDUCED]. Issue #7.
 - **UT61B+/D+ mV ladders are offered to the RANGE driver, untested** —
   `range_is_fixed` covers DC mV and AC mV on the E+, where RANGE is dead
   (2026-09-07), but the 6,000-count tables give both modes two rungs and
   no run has pressed RANGE there. The `dcv_ranges` step does not reach
   them; the mV position needs its own. Issue #7.
-- **UT61B+ golden set taken 2026-09-10** — 31 fixtures in
-  `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the two issue #19
-  reports: every mode the dial reaches, both current ladders driven to
-  their top rung, HOLD/REL/MIN/MAX/manual-range in DC V, both overload
-  spellings and both NCV levels seen.
+- **UT61B+ golden set** — 45 fixtures in
+  `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the three issue #19
+  reports: every mode the dial reaches, the Ω, DC V and both current
+  ladders driven rung by rung, HOLD/REL/MIN/MAX in Ω and DC V, all three
+  overload shapes, both NCV levels seen, mains AC V with the HV warning.
 - **Golden YAML fidelity (2026-06 review):** two hand-built UT61E+ fixtures
   remain, `dcv_5.678` and `ncv_3` — the DC V case lacks the DC-indicator bit
   (verified set on real DC V) and bar-graph bytes are 00 00 despite a
