@@ -64,7 +64,7 @@ The order is load-bearing, and it is ordered by what each probe costs on the *ot
 before the UT171 connect so that a UT181A with Communication ON is already identified when the
 `0x0A` opcode that would start a recording on it goes out.
 
-Each step logs at DEBUG — the bytes sent, and every classification attempt — and the result is
+Each step logs at DEBUG — the probe sent, and what a rule identified — and the result is
 one INFO line, so `RUST_LOG=dmm_lib=debug` is the whole story when a reporter's meter is not
 recognised.
 

@@ -235,7 +235,7 @@ fn sum16(bytes: &[u8]) -> u16 {
 /// backwards.
 fn checksum_ok(label: &str, computed: u16, received: u16, frame: &[u8]) -> Result<()> {
     if computed != received {
-        debug!(
+        trace!(
             "framing: {label} checksum mismatch: computed={computed:#06x}, received={received:#06x}, frame={frame:02X?}"
         );
         return Err(Error::ChecksumMismatch {
@@ -289,7 +289,7 @@ pub fn extract_frame_abcd_be16(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let payload = frame[3..3 + payload_len].to_vec();
     let consumed = start + frame_len;
 
-    debug!("framing: valid frame, payload_len={payload_len}, consumed={consumed}");
+    trace!("framing: valid frame, payload_len={payload_len}, consumed={consumed}");
     Ok(Some((payload, consumed)))
 }
 
@@ -315,7 +315,7 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // block extraction until the buffer cap clears everything. The
     // family's SkipAndRetry recovery drains past this header instead.
     if remaining[3] != 0x02 {
-        debug!("framing: ut8803 byte3={:#04x}, expected 0x02", remaining[3]);
+        trace!("framing: ut8803 byte3={:#04x}, expected 0x02", remaining[3]);
         return Err(Error::invalid_response(
             format!("ut8803 frame type {:#04x}, expected 0x02", remaining[3]),
             remaining,
@@ -336,7 +336,7 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let payload = frame[2..19].to_vec();
     let consumed = start + FRAME_LEN;
 
-    debug!("framing: ut8803 valid frame, consumed={consumed}");
+    trace!("framing: ut8803 valid frame, consumed={consumed}");
     Ok(Some((payload, consumed)))
 }
 
@@ -389,7 +389,7 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // Validate position code (byte 1)
     let position = frame[1];
     if !is_valid_ut8802_position(position) {
-        debug!(
+        trace!(
             "framing: ut8802 invalid position code {:#04x}, frame={frame:02X?}",
             position
         );
@@ -411,7 +411,7 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     ];
     for (i, &nibble) in nibbles.iter().enumerate() {
         if !is_valid_bcd_nibble(nibble) {
-            debug!(
+            trace!(
                 "framing: ut8802 invalid BCD nibble {:#04x} at digit {}, frame={frame:02X?}",
                 nibble,
                 i + 1
@@ -426,7 +426,7 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     // Validate decimal point position (byte 5 low nibble, must be 0-4)
     let dp_pos = frame[5] & 0x0F;
     if dp_pos > 4 {
-        debug!("framing: ut8802 invalid decimal point position {dp_pos}, frame={frame:02X?}");
+        trace!("framing: ut8802 invalid decimal point position {dp_pos}, frame={frame:02X?}");
         return Err(Error::invalid_response(
             format!("ut8802 invalid decimal point position {dp_pos}"),
             frame,
@@ -437,7 +437,7 @@ pub fn extract_frame_ut8802(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
     let payload = frame[1..UT8802_FRAME_LEN].to_vec();
     let consumed = start + UT8802_FRAME_LEN;
 
-    debug!("framing: ut8802 valid frame, position={position:#04x}, consumed={consumed}");
+    trace!("framing: ut8802 valid frame, position={position:#04x}, consumed={consumed}");
     Ok(Some((payload, consumed)))
 }
 
@@ -481,7 +481,7 @@ pub fn extract_frame_abcd_2byte_le16(buf: &[u8]) -> Result<Option<(Vec<u8>, usiz
     let payload = frame[4..4 + payload_len].to_vec();
     let consumed = start + frame_len;
 
-    debug!("framing: 2byte_le16 valid frame, payload_len={payload_len}, consumed={consumed}");
+    trace!("framing: 2byte_le16 valid frame, payload_len={payload_len}, consumed={consumed}");
     Ok(Some((payload, consumed)))
 }
 
@@ -534,12 +534,12 @@ pub fn extract_frame_fs9721(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
             trace!("framing: fs9721 raw frame: {:02X?}", frame);
             let payload: Vec<u8> = frame.iter().map(|&b| b & 0x0F).collect();
             let consumed = start + FS9721_FRAME_LEN;
-            debug!("framing: fs9721 valid frame, consumed={consumed}");
+            trace!("framing: fs9721 valid frame, consumed={consumed}");
             return Ok(Some((payload, consumed)));
         }
 
         // Not a valid frame — skip past this false start
-        debug!("framing: fs9721 false start at offset {start}, skipping");
+        trace!("framing: fs9721 false start at offset {start}, skipping");
         search_start = start + 1;
     }
 }
