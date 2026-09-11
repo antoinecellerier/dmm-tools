@@ -1,5 +1,7 @@
+use dmm_lib::detect::Detected;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
+use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{Choice, Setting, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Transport;
@@ -94,6 +96,14 @@ pub(crate) enum DmmMessage {
     Measurement(Measurement),
     Connected {
         name: String,
+        /// Model the connected protocol reports. Names the meter in the
+        /// experimental warning, where the registry entry's display name
+        /// would be second-hand.
+        model_name: String,
+        /// Registry entry behind that protocol — what detection settled on,
+        /// or the entry the user picked. `None` only if a protocol ever
+        /// reports a model no entry claims.
+        device_id: Option<&'static str>,
         experimental: bool,
         /// URL for reporting feedback on experimental protocols.
         feedback_url: String,
@@ -131,8 +141,14 @@ pub(crate) enum DmmMessage {
 
 /// Extract profile info from a newly opened device, optionally query its name,
 /// and send a `Connected` message to the UI.
+///
+/// `detected` is what identified the meter when nothing named it; `selected`
+/// is the entry the user picked. Exactly one of them is set, and together they
+/// tell the UI which meter it is now looking at.
 fn establish_connection<T: Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
+    detected: Option<Detected>,
+    selected: Option<&'static SelectableDevice>,
     query_name: bool,
     msg_tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
@@ -147,13 +163,24 @@ fn establish_connection<T: Transport>(
         .collect();
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
-    let name = if query_name {
-        dmm.get_name().ok().flatten().unwrap_or_default()
-    } else {
-        String::new()
+    let model_name = profile.model_name.to_string();
+    let device_id = detected
+        .as_ref()
+        .map(|d| d.device)
+        .or(selected)
+        .map(|d| d.id);
+    // Detection asks a UT61+ for its name to identify it at all, so the answer
+    // is already in hand: asking again would spend a second round trip — and a
+    // second beep — on a name we have.
+    let name = match detected.and_then(|d| d.reported_name) {
+        Some(reported) => reported,
+        None if query_name => dmm.get_name().ok().flatten().unwrap_or_default(),
+        None => String::new(),
     };
     let _ = msg_tx.send(DmmMessage::Connected {
         name,
+        model_name,
+        device_id,
         experimental,
         feedback_url,
         supported_commands: cmds,
@@ -168,6 +195,10 @@ pub(super) struct ThreadContext {
     pub ctrl_rx: mpsc::Receiver<ThreadControl>,
     pub cmd_rx: mpsc::Receiver<RemoteCommand>,
     pub ctx: egui::Context,
+    /// The meter the user picked, `None` when the opener detects it instead.
+    /// The opener already knows; this is how the *reporting* side learns it,
+    /// so a named meter reaches the UI as a registry entry too.
+    pub selected: Option<&'static SelectableDevice>,
     pub query_name: bool,
     pub sample_interval_ms: u32,
     pub stop_flag: Arc<AtomicBool>,
@@ -254,13 +285,14 @@ fn invalidate(keys: &mut ListedKeys, setting: Setting) {
 pub(super) fn run_device_thread<T, F>(open_fn: F, thread_ctx: ThreadContext)
 where
     T: Transport + Send + 'static,
-    F: Fn() -> dmm_lib::error::Result<dmm_lib::Dmm<T>> + Send + 'static,
+    F: Fn() -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)> + Send + 'static,
 {
     let ThreadContext {
         msg_tx,
         ctrl_rx,
         cmd_rx,
         ctx,
+        selected,
         query_name,
         sample_interval_ms,
         stop_flag,
@@ -268,8 +300,8 @@ where
 
     info!("background thread: connecting to device");
     let mut dmm = match open_fn() {
-        Ok(mut d) => {
-            establish_connection(&mut d, query_name, &msg_tx, &ctx);
+        Ok((mut d, detected)) => {
+            establish_connection(&mut d, detected, selected, query_name, &msg_tx, &ctx);
             d
         }
         Err(e) => {
@@ -414,10 +446,15 @@ where
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
 
+                    // Re-runs the opener whole, detection included: under
+                    // Auto the meter that comes back is identified again
+                    // rather than assumed to be the one that went away.
                     match open_fn() {
-                        Ok(mut d) => {
+                        Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");
-                            establish_connection(&mut d, query_name, &msg_tx, &ctx);
+                            establish_connection(
+                                &mut d, detected, selected, query_name, &msg_tx, &ctx,
+                            );
                             dmm = d;
                             break;
                         }

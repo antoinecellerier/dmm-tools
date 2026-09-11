@@ -8,6 +8,10 @@ use std::time::Instant;
 use super::App;
 use crate::recording::render_csv;
 
+/// What the CSV's `# device:` comment says when nothing ever identified the
+/// meter — a recording toggled on under Auto-detect before one answered.
+const UNKNOWN_DEVICE: &str = "unknown";
+
 /// Result of a CSV export, sent from the writer thread to the UI.
 pub(super) struct ExportOutcome {
     /// Toast text.
@@ -53,10 +57,14 @@ impl App {
             return;
         }
         // The meter these samples came from, not whatever is selected now.
+        // Nothing named it and nothing was ever identified — a recording
+        // toggled on before a meter answered — so the file says so rather
+        // than crediting the samples to a model that was only selected later.
         let device_model = self
             .capture_layout
             .device
-            .unwrap_or_else(|| self.selected_device().display_name);
+            .or_else(|| self.active_device().map(|d| d.display_name))
+            .unwrap_or(UNKNOWN_DEVICE);
 
         // Render here and hand the bytes to the writer thread. Cloning the
         // sample buffer instead — which is what this used to do so the dialog

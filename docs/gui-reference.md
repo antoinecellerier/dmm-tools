@@ -19,11 +19,20 @@ dmm-gui [OPTIONS]
 A desktop GUI for live measurement display, time-series graphing, recording,
 and remote control of UNI-T and Voltcraft multimeters.
 
-The Settings panel includes a **Device** selector populated from the
-device registry with all supported models (UT61E+, UT61B+, UT61D+,
-UT161B/D/E, UT8802, UT8803, UT803, UT804, UT171A/B/C, UT181A,
+The Settings panel includes a **Device** selector. **Auto-detect** leads the
+row and is the default: rather than being told the family, the GUI works out
+which meter is on the USB cable from the bytes it sends (see
+[detection-design.md](detection-design.md)), and the device label in the top
+bar shows the model it found once connected. The probe makes a UT61+/UT161
+beep once per connect; picking the model instead keeps it silent. If nothing answers, the reading
+column says so and lists what to switch on for each meter that cable could
+carry.
+
+The rest of the row is the device registry — all supported models (UT61E+,
+UT61B+, UT61D+, UT161B/D/E, UT8802, UT8803, UT803, UT804, UT171A/B/C, UT181A,
 Voltcraft VC-880, Voltcraft VC650BT, Voltcraft VC-890) and a **Mock (simulated)**
-option. Each model selects the correct protocol tables (e.g., UT61B+
+option. Picking one skips detection and opens that family directly. Each model
+selects the correct protocol tables (e.g., UT61B+
 uses different mode/range mappings than UT61E+). The selection persists
 across sessions and requires a reconnect to take effect. When connected
 to an experimental (not yet fully verified) protocol, an orange **EXPERIMENTAL**
@@ -49,6 +58,8 @@ the next mode regardless of the auto-cycle setting.
 
 The top bar contains:
 
+- **Device label** (left) — the model picked in Settings, or the one
+  Auto-detect found; reads "Auto-detect" until a meter answers.
 - **App name and version** — click the version label to open the "What's
   New" changelog popup. On release upgrades, this popup opens automatically
   on first launch.
@@ -355,10 +366,10 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Show Recording** | on | Toggle recording panel visibility |
 | **Show Specifications** | on | Toggle specifications panel visibility |
 | **Auto-connect** | on | Connect to meter automatically on startup |
-| **Query device name** | on | Ask meter for its name on connect (causes a beep) |
+| **Query device name** | on | Ask meter for its name on connect (causes a beep). Under Auto-detect a UT61+/UT161 has already given its name to the detection probe, so it is not asked a second time. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
 | **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size, which keeps every sample it took. Editing `settings.json` by hand accepts any size from 1K to 50M. Hover shows the memory and hours a size buys — a 500K recording is ~140 MB single-display, ~420 MB with four sub-values. |
-| **Device** | UT61E+ | Device family. See the description for supported models and Mock. Requires reconnect. |
+| **Device** | Auto-detect | Auto-detect identifies the meter on the cable; the other chips pin a family and skip detection. See the description for supported models and Mock. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11. |
@@ -411,7 +422,7 @@ do not modify the persisted `settings.json`.
 
 | Option | Description |
 |--------|-------------|
-| `--device <ID>` | Device family to connect to (e.g., `ut61eplus`, `ut181a`, `mock`). Run `--help` for the full list with aliases. |
+| `--device <ID>` | Device family to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (the default) to identify the meter from the bytes it sends. Run `--help` for the full list with aliases. |
 | `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |

@@ -26,7 +26,7 @@
 The GUI accepts `--device`, `--theme`, and `--mock-mode` flags (via `clap`,
 consistent with the CLI). These override saved settings for the current
 session only. The settings panel shows which values are overridden (e.g.,
-"UT181A (--device)"). Clicking a different value in the panel clears the
+"Auto-detect (--device)"). Clicking a different value in the panel clears the
 override and persists the user's choice. See `docs/gui-reference.md` for
 the full options table.
 
@@ -36,7 +36,7 @@ the full options table.
 
 - Supports light and dark mode, toggled via settings
 - Default: dark
-- Connected status: green indicator dot + device name (e.g., "UT61E+")
+- Connected status: green indicator dot + device name (e.g., "UT61E+"); the top bar's device label names the model, auto-detected when none was picked
 - Disconnected/error: grey indicator dot
 - Reconnecting: orange indicator dot
 
@@ -54,7 +54,7 @@ the full options table.
 
 ### Top Bar
 
-Compact toolbar row: app title, Connect/Disconnect button, Pause/Resume button (freezes capture without disconnecting — pauses >gap threshold show gap markers), Clear button (resets graph/stats), connection status with device name and colored dot, settings gear icon (right-aligned).
+Compact toolbar row: device label, Connect/Disconnect button, Pause/Resume button (freezes capture without disconnecting — pauses >gap threshold show gap markers), Clear button (resets graph/stats), connection status with device name and colored dot, settings gear icon (right-aligned).
 
 ### Settings Panel
 

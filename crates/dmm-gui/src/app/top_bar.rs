@@ -49,11 +49,13 @@ impl App {
         ui.horizontal(|ui| {
             let left_start = ui.cursor().left();
 
-            // `selected_device()`, not `find_device`: it accepts the aliases
-            // the CLI and settings file accept, and falls back to the same
-            // default the connection will actually open — so the label always
-            // names the meter this session will talk to.
-            let device_label = self.selected_device().display_name;
+            // The meter this session is talking to: the one picked, else the
+            // one detection found. Under Auto-detect with nothing connected
+            // there is no meter to name yet — the label says what will happen
+            // instead, and is replaced by the model as soon as one answers.
+            let device_label = self
+                .active_device()
+                .map_or("Auto-detect", |d| d.display_name);
             ui.label(RichText::new(device_label).strong());
             ui.separator();
 
@@ -154,28 +156,31 @@ impl App {
                 ui.painter().circle_filled(rect.center(), 5.0, dot_color);
                 ui.label(RichText::new(&status_text).small());
 
-                // Show EXPERIMENTAL badge based on connected state or selected device.
-                let profile = &self.selected_profile;
-                let is_experimental = if self.connection.state == ConnectionState::Connected {
-                    self.connection.experimental
+                // The EXPERIMENTAL badge names a protocol, so it comes from
+                // the connected one where there is one — under Auto-detect
+                // that is the only thing that names a meter at all — and from
+                // the selected entry's profile otherwise.
+                let badge = if self.connection.state == ConnectionState::Connected {
+                    self.connection.experimental.then(|| {
+                        (
+                            self.connection.model_name.clone(),
+                            self.connection.feedback_url.clone(),
+                        )
+                    })
                 } else {
-                    profile.stability == dmm_lib::protocol::Stability::Experimental
+                    self.selected_profile
+                        .as_ref()
+                        .filter(|p| p.stability == dmm_lib::protocol::Stability::Experimental)
+                        .map(|p| (p.model_name.to_string(), p.feedback_url()))
                 };
-                if is_experimental {
-                    let url = if self.connection.state == ConnectionState::Connected
-                        && !self.connection.feedback_url.is_empty()
-                    {
-                        self.connection.feedback_url.clone()
-                    } else {
-                        profile.feedback_url()
-                    };
+                if let Some((model_name, url)) = badge {
                     ui.hyperlink_to(
                         RichText::new("EXPERIMENTAL").small().strong().color(orange),
                         url,
                     )
                     .on_hover_text(format!(
                         "{} Click to report feedback.",
-                        dmm_lib::binary_help::experimental_warning(profile.model_name)
+                        dmm_lib::binary_help::experimental_warning(&model_name)
                     ));
                 }
 

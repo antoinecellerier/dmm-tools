@@ -301,7 +301,9 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             shared: SharedSettings {
-                device_family: dmm_lib::protocol::registry::default_device().id.to_string(),
+                // No meter named: a fresh install works out which one is on
+                // the cable rather than assuming the one we own.
+                device_family: dmm_lib::protocol::registry::AUTO_DEVICE_ID.to_string(),
             },
             theme: ThemeMode::Dark,
             show_graph: true,
@@ -347,12 +349,13 @@ impl Settings {
         // Through the shared resolver so the GUI and the CLI read the same
         // file the same way. There is no `--device` to weigh here — that
         // override is applied in `App::new` — so this is the settings-then-
-        // registry-default half, which leaves the GUI a concrete device to
-        // display for an older config or a fresh install.
+        // fallback half. A saved id keeps naming its meter; an older config
+        // or a fresh install falls through to detection instead of to a
+        // model the user never picked.
         let (family, _) = dmm_settings::resolve_device_family(
             None,
             Some(&s.shared),
-            dmm_lib::protocol::registry::default_device().id,
+            dmm_lib::protocol::registry::AUTO_DEVICE_ID,
         );
         s.shared.device_family = family;
         s.sanitize();
@@ -404,6 +407,25 @@ mod tests {
         assert!(s.show_specs);
         assert!(s.query_device_name);
         assert_eq!(s.theme, ThemeMode::Dark);
+    }
+
+    /// A fresh install names no meter: the device it opens is the one that
+    /// answers, not the family whose tables happen to be the fallback.
+    #[test]
+    fn the_default_device_is_auto_detect() {
+        assert_eq!(
+            Settings::default().shared.device_family,
+            dmm_lib::protocol::registry::AUTO_DEVICE_ID
+        );
+        // And a config file written before the field existed lands there too,
+        // rather than on a model the user never picked.
+        let s: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
+        let (family, _) = dmm_settings::resolve_device_family(
+            None,
+            Some(&s.shared),
+            dmm_lib::protocol::registry::AUTO_DEVICE_ID,
+        );
+        assert_eq!(family, dmm_lib::protocol::registry::AUTO_DEVICE_ID);
     }
 
     #[test]

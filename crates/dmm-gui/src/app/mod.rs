@@ -208,12 +208,34 @@ impl SettingChoices {
     }
 }
 
+/// The meter a saved `device_family` names, or `None` when it names none.
+///
+/// `None` covers both [`registry::AUTO_DEVICE_ID`] and a value no registry
+/// entry answers to — a hand-edited settings file, or a model removed since
+/// it was written. Both mean "we were not told which meter this is", and
+/// detection is a better answer to that than quietly opening the meter whose
+/// tables happen to be the library's fallback.
+fn named_device(family: &str) -> Option<&'static registry::SelectableDevice> {
+    match registry::resolve_selection(family) {
+        Some(registry::Selection::Device(d)) => Some(d),
+        Some(registry::Selection::Auto) | None => None,
+    }
+}
+
 /// The live link to a meter: its state, what the connected protocol told us
 /// about itself, and the channels and flags shared with the acquisition
 /// thread.
 pub(super) struct Connection {
     pub(super) state: ConnectionState,
     pub(super) device_name: Option<String>,
+    /// The registry entry actually connected — the one the user named, or the
+    /// one detection settled on. `None` while nothing is connected, so under
+    /// Auto-detect this is the only thing that knows which meter is on the
+    /// cable. Cleared on disconnect.
+    pub(super) detected: Option<&'static registry::SelectableDevice>,
+    /// Model name the connected protocol reports, for the text that has to
+    /// name it (the experimental warning). Empty while disconnected.
+    pub(super) model_name: String,
     /// Whether the connected protocol is experimental (unverified).
     pub(super) experimental: bool,
     /// URL for reporting feedback on experimental protocols.
@@ -249,6 +271,8 @@ impl Default for Connection {
         Self {
             state: ConnectionState::Disconnected,
             device_name: None,
+            detected: None,
+            model_name: String::new(),
             experimental: false,
             feedback_url: String::new(),
             supported_commands: Vec::new(),
@@ -303,8 +327,13 @@ pub struct App {
     /// changes. Two render paths need it every frame, and building a protocol
     /// to read it allocates — the UT61E+ factory lowercases its model string,
     /// boxes a device table and reserves an rx buffer.
-    selected_profile: dmm_lib::protocol::DeviceProfile,
-    /// Device id the cached profile belongs to.
+    ///
+    /// `None` under Auto-detect: no meter is named, so there is no profile to
+    /// describe until one answers — what the connection then reports stands
+    /// in ([`Connection::detected`]).
+    selected_profile: Option<dmm_lib::protocol::DeviceProfile>,
+    /// Device id the cached profile belongs to, [`registry::AUTO_DEVICE_ID`]
+    /// when none is selected.
     selected_profile_id: &'static str,
     recording_panel: RecordingPanel,
     first_frame: bool,
@@ -353,8 +382,7 @@ impl App {
         let mut recording = Recording::new();
         // A fresh buffer holds nothing, so this cannot stop anything.
         recording.set_max_samples(settings.max_samples);
-        let initial_device = registry::resolve_device(&settings.shared.device_family)
-            .unwrap_or_else(registry::default_device);
+        let initial_device = named_device(&settings.shared.device_family);
         Self {
             settings,
             settings_open: false,
@@ -368,8 +396,8 @@ impl App {
             wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
             capture_layout: CaptureLayout::default(),
-            selected_profile: *(initial_device.new_protocol)().profile(),
-            selected_profile_id: initial_device.id,
+            selected_profile: initial_device.map(|d| *(d.new_protocol)().profile()),
+            selected_profile_id: initial_device.map_or(registry::AUTO_DEVICE_ID, |d| d.id),
             recording_panel: RecordingPanel::default(),
             first_frame: true,
             applied: AppliedChrome::default(),
@@ -389,9 +417,10 @@ impl App {
     /// repaint, and `(new_protocol)()` allocates.
     fn refresh_selected_profile(&mut self) {
         let device = self.selected_device();
-        if self.selected_profile_id != device.id {
-            self.selected_profile = *(device.new_protocol)().profile();
-            self.selected_profile_id = device.id;
+        let id = device.map_or(registry::AUTO_DEVICE_ID, |d| d.id);
+        if self.selected_profile_id != id {
+            self.selected_profile = device.map(|d| *(d.new_protocol)().profile());
+            self.selected_profile_id = id;
         }
     }
 
@@ -444,7 +473,9 @@ impl App {
     /// desync and is left alone: the GUI cannot learn which scenario the
     /// mock cycled to.
     fn repin_mock(&mut self, id: u16) -> bool {
-        if self.selected_device().id != "mock" || self.settings.mock_mode.is_empty() {
+        if self.selected_device().is_none_or(|d| d.id != "mock")
+            || self.settings.mock_mode.is_empty()
+        {
             return false;
         }
         let Some(mode) = MockMode::from_choice_id(id) else {
@@ -457,13 +488,21 @@ impl App {
         true
     }
 
-    fn selected_device(&self) -> &'static registry::SelectableDevice {
-        registry::resolve_device(&self.settings.shared.device_family)
-            .unwrap_or_else(registry::default_device)
+    /// The meter the user named, or `None` when the one on the cable is to be
+    /// identified instead.
+    fn selected_device(&self) -> Option<&'static registry::SelectableDevice> {
+        named_device(&self.settings.shared.device_family)
+    }
+
+    /// The meter this session is actually talking about: the one the user
+    /// named, else the one detection found. `None` until a meter answers
+    /// under Auto-detect.
+    fn active_device(&self) -> Option<&'static registry::SelectableDevice> {
+        self.selected_device().or(self.connection.detected)
     }
 
     fn manual_url(&self) -> Option<&'static str> {
-        self.selected_device().manual_url
+        self.active_device().and_then(|d| d.manual_url)
     }
 
     /// Status text while the acquisition thread is retrying.
@@ -820,5 +859,46 @@ mod tests {
         let mut app = app("ut181a", "temp2");
         assert!(!app.repin_mock(0x1121));
         assert_eq!(app.settings.mock_mode, "temp2");
+    }
+
+    /// A named meter still resolves to its entry, aliases included; `auto`
+    /// names none. The unknown case is the one that used to bite: it fell
+    /// back to the UT61E+, so a typo in the settings file opened a meter the
+    /// user had never chosen and failed on the first frame it parsed.
+    #[test]
+    fn only_a_named_meter_resolves_to_an_entry() {
+        assert_eq!(named_device("ut61b+").map(|d| d.id), Some("ut61b+"));
+        assert_eq!(named_device("UT61E").map(|d| d.id), Some("ut61eplus"));
+        assert!(named_device(registry::AUTO_DEVICE_ID).is_none());
+        assert!(named_device("AUTO").is_none());
+        assert!(named_device("no such meter").is_none());
+        assert!(named_device("").is_none());
+    }
+
+    /// Auto-detect has no profile of its own, so nothing may assume one: the
+    /// experimental badge and the connection help both read it every frame.
+    #[test]
+    fn auto_detect_carries_no_profile_until_a_meter_answers() {
+        let mut app = app(registry::AUTO_DEVICE_ID, "");
+        assert!(app.selected_device().is_none());
+        assert!(app.selected_profile.is_none());
+        assert_eq!(app.selected_profile_id, registry::AUTO_DEVICE_ID);
+        assert!(app.active_device().is_none(), "nothing connected yet");
+
+        // What `DmmMessage::Connected` does: the meter that answered is the
+        // one the top bar names from then on.
+        app.connection.detected = registry::find_device("ut8803");
+        assert_eq!(app.active_device().map(|d| d.id), Some("ut8803"));
+
+        // And picking a model back out of the picker restores its profile.
+        app.settings.shared.device_family = "ut61b+".to_string();
+        app.refresh_selected_profile();
+        assert_eq!(app.selected_profile_id, "ut61b+");
+        assert_eq!(
+            app.selected_profile.map(|p| p.model_name),
+            Some("UNI-T UT61B+"),
+            "the picked model outranks the connected one"
+        );
+        assert_eq!(app.active_device().map(|d| d.id), Some("ut61b+"));
     }
 }

@@ -31,7 +31,7 @@ pub fn version_label() -> String {
     after_long_help = "Help / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Args {
-    /// Device to connect to [ut61eplus, ut8803, ut171, ut181a, mock, ...]
+    /// Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...]
     #[arg(long)]
     device: Option<String>,
 
@@ -113,10 +113,14 @@ fn resolve_device_and_clock(
     let clock = dmm_lib::Clock::from_flags(scale, preseed)
         .map_err(|e| format!("--mock-clock-scale / --mock-clock-preseed: {e}"))?;
 
-    let hardware = device
-        .as_deref()
-        .and_then(registry::resolve_device)
-        .is_some_and(|d| d.requires_hardware);
+    // Auto counts as hardware: it names no meter, but the meter it finds is a
+    // real one, and bending session time under it would stamp readings with
+    // instants no USB-paced meter produced.
+    let hardware = match device.as_deref().and_then(registry::resolve_selection) {
+        Some(registry::Selection::Auto) => true,
+        Some(registry::Selection::Device(d)) => d.requires_hardware,
+        None => false,
+    };
     if !clock.is_real() && hardware {
         return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.to_string());
     }
@@ -137,18 +141,24 @@ fn parse_args() -> CliOverrides {
     cmd = cmd.mut_arg("device", |a| a.long_help(device_help));
     let args = Args::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e| e.exit());
 
-    // Validate and canonicalize --device if provided
-    let device = args.device.map(|raw| match registry::resolve_device(&raw) {
-        Some(d) => d.id.to_string(),
-        None => {
-            Args::command()
-                .error(
-                    clap::error::ErrorKind::InvalidValue,
-                    format!("unknown device '{raw}'. Run with --help to see available devices."),
-                )
-                .exit();
-        }
-    });
+    // Validate and canonicalize --device if provided. Through `resolve_selection`
+    // so `--device auto` is a choice rather than an unknown device.
+    let device = args
+        .device
+        .map(|raw| match registry::resolve_selection(&raw) {
+            Some(registry::Selection::Auto) => registry::AUTO_DEVICE_ID.to_string(),
+            Some(registry::Selection::Device(d)) => d.id.to_string(),
+            None => {
+                Args::command()
+                    .error(
+                        clap::error::ErrorKind::InvalidValue,
+                        format!(
+                            "unknown device '{raw}'. Run with --help to see available devices."
+                        ),
+                    )
+                    .exit();
+            }
+        });
 
     // Parse --theme if provided
     let theme = args.theme.as_deref().map(|t| match t {
@@ -412,6 +422,20 @@ mod tests {
         );
         // Without the flags the same device is of course fine.
         assert!(resolve(Some("ut61eplus"), None, None).is_ok());
+    }
+
+    /// `auto` names no meter, but the one it finds is real hardware — so it
+    /// takes the refusal, and is not mistaken for an unknown device that
+    /// silently leaves the flags alone.
+    #[test]
+    fn auto_detect_is_hardware_for_the_clock_flags() {
+        assert_eq!(
+            resolve(Some("auto"), None, Some(90.0)).unwrap_err(),
+            dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY
+        );
+        let (device, clock) = resolve(Some("auto"), None, None).expect("no clock flags");
+        assert_eq!(device.as_deref(), Some("auto"));
+        assert!(clock.is_real());
     }
 
     /// The message clap prints has to say which flag was wrong; the value

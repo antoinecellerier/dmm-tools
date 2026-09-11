@@ -417,19 +417,41 @@ impl App {
             // timing its recording and dating its exports by a clock no meter
             // ever ran on. Pin the row instead.
             let pinned_to_mock = !self.clock.is_real();
-            let chips = registry::DEVICES.iter().map(|device| {
-                let selected = self.settings.shared.device_family == device.id;
+            let has_override = self.settings.overrides.has_device();
+            // What the selection resolves to, not what the file spells: an
+            // alias, or an id no entry answers to, would otherwise leave the
+            // row with nothing marked while the session opened something.
+            let selected_id = self
+                .selected_device()
+                .map_or(registry::AUTO_DEVICE_ID, |d| d.id);
+            let with_override = |selected: bool, label: String| {
+                if selected && has_override {
+                    format!("{label} (--device)")
+                } else {
+                    label
+                }
+            };
+            // Leads the row: it is the default, and the one entry that names
+            // no meter — the meter names itself instead.
+            let auto = std::iter::once(Chip {
+                value: registry::AUTO_DEVICE_ID,
+                selected: selected_id == registry::AUTO_DEVICE_ID,
+                label: with_override(
+                    selected_id == registry::AUTO_DEVICE_ID,
+                    "Auto-detect".to_string(),
+                ),
+                tooltip: "Work out which meter is on the USB cable".to_string(),
+            });
+            let devices = registry::DEVICES.iter().map(|device| {
+                let selected = selected_id == device.id;
                 Chip {
                     value: device.id,
                     selected,
-                    label: if selected && self.settings.overrides.has_device() {
-                        format!("{} (--device)", device.display_name)
-                    } else {
-                        device.display_name.to_string()
-                    },
+                    label: with_override(selected, device.display_name.to_string()),
                     tooltip: format!("Talk to a {} over USB", device.display_name),
                 }
             });
+            let chips = auto.chain(devices);
             let picked = ui
                 .scope(|ui| {
                     if pinned_to_mock {
@@ -458,7 +480,7 @@ impl App {
         });
 
         // Mock mode selector (only shown when mock device is selected)
-        if self.selected_device().id == "mock" {
+        if self.selected_device().is_some_and(|d| d.id == "mock") {
             ui.horizontal_wrapped(|ui| {
                 let has_override = self.settings.overrides.has_mock_mode();
                 // "Auto" = cycle through all modes, and leads the row.

@@ -55,7 +55,10 @@ impl App {
     fn apply_recording_toggle(&mut self) {
         self.recording.toggle(self.clock.now());
         if self.recording.active {
-            self.capture_layout.device = Some(self.selected_device().display_name);
+            // The meter picked, or the one detection found; under Auto-detect
+            // with nothing connected there is no meter to name, and the export
+            // falls back to its own placeholder.
+            self.capture_layout.device = self.active_device().map(|d| d.display_name);
             self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
             // after the meter's — see `extra_slots`.

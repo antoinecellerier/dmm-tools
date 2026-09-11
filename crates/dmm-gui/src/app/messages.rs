@@ -34,6 +34,11 @@ pub(crate) enum ConnectionIssue {
     /// help text, including the connected-device list, because building it
     /// enumerates the USB bus — far too heavy for the paint path.
     AdapterNotFound { help: String },
+    /// The cable is there but nothing on it answered the detection probe.
+    /// Carries the finished help — what to switch on, per meter that could
+    /// have been on that bridge — because it is built from the bridge the
+    /// error names and the render path no longer has it.
+    NotIdentified { help: String },
     /// Anything else, as reported by the acquisition thread.
     Other(String),
 }
@@ -49,6 +54,13 @@ impl ConnectionIssue {
         if let dmm_lib::error::Error::AdapterNotFound(selector) = err {
             return Self::AdapterNotFound {
                 help: adapter_not_found_help(selector),
+            };
+        }
+        // Also a `Timeout` kind — retrying does help once transmission is on —
+        // so it is matched by variant, ahead of the kind test below.
+        if let dmm_lib::error::Error::DeviceNotIdentified { bridge } = err {
+            return Self::NotIdentified {
+                help: not_identified_help(bridge),
             };
         }
         match err.kind() {
@@ -74,6 +86,37 @@ fn adapter_not_found_help(selector: &str) -> String {
     // user with a choice to make.
     if !matches!(adapters, ConnectedAdapters::None) {
         msg.push_str("\n\nRestart with the correct --adapter value.");
+    }
+    msg
+}
+
+/// Build the "nothing answered" help: what the user can switch on, for every
+/// meter that could have been behind that bridge.
+///
+/// Families share activation steps — the whole UT61+ line is one instruction —
+/// so the meters are grouped by the instruction text rather than listed one by
+/// one, which would repeat the same four steps six times over.
+fn not_identified_help(bridge: &str) -> String {
+    let mut msg = String::from(
+        "The USB adapter is connected but no meter identified itself.\n\n\
+         Switch on the meter's USB mode, or pick the model in Settings (\u{2699}):\n",
+    );
+    let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
+    for device in dmm_lib::devices_on_bridge(bridge) {
+        match groups
+            .iter_mut()
+            .find(|(steps, _)| *steps == device.activation_instructions)
+        {
+            Some((_, names)) => names.push(device.display_name),
+            None => groups.push((device.activation_instructions, vec![device.display_name])),
+        }
+    }
+    for (steps, names) in groups {
+        msg.push('\n');
+        msg.push_str(&names.join(", "));
+        msg.push('\n');
+        msg.push_str(steps);
+        msg.push('\n');
     }
     msg
 }
@@ -123,10 +166,12 @@ impl App {
         let ctx_clone = ctx.clone();
         let query_name = self.settings.query_device_name;
         let sample_interval_ms = self.settings.sample_interval_ms;
+        // `None` = Auto-detect: nothing names the meter, so the opener works
+        // it out from the bytes it sends.
         let device_entry = self.selected_device();
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
-        if !device_entry.requires_hardware {
+        if device_entry.is_some_and(|d| !d.requires_hardware) {
             let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
                 None
             } else {
@@ -157,13 +202,18 @@ impl App {
                     run_device_thread(
                         // Cloned inside: this closure is re-run on every
                         // reconnect, and the session clock outlives each
-                        // `Dmm` it opens.
-                        move || dmm_lib::mock::open_mock_clocked(mock_mode, clock.clone()),
+                        // `Dmm` it opens. Nothing to detect — the mock is
+                        // what it says it is.
+                        move || {
+                            dmm_lib::mock::open_mock_clocked(mock_mode, clock.clone())
+                                .map(|dmm| (dmm, None))
+                        },
                         ThreadContext {
                             msg_tx,
                             ctrl_rx,
                             cmd_rx,
                             ctx: ctx_clone,
+                            selected: device_entry,
                             query_name,
                             sample_interval_ms: mock_interval,
                             stop_flag,
@@ -175,19 +225,28 @@ impl App {
                 }
             });
         } else {
-            let device_id = device_entry.id;
+            let device_id = device_entry.map(|d| d.id);
             let adapter = self.settings.overrides.adapter.clone();
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
                 let panic_ctx = ctx_clone.clone();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_device_thread(
-                        move || dmm_lib::open_device_by_id_auto(device_id, adapter.as_deref()),
+                        // Re-run on every reconnect, detection included: a
+                        // meter that comes back is identified again rather
+                        // than assumed to be the one that left.
+                        move || match device_id {
+                            Some(id) => dmm_lib::open_device_by_id_auto(id, adapter.as_deref())
+                                .map(|dmm| (dmm, None)),
+                            None => dmm_lib::open_auto(adapter.as_deref())
+                                .map(|(dmm, detected)| (dmm, Some(detected))),
+                        },
                         ThreadContext {
                             msg_tx,
                             ctrl_rx,
                             cmd_rx,
                             ctx: ctx_clone,
+                            selected: device_entry,
                             query_name,
                             sample_interval_ms,
                             stop_flag,
@@ -217,6 +276,10 @@ impl App {
         self.connection.cmd_tx = None;
         self.connection.state = ConnectionState::Disconnected;
         self.connection.device_name = None;
+        // Nothing is connected, so nothing is identified: under Auto-detect
+        // the next connect asks the cable again.
+        self.connection.detected = None;
+        self.connection.model_name.clear();
         self.connection.experimental = false;
         self.connection.feedback_url.clear();
         self.connection.supported_commands.clear();
@@ -268,12 +331,19 @@ impl App {
             match msg {
                 DmmMessage::Connected {
                     name,
+                    model_name,
+                    device_id,
                     experimental: exp,
                     feedback_url,
                     supported_commands: cmds,
                     max_aux_values,
                 } => {
                     self.connection.state = ConnectionState::Connected;
+                    // Which meter this actually is. Under Auto-detect it is
+                    // the only thing that knows — nothing named one.
+                    self.connection.detected =
+                        device_id.and_then(dmm_lib::protocol::registry::find_device);
+                    self.connection.model_name = model_name;
                     self.connection.experimental = exp;
                     self.capture_layout.device_aux_slots = max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
@@ -295,7 +365,10 @@ impl App {
                     self.connection.last_error = None;
                     self.connection.reconnect_attempt = 0;
                     self.connection.reconnect_last_error = None;
-                    info!("UI: connected to {name}");
+                    info!(
+                        "UI: connected to {} (meter reports {:?})",
+                        self.connection.model_name, self.connection.device_name
+                    );
                 }
                 DmmMessage::WaitingForMeter(count) => {
                     self.connection.waiting_timeouts = count;
@@ -447,13 +520,34 @@ impl App {
             .theme_colors(ui.visuals().dark_mode)
             .status_warning();
 
+        // The probe is still running: nothing names the meter, the channel is
+        // up, and neither a connection nor a failure has come back yet. It
+        // spends up to a couple of seconds giving each family its turn to
+        // answer, and an empty column for that long reads as a hang.
+        if self.selected_device().is_none()
+            && self.connection.state == ConnectionState::Disconnected
+            && self.connection.rx.is_some()
+            && self.connection.last_error.is_none()
+        {
+            ui.add_space(4.0);
+            ui.label(RichText::new("Detecting the meter\u{2026}").color(warn_color));
+            return;
+        }
+
         // Show waiting indicator before error threshold
         if self.connection.waiting_timeouts > 0 && self.connection.last_error.is_none() {
             ui.add_space(4.0);
             let dots = ".".repeat((self.connection.waiting_timeouts as usize % 4) + 1);
             ui.label(RichText::new(format!("Waiting for meter{dots}")).color(warn_color));
+            // Under Auto-detect there is no selection to check, so the hint is
+            // the other two things that make a quiet meter talk.
+            let hint = if self.selected_device().is_some() {
+                "Check that the correct device is selected in Settings (\u{2699})"
+            } else {
+                "Switch on the meter's USB mode, or pick the model in Settings (\u{2699})"
+            };
             ui.label(
-                RichText::new("Check that the correct device is selected in Settings (\u{2699})")
+                RichText::new(hint)
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
@@ -481,8 +575,13 @@ impl App {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
-            let profile = &self.selected_profile;
-            if profile.stability == dmm_lib::protocol::Stability::Experimental {
+            // Auto-detect names no meter, so there is no protocol to warn
+            // about until one answers.
+            if let Some(profile) = self
+                .selected_profile
+                .as_ref()
+                .filter(|p| p.stability == dmm_lib::protocol::Stability::Experimental)
+            {
                 ui.hyperlink_to(
                     RichText::new(format!(
                         "{} Report feedback.",
@@ -503,19 +602,35 @@ impl App {
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
+        } else if let ConnectionIssue::NotIdentified { help } = issue {
+            // The cable is fine and the probe ran; nothing on the far end
+            // spoke a protocol we know.
+            ui.label(RichText::new("No meter answered over the USB cable").color(warn_color));
+            ui.label(
+                RichText::new(help)
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            );
         } else {
             // Dongle found but meter not responding
             ui.label(RichText::new("No response from meter").color(warn_color));
-            let device_entry = self.selected_device();
-            let instructions = format!(
-                "The USB adapter is connected but the meter \n\
-                 isn't responding ({} selected).\n\
-                 \n\
-                 If this is the wrong device, change it in Settings (\u{2699}).\n\
-                 Otherwise, enable data transmission:\n\
-                 {}",
-                device_entry.display_name, device_entry.activation_instructions
-            );
+            // The meter this session is talking about: the one picked, or the
+            // one detection found. Under Auto-detect, before anything answered,
+            // there is neither a model to name nor steps to give.
+            let instructions = match self.active_device() {
+                Some(entry) => format!(
+                    "The USB adapter is connected but the meter \n\
+                     isn't responding ({} selected).\n\
+                     \n\
+                     If this is the wrong device, change it in Settings (\u{2699}).\n\
+                     Otherwise, enable data transmission:\n\
+                     {}",
+                    entry.display_name, entry.activation_instructions
+                ),
+                None => "No meter answered over the USB cable \u{2014} switch on the meter's \n\
+                         USB mode, or pick the model in Settings (\u{2699})."
+                    .to_string(),
+            };
             ui.label(
                 RichText::new(instructions)
                     .small()
@@ -541,6 +656,45 @@ mod tests {
             panic!("expected AdapterNotFound, got {issue:?}");
         };
         assert!(help.contains("ABC123"), "got {help}");
+    }
+
+    /// `DeviceNotIdentified` is an `ErrorKind::Timeout`, which would land it
+    /// in `Other` and print the "no response from meter" block naming a
+    /// device nobody selected. It is matched by variant for that reason.
+    #[test]
+    fn nothing_answering_the_probe_is_its_own_case() {
+        let issue = ConnectionIssue::from_error(&dmm_lib::error::Error::DeviceNotIdentified {
+            bridge: "CP2110",
+        });
+        let ConnectionIssue::NotIdentified { help } = issue else {
+            panic!("expected NotIdentified, got {issue:?}");
+        };
+        assert!(help.contains("UT61E+"), "got {help}");
+        assert!(help.contains("Long press the USB/Hz button"), "got {help}");
+        // gui.md: user-facing text names the cable, never the bridge chip.
+        for chip in ["CP2110", "CH9329", "CH9325"] {
+            assert!(!help.contains(chip), "{chip} leaked into: {help}");
+        }
+    }
+
+    /// Six UT61+ models share one four-step instruction. Listing each meter
+    /// separately would repeat those steps six times in a panel the reading
+    /// column has to fit.
+    #[test]
+    fn meters_sharing_activation_steps_are_listed_together() {
+        let help = not_identified_help("CP2110");
+        assert!(
+            help.contains("UT61E+, UT61B+, UT61D+, UT161B, UT161D, UT161E"),
+            "got {help}"
+        );
+        assert_eq!(
+            help.matches("Long press the USB/Hz button").count(),
+            1,
+            "the shared steps appear once: {help}"
+        );
+        // The mock is not on any bridge, so it is never offered as a cure for
+        // a silent cable.
+        assert!(!help.contains("Mock"), "got {help}");
     }
 
     /// The USB-cable help used to be selected on the thread side, before the
