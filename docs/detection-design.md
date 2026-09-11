@@ -132,7 +132,7 @@ worth. Extractor errors are ignored, never propagated.
 
 | Failure mode | Cause | What the user sees | Mitigation |
 |---|---|---|---|
-| Nothing answers | Meter off; Communication OFF (UT171/UT181A); PC button not pressed (VC-880); wrong cable; CH9325 at the wrong baud | `DeviceNotIdentified` after ~2.6 s | Help lists the activation instructions of every family on that bridge; `--device <id>` pins a family and skips probing; the GUI's reconnect loop re-probes on its own once transmission is enabled |
+| Nothing answers | Meter off; Communication OFF (UT171/UT181A); PC button not pressed (VC-880); wrong cable; CH9325 at the wrong baud | `DeviceNotIdentified` after ~2.6 s | Help lists the activation instructions of every family on that bridge; `--device <id>` pins a family and skips probing; in the GUI a first failure shows the help and waits for Connect, while a drop mid-session reconnects and re-probes on its own |
 | Misidentification from junk | Random bytes passing a lax extractor (the `0xAC` 8-byte UT8802 format passes ~1% of random input); garbage from a wrong CH9325 baud | Wrong parser, later checksum or parse errors | Checksummed formats first, strictest first; UT8802 needs two consecutive frames 8 bytes apart; `0xAC` only when no `AB CD` frame classified; the "Detected X" notice tells the user what was picked and that `--device` overrides it |
 | Stale frame from an earlier session | CH9329 does not purge RX on open; a UT61+ mid-poll or a UT181A left streaming | Family evidence arriving before the probe reply | A name frame outranks a measurement frame within the window; a lone 14-byte UT61+ frame falls back to `ut61eplus` with `reported_name: None` and a WARN |
 | UT181A vs UT171 ambiguity | Same framing and type byte; payload lengths overlap (UT181A 19 bytes without aux or bargraph, UT171 16/22) | Wrong one of the two | Payload ≥ 31 → UT181A; else the step that elicited the stream decides; a ≤ 22-byte frame before any LE16 trigger → UT171 with a WARN; recorded in the backlog; parse-based arbitration once UT171 hardware exists |
@@ -144,8 +144,8 @@ worth. Extractor errors are ignored, never propagated.
 | Garbage flood | Wrong baud, noisy line | Unbounded buffer | 4096-byte cap, oldest bytes dropped; extractor errors ignored, never propagated |
 | Several adapters plugged in | Only the first bridge found is probed | The other meter is never seen | The existing warning; `--adapter` selects one; probing every adapter is a listed follow-up, not in scope |
 | Reconnect churn in the GUI | Every reconnect attempt re-probes: a UT181A beeps each time; ~2.6 s per attempt while nothing answers | Repeated beeps, slower recovery | In scope: none beyond the wait text. Follow-up: retry the entry detected earlier in the session before falling back to the full cascade |
-| Older binary reads `"auto"` | A settings file written by this version opened by an older `dmm-cli`/`dmm-gui` | `unknown device: auto` | CHANGELOG migration line; picking any model in the GUI rewrites the file |
-| Name probe beeps the UT61+ | If `0x5F` beeps, every connect beeps regardless of the GUI's name-query toggle | A beep per connect | Checked on our UT61E+ in the hardware gate; if it beeps, say so in `docs/gui-reference.md` and the CHANGELOG entry |
+| Older binary reads `"auto"` | A settings file written by this version opened by an older `dmm-cli`/`dmm-gui` | `unknown device: auto` | Upgrading needs no step, so no migration line; on a downgrade, pass `--device` or pick any model in the GUI, which rewrites the file |
+| Name probe beeps the UT61+ | `0x5F` beeps (confirmed on our UT61E+), so every auto connect beeps regardless of the GUI's name-query toggle | A beep per connect | Documented in `docs/gui-reference.md` and `docs/cli-reference.md`; pinning the family with `--device` keeps the connect silent |
 
 ## Adding a family
 

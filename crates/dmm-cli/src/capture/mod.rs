@@ -32,6 +32,7 @@ pub(crate) fn cmd_capture(
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
+    known_name: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());
@@ -39,7 +40,7 @@ pub(crate) fn cmd_capture(
     // reporter's typo, and they should hear about it straight away.
     let plan_steps = plan_path.as_deref().map(crate::plan::load).transpose()?;
 
-    let (device_name, supported) = verify_meter(&mut dmm, device)?;
+    let (device_name, supported) = verify_meter(&mut dmm, device, known_name)?;
 
     let input = Input::start();
     let (mut report, output_path) =
@@ -54,7 +55,8 @@ pub(crate) fn cmd_capture(
     report.device_id = Some(device.id.to_string());
     report.plan = plan_path.clone();
     report.unverified_only = unverified_only;
-    // Everything on the wire so far is the init handshake and the name query.
+    // Everything on the wire so far is the detection probe (when the meter
+    // was not named), the init handshake and the name query.
     report.init_frames = recording::lock(&recorder)
         .drain()
         .iter()

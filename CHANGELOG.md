@@ -3,7 +3,6 @@
 ## Unreleased
 
 ### GUI
-
 - **Switch the meter's function and range from the readout** — on meters that allow it (UT61+/UT161, UT181A, VC-880, VC-890, mock) the mode and range labels are dropdowns naming what the dial position offers, Auto included.
 - **Scale row converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a new **Buffer size** setting moves the bound for graph and recording together.
@@ -25,6 +24,7 @@
 
 ### CLI
 
+- **The meter on the cable is identified for you** — `--device` now only pins a meter model; when nothing answers, you get the steps that switch each meter's transmission on.
 - **`dmm-cli get` and `set` list and switch the meter's settings by name** — mode, range, HOLD, REL, MIN/MAX and Peak without touching the meter, on the UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and the mock; `get --format json` for scripts.
 - **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.

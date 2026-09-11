@@ -10,14 +10,14 @@ use clap_complete::Shell;
 use console::style;
 use dmm_lib::binary_help::ConnectedAdapters;
 use dmm_lib::error::ErrorKind;
-use dmm_lib::protocol::registry::{self, SelectableDevice};
+use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::protocol::{Choice, Setting};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transform::{FactorError, Transform};
 use log::{error, info};
 use std::io::Write;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 fn version_string() -> &'static str {
@@ -38,9 +38,10 @@ fn version_string() -> &'static str {
     after_long_help = ""
 )]
 struct Cli {
-    /// Device to connect to [ut61eplus, ut8803, ut171, ut181a, mock, ...].
+    /// Device to connect to [auto, ut61eplus, ut8803, ut171, ut181a, mock, ...].
     /// If omitted, falls back to `device_family` in ~/.config/dmm-tools/settings.json
-    /// (written by dmm-gui), then to `ut61eplus` as a last resort.
+    /// (written by dmm-gui), then to `auto`, which detects the meter over the
+    /// USB cable.
     #[arg(long)]
     device: Option<String>,
 
@@ -303,15 +304,16 @@ fn main() {
     let cli =
         Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
 
-    // The fallback goes through `registry::default_device()` so the CLI and the
-    // registry stay in sync on which device is the default.
+    // Nothing named a meter, so none is assumed: detection is the fallback,
+    // and `--device` or the settings file pins a model when the user wants
+    // one.
     let (device_id, device_source) = dmm_settings::resolve_device_family(
         cli.device.as_deref(),
         dmm_settings::SharedSettings::load_if_exists().as_ref(),
-        registry::default_device().id,
+        registry::AUTO_DEVICE_ID,
     );
-    let device = match registry::resolve_device(&device_id) {
-        Some(d) => d,
+    let selection = match registry::resolve_selection(&device_id) {
+        Some(s) => s,
         None => {
             eprintln!(
                 "{} unknown device: {}",
@@ -323,16 +325,15 @@ fn main() {
     };
 
     // Dim one-line notice when the user picked neither on the CLI nor in
-    // settings — nudges toward an explicit choice without blocking. Skipped
-    // for commands that don't open a device.
+    // settings — says the meter is being worked out rather than assumed.
+    // Skipped for commands that don't open a device.
     let opens_device = !matches!(cli.command, Cmd::List | Cmd::Completions { .. });
     if opens_device && device_source == dmm_settings::DeviceSource::Fallback {
         eprintln!(
             "{}",
-            style(format!(
-                "Using default device: {} (pass --device or set device_family in dmm-gui settings to change)",
-                device.id
-            ))
+            style(
+                "Auto-detecting the meter (pass --device or set device_family in dmm-gui settings to pin one)"
+            )
             .dim()
         );
     }
@@ -365,17 +366,18 @@ fn main() {
         // The mock is a registry device with nothing to open, so only the
         // commands that have no meaning without hardware branch on it here —
         // `read`, `command`, `get` and `set` pick the mock transport
-        // themselves and take the same arm as every other device.
-        Cmd::Info | Cmd::Debug { .. } if !device.requires_hardware => {
+        // themselves and take the same arm as every other device. Auto never
+        // lands here: detecting a meter means opening a cable.
+        Cmd::Info | Cmd::Debug { .. } if !requires_hardware(selection) => {
             eprintln!(
                 "{} This command requires real hardware (not supported with --device {}).",
                 style("Error:").red().bold(),
-                device.id,
+                selection_id(selection),
             );
             std::process::exit(1);
         }
 
-        Cmd::Info => cmd_info(device, adapter),
+        Cmd::Info => cmd_info(selection, adapter),
         Cmd::Read {
             interval_ms,
             format,
@@ -400,7 +402,7 @@ fn main() {
                 }
             };
             cmd_read(
-                device,
+                selection,
                 adapter,
                 interval_ms,
                 format,
@@ -412,18 +414,18 @@ fn main() {
                 clock,
             )
         }
-        Cmd::Command { action } => cmd_command(device, adapter, action),
+        Cmd::Command { action } => cmd_command(selection, adapter, action),
         Cmd::Get {
             setting,
             format,
             mock_mode,
-        } => cmd_get(device, adapter, setting, format, mock_mode),
+        } => cmd_get(selection, adapter, setting, format, mock_mode),
         Cmd::Set {
             setting,
             choice,
             mock_mode,
-        } => cmd_set(device, adapter, setting, choice, mock_mode),
-        Cmd::Debug { count, interval_ms } => cmd_debug(device, adapter, count, interval_ms),
+        } => cmd_set(selection, adapter, setting, choice, mock_mode),
+        Cmd::Debug { count, interval_ms } => cmd_debug(selection, adapter, count, interval_ms),
         Cmd::Capture {
             output,
             steps,
@@ -438,10 +440,12 @@ fn main() {
             if list_steps {
                 // Device-scoped: the steps come from the selected device's
                 // protocol, so what's listed is what `--steps` will match.
-                capture::list_steps(device, format);
-                Ok(())
+                // With nothing selected, that means asking the cable first.
+                device_for_listing(selection, adapter).map(|device| {
+                    capture::list_steps(device, format);
+                })
             } else {
-                open_recording_with_help(device, adapter).and_then(|(dmm, recorder)| {
+                open_recording_with_help(selection, adapter).and_then(|(dmm, recorder, device)| {
                     capture::cmd_capture(
                         output,
                         steps,
@@ -453,6 +457,7 @@ fn main() {
                         dmm,
                         recorder,
                         device,
+                        detected_name(),
                     )
                 })
             }
@@ -462,7 +467,12 @@ fn main() {
     if let Err(e) = result {
         error!("{e}");
         let msg = e.to_string();
-        if msg.contains("timeout") {
+        // The activation instructions belong to one meter, so they are only
+        // printed once one is settled on: the one named, or the one detection
+        // found before the meter went quiet.
+        if msg.contains("timeout")
+            && let Some(device) = opened_device(selection)
+        {
             print_no_response_help(device);
         } else {
             eprintln!("{} {msg}", style("Error:").red().bold());
@@ -510,7 +520,7 @@ fn build_after_long_help() -> String {
          \x20 --device precedence:\n\
          \x20   1. Command-line flag\n\
          \x20   2. device_family from the settings file above\n\
-         \x20   3. Registry default ({default})\n\
+         \x20   3. auto \u{2014} detect the meter over the USB cable\n\
          \n\
          ENVIRONMENT:\n\
          \x20 RUST_LOG    Log filter. Use `dmm_lib=trace` for wire-level debugging.\n\
@@ -518,7 +528,6 @@ fn build_after_long_help() -> String {
          \n\
          Help / GitHub: https://github.com/antoinecellerier/dmm-tools",
         path = resolved_config_path_display(),
-        default = registry::default_device().id,
     )
 }
 
@@ -561,43 +570,159 @@ fn setup_ctrlc() -> Result<Arc<AtomicBool>, Box<dyn std::error::Error>> {
 /// at runtime.
 type BoxedDmm = dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>;
 
-/// Open the meter with helpful error messages for common failures.
+/// What detection settled on, once a [`Selection::Auto`] open has run.
+///
+/// The two sites that need it afterwards — the `info` listing and the timeout
+/// help `main` prints once a command has already returned — are past the point
+/// where the opener could hand it to them, and a run only ever opens one meter.
+static AUTO_DETECTED: OnceLock<dmm_lib::detect::Detected> = OnceLock::new();
+
+/// Whether this selection means opening a USB cable. Auto does: there is
+/// nothing to detect without one.
+fn requires_hardware(selection: Selection) -> bool {
+    match selection {
+        Selection::Auto => true,
+        Selection::Device(device) => device.requires_hardware,
+    }
+}
+
+/// What the user would pass to `--device` to make this selection again.
+fn selection_id(selection: Selection) -> &'static str {
+    match selection {
+        Selection::Auto => registry::AUTO_DEVICE_ID,
+        Selection::Device(device) => device.id,
+    }
+}
+
+/// The entry a command ran against: the one named, or the one detection found.
+///
+/// `None` only when Auto never got as far as identifying a meter.
+fn opened_device(selection: Selection) -> Option<&'static SelectableDevice> {
+    match selection {
+        Selection::Auto => AUTO_DETECTED.get().map(|d| d.device),
+        Selection::Device(device) => Some(device),
+    }
+}
+
+/// Record what detection found, and say so.
+///
+/// The meter was picked for the user, so the name it was picked by belongs on
+/// screen — dim and on stderr, like every other notice, so a redirected CSV or
+/// JSON stream stays machine-readable.
+fn note_detected(detected: dmm_lib::detect::Detected) -> &'static SelectableDevice {
+    let detected = AUTO_DETECTED.get_or_init(|| detected);
+    let device = detected.device;
+    // A name the registry doesn't carry still identifies the family, and the
+    // tables in use are then someone else's — say whose, and how to override.
+    let note = match &detected.reported_name {
+        Some(name) if name != device.display_name => format!(
+            " (the meter reports {name:?}; using {} tables \u{2014} pass --device to override)",
+            device.display_name
+        ),
+        _ => String::new(),
+    };
+    eprintln!(
+        "{}",
+        style(format!("Detected {}{note}", device.display_name)).dim()
+    );
+    device
+}
+
+/// Open the meter with helpful error messages for common failures, and say
+/// which entry answered — the one named, or the one detection found.
 fn open_with_help(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
-) -> Result<BoxedDmm, Box<dyn std::error::Error>> {
-    let dmm = dmm_lib::open_device_by_id_auto(device.id, adapter)
-        .map_err(|e| open_error_help(device, e))?;
+) -> Result<(BoxedDmm, &'static SelectableDevice), Box<dyn std::error::Error>> {
+    let (dmm, device) = match selection {
+        Selection::Auto => {
+            let (dmm, detected) =
+                dmm_lib::open_auto(adapter).map_err(|e| open_error_help(selection, e))?;
+            let device = note_detected(detected);
+            (dmm, device)
+        }
+        Selection::Device(device) => (
+            dmm_lib::open_device_by_id_auto(device.id, adapter)
+                .map_err(|e| open_error_help(selection, e))?,
+            device,
+        ),
+    };
     warn_if_experimental(device, dmm.profile());
-    Ok(dmm)
+    Ok((dmm, device))
 }
 
 /// Open the meter with every wire byte recorded, the init handshake included,
 /// for `capture` to put in its report.
 fn open_recording_with_help(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
-) -> Result<(BoxedDmm, recording::SharedRecorder), Box<dyn std::error::Error>> {
-    // The mock has no USB link to open, and none to record either — it goes
-    // through the same recorder so `capture` has one code path.
-    let (transport, protocol): (Box<dyn dmm_lib::transport::Transport>, _) =
-        if device.requires_hardware {
-            dmm_lib::open_transport_by_id_auto(device.id, adapter)
-                .map_err(|e| open_error_help(device, e))?
-        } else {
-            (
-                Box::new(dmm_lib::transport::NullTransport),
-                (device.new_protocol)(),
-            )
-        };
-    let (transport, recorder) = recording::RecordingTransport::new(transport);
-    let dmm = dmm_lib::Dmm::new(
-        Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,
-        protocol,
-    )
-    .map_err(|e| open_error_help(device, e))?;
+) -> Result<
+    (
+        BoxedDmm,
+        recording::SharedRecorder,
+        &'static SelectableDevice,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    type Boxed = Box<dyn dmm_lib::transport::Transport>;
+    let (transport, recorder, device, protocol): (Boxed, _, _, _) = match selection {
+        // Wrap first, then detect: the probe and the meter's answer to it are
+        // the first bytes on the wire, and a report that starts after them
+        // hides how the meter was picked.
+        Selection::Auto => {
+            let (transport, bridge) =
+                dmm_lib::open_transport(&[], adapter).map_err(|e| open_error_help(selection, e))?;
+            let (transport, recorder) = recording::RecordingTransport::new(transport);
+            let transport = Box::new(transport) as Boxed;
+            let detected = dmm_lib::detect::detect_device(&*transport, bridge)
+                .map_err(|e| open_error_help(selection, e))?;
+            let device = note_detected(detected);
+            (transport, recorder, device, (device.new_protocol)())
+        }
+        Selection::Device(device) => {
+            // The mock has no USB link to open, and none to record either — it
+            // goes through the same recorder so `capture` has one code path.
+            let (transport, protocol): (Boxed, _) = if device.requires_hardware {
+                dmm_lib::open_transport_by_id_auto(device.id, adapter)
+                    .map_err(|e| open_error_help(selection, e))?
+            } else {
+                (
+                    Box::new(dmm_lib::transport::NullTransport),
+                    (device.new_protocol)(),
+                )
+            };
+            let (transport, recorder) = recording::RecordingTransport::new(transport);
+            (Box::new(transport) as Boxed, recorder, device, protocol)
+        }
+    };
+    let dmm = dmm_lib::Dmm::new(transport, protocol).map_err(|e| open_error_help(selection, e))?;
     warn_if_experimental(device, dmm.profile());
-    Ok((dmm, recorder))
+    Ok((dmm, recorder, device))
+}
+
+/// Identify the meter and hand the cable straight back, for the listings that
+/// need a registry entry but nothing from the meter itself.
+fn detect_only(
+    adapter: Option<&str>,
+) -> Result<&'static SelectableDevice, Box<dyn std::error::Error>> {
+    let (transport, bridge) =
+        dmm_lib::open_transport(&[], adapter).map_err(|e| open_error_help(Selection::Auto, e))?;
+    let detected = dmm_lib::detect::detect_device(&*transport, bridge)
+        .map_err(|e| open_error_help(Selection::Auto, e))?;
+    Ok(note_detected(detected))
+}
+
+/// The entry a listing describes. Nothing is read from the meter, but with
+/// nothing selected there is still a meter to identify — the alternative is
+/// listing another model's commands or capture steps.
+fn device_for_listing(
+    selection: Selection,
+    adapter: Option<&str>,
+) -> Result<&'static SelectableDevice, Box<dyn std::error::Error>> {
+    match selection {
+        Selection::Auto => detect_only(adapter),
+        Selection::Device(device) => Ok(device),
+    }
 }
 
 /// Tell the user an unverified protocol is in use and how to help fix it.
@@ -631,30 +756,74 @@ fn warn_if_experimental(
     );
 }
 
+/// The meters on a bridge, grouped by the steps that switch their
+/// transmission on.
+///
+/// Several entries share one instruction block — every UT61+/UT161 model, the
+/// UT8802 and the UT8803 — so a list per device would print the same four
+/// lines six times over. Registry order is kept, and a group is named by the
+/// display names that share it.
+fn activation_groups(
+    devices: &[&'static SelectableDevice],
+) -> Vec<(&'static str, Vec<&'static str>)> {
+    let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
+    for device in devices {
+        match groups
+            .iter_mut()
+            .find(|(instructions, _)| *instructions == device.activation_instructions)
+        {
+            Some((_, names)) => names.push(device.display_name),
+            None => groups.push((device.activation_instructions, vec![device.display_name])),
+        }
+    }
+    groups
+}
+
 /// Print setup help for the failures a user can act on, and return the error
 /// to report.
 fn open_error_help(
-    device: &'static SelectableDevice,
+    selection: Selection,
     error: dmm_lib::error::Error,
 ) -> Box<dyn std::error::Error> {
     match error {
         dmm_lib::error::Error::NoTransportFound => {
             eprintln!("{}", style("USB cable not found.").yellow().bold());
             print_transport_setup_help();
-            let proto = (device.new_protocol)();
-            let profile = proto.profile();
-            if profile.stability == dmm_lib::protocol::Stability::Experimental {
-                eprintln!(
-                    "{}",
-                    style(format!(
-                        "{} Report feedback: {}",
-                        dmm_lib::binary_help::experimental_warning(profile.model_name),
-                        profile.feedback_url()
-                    ))
-                    .yellow()
-                );
+            // Nothing is known about the meter when it was never named and the
+            // cable it would have been identified through never opened.
+            if let Selection::Device(device) = selection {
+                let proto = (device.new_protocol)();
+                let profile = proto.profile();
+                if profile.stability == dmm_lib::protocol::Stability::Experimental {
+                    eprintln!(
+                        "{}",
+                        style(format!(
+                            "{} Report feedback: {}",
+                            dmm_lib::binary_help::experimental_warning(profile.model_name),
+                            profile.feedback_url()
+                        ))
+                        .yellow()
+                    );
+                }
             }
             "device not found".into()
+        }
+        // The cable is there and nothing on it spoke. Every meter it could
+        // carry has something the user has to switch on, so list them.
+        dmm_lib::error::Error::DeviceNotIdentified { bridge } => {
+            eprintln!(
+                "{}",
+                style("No meter answered over the USB cable.")
+                    .yellow()
+                    .bold()
+            );
+            for (instructions, names) in activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
+                eprintln!("\n{}", style(names.join(", ")).yellow());
+                for line in instructions.lines() {
+                    eprintln!("{}", style(format!("  {line}")).dim());
+                }
+            }
+            "device not identified".into()
         }
         dmm_lib::error::Error::AdapterNotFound(ref detail) => {
             eprintln!(
@@ -703,15 +872,36 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn cmd_info(
-    device: &'static SelectableDevice,
-    adapter: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut dmm = open_with_help(device, adapter)?;
-    let name = dmm.get_name()?;
+/// The name the detection probe already got from the meter, if it ran and
+/// the meter gave one: asking again would spend a second round trip — and on
+/// a UT61+ a second beep — on a name we have.
+fn detected_name() -> Option<String> {
+    AUTO_DETECTED.get().and_then(|d| d.reported_name.clone())
+}
+
+fn cmd_info(selection: Selection, adapter: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut dmm, _device) = open_with_help(selection, adapter)?;
+    let name = match detected_name() {
+        Some(name) => Some(name),
+        None => dmm.get_name()?,
+    };
     match name {
         Some(ref n) => println!("Device: {}", style(n).bold()),
         None => println!("Device: {}", style("(name not supported)").dim()),
+    }
+    // Which tables are in use is only in question when the user named no
+    // meter, so the line is only there when they didn't.
+    if let Some(detected) = AUTO_DETECTED.get() {
+        let reported = match &detected.reported_name {
+            Some(name) if name != detected.device.display_name => {
+                format!(" (the meter reports {name:?})")
+            }
+            _ => String::new(),
+        };
+        println!(
+            "Detected: {}{reported}",
+            style(detected.device.display_name).bold()
+        );
     }
 
     println!("Transport: {}", dmm.transport().transport_name());
@@ -727,7 +917,7 @@ fn cmd_info(
 
 #[allow(clippy::too_many_arguments)]
 fn cmd_read(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
     interval_ms: u64,
     format: OutputFormat,
@@ -739,9 +929,9 @@ fn cmd_read(
     // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    refuse_clock_on_hardware(device, &clock)?;
-    if device.requires_hardware {
-        let mut dmm = open_with_help(device, adapter)?;
+    refuse_clock_on_hardware(selection, &clock)?;
+    if requires_hardware(selection) {
+        let (mut dmm, device) = open_with_help(selection, adapter)?;
         let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
         info!("connected, starting measurement loop");
         run_read_loop(
@@ -779,12 +969,13 @@ fn cmd_read(
 /// Refuse a bent session clock on a device that is paced by USB.
 ///
 /// Checked before the device is opened, so a hardware `--device` with the
-/// clock flags fails with no meter attached and nothing to plug in.
+/// clock flags fails with no meter attached and nothing to plug in — and so
+/// does Auto, which has a cable to open before it knows anything at all.
 fn refuse_clock_on_hardware(
-    device: &SelectableDevice,
+    selection: Selection,
     clock: &dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if device.requires_hardware && !clock.is_real() {
+    if requires_hardware(selection) && !clock.is_real() {
         return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.into());
     }
     Ok(())
@@ -1019,17 +1210,17 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 }
 
 fn cmd_command(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
     action: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let action = match action {
         Some(a) => a,
-        None => return print_available_commands(device),
+        None => return print_available_commands(device_for_listing(selection, adapter)?),
     };
 
-    if device.requires_hardware {
-        let mut dmm = open_with_help(device, adapter)?;
+    if requires_hardware(selection) {
+        let (mut dmm, _device) = open_with_help(selection, adapter)?;
         dmm.send_command(&action)?;
     } else {
         let mut dmm = dmm_lib::mock::open_mock()?;
@@ -1182,15 +1373,15 @@ fn print_tip(lead: &str, setting: Setting, choices: &[Choice]) {
 /// Both need a reading first: the choices are relative to what the meter is
 /// measuring now, so there is nothing to list until one frame has arrived.
 fn cmd_get(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
     setting: Option<SettingArg>,
     format: SettingsFormat,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let setting = setting.map(Setting::from);
-    if device.requires_hardware {
-        let mut dmm = open_with_help(device, adapter)?;
+    if requires_hardware(selection) {
+        let (mut dmm, _device) = open_with_help(selection, adapter)?;
         run_get(&mut dmm, setting, format)
     } else {
         let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
@@ -1200,15 +1391,15 @@ fn cmd_get(
 
 /// Switch one setting, or list what it reaches when no choice was named.
 fn cmd_set(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
     setting: SettingArg,
     choice: Option<String>,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let setting = Setting::from(setting);
-    if device.requires_hardware {
-        let mut dmm = open_with_help(device, adapter)?;
+    if requires_hardware(selection) {
+        let (mut dmm, _device) = open_with_help(selection, adapter)?;
         run_set(&mut dmm, setting, choice)
     } else {
         let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
@@ -1696,14 +1887,14 @@ fn resolve_choice<'a>(choices: &'a [Choice], input: &str) -> Result<&'a Choice, 
 }
 
 fn cmd_debug(
-    device: &'static SelectableDevice,
+    selection: Selection,
     adapter: Option<&str>,
     count: usize,
     interval_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
-    let mut dmm = open_with_help(device, adapter)?;
+    let (mut dmm, _device) = open_with_help(selection, adapter)?;
 
     // Show transport info before entering measurement loop
     eprintln!(
@@ -1872,20 +2063,107 @@ mod tests {
         }
     }
 
+    /// A device string, resolved as `main` resolves it.
+    fn selection(s: &str) -> Selection {
+        registry::resolve_selection(s).unwrap_or_else(|| panic!("{s} must resolve"))
+    }
+
     /// A bent clock on a USB-paced meter would stamp readings with instants
     /// the meter never produced, so `read` refuses before it opens anything.
+    /// Auto is one of those: it has a cable to open either way.
     #[test]
     fn clock_flags_are_refused_on_a_hardware_device() {
-        let hardware = registry::resolve_device("ut61eplus").expect("registry has ut61eplus");
-        let mock = registry::resolve_device("mock").expect("registry has mock");
+        let mock = selection("mock");
         let virtual_clock = dmm_lib::Clock::from_flags(None, Some(90.0)).expect("valid preseed");
 
-        let err = refuse_clock_on_hardware(hardware, &virtual_clock)
-            .expect_err("a hardware device must refuse a virtual clock");
-        assert_eq!(err.to_string(), dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY);
+        for hardware in [selection("ut61eplus"), selection("auto")] {
+            let err = refuse_clock_on_hardware(hardware, &virtual_clock)
+                .expect_err("a hardware device must refuse a virtual clock");
+            assert_eq!(err.to_string(), dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY);
+            assert!(refuse_clock_on_hardware(hardware, &dmm_lib::Clock::real()).is_ok());
+        }
 
         assert!(refuse_clock_on_hardware(mock, &virtual_clock).is_ok());
-        assert!(refuse_clock_on_hardware(hardware, &dmm_lib::Clock::real()).is_ok());
+    }
+
+    /// Naming no meter, on the command line or in the settings file, means
+    /// detection rather than a model nobody chose.
+    #[test]
+    fn no_flag_and_no_setting_detects_the_meter() {
+        let (id, source) =
+            dmm_settings::resolve_device_family(None, None, registry::AUTO_DEVICE_ID);
+        assert_eq!(source, dmm_settings::DeviceSource::Fallback);
+        assert!(matches!(
+            registry::resolve_selection(&id),
+            Some(Selection::Auto)
+        ));
+        assert!(requires_hardware(selection("auto")));
+    }
+
+    /// A saved or flagged family still pins one, and skips detection.
+    #[test]
+    fn a_named_family_still_wins() {
+        let saved = dmm_settings::SharedSettings {
+            device_family: "ut8803".to_string(),
+        };
+        let (id, source) =
+            dmm_settings::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
+        assert_eq!(source, dmm_settings::DeviceSource::Settings);
+        let Some(Selection::Device(device)) = registry::resolve_selection(&id) else {
+            panic!("a saved family must resolve to that device");
+        };
+        assert_eq!(device.id, "ut8803");
+
+        let (id, source) = dmm_settings::resolve_device_family(
+            Some("ut61b+"),
+            Some(&saved),
+            registry::AUTO_DEVICE_ID,
+        );
+        assert_eq!(source, dmm_settings::DeviceSource::Cli);
+        assert_eq!(selection_id(selection(&id)), "ut61b+");
+    }
+
+    /// `auto` is a value `--device` takes, and the only one the registry does
+    /// not carry — so nothing else would put it in the help.
+    #[test]
+    fn the_device_help_offers_auto() {
+        let help = build_device_help();
+        assert!(
+            help.contains("auto         Detect the meter over the USB cable (default)"),
+            "{help}"
+        );
+        assert!(
+            build_after_long_help()
+                .contains("3. auto \u{2014} detect the meter over the USB cable"),
+            "the precedence list still names a model as the fallback"
+        );
+    }
+
+    /// The "no meter answered" help lists what to switch on, once per set of
+    /// steps: every UT61+/UT161 model shares one block, and so do the UT8802
+    /// and the UT8803.
+    #[test]
+    fn activation_help_lists_each_set_of_steps_once() {
+        let devices = dmm_lib::devices_on_bridge("CP2110");
+        assert!(devices.len() > 1, "CP2110 carries several meters");
+        let groups = activation_groups(&devices);
+        assert!(groups.len() < devices.len(), "nothing was grouped");
+
+        let instructions: Vec<&str> = groups.iter().map(|(i, _)| *i).collect();
+        let mut unique = instructions.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), instructions.len(), "a block is listed twice");
+
+        // Every meter is named exactly once, under its own block.
+        let named: Vec<&str> = groups.iter().flat_map(|(_, names)| names.clone()).collect();
+        assert_eq!(named.len(), devices.len());
+        let ut61 = groups
+            .iter()
+            .find(|(_, names)| names.contains(&"UT61E+"))
+            .expect("the UT61E+ is on the CP2110");
+        assert!(ut61.1.contains(&"UT61B+"), "{:?}", ut61.1);
+        assert!(ut61.0.contains("USB/Hz"), "{}", ut61.0);
     }
 
     fn read_transform(args: &[&str]) -> Transform {

@@ -15,14 +15,18 @@ use crate::protocol::{Stability, registry};
 /// Counts, form factor and which models share a protocol table stay in
 /// `docs/supported-devices.md`, which the reference links to.
 pub fn cli_reference_table() -> String {
-    let default_id = registry::default_device().id;
     let mut table = String::from("| Value | Aliases | Description |\n|---|---|---|");
+    // Auto leads the table and carries the default tag: it is what `--device`
+    // does when nothing names a meter, and the one value that is not a
+    // registry entry. Its description links to the design the way the rows
+    // below send a reader to `supported-devices.md`.
+    table.push_str(&format!(
+        "\n| `{}` |  | [Detect the meter over the USB cable](detection-design.md) (default) |",
+        registry::AUTO_DEVICE_ID
+    ));
     for device in registry::DEVICES {
         let aliases: Vec<String> = device.aliases.iter().map(|a| format!("`{a}`")).collect();
         let mut tags: Vec<&str> = Vec::new();
-        if device.id == default_id {
-            tags.push("default");
-        }
         if !device.requires_hardware {
             tags.push("no hardware required");
         } else if (device.new_protocol)().profile().stability == Stability::Verified {
@@ -79,7 +83,15 @@ mod tests {
     #[test]
     fn cli_reference_tags_default_experimental_and_mock() {
         let table = cli_reference_table();
-        assert!(table.contains("| UT61E+ (default, verified) |"), "{table}");
+        // The default is detection, not a model: `auto` carries the tag and
+        // leads the table, and no meter claims it.
+        let first_row = table.lines().nth(2).expect("a first device row");
+        assert_eq!(
+            first_row,
+            "| `auto` |  | [Detect the meter over the USB cable](detection-design.md) (default) |"
+        );
+        assert!(table.contains("| UT61E+ (verified) |"), "{table}");
+        assert_eq!(table.matches("default").count(), 1, "{table}");
         assert!(table.contains("| UT171A/B/C (experimental) |"), "{table}");
         assert!(
             table.contains("| Mock (simulated, no hardware required) |"),

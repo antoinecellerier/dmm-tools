@@ -26,7 +26,7 @@ Set `NO_COLOR=1` to disable colored output.
 
 | Option | Default | Description |
 |---|---|---|
-| `--device <FAMILY>` | see below | Device family to connect to. See [Device Families](#device-families) below. |
+| `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is on the cable. See [Devices](#devices) below. |
 | `--adapter <SERIAL_OR_PATH>` | | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `list` output. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
@@ -37,18 +37,26 @@ The `--device` flag selects which device model and protocol to use. Each model h
 its own entry with model-specific protocol tables (e.g., UT61B+ uses different
 mode/range mappings than UT61E+).
 
+`auto`, the default, identifies the meter from the frames it answers with instead of
+being told ([how detection works](detection-design.md)). A meter that answers the first
+probe costs about 200 ms; nothing answering at all costs ~2.6 s and then lists what to
+switch on for every meter that cable could carry. `--device <id>` pins a model and
+skips probing entirely. The name probe makes a UT61+/UT161 beep once per connect; a pinned
+family stays silent.
+
 **Device resolution precedence** (highest to lowest):
 
-1. `--device <FAMILY>` on the command line
+1. `--device <DEVICE>` on the command line
 2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device in its settings panel — the CLI reads it but never writes to it)
-3. `ut61eplus` as a final fallback
+3. `auto` as a final fallback
 
-When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so silent use of the wrong protocol is less likely. The notice is suppressed for commands that don't open a device (`list`, `completions`).
+When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so it is clear no model was named. That notice is suppressed for commands that don't open a device (`list`, `completions`). Every detected open adds a second dim line naming the meter that was found, and the model name the meter reported when it differs from the entry's.
 
 <!-- devices:start -->
 | Value | Aliases | Description |
 |---|---|---|
-| `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (default, verified) |
+| `auto` |  | [Detect the meter over the USB cable](detection-design.md) (default) |
+| `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (verified) |
 | `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (verified) |
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
 | `ut161b` |  | UT161B (experimental) |

@@ -11,7 +11,7 @@ is probed with, and how well that probe is backed:
 
 | Family | Detection sends | Expects back | Hardware status |
 |---|---|---|---|
-| UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | Name reply verified in 12 of our captures (CP2110) |
+| UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | **Verified through the detector** 2026-09-11 on our UT61E+ (CP2110): identified in under a second, ack at 85 ms and name at 193 ms in the capture's `init_frames`; with the meter off the cascade ends in 2.7 s with the not-identified help |
 | UT61B+ | same | same, the name being `UT61B+` | Verified over CH9329 ([issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
 | UT61D+, UT161B/D/E | same | same, the name being the model | Unverified — no report has named one of these meters |
 | UT181A | `AB CD 04 00 05 01 0A 00` (SET_MONITOR) | 2-byte-LE frames, type `0x02`, payload ≥ 31 bytes | The reply is verified on hardware ([PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8), [issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)), never through the detector |
@@ -43,8 +43,9 @@ Open questions, each needing a meter:
   unrecognised name falls back to the UT61E+ tables and is logged, so a
   reporter's `RUST_LOG=dmm_lib=debug` output is what turns one into a
   registry alias.
-- **Does a UT61+ beep on `0x5F`?** If it does, every auto connect beeps
-  once, whatever the GUI's name-query setting says.
+- ~~**Does a UT61+ beep on `0x5F`?**~~ — **VERIFIED** 2026-09-11 on our
+  UT61E+: it does, so every auto connect beeps once, whatever the GUI's
+  name-query setting says; a pinned `--device ut61eplus` read stays silent.
 - **Does a VC-890 answer `0x5E` on the first attempt?** The vendor software
   retries the name request up to 10 times with a buffer flush between
   attempts, so a single poll may not be enough.

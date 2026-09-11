@@ -42,6 +42,12 @@ pub fn device_help(intro: &str) -> String {
     let mut help = String::with_capacity(intro.len() + registry::DEVICES.len() * 48 + 160);
     help.push_str(intro);
     help.push_str("\n\nDevices:\n");
+    // Leads the list: it is what the flag does when nothing names a meter, and
+    // the one value the registry does not carry.
+    help.push_str(&format!(
+        "  {:<12} Detect the meter over the USB cable (default)\n",
+        registry::AUTO_DEVICE_ID
+    ));
     for d in registry::DEVICES {
         let stability = (d.new_protocol)().profile().stability;
         let tag = if !d.requires_hardware {
@@ -220,6 +226,13 @@ mod tests {
     fn device_help_lists_every_registry_device() {
         let help = device_help("Device to connect to.");
         assert!(help.starts_with("Device to connect to.\n\nDevices:\n"));
+        // Auto is not a registry entry, so nothing below would list it — and
+        // it leads, being what a user who names nothing gets.
+        let listing = help.split("Devices:\n").nth(1).expect("device list");
+        assert!(
+            listing.starts_with("  auto         Detect the meter over the USB cable (default)\n"),
+            "{listing}"
+        );
         for d in registry::DEVICES {
             assert!(help.contains(d.id), "missing {}", d.id);
             assert!(help.contains(d.display_name), "missing {}", d.display_name);

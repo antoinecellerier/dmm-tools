@@ -92,3 +92,30 @@ fn command_sends_to_the_mock() {
     let (stdout, _) = run(&["--device", "mock", "command", "hold"]);
     assert_eq!(stdout.trim(), "Sent hold");
 }
+
+/// `auto` is a `--device` value like any other, and the one the registry does
+/// not carry: it has to reach the open path rather than be rejected as an
+/// unknown device.
+///
+/// Pinned to an adapter that cannot exist so the run stays hermetic — without
+/// it, a machine with a meter plugged in would have that meter probed by the
+/// test suite.
+#[test]
+fn auto_is_a_device_value_and_reaches_the_usb_cable() {
+    let (_, stderr) = run(&["--device", "auto", "--adapter", "no-such-adapter", "info"]);
+    assert!(
+        !stderr.contains("unknown device"),
+        "auto was rejected before anything was opened: {stderr}"
+    );
+    assert!(stderr.contains("adapter not found"), "got {stderr}");
+}
+
+/// Naming the mock still picks it, rather than probing for a meter: the
+/// dispatch every command goes through now resolves `auto` too.
+#[test]
+fn a_named_device_is_not_detected() {
+    let (stdout, stderr) = run(&["--device", "mock", "command", "hold"]);
+    assert_eq!(stdout.trim(), "Sent hold");
+    assert!(!stderr.contains("Detected"), "got {stderr}");
+    assert!(!stderr.contains("Auto-detecting"), "got {stderr}");
+}

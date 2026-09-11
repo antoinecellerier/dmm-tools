@@ -59,7 +59,7 @@ $ dmm-cli set range 22V
 Meter now in 22V (manual range)
 ```
 
-Connect to other device families with `--device`:
+The meter on the cable is detected automatically; `--device` pins a model:
 
 ```
 $ dmm-cli --device ut8803 capture

@@ -13,12 +13,21 @@ use console::style;
 use dmm_lib::protocol::Need;
 
 /// Verify that the meter is responding. Returns `(device_name, supported)` on success.
+///
+/// `known_name` is the name the detection probe already got, when it ran:
+/// the meter has answered once, so it is neither asked again nor made to
+/// beep again.
 pub(super) fn verify_meter(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
+    known_name: Option<String>,
 ) -> Result<(String, bool), Box<dyn std::error::Error>> {
     eprintln!("{}", style("Checking meter communication...").dim());
-    let device_name = match dmm.get_name() {
+    let name = match known_name {
+        Some(name) => Ok(Some(name)),
+        None => dmm.get_name(),
+    };
+    let device_name = match name {
         Ok(Some(name)) => name,
         Ok(None) | Err(_) => {
             // get_name failed or unsupported — try a plain measurement as fallback
