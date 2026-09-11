@@ -39,7 +39,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{CaptureStep, DeviceProfile, Protocol, Stability, unknown_mode};
+use crate::protocol::{
+    CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
+    unknown_mode,
+};
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
@@ -479,16 +482,14 @@ const UT803_MODES: &[u8] = &[0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x9, 0xB, 0xD, 0xE, 0
 
 /// Whether `nibbles` can be a measurement frame for this model.
 ///
-/// `pub(crate)` for [`crate::detect`], which splits a UT803 from a UT804 on
-/// the CH9325 bridge with the same two checks rather than a table of its own.
-///
 /// UT804 frames carry 0xD 0xA markers at nibbles 9-10; the UT803 has no
 /// markers, so a known mode code stands in. The stream filter uses this to
-/// resync, and `Protocol::parse_payload` to refuse a payload that never went
+/// resync, `Protocol::parse_payload` to refuse a payload that never went
 /// through the stream — the UT803 parser names an unrecognised mode code
 /// "Unknown" rather than failing, so without the gate a golden fixture
-/// holding anything at all would pin a plausible-looking measurement.
-pub(crate) fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
+/// holding anything at all would pin a plausible-looking measurement — and
+/// [`FINGERPRINT`] to split the two models on the wire.
+fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
     match model {
         Fs9721Model::Ut804 => nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
         Fs9721Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
@@ -701,6 +702,42 @@ impl Protocol for Fs9721Protocol {
             ),
         ]
     }
+}
+
+/// Detection for the UT803/UT804.
+///
+/// The meters stream 14-byte FS9721 frames and take no commands past the
+/// CH9325 transport's own init, so there is nothing to send. Both send the
+/// same frames, so only the payload separates them
+/// (`docs/research/ut803/reverse-engineered-protocol.md`).
+pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Fs9721,
+    label: "fs9721 stream",
+    trigger: None,
+    recognise,
+};
+
+fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+    let mut offset = 0;
+    while let Ok(Some((nibbles, consumed))) = framing::extract_frame_fs9721(&buf[offset..]) {
+        // UT804 first: its `0xD 0xA` marker pair at nibbles 9-10 is positive
+        // evidence, where the UT803 check only asks whether the mode nibble is
+        // one of the codes we know — which a UT804 frame can satisfy by
+        // accident.
+        for model in [Fs9721Model::Ut804, Fs9721Model::Ut803] {
+            if is_measurement_frame(model, &nibbles) {
+                return Some(Evidence::Model {
+                    id: match model {
+                        Fs9721Model::Ut804 => "ut804",
+                        Fs9721Model::Ut803 => "ut803",
+                    },
+                    reported_name: None,
+                });
+            }
+        }
+        offset += consumed;
+    }
+    None
 }
 
 #[cfg(test)]
@@ -1549,5 +1586,34 @@ raw_payload=14"#
             err.to_string(),
             "invalid response: fs9721 invalid digit nibble 0x0f"
         );
+    }
+
+    // --- Detection (crate::detect) ---------------------------------------
+
+    /// Both models send the same 14-byte frames, so only the payload splits
+    /// them — and the UT804's marker pair is checked first, because the UT803
+    /// check only asks whether the mode nibble is one of the codes we know,
+    /// which a UT804 frame can satisfy by accident.
+    #[test]
+    fn the_ut804_markers_are_checked_before_the_ut803_mode_codes() {
+        // 14 bytes, high nibble = index 1..14. Nibbles 9 and 10 carry the
+        // UT804's 0xD 0xA marker pair; the UT803 frame has a known mode code
+        // (0x2) at nibble 6 instead.
+        let mut ut804: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
+        ut804[9] |= 0x0D;
+        ut804[10] |= 0x0A;
+        let mut ut803: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
+        ut803[6] |= 0x02;
+
+        let recognise = FINGERPRINT.recognise;
+        for (frame, id) in [(ut804, "ut804"), (ut803, "ut803")] {
+            assert_eq!(
+                recognise(&frame, &Probing::default()),
+                Some(Evidence::Model {
+                    id,
+                    reported_name: None,
+                })
+            );
+        }
     }
 }

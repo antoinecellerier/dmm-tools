@@ -13,7 +13,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
+use crate::protocol::{
+    DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
+    unknown_mode,
+};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
@@ -381,6 +384,31 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         // range would need the full range table, which we don't have.
         ..Measurement::from_payload(payload)
     })
+}
+
+/// Detection for the UT8803.
+///
+/// The meter streams unprompted, so it is identified in whichever window it
+/// first speaks and needs no trigger of its own. Its 21-byte frame carries a
+/// checksum, which is why detection consults this fingerprint before every
+/// other AB CD family (`docs/detection-design.md`).
+pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Ut8803,
+    label: "ut8803 stream",
+    trigger: None,
+    recognise,
+};
+
+fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+    for start in framing::abcd_header_offsets(buf) {
+        if matches!(framing::extract_frame_ut8803(&buf[start..]), Ok(Some(_))) {
+            return Some(Evidence::Model {
+                id: "ut8803",
+                reported_name: None,
+            });
+        }
+    }
+    None
 }
 
 #[cfg(test)]

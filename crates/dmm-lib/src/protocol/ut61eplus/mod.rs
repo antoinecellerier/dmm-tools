@@ -6,13 +6,14 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
+use crate::protocol::registry;
 use crate::protocol::{
-    Choice, DeviceProfile, Protocol, Setting, Stability, check_len, cycle, unknown_mode,
-    unknown_mode16, unsupported_setting,
+    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
+    Stability, check_len, cycle, unknown_mode, unknown_mode16, unsupported_setting,
 };
 use crate::transport::Transport;
 use command::Command;
-use log::debug;
+use log::{debug, warn};
 use mode::Mode;
 use std::borrow::Cow;
 use std::time::Duration;
@@ -529,6 +530,92 @@ impl Protocol for Ut61PlusProtocol {
         steps
     }
 }
+
+/// The ack the meter answers every command with
+/// (`docs/research/ut61eplus/reverse-engineered-protocol.md` §6). Something is
+/// listening, but the ack says nothing about what — [`Protocol::get_name`]
+/// reads past it, and detection ignores it.
+pub(crate) fn is_ack(payload: &[u8]) -> bool {
+    payload == [0xFF, 0x00]
+}
+
+/// The model name in a Get Name reply, `None` for a payload that is not one.
+///
+/// The name is printable ASCII, e.g. `"UT61E+"` (§6). The length bounds are
+/// what separate it from the other frames on this wire: a measurement payload
+/// is 14 bytes of mixed binary and ASCII, and the ack is two.
+pub(crate) fn name_from_reply(payload: &[u8]) -> Option<String> {
+    if (3..=20).contains(&payload.len()) && payload.iter().all(u8::is_ascii_graphic) {
+        return Some(String::from_utf8_lossy(payload).into_owned());
+    }
+    None
+}
+
+/// Detection for the UT61+/UT161 family.
+///
+/// Get Name is the only reply on any bridge that pins the exact model, which
+/// is why the cascade sends it first; a measurement frame settles the family
+/// alone.
+pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Ut61EPlus,
+    label: "ut61+ get name",
+    trigger: Some(send_get_name),
+    recognise,
+};
+
+/// Ask the meter its name — the same frame [`Protocol::get_name`] writes.
+fn send_get_name(transport: &dyn Transport) -> Result<()> {
+    transport.write(&Command::GetName.encode())
+}
+
+/// The BE16 frames this family sends: the name frame pins the model, a
+/// measurement frame only the family.
+///
+/// The scan runs to the end of the buffer even once a reading has been seen:
+/// on the CH9329, which does not purge its RX buffer on open, a stale frame
+/// from an earlier session can sit in front of the name.
+fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+    let mut evidence = None;
+    for start in framing::abcd_header_offsets(buf) {
+        let Ok(Some((payload, _))) = framing::extract_frame_abcd_be16(&buf[start..]) else {
+            continue;
+        };
+        if is_ack(&payload) {
+            continue;
+        }
+        if let Some(name) = name_from_reply(&payload) {
+            return Some(match registry::device_for_reported_name(&name) {
+                Some(device) => {
+                    debug!("detect: name frame {name:?} resolves to {}", device.id);
+                    Evidence::Model {
+                        id: device.id,
+                        reported_name: Some(name),
+                    }
+                }
+                None => {
+                    warn!(
+                        "detect: the meter reports an unknown model {name:?}; using the UT61E+ \
+                         tables. Please report the name so the registry can carry it."
+                    );
+                    Evidence::Model {
+                        id: FALLBACK_ID,
+                        reported_name: Some(name),
+                    }
+                }
+            });
+        }
+        if payload.len() == UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
+            evidence = Some(Evidence::FamilyOnly {
+                fallback: FALLBACK_ID,
+            });
+        }
+    }
+    evidence
+}
+
+/// The entry a frame that names no model opens: the tables every meter in the
+/// family reads with, even where a sibling's ranges differ.
+const FALLBACK_ID: &str = "ut61eplus";
 
 /// How long to leave the meter alone after a button press before asking it
 /// what mode it is in.
@@ -1753,5 +1840,76 @@ raw_payload=14"#
         ];
         let m = parse_measurement(&dcma, &table).unwrap();
         assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("mA", "60mA"));
+    }
+
+    // --- Detection (crate::detect) ---------------------------------------
+
+    /// The ack and the ASCII name frame the meter answers Get Name with,
+    /// both captured from our UT61E+ over CP2110.
+    const ACK: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+    const NAME_UT61EPLUS: [u8; 11] = [
+        0xAB, 0xCD, 0x08, 0x55, 0x54, 0x36, 0x31, 0x45, 0x2B, 0x03, 0x00,
+    ];
+    /// The same reply from a UT61B+ over CH9329 (issue #19).
+    const NAME_UT61BPLUS: [u8; 11] = [
+        0xAB, 0xCD, 0x08, 0x55, 0x54, 0x36, 0x31, 0x42, 0x2B, 0x02, 0xFD,
+    ];
+
+    fn recognised(buf: &[u8]) -> Option<Evidence> {
+        (FINGERPRINT.recognise)(buf, &Probing::default())
+    }
+
+    /// The name frame is the only reply that pins the exact model, and each
+    /// sibling's name is its own registry entry.
+    #[test]
+    fn a_name_frame_picks_the_registry_entry() {
+        for (frame, id, name) in [
+            (NAME_UT61EPLUS, "ut61eplus", "UT61E+"),
+            (NAME_UT61BPLUS, "ut61b+", "UT61B+"),
+        ] {
+            assert_eq!(
+                recognised(&frame),
+                Some(Evidence::Model {
+                    id,
+                    reported_name: Some(name.to_string()),
+                })
+            );
+        }
+    }
+
+    /// A name no registry entry carries still identifies the family: the
+    /// UT61E+ tables are the fallback and the name is kept for the user.
+    #[test]
+    fn an_unknown_name_falls_back_to_the_ut61eplus_tables() {
+        assert_eq!(
+            recognised(&test_frame_be16(b"UT60BT")),
+            Some(Evidence::Model {
+                id: "ut61eplus",
+                reported_name: Some("UT60BT".to_string()),
+            })
+        );
+    }
+
+    /// A measurement frame says which family answered, not which model: the
+    /// CH9329 does not purge its RX buffer on open, so it may be left over
+    /// from an earlier session.
+    #[test]
+    fn a_measurement_frame_settles_the_family_only() {
+        let reading = test_frame_be16(&[
+            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x34, 0x00, 0x02, 0x30, 0x30, 0x30,
+        ]);
+        assert_eq!(
+            recognised(&reading),
+            Some(Evidence::FamilyOnly {
+                fallback: "ut61eplus",
+            })
+        );
+    }
+
+    /// The ack says something is listening, but nothing about what.
+    #[test]
+    fn the_ack_identifies_nothing() {
+        assert!(is_ack(&[0xFF, 0x00]));
+        assert_eq!(recognised(&ACK), None);
     }
 }

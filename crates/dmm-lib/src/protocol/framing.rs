@@ -155,6 +155,18 @@ pub const HEADER: [u8; 2] = [0xAB, 0xCD];
 /// (length byte value must be >= 2 to hold at least the checksum)
 const MIN_RESPONSE_LEN: usize = 5;
 
+/// Offsets of every [`HEADER`] in `buf`.
+///
+/// What the detection recognisers scan: each of them asks its own extractor
+/// whether a frame starts here, so a false header costs one rejected frame
+/// rather than a resync.
+pub(crate) fn abcd_header_offsets(buf: &[u8]) -> impl Iterator<Item = usize> + '_ {
+    buf.windows(HEADER.len())
+        .enumerate()
+        .filter(|(_, w)| *w == HEADER)
+        .map(|(i, _)| i)
+}
+
 /// Build the `AB CD <len> <cmd> [data] <BE16 checksum>` command frame the
 /// UT61+ family and both Voltcraft meters send — the write side of
 /// [`extract_frame_abcd_be16`].
@@ -332,7 +344,7 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
 pub const UT8802_HEADER: [u8; 1] = [0xAC];
 
 /// Fixed frame length for UT8802: header(1) + position(1) + digits(3) + dp_flags(1) + status(1) + sign(1) = 8.
-const UT8802_FRAME_LEN: usize = 8;
+pub(crate) const UT8802_FRAME_LEN: usize = 8;
 
 /// Valid BCD nibble values: 0x0-0x9 (digits), 0x0A (treated as zero), 0x0C (overload 'L').
 fn is_valid_bcd_nibble(nibble: u8) -> bool {

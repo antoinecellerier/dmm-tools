@@ -35,7 +35,9 @@ use std::time::Duration;
 /// builder at line 3805: command = `0xFF`, data = `[0x00]`, header
 /// `0xAB 0xCD`, length byte `0x04` (= 2 + cmd + 1 data), checksum
 /// `0xAB + 0xCD + 0x04 + 0xFF + 0x00 = 0x027B` (BE).
-const ACK_FRAME: [u8; 7] = framing::build_abcd_be16(0xFF, &[0x00]);
+///
+/// `pub(crate)` because detection sends the same burst before its poll.
+pub(crate) const ACK_FRAME: [u8; 7] = framing::build_abcd_be16(0xFF, &[0x00]);
 
 /// Gap between the three ack writes, matching `Thread.Sleep(100)` in
 /// the vendor code.
@@ -57,6 +59,18 @@ fn send_ack_sequence(transport: &dyn Transport) -> Result<()> {
 
 /// Measurement request command (polled model).
 const CMD_GET_MEASUREMENT: u8 = 0x5E;
+
+/// The poll frame [`request_live`] asks for a reading with. `pub(crate)`
+/// alongside [`ACK_FRAME`]: detection sends the pair as its VC-890 probe.
+pub(crate) const POLL_FRAME: [u8; 6] = build_command(CMD_GET_MEASUREMENT);
+
+/// Ask the meter for a reading: the vendor's pre-clear ack burst, then the
+/// poll. Shared with detection, whose probe is exactly this and nothing else
+/// — a meter that answers it has already said what it is.
+pub(crate) fn request_live(transport: &dyn Transport) -> Result<()> {
+    send_ack_sequence(transport)?;
+    transport.write(&POLL_FRAME)
+}
 
 /// Minimum payload length for a VC890 live data frame.
 /// Payload = type(1) + function(1) + range(1) + value1(7) + value2(8) +
@@ -271,6 +285,7 @@ pub(crate) struct Vc890Model;
 impl Vc8x0Model for Vc890Model {
     const LOG: &'static str = "vc890";
     const NAME: &'static str = "VC-890";
+    const DETECTED_ID: &'static str = "vc890";
     const PAYLOAD_LEN: usize = LIVE_DATA_PAYLOAD_LEN;
     const STATUS_AT: usize = 53;
     const DIAL: &'static [DialPosition] = DIAL;
@@ -355,10 +370,8 @@ impl Vc8x0Model for Vc890Model {
 
     /// The meter is polled: ask for a reading, then confirm the frame.
     fn read_live_frame(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>> {
-        Self::ack(transport)?;
-
-        // Send measurement request (0x5E) — same command as UT61E+.
-        transport.write(&build_command(CMD_GET_MEASUREMENT))?;
+        // The ack burst and the 0x5E request — the same command as UT61E+.
+        request_live(transport)?;
 
         let payload = read_live(rx_buf, transport, Self::LOG)?;
 

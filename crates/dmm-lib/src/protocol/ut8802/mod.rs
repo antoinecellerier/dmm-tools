@@ -16,7 +16,10 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
+use crate::protocol::{
+    DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
+    unknown_mode,
+};
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
@@ -393,6 +396,51 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         flags,
         ..Measurement::from_payload(payload)
     })
+}
+
+/// Detection for the UT8802.
+///
+/// The meter streams unprompted, so it needs no trigger. Its 8-byte format
+/// carries no checksum and its validation accepts roughly 1% of random input,
+/// so one frame is not evidence: two consecutive ones are required, and
+/// detection consults this fingerprint last
+/// (`docs/research/uci-bench-family/reverse-engineered-protocol.md` §3).
+pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Ut8802,
+    label: "ut8802 stream",
+    trigger: None,
+    recognise,
+};
+
+fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+    const FRAME_LEN: usize = framing::UT8802_FRAME_LEN;
+    // The extractor searches forward for the next `0xAC`, so a frame it
+    // returns is not necessarily the one at the offset asked for: a match
+    // consuming exactly one frame is what pins it there, and with it the
+    // "consecutive" this rule rests on.
+    let frame_at = |at: usize| {
+        matches!(
+            framing::extract_frame_ut8802(&buf[at..]),
+            Ok(Some((_, FRAME_LEN)))
+        )
+    };
+    for (start, _) in buf
+        .iter()
+        .enumerate()
+        .filter(|&(_, &b)| b == framing::UT8802_HEADER[0])
+    {
+        let next = start + FRAME_LEN;
+        if next + FRAME_LEN > buf.len() {
+            break;
+        }
+        if frame_at(start) && frame_at(next) {
+            return Some(Evidence::Model {
+                id: "ut8802",
+                reported_name: None,
+            });
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -819,5 +867,39 @@ raw_payload=7"#
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.mode_raw, 0x2B);
         assert_eq!(m.mode, "Hz");
+    }
+
+    // --- Detection (crate::detect) ---------------------------------------
+
+    /// One frame is not evidence — the format has no checksum, so a single
+    /// validation pass accepts roughly 1% of random input. Two consecutive
+    /// frames are what detection asks for.
+    #[test]
+    fn two_consecutive_frames_identify_the_meter_and_one_does_not() {
+        let frame = framing::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let mut pair = frame.clone();
+        pair.extend_from_slice(&frame);
+        let recognise = FINGERPRINT.recognise;
+        assert_eq!(
+            recognise(&pair, &Probing::default()),
+            Some(Evidence::Model {
+                id: "ut8802",
+                reported_name: None,
+            })
+        );
+        assert_eq!(recognise(&frame, &Probing::default()), None);
+    }
+
+    /// Two valid frames with anything between them are not a stream — a
+    /// meter sends them back to back, and random bytes are what puts a
+    /// second `0xAC` somewhere further along.
+    #[test]
+    fn two_frames_that_are_not_adjacent_identify_nothing() {
+        let frame = framing::test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let mut spaced = frame.clone();
+        spaced.extend_from_slice(&[0x00, 0x00, 0x00]);
+        spaced.extend_from_slice(&frame);
+        let recognise = FINGERPRINT.recognise;
+        assert_eq!(recognise(&spaced, &Probing::default()), None);
     }
 }

@@ -25,8 +25,8 @@ use crate::protocol::cycle::{
 };
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::{
-    CaptureStep, Choice, DeviceProfile, Protocol, Setting, check_len, unknown_mode,
-    unsupported_setting,
+    CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
+    Setting, check_len, unknown_mode, unsupported_setting,
 };
 use crate::transport::Transport;
 use log::{debug, warn};
@@ -393,6 +393,13 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     /// What the front panel calls this meter, for the errors a user reads.
     const NAME: &'static str;
 
+    /// The [`crate::protocol::registry`] id detection pins for this meter.
+    ///
+    /// The VC650BT shares the VC-880's protocol byte for byte, so a frame
+    /// cannot tell the two apart and detection always reports `"vc880"`;
+    /// `--device vc650bt` carries the other name, with the same tables.
+    const DETECTED_ID: &'static str;
+
     /// Length of a live-data payload — everything the frame extractor hands
     /// back, between the length byte and the checksum.
     const PAYLOAD_LEN: usize;
@@ -669,9 +676,95 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
     })
 }
 
+/// Detection for the VC-880: the meter streams live frames unprompted once
+/// its PC button is pressed, so there is nothing to send.
+pub(crate) static VC880_FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Vc880,
+    label: "vc-880 stream",
+    trigger: None,
+    recognise: recognise_vc880,
+};
+
+/// Detection for the VC-890: the meter answers nothing but the `0x5E` poll
+/// behind the vendor's ack burst, which is what the trigger sends.
+pub(crate) static VC890_FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Vc890,
+    label: "vc-890 poll",
+    trigger: Some(vc890::request_live),
+    recognise: recognise_vc890,
+};
+
+fn recognise_vc880(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+    recognise_live::<vc880::Vc880Model>(buf)
+}
+
+fn recognise_vc890(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+    recognise_live::<vc890::Vc890Model>(buf)
+}
+
+/// A live-data frame of `M`'s length: the type byte is the same on both
+/// meters, so only the payload length tells them apart.
+fn recognise_live<M: Vc8x0Model>(buf: &[u8]) -> Option<Evidence> {
+    for start in framing::abcd_header_offsets(buf) {
+        let Ok(Some((payload, _))) = framing::extract_frame_abcd_be16(&buf[start..]) else {
+            continue;
+        };
+        if payload.first() == Some(&MSG_TYPE_LIVE_DATA) && payload.len() == M::PAYLOAD_LEN {
+            return Some(Evidence::Model {
+                id: M::DETECTED_ID,
+                reported_name: None,
+            });
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A live frame payload: the type byte, then display fields the
+    /// recogniser never looks at.
+    fn live_payload(len: usize) -> Vec<u8> {
+        let mut payload = vec![b'0'; len];
+        payload[0] = MSG_TYPE_LIVE_DATA;
+        payload
+    }
+
+    fn recognise(buf: &[u8]) -> Option<Evidence> {
+        super::recognise_vc880(buf, &Probing::default())
+            .or_else(|| super::recognise_vc890(buf, &Probing::default()))
+    }
+
+    /// Only the payload length separates the two meters' live frames.
+    #[test]
+    fn the_payload_length_picks_the_meter() {
+        for (len, id) in [
+            (vc880::Vc880Model::PAYLOAD_LEN, "vc880"),
+            (vc890::Vc890Model::PAYLOAD_LEN, "vc890"),
+        ] {
+            assert_eq!(
+                recognise(&framing::test_frame_be16(&live_payload(len))),
+                Some(Evidence::Model {
+                    id,
+                    reported_name: None,
+                }),
+                "a {len}-byte live payload is a {id}"
+            );
+        }
+    }
+
+    /// Any other length is some other family's frame, or junk.
+    #[test]
+    fn other_lengths_are_not_voltcraft_frames() {
+        for len in [1, 14, 33, 35, 60, 62] {
+            assert_eq!(
+                recognise(&framing::test_frame_be16(&live_payload(len))),
+                None,
+                "a {len}-byte payload is not a live frame"
+            );
+        }
+    }
 
     #[test]
     fn build_command_checksum() {

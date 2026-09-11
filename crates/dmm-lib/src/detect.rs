@@ -8,18 +8,20 @@
 //! VC-880) never need a probe — they are identified in whichever window they
 //! first speak.
 //!
-//! The cascade, the check order and the reasoning behind both live in
-//! `docs/detection-design.md`; the byte layouts come from the per-family
-//! specs under `docs/research/<family>/reverse-engineered-protocol.md`, cited
-//! at each rule below.
+//! What each family sends and what it recognises is the family's own
+//! [`Fingerprint`], next to the constants it already puts on the wire; this
+//! module is the engine that runs them, and the two tables below are the
+//! order it runs them in. The reasoning behind both lives in
+//! `docs/detection-design.md`.
 
 use crate::error::{Error, Result};
-use crate::protocol::framing;
-use crate::protocol::fs9721::{Fs9721Model, is_measurement_frame};
 use crate::protocol::registry::{self, SelectableDevice};
+use crate::protocol::{
+    DeviceFamily, Evidence, Fingerprint, Probing, fs9721, ut61eplus, ut171, ut181a, ut8802, ut8803,
+    vc8x0,
+};
 use crate::transport::Transport;
 use log::{debug, info, warn};
-use std::thread;
 use std::time::{Duration, Instant};
 
 /// What the probe cascade concluded.
@@ -69,115 +71,51 @@ const MAX_RX_BUF: usize = 4096;
 /// spells it.
 const CH9325_BRIDGE: &str = "CH9325";
 
-/// UT61+/UT161 Get Name. Answered with an `FF 00` ack and then the ASCII
-/// model name — the only reply that pins the exact model
-/// (`docs/research/ut61eplus/reverse-engineered-protocol.md` §6, command
-/// `0x5F`).
-const CMD_GET_NAME: [u8; 6] = framing::build_abcd_be16(0x5F, &[]);
-
-/// UT181A SET_MONITOR (`0x05`, enable = 1): the meter is silent until it
-/// arrives, then streams measurement frames
-/// (`docs/research/ut181/reverse-engineered-protocol.md` §7). Byte-identical
-/// to what `Ut181aProtocol::init` sends, so a UT181A that answers this probe
-/// is left in the state opening it would have produced anyway.
-const CMD_SET_MONITOR: [u8; 8] = [0xAB, 0xCD, 0x04, 0x00, 0x05, 0x01, 0x0A, 0x00];
-
-/// UT171 connect / start streaming
-/// (`docs/research/ut171/reverse-engineered-protocol.md` §4.3).
+/// Every family's fingerprint, in the order they are consulted, strictest
+/// format first.
 ///
-/// The same bytes are UT181A opcode `0x0A`, *start recording*. Sending them
-/// is only safe because the SET_MONITOR step runs first: a UT181A with
-/// Communication ON has already identified itself by now, and one with it OFF
-/// ignores everything on the wire.
-const CMD_UT171_CONNECT: [u8; 8] = [0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00];
+/// The order is about which extractor is willing to accept another family's
+/// bytes. The checksummed UT8803 leads: a UT61+ DC V frame also carries
+/// `0x02` at byte 3, but it is 19 bytes long, so its checksum cannot pass
+/// there. The 2-byte-LE pair comes next, UT181A before UT171 because the
+/// UT181A claims only what its own trigger elicited or what only it can send,
+/// leaving the rest to the UT171. The 1-byte BE16 families follow, because a
+/// UT8803 frame's byte 2 is a mode byte that their extractor would read as a
+/// length; the Voltcraft pair before the UT61+, whose bare reading settles
+/// only the family and ends the walk — nothing may sit below it that a
+/// stray frame could still name. The checksum-less `0xAC` UT8802 rule is
+/// last: its validation accepts roughly 1% of random input, and a UT181A
+/// frame is full of arbitrary float32 bytes.
+static FINGERPRINTS: [&Fingerprint; 8] = [
+    &ut8803::FINGERPRINT,
+    &ut181a::FINGERPRINT,
+    &ut171::FINGERPRINT,
+    &vc8x0::VC880_FINGERPRINT,
+    &vc8x0::VC890_FINGERPRINT,
+    &ut61eplus::FINGERPRINT,
+    &ut8802::FINGERPRINT,
+    &fs9721::FINGERPRINT,
+];
 
-/// The ack the Voltcraft vendor software sends three times before every
-/// command (`docs/research/vc890/reverse-engineered-protocol.md`; the same
-/// frame `vc890::ACK_FRAME` builds).
-const CMD_ACK: [u8; 7] = framing::build_abcd_be16(0xFF, &[0x00]);
+/// The fingerprints that have something to send, in the order they send it.
+///
+/// Get Name first because it is the most verified probe and the fastest to
+/// answer; SET_MONITOR before the UT171 connect so a UT181A is identified
+/// before it can be sent `0x0A`, which is its own *start recording* opcode.
+static CASCADE: [&Fingerprint; 4] = [
+    &ut61eplus::FINGERPRINT,
+    &ut181a::FINGERPRINT,
+    &ut171::FINGERPRINT,
+    &vc8x0::VC890_FINGERPRINT,
+];
 
-/// VC-890 measurement poll (`0x5E`). The VC-890 answers nothing else; the
-/// VC-880 streams without being asked.
-const CMD_VC890_POLL: [u8; 6] = framing::build_abcd_be16(0x5E, &[]);
-
-/// Gap between the three acks, matching the vendor's `Thread.Sleep(100)`.
-const ACK_GAP: Duration = Duration::from_millis(100);
-
-/// A LE16 measurement payload this long can only be a UT181A: its normal
-/// format passes 31 bytes as soon as it carries an aux value or a bargraph
-/// (`docs/research/ut181/reverse-engineered-protocol.md` §5.3), while the
-/// UT171's longest measurement response is 21 payload bytes
-/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4).
-const LE16_UT181A_ONLY_PAYLOAD: usize = 31;
-
-/// The payload length of a Voltcraft VC-880 live frame (`vc880.rs`).
-const VC880_PAYLOAD_LEN: usize = 34;
-
-/// The payload length of a Voltcraft VC-890 live frame (`vc890.rs`).
-const VC890_PAYLOAD_LEN: usize = 61;
-
-/// One step of the cascade: what to send, and what a frame arriving
-/// afterwards most likely came from.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Step {
-    /// UT61+ Get Name.
-    Name,
-    /// UT181A SET_MONITOR.
-    Monitor,
-    /// UT171 connect.
-    Connect,
-    /// The VC-890 ack burst and poll.
-    Vc890,
-    /// The CH9325 bridge: nothing to send, the meter streams on its own.
-    Fs9721Stream,
-}
-
-impl Step {
-    /// The cascade in order. Get Name first because it is the most verified
-    /// probe and the fastest to answer; SET_MONITOR before the UT171 connect
-    /// so a UT181A is identified before it can be sent `0x0A`.
-    const CASCADE: [Step; 4] = [Step::Name, Step::Monitor, Step::Connect, Step::Vc890];
-
-    fn label(self) -> &'static str {
-        match self {
-            Step::Name => "ut61+ get name",
-            Step::Monitor => "ut181a set monitor",
-            Step::Connect => "ut171 connect",
-            Step::Vc890 => "vc-890 poll",
-            Step::Fs9721Stream => "fs9721 stream",
-        }
-    }
-
-    fn send(self, transport: &dyn Transport) -> Result<()> {
-        match self {
-            Step::Name => transport.write(&CMD_GET_NAME),
-            Step::Monitor => transport.write(&CMD_SET_MONITOR),
-            Step::Connect => transport.write(&CMD_UT171_CONNECT),
-            Step::Vc890 => {
-                // Three acks 100 ms apart, then the poll — the sequence the
-                // vendor software sends before every command.
-                for i in 0..3 {
-                    transport.write(&CMD_ACK)?;
-                    if i < 2 {
-                        thread::sleep(ACK_GAP);
-                    }
-                }
-                transport.write(&CMD_VC890_POLL)
-            }
-            // The CH9325 transport's own init already set the baud rate; the
-            // UT803/UT804 stream from there on.
-            Step::Fs9721Stream => Ok(()),
-        }
-    }
-}
-
-/// What a buffer of received bytes says about the meter.
-enum Signature {
-    /// A frame that pins a registry entry.
-    Device(Detected),
-    /// A UT61+ measurement frame: the family is right but the model is not.
-    /// Evidence only — keep listening for the name frame.
-    Ut61PlusReading,
+/// A family settled by a frame that named no model.
+#[derive(Clone, Copy)]
+struct FamilyEvidence {
+    /// Which family the frame came from, for the warning the user reads.
+    family: DeviceFamily,
+    /// Registry id to open when nothing better arrives.
+    fallback: &'static str,
 }
 
 /// Identify the meter answering on `transport`, `bridge` being the USB bridge
@@ -187,36 +125,67 @@ enum Signature {
 /// back; the receive buffer persists across steps, so a meter that speaks
 /// slowly still gets the whole cascade's worth of time.
 pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
-    // The CH9325 carries one family and needs no trigger, so it gets a single
-    // window rather than the cascade — and none of the AB CD probes, which
-    // mean nothing to an FS9721 meter.
-    if bridge == CH9325_BRIDGE {
-        return detect_fs9721(transport, bridge);
-    }
+    // The CH9325 carries the FS9721 family and nothing else, and no other
+    // bridge carries it: the AB CD probes mean nothing to an FS9721 meter,
+    // and its own frames cannot arrive anywhere else.
+    let carried: Vec<&'static Fingerprint> = FINGERPRINTS
+        .iter()
+        .copied()
+        .filter(|fp| (fp.family == DeviceFamily::Fs9721) == (bridge == CH9325_BRIDGE))
+        .collect();
+    let probes: Vec<&'static Fingerprint> = CASCADE
+        .iter()
+        .copied()
+        .filter(|fp| carried.iter().any(|c| c.family == fp.family))
+        .collect();
+    // A bridge no probe belongs to gets one listen window per family it
+    // carries instead: those meters stream on their own, and the window
+    // sends nothing — which is what makes probing such a bridge blind safe.
+    let probes = if probes.is_empty() {
+        carried.clone()
+    } else {
+        probes
+    };
 
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_RX_BUF);
-    // A bare UT61+ measurement frame (a stale one from an earlier session, or
-    // a meter mid-poll) tells us the family but not the model. Remember it and
-    // keep probing: a name frame later in the cascade outranks it.
-    let mut saw_ut61plus_reading = false;
+    let mut probing = Probing::default();
+    // A frame that settles the family but not the model — a bare UT61+
+    // reading, stale from an earlier session or caught mid-poll. Remember it
+    // and keep probing: a name frame later in the cascade outranks it.
+    let mut family_only: Option<FamilyEvidence> = None;
 
-    for step in Step::CASCADE {
-        debug!("detect: probing {bridge} with {}", step.label());
-        step.send(transport)?;
-        if let Some(detected) = listen(transport, &mut buf, step, &mut saw_ut61plus_reading)? {
+    for fp in probes {
+        match fp.trigger {
+            Some(send) => {
+                debug!("detect: probing {bridge} with {}", fp.label);
+                send(transport)?;
+                probing.sent.push(fp.family);
+            }
+            None => debug!("detect: listening on {bridge} for {}", fp.label),
+        }
+        if let Some(detected) = listen(
+            transport,
+            &mut buf,
+            fp.label,
+            &carried,
+            &probing,
+            &mut family_only,
+        )? {
             return Ok(announce(detected, bridge));
         }
         // The family is settled, only the model is not — the remaining
         // probes belong to other families and would go out to a meter we
-        // already know is a UT61+.
-        if saw_ut61plus_reading {
+        // already know the family of.
+        if let Some(found) = family_only {
+            let device = pin(found.fallback);
             warn!(
-                "detect: a UT61+ measurement frame arrived on {bridge} but the meter never \
-                 answered Get Name; falling back to the UT61E+ tables"
+                "detect: a {} frame arrived on {bridge} but the meter never named its model; \
+                 falling back to the {} tables",
+                found.family, device.display_name
             );
             return Ok(announce(
                 Detected {
-                    device: registry::default_device(),
+                    device,
                     reported_name: None,
                 },
                 bridge,
@@ -224,28 +193,8 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
         }
     }
 
-    debug!("detect: nothing recognisable on {bridge} after the full cascade");
+    debug!("detect: nothing recognisable on {bridge}");
     Err(Error::DeviceNotIdentified { bridge })
-}
-
-/// One listen window on the CH9325, whose meters need no trigger at all.
-fn detect_fs9721(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
-    let step = Step::Fs9721Stream;
-    let mut buf: Vec<u8> = Vec::with_capacity(MAX_RX_BUF);
-    // No UT61+ can be on this bridge, so the name-frame evidence flag has
-    // nothing to record here.
-    let mut ignored = false;
-    debug!("detect: listening on {bridge} for {}", step.label());
-    // A no-op, and the reason this bridge is safe to probe blind: an FS9721
-    // meter is never sent a byte it might act on.
-    step.send(transport)?;
-    match listen(transport, &mut buf, step, &mut ignored)? {
-        Some(detected) => Ok(announce(detected, bridge)),
-        None => {
-            debug!("detect: nothing recognisable on {bridge}");
-            Err(Error::DeviceNotIdentified { bridge })
-        }
-    }
 }
 
 /// Log the one INFO line the whole detection produces.
@@ -265,12 +214,14 @@ fn announce(detected: Detected, bridge: &'static str) -> Detected {
 ///
 /// The buffer is the caller's, and never cleared: CP2110 can deliver a single
 /// UART byte per HID report, and a frame that straddles a step boundary has to
-/// survive it.
+/// survive it. `label` names the probe this window follows, for the log.
 fn listen(
     transport: &dyn Transport,
     buf: &mut Vec<u8>,
-    step: Step,
-    saw_ut61plus_reading: &mut bool,
+    label: &str,
+    recognisers: &[&'static Fingerprint],
+    probing: &Probing,
+    family_only: &mut Option<FamilyEvidence>,
 ) -> Result<Option<Detected>> {
     let deadline = Instant::now() + WINDOW;
     let mut chunk = [0u8; 64];
@@ -287,17 +238,31 @@ fn listen(
         }
         empty_reads = 0;
         push(buf, &chunk[..n]);
-        match classify(buf, step) {
-            Some(Signature::Device(detected)) => {
-                debug!(
-                    "detect: {} identified from {} received bytes during {}",
-                    detected.device.id,
-                    buf.len(),
-                    step.label()
-                );
-                return Ok(Some(detected));
+        match classify(buf, recognisers, probing) {
+            Some((
+                family,
+                Evidence::Model {
+                    id,
+                    reported_name: name,
+                },
+            )) => match registry::find_device(id) {
+                Some(device) => {
+                    debug!(
+                        "detect: {id} identified from {} received bytes during {label}",
+                        buf.len()
+                    );
+                    return Ok(Some(Detected {
+                        device,
+                        reported_name: name,
+                    }));
+                }
+                // Unreachable while the tables below hold: every id a
+                // fingerprint returns is one `DEVICES` carries.
+                None => warn!("detect: the {family} rule claims {id:?}, which is no registry id"),
+            },
+            Some((family, Evidence::FamilyOnly { fallback })) => {
+                *family_only = Some(FamilyEvidence { family, fallback })
             }
-            Some(Signature::Ut61PlusReading) => *saw_ut61plus_reading = true,
             None => {}
         }
     }
@@ -313,226 +278,60 @@ fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
     }
 }
 
-/// Classify everything received so far.
+/// Classify everything received so far: the first fingerprint that
+/// recognises anything wins.
 ///
-/// Extractor errors are ignored throughout: to a classifier "this is not that
-/// format here" is the answer, not a failure, and a checksum mismatch at one
-/// offset says nothing about the next.
-fn classify(buf: &[u8], step: Step) -> Option<Signature> {
-    if step == Step::Fs9721Stream {
-        return classify_fs9721(buf);
-    }
-
-    let mut evidence = None;
-    for start in header_offsets(buf) {
-        match classify_abcd(&buf[start..], step) {
-            Some(Signature::Device(detected)) => return Some(Signature::Device(detected)),
-            // Keep scanning: a name frame further along the buffer outranks a
-            // measurement frame.
-            Some(Signature::Ut61PlusReading) => evidence = Some(Signature::Ut61PlusReading),
-            None => {}
-        }
-    }
-
-    // The UT8802's 8-byte format carries no checksum, so its validation
-    // accepts roughly 1% of random input — and a UT181A frame is full of
-    // arbitrary float32 bytes. Only look at 0xAC when no AB CD frame
-    // classified at all.
-    if evidence.is_none()
-        && let Some(sig) = classify_ut8802(buf)
-    {
-        return Some(sig);
-    }
-    evidence
-}
-
-/// Offsets of every `AB CD` header in `buf`.
-fn header_offsets(buf: &[u8]) -> impl Iterator<Item = usize> + '_ {
-    buf.windows(framing::HEADER.len())
-        .enumerate()
-        .filter(|(_, w)| *w == framing::HEADER)
-        .map(|(i, _)| i)
-}
-
-/// Classify the frame starting at one `AB CD` header, strictest format first.
-fn classify_abcd(tail: &[u8], step: Step) -> Option<Signature> {
-    // 1. UT8803: a fixed 21-byte frame with byte 3 == 0x02 and its own
-    //    checksum (`docs/research/ut8803/reverse-engineered-protocol.md` §3).
-    //    A UT61+ DC V frame also carries 0x02 at byte 3, but it is 19 bytes
-    //    long, so its checksum cannot pass here.
-    if matches!(framing::extract_frame_ut8803(tail), Ok(Some(_))) {
-        return pin("ut8803");
-    }
-
-    // 2. The 2-byte LE length families, UT181A and UT171. Their framing and
-    //    their measurement type byte are identical and their payload lengths
-    //    overlap, so length alone cannot split them.
-    if let Ok(Some((payload, _))) = framing::extract_frame_abcd_2byte_le16(tail) {
-        // Payload byte 0 is the response type: 0x02 is a live measurement,
-        // 0x01 the OK/ER reply to a command, which names no model.
-        if payload.first() == Some(&0x02) {
-            return match payload.len() {
-                len if len >= LE16_UT181A_ONLY_PAYLOAD => pin("ut181a"),
-                _ => match step {
-                    Step::Monitor => pin("ut181a"),
-                    Step::Name => {
-                        // Streaming before any LE16 trigger went out: a UT171
-                        // left connected, or a UT181A left in monitor mode by
-                        // an earlier session. The UT171 is the likelier one,
-                        // but say so out loud.
-                        warn!(
-                            "detect: a short LE16 measurement frame arrived before any trigger; \
-                             assuming a UT171 (a UT181A left streaming looks the same)"
-                        );
-                        pin("ut171")
-                    }
-                    _ => pin("ut171"),
-                },
-            };
-        }
-        debug!(
-            "detect: ignoring LE16 frame of type {:#04x}",
-            payload.first().copied().unwrap_or(0)
-        );
-    }
-
-    // 3. The 1-byte BE16 length families, last: a UT8803 frame's byte 2 is a
-    //    mode byte, which this extractor would read as a length.
-    if let Ok(Some((payload, _))) = framing::extract_frame_abcd_be16(tail) {
-        // The ack every UT61+/Voltcraft command gets. Something is listening,
-        // but the ack says nothing about what.
-        if payload == [0xFF, 0x00] {
-            return None;
-        }
-
-        // The UT61+ name frame: printable ASCII, e.g. "UT61E+"
-        // (`docs/research/ut61eplus/reverse-engineered-protocol.md` §6).
-        if (3..=20).contains(&payload.len()) && payload.iter().all(u8::is_ascii_graphic) {
-            let name = String::from_utf8_lossy(&payload).into_owned();
-            return Some(match registry::device_for_reported_name(&name) {
-                Some(device) => {
-                    debug!("detect: name frame {name:?} resolves to {}", device.id);
-                    Signature::Device(Detected {
-                        device,
-                        reported_name: Some(name),
-                    })
-                }
-                None => {
-                    warn!(
-                        "detect: the meter reports an unknown model {name:?}; using the UT61E+ \
-                         tables. Please report the name so the registry can carry it."
-                    );
-                    Signature::Device(Detected {
-                        device: registry::default_device(),
-                        reported_name: Some(name),
-                    })
-                }
-            });
-        }
-
-        // The Voltcraft live frames: type byte 0x01 and a fixed payload
-        // length per model (`vc880.rs`, `vc890.rs`).
-        if payload.first() == Some(&0x01) {
-            match payload.len() {
-                VC880_PAYLOAD_LEN => return pin("vc880"),
-                VC890_PAYLOAD_LEN => return pin("vc890"),
-                _ => {}
-            }
-        }
-
-        // A UT61+ measurement frame. Only evidence: it does not say which
-        // model of the family sent it, and the CH9329 does not purge its RX
-        // buffer on open, so it may be left over from an earlier session.
-        if payload.len() == framing::UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
-            return Some(Signature::Ut61PlusReading);
-        }
-    }
-
-    None
-}
-
-/// Classify a UT8802 stream: two consecutive 8-byte frames, the second
-/// exactly 8 bytes after the first
-/// (`docs/research/uci-bench-family/reverse-engineered-protocol.md` §3).
+/// That is what arbitrates between families — [`FINGERPRINTS`] is ordered
+/// strictest first — and it is also why [`Evidence::FamilyOnly`] ends the
+/// walk: a UT61+ reading must not be second-guessed by the checksum-less
+/// UT8802 rule sitting below it.
 ///
-/// One frame alone is not enough — the format has no checksum, so a single
-/// validation pass is weak evidence.
-fn classify_ut8802(buf: &[u8]) -> Option<Signature> {
-    const FRAME_LEN: usize = 8;
-    for (start, _) in buf
+/// Extractor errors are ignored inside every recogniser: to a classifier
+/// "this is not that format here" is the answer, not a failure, and a
+/// checksum mismatch at one offset says nothing about the next.
+fn classify(
+    buf: &[u8],
+    recognisers: &[&'static Fingerprint],
+    probing: &Probing,
+) -> Option<(DeviceFamily, Evidence)> {
+    recognisers
         .iter()
-        .enumerate()
-        .filter(|&(_, &b)| b == framing::UT8802_HEADER[0])
-    {
-        let next = start + FRAME_LEN;
-        if next + FRAME_LEN > buf.len() {
-            break;
-        }
-        if matches!(framing::extract_frame_ut8802(&buf[start..]), Ok(Some(_)))
-            && matches!(framing::extract_frame_ut8802(&buf[next..]), Ok(Some(_)))
-        {
-            return pin("ut8802");
-        }
-    }
-    None
+        .find_map(|fp| (fp.recognise)(buf, probing).map(|evidence| (fp.family, evidence)))
 }
 
-/// Split a UT803 from a UT804 on the CH9325 bridge.
+/// The registry entry a fingerprint's fallback id names.
 ///
-/// Both send the same 14-byte FS9721 frames, so only the payload separates
-/// them — and the same two checks the stream filter uses do it
-/// (`docs/research/ut803/reverse-engineered-protocol.md`).
-fn classify_fs9721(buf: &[u8]) -> Option<Signature> {
-    let mut offset = 0;
-    while let Ok(Some((nibbles, consumed))) = framing::extract_frame_fs9721(&buf[offset..]) {
-        // UT804 first: its `0xD 0xA` marker pair at nibbles 9-10 is positive
-        // evidence, where the UT803 check only asks whether the mode nibble is
-        // one of the codes we know — which a UT804 frame can satisfy by
-        // accident.
-        if is_measurement_frame(Fs9721Model::Ut804, &nibbles) {
-            return pin("ut804");
-        }
-        if is_measurement_frame(Fs9721Model::Ut803, &nibbles) {
-            return pin("ut803");
-        }
-        offset += consumed;
-    }
-    None
-}
-
-/// Pin a registry entry by id.
-///
-/// Every id passed here is a literal `DEVICES` carries (the tests below walk
-/// all of them); `?` rather than a panic so a registry rename degrades to "not
-/// identified" instead of aborting a user's session.
-fn pin(id: &'static str) -> Option<Signature> {
-    Some(Signature::Device(Detected {
-        device: registry::find_device(id)?,
-        reported_name: None,
-    }))
+/// Every id a fingerprint returns is a literal `DEVICES` carries; falling back
+/// to the default keeps a registry rename degrading to the UT61E+ tables
+/// rather than aborting a user's session.
+fn pin(id: &'static str) -> &'static SelectableDevice {
+    registry::find_device(id).unwrap_or_else(registry::default_device)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::framing::{
-        test_frame_be16, test_frame_le16, test_frame_ut8802, test_frame_ut8803, test_ut8803_body,
-    };
+    use crate::protocol::framing::test_ut8803_body;
+    use crate::protocol::framing::{test_frame_be16, test_frame_le16, test_frame_ut8803};
+    use crate::protocol::ut61eplus::command::Command;
+    use crate::protocol::ut171::UT171_CMD_CONNECT;
     use crate::protocol::ut181a::parse::tests::{real_frame_temp_dual_probe, real_frame_vac_hz};
+    use crate::protocol::ut181a::set_monitor_frame;
+    use crate::protocol::vc8x0::vc890::{ACK_FRAME, POLL_FRAME};
+    use crate::protocol::vc8x0::{MSG_TYPE_LIVE_DATA, Vc8x0Model, vc890::Vc890Model};
     use crate::transport::mock::MockTransport;
     use std::cell::RefCell;
     use std::collections::VecDeque;
 
-    /// The UT61E+ name reply, as two whole frames: the ack, then the ASCII
-    /// name. Both captured from our UT61E+ over CP2110.
-    const ACK: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
-    const NAME_UT61EPLUS: [u8; 11] = [
-        0xAB, 0xCD, 0x08, 0x55, 0x54, 0x36, 0x31, 0x45, 0x2B, 0x03, 0x00,
-    ];
-    /// The same reply from a UT61B+ over CH9329 (issue #19).
-    const NAME_UT61BPLUS: [u8; 11] = [
-        0xAB, 0xCD, 0x08, 0x55, 0x54, 0x36, 0x31, 0x42, 0x2B, 0x02, 0xFD,
-    ];
+    /// The two frames a UT61+ answers Get Name with: the ack, then the ASCII
+    /// name. The bytes our UT61E+ sends over CP2110, and what
+    /// `protocol::ut61eplus`'s own tests pin.
+    fn ack_frame() -> Vec<u8> {
+        test_frame_be16(&[0xFF, 0x00])
+    }
+    fn name_frame() -> Vec<u8> {
+        test_frame_be16(b"UT61E+")
+    }
 
     /// A meter that only speaks when it is asked the right question.
     ///
@@ -599,12 +398,11 @@ mod tests {
         payload
     }
 
-    /// A Voltcraft live frame payload: type byte 0x01, then display fields
-    /// the classifier never looks at.
-    fn vc_live_payload(len: usize) -> Vec<u8> {
-        let mut payload = vec![b'0'; len];
-        payload[0] = 0x01;
-        payload
+    /// A UT61+ measurement frame, as one arrives from a meter mid-poll.
+    fn ut61plus_reading() -> Vec<u8> {
+        test_frame_be16(&[
+            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x34, 0x00, 0x02, 0x30, 0x30, 0x30,
+        ])
     }
 
     fn detect(transport: &dyn Transport) -> Result<Detected> {
@@ -613,7 +411,7 @@ mod tests {
 
     #[test]
     fn ut61eplus_answers_get_name_with_whole_frames() {
-        let mock = MockTransport::new(vec![ACK.to_vec(), NAME_UT61EPLUS.to_vec()]);
+        let mock = MockTransport::new(vec![ack_frame(), name_frame()]);
         let detected = detect(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
@@ -621,7 +419,7 @@ mod tests {
         // ever sent to a meter that answers it.
         let written = mock.written.borrow();
         assert_eq!(written.len(), 1);
-        assert_eq!(written[0], CMD_GET_NAME);
+        assert_eq!(written[0], Command::GetName.encode());
     }
 
     /// CP2110 can deliver one UART byte per HID report, with idle polls in
@@ -629,7 +427,7 @@ mod tests {
     #[test]
     fn ut61eplus_name_arrives_one_byte_at_a_time() {
         let mut reports: Vec<Vec<u8>> = Vec::new();
-        for byte in ACK.iter().chain(NAME_UT61EPLUS.iter()) {
+        for byte in ack_frame().iter().chain(name_frame().iter()) {
             reports.push(Vec::new()); // an HID report with no UART payload
             reports.push(vec![*byte]);
         }
@@ -637,25 +435,6 @@ mod tests {
         let detected = detect(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
-    }
-
-    #[test]
-    fn ut61bplus_name_picks_its_own_entry() {
-        let mock = MockTransport::new(vec![ACK.to_vec(), NAME_UT61BPLUS.to_vec()]);
-        let detected = detect(&mock).unwrap();
-        assert_eq!(detected.device.id, "ut61b+");
-        assert_eq!(detected.reported_name.as_deref(), Some("UT61B+"));
-    }
-
-    /// A name no registry entry carries still identifies the family: the
-    /// UT61E+ tables are the fallback and the name is kept for the user.
-    #[test]
-    fn unknown_name_falls_back_to_the_ut61eplus_tables() {
-        let name = test_frame_be16(b"UT60BT");
-        let mock = MockTransport::new(vec![ACK.to_vec(), name]);
-        let detected = detect(&mock).unwrap();
-        assert_eq!(detected.device.id, "ut61eplus");
-        assert_eq!(detected.reported_name.as_deref(), Some("UT60BT"));
     }
 
     /// The cap on empty reads guards against a transport that never blocks,
@@ -666,7 +445,7 @@ mod tests {
     fn idle_reports_between_frames_do_not_end_a_window_early() {
         const IDLE_PER_BYTE: usize = 40;
         let mut reports: Vec<Vec<u8>> = Vec::new();
-        for byte in ACK.iter().chain(NAME_UT61EPLUS.iter()) {
+        for byte in ack_frame().iter().chain(name_frame().iter()) {
             reports.extend(vec![Vec::new(); IDLE_PER_BYTE]);
             reports.push(vec![*byte]);
         }
@@ -680,36 +459,36 @@ mod tests {
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
         // Still inside the first window, so no other family's trigger went out.
-        assert_eq!(mock.written.borrow().as_slice(), &[CMD_GET_NAME.to_vec()]);
+        assert_eq!(
+            mock.written.borrow().as_slice(),
+            &[Command::GetName.encode().to_vec()]
+        );
     }
 
     /// The CH9329 does not purge its RX buffer on open, so a reading from an
     /// earlier session can arrive before the name. The name outranks it.
     #[test]
     fn a_stale_measurement_frame_does_not_outrank_the_name() {
-        let stale = test_frame_be16(&[
-            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x34, 0x00, 0x02, 0x30, 0x30, 0x30,
-        ]);
-        let mock = MockTransport::new(vec![stale, ACK.to_vec(), NAME_UT61BPLUS.to_vec()]);
+        let mock = MockTransport::new(vec![ut61plus_reading(), ack_frame(), name_frame()]);
         let detected = detect(&mock).unwrap();
-        assert_eq!(detected.device.id, "ut61b+");
-        assert_eq!(detected.reported_name.as_deref(), Some("UT61B+"));
+        assert_eq!(detected.device.id, "ut61eplus");
+        assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
     }
 
     /// A meter that only ever sends a measurement frame is still a UT61+, and
     /// the UT61E+ tables are the family fallback — but no model is claimed.
     #[test]
     fn a_lone_measurement_frame_falls_back_to_the_family() {
-        let stale = test_frame_be16(&[
-            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x34, 0x00, 0x02, 0x30, 0x30, 0x30,
-        ]);
-        let mock = MockTransport::new(vec![stale]);
+        let mock = MockTransport::new(vec![ut61plus_reading()]);
         let detected = detect(&mock).unwrap();
         assert_eq!(detected.device.id, "ut61eplus");
         assert_eq!(detected.reported_name, None);
         // The family is known after the name window, so no other family's
         // trigger goes out to it.
-        assert_eq!(mock.written.borrow().as_slice(), &[CMD_GET_NAME.to_vec()]);
+        assert_eq!(
+            mock.written.borrow().as_slice(),
+            &[Command::GetName.encode().to_vec()]
+        );
     }
 
     /// Real UT181A frames, the ones `ut181a::parse` pins: 32 and 57 payload
@@ -718,7 +497,7 @@ mod tests {
     #[test]
     fn ut181a_real_frames_after_set_monitor() {
         for payload in [real_frame_temp_dual_probe(), real_frame_vac_hz()] {
-            let meter = ScriptedMeter::answering(&CMD_SET_MONITOR, test_frame_le16(&payload));
+            let meter = ScriptedMeter::answering(&set_monitor_frame(), test_frame_le16(&payload));
             let detected = detect(&meter).unwrap();
             assert_eq!(detected.device.id, "ut181a", "payload {}", payload.len());
             assert_eq!(detected.reported_name, None);
@@ -726,11 +505,11 @@ mod tests {
     }
 
     /// A UT181A in its shortest normal format is 19 payload bytes — inside
-    /// the UT171's range. The step that elicited it is what decides.
+    /// the UT171's range. The probe that elicited it is what decides.
     #[test]
     fn a_short_le16_frame_after_set_monitor_is_a_ut181a() {
         let meter = ScriptedMeter::answering(
-            &CMD_SET_MONITOR,
+            &set_monitor_frame(),
             test_frame_le16(&le16_measurement_payload(19)),
         );
         let detected = detect(&meter).unwrap();
@@ -738,11 +517,11 @@ mod tests {
     }
 
     /// The same frame after the UT171 connect instead: a UT181A would have
-    /// answered the step before.
+    /// answered the probe before.
     #[test]
     fn a_short_le16_frame_after_the_connect_is_a_ut171() {
         let meter = ScriptedMeter::answering(
-            &CMD_UT171_CONNECT,
+            UT171_CMD_CONNECT,
             test_frame_le16(&le16_measurement_payload(15)),
         );
         let detected = detect(&meter).unwrap();
@@ -758,64 +537,29 @@ mod tests {
         assert_eq!(detected.device.id, "ut8803");
     }
 
-    /// The UT8802's 8-byte format has no checksum, so one frame is not
-    /// evidence: two consecutive ones are required.
-    #[test]
-    fn two_ut8802_frames_identify_it_and_one_does_not() {
-        let frame = test_frame_ut8802(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
-        let mut pair = frame.clone();
-        pair.extend_from_slice(&frame);
-        let mock = MockTransport::new(vec![pair]);
-        assert_eq!(detect(&mock).unwrap().device.id, "ut8802");
-
-        let mock = MockTransport::new(vec![frame]);
-        assert!(matches!(
-            detect(&mock),
-            Err(Error::DeviceNotIdentified { .. })
-        ));
-    }
-
-    #[test]
-    fn vc880_stream_is_identified_unprompted() {
-        let mock = MockTransport::new(vec![test_frame_be16(&vc_live_payload(VC880_PAYLOAD_LEN))]);
-        let detected = detect(&mock).unwrap();
-        assert_eq!(detected.device.id, "vc880");
-    }
-
     /// The VC-890 is polled: it answers only the `0x5E` that follows the
     /// three acks, in the last step of the cascade.
     #[test]
     fn vc890_answers_only_the_poll() {
-        let meter = ScriptedMeter::answering(
-            &CMD_VC890_POLL,
-            test_frame_be16(&vc_live_payload(VC890_PAYLOAD_LEN)),
-        );
+        let mut payload = vec![b'0'; Vc890Model::PAYLOAD_LEN];
+        payload[0] = MSG_TYPE_LIVE_DATA;
+        let meter = ScriptedMeter::answering(&POLL_FRAME, test_frame_be16(&payload));
         let detected = detect(&meter).unwrap();
         assert_eq!(detected.device.id, "vc890");
     }
 
-    /// The UT804 marker check runs before the UT803 mode-code check, and
-    /// nothing is written to a CH9325 meter.
+    /// The CH9325 window sends nothing at all, and the FS9721 family is the
+    /// only one it can identify.
     #[test]
-    fn ch9325_splits_ut804_from_ut803() {
+    fn the_ch9325_window_writes_nothing() {
         // 14 bytes, high nibble = index 1..14. Nibbles 9 and 10 carry the
-        // UT804's 0xD 0xA marker pair; the UT803 frame has a known mode code
-        // (0x2) at nibble 6 instead.
+        // UT804's 0xD 0xA marker pair.
         let mut ut804: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
         ut804[9] |= 0x0D;
         ut804[10] |= 0x0A;
         let mock = MockTransport::new(vec![ut804]);
-        assert_eq!(
-            detect_device(&mock, "CH9325").unwrap().device.id,
-            "ut804",
-            "0xD/0xA markers identify a UT804"
-        );
+        assert_eq!(detect_device(&mock, "CH9325").unwrap().device.id, "ut804");
         assert!(mock.written.borrow().is_empty(), "nothing is sent");
-
-        let mut ut803: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
-        ut803[6] |= 0x02;
-        let mock = MockTransport::new(vec![ut803]);
-        assert_eq!(detect_device(&mock, "CH9325").unwrap().device.id, "ut803");
     }
 
     #[test]
@@ -836,17 +580,21 @@ mod tests {
         let mock = MockTransport::new(vec![]);
         assert!(detect(&mock).is_err());
         let written = mock.written.borrow();
-        assert_eq!(written[0], CMD_GET_NAME, "Get Name is always first");
+        assert_eq!(
+            written[0],
+            Command::GetName.encode(),
+            "Get Name is always first"
+        );
         assert_eq!(
             *written,
             vec![
-                CMD_GET_NAME.to_vec(),
-                CMD_SET_MONITOR.to_vec(),
-                CMD_UT171_CONNECT.to_vec(),
-                CMD_ACK.to_vec(),
-                CMD_ACK.to_vec(),
-                CMD_ACK.to_vec(),
-                CMD_VC890_POLL.to_vec(),
+                Command::GetName.encode().to_vec(),
+                set_monitor_frame(),
+                UT171_CMD_CONNECT.to_vec(),
+                ACK_FRAME.to_vec(),
+                ACK_FRAME.to_vec(),
+                ACK_FRAME.to_vec(),
+                POLL_FRAME.to_vec(),
             ]
         );
     }
@@ -880,14 +628,49 @@ mod tests {
         assert_eq!(buf.len(), MAX_RX_BUF);
     }
 
-    /// Every id `pin` can return has to be a real registry entry, or a rename
-    /// would silently turn a detected meter into "not identified".
+    /// A meter the registry can open but no fingerprint recognises is one
+    /// `--device auto` silently never finds.
     #[test]
-    fn every_pinned_id_is_in_the_registry() {
-        for id in [
-            "ut8803", "ut8802", "ut181a", "ut171", "vc880", "vc890", "ut803", "ut804",
-        ] {
-            assert!(pin(id).is_some(), "{id} is not a registry id");
+    fn every_hardware_family_has_one_fingerprint() {
+        for device in registry::DEVICES.iter().filter(|d| d.requires_hardware) {
+            let found = FINGERPRINTS
+                .iter()
+                .filter(|fp| fp.family == device.family)
+                .count();
+            assert_eq!(found, 1, "{} has {found} fingerprints", device.id);
+        }
+    }
+
+    /// Two rules for one family would make the weaker one unreachable, and
+    /// which of them ran would depend on the table order alone.
+    #[test]
+    fn no_family_is_fingerprinted_twice() {
+        for (i, fp) in FINGERPRINTS.iter().enumerate() {
+            for other in &FINGERPRINTS[i + 1..] {
+                assert_ne!(
+                    fp.family, other.family,
+                    "{} and {} share a family",
+                    fp.label, other.label
+                );
+            }
+        }
+    }
+
+    /// A cascade entry is a fingerprint with something to send, and the
+    /// window it opens only recognises what its own table row does.
+    #[test]
+    fn every_cascade_entry_sends_something_and_is_recognised() {
+        for fp in CASCADE {
+            assert!(
+                fp.trigger.is_some(),
+                "{} is in the cascade but sends nothing",
+                fp.label
+            );
+            let listed = FINGERPRINTS
+                .iter()
+                .filter(|f| f.family == fp.family)
+                .count();
+            assert_eq!(listed, 1, "{} is listed {listed} times", fp.label);
         }
     }
 }

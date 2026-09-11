@@ -16,9 +16,12 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{DeviceProfile, Protocol, Stability, check_len, unknown_mode};
+use crate::protocol::{
+    DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
+    unknown_mode,
+};
 use crate::transport::Transport;
-use log::debug;
+use log::{debug, warn};
 use std::borrow::Cow;
 
 /// Look up the human-readable range label for a (mode, range) pair.
@@ -132,10 +135,19 @@ fn display_unit(mode_byte: u8, range_byte: u8, base_unit: &'static str) -> &'sta
 
 const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 
+/// Response type of a measurement frame; the meter's short replies share it
+/// (gulux observes lengths 4-8), which is why the stream filter asks for a
+/// measurement-sized payload as well
+/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4).
+const RESPONSE_MEASUREMENT: u8 = 0x02;
+
 /// Known UT171 command frames (complete wire bytes from RE docs).
 /// Frame format: AB CD len_lo len_hi payload chk_lo chk_hi, where the
 /// LE16 length counts payload + checksum (same framing as UT181A).
-const UT171_CMD_CONNECT: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00];
+///
+/// The connect frame is `pub(crate)` because detection sends it too
+/// (`docs/research/ut171/reverse-engineered-protocol.md` §4.3).
+pub(crate) const UT171_CMD_CONNECT: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x01, 0x0F, 0x00];
 const UT171_CMD_PAUSE: &[u8] = &[0xAB, 0xCD, 0x04, 0x00, 0x0A, 0x00, 0x0E, 0x00];
 
 /// Protocol implementation for the UT171A/B/C.
@@ -187,7 +199,7 @@ impl Protocol for Ut171Protocol {
             // Accept only full measurement frames: type 0x02 at payload[0]
             // AND a measurement-sized payload — short ack/response frames
             // share the 0x02 type byte (gulux observes lengths 4-8).
-            |p| p.len() >= 15 && p[0] == 0x02,
+            |p| p.len() >= 15 && p[0] == RESPONSE_MEASUREMENT,
             FrameErrorRecovery::SkipAndRetry,
             "ut171",
             &framing::HEADER,
@@ -391,6 +403,49 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         aux_values,
         ..Measurement::from_payload(payload)
     })
+}
+
+/// Detection for the UT171.
+///
+/// Consulted after the UT181A, which claims the frames only it can send and
+/// the ones its own trigger elicited: what is left is a UT171's. The connect
+/// frame is UT181A opcode `0x0A` (start recording), which is why the cascade
+/// sends SET_MONITOR first — see `docs/detection-design.md`.
+pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Ut171,
+    label: "ut171 connect",
+    trigger: Some(send_connect),
+    recognise,
+};
+
+/// Start the stream — the same frame [`Protocol::init`] writes.
+fn send_connect(transport: &dyn Transport) -> Result<()> {
+    transport.write(UT171_CMD_CONNECT)
+}
+
+fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
+    for start in framing::abcd_header_offsets(buf) {
+        let Ok(Some((payload, _))) = framing::extract_frame_abcd_2byte_le16(&buf[start..]) else {
+            continue;
+        };
+        if payload.first() != Some(&RESPONSE_MEASUREMENT) {
+            continue;
+        }
+        if !probing.has_sent(DeviceFamily::Ut171) {
+            // Streaming before the connect frame went out: a UT171 left
+            // connected, or a UT181A left in monitor mode by an earlier
+            // session. The UT171 is the likelier one, but say so out loud.
+            warn!(
+                "detect: a short LE16 measurement frame arrived before any trigger; \
+                 assuming a UT171 (a UT181A left streaming looks the same)"
+            );
+        }
+        return Some(Evidence::Model {
+            id: "ut171",
+            reported_name: None,
+        });
+    }
+    None
 }
 
 #[cfg(test)]
@@ -735,5 +790,52 @@ raw_payload=15"#
                 code
             );
         }
+    }
+
+    // --- Detection (crate::detect) ---------------------------------------
+
+    fn recognised(buf: &[u8], probing: &Probing) -> Option<Evidence> {
+        (FINGERPRINT.recognise)(buf, probing)
+    }
+
+    /// A measurement frame short enough for either family is a UT171 once the
+    /// connect frame has gone out — the UT181A fingerprint, consulted first,
+    /// has already declined it.
+    #[test]
+    fn a_measurement_frame_after_the_connect_is_a_ut171() {
+        let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        let probing = Probing {
+            sent: vec![DeviceFamily::Ut171],
+        };
+        assert_eq!(
+            recognised(&frame, &probing),
+            Some(Evidence::Model {
+                id: "ut171",
+                reported_name: None,
+            })
+        );
+    }
+
+    /// The same frame before any trigger: a UT171 left connected is the
+    /// likelier source than a UT181A left streaming, and the engine warns.
+    #[test]
+    fn a_measurement_frame_before_any_trigger_is_still_a_ut171() {
+        let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
+        assert_eq!(
+            recognised(&frame, &Probing::default()),
+            Some(Evidence::Model {
+                id: "ut171",
+                reported_name: None,
+            })
+        );
+    }
+
+    /// The meter's short replies share the measurement type byte, so they
+    /// would be claimed here too — they name no model either way, and the
+    /// stream filter is what keeps them out of the parser.
+    #[test]
+    fn a_frame_of_another_type_identifies_nothing() {
+        let frame = framing::test_frame_le16(&[0x01, 0x00, 0x00, 0x00]);
+        assert_eq!(recognised(&frame, &Probing::default()), None);
     }
 }

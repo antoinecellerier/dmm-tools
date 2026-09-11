@@ -8,8 +8,10 @@ got 0x07ed` from a UT181A read as a UT61+.
 
 Detection lives in `crates/dmm-lib/src/detect.rs`. `detect_device(transport, bridge)` walks a
 probe cascade and returns the registry entry it settled on plus the name the meter reported,
-if it gave one. This document is the algorithm and the reasons behind its shape; the CLI and
-GUI surface (`--device auto`, the Auto-detect chip) is described in
+if it gave one. What each family sends and what it recognises is the family's own
+`Fingerprint`, declared in the family module next to the constants it already puts on the wire;
+`detect.rs` is the engine that runs them. This document is the algorithm and the reasons behind
+its shape; the CLI and GUI surface (`--device auto`, the Auto-detect chip) is described in
 [cli-reference.md](cli-reference.md) and [gui-reference.md](gui-reference.md). Per-family
 verification status is not repeated here — it lives in the backlog's
 [Device auto-detection](verification-backlog.md#device-auto-detection) section.
@@ -66,30 +68,43 @@ Each step logs at DEBUG — the bytes sent, and every classification attempt —
 one INFO line, so `RUST_LOG=dmm_lib=debug` is the whole story when a reporter's meter is not
 recognised.
 
-## `classify`: check order
+## Check order
 
-`classify(buf, step)` runs at every `AB CD` offset in the buffer, strictest format first. Each
-check is the family's own extractor from `framing.rs`, so the ordering rules are about which
-extractor is willing to accept another family's bytes:
+A family's `Fingerprint` (`protocol/mod.rs`) is a log label, an optional trigger — byte-identical
+to what the family's own `init` sends — and a rule that classifies the whole receive buffer with
+that family's extractor and constants. `detect.rs` holds the two tables: `FINGERPRINTS`, the order
+the rules are consulted in, and `CASCADE`, the order the triggers go out in.
 
-1. `extract_frame_ut8803` — byte 3 is `0x02` and the 21-byte checksum holds → `ut8803`. A
-   UT61+ DC V frame also carries `0x02` at byte 3, but it is 19 bytes long, so its checksum
-   fails here.
-2. `extract_frame_abcd_2byte_le16` with payload `[0] == 0x02` → the LE16 pair. Payload ≥ 31
-   bytes → `ut181a`; otherwise the step decides (step 2 → `ut181a`, step 3 → `ut171`), and a
-   frame seen in step 1, before either trigger went out, is taken as `ut171` with a WARN.
-   Payload `[0] == 0x01` is an OK/ER reply and is ignored. This check cannot fire on the other
-   families: a UT61+ name frame reads a length of `0x5508`, a VC-880 frame `0x0124`.
-3. `extract_frame_abcd_be16` last, because a UT8803 frame's byte 2 is a mode byte that reads
-   as a plausible length here. Payload `FF 00` is an ack — skipped. Printable ASCII of length
-   3..=20 → a UT61+ name. Payload `[0] == 0x01` with length 34 → `vc880`, length 61 → `vc890`.
-   Length 14 → a UT61+ measurement frame; since that can only be a stale frame from an earlier
-   session (CH9329 only — CP2110 purges RX on init), the window keeps listening for the name
-   and falls back to `ut61eplus` with `reported_name: None` and a WARN at the end of it.
+A rule answers `Evidence::Model` (a registry id, plus the name where the meter sent one) or
+`Evidence::FamilyOnly` (the family is settled, no model named). The first rule that answers at all
+wins, and a `FamilyOnly` ends the walk — the weaker rules below it never get to second-guess it.
+Rules run after every read, against every candidate offset in the buffer, and extractor errors are
+ignored throughout: to a classifier "this is not that format here" is the answer, not a failure,
+and a checksum mismatch at one offset says nothing about the next.
 
-`0xAC` offsets are examined only when no `AB CD` frame classified, and require two consecutive
-`extract_frame_ut8802` hits exactly 8 bytes apart: that format's validation passes roughly 1%
-of random bytes, and UT181A frames carry arbitrary float32 payload.
+`FINGERPRINTS` is ordered strictest format first, because the ordering is about which extractor is
+willing to accept another family's bytes:
+
+1. `ut8803` — byte 3 is `0x02` and the 21-byte checksum holds. A UT61+ DC V frame also carries
+   `0x02` at byte 3, but it is 19 bytes long, so its checksum fails there.
+2. `ut181a`, then `ut171` — the 2-byte-LE pair, whose framing and measurement type byte (`0x02`)
+   are identical and whose payload lengths overlap. The UT181A takes a payload ≥ 31 bytes (only it
+   can send one) and anything its own trigger elicited; the UT171, consulted next, takes the rest,
+   with a WARN when nothing had been sent yet. Payload `[0] == 0x01` is an OK/ER reply and is
+   ignored. Neither can fire on the other families: a UT61+ name frame reads a length of `0x5508`,
+   a VC-880 frame `0x0124`.
+3. `vc880` and `vc890`, then `ut61eplus` — the 1-byte BE16 families, after the LE16 pair because a
+   UT8803 frame's byte 2 is a mode byte that reads as a plausible length here. Payload `[0] == 0x01`
+   with length 34 is `vc880`, length 61 `vc890`. `FF 00` is an ack — skipped. Printable ASCII of
+   length 3..=20 is a UT61+ name; a 14-byte payload is a UT61+ reading, which settles the family
+   only (`FamilyOnly`, fallback `ut61eplus`) and ends the walk — which is why the UT61+ rule sits
+   below every rule a stray frame could still satisfy.
+4. `ut8802` last — `0xAC` offsets, two consecutive `extract_frame_ut8802` hits exactly 8 bytes
+   apart. That format's validation passes roughly 1% of random bytes and UT181A frames carry
+   arbitrary float32 payload, which is also why a `FamilyOnly` above it stops the walk.
+
+`fs9721` is the CH9325's rule and is the only one consulted there; the AB CD rules are the other
+bridges' (see [Bridges and adapters](#bridges-and-adapters)).
 
 ## Names and the registry
 
@@ -150,12 +165,14 @@ worth. Extractor errors are ignored, never propagated.
 
 ## Adding a family
 
-A family joins detection with four things: an arm in `classify` for the frame its extractor
-accepts, placed by how strict that extractor is against the checks already there; a fixture in
-the `detect.rs` tests — real bytes where hardware exists, the vendor trace otherwise; a row in
-the cascade table above, or in its unprompted line if the meter streams by itself; and a line
-in the backlog's [Device auto-detection](verification-backlog.md#device-auto-detection)
-section saying what is sent, what is expected back, and whether hardware has confirmed it. A
-family that needs a trigger byte also owns the question of what that byte does to every other
-meter on the same bridge — the `0x0A` collision between the UT171 connect and UT181A start
-recording is why the cascade order, not just its contents, is part of the design.
+A family joins detection with four things: a `Fingerprint` exported from its own module, built
+from the constants it already sends and parses with, and listed in `FINGERPRINTS` by how strict
+its extractor is against the rules already there — and in `CASCADE` as well if it has something to
+send; a test beside that rule, over real bytes where hardware exists and the vendor trace
+otherwise; a row in the cascade table above, or in its unprompted line if the meter streams by
+itself; and a line in the backlog's
+[Device auto-detection](verification-backlog.md#device-auto-detection) section saying what is
+sent, what is expected back, and whether hardware has confirmed it. A family that needs a trigger
+also owns the question of what that trigger does to every other meter on the same bridge — the
+`0x0A` collision between the UT171 connect and UT181A start recording is why the cascade order,
+not just its contents, is part of the design.

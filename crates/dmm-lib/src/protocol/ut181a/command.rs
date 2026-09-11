@@ -40,6 +40,17 @@ pub(super) fn build_command(payload: &[u8]) -> Vec<u8> {
     frame
 }
 
+/// SET_MONITOR (opcode `0x05`, enable = 1): the meter is silent until it
+/// arrives, then streams measurement frames
+/// (`docs/research/ut181/reverse-engineered-protocol.md` §7). Verified against
+/// real UT181A hardware: bytes AB CD 04 00 05 01 0A 00.
+///
+/// `pub(crate)` because detection sends it too, and a UT181A that answers the
+/// probe is left in the state opening it would have produced anyway.
+pub(crate) fn set_monitor_frame() -> Vec<u8> {
+    build_command(&[0x05, 0x01])
+}
+
 /// Readings taken after a setting command before concluding it did nothing.
 ///
 /// Three, as on the cycling families: one for the frame already in flight,

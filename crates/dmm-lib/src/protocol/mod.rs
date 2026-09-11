@@ -207,6 +207,73 @@ impl std::str::FromStr for DeviceFamily {
     }
 }
 
+/// What one family contributes to auto-detection.
+///
+/// The engine in [`crate::detect`] owns the listen windows, the receive
+/// buffer and the order the fingerprints are consulted in; everything
+/// family-specific — the bytes a probe sends, the frame shapes that identify
+/// the meter — lives in the family module, built from the constants it
+/// already puts on the wire. `docs/detection-design.md` is the algorithm and
+/// the reasons behind its shape.
+pub(crate) struct Fingerprint {
+    /// The family this recognises. The engine's tables key their invariants
+    /// on it, and the rules that depend on what has been sent compare it.
+    pub(crate) family: DeviceFamily,
+    /// Log label: what the probe is, e.g. `"ut61+ get name"`.
+    pub(crate) label: &'static str,
+    /// What to send before this family can answer; `None` for a meter that
+    /// streams unprompted. Byte-identical to what the family's own
+    /// [`Protocol::init`] sends, so a meter that answers a probe is left in
+    /// the state opening it would have produced anyway.
+    pub(crate) trigger: Option<fn(&dyn Transport) -> Result<()>>,
+    /// Classify the whole receive buffer. Called after every read, so it has
+    /// to tolerate partial frames and scan every candidate offset itself: a
+    /// bridge can deliver one UART byte per report, and the buffer is never
+    /// cleared between windows.
+    pub(crate) recognise: fn(&[u8], &Probing) -> Option<Evidence>,
+}
+
+/// What a recogniser concluded from the bytes received so far.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Evidence {
+    /// A frame that pins a [`registry::DEVICES`] entry.
+    Model {
+        /// The entry's id.
+        id: &'static str,
+        /// The model name the meter reported, where it sent one.
+        reported_name: Option<String>,
+    },
+    /// The family is settled but no frame named the model: open `fallback`
+    /// unless something better arrives before the window ends. Weaker
+    /// fingerprints are not consulted afterwards — a UT61+ reading must never
+    /// be second-guessed by the checksum-less UT8802 rule.
+    FamilyOnly {
+        /// Registry id to open when nothing names the model.
+        fallback: &'static str,
+    },
+}
+
+/// Which triggers have gone out so far, for the rules that depend on it: the
+/// UT181A and the UT171 stream the same frame shape, and only what elicited
+/// one tells the two apart.
+#[derive(Default)]
+pub(crate) struct Probing {
+    /// The families whose trigger has been sent, in the order they went out.
+    pub(crate) sent: Vec<DeviceFamily>,
+}
+
+impl Probing {
+    /// The trigger that went out last; `None` before the first one.
+    pub(crate) fn last(&self) -> Option<DeviceFamily> {
+        self.sent.last().copied()
+    }
+
+    /// Whether `family`'s trigger has gone out at all.
+    pub(crate) fn has_sent(&self, family: DeviceFamily) -> bool {
+        self.sent.contains(&family)
+    }
+}
+
 /// A meter setting the host can read the options of and switch between.
 ///
 /// All six are implemented; which of them a given family offers is the

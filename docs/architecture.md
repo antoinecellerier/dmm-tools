@@ -90,14 +90,18 @@ CP2110 and time out on every read — and the fallback keeps unusual cable pairi
 
 Handed `"auto"` instead of an entry, the same opener identifies the meter first: `detect.rs` runs
 a probe cascade on the opened transport, sending each family's trigger in turn and classifying
-whatever comes back, and a UT61+ name frame resolves to its registry entry. The cascade and its
-failure modes are in `docs/detection-design.md`. `open_auto()` is that path with the `Detected`
-entry handed back, so a caller can name the meter it picked; `open_transport()` is its split half
-— a bridge and its name, no protocol chosen — for a caller that must wrap the transport before
-the probe bytes flow, and pairs with `detect::detect_device()`. `devices_on_bridge()` inverts
+whatever comes back, and a UT61+ name frame resolves to its registry entry. The families own that
+knowledge: each exports a `Fingerprint` — its probe and its recognition rule, built from the
+constants it already puts on the wire — and `detect.rs` is the engine that runs them, holding only
+the order they go out and are consulted in. The cascade and its failure modes are in
+`docs/detection-design.md`. `open_auto()` is that path with the `Detected` entry handed back, so a
+caller can name the meter it picked; `open_transport()` is its split half — a bridge and its name,
+no protocol chosen — for a caller that must wrap the transport before the probe bytes flow, and
+pairs with `detect::detect_device()`. `devices_on_bridge()` inverts
 `preferred_transports()` to list the meters that could have been on a bridge nothing answered on,
 and `find_by_model_name()` maps an open session's `model_name` back to its entry.
-Adding a new device requires only a registry entry and a `Protocol` implementation; zero app code changes.
+Adding a new device requires only a registry entry, a `Protocol` implementation and — to be found
+by `"auto"` — a `Fingerprint` listed in `detect.rs`; zero app code changes.
 
 ### dmm-settings
 

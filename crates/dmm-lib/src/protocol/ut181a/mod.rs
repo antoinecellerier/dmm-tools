@@ -36,8 +36,12 @@ use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::protocol::cycle::FlagSetting;
 use crate::protocol::framing::{self, FrameErrorRecovery};
-use crate::protocol::{Choice, DeviceProfile, Protocol, Setting, Stability, unsupported_setting};
+use crate::protocol::{
+    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
+    Stability, unsupported_setting,
+};
 use crate::transport::Transport;
+pub(crate) use command::set_monitor_frame;
 use command::{UT181A_COMMANDS, build_command, build_set_mode};
 use log::debug;
 use parse::{decode_mode_word, parse_measurement};
@@ -111,12 +115,10 @@ impl Ut181aProtocol {
 
 impl Protocol for Ut181aProtocol {
     fn init(&mut self, transport: &dyn Transport) -> Result<()> {
-        // User must enable "Communication ON" on the meter
-        // Send CMD_CONT_DATA (0x05, enable=1) to start the measurement stream.
-        // Verified against real UT181A hardware: bytes AB CD 04 00 05 01 0A 00.
+        // User must enable "Communication ON" on the meter; SET_MONITOR
+        // starts the measurement stream.
         debug!("ut181a: sending start-stream command (CMD_CONT_DATA)");
-        let frame = build_command(&[0x05, 0x01]);
-        transport.write(&frame)?;
+        transport.write(&set_monitor_frame())?;
         debug!("ut181a: init (streaming, manual enable required)");
         Ok(())
     }
@@ -127,7 +129,7 @@ impl Protocol for Ut181aProtocol {
             transport,
             framing::extract_frame_abcd_2byte_le16,
             // Only accept measurement frames (type 0x02)
-            |p| !p.is_empty() && p[0] == 0x02,
+            |p| p.first() == Some(&parse::RESPONSE_MEASUREMENT),
             FrameErrorRecovery::SkipAndRetry,
             "ut181a",
             &framing::HEADER,
@@ -457,6 +459,51 @@ impl Protocol for Ut181aProtocol {
             .expect(Expect::new().range(RangeExpect::Manual)),
         ]
     }
+}
+
+/// Detection for the UT181A.
+///
+/// SET_MONITOR is what makes a UT181A speak at all, and the frames it then
+/// streams are framed exactly like a UT171's. Two things claim one: a payload
+/// only a UT181A can send, and any measurement frame that arrived while
+/// SET_MONITOR was the last trigger out. Everything shorter and later is left
+/// to the UT171, which detection consults next.
+pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
+    family: DeviceFamily::Ut181a,
+    label: "ut181a set monitor",
+    trigger: Some(send_set_monitor),
+    recognise,
+};
+
+/// Start the measurement stream — the same frame [`Protocol::init`] writes.
+fn send_set_monitor(transport: &dyn Transport) -> Result<()> {
+    transport.write(&set_monitor_frame())
+}
+
+fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
+    for start in framing::abcd_header_offsets(buf) {
+        let Ok(Some((payload, _))) = framing::extract_frame_abcd_2byte_le16(&buf[start..]) else {
+            continue;
+        };
+        if payload.first() != Some(&parse::RESPONSE_MEASUREMENT) {
+            // Logged once here rather than in both LE16 recognisers: an OK/ER
+            // reply names no model, but it does say something answered.
+            debug!(
+                "detect: ignoring LE16 frame of type {:#04x}",
+                payload.first().copied().unwrap_or(0)
+            );
+            continue;
+        }
+        if payload.len() >= parse::EXCLUSIVE_PAYLOAD_MIN
+            || probing.last() == Some(DeviceFamily::Ut181a)
+        {
+            return Some(Evidence::Model {
+                id: "ut181a",
+                reported_name: None,
+            });
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -1031,5 +1078,63 @@ mod tests {
         }
         let (mut proto, mock) = proto_in(0x3111, 0);
         assert!(proto.send_command(&mock, "nonexistent").is_err());
+    }
+
+    // --- Detection (crate::detect) ---------------------------------------
+
+    /// Whichever trigger went out last, expressed as the engine records it.
+    fn after(family: DeviceFamily) -> Probing {
+        Probing { sent: vec![family] }
+    }
+
+    fn recognised(buf: &[u8], probing: &Probing) -> Option<Evidence> {
+        (FINGERPRINT.recognise)(buf, probing)
+    }
+
+    fn ut181a() -> Option<Evidence> {
+        Some(Evidence::Model {
+            id: "ut181a",
+            reported_name: None,
+        })
+    }
+
+    /// The real frames this module's parser pins are 32 and 57 payload bytes,
+    /// both past the length only a UT181A reaches — so no context is needed
+    /// to claim them.
+    #[test]
+    fn a_long_frame_is_a_ut181a_whatever_elicited_it() {
+        for payload in [
+            parse::tests::real_frame_temp_dual_probe(),
+            parse::tests::real_frame_vac_hz(),
+        ] {
+            let frame = framing::test_frame_le16(&payload);
+            for probing in [Probing::default(), after(DeviceFamily::Ut171)] {
+                assert_eq!(
+                    recognised(&frame, &probing),
+                    ut181a(),
+                    "payload {}",
+                    payload.len()
+                );
+            }
+        }
+    }
+
+    /// A UT181A in its shortest normal format is 19 payload bytes — inside
+    /// the UT171's range, so only its own trigger tells the two apart.
+    #[test]
+    fn a_short_frame_is_a_ut181a_only_after_set_monitor() {
+        let mut payload = vec![0u8; 19];
+        payload[0] = parse::RESPONSE_MEASUREMENT;
+        let frame = framing::test_frame_le16(&payload);
+        assert_eq!(recognised(&frame, &after(DeviceFamily::Ut181a)), ut181a());
+        assert_eq!(recognised(&frame, &after(DeviceFamily::Ut171)), None);
+        assert_eq!(recognised(&frame, &Probing::default()), None);
+    }
+
+    /// An OK/ER reply names no model, whatever asked for it.
+    #[test]
+    fn a_command_reply_identifies_nothing() {
+        let reply = framing::test_frame_le16(&[0x01, 0x4F, 0x4B]);
+        assert_eq!(recognised(&reply, &after(DeviceFamily::Ut181a)), None);
     }
 }

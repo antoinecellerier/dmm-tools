@@ -8,6 +8,18 @@ use crate::protocol::{check_len, unknown_mode16};
 use log::debug;
 use std::borrow::Cow;
 
+/// Response type of a live measurement frame, the only one that carries a
+/// reading: `0x01` is the OK/ER reply to a command
+/// (`docs/research/ut181/reverse-engineered-protocol.md` §5).
+pub(super) const RESPONSE_MEASUREMENT: u8 = 0x02;
+
+/// A measurement payload this long can only be a UT181A: its normal format
+/// passes 31 bytes as soon as it carries an aux value or a bargraph (§5.3),
+/// while the UT171's longest measurement response is 21 payload bytes
+/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4). Below it the
+/// two families are told apart by which trigger elicited the frame.
+pub(super) const EXCLUSIVE_PAYLOAD_MIN: usize = 31;
+
 /// Decode a UT181A mode word (uint16 LE) into a human-readable string.
 ///
 /// Nibble encoding: N3 N2 N1 N0
@@ -340,7 +352,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // — a golden fixture — has not been through it, and a command reply read
     // as a measurement decodes its mode word out of the wrong bytes and
     // "parses" cleanly.
-    if payload[0] != 0x02 {
+    if payload[0] != RESPONSE_MEASUREMENT {
         return Err(Error::invalid_response(
             format!(
                 "ut181a: not a measurement packet (type {:#04x}, expected 0x02)",
