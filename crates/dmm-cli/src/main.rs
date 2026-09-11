@@ -307,7 +307,7 @@ fn main() {
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants
     // one.
-    let (device_id, device_source) = dmm_settings::resolve_device_family(
+    let (device_id, _source) = dmm_settings::resolve_device_family(
         cli.device.as_deref(),
         dmm_settings::SharedSettings::load_if_exists().as_ref(),
         registry::AUTO_DEVICE_ID,
@@ -323,20 +323,6 @@ fn main() {
             std::process::exit(1);
         }
     };
-
-    // Dim one-line notice when the user picked neither on the CLI nor in
-    // settings — says the meter is being worked out rather than assumed.
-    // Skipped for commands that don't open a device.
-    let opens_device = !matches!(cli.command, Cmd::List | Cmd::Completions { .. });
-    if opens_device && device_source == dmm_settings::DeviceSource::Fallback {
-        eprintln!(
-            "{}",
-            style(
-                "Auto-detecting the meter (pass --device or set device_family in dmm-gui settings to pin one)"
-            )
-            .dim()
-        );
-    }
 
     let adapter = cli.adapter.as_deref();
 
@@ -629,7 +615,10 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static SelectableDevi
              or another id to override)",
             device.display_name, device.id
         ),
-        _ => format!(" (pass --device {} to skip detection next time)", device.id),
+        _ => format!(
+            " (pass --device {} or pick it in dmm-gui to skip detection next time)",
+            device.id
+        ),
     };
     eprintln!(
         "{}",

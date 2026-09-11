@@ -37,13 +37,10 @@ The `--device` flag selects which device model and protocol to use. Each model h
 its own entry with model-specific protocol tables (e.g., UT61B+ uses different
 mode/range mappings than UT61E+).
 
-`auto`, the default, identifies the meter from the frames it answers with instead of
-being told ([how detection works](detection-design.md)). A meter that answers the first
-probe costs about 200 ms; nothing answering at all costs ~2.6 s and then lists what to
-switch on for every meter that cable could carry, how to name the meter with `--device` when it
-is already transmitting, and where to report it. `--device <id>` pins a model and
-skips probing entirely. The name probe makes a UT61+/UT161 beep once per connect; a pinned
-model stays silent.
+`auto` (the default) works out which meter is on the cable from its replies
+([how](detection-design.md)); naming a model skips the probe. Detection takes
+about 200 ms, or ~2.6 s to give up and list what each meter needs switched on.
+The probe makes a UT61+/UT161 beep once.
 
 **Device resolution precedence** (highest to lowest):
 
@@ -51,9 +48,7 @@ model stays silent.
 2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device in its settings panel — the CLI reads it but never writes to it)
 3. `auto` as a final fallback
 
-`dmm-gui` also writes the meter it detects into `device_family`, so after one GUI session on that cable the CLI opens that meter directly instead of probing for it.
-
-When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so it is clear no model was named. That notice is suppressed for commands that don't open a device (`list`, `completions`). Every detected open adds a second dim line naming the meter that was found, the exact `--device <id>` that pins it for later runs, and the model name the meter reported when it differs from the entry's.
+A detected run prints one dim stderr line naming the meter and the `--device <id>` that pins it. `dmm-gui` saves the meter it detects to `device_family`, so after one GUI session the CLI stops probing too.
 
 <!-- devices:start -->
 | Value | Aliases | Description |
