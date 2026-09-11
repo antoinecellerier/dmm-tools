@@ -4,6 +4,7 @@
 
 use dmm_lib::binary_help::{ConnectedAdapters, connected_adapters};
 use dmm_lib::mock::MockMode;
+use dmm_lib::protocol::registry;
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,7 +16,7 @@ use super::connection::{
     run_device_thread,
 };
 use super::plot_input::{PlotInput, resolve_plot_input};
-use super::{App, ConnectionState};
+use super::{App, ConnectionState, named_device};
 use crate::graph::PlotSample;
 use crate::settings::format_sample_count;
 
@@ -121,7 +122,97 @@ fn not_identified_help(bridge: &str) -> String {
     msg
 }
 
+/// The meter a `Connected` identified for a session that was told none, or
+/// `None` when there is nothing to tell the user.
+///
+/// `None` covers the two quiet cases: the settings name a meter, so the id
+/// that came back is the user's own pick returning (which is also every
+/// reconnect once a detected meter has been saved), and the mock, which is
+/// never on the far end of a cable.
+fn detected_under_auto(
+    family: &str,
+    device_id: Option<&'static str>,
+) -> Option<&'static registry::SelectableDevice> {
+    if named_device(family).is_some() {
+        return None;
+    }
+    device_id
+        .and_then(registry::find_device)
+        .filter(|d| d.requires_hardware)
+}
+
+/// The id to write into `device_family` once a meter has identified itself,
+/// or `None` when this connection leaves the settings file alone.
+///
+/// Saving is the whole point: a session that opens a named model skips the
+/// detection cascade, so the `0x5F` a UT61+ beeps at is sent only if
+/// `query_device_name` asks for the name — while detecting it goes out either
+/// way. Two cases deliberately write nothing.
+/// `--device auto` is a session-only override, and session-only
+/// values never reach the file ([`crate::settings::Settings::save`] writes the
+/// original back under one). And a value that already names that meter is left
+/// alone, so a drop and reconnect doesn't rewrite the file each time.
+fn detected_device_to_save(
+    family: &str,
+    overridden: bool,
+    device_id: Option<&'static str>,
+) -> Option<&'static str> {
+    if overridden {
+        return None;
+    }
+    detected_under_auto(family, device_id)
+        .map(|d| d.id)
+        .filter(|id| *id != family)
+}
+
+/// What the toast says when a meter identifies itself under Auto-detect.
+///
+/// `saved` splits the settings selection, which now names the meter that
+/// answered, from a `--device auto` run, which detects for this session only.
+fn detected_toast(display_name: &str, reported: &str, saved: bool) -> String {
+    let mut msg = format!("Detected {display_name}");
+    // The reported name earns its place only when it is not the name already
+    // on screen: a UT61E+ answers "UT61E+". A model no entry claims falls back
+    // to the UT61E+ tables, and then the name is the whole story — it is what
+    // the user has to quote to get an alias added.
+    if !reported.is_empty() && !reported.eq_ignore_ascii_case(display_name) {
+        msg.push_str(&format!(" (the meter reports \"{reported}\")"));
+    }
+    if saved {
+        msg.push_str(", saved as your device. Pick Auto-detect in Settings to probe again.");
+    }
+    msg
+}
+
 impl App {
+    /// Save the meter that just identified itself as the device, and say so.
+    ///
+    /// Only a session that was detecting gets here: under a named model the
+    /// `Connected` id is the pick the user already made. What is saved is what
+    /// the *next* session opens — this one is already running that protocol,
+    /// so nothing reconnects and no reading is lost.
+    fn remember_detected_device(&mut self, device_id: Option<&'static str>, reported: &str) {
+        let Some(device) = detected_under_auto(&self.settings.shared.device_family, device_id)
+        else {
+            return;
+        };
+        let to_save = detected_device_to_save(
+            &self.settings.shared.device_family,
+            self.settings.overrides.has_device(),
+            device_id,
+        );
+        if let Some(id) = to_save {
+            info!("UI: saving detected device {id} as the selected device");
+            self.settings.shared.device_family = id.to_string();
+            self.settings.save();
+        }
+        self.toast = Some((
+            detected_toast(device.display_name, reported, to_save.is_some()),
+            false,
+            Instant::now(),
+        ));
+    }
+
     /// Say that lowering Buffer size ended the capture that was running.
     ///
     /// Deliberately not the full-buffer wording: that names the new bound,
@@ -362,6 +453,10 @@ impl App {
                     } else {
                         Some(name.clone())
                     };
+                    // Under Auto-detect the meter that just named itself
+                    // becomes the saved device, so the next session opens it
+                    // pinned instead of probing the cable again.
+                    self.remember_detected_device(device_id, &name);
                     self.connection.last_error = None;
                     self.connection.reconnect_attempt = 0;
                     self.connection.reconnect_last_error = None;
@@ -540,9 +635,13 @@ impl App {
             let dots = ".".repeat((self.connection.waiting_timeouts as usize % 4) + 1);
             ui.label(RichText::new(format!("Waiting for meter{dots}")).color(warn_color));
             // Under Auto-detect there is no selection to check, so the hint is
-            // the other two things that make a quiet meter talk.
+            // the other two things that make a quiet meter talk. With a family
+            // selected the way out is named too: the value may have been saved
+            // by a detected connect rather than picked, and the user swapping
+            // meters has no reason to connect the silence to it.
             let hint = if self.selected_device().is_some() {
-                "Check that the correct device is selected in Settings (\u{2699})"
+                "Check that the correct device is selected in Settings (\u{2699}), \
+                 or pick Auto-detect there"
             } else {
                 "Switch on the meter's USB mode, or pick the model in Settings (\u{2699})"
             };
@@ -622,7 +721,7 @@ impl App {
                     "The USB adapter is connected but the meter \n\
                      isn't responding ({} selected).\n\
                      \n\
-                     If this is the wrong device, change it in Settings (\u{2699}).\n\
+                     If this is the wrong device, change it in Settings (\u{2699}), or pick Auto-detect there.\n\
                      Otherwise, enable data transmission:\n\
                      {}",
                     entry.display_name, entry.activation_instructions
@@ -643,6 +742,137 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::Settings;
+
+    /// An app whose settings name `family`, with `overridden` saying whether
+    /// that came from `--device` rather than the file.
+    ///
+    /// Nothing here may reach [`Settings::save`] — it writes the real config
+    /// file — so every app-level case below is one the save decision refuses.
+    fn app(family: &str, overridden: bool) -> App {
+        let mut settings = Settings::default();
+        settings.shared.device_family = family.to_string();
+        if overridden {
+            settings.overrides.device_family = Some(String::new());
+        }
+        App::from_settings(settings, dmm_lib::Clock::real())
+    }
+
+    fn toast_text(app: &App) -> Option<&str> {
+        app.toast.as_ref().map(|(msg, _, _)| msg.as_str())
+    }
+
+    /// The mitigation itself: the meter that answered the probe is saved, so
+    /// the session after this one opens it pinned rather than walking the
+    /// cascade at every connect.
+    #[test]
+    fn a_detected_meter_is_saved_as_the_device() {
+        assert_eq!(
+            detected_device_to_save(registry::AUTO_DEVICE_ID, false, Some("ut61eplus")),
+            Some("ut61eplus")
+        );
+    }
+
+    /// `--device auto` detects for one run. Saving under it would either be
+    /// undone by `Settings::save` (which writes the file's own value back
+    /// under an override) or persist a choice made for a single session.
+    #[test]
+    fn a_command_line_auto_detects_without_saving() {
+        assert_eq!(
+            detected_device_to_save(registry::AUTO_DEVICE_ID, true, Some("ut61eplus")),
+            None
+        );
+    }
+
+    /// The mock is a debugging aid, never the meter on the cable — detection
+    /// cannot land on it, and nothing here should be what makes that true.
+    #[test]
+    fn a_mock_connect_is_never_saved() {
+        assert_eq!(
+            detected_device_to_save(registry::AUTO_DEVICE_ID, false, Some("mock")),
+            None
+        );
+    }
+
+    /// A drop mid-session re-probes and reports the same meter again. Writing
+    /// the file on each of those would rewrite it for the life of the session.
+    #[test]
+    fn a_value_that_already_names_that_meter_is_not_re_saved() {
+        assert_eq!(
+            detected_device_to_save("ut61eplus", false, Some("ut61eplus")),
+            None
+        );
+        // Including when the file spells it as one of the entry's aliases.
+        assert_eq!(
+            detected_device_to_save("ut61e", false, Some("ut61eplus")),
+            None
+        );
+        // And a meter the user picked themselves is left as they left it.
+        assert_eq!(
+            detected_device_to_save("ut61b+", false, Some("ut61eplus")),
+            None
+        );
+    }
+
+    /// The saved case tells the user what changed and how to undo it; a
+    /// UT61E+ reports its own display name, so quoting it back adds nothing.
+    #[test]
+    fn the_toast_says_what_was_saved() {
+        assert_eq!(
+            detected_toast("UT61E+", "UT61E+", true),
+            "Detected UT61E+, saved as your device. \
+             Pick Auto-detect in Settings to probe again."
+        );
+        // A family that never reports a name says only what it is.
+        assert_eq!(
+            detected_toast("UT8803", "", true),
+            "Detected UT8803, saved as your device. \
+             Pick Auto-detect in Settings to probe again."
+        );
+    }
+
+    /// An unknown name falls back to the UT61E+ entry, so the toast has to
+    /// carry the model the meter actually reported — it is what the user
+    /// quotes when reporting it.
+    #[test]
+    fn the_toast_names_a_model_that_differs_from_the_entry() {
+        assert_eq!(
+            detected_toast("UT61E+", "UT60BT", true),
+            "Detected UT61E+ (the meter reports \"UT60BT\"), saved as your device. \
+             Pick Auto-detect in Settings to probe again."
+        );
+        assert_eq!(
+            detected_toast("UT61E+", "UT60BT", false),
+            "Detected UT61E+ (the meter reports \"UT60BT\")"
+        );
+    }
+
+    /// Nothing was saved, so the toast must not say it was.
+    #[test]
+    fn the_toast_under_a_command_line_auto_only_names_the_meter() {
+        let mut app = app(registry::AUTO_DEVICE_ID, true);
+        app.remember_detected_device(Some("ut61eplus"), "UT61E+");
+        assert_eq!(toast_text(&app), Some("Detected UT61E+"));
+        assert_eq!(
+            app.settings.shared.device_family,
+            registry::AUTO_DEVICE_ID,
+            "a session-only override must not reach the settings"
+        );
+        // The session is already talking to that meter; re-opening it would
+        // cost a reconnect and a hole in the graph for nothing.
+        assert!(!app.connection.needs_reconnect);
+    }
+
+    /// A reconnect under a saved or picked meter has nothing to announce —
+    /// the user is looking at the model they chose.
+    #[test]
+    fn a_connect_under_a_named_meter_is_silent() {
+        for family in ["ut61eplus", "mock"] {
+            let mut app = app(family, false);
+            app.remember_detected_device(Some(family), "UT61E+");
+            assert_eq!(toast_text(&app), None, "{family} should say nothing");
+        }
+    }
 
     /// The adapter case used to be recovered at the render site with
     /// `error.contains("adapter not found")`, and "no adapter on the bus"

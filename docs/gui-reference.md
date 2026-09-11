@@ -23,10 +23,14 @@ The Settings panel includes a **Device** selector. **Auto-detect** leads the
 row and is the default: rather than being told the family, the GUI works out
 which meter is on the USB cable from the bytes it sends (see
 [detection-design.md](detection-design.md)), and the device label in the top
-bar shows the model it found once connected. The probe makes a UT61+/UT161
-beep once per connect; picking the model instead keeps it silent. If nothing answers, the reading
-column says so and lists what to switch on for each meter that cable could
-carry.
+bar shows the model it found once connected. That meter is then saved as the
+**Device**, so later sessions open it directly rather than probing the cable
+again. The probe makes a UT61+/UT161 beep whatever **Query device name** is set
+to; a saved model is only asked its name when that setting is on, so turning it
+off keeps those connects silent. Pick **Auto-detect** again to probe afresh, as
+after swapping meters. Starting the GUI with `--device auto` detects the same
+way and saves nothing. If nothing answers, the reading column says so and lists
+what to switch on for each meter that cable could carry.
 
 The rest of the row is the device registry — all supported models (UT61E+,
 UT61B+, UT61D+, UT161B/D/E, UT8802, UT8803, UT803, UT804, UT171A/B/C, UT181A,
@@ -366,10 +370,10 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Show Recording** | on | Toggle recording panel visibility |
 | **Show Specifications** | on | Toggle specifications panel visibility |
 | **Auto-connect** | on | Connect to meter automatically on startup |
-| **Query device name** | on | Ask meter for its name on connect (causes a beep). Under Auto-detect a UT61+/UT161 has already given its name to the detection probe, so it is not asked a second time. |
+| **Query device name** | on | Ask meter for its name on connect (causes a beep). Under Auto-detect a UT61+/UT161 has already given its name to the detection probe, so it is not asked a second time — and that probe beeps whether this is on or off. Once the detected meter is saved as the Device, this setting is what decides: off keeps the connect silent. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
 | **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size, which keeps every sample it took. Editing `settings.json` by hand accepts any size from 1K to 50M. Hover shows the memory and hours a size buys — a 500K recording is ~140 MB single-display, ~420 MB with four sub-values. |
-| **Device** | Auto-detect | Auto-detect identifies the meter on the cable; the other chips pin a family and skip detection. See the description for supported models and Mock. Requires reconnect. |
+| **Device** | Auto-detect | Auto-detect identifies the meter on the cable and saves it here, so later sessions open that model directly; pick Auto-detect again to probe afresh. The other chips pin a model and skip detection. See the description for supported models and Mock. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11. |

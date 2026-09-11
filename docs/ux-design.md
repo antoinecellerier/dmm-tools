@@ -25,10 +25,11 @@
 
 The GUI accepts `--device`, `--theme`, and `--mock-mode` flags (via `clap`,
 consistent with the CLI). These override saved settings for the current
-session only. The settings panel shows which values are overridden (e.g.,
-"Auto-detect (--device)"). Clicking a different value in the panel clears the
-override and persists the user's choice. See `docs/gui-reference.md` for
-the full options table.
+session only — so `--device auto` detects the meter without saving it, where
+Auto-detect chosen in the panel saves the meter it finds. The settings panel
+shows which values are overridden (e.g., "Auto-detect (--device)"). Clicking a
+different value in the panel clears the override and persists the user's
+choice. See `docs/gui-reference.md` for the full options table.
 
 ## GUI Layout
 

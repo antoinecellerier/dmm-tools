@@ -50,6 +50,8 @@ family stays silent.
 2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device in its settings panel — the CLI reads it but never writes to it)
 3. `auto` as a final fallback
 
+`dmm-gui` also writes the meter it detects into `device_family`, so after one GUI session on that cable the CLI opens that meter directly instead of probing for it.
+
 When the CLI falls through to the final fallback (you passed no `--device` and have no setting saved), a dim one-line notice is printed to stderr before the command runs, so it is clear no model was named. That notice is suppressed for commands that don't open a device (`list`, `completions`). Every detected open adds a second dim line naming the meter that was found, and the model name the meter reported when it differs from the entry's.
 
 <!-- devices:start -->
