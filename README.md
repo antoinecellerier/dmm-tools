@@ -83,6 +83,8 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 
 🧪 = reverse-engineered from vendor software; most have not yet been tested on real hardware — click to help verify.
 
+Your model is not listed here? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with the model's detail.
+
 See [docs/supported-devices.md](docs/supported-devices.md) for the full compatibility list and reference implementations.
 
 ## Quick start
