@@ -69,6 +69,25 @@ fn buffer_cost(n: usize, overlays: usize, aux: usize, interval_ms: u32) -> (Stri
     (buffer_memory_estimate(n, overlays, aux), span)
 }
 
+/// What the settings panel leaves below itself for the rest of the window.
+/// Raising it keeps more of the reading and the graph visible on a short
+/// window, and starts scrolling the settings sooner.
+const SETTINGS_RESERVE: f32 = 160.0;
+
+/// The shortest the settings rows are ever squashed to, even when that eats
+/// into [`SETTINGS_RESERVE`]: below a few lines the panel is a scrollbar
+/// beside a sliver of content, and nothing can be found in it.
+const SETTINGS_MIN_HEIGHT: f32 = 96.0;
+
+/// How tall the scrolling settings rows may be, given the window height and
+/// where the rows start. Floored to whole points so that a fractional
+/// overflow can't raise a scrollbar beside rows that fit.
+fn settings_scroll_cap(window_h: f32, top: f32) -> f32 {
+    (window_h - top - SETTINGS_RESERVE)
+        .max(SETTINGS_MIN_HEIGHT)
+        .floor()
+}
+
 impl App {
     pub(super) fn show_remote_controls(&mut self, ui: &mut Ui, scale: f32) {
         use super::ConnectionState;
@@ -200,13 +219,49 @@ impl App {
         });
     }
 
-    pub(super) fn show_settings_panel(&mut self, ui: &mut Ui) {
+    /// The rows below the bar row while the settings are open. Returns the
+    /// scroll area's output so a test can check that nothing is scrolled when
+    /// the rows fit, and `None` when the settings are closed.
+    pub(super) fn show_settings_panel(
+        &mut self,
+        ui: &mut Ui,
+    ) -> Option<egui::scroll_area::ScrollAreaOutput<()>> {
         if !self.settings_open {
-            return;
+            return None;
         }
 
         ui.separator();
-        ui.horizontal(|ui| {
+        // A panel clips its content and never scrolls, so on a short window
+        // the rows below would simply be cut off — Zoom, the way back from a
+        // scale that made the window unusable, among them. Cap the rows and
+        // scroll them instead. The cap is measured from the window rather
+        // than from `available_height()`: inside a panel the content ui's
+        // `max_rect` is last frame's panel rect, so the space a `ScrollArea`
+        // would size itself from is stale, and often nothing at all. The cap
+        // is handed over as a child ui rather than via `set_max_height`,
+        // which unions the new bound with everything placed so far and then
+        // moves the cursor back to the top of the panel — the rows would be
+        // painted over the bar row.
+        let cap = settings_scroll_cap(ui.ctx().content_rect().height(), ui.cursor().top());
+        let scrolled = ui
+            .allocate_ui(egui::vec2(ui.available_width(), cap), |ui| {
+                egui::ScrollArea::vertical()
+                    .id_salt("settings_scroll")
+                    .show(ui, |ui| self.show_settings_rows(ui))
+            })
+            .inner;
+
+        // Outside the scroller: the rule closing the panel belongs to the
+        // panel, not to the last row that happens to be scrolled into view.
+        ui.separator();
+        Some(scrolled)
+    }
+
+    /// The settings rows, top to bottom. Drawn inside the scroll area that
+    /// [`Self::show_settings_panel`] caps, and kept in their own method so
+    /// that the rows stay at one indentation level.
+    fn show_settings_rows(&mut self, ui: &mut Ui) {
+        ui.horizontal_wrapped(|ui| {
             let chips = [ThemeMode::Dark, ThemeMode::Light, ThemeMode::System]
                 .into_iter()
                 .map(|mode| {
@@ -296,7 +351,7 @@ impl App {
         // -- Collapsible color customization --
         self.show_color_customization(ui);
 
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let changed = setting_checkbox(
                 ui,
                 &mut self.settings.show_graph,
@@ -325,7 +380,7 @@ impl App {
             }
         });
 
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let changed = setting_checkbox(
                 ui,
                 &mut self.settings.auto_connect,
@@ -545,8 +600,8 @@ impl App {
             );
         });
 
-        // Wrapped, unlike the decorations row below it: the Wayland caption
-        // is a sentence, and a narrow window would cut it off mid-word.
+        // The Wayland caption is a sentence, so it wraps rather than
+        // running off the edge of a narrow window.
         ui.horizontal_wrapped(|ui| {
             // Greyed rather than hidden on Wayland, and the saved value is
             // left alone: a `true` written on an X11 session still applies
@@ -571,7 +626,7 @@ impl App {
             }
         });
 
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             if setting_checkbox(
                 ui,
                 &mut self.settings.hide_decorations,
@@ -587,8 +642,6 @@ impl App {
                     .color(ui.visuals().weak_text_color()),
             );
         });
-
-        ui.separator();
     }
 
     /// Show the collapsible color customization section.
@@ -856,4 +909,133 @@ fn color_edit(
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+    use eframe::egui::scroll_area::ScrollAreaOutput;
+    use eframe::egui::{Id, Pos2, Rect, vec2};
+
+    /// The settings rows laid out under the real bar row.
+    struct SettingsFrame {
+        ctx: egui::Context,
+        /// Where the bar row ends: the rows must start below it.
+        bar_bottom: f32,
+        scrolled: ScrollAreaOutput<()>,
+    }
+
+    /// An open settings panel in a `w` x `h` window, after three headless
+    /// frames — a panel sizes itself from the previous frame, so the first
+    /// one alone proves nothing. The bar row is the app's own, since the bug
+    /// this guards against is the rows being laid over it.
+    fn settings_panel(w: f32, h: f32) -> SettingsFrame {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.settings_open = true;
+        let ctx = egui::Context::default();
+        let mut bar_bottom = 0.0;
+        let mut scrolled = None;
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(w, h))),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::Panel::top("top_bar").show(ui, |ui| {
+                        let ctx = ui.ctx().clone();
+                        app.show_top_bar(ui, &ctx);
+                        bar_bottom = ui.min_rect().bottom();
+                        scrolled = app.show_settings_panel(ui);
+                    });
+                },
+            );
+            out.textures_delta.clear();
+        }
+        SettingsFrame {
+            ctx,
+            bar_bottom,
+            scrolled: scrolled.expect("the settings are open"),
+        }
+    }
+
+    #[test]
+    fn the_scroll_cap_follows_the_window_down_to_a_floor() {
+        assert_eq!(
+            settings_scroll_cap(900.0, 40.0),
+            900.0 - 40.0 - SETTINGS_RESERVE
+        );
+        // Too short for the reserve: the rows keep their few lines instead.
+        assert_eq!(settings_scroll_cap(220.0, 40.0), SETTINGS_MIN_HEIGHT);
+    }
+
+    /// A panel clips its content and never scrolls, so without the cap the
+    /// top bar grew over the whole window and the central panel — and the
+    /// reading with it — was squeezed out from below.
+    #[test]
+    fn a_short_window_keeps_the_settings_panel_off_the_rest_of_it() {
+        let frame = settings_panel(400.0, 220.0);
+        let panel = egui::PanelState::load(&frame.ctx, Id::new("top_bar")).expect("the panel ran");
+        // The floor wins at this height, so the panel is the bar row, the
+        // rows' cap, the two separators and the frame's margin — and the
+        // rest of the window is left to the central panel.
+        let bottom = panel.outer_rect.bottom();
+        assert!(
+            bottom <= frame.bar_bottom + SETTINGS_MIN_HEIGHT + 32.0,
+            "settings panel took {bottom} pt of a 220 pt window (bar ends at {})",
+            frame.bar_bottom
+        );
+        // And the rows do scroll: there is more than the cap can show.
+        let inner = frame.scrolled.inner_rect;
+        assert!(
+            frame.scrolled.content_size.y > inner.height(),
+            "rows {} pt tall fit a {} pt viewport, nothing to scroll",
+            frame.scrolled.content_size.y,
+            inner.height()
+        );
+    }
+
+    /// `set_max_height` would have put the rows here: it unions the new
+    /// bound with what was already placed and moves the cursor back to the
+    /// top of the panel, so the rows were painted over the bar row.
+    #[test]
+    fn the_rows_start_below_the_bar_row() {
+        for h in [220.0, 900.0] {
+            let frame = settings_panel(400.0, h);
+            let top = frame.scrolled.inner_rect.top();
+            assert!(
+                top >= frame.bar_bottom,
+                "rows start at {top} pt, over a bar row ending at {} pt, in a {h} pt window",
+                frame.bar_bottom
+            );
+        }
+    }
+
+    /// And when the window is tall enough, every row is on screen and the
+    /// scroll area is invisible: it shrinks to the rows, so no bar appears
+    /// and there is nothing to scroll.
+    #[test]
+    fn a_tall_window_shows_every_row_with_nothing_scrolled() {
+        let frame = settings_panel(400.0, 900.0);
+        let panel = egui::PanelState::load(&frame.ctx, Id::new("top_bar")).expect("the panel ran");
+        let height = panel.outer_rect.height();
+        assert!(
+            height > SETTINGS_MIN_HEIGHT + 40.0,
+            "settings panel is only {height} pt tall in a 900 pt window"
+        );
+        // Short of the cap, so the rows fit inside it.
+        assert!(
+            height < settings_scroll_cap(900.0, 0.0),
+            "settings panel is {height} pt tall, at the cap"
+        );
+        let inner = frame.scrolled.inner_rect;
+        assert!(
+            frame.scrolled.content_size.y <= inner.height() + 0.01,
+            "rows {} pt tall overflow a {} pt viewport",
+            frame.scrolled.content_size.y,
+            inner.height()
+        );
+        assert_eq!(frame.scrolled.state.offset, egui::Vec2::ZERO);
+    }
 }

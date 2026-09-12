@@ -69,6 +69,8 @@ Toggled by the gear icon. Contains:
 - **Sample interval:** 0ms (fastest, ~10 Hz), 100ms, 200ms, 300ms, 500ms, 1000ms, 2000ms. Requires reconnect to take effect.
 - **Zoom:** UI scale selector (30%-300%, Firefox-style non-linear levels) + keyboard shortcuts (Ctrl+/-, Ctrl+0 to reset). 100% = OS default scale. Persists across sessions.
 
+The rows are height-capped and scroll when the window is too short to hold them all; the top bar row above them stays where it is.
+
 Settings persist to `~/.config/ut61eplus/settings.json`.
 
 ### Responsive Layout
