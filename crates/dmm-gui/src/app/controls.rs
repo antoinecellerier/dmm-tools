@@ -730,13 +730,35 @@ fn color_edit(
     // the open lifecycle. egui's `color_edit_button_srgba` also uses
     // `Popup::menu`, but doesn't move focus into the popup when it opens —
     // keyboard users end up stranded on the settings panel.
-    let response = ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
-        let btn_size = egui::Vec2::splat(ui.spacing().interact_size.y);
-        let btn = ui.add(egui::Button::new("").fill(color).min_size(btn_size));
-        ui.label(RichText::new(label).small());
-        btn
-    });
+    //
+    // The swatch and its label are one unit, sized before it is placed so the
+    // wrapped group row can move it to the next line. A `ui.horizontal` here
+    // claimed the rest of the row and never wrapped, and its overflow widened
+    // the whole settings panel — every other row then kept folding at that
+    // width instead of the window's.
+    let gap = 2.0;
+    let btn_size = egui::Vec2::splat(ui.spacing().interact_size.y);
+    let text = egui::WidgetText::from(RichText::new(label).small());
+    let galley = text.clone().into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    );
+    let unit = egui::vec2(
+        btn_size.x + gap + galley.size().x,
+        btn_size.y.max(galley.size().y),
+    );
+    let response = ui.allocate_ui_with_layout(
+        unit,
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            let btn = ui.add(egui::Button::new("").fill(color).min_size(btn_size));
+            ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend));
+            btn
+        },
+    );
 
     // The swatch's visible content is just a color, which screen readers
     // can't describe — give it the label text as its accessible name.
@@ -930,6 +952,8 @@ mod tests {
         /// Where the bar row ends: the rows must start below it.
         bar_bottom: f32,
         scrolled: ScrollAreaOutput<()>,
+        /// The AccessKit tree, empty unless the run enabled it.
+        nodes: Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>,
     }
 
     /// An open settings panel in a `w` x `h` window, driven a frame at a
@@ -957,10 +981,15 @@ mod tests {
         }
 
         fn frame(&mut self, events: Vec<egui::Event>) -> SettingsFrame {
+            self.frame_after(1.0, events)
+        }
+
+        /// A frame `secs` after the previous one.
+        fn frame_after(&mut self, secs: f64, events: Vec<egui::Event>) -> SettingsFrame {
             let mut bar_bottom = 0.0;
             let mut scrolled = None;
             let app = &mut self.app;
-            self.seconds += 1.0;
+            self.seconds += secs;
             let mut out = self.ctx.run_ui(
                 egui::RawInput {
                     screen_rect: Some(self.screen),
@@ -978,12 +1007,44 @@ mod tests {
                 },
             );
             out.textures_delta.clear();
+            let nodes = out
+                .platform_output
+                .accesskit_update
+                .map(|update| update.nodes)
+                .unwrap_or_default();
             SettingsFrame {
                 ctx: self.ctx.clone(),
                 bar_bottom,
                 scrolled: scrolled.expect("the settings are open"),
+                nodes,
             }
         }
+
+        /// Click `pos` the way a mouse does — move, press, release on
+        /// successive frames — and return the release frame. The release
+        /// follows the press within egui's click window, not a second later.
+        fn click(&mut self, pos: Pos2) -> SettingsFrame {
+            let button = |pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            self.frame(vec![egui::Event::PointerMoved(pos)]);
+            self.frame(vec![egui::Event::PointerMoved(pos), button(true)]);
+            self.frame_after(0.1, vec![egui::Event::PointerMoved(pos), button(false)])
+        }
+    }
+
+    /// Where a widget sits, as AccessKit reports it: a button carries its
+    /// text as the node's label, a label as its value.
+    fn node_bounds(frame: &SettingsFrame, text: &str) -> egui::accesskit::Rect {
+        frame
+            .nodes
+            .iter()
+            .find(|(_, n)| n.label() == Some(text) || n.value() == Some(text))
+            .and_then(|(_, n)| n.bounds())
+            .unwrap_or_else(|| panic!("no {text:?} widget in the settings"))
     }
 
     /// After three headless frames — a panel sizes itself from the previous
@@ -1141,6 +1202,71 @@ mod tests {
 
     /// The scroller takes the panel's width, so its bar sits at the panel's
     /// edge — not at the widest row's, part-way across the window.
+    /// Expanding **Customize colors** used to run the Graph swatches off the
+    /// right edge of a narrow panel, and that overflow held every wrapped row
+    /// at the overflowed width: the Device chips stopped reflowing with the
+    /// window. Reported with the section opened in a wide window that was
+    /// then narrowed, so the run does the same.
+    #[test]
+    fn the_expanded_colours_wrap_and_the_other_rows_keep_reflowing() {
+        // Narrower than the Graph swatch row and than the Device chips.
+        let width = 700.0;
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        let header = node_bounds(&frame, "Customize colors");
+        let centre = Pos2::new(
+            ((header.x0 + header.x1) / 2.0) as f32,
+            ((header.y0 + header.y1) / 2.0) as f32,
+        );
+        run.click(centre);
+        // The body animates open; a second per frame has it fully open.
+        run.frame(vec![]);
+        run.frame(vec![]);
+        run.screen = Rect::from_min_size(Pos2::ZERO, vec2(width, 900.0));
+        run.frame(vec![]);
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        // The section is open: its first swatch fits whatever the width.
+        node_bounds(&frame, "Background");
+
+        // A widget cut off at the edge leaves the AccessKit tree.
+        let crosshair = frame
+            .nodes
+            .iter()
+            .find_map(|(_, n)| (n.label() == Some("Crosshair")).then(|| n.bounds()))
+            .flatten()
+            .expect("the last Graph swatch is cut off by the panel edge");
+        assert!(
+            crosshair.x1 <= f64::from(width),
+            "the last Graph swatch runs off the panel: {crosshair:?}"
+        );
+        let scrolled = &frame.scrolled;
+        assert!(
+            scrolled.content_size.x <= scrolled.inner_rect.width(),
+            "the rows overflow the panel: content {} wide in {}",
+            scrolled.content_size.x,
+            scrolled.inner_rect.width()
+        );
+        for (_, node) in &frame.nodes {
+            if let Some(b) = node.bounds() {
+                assert!(
+                    b.x1 <= f64::from(width),
+                    "{:?} runs off the panel: {b:?}",
+                    node.label().or(node.value())
+                );
+            }
+        }
+        // The Device row folded at the window, not at the swatch row.
+        let first = node_bounds(&frame, "UT61E+");
+        let last = node_bounds(&frame, "Voltcraft VC-890");
+        assert!(
+            last.y0 > first.y1,
+            "the Device chips did not reflow: UT61E+ at {first:?}, VC-890 at {last:?}"
+        );
+    }
+
     #[test]
     fn the_scroller_spans_the_panel() {
         let frame = settings_panel(400.0, 220.0);

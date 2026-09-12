@@ -58,6 +58,7 @@
 
 ### Bug fixes
 
+- **Colour swatches wrap in a narrow settings panel** — with **Customize colors** open, the Graph row ran off the right edge and the rows above stopped reflowing with the window.
 - **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, diode, capacitance, Hz, duty, NCV and AC+DC V offered controls that did nothing.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
 - **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V, a value the manual's AC table does not list.
