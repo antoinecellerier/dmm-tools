@@ -476,6 +476,12 @@ with the focus anywhere else it closes the help overlay or quits.
 
 The layout adapts to the window size and panel visibility.
 
+In a window too small for its content the reading and graph columns, the
+settings rows and the shortcut help scroll rather than being cut off; the top
+bar stays in place and the graph area keeps a minimum height instead of
+shrinking away. The plain mouse wheel scrolls whatever is under the pointer —
+`Ctrl` + wheel is what zooms the graph.
+
 ### Wide Layout (≥ 900px)
 
 Two-column layout with a resizable left sidebar (180–400px):
@@ -490,10 +496,6 @@ Two-column layout with a resizable left sidebar (180–400px):
 Single-column stack: reading, controls, help, specifications (compact),
 statistics, graph, recording.
 
-In a window too short for a column, that column scrolls with the mouse wheel
-and the graph area keeps a minimum height instead of shrinking away; the top
-bar stays in place.
-
 ### Big Meter Mode
 
 ![Big meter mode — reading and statistics scaled to fill the window](../assets/gui-big-meter.png)
@@ -507,7 +509,9 @@ quickly enter big meter mode — this temporarily hides graph, recording,
 statistics, and specifications without changing your saved settings.
 Press **Ctrl+B** again to enter **minimal mode**, which also hides the
 top bar and command buttons, leaving only the reading and mode line.
-Press **Ctrl+B** a third time to return to your normal layout.
+Press **Ctrl+B** a third time to return to your normal layout. The **⊞**
+overlay button is hidden below roughly 100 × 80 px, where it would cover the
+reading, so in a window that small **Ctrl+B** is the way out.
 
 ![Minimal meter mode — reading only, no chrome](../assets/gui-minimal-meter.png)
 

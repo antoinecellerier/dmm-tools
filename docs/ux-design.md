@@ -91,7 +91,8 @@ Threshold at ~900px available width:
 
 Each column is a page scroller: too short a window scrolls it rather than
 cropping it, the graph area keeping a minimum height. The top bar is outside
-the scrollers and stays pinned.
+the scrollers and stays pinned. The shortcut help caps itself to the window
+and scrolls inside its own frame rather than being clipped by it.
 
 **Big meter mode (graph + recording both hidden):** Single centered display.
 - Reading, buttons, specs (inline), and stats scale to fill available space
