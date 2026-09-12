@@ -3,6 +3,8 @@ paths:
   - "docs/cli-reference.md"
   - "docs/gui-reference.md"
   - "docs/supported-devices.md"
+  - "docs/setup.md"
+  - "CONTRIBUTING.md"
 ---
 
 # User-facing doc rules
@@ -52,6 +54,12 @@ stop — a short section is never the defect.
 - Detail a few readers need goes to the Appendix, linked from the section
   that uses it.
 - A new section is inserted by rank, never appended.
+
+## Step lists (setup.md, CONTRIBUTING.md)
+
+- Numbered steps and the commands to run, a one-line reason only where the
+  reader must choose between steps. The same exclusions and ownership apply;
+  a troubleshooting heading is the message the tool prints, verbatim.
 
 ## Before commit
 
