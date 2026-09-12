@@ -209,6 +209,13 @@ Report: `ut61eplus-ladders.yaml`, `ut61eplus-acdcv.yaml`.
   decoding of a non-zero value at each rung is not. A resistor of 1k-100k
   across the probes would settle that in one run — it lands inside five of the
   seven rungs and each must decode to the same resistance.
+- **The AC V ladder was walked earlier, on 2026-09-07** (`acv/range:*` in
+  `ut61eplus-verify5.yaml`), which this section originally left out: all four
+  rungs are golden fixtures, and their decimal counts run 4, 3, 2, 1 across
+  indices 0-3 — `  0.0647`, `   0.395`, `    0.35`, `     0.0` — matching the
+  manual's 0.1mV/1mV/10mV/0.1V resolutions for 2.2000V, 22.000V, 220.00V and
+  1000.0V. AC V does *not* share the DC V table in the code, and does not
+  need to.
 - That closes the 2026-09-07 worry that RANGE could not be swept: the blind
   six-press sweep that produced indices 0, 2, 0, 0, 0, 0 was the old code
   pressing without reading back. `choices(Range)` walks to target with a
@@ -359,9 +366,21 @@ Left open on this model:
   then sat before the gate closed (below), and the two runs since were
   `--unverified` and `--steps`, neither of which reaches a step already
   marked verified. `capture --steps acv` with the leads open covers it.
-- **Capacitance rungs 1-4 and 6** and **the mV ladder** — auto-ranging never
-  left rung 0 with open leads, and RANGE is dead in capacitance (below); rung
-  5 came from a capacitor held to the leads on 2026-09-11.
+- **Capacitance rungs 1-4 and 6** — pinned by arithmetic, but worth a real
+  measurement if capacitors turn up, because this is the one open ladder
+  whose units change mid-way (nF/µF/mF), and `unit` comes straight from the
+  range table (`ut61eplus/mod.rs:866`), so a wrong rung here is a 1000x
+  error rather than a wrong label. Rung 0 is pinned by `   0.03` (60.00 nF)
+  and rung 5 by `  4.514` (6.000 mF, a capacitor on 2026-09-11); with both
+  ends of a seven-entry decade ladder fixed and the order ascending, 1-4 are
+  the four manual rungs between them and 6 the one above. Reaching them for
+  real needs six capacitors, one per decade — RANGE is dead in capacitance
+  (below), so auto-ranging is the only way there.
+- **The mV ladder** — rung 0 is *measured*, not deduced: `   1.43` in
+  `dcmv.yaml` and `  11.72` in `acmv.yaml`, two decimals each, which is
+  60.00 mV full scale. With two ascending entries that leaves rung 1 at
+  600mV, and both carry unit `mV`. What is genuinely untested is whether
+  RANGE walks them at all (next item).
 - ~~**The 600Ω manual rung.**~~ — the rung is stable; what is left is a
   question about the press path, not the range table. The 2026-09-11 walk
   pressed RANGE four times from 600kΩ auto and read back 3 (manual), 4, 5, 0 —
@@ -380,14 +399,20 @@ Left open on this model:
   presses, so a duplicate would be in the bridge or the meter's own handling.
   One observation, on one cable; the check is whether a RANGE walk on our own
   meter over CH9329 ever gains a rung it did not press for.
-- **The Hz ladder.** Range index 0 carried two different full scales across
-  the two runs: `0.0` (one decimal) from the V~ Hz path on 2026-09-09 and
-  `0.00` / `49.98` (two decimals) from the Hz/% dial position on 2026-09-10.
-  One index cannot mean both, so either the index is pinned at 0 in Hz and the
-  rung shows only in the decimal placement, or the two paths range
-  differently. The code's five invented Hz ranges describe neither. Settling
-  it needs one frame on a signal above 60 Hz, to see whether the range byte
-  ever leaves 0.
+- **The Hz ladder — PARKED 2026-09-12, needs a signal generator we do not
+  have.** Raise it again if one turns up, or if a reporter offers. This is
+  the only open item on the model with a real correctness risk: the Hz rungs
+  are Hz, Hz, kHz, kHz, kHz, and `unit` comes from the range table, so if the
+  range byte really does stay at 0 above 6 kHz then everything up there is
+  labelled Hz while the meter shows kHz. Range index 0 carried two different
+  full scales across the two runs: `0.0` (one decimal) from the V~ Hz path on
+  2026-09-09 and `0.00` / `49.98` (two decimals) from the Hz/% dial position
+  on 2026-09-10. One index cannot mean both, so either the index is pinned at
+  0 in Hz and the rung shows only in the decimal placement, or the two paths
+  range differently. The code's five invented Hz ranges describe neither, and
+  the E+'s five are invented too, so no sibling can arbitrate. Settling it
+  needs one frame on a signal above 60 Hz — say a 1 kHz square wave — to see
+  whether the range byte ever leaves 0.
 
 ### Capture: gate steps placed after other steps
 
@@ -1087,21 +1112,29 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **UT61D+ amps: manual lists 6.000A and 20.00A; code has only 20A**
   (`ut61d_plus.rs` dc_a/ac_a copied from E+). Needs the 6A range row;
   blocked on D+ hardware for index ordering (issue #7).
-- **UT61B+/D+ frequency ranges in code are invented structure** — the
-  manual gives only a 10.00 Hz–10.00 MHz span, no discrete ranges, and
-  the code's five ranges top out at 600 kHz. The 2026-09-09 UT61B+
-  capture contradicts the structure outright: two Hz readings at range
-  index 0 with different full scales. The 2026-09-10 re-run cannot break
-  the tie — it read `0.00` and `49.98` at index 0, both the 60Hz rung —
-  and RANGE is dead in Hz on both meters, so the button cannot walk the
-  ladder either. Needs one frame on a signal above 60 Hz. Issue #7.
+- **Frequency ranges in code are invented structure, on every model in the
+  family** — the manual gives only a span (10.00 Hz–10.00 MHz for the
+  6,000-count models), no discrete ranges, and the code's five ranges top out
+  at 600 kHz on the B+/D+ and 220 kHz on the E+. The E+'s five have no
+  provenance comment and no verification entry either, so it cannot arbitrate
+  for its siblings. The 2026-09-09 UT61B+ capture contradicts the structure
+  outright: two Hz readings at range index 0 with different full scales. The
+  2026-09-10 re-run cannot break the tie — it read `0.00` and `49.98` at
+  index 0, both the 60Hz rung — and RANGE is dead in Hz on both meters, so
+  the button cannot walk the ladder either. Needs one frame on a signal above
+  60 Hz. **PARKED 2026-09-12: no signal generator here**; the risk it carries
+  is set out under the UT61B+'s open items. Issue #7.
 - **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
   not part of the V ladder** — settled for the B+: index 0 is each
   ladder's bottom rung; the 2026-09-10 capture pinned DC V 0–1, AC V 0,
   Ω 0/4/5, µA 0–1, mA 0–1 and A 0–1 by the decimal count the meter sent
   at each, and the 2026-09-11 RANGE walk the rest of Ω and DC V, plus
-  AC V 2 and capacitance 5. AC V 1 and 3, capacitance 1–4 and 6, and the
-  whole D+ table are still [DEDUCED]. Issue #7.
+  AC V 2 and capacitance 5. The mV rung 0s are measured too (`dcmv.yaml`,
+  `acmv.yaml`). What is left is not [DEDUCED] in the guessing sense but
+  *pinned between measured ends*: with ascending order established and both
+  ends of a ladder measured, AC V 1, capacitance 1–4 and 6 and mV 1 have
+  nowhere else to sit. Only the Hz ladder is still genuinely unknown, and
+  the whole D+ table remains [DEDUCED] for want of D+ hardware. Issue #7.
 - **UT61B+/D+ mV ladders are offered to the RANGE driver, untested** —
   `range_is_fixed` covers DC mV and AC mV on the E+, where RANGE is dead
   (2026-09-07), but the 6,000-count tables give both modes two rungs and
