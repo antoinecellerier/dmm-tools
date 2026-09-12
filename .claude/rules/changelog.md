@@ -34,8 +34,22 @@ A change the user must act on by hand — edit or delete a system file, run a co
 
 ## Sections
 
-- Order within a version, only when non-empty: `### GUI`, `### CLI`, `### Library`, `### Bug fixes`, `### Documentation`. `### Internal` only for a user-visible symptom of an internal change, led by the symptom.
+- Order within a version, only when non-empty: `### Devices`, `### GUI`, `### CLI`, `### Bug fixes`, `### Documentation`. `### Internal` only for a user-visible symptom of an internal change, led by the symptom.
+- `### Devices`: new models, verification status changes, cables. It comes first because whether the reader's meter works is the first question.
+- A feature in both GUI and CLI gets an entry in each — a CLI reader doesn't read the GUI section.
 - Bug fixes are defects: documented or obviously intended behaviour that didn't work. New rendering, prompts, options or output fields go under their component, even when a bug report prompted them.
+
+## Order within a section
+
+Recency is not an order. A new entry goes below the last entry of its tier, never at the top.
+
+- GUI and CLI, by tier, then breadth (every meter before one family), then how often the reader meets it:
+  1. Works at all: connecting, detection, a meter or cable now usable.
+  2. New capability: something the reader could not do before.
+  3. More of an existing capability that changes the experience: a buffer going from minutes to hours, sub-values on screen, new columns, modes, shortcuts.
+  4. Polish: appearance, contrast, wording, help text, focus.
+- Bug fixes, by what the defect cost: nothing worked, then wrong readings or exported data, then wrong labels, then controls that did nothing or the wrong thing, then cosmetic. A migration entry takes its place by the same ladder.
+- At release, the summary under the heading names the first entry or two of each section; if it names something further down, reorder.
 
 ## One entry per released change
 
