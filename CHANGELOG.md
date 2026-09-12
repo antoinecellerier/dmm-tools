@@ -5,7 +5,7 @@
 ### Devices
 
 - **The UT61B+ is a verified model** — thanks to [@ChrisTheExpie](https://github.com/ChrisTheExpie) for the captures.
-- **The UT181A is listed as partly verified** — it was tagged experimental like meters nobody has run; the warning and badge still link to its issue.
+- **The UT181A is listed as partly verified** — thanks to [@alexander-magon](https://github.com/alexander-magon) and [@diego351](https://github.com/diego351) for running it on real meters.
 
 ### GUI
 
