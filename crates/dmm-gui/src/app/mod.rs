@@ -30,6 +30,7 @@ use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{Choice, Setting, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui;
+use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -337,6 +338,10 @@ pub struct App {
     selected_profile_id: &'static str,
     recording_panel: RecordingPanel,
     first_frame: bool,
+    /// The window is a native Wayland surface, where the compositor owns
+    /// stacking: xdg-shell has no keep-above request, so winit drops
+    /// `WindowLevel` commands and "Always on top" cannot work.
+    on_wayland: bool,
     applied: AppliedChrome,
     /// Transient status toast (message, is_error, timestamp).
     toast: Option<(String, bool, Instant)>,
@@ -370,7 +375,15 @@ impl App {
             settings.theme = theme;
         }
         settings.overrides.adapter = cli.adapter;
-        Self::from_settings(settings, cli.clock)
+        // Asked once, here: the display handle says which backend the window
+        // actually got, where `WAYLAND_DISPLAY` only says which one is on
+        // offer.
+        let on_wayland = cc
+            .display_handle()
+            .is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)));
+        let mut app = Self::from_settings(settings, cli.clock);
+        app.on_wayland = on_wayland;
+        app
     }
 
     /// The app state for `settings` on `clock`, before any frame. Separate
@@ -400,6 +413,8 @@ impl App {
             selected_profile_id: initial_device.map_or(registry::AUTO_DEVICE_ID, |d| d.id),
             recording_panel: RecordingPanel::default(),
             first_frame: true,
+            // Only `App::new` has a window to ask; tests build without one.
+            on_wayland: false,
             applied: AppliedChrome::default(),
             toast: None,
             export_result_rx: None,
@@ -560,7 +575,7 @@ impl eframe::App for App {
         // Auto-connect on first frame if enabled
         if self.first_frame {
             self.first_frame = false;
-            if self.settings.always_on_top {
+            if self.settings.always_on_top && !self.on_wayland {
                 self.apply_always_on_top(&ctx);
             }
             if self.settings.hide_decorations {

@@ -12,6 +12,7 @@ dmm-settings = { path = "../dmm-settings" }
 eframe = { version = "0.36", features = ["glow", "wgpu"] }
 egui_commonmark = "0.25"
 egui_plot = "0.37"
+raw-window-handle = "0.6"
 chrono.workspace = true
 csv.workspace = true
 rfd = "0.17"

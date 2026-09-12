@@ -346,12 +346,13 @@ impl App {
             !self.settings.hide_decorations,
         ));
     }
-
-    /// Returns true if the app is running on a native Wayland session.
-    pub(super) fn is_wayland() -> bool {
-        std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
-    }
 }
+
+/// Why "Always on top" does nothing on Wayland, and what to reach for
+/// instead. One string for the greyed checkbox's tooltip, the caption beside
+/// it (in parentheses) and the `Ctrl+T` toast.
+pub(super) const ALWAYS_ON_TOP_WAYLAND_HINT: &str =
+    "Not available on Wayland — right-click the title bar to keep the window above others";
 
 #[cfg(test)]
 mod tests {

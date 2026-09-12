@@ -8,6 +8,7 @@ use crate::settings::{
 };
 use crate::theme::{PaletteField, PaletteGroup, ThemeColors};
 
+use super::appearance::ALWAYS_ON_TOP_WAYLAND_HINT;
 use super::{App, BigMeterMode};
 
 /// Show a settings checkbox with a hover tooltip; returns `true` if the value changed.
@@ -544,19 +545,26 @@ impl App {
             );
         });
 
-        ui.horizontal(|ui| {
-            if setting_checkbox(
-                ui,
-                &mut self.settings.always_on_top,
-                "Always on top",
-                "Keep the window above other desktop windows (Ctrl+T)",
-            ) {
+        // Wrapped, unlike the decorations row below it: the Wayland caption
+        // is a sentence, and a narrow window would cut it off mid-word.
+        ui.horizontal_wrapped(|ui| {
+            // Greyed rather than hidden on Wayland, and the saved value is
+            // left alone: a `true` written on an X11 session still applies
+            // there.
+            let response = ui
+                .add_enabled(
+                    !self.on_wayland,
+                    egui::Checkbox::new(&mut self.settings.always_on_top, "Always on top"),
+                )
+                .on_hover_text("Keep the window above other desktop windows (Ctrl+T)")
+                .on_disabled_hover_text(ALWAYS_ON_TOP_WAYLAND_HINT);
+            if response.changed() {
                 self.apply_always_on_top(ui.ctx());
                 self.settings.save();
             }
-            if Self::is_wayland() {
+            if self.on_wayland {
                 ui.label(
-                    RichText::new("(on Wayland, use the title bar menu or launch with WAYLAND_DISPLAY= to force X11)")
+                    RichText::new(format!("({ALWAYS_ON_TOP_WAYLAND_HINT})"))
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );

@@ -11,6 +11,7 @@
 
 use eframe::egui::{self, Key, Modifiers};
 
+use super::appearance::ALWAYS_ON_TOP_WAYLAND_HINT;
 use super::{App, ConnectionState};
 
 /// What a key press does, independent of the keys bound to it.
@@ -157,16 +158,29 @@ impl Shortcut {
         Self::Quit,
     ];
 
-    /// Row in the help grid: `(keys, action)`; `None` for a binding folded
-    /// into another row.
-    fn help_row(self) -> Option<(&'static str, &'static str)> {
-        Some(match self {
+    /// Row in the help grid: `(keys, action, inert)`; `None` for a binding
+    /// folded into another row. `inert` marks a key that does nothing in
+    /// this session, so the modal can grey the row as well as say so.
+    ///
+    /// `on_wayland` marks the one key the compositor makes inert.
+    fn help_row(self, on_wayland: bool) -> Option<(&'static str, &'static str, bool)> {
+        let (key, action) = match self {
             Self::ConnectToggle => ("Ctrl+O", "Connect / Disconnect"),
             Self::TogglePause => ("Space", "Pause / Resume"),
             Self::ClearSession => ("Ctrl+L", "Clear graph & statistics"),
             Self::ToggleRecording => ("Ctrl+R", "Toggle recording"),
             Self::CycleBigMeter => ("Ctrl+B", "Cycle big meter (off / full / minimal)"),
-            Self::ToggleAlwaysOnTop => ("Ctrl+T", "Toggle always on top"),
+            Self::ToggleAlwaysOnTop => (
+                "Ctrl+T",
+                if on_wayland {
+                    // Same explanation as the settings caption and the
+                    // toast, so the three surfaces read alike — a test
+                    // pins the tail to `ALWAYS_ON_TOP_WAYLAND_HINT`.
+                    "Always on top: not available on Wayland — right-click the title bar to keep the window above others"
+                } else {
+                    "Toggle always on top"
+                },
+            ),
             Self::ToggleDecorations => ("Ctrl+D", "Toggle window decorations"),
             Self::ExportCsv => ("Ctrl+E", "Export CSV"),
             Self::ZoomIn => ("Ctrl+Plus/Minus", "Zoom in / out"),
@@ -178,13 +192,19 @@ impl Shortcut {
             // Not listed: the grid it opens *is* the documentation, and the
             // toolbar's `?` button spells the key out in its tooltip.
             Self::ToggleHelp => return None,
-        })
+        };
+        let inert = on_wayland && self == Self::ToggleAlwaysOnTop;
+        Some((key, action, inert))
     }
 }
 
 /// The "General" grid of the shortcut help modal, in display order.
-pub(super) fn help_rows() -> impl Iterator<Item = (&'static str, &'static str)> {
-    Shortcut::HELP_ORDER.iter().filter_map(|s| s.help_row())
+pub(super) fn help_rows(
+    on_wayland: bool,
+) -> impl Iterator<Item = (&'static str, &'static str, bool)> {
+    Shortcut::HELP_ORDER
+        .iter()
+        .filter_map(move |s| s.help_row(on_wayland))
 }
 
 impl App {
@@ -233,9 +253,19 @@ impl App {
                 }
                 Shortcut::CycleBigMeter => self.cycle_big_meter(),
                 Shortcut::ToggleAlwaysOnTop => {
-                    self.settings.always_on_top = !self.settings.always_on_top;
-                    self.apply_always_on_top(ctx);
-                    self.settings.save();
+                    if self.on_wayland {
+                        // Flipping the setting there moved a checkbox and
+                        // nothing else; say so instead.
+                        self.toast = Some((
+                            ALWAYS_ON_TOP_WAYLAND_HINT.to_string(),
+                            false,
+                            std::time::Instant::now(),
+                        ));
+                    } else {
+                        self.settings.always_on_top = !self.settings.always_on_top;
+                        self.apply_always_on_top(ctx);
+                        self.settings.save();
+                    }
                 }
                 Shortcut::ToggleDecorations => {
                     self.settings.hide_decorations = !self.settings.hide_decorations;
@@ -297,7 +327,7 @@ mod tests {
                     | Shortcut::ToggleHelp
             );
             assert_eq!(
-                binding.shortcut.help_row().is_some(),
+                binding.shortcut.help_row(false).is_some(),
                 !folded,
                 "{:?} help row disagrees with the folded list",
                 binding.shortcut
@@ -332,7 +362,9 @@ mod tests {
     #[test]
     fn help_rows_are_the_twelve_documented_general_rows() {
         assert_eq!(
-            help_rows().collect::<Vec<_>>(),
+            help_rows(false)
+                .map(|(key, action, _)| (key, action))
+                .collect::<Vec<_>>(),
             vec![
                 ("Ctrl+O", "Connect / Disconnect"),
                 ("Space", "Pause / Resume"),
@@ -348,5 +380,29 @@ mod tests {
                 ("Ctrl+Q", "Quit"),
             ]
         );
+    }
+
+    /// On Wayland the grid explains the one key the compositor ignores, greys
+    /// it, and changes nothing else, so the modal doesn't quietly diverge per
+    /// session. The explanation is the settings caption's, word for word.
+    #[test]
+    fn wayland_annotates_only_the_always_on_top_row() {
+        let annotated = "Always on top: not available on Wayland — right-click the title bar to keep the window above others";
+        // The shared hint, minus its capital first letter.
+        assert!(
+            annotated.ends_with(&ALWAYS_ON_TOP_WAYLAND_HINT[1..]),
+            "the Ctrl+T row has drifted from ALWAYS_ON_TOP_WAYLAND_HINT"
+        );
+        let expected: Vec<_> = help_rows(false)
+            .map(|(key, action, inert)| {
+                assert!(!inert, "{key} is inert off Wayland");
+                if key == "Ctrl+T" {
+                    (key, annotated, true)
+                } else {
+                    (key, action, false)
+                }
+            })
+            .collect();
+        assert_eq!(help_rows(true).collect::<Vec<_>>(), expected);
     }
 }

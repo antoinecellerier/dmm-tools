@@ -22,6 +22,7 @@
 - **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.
 - **`Ctrl+O` connects and disconnects** — the documented `Ctrl+Shift+C` was taken as a clipboard copy and never fired.
 - **Cable-not-found help suggests trying another USB port** — on Windows the steps stopped at the driver download.
+- **Always on top says it is unavailable on Wayland** — the checkbox and `Ctrl+T` toggled a setting that did nothing there.
 
 ### CLI
 

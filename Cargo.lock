@@ -1008,6 +1008,7 @@ dependencies = [
  "egui_plot",
  "env_logger",
  "log",
+ "raw-window-handle",
  "rfd",
  "serde",
  "serde_json",

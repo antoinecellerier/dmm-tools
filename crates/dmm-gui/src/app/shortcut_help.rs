@@ -41,16 +41,34 @@ impl App {
                     });
                 });
                 ui.separator();
+                // `num_columns` is what makes the wrapped action column
+                // below work: without it egui hands the last cell the
+                // previous frame's column width — the 120 pt minimum — and
+                // a wrapping label never grows past what it is given, so
+                // every row wrapped into a narrow ribbon.
                 egui::Grid::new("shortcuts_app")
+                    .num_columns(2)
                     .min_col_width(120.0)
                     .show(ui, |ui| {
                         ui.label(RichText::new("General").strong());
                         ui.end_row();
                         // Rendered from the same table `handle_keyboard_shortcuts`
                         // dispatches, so the two cannot drift.
-                        for (key, action) in shortcuts::help_rows() {
-                            ui.label(RichText::new(key).monospace());
-                            ui.label(action);
+                        for (key, action, inert) in shortcuts::help_rows(self.on_wayland) {
+                            let mut key = RichText::new(key).monospace();
+                            let mut action = RichText::new(action);
+                            // Greyed like the setting it mirrors; the text
+                            // still says why, so colour is only the cue.
+                            if inert {
+                                let weak = ui.visuals().weak_text_color();
+                                key = key.color(weak);
+                                action = action.color(weak);
+                            }
+                            ui.label(key);
+                            // Wrapped, not extended: the Wayland note on
+                            // Ctrl+T is a sentence, and a grid cell that
+                            // wide would push the modal past its max width.
+                            ui.add(egui::Label::new(action).wrap());
                             ui.end_row();
                         }
                     });

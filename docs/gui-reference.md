@@ -371,7 +371,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
-| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). On Wayland, use the title bar right-click menu or launch with `WAYLAND_DISPLAY=` to force X11. |
+| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
 
 ### Color Customization
@@ -442,7 +442,7 @@ Press `?` or click the `?` button in the top bar to open an in-app reference of 
 | `Ctrl+L` | Clear graph & statistics |
 | `Ctrl+R` | Toggle recording |
 | `Ctrl+B` | Cycle big meter mode (off / full / minimal) |
-| `Ctrl+T` | Toggle always on top |
+| `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
 | `Ctrl+D` | Toggle window decorations |
 | `Ctrl+E` | Export CSV |
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |

@@ -153,5 +153,5 @@ dmm-gui --renderer glow
 If you encounter display issues on Wayland, try forcing X11:
 
 ```sh
-WINIT_UNIX_BACKEND=x11 dmm-gui
+WAYLAND_DISPLAY= dmm-gui
 ```
