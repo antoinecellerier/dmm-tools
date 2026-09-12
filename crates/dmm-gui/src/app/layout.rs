@@ -34,7 +34,11 @@ impl App {
     ) -> egui::scroll_area::ScrollAreaOutput<()> {
         egui::ScrollArea::vertical()
             .id_salt("reading_column")
-            .show(ui, |ui| self.show_reading_column(ui, layout))
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                self.show_reading_column(ui, layout);
+                crate::a11y::scroll_to_focus(ui);
+            })
     }
 
     /// Reading, controls, specs and stats — the column shared by the wide and

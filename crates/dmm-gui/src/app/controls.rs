@@ -245,9 +245,15 @@ impl App {
         let cap = settings_scroll_cap(ui.ctx().content_rect().height(), ui.cursor().top());
         let scrolled = ui
             .allocate_ui(egui::vec2(ui.available_width(), cap), |ui| {
+                // Full width, so the bar sits at the panel's edge rather than
+                // at the widest row's.
                 egui::ScrollArea::vertical()
                     .id_salt("settings_scroll")
-                    .show(ui, |ui| self.show_settings_rows(ui))
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        self.show_settings_rows(ui);
+                        crate::a11y::scroll_to_focus(ui);
+                    })
             })
             .inner;
 
@@ -926,20 +932,40 @@ mod tests {
         scrolled: ScrollAreaOutput<()>,
     }
 
-    /// An open settings panel in a `w` x `h` window, after three headless
-    /// frames — a panel sizes itself from the previous frame, so the first
-    /// one alone proves nothing. The bar row is the app's own, since the bug
-    /// this guards against is the rows being laid over it.
-    fn settings_panel(w: f32, h: f32) -> SettingsFrame {
-        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-        app.settings_open = true;
-        let ctx = egui::Context::default();
-        let mut bar_bottom = 0.0;
-        let mut scrolled = None;
-        for _ in 0..3 {
-            let mut out = ctx.run_ui(
+    /// An open settings panel in a `w` x `h` window, driven a frame at a
+    /// time. The bar row is the app's own, since one bug this guards against
+    /// is the rows being laid over it.
+    struct SettingsRun {
+        app: App,
+        ctx: egui::Context,
+        screen: Rect,
+        /// Jumps a second per frame, so egui's scroll animation — a few
+        /// hundred milliseconds — has always finished by the next one.
+        seconds: f64,
+    }
+
+    impl SettingsRun {
+        fn new(w: f32, h: f32) -> Self {
+            let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+            app.settings_open = true;
+            Self {
+                app,
+                ctx: egui::Context::default(),
+                screen: Rect::from_min_size(Pos2::ZERO, vec2(w, h)),
+                seconds: 0.0,
+            }
+        }
+
+        fn frame(&mut self, events: Vec<egui::Event>) -> SettingsFrame {
+            let mut bar_bottom = 0.0;
+            let mut scrolled = None;
+            let app = &mut self.app;
+            self.seconds += 1.0;
+            let mut out = self.ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(w, h))),
+                    screen_rect: Some(self.screen),
+                    events,
+                    time: Some(self.seconds),
                     ..Default::default()
                 },
                 |ui| {
@@ -952,12 +978,35 @@ mod tests {
                 },
             );
             out.textures_delta.clear();
+            SettingsFrame {
+                ctx: self.ctx.clone(),
+                bar_bottom,
+                scrolled: scrolled.expect("the settings are open"),
+            }
         }
-        SettingsFrame {
-            ctx,
-            bar_bottom,
-            scrolled: scrolled.expect("the settings are open"),
-        }
+    }
+
+    /// After three headless frames — a panel sizes itself from the previous
+    /// frame, so the first one alone proves nothing.
+    fn settings_panel(w: f32, h: f32) -> SettingsFrame {
+        let mut run = SettingsRun::new(w, h);
+        run.frame(vec![]);
+        run.frame(vec![]);
+        run.frame(vec![])
+    }
+
+    /// Tab pressed and released within one frame.
+    fn tab() -> Vec<egui::Event> {
+        [true, false]
+            .into_iter()
+            .map(|pressed| egui::Event::Key {
+                key: egui::Key::Tab,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            })
+            .collect()
     }
 
     #[test]
@@ -1037,5 +1086,65 @@ mod tests {
             inner.height()
         );
         assert_eq!(frame.scrolled.state.offset, egui::Vec2::ZERO);
+    }
+
+    /// egui scrolls to a focused widget only when assistive tech asks, so
+    /// Tab walked below the fold with nothing on screen to show for it.
+    #[test]
+    fn tab_brings_the_focused_row_into_view() {
+        let mut run = SettingsRun::new(400.0, 220.0);
+        for _ in 0..3 {
+            run.frame(vec![]);
+        }
+        let mut rows_focused = 0;
+        let mut scrolled_down = false;
+        for _ in 0..60 {
+            run.frame(tab());
+            // Focus moves within the Tab frame and the scroller is asked at
+            // once, but egui animates the move and places the content a frame
+            // behind the offset — a person sees it settle within two frames.
+            run.frame(vec![]);
+            run.frame(vec![]);
+            let frame = run.frame(vec![]);
+            let Some(id) = run.ctx.memory(|m| m.focused()) else {
+                continue;
+            };
+            let Some(response) = run.ctx.read_response(id) else {
+                continue;
+            };
+            let inner = frame.scrolled.inner_rect;
+            let content = Rect::from_min_size(
+                inner.min - frame.scrolled.state.offset,
+                frame.scrolled.content_size,
+            );
+            // Only the rows are the scroller's business; the bar row's
+            // buttons are outside it.
+            if !content.contains_rect(response.rect) {
+                continue;
+            }
+            rows_focused += 1;
+            scrolled_down |= frame.scrolled.state.offset.y > 0.0;
+            assert!(
+                response.rect.top() >= inner.top() - 1.0
+                    && response.rect.bottom() <= inner.bottom() + 1.0,
+                "focused control at {:?} is outside the {:?} viewport",
+                response.rect,
+                inner
+            );
+        }
+        assert!(
+            rows_focused > 5,
+            "Tab reached only {rows_focused} settings controls"
+        );
+        assert!(scrolled_down, "Tab never had to scroll the rows");
+    }
+
+    /// The scroller takes the panel's width, so its bar sits at the panel's
+    /// edge — not at the widest row's, part-way across the window.
+    #[test]
+    fn the_scroller_spans_the_panel() {
+        let frame = settings_panel(400.0, 220.0);
+        let right = frame.scrolled.inner_rect.right();
+        assert!(right >= 400.0 - 24.0, "scroller ends at {right} pt of 400");
     }
 }

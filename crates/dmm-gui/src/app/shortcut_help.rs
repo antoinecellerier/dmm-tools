@@ -123,11 +123,6 @@ impl App {
                 // modal looks exactly as it did before it had one.
                 egui::ScrollArea::vertical()
                     .id_salt("shortcut_help_scroll")
-                    // A key press jumps. Left animated, egui parks the delta
-                    // as a target that the *next* pass turns into an offset,
-                    // and it asks for no repaint once it arrives — so the
-                    // rows could sit still until something else redrew.
-                    .animated(false)
                     .show(ui, |ui| {
                         // `ScrollArea` handles the wheel but no keys, and the
                         // modal keeps focus on the close button, so the keys
@@ -296,6 +291,7 @@ mod tests {
             egui::RawInput {
                 screen_rect: Some(screen),
                 events,
+                time: Some(next_second()),
                 ..Default::default()
             },
             |ui| {
@@ -323,6 +319,13 @@ mod tests {
             .map(|update| (update.nodes, Some(update.focus)))
             .unwrap_or_default();
         TestFrame { nodes, focus }
+    }
+
+    /// A clock that jumps a second per frame, so egui's scroll animation —
+    /// a few hundred milliseconds — has always finished by the next one.
+    fn next_second() -> f64 {
+        static SECONDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        SECONDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64
     }
 
     /// A key pressed and released within one frame.
@@ -397,8 +400,9 @@ mod tests {
         run_frame(&ctx, &mut app, screen, vec![]);
         let before = row_top(&run_frame(&ctx, &mut app, screen, vec![]), "Graph (mouse)");
         run_frame(&ctx, &mut app, screen, key(egui::Key::ArrowDown));
-        // The offset lands at the end of the key's own frame, so the rows
-        // move on the frame after it.
+        // egui animates the move and places the content a frame behind the
+        // offset, so the rows have moved two frames after the key.
+        run_frame(&ctx, &mut app, screen, vec![]);
         let after = row_top(&run_frame(&ctx, &mut app, screen, vec![]), "Graph (mouse)");
         assert!(
             after < before,
@@ -476,6 +480,7 @@ mod tests {
         let mouse_at_top = row_top(&first, "Graph (mouse)");
 
         run_frame(&ctx, &mut app, short_window(), key(egui::Key::End));
+        run_frame(&ctx, &mut app, short_window(), vec![]);
         let scrolled = run_frame(&ctx, &mut app, short_window(), vec![]);
         assert!(
             row_top(&scrolled, "Graph (mouse)") < mouse_at_top,
@@ -486,6 +491,7 @@ mod tests {
         run_frame(&ctx, &mut app, short_window(), vec![]);
         app.shortcut_help.open = true;
         app.shortcut_help.focus_pending = true;
+        run_frame(&ctx, &mut app, short_window(), vec![]);
         run_frame(&ctx, &mut app, short_window(), vec![]);
         let reopened = run_frame(&ctx, &mut app, short_window(), vec![]);
         assert_eq!(

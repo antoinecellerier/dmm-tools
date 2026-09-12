@@ -232,11 +232,13 @@ impl App {
     ) -> egui::scroll_area::ScrollAreaOutput<()> {
         egui::ScrollArea::vertical()
             .id_salt("graph_column")
+            .auto_shrink([false, true])
             .show(ui, |ui| {
                 let height = ui.available_height().max(MIN_SPLIT_HEIGHT).floor();
                 ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
                     self.show_graph_recording_split(ui, false);
                 });
+                crate::a11y::scroll_to_focus(ui);
             })
     }
 

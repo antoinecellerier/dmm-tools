@@ -8,7 +8,7 @@
 - **Scale row converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **The graph zooms on Ctrl + scroll wheel, or a pinch** — a plain wheel tick anywhere in the window zoomed it and left live mode, and the wheel now scrolls instead.
 - **The shortcut help scrolls when the window is too short** — its lower rows were cut off; `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` move it.
-- **The settings rows scroll when the window is too short** — Zoom, Always on top and Hide decorations were cut off.
+- **The settings rows scroll when the window is too short** — Zoom, Always on top and Hide decorations were cut off; Tab brings the focused control into view.
 - **The reading and graph columns scroll when the window is too short** — the stats, and in a narrow window the graph and recording below them, were cut off.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a new **Buffer size** setting moves the bound for graph and recording together.
 - **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were parsed but never shown.

@@ -223,6 +223,28 @@ impl UiA11yExt for Ui {
     }
 }
 
+/// Bring the control that just took keyboard focus into view.
+///
+/// egui scrolls to a focused widget only when assistive tech asks it to, so
+/// Tab through a scrolled panel left the focused control below the fold with
+/// nothing on screen to show for it. Call this last inside a `ScrollArea`'s
+/// content closure: the target it sets is taken by that scroll area's `end`,
+/// and the containment check keeps a scroller from answering for a widget
+/// that lives in another. The move runs over egui's scroll animation, a few
+/// hundred milliseconds, like every other programmatic scroll.
+pub(crate) fn scroll_to_focus(ui: &Ui) {
+    let ctx = ui.ctx();
+    let Some(id) = ctx.memory(|m| m.focused()) else {
+        return;
+    };
+    let Some(response) = ctx.read_response(id) else {
+        return;
+    };
+    if response.gained_focus() && ui.min_rect().contains_rect(response.rect) {
+        response.scroll_to_me(None);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
