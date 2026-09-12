@@ -2,6 +2,7 @@
 paths:
   - "docs/cli-reference.md"
   - "docs/gui-reference.md"
+  - "docs/supported-devices.md"
 ---
 
 # User-facing doc rules

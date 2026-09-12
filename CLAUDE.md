@@ -40,7 +40,7 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 
 ## Engineering standards
 
-Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`), `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`), `.claude/rules/changelog.md` (entry format, sectioning — `CHANGELOG.md`) and the user-facing doc rules: `.claude/rules/docs-user-facing.md` (what user docs carry and what goes to design docs — `docs/cli-reference.md`, `docs/gui-reference.md`), `.claude/rules/reference-docs.md` (section shape — the CLI and GUI references).
+Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`), `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`), `.claude/rules/changelog.md` (entry format, sectioning — `CHANGELOG.md`) and the user-facing doc rules: `.claude/rules/docs-user-facing.md` (what user docs carry and what goes to design docs — the references and the device catalog), `.claude/rules/reference-docs.md` (section shape — the CLI and GUI references) and `.claude/rules/device-catalog.md` (`docs/supported-devices.md`).
 
 ### Code quality
 - All code must pass `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check`.
