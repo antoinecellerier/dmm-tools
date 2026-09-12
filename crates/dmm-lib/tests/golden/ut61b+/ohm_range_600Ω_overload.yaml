@@ -1,5 +1,6 @@
-# Ω OL on the manual 600Ω rung, the point after L as at 600kΩ - the one frame the meter sent there before moving to 6kΩ on its own
+# Ω OL on the manual 600Ω rung, the point after L as at 600kΩ
 # Captured 2026-09-11 from a UT61B+ over CH9329 (issue #19, v0.7.0-dev 88e80ed report, step ohm_ranges/range:600Ω).
+# The sweep caught one frame here before the meter showed 6kΩ; a later run held this exact frame for five polls on a rung set by the meter's own RANGE button, so the rung is stable and the extra transition was on the press path.
 raw_hex: "06 30 20 20 20 4F 4C 2E 20 03 00 30 34 30"
 mode: "Ω"
 value: "OL"

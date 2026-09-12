@@ -346,22 +346,34 @@ Settled:
 
 Left open on this model:
 
-- **AC V rung 3 (750V)** and the AC V RANGE walk — the `acv` step was not part
-  of the 2026-09-11 `--unverified` run, which asked only for the two ladder
-  steps still unverified on this model.
+- **AC V rungs 1 (60V) and 3 (750V)** and the AC V RANGE walk. No new step is
+  needed for these: `acv` is not a gate step, so the sweep walks its ladder as
+  it does any other mode step's. It went unswept on 2026-09-10 only because it
+  then sat before the gate closed (below), and the two runs since were
+  `--unverified` and `--steps`, neither of which reaches a step already marked
+  verified. `capture --steps acv` with the leads open covers both rungs, the
+  decimal count naming each.
 - **Capacitance rungs 1-4 and 6** and **the mV ladder** — auto-ranging never
   left rung 0 with open leads, and RANGE is dead in capacitance (below); rung
   5 came from a capacitor held to the leads on 2026-09-11.
-- **The 600Ω manual rung.** The 2026-09-11 walk pressed RANGE four times from
-  600kΩ auto and read back 3 (manual), 4, 5, 0 — then, with no further press,
-  the next poll 150 ms later reported rung 1 (6kΩ), still flagged manual, and
-  all three samples of the step sat there. Five transitions for four presses.
-  Either the meter leaves the 600Ω rung on its own when overloaded with open
-  leads, or the fourth press registered twice on the CH9329 path; the file
-  cannot say which, and the tool filed the step `needs_attention`. The E+
-  holds its 220Ω rung over OL (the 82 kΩ run, 2026-09-10), so this is not
-  family behaviour. The ask is one press of the meter's own RANGE button to
-  600Ω with the leads open, watching whether it stays.
+- ~~**The 600Ω manual rung.**~~ — the rung is stable; what is left is a
+  question about the press path, not the range table. The 2026-09-11 walk
+  pressed RANGE four times from 600kΩ auto and read back 3 (manual), 4, 5, 0 —
+  then, with no further press, the next poll 150 ms later reported rung 1
+  (6kΩ), still flagged manual, and all three samples of the step sat there:
+  five transitions for four presses, and the tool filed the step
+  `needs_attention`. **VERIFIED** 2026-09-11 by @ChrisTheExpie that the meter
+  does not leave the rung on its own: with 600Ω set by the meter's own RANGE
+  button and the leads open, `debug --count 5` returned five consecutive
+  frames of `06 30 20 20 20 4F 4C 2E 20 03 00 30 34 30` — rung 0, manual
+  (flag2 bit 2 set), the `   OL. ` shape — byte-identical to the one frame the
+  sweep caught there. It had not dropped off at entry time either, or it would
+  have been on 6kΩ before `debug` ran. That matches the E+, which holds its
+  220Ω rung over OL (the 82 kΩ run, 2026-09-10). The remaining candidate is
+  the fourth 0x46 landing twice past the tool: our tx log has exactly four
+  presses, so a duplicate would be in the bridge or the meter's own handling.
+  One observation, on one cable; the check is whether a RANGE walk on our own
+  meter over CH9329 ever gains a rung it did not press for.
 - **The Hz ladder.** Range index 0 carried two different full scales across
   the two runs: `0.0` (one decimal) from the V~ Hz path on 2026-09-09 and
   `0.00` / `49.98` (two decimals) from the Hz/% dial position on 2026-09-10.
