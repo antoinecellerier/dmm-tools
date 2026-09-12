@@ -6,18 +6,24 @@
 # window on the user's screen. The caller's own DISPLAY/WAYLAND_DISPLAY are
 # never modified.
 set -euo pipefail
+# Byte semantics for every [0-9] below: digit ranges are locale-collated, so
+# under a UTF-8 locale Arabic-Indic digits and '²' pass an ASCII-looking class.
+export LC_ALL=C
 
 # No /tmp fallback: a predictable, world-writable path could be pre-planted.
 STATE="${VERIFY_GUI_STATE:-${XDG_RUNTIME_DIR:?verify-gui needs XDG_RUNTIME_DIR}/verify-gui}"
 CONFIG="$STATE/config" # private XDG_CONFIG_HOME so the user's settings.json is untouched
 LOG="$STATE/gui.log"
-GEOMETRY="1600x1000x24" # holds the default dmm-gui window at 1x with margin
+# Root window WxHxDEPTH. 'start' reuses a running Xvfb, so change this only
+# after a 'stop'. The default holds the default dmm-gui window at 1x with margin.
+GEOMETRY="${VERIFY_GUI_GEOMETRY:-1600x1000x24}"
 DISPLAY_MIN=99          # :0 and :1 belong to the user's real session
 DISPLAY_MAX=110         # give up rather than wander into unknown displays
 XVFB_TRIES=50           # x 0.1s = 5s for the X server to accept clients
 WINDOW_TIMEOUT=20       # seconds for the window to map (cold debug start)
 FIRST_FRAMES=3          # seconds for the mock device to connect and draw samples
 CHORD_HOLD=0.3          # seconds: longer than one egui frame, shorter than key repeat
+RESIZE_TIMEOUT=5        # seconds: --sync hangs if the app resizes back before the first poll
 GUI_EXIT_TRIES=30       # x 0.1s = 3s to exit on SIGTERM before SIGKILL
 MIN_PNG_BYTES=1024      # smaller means a truncated or failed capture
 MIN_COLORS=100          # a real frame has many colours; a flat fill has one
@@ -52,6 +58,8 @@ need_wid() {
 	local w
 	w="$(state_get wid)"
 	[ -n "$w" ] && alive_as "$(state_get gui.pid)" dmm-gui || die "no running dmm-gui — run 'run' first"
+	# The id reaches xdotool as an argument: a tampered state file must not smuggle flags.
+	[[ "$w" =~ ^[0-9]+$ ]] || die "refusing window id '$w'"
 	echo "$w"
 }
 
@@ -78,6 +86,9 @@ kill_gui() {
 
 cmd_start() {
 	require Xvfb xdotool
+	# Bounded to five digits per axis: a typo must not ask Xvfb for gigabytes.
+	[[ "$GEOMETRY" =~ ^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}x(8|16|24)$ ]] ||
+		die "VERIFY_GUI_GEOMETRY must be WxHxDEPTH with depth 8, 16 or 24 (got '$GEOMETRY')"
 	mkdir -p -m 700 "$STATE" "$CONFIG"
 	[ -O "$STATE" ] && [ ! -L "$STATE" ] || die "state dir $STATE is not ours"
 	chmod 700 "$STATE"
@@ -232,6 +243,52 @@ cmd_click() {
 	echo "clicked $x,$y in window $wid"
 }
 
+cmd_wheel() {
+	require xdotool
+	local x="${1:-}" y="${2:-}" dir="${3:-down}" mod="${4:-}" wid btn
+	local usage="usage: wheel <x> <y> [up|down] [ctrl]   (window-relative pixels)"
+	[[ "$x" =~ ^[0-9]+$ ]] && [[ "$y" =~ ^[0-9]+$ ]] || die "$usage"
+	case "$dir" in
+	up) btn=4 ;;
+	down) btn=5 ;;
+	*) die "$usage — direction is 'up' or 'down'" ;;
+	esac
+	[ -z "$mod" ] || [ "$mod" = ctrl ] || die "$usage — the only modifier is 'ctrl'"
+	wid="$(need_wid)"
+	onx xdotool mousemove --window "$wid" "$x" "$y" || die "could not move the pointer to $x,$y"
+	if [ "$mod" = ctrl ]; then
+		# Hold Ctrl across a frame as cmd_key does: egui reads its modifier snapshot
+		# when the frame runs, so a chord released within a millisecond arrives bare.
+		onx xdotool keydown ctrl sleep "$CHORD_HOLD" click "$btn" sleep "$CHORD_HOLD" keyup ctrl || {
+			# A chain that failed mid-way can leave Ctrl held, silently tainting
+			# every later key, click and shot on this display.
+			onx xdotool keyup ctrl >/dev/null 2>&1 || true
+			die "ctrl+wheel $dir at $x,$y failed"
+		}
+	else
+		onx xdotool click "$btn" || die "wheel $dir at $x,$y failed"
+	fi
+	echo "sent ${mod:+ctrl+}wheel $dir at $x,$y in window $wid"
+}
+
+cmd_resize() {
+	require xdotool
+	local w="${1:-}" h="${2:-}" wid geom gw gh
+	[[ "$w" =~ ^[1-9][0-9]*$ ]] && [[ "$h" =~ ^[1-9][0-9]*$ ]] ||
+		die "usage: resize <width> <height>   (positive integers, pixels at 1x)"
+	wid="$(need_wid)"
+	onx timeout "$RESIZE_TIMEOUT" xdotool windowsize --sync "$wid" "$w" "$h" ||
+		die "could not resize window $wid to ${w}x${h}"
+	# No WM on Xvfb, so the app's MinInnerSize hint is not enforced; give the app a
+	# frame to re-grow a window below its own minimum and report what it settled on.
+	sleep "$CHORD_HOLD"
+	geom="$(onx xdotool getwindowgeometry --shell "$wid")" || die "could not read the geometry of window $wid"
+	gw="$(printf '%s\n' "$geom" | sed -n 's/^WIDTH=\([0-9]\{1,\}\)$/\1/p')"
+	gh="$(printf '%s\n' "$geom" | sed -n 's/^HEIGHT=\([0-9]\{1,\}\)$/\1/p')"
+	[ -n "$gw" ] && [ -n "$gh" ] || die "xdotool reported no size for window $wid"
+	echo "window $wid is ${gw}x${gh} (asked ${w}x${h})"
+}
+
 cmd_stop() {
 	kill_gui
 	local pid
@@ -276,6 +333,6 @@ cmd_selftest() {
 sub="${1:-}"
 shift || true
 case "$sub" in
-start | run | shot | key | click | stop | status | selftest) "cmd_$sub" "$@" ;;
-*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png>|key <chord>|click <x> <y>|stop|status|selftest}" ;;
+start | run | shot | key | click | wheel | resize | stop | status | selftest) "cmd_$sub" "$@" ;;
+*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png>|key <chord>|click <x> <y>|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|stop|status|selftest}" ;;
 esac

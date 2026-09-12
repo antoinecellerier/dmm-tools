@@ -267,8 +267,16 @@ keyboard/click tests never touch your live desktop session or your
 ```
 
 It needs `xvfb`, `xdotool` and `imagemagick` (plus `python3-pil` for pixel
-measurement). `start`, `run`, `key`, `click`, `shot`, `status` and `stop` are the
-individual steps; always finish with `stop`.
+measurement). `start`, `run`, `key`, `click`, `wheel`, `resize`, `shot`, `status`
+and `stop` are the individual steps; always finish with `stop`.
+
+`wheel <x> <y> [up|down] [ctrl]` sends one wheel tick at window-relative
+coordinates, and `resize <width> <height>` reshapes the window for small-window
+checks — there is no window manager on the private display, so the app's minimum
+size is not enforced, but the app re-grows a window below its own computed
+minimum and `resize` prints the size it settled on. `VERIFY_GUI_GEOMETRY`
+(default `1600x1000x24`) sets the root window size; `start` reuses a running
+Xvfb, so `stop` before changing it.
 
 Session clock: two hidden `dmm-gui` flags let a run start with history rather
 than wait for it. `--mock-clock-preseed <SECS>` hands out that many seconds of
