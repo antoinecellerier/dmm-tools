@@ -5,6 +5,7 @@ paths:
   - "docs/supported-devices.md"
   - "docs/setup.md"
   - "CONTRIBUTING.md"
+  - "README.md"
 ---
 
 # User-facing doc rules
