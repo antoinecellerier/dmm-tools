@@ -73,8 +73,8 @@ The top bar contains:
 - **Settings gear** (right side) — opens the settings panel
 - **Help link** — opens the project page
 
-Toast notifications appear in the top-right corner (e.g. CSV export
-success/failure) and expire after 4 seconds.
+Toast notifications (e.g. CSV export success/failure) float over the
+window's top-right corner in every layout and expire after 8 seconds.
 
 ## Reading Display
 

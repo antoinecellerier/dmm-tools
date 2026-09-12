@@ -141,8 +141,8 @@ impl App {
                 }
             };
 
-            // Group status indicators (dot, label, experimental badge, toast)
-            // so the whole region exposes a Role::Status landmark to AT.
+            // Group status indicators (dot, label, experimental badge) so the
+            // whole region exposes a Role::Status landmark to AT.
             //
             // Explicit id_salt: this scope sits inside a horizontal whose
             // sibling layout changes whenever the connection state flips
@@ -182,12 +182,6 @@ impl App {
                         "{} Click to report feedback.",
                         dmm_lib::binary_help::experimental_warning(&model_name)
                     ));
-                }
-
-                // Toast inline on this row
-                if let Some((msg, is_error, _)) = &self.toast {
-                    let color = if *is_error { tc.status_error() } else { green };
-                    ui.label(RichText::new(msg).small().color(color));
                 }
             });
 

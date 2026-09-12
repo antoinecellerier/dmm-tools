@@ -57,6 +57,8 @@ choice. See `docs/gui-reference.md` for the full options table.
 
 Compact toolbar row: device label, Connect/Disconnect button, Pause/Resume button (freezes capture without disconnecting — pauses >gap threshold show gap markers), Clear button (resets graph/stats), connection status with device name and colored dot, settings gear icon (right-aligned).
 
+Transient status messages are not part of the row: a toast floats over the window's top-right corner, so every layout shows it and a narrow bar neither clips it nor grows to hold it. Its `✔`/`⚠` glyph carries the kind of news, so colour is not the only cue.
+
 ### Settings Panel
 
 Toggled by the gear icon. Contains:

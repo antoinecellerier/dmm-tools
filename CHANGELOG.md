@@ -10,6 +10,7 @@
 - **The shortcut help scrolls when the window is too short** — its lower rows were cut off; `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` move it.
 - **The settings rows scroll when the window is too short** — Zoom, Always on top and Hide decorations were cut off; Tab brings the focused control into view.
 - **The reading and graph columns scroll when the window is too short** — the stats, and in a narrow window the graph and recording below them, were cut off.
+- **Toasts show in every layout** — they were drawn in the top bar, so minimal mode never showed them and a narrow bar cut them off; they are now a bordered box with a `✔`/`⚠` glyph that stays 8 seconds, or until its `×` is clicked.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a new **Buffer size** setting moves the bound for graph and recording together.
 - **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were parsed but never shown.
 - **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.

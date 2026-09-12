@@ -164,6 +164,7 @@ methods to it, so no panel owns state of its own.
 | `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and the connection-help text |
 | `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and same-unit overlays |
 | `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/Help/shortcuts/settings group |
+| `app/toast.rs` | The transient status message, floated over the window's top-right corner in every layout |
 | `app/controls.rs` | The settings panel and the meter's remote-command buttons |
 | `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
 | `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |

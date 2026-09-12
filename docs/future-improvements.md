@@ -316,18 +316,6 @@ Use cases: retrieving field measurements logged by the meter itself, longer reco
 
 ## Usability
 
-### Toasts only exist in the top bar
-
-**Complexity:** Low
-
-Toasts — export confirmations, connect and clear feedback — are drawn inline on
-the top bar's status row (`app/top_bar.rs`), so they never appear in big meter
-minimal mode, which hides that bar, and they are the first thing pushed off the
-edge of a narrow bar. Painting them as an overlay anchored to the window would
-show them in every mode.
-
-Use cases: confirming an export or a mode change on a bench-mount display.
-
 ### Configurable CSV columns
 
 **Complexity:** Low

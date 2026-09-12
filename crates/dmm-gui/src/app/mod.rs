@@ -3,11 +3,11 @@
 //!
 //! The concerns live in submodules — [`appearance`] (fonts, theme, zoom),
 //! [`connection`] and [`messages`] (the acquisition thread and its channel),
-//! [`plot_input`], [`top_bar`], [`controls`], [`layout`] (the reading column),
-//! [`meter_fit`] (the big meter's sizing arithmetic), [`stats_panel`],
-//! [`recording_panel`], [`export`], [`transform_ui`], [`shortcuts`],
-//! [`shortcut_help`] and [`whats_new`] — all of which add methods to the one
-//! [`App`] declared here.
+//! [`plot_input`], [`top_bar`], [`toast`], [`controls`], [`layout`] (the
+//! reading column), [`meter_fit`] (the big meter's sizing arithmetic),
+//! [`stats_panel`], [`recording_panel`], [`export`], [`transform_ui`],
+//! [`shortcuts`], [`shortcut_help`] and [`whats_new`] — all of which add
+//! methods to the one [`App`] declared here.
 
 mod appearance;
 mod connection;
@@ -21,6 +21,7 @@ mod recording_panel;
 mod shortcut_help;
 mod shortcuts;
 mod stats_panel;
+mod toast;
 mod top_bar;
 mod transform_ui;
 mod whats_new;
@@ -52,7 +53,7 @@ use recording_panel::RecordingPanel;
 use transform_ui::TransformEditor;
 
 /// How long a toast message stays visible (seconds).
-const TOAST_DURATION_SECS: u64 = 4;
+const TOAST_DURATION_SECS: u64 = 8;
 
 /// Default height of the recording panel (logical pixels).
 const DEFAULT_RECORDING_HEIGHT: f32 = 120.0;
@@ -585,7 +586,7 @@ impl eframe::App for App {
             self.connect(&ctx);
         }
 
-        // Expire toast after 4 seconds
+        // Expire the toast, unless the user closed it first
         if let Some((_, _, when)) = &self.toast
             && when.elapsed().as_secs() >= TOAST_DURATION_SECS
         {
@@ -616,11 +617,15 @@ impl eframe::App for App {
         }
 
         let minimal = self.big_meter_mode == BigMeterMode::Minimal;
+        // Where the toast hangs from: under the bar (and under the settings
+        // rows it opens), at the window's top edge when there is no bar.
+        let mut toast_top = ctx.content_rect().top();
         if !minimal {
-            egui::Panel::top("top_bar").show(ui, |ui| {
+            let top = egui::Panel::top("top_bar").show(ui, |ui| {
                 self.show_top_bar(ui, &ctx);
                 self.show_settings_panel(ui);
             });
+            toast_top = top.response.rect.bottom();
         }
 
         // Determine layout mode before panels
@@ -837,6 +842,7 @@ impl eframe::App for App {
                 .a11y_role(egui::accesskit::Role::Main);
         }
 
+        self.show_toast(&ctx, toast_top);
         self.show_shortcut_help(&ctx);
         self.show_discard_confirmation(&ctx);
         self.show_whats_new(&ctx);
