@@ -141,3 +141,25 @@ find references/ut161/extracted-nsis/ -type f \
 | UNI-T | `references/ut61eplus/vendor-software/extracted/` | Software V2.02 (shared) |
 | Analysis | `references/ut61eplus/vendor-software/CustomDmm_decompiled.txt` | Protocol plugin |
 | Analysis | `references/ut61eplus/vendor-software/DMM_decompiled.txt` | Main application |
+
+## Cross-Reference with Community Sources
+
+Consulted after the vendor analysis above, for validation only.
+
+| Finding | Our RE | [ljakob](https://github.com/ljakob/unit_ut61eplus) | [mwuertinger](https://github.com/mwuertinger/ut61ep) | Agreement |
+|---------|--------|--------|------------|:---------:|
+| Same protocol for B+/D+/E+ | Yes (vendor code) | Yes (per-model tables, same framing) | N/A (E+ only) | ✓ |
+| Same protocol for UT161 series | Yes (binary-identical software) | Yes (explicit UT161 support) | N/A | ✓ |
+| UT60BT over Bluetooth | Not investigated | Yes (BT serial support) | N/A | — |
+| 6000-count range tables | From manual | Per-model tables in code | N/A | To verify |
+| Mode byte values 0x00-0x14 | Vendor software table | Same values | Same values | ✓ |
+| LoZ mode 0x15/0x16 | Vendor has both; code treats differently | Uses 0x15 only | N/A | Partial |
+
+**Key discrepancy**: ljakob's implementation uses only mode 0x15 for LoZ,
+while the vendor software has entries for both 0x15 and 0x16 with
+different display value handling. Requires UT61D+ device testing.
+
+Reference implementations:
+
+- [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Python, UT61E+ and UT61B+/D+ tables, UT161 and UT60BT support
+- [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Go, UT61E+

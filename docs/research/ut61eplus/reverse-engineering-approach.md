@@ -501,3 +501,12 @@ grep -n -C 3 'FUN_0040d3a0' DMM_decompiled.txt
 | Analysis | `vendor-software/CP2110_decompiled.txt` | Ghidra decompilation (100 KB) |
 | Analysis | `vendor-software/DMM_decompiled.txt` | Ghidra decompilation (1.6 MB) |
 | Analysis | `vendor-software/DeviceSelector_decompiled.txt` | Ghidra decompilation (309 KB) |
+
+## CP2110 Libraries
+
+Other implementations of the CP2110 HID-to-UART bridge, useful for
+comparing feature-report handling:
+
+- [antage/cp211x_uart](https://github.com/antage/cp211x_uart) — Rust crate for CP2110/CP2114 UART control
+- [rginda/pycp2110](https://github.com/rginda/pycp2110) — Python CP2110 library
+- [pyserial CP2110 handler](https://github.com/pyserial/pyserial/blob/master/serial/urlhandler/protocol_cp2110.py) — CP2110 support built into pyserial

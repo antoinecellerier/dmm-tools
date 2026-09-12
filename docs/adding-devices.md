@@ -136,7 +136,7 @@ Create two files in `docs/research/<family>/`:
 **Only after completing Phase 2.** Look for:
 - [sigrok](https://sigrok.org/) drivers — broad device coverage, well-tested
 - GitHub projects for the specific device (search by model number)
-- Community projects listed in `docs/supported-devices.md`
+- Community projects listed in the family's `docs/research/<family>/reverse-engineering-approach.md` cross-reference section and in the README's References
 - Forum posts with protocol traces (EEVBlog, etc.)
 
 Document discrepancies. When our independent analysis disagrees with community work, flag it for real-device verification rather than assuming either is correct.

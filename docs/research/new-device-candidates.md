@@ -353,6 +353,15 @@ vendor software. **Not a priority target.**
 
 ---
 
+## Not Yet Investigated
+
+| Model | Brand | Type | Transport | Notes |
+|-------|-------|------|-----------|-------|
+| **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
+| **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset |
+| **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04) |
+| **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional); see [research/ut8803](ut8803/reverse-engineering-approach.md) |
+
 ## Meters Investigated and Ruled Out
 
 | Brand/Model | Connection | Why excluded |

@@ -576,3 +576,30 @@ without the UCI SDK.
 | Analysis | `references/ut8803/vendor-software/uci_dll_decompiled.txt` | Ghidra decompilation of uci.dll |
 | Extracted | `references/ut8803/sdk/UNI-T SDK V2.3/` | SDK contents (headers, examples, libraries) |
 | Extracted | `references/ut8803/vendor-software/extracted/` | Setup.exe, User Manual.pdf |
+
+## Cross-Reference with Community Sources
+
+Consulted after the vendor analysis above, for validation only.
+
+| Finding | Our RE | [philpagel](https://github.com/philpagel/ut8803e) | [hskim7639](https://github.com/hskim7639/UNI-T) | Agreement |
+|---------|--------|-----------|-----------|:---------:|
+| CP2110 bridge (0x10C4:0xEA80) | Programming manual + Ghidra | Same | Same | ✓ |
+| 9600 baud | Ghidra (feature report 0x50) | 9600 in code | N/A | ✓ |
+| AB CD frame header | Ghidra parser | Same | Same | ✓ |
+| 21-byte frames | Ghidra (min frame size 0x15) | "19 byte data frame" | N/A | ~¹ |
+| Streaming model | Ghidra (0x5A trigger, read-only loop) | Continuous read | N/A | ✓ |
+| Alternating-byte checksum | Ghidra | "Weighted checksum" | N/A | To verify² |
+| Mode/range tables | Programming manual + Ghidra | Empirical tables | N/A | To verify |
+| UT8802 different format | Ghidra (0xAC header, 8-byte) | N/A | N/A | — |
+| UT632/803/804 same protocol | Programming manual | Listed as compatible | N/A | ✓ |
+
+¹ philpagel counts 19 data bytes (excluding header); our 21 includes the 2-byte AB CD header.
+  These are consistent.
+
+² philpagel describes a "weighted checksum" which may refer to the
+  alternating-byte sum we found. Needs detailed comparison.
+
+Reference implementations:
+
+- [philpagel/ut8803e](https://github.com/philpagel/ut8803e) — Python, UT8803/UT8803E, detailed protocol docs
+- [hskim7639/UNI-T](https://github.com/hskim7639/UNI-T) — Python (Windows), UT8803E
