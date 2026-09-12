@@ -464,7 +464,7 @@ Each row below is a press whose flag did not move on the next frame.
 | Mode | Hold 0x4A | Rel 0x48 | MinMax 0x41 | Range 0x46 |
 |------|:---------:|:--------:|:-----------:|:----------:|
 | Continuity (0x07) | Yes | **No effect** | **No effect** | fixed range |
-| Diode (0x08) | Yes | no effect on one meter | **No effect** | fixed range |
+| Diode (0x08) | Yes | **No effect** | **No effect** | fixed range |
 | Capacitance (0x09) | Yes | Yes | **No effect** | **No effect** |
 | Hz (0x04) | Yes | **No effect** | **No effect** | **No effect** |
 | Duty % (0x05) | Yes | **No effect** | **No effect** | fixed range |
@@ -482,12 +482,12 @@ was refused over OL in the 2026-03 run and taken in all three later runs where
 DC mV had a value. Hold and MinMax are not affected — diode's Hold frames
 carry the flag over OL, and `dcmv/minmax` was taken twice over OL.
 
-**Diode**, asked on 2026-09-10 with a Schottky forward-biased at 0.1968 V,
-refused both Rel and MinMax. That is the first diode evidence not confounded
-by OL, since open leads there read OL. MinMax is settled: the UT61B+ had
-already refused it five times and OL is no confound for that button, so two
-meters agree. Rel is one meter — the UT61B+ has the mode and has never been
-asked with a diode fitted, which is the outstanding ask on issue #19.
+**Diode** refused both Rel and MinMax on both meters, each asked with a diode
+fitted — the only evidence there not confounded by OL, since open leads in
+that mode read OL. Our UT61E+ on 2026-09-10 with a Schottky forward-biased at
+0.1968 V, and a UT61B+ on 2026-09-11 at 0.515 V (issue #19), where Hold was
+taken in the same step. MinMax was settled first: the UT61B+ had already
+refused it five times and OL is no confound for that button.
 
 **AC+DC V** refused Rel on all three runs that reached it — 2026-09-07 twice
 at 0.07 V and 0.08 V, and 2026-09-10 again — which is every meter that has

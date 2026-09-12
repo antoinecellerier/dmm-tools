@@ -153,15 +153,17 @@ on every meter that can be asked.** Both halves earn their place:
   frames carry the flag over OL, and `dcmv/minmax` was taken twice over OL.
   Tallying every REL and MIN/MAX sub-step by what was on screen, `dcmv` + REL
   is the only case in any capture where the outcome differs by screen state.
-- **Diode, settled for MIN/MAX on 2026-09-10** with a Schottky forward-biased
-  at 0.1968 V (`ut61eplus-diode.yaml`): REL and MIN/MAX both refused, HOLD
-  taken. It is the first diode evidence not confounded by OL, since open leads
-  there read OL. MIN/MAX joins the list — the UT61B+ had already refused it
-  five times, and OL is no confound for that button, so two meters agree.
-  **REL stays offered**: one meter, and the UT61B+ has the mode and has never
-  been asked with a diode fitted. That is the outstanding ask on issue #19.
-  The 2026-09-11 B+ run fitted a diode, but as a freeform extra, which the
-  sweep never drives, so no REL was sent and the ask stands.
+- ~~**Diode + REL, asked with a diode fitted on a second meter**~~ —
+  **VERIFIED** 2026-09-11 by @ChrisTheExpie on a real UT61B+ (CH9329). Diode
+  is settled for both buttons on both meters that have the mode, each asked
+  with a diode fitted rather than over OL — open leads there read OL, and the
+  meter refuses REL over OL whatever the mode. Our UT61E+ on 2026-09-10 with a
+  Schottky at 0.1968 V (`ut61eplus-diode.yaml`): REL and MIN/MAX refused, HOLD
+  taken. The B+'s `capture --steps diode` run at 0.515 V: `diode/rel:on`
+  refused (`REL did nothing in off`) with the flag nibble unmoved across all
+  three settle reads, `diode/hold:on` taken. REL decoding is proven on that
+  meter by `dcv_ranges/rel:on` the same day, so the refusal is the meter's and
+  not a parse miss. Diode is now in `REL_DEAD` as well as `MINMAX_DEAD`.
 - **AC+DC V joins the REL list**, on three refusals with a real reading:
   2026-09-07 at 0.07 V and 0.08 V, and 2026-09-10 at 0.0005-0.0175 V
   (`ut61eplus-acdcv.yaml`). That is every meter that has the mode — the
@@ -272,7 +274,7 @@ Re-asserting Auto after the flag sweeps would fix it.
 
 ### UT61B+ — hardware reports
 
-Three UT61B+ captures by @ChrisTheExpie in
+Four UT61B+ captures by @ChrisTheExpie in
 [issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19), all over
 a CH9329 cable, are the family's device evidence beyond our own UT61E+:
 
@@ -284,6 +286,9 @@ a CH9329 cable, are the family's device evidence beyond our own UT61E+:
 - **2026-09-11, v0.7.0-dev (88e80ed)** — a `capture --unverified` run, driven,
   trusted tier, walking the two ladder steps the model was still asked for,
   plus three freeform extras (a diode, a capacitor, live mains AC V).
+- **2026-09-11 later, v0.7.0-dev (88e80ed)** — `capture --steps diode` with a
+  diode fitted, answering the REL ask, alongside a `debug --count 5` terminal
+  capture on the manually set 600Ω rung answering the other.
 
 Together they carried the model to `Stability::Verified`: every mode its dial
 reaches was captured and decoded correctly, and every command moved the flag it
@@ -311,8 +316,9 @@ Settled:
   **capacitance 5** (6mF, a real capacitor at 4.514 mF, LCD-confirmed);
   **µA 0 and 1** (600µA, 6000µA), **mA 0 and 1** (60mA, 600mA), **A 0 and 1**
   (6A, 10A — the B+ tops out where the E+ has 20A).
-- **Diode reads 0.516 V with a diode fitted** (2026-09-11, LCD-confirmed) —
-  the model's first finite diode frame; the earlier one is OL.
+- **Diode reads 0.515-0.516 V with a diode fitted** (2026-09-11,
+  LCD-confirmed) — the model's first finite diode frames; the earlier one is
+  OL. The later run of that day drove the step: HOLD taken, REL refused.
 - HOLD, MIN and MAX were taken in Ω over OL, and HOLD, REL, MIN and MAX in
   DC V at 0 V, with the same nibbles as on the E+ (2026-09-11).
 - Bar graph full scale is 30 across modes (`-9.33` on 60V → 4, `11.72` on
@@ -335,8 +341,8 @@ Settled:
 - **Duty % is reached from the Hz/% dial position with the USB short-press**,
   as `ut61b_plus.rs`'s Hz/% ring (0x49) says. The reporter's first run used
   the button from V~ instead, which is why the earlier note read SELECT.
-- **Golden fixtures**: 45 in `crates/dmm-lib/tests/golden/ut61b+/`, lifted
-  from all three reports.
+- **Golden fixtures**: 46 in `crates/dmm-lib/tests/golden/ut61b+/`, lifted
+  from all four reports.
 
 Left open on this model:
 
@@ -356,9 +362,6 @@ Left open on this model:
   holds its 220Ω rung over OL (the 82 kΩ run, 2026-09-10), so this is not
   family behaviour. The ask is one press of the meter's own RANGE button to
   600Ω with the leads open, watching whether it stays.
-- **REL in diode with a diode fitted**, still unasked — the diode came as a
-  freeform extra on 2026-09-11, and the sweep never drives extras, so no REL
-  was sent.
 - **The Hz ladder.** Range index 0 carried two different full scales across
   the two runs: `0.0` (one decimal) from the V~ Hz path on 2026-09-09 and
   `0.00` / `49.98` (two decimals) from the Hz/% dial position on 2026-09-10.
@@ -1072,11 +1075,12 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   (2026-09-07), but the 6,000-count tables give both modes two rungs and
   no run has pressed RANGE there. The `dcv_ranges` step does not reach
   them; the mV position needs its own. Issue #7.
-- **UT61B+ golden set** — 45 fixtures in
-  `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the three issue #19
+- **UT61B+ golden set** — 46 fixtures in
+  `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the four issue #19
   reports: every mode the dial reaches, the Ω, DC V and both current
-  ladders driven rung by rung, HOLD/REL/MIN/MAX in Ω and DC V, all three
-  overload shapes, both NCV levels seen, mains AC V with the HV warning.
+  ladders driven rung by rung, HOLD/REL/MIN/MAX in Ω and DC V, HOLD over a
+  forward-biased diode, all three overload shapes, both NCV levels seen,
+  mains AC V with the HV warning.
 - **Golden YAML fidelity (2026-06 review):** two hand-built UT61E+ fixtures
   remain, `dcv_5.678` and `ncv_3` — the DC V case lacks the DC-indicator bit
   (verified set on real DC V) and bar-graph bytes are 00 00 despite a

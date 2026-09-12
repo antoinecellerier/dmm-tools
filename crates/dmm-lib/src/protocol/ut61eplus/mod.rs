@@ -349,7 +349,9 @@ impl Protocol for Ut61PlusProtocol {
             // Open leads read OL, and the meter refuses REL over OL in any
             // mode, so the old wording ("leave leads open") guaranteed that
             // this step's REL and MIN/MAX sub-steps said nothing about diode
-            // — which is exactly what happened until 2026-09-10.
+            // — which is exactly what happened until 2026-09-10. Both are
+            // now known dead here, so the step no longer sweeps them, but a
+            // finite reading is still what verifies the decode.
             CaptureStep::basic(
                 "diode",
                 "Set meter to diode. A diode across the probes if you have one, \
@@ -654,13 +656,12 @@ const HOLD_DEAD: &[Mode] = &[Mode::Ncv];
 /// mode — the UT61B+ has no such position. HOLD and MIN/MAX both work there,
 /// so it is REL specifically, not a mode that ignores commands.
 ///
-/// Diode is deliberately absent. Our UT61E+ refused it once with a Schottky
-/// forward-biased at 0.1968 V (2026-09-10), which is the first diode REL
-/// evidence that is not confounded by OL — but it is one meter, and unlike
-/// AC+DC V the UT61B+ has the mode and can be asked. See
-/// `docs/verification-backlog.md`.
+/// Diode is here on both meters that have the mode, each asked with a diode
+/// fitted rather than over OL: our UT61E+ with a Schottky forward-biased at
+/// 0.1968 V (2026-09-10) and a UT61B+ at 0.515 V (issue #19, 2026-09-11).
 const REL_DEAD: &[Mode] = &[
     Mode::Continuity,
+    Mode::Diode,
     Mode::Hz,
     Mode::DutyCycle,
     Mode::Ncv,
@@ -1429,22 +1430,21 @@ mod tests {
 
     /// The modes where a press leaves the flag where it was offer nothing to
     /// press. Both a UT61E+ (2026-09-07) and a UT61B+ (issue #19, 2026-09-10)
-    /// refused these, mode for mode.
+    /// refused these, mode for mode — diode's REL on 2026-09-11, once both
+    /// had been asked with a diode fitted instead of over OL.
     #[test]
     fn a_dead_flag_offers_nothing_to_switch_to() {
         let proto = Ut61PlusProtocol::new();
         // (mode byte, HOLD, REL, MIN/MAX) — true means the meter takes it.
         let cases = [
             (0x07u8, true, false, false), // continuity
-            // Diode keeps REL: one meter has refused it on a real reading,
-            // and the other has the mode and has not been asked.
-            (0x08, true, true, false),   // diode
-            (0x09, true, true, false),   // capacitance
-            (0x04, true, false, false),  // Hz
-            (0x05, true, false, false),  // duty %
-            (0x14, false, false, false), // NCV
-            (0x19, true, false, true),   // AC+DC V
-            (0x02, true, true, true),    // DC V, the control
+            (0x08, true, false, false),   // diode
+            (0x09, true, true, false),    // capacitance
+            (0x04, true, false, false),   // Hz
+            (0x05, true, false, false),   // duty %
+            (0x14, false, false, false),  // NCV
+            (0x19, true, false, true),    // AC+DC V
+            (0x02, true, true, true),     // DC V, the control
         ];
         for (mode, hold, rel, minmax) in cases {
             let m = make_test_measurement(mode, 0x00, b" 12.345", (0, 0), (0, MANUAL, 0));

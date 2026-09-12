@@ -57,8 +57,8 @@ impl Scenario {
         !matches!(self.id, MockMode::Ncv)
     }
 
-    /// Whether REL does anything here (`REL_DEAD`). Continuity, duty and
-    /// AC+DC V are on that list too; the mock has no scenario for them.
+    /// Whether REL does anything here (`REL_DEAD`). Continuity, diode, duty
+    /// and AC+DC V are on that list too; the mock has no scenario for them.
     pub(super) fn rel_applies(&self) -> bool {
         !matches!(self.id, MockMode::Hz | MockMode::Ncv)
     }
