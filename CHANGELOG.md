@@ -17,7 +17,7 @@
 - **macOS shortcuts use `Cmd`, and `Cmd+M` minimises** — the shortcut help said `Ctrl` on every row.
 - **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were never shown; screen readers read them too.
 - **Graph plots sub-values** — **Plot:** picks the series; **Show:** overlays same-unit ones such as T2 or a REL reference, dashed.
-- **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
+- **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.
 - **Border and Weak text colours in Customize colors** — separators, panel edges, hints and captions were fixed per preset.
 - **Every panel scrolls when the window is too short** — the shortcut help, the settings rows and the stats, graph and recording below the reading were cut off.
 - **Toasts show in every layout** — minimal mode never showed them and a narrow top bar cut them off; they now float over the window.
@@ -39,7 +39,7 @@
 - **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; confirmations and `debug` showed only the main reading.
 - **`capture --unverified` runs only the steps no report has confirmed** — `--list-steps --format md` prints that checklist for an issue; `--plan` runs a maintainer-written step file.
 - **REL on the UT181A** — in the CLI and the GUI.
-- **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
+- **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values and noise** — `--mock-mode acv-hz`, `temp2`, `temp-diff` and `temp-diff-rev` stand in for a UT181A; `noise` is a spiky DC signal for the graph.
 
@@ -48,7 +48,7 @@
 - **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
 - **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V.
-- **UT61E+ NCV shows the detected level**
+- **UT61+/UT161 NCV shows the detected level**
 - **UT8802 negative readings show their sign**
 - **VC-880 and VC-890 report the AVG flag**
 - **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked two cells, shifting the sub-value columns.
