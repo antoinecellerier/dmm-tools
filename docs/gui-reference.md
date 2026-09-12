@@ -22,34 +22,23 @@ and remote control of UNI-T and Voltcraft multimeters.
 The Settings panel includes a **Device** selector. **Auto-detect**, the
 default, works out which meter is on the USB cable from its replies
 ([how](detection-design.md)), shows it in the top bar and saves it as the
-**Device**, so later sessions skip the probe; pick **Auto-detect** again
-after swapping meters. The probe makes a UT61+/UT161 beep once. If nothing
-answers, the reading column lists what each meter needs switched on and how
-to pick a model instead.
+**Device**; pick **Auto-detect** again after swapping meters. The probe makes
+a UT61+/UT161 beep once. If nothing answers, the reading column lists what
+each meter needs switched on.
 
-The rest of the row is the device registry — all supported models (UT61E+,
-UT61B+, UT61D+, UT161B/D/E, UT8802, UT8803, UT803, UT804, UT171A/B/C, UT181A,
-Voltcraft VC-880, Voltcraft VC650BT, Voltcraft VC-890) and a **Mock (simulated)**
-option. Picking one skips detection and opens that family directly. Each model
-selects the correct protocol tables (e.g., UT61B+
-uses different mode/range mappings than UT61E+). The selection persists
-across sessions and requires a reconnect to take effect. When connected
-to an experimental (not yet fully verified) protocol, an orange **EXPERIMENTAL**
-badge appears in the top bar. Clicking it opens the device's
-verification issue on GitHub where you can report feedback.
+The other choices are every supported model (see [supported
+devices](supported-devices.md)) and **Mock (simulated)**; picking one skips
+detection. The selection persists across sessions and requires a reconnect to
+take effect. When connected to an experimental protocol, an orange
+**EXPERIMENTAL** badge appears in the top bar; clicking it opens the device's
+verification issue on GitHub, where you can report feedback.
 
 The **Mock (simulated)** device generates synthetic measurements without
-hardware, cycling through every mode listed below.
-When Mock is selected, a **Mock mode** row appears in Settings with
-choices: **Auto (cycle)** (default) or a specific mode (dcv, acv, ohm,
-cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff,
-temp-diff-rev, noise). Selecting a specific mode pins the mock to that
-measurement type indefinitely; a pick in the reading's mode dropdown
-re-pins it (a range pick does not — the mock stays in the scenario it
-is pinned to).
-Remote control buttons (HOLD, REL,
-RANGE, etc.) respond to toggle flags. The SELECT button advances to
-the next mode regardless of the auto-cycle setting.
+hardware, cycling through its modes. A **Mock mode** row in Settings pins it
+to one mode instead (the modes are listed under
+[Command-Line Options](#command-line-options)). Remote control buttons
+respond to toggle flags, and SELECT, or a pick in the mode dropdown, moves to
+the next mode.
 
 ![Wide layout — live measurement with graph, statistics, recording, and minimap](../assets/gui-wide-layout.png)
 
@@ -73,8 +62,8 @@ The top bar contains:
 - **Settings gear** (right side) — opens the settings panel
 - **Help link** — opens the project page
 
-Toast notifications (e.g. CSV export success/failure) float over the
-window's top-right corner in every layout and expire after 8 seconds.
+Toast notifications (e.g. CSV export success/failure) appear in the
+top-right corner in every layout and expire on their own.
 
 ## Reading Display
 
@@ -84,28 +73,21 @@ window's top-right corner in every layout and expire after 8 seconds.
   display string for stable width (no jitter between readings)
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
 - Sub-value rows under the reading for meters that send them (UT181A, UT171):
-  one row per sub-value with its label, value and unit, plus `@Ns` for the
-  MIN/MAX timestamps. Shown in every layout — the narrow layout condenses them
-  to a single summary line. Single-display meters show nothing extra.
+  label, value and unit, plus `@Ns` for the MIN/MAX timestamps. The narrow
+  layout condenses them to one line.
 - Mode and range label below in smaller text
 - On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
-  VC-890, and the mock), the mode and range labels are dropdowns (`V AC Hz ▾`,
-  `22V ▾`) of what the meter offers from where it sits: the mode list holds the
-  modes the current dial position allows, the range list `Auto` plus the rungs
-  of the current mode's ladder. The live entry is marked `●` — `Auto` while the
-  meter is auto-ranging, the live rung otherwise — and the closed label always
-  shows what the meter reports. Picking an entry switches the meter; a refused
-  switch shows a toast. Dial positions with a single mode, modes with a fixed
-  range, and other meters keep the plain label.
+  VC-890, and the mock), the mode and range labels are dropdowns of what the
+  meter offers from the current dial position, with the live entry marked `●`.
+  Picking an entry switches the meter. Dial positions with a single mode,
+  modes with a fixed range, and other meters keep the plain label.
 - Active flags shown as colored badges:
   - **AUTO** — auto-range active
   - **HOLD** — display frozen on meter
   - **REL** — relative/delta mode
   - **MIN**, **MAX**, **AVG** — min/max/average recording active
   - **LOW BAT** — low battery warning (orange)
-  - **SCALE** — a software [scale](#scale) is applied to the reading. Unlike
-    the others this is the app's own state, not something the meter reported,
-    so it is drawn after the meter's badges
+  - **SCALE** — a software [scale](#scale) is applied to the reading
 - Overload ("OL") rendered in warning red
 
 ## Remote Control
@@ -117,7 +99,7 @@ A row of buttons shown when connected and receiving data (visible in the
 |---|---|
 | **HOLD** | Toggle hold mode |
 | **REL** | Toggle relative mode |
-| **RANGE** | Press RANGE on the meter: one step into or through the manual range. To jump to a rung, use the range dropdown under the reading. |
+| **RANGE** | Press RANGE on the meter: one step through the manual ranges. To jump to a range, use the range dropdown under the reading. |
 | **AUTO** | Return to auto-range |
 | **MIN/MAX** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. |
 | **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. |
@@ -130,8 +112,8 @@ measurement. LIGHT has no protocol feedback, so it does not highlight.
 ## Scale
 
 **Scale**, next to the remote controls, applies a software transform to the
-reading — a current clamp's 10 mV/A, a shunt, a probe divider, °C to °F. It
-changes nothing on the meter. Clicking it opens three fields:
+reading — a current clamp's 10 mV/A, a shunt, a probe divider, °C to °F.
+Nothing is sent to the meter. Clicking it opens three fields:
 
 | Field | Meaning | Left empty |
 |---|---|---|
@@ -139,37 +121,22 @@ changes nothing on the meter. Clicking it opens three fields:
 | **+** (Offset) | add this afterwards | +0 |
 | **→** (Unit label) | show this unit instead of the base unit | no relabel |
 
-**Apply**, or Enter in a field, commits; nothing is applied while you type.
-A zero or non-numeric value is rejected with a toast naming the field.
-**Off** turns scaling off.
+**Apply**, or Enter in a field, commits; **Off** turns scaling off.
 
-The arithmetic runs on the reading converted to its base SI unit (V, A, Ω,
-F, Hz, S, W), so a factor survives auto-ranging: 123.4 mV and 0.1234 V are
-the same input. A 10 mV/A clamp is therefore `× 100 → A`. With no unit
-label the reading shows in the base unit (`× 10` on 123.4 mV gives 1.234 V).
+The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
+factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. With no unit
+label the reading shows in the base unit.
 
-The meter's own reading is kept as a **Raw** sub-value: in the reading
-display, the graph's **Plot:**/**Show:** groups, the recording log and an
-extra `auxN_*` CSV group. Its **Show:** chip starts unlit — the unscaled
-reading is often a factor of a hundred away from the scaled one, and drawing
-both would flatten the scaled trace against the shared Y axis — so click the
-chip when you want the comparison. **Plot:** is unaffected: choosing **Raw**
-there plots it as the main series.
+The meter's own reading is kept as a **Raw** sub-value in the reading
+display, the graph's **Plot:** and **Show:** groups, the recording log and
+the CSV export; its **Show:** trace starts hidden. Sub-values in the same
+unit as the reading (a second thermocouple, a REL reference, MIN/MAX) are
+scaled with it; sub-values in another unit are left as sent. Statistics and
+the integral use the scaled reading.
 
-Sub-values that measure the same quantity as the reading — a second
-thermocouple, a REL reference, the MIN/MAX extremes — are scaled with it and
-shown in the same unit, so they stay same-unit and keep overlaying the scaled
-trace in the graph; sub-values in another unit, such as a frequency beside a
-voltage, are left as the meter sent them.
-
-Applying or clearing a scale resets the graph,
-statistics and integral but not the recording buffer, like **Clear**; a
-recording in progress continues with scaled values. The Specifications
-panel keeps describing the meter's own range.
-
-The setting is session-only — never written to `settings.json`, since a
-stale factor silently corrupting a later session is worse than retyping it.
-It survives disconnect, a device change and `Ctrl+L`. `dmm-cli read` takes
+Applying or clearing a scale resets the graph and statistics, like
+**Clear**; a recording in progress continues with scaled values. The setting
+is session-only and survives disconnect and `Ctrl+L`. `dmm-cli read` offers
 the same transform as `--scale`, `--offset` and `--unit`.
 
 ## Graph
@@ -180,21 +147,14 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 
 ### Toolbar
 
-Laid out in rows: the view controls (time window, LIVE, Y axis, Reset Zoom)
-first, then — only for meters that send sub-values — a row of its own holding
-the boxed **Plot:** and **Show:** groups, then the analysis overlays (Mean,
-Min/Max, Ref, Cursors). A single-display meter shows only the first and last
-rows, until a software [scale](#scale) is applied: its **Raw** sub-value
-brings the **Plot:**/**Show:** row up for those meters too.
-
 | Control | Description |
 |---|---|
 | **5s, 10s, 30s, 1m, 5m, 10m** | Time window presets |
 | **LIVE** | Auto-scroll to latest data (filled when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or any sub-value the meter is currently sending. Only appears for meters that send sub-values (UT181A, UT171), or while a software [scale](#scale) is active (which adds **Raw**). Switching restarts the graph, and so does the meter dropping the chosen sub-value for a few readings in a row — the graph returns to **Main**. |
-| **Show:** | One chip per same-unit sub-value drawn beside the plotted series — click to draw or hide that trace. Only appears once there is such a sub-value — including the **Raw** reading a same-unit software [scale](#scale) adds, which is listed but starts hidden. Hiding one stops it being drawn (and drops it from the key and the Y-axis fit) but not recorded, so turning it back on brings its history with it. Session-only; survives `Ctrl+L` and a change of plotted series. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171) and while a software [scale](#scale) is active, which adds **Raw**. Switching restarts the graph; if the meter stops sending the chosen sub-value, the graph returns to **Main**. |
+| **Show:** | One chip per sub-value in the plotted series' unit: click to draw or hide its trace beside the plotted series. Hidden traces are still recorded. Session-only. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
@@ -205,30 +165,22 @@ brings the **Plot:**/**Show:** row up for those meters too.
 
 - Time-series line plot with auto-scaling Y axis (10% padding)
 - Axis labels include units (e.g. "1.0 mV", "10 s")
-- Crosshair tooltip shows time and value with units
+- Crosshair tooltip shows time and value with units, and names the series it
+  is over when several are drawn
 - No-data gaps (disconnect, pause, slow sample interval) shown as dashed
   vertical line pairs
 - Overloads shown as a filled band in the error colour, drawn at their true
   duration; the crosshair reports `overload` inside one
 - Timeline is continuous across reconnects (data is not cleared)
-- History buffer holds up to the configured buffer size (default 500K points,
-  ~14 h at 10 Hz; oldest dropped). A change of mode or unit clears the graph —
-  including auto-range crossing a decade (Ω→kΩ), and including a change of
-  plotted series
-- Sub-values sharing the plotted series' unit are drawn beside it as extra
-  dashed/dotted lines, up to four. Selecting a sub-value adds the meter's main
-  reading as one of them when the units match, so choosing T2 still shows T1.
-  Sub-values in a *different* unit (the Hz and ms beside an AC voltage) are
-  never overlaid — plotting them against the same axis would invent a
-  relationship that isn't there; reach them through **Plot:** instead
-- Whenever at least one such trace is drawn, a key in the plot's top-left
-  corner names every line and shows its colour and dash pattern. The key is a
-  key, not a control — use the toolbar's **Show:** chips to pick which
-  sub-value traces are drawn
-- The crosshair tooltip names the series it is over while overlays are shown
-- The minimap, the measurement cursors, the Mean/Min/Max/Ref overlays and the
-  visible-window statistics all follow the *plotted* series — the overlays are
-  reference traces only
+- History buffer holds up to the configured [buffer size](#settings) (oldest
+  dropped). A change of mode, unit or plotted series clears the graph —
+  including auto-range crossing a decade (Ω→kΩ)
+- Sub-values in the plotted series' unit are drawn beside it as dashed or
+  dotted lines, named in a key in the plot's top-left corner; the toolbar's
+  **Show:** chips pick which. Sub-values in another unit are reached through
+  **Plot:** instead
+- The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
+  visible-window statistics follow the plotted series
 
 Two cases the graph does not draw faithfully: a connection loss entirely
 inside a continuing overload is absorbed into the band instead of splitting
@@ -238,7 +190,7 @@ it, and several dropouts between the same two readings collapse into one gap.
 
 | Action | Effect |
 |---|---|
-| **Ctrl + scroll wheel** (or pinch) | Zoom X axis centered on cursor (2s–3600s range), over the plot only; leaves live mode |
+| **Ctrl + scroll wheel** (or pinch) | Zoom X axis centered on cursor (2s–3600s range); leaves live mode |
 | **Scroll wheel** | Scrolls the panel — the graph ignores it |
 | **Click & drag** | Pan left/right through history |
 | **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region. Release to apply; press Escape to cancel. |
@@ -251,8 +203,7 @@ A thin strip below the main plot showing the full capture history.
 
 - Bracket markers ([ ]) indicate the current viewport
 - Overload bands mirror the main plot, widened to a pixel when narrower
-- The trace is condensed to one min/max column per pixel, so spikes stay
-  visible however long the session
+- Spikes stay visible however long the session runs
 - Click or drag the interior to jump to a specific time
 - Drag the bracket edges to resize the viewport to an arbitrary time width
 - Clicking near the end re-enables live mode
@@ -302,13 +253,11 @@ UT61E+). Other devices show only the Manual link.
 - Stats persist across reconnects (use Clear for full reset)
 - In wide layout, a second row shows **visible window stats** — min/max/avg
   computed only over the current graph viewport
-- Min/Max/Avg/Count/∫ track the meter's **main reading** whatever the graph is
-  plotting; the visible-window row follows the **plotted series** and is
-  captioned with its unit, so selecting a Hz sub-value shows Hz there and V in
-  the session block above
-- With a software [scale](#scale) active, all of these follow the *scaled*
-  reading, and ∫ follows its unit — a clamp relabelled to `A` gives charge in
-  Ah where the unscaled millivolts would have given V·s
+- Min/Max/Avg/Count/∫ track the meter's main reading whatever the graph is
+  plotting; the visible-window row follows the plotted series and is
+  captioned with its unit
+- With a software [scale](#scale) active, all of these follow the scaled
+  reading, and ∫ its unit: a clamp relabelled to `A` gives charge in Ah
 
 ## Recording
 
@@ -319,9 +268,8 @@ UT61E+). Other devices show only the Manual link.
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values
-- Buffer holds up to the configured buffer size (default 500K samples,
-  ~14 hours at 10 Hz). Recording auto-stops when the buffer is full and shows
-  a toast notification.
+- Buffer holds up to the configured [buffer size](#settings). Recording
+  auto-stops when the buffer is full and shows a toast notification.
 
 **CSV format:**
 
@@ -331,25 +279,10 @@ timestamp,mode,value,unit,range,flags
 2026-03-19T10:15:30.123+01:00,DC V,3.3042,V,22V,AUTO
 ```
 
-Meters that report sub-values add one `auxN_label,auxN_value,auxN_unit` group
-per slot the family can send (UT181A 4, UT171 1, mock 2), padded with empty
-fields when a reading uses fewer. Single-display meters keep the six-column
-file above.
-
-```
-# device: UNI-T UT181A
-timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
-2026-09-02T09:33:56.123+02:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
-```
-
-A software [scale](#scale) claims one more slot for its **Raw** group, so a
-single-display meter recorded with a scale on gets `aux1_label,aux1_value,
-aux1_unit` holding the meter's own reading. The **Raw** group is always the
-last one in the file, so it keeps the same columns even as the meter's own
-sub-value count changes with the mode. Turning a scale on after Record has
-started still gets the column, and the rows recorded before it simply leave
-that group empty; turning one off mid-recording leaves it empty for the rest
-of the file.
+Meters that report sub-values add `auxN_label,auxN_value,auxN_unit` columns,
+and a software [scale](#scale) adds one more such group holding the meter's
+own **Raw** reading. The column layout is the same as `dmm-cli read`'s and
+is described in the [CLI reference](cli-reference.md#dmm-cli-read).
 
 ## Settings
 
@@ -366,7 +299,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Auto-connect** | on | Connect to meter automatically on startup |
 | **Query device name** | on | Ask meter for its name on connect (causes a beep). Skipped when Auto-detect already has the name. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
-| **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size, which keeps every sample it took. Editing `settings.json` by hand accepts any size from 1K to 50M. Hover shows the memory and hours a size buys — a 500K recording is ~140 MB single-display, ~420 MB with four sub-values. |
+| **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
@@ -411,7 +344,7 @@ Available color fields:
 
 Format: `#RRGGBB` or `#RRGGBBAA`.
 
-Derived colors auto-track their base: cursor dim/delta from cursor, minimap line from graph line, recording warning from `status_warning`, button hover/active from `button`. egui's own warnings and errors (the stats panel's "gaps skipped" note) use `status_warning` and `status_error`. Customizing `text` also recolors button captions, bold headings and hovered text; customizing `accent` also recolors selected toggles and chips, focus rings and selected text; left alone, both keep egui's defaults. `border` is set only by the High Contrast preset; Default and Colorblind keep egui's faint grey until you pick a color. Plot grid and axis labels follow `text`.
+Derived colors auto-track their base: cursor dim/delta from `graph_cursor`, minimap line from `graph_line`, recording warning from `status_warning`, button hover/active from `button`, plot grid and axis labels from `text`. `text` also governs button captions and headings, and `accent` selected toggles and chips, focus rings and selected text; left unset, both keep egui's defaults. `border` is set only by the High Contrast preset.
 
 ## Command-Line Options
 
@@ -430,7 +363,7 @@ do not modify the persisted `settings.json`.
 
 ## Keyboard Shortcuts
 
-Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures. In a window too short for the whole list, `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` scroll it.
+Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures.
 
 ### General
 
@@ -451,10 +384,10 @@ shows the macOS spelling.
 | `Cmd+M` (macOS) | Minimise window |
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
 | `Ctrl+0` | Reset zoom to 100% |
-| `Ctrl+Q` / `Ctrl+W` | Quit |
+| `Ctrl+Q` | Quit |
+| `Ctrl+W` | Close the help overlay, or quit when it is closed |
 | `?` / `F1` | Toggle keyboard & mouse help overlay |
-| `Esc` / `Ctrl+W` | Close help overlay |
-| `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` | Scroll the help overlay (while it is open) |
+| `Esc` | Close help overlay |
 
 ### Graph Navigation
 
@@ -468,18 +401,13 @@ shows the macOS spelling.
 Graph and `Space` shortcuts are disabled while any widget holds keyboard
 focus — not just text fields but any button reached with `Tab`, since `Space`
 and the arrow keys drive the focused widget. Press `Escape` to release it.
-`Ctrl+W` stays with a focused text field, where it deletes the previous word;
-with the focus anywhere else it closes the help overlay or quits.
 
 ## Layout Modes
 
-The layout adapts to the window size and panel visibility.
-
-In a window too small for its content the reading and graph columns, the
-settings rows and the shortcut help scroll rather than being cut off; the top
-bar stays in place and the graph area keeps a minimum height instead of
-shrinking away. The plain mouse wheel scrolls whatever is under the pointer —
-`Ctrl` + wheel is what zooms the graph.
+The layout adapts to the window size and panel visibility. In a window too
+small for its content, the panels scroll rather than being cut off, and the
+top bar stays in place. The mouse wheel scrolls; `Ctrl` + wheel zooms the
+graph.
 
 ### Wide Layout (≥ 900px)
 
@@ -508,9 +436,8 @@ quickly enter big meter mode — this temporarily hides graph, recording,
 statistics, and specifications without changing your saved settings.
 Press **Ctrl+B** again to enter **minimal mode**, which also hides the
 top bar and command buttons, leaving only the reading and mode line.
-Press **Ctrl+B** a third time to return to your normal layout. The **⊞**
-overlay button is hidden below roughly 100 × 80 px, where it would cover the
-reading, so in a window that small **Ctrl+B** is the way out.
+Press **Ctrl+B** a third time to return to your normal layout. In a window
+too small to show the **⊞** button, **Ctrl+B** is the way out.
 
 ![Minimal meter mode — reading only, no chrome](../assets/gui-minimal-meter.png)
 
@@ -529,7 +456,7 @@ Shown automatically when connection fails:
   (insert module, turn on, long-press USB/Hz until S icon appears)
 
 In big meter and minimal mode only the title is shown; hover it for the
-steps, or press **Ctrl+B** to leave the mode.
+steps.
 
 Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
 (or press `Ctrl+O`) while it is retrying to stop the loop.
@@ -539,8 +466,7 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 ### Visual
 
 - Theme-aware colors with WCAG 2.1 AA contrast ratios (≥4.5:1 text, ≥3:1 graphical elements). Minimum 11 pt font; status flags use bold text in addition to color so they don't rely on color alone.
-- Secondary text — the mode line under the reading, sub-value labels and their "@12s" timestamps, toolbar and hint captions — is a dedicated per-preset color that meets the same 4.5:1 bar as the primary text, rather than a dimmed shade of it. In the dark theme the primary text is a step brighter than egui's default so the two tiers stay visibly distinct; labels now match the brightness of the button text beside them.
-- The smallest captions in the app (status line, hints, toolbar captions, the graph's **LIVE** button) render at 11 pt, so nothing drops below the minimum font size. Zoom scales on top of that.
+- Secondary text (the mode line under the reading, sub-value labels, toolbar and hint captions) has its own per-preset color that meets the same 4.5:1 bar as the primary text.
 - Every button, link, toggle, and setting has a hover tooltip explaining what it does — hover any control to learn it without leaving the GUI.
 
 ### Keyboard
@@ -548,7 +474,7 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
 - Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the **Customize colors** disclosure header, the graph minimap, the recording-panel resize divider, and the left side-panel resize handle.
 - Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the 2D saturation/value square and the 1D hue gradient also accept arrow keys (2 % step, horizontal for saturation/hue, vertical for value).
-- The mode and range dropdowns under the reading open on Enter or Space with the live entry focused; Up/Down move, Enter picks, Esc or Tab closes. Tab reaches the mode dropdown first, then the range one.
+- The mode and range dropdowns under the reading open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
 - The `?` keyboard-shortcut help overlay traps focus inside while open and restores focus to the `?` button when closed (Esc or Ctrl+W). The version label opens a separate **What's New** OS window — that window has its own focus management, but closing it restores focus to the version label in the main window.
 
@@ -557,11 +483,10 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md). Reports of what does and doesn't come through as expected are welcome.
 
 - Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color. The clickable version label in the top bar announces "Show release notes" rather than the literal version string.
-- Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, and the graph's LIVE button announce whether they are currently on or off — you don't have to rely on the color change.
-- The graph toolbar's two chip rows name their group, so they are distinguishable by ear even though both list the same sub-value names: the **Plot:** chips announce as "Plot \<name\>" (and "Plot main reading") radio buttons, of which exactly one is selected, and the **Show:** chips as "Show \<name\> trace" toggles.
-- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode — including the time at which a MIN/MAX extreme was captured ("Max 5.9010 V at 12 seconds"), matching the "@12s" on screen. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled", matching the SCALE badge on screen.
-- The **Scale** button announces whether scaling is currently on or off, and its three fields announce as "Scale factor", "Offset" and "Unit label" from their hint text.
-- The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-values currently drawn beside it (traces hidden with **Show:** are left out, as they are off screen), whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
+- Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button and **Scale** announce whether they are currently on or off — you don't have to rely on the color change.
+- The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
+- The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled".
+- The graph announces a one-line summary of what it's showing: which series is plotted, time window, Y-axis range, number of samples, the sub-value traces drawn beside it, whether it's following live, and the most recent reading (using the same digit string the sighted user sees) — or that the meter is currently over range. The summary updates whenever any of those change.
 - The top bar, main content area, and connection status region are exposed as Toolbar, Main, and Status landmarks for flat-review navigation (e.g. Orca+Ctrl+Shift+L on Linux).
 
 ### Known limitations

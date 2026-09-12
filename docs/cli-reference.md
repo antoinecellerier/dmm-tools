@@ -38,17 +38,17 @@ its own entry with model-specific protocol tables (e.g., UT61B+ uses different
 mode/range mappings than UT61E+).
 
 `auto` (the default) works out which meter is on the cable from its replies
-([how](detection-design.md)); naming a model skips the probe. Detection takes
-about 200 ms, or ~2.6 s to give up and list what each meter needs switched on.
-The probe makes a UT61+/UT161 beep once.
+([how](detection-design.md)); naming a model skips the probe. The probe makes a
+UT61+/UT161 beep once. If nothing answers, the CLI lists what each meter needs
+switched on.
 
 **Device resolution precedence** (highest to lowest):
 
 1. `--device <DEVICE>` on the command line
-2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device in its settings panel — the CLI reads it but never writes to it)
+2. `device_family` field in `~/.config/dmm-tools/settings.json` (written by `dmm-gui` when you pick a device or Auto-detect finds one — the CLI reads it but never writes to it)
 3. `auto` as a final fallback
 
-A detected run prints one dim stderr line naming the meter and the `--device <id>` that pins it. `dmm-gui` saves the meter it detects to `device_family`, so after one GUI session the CLI stops probing too.
+A detected run prints one dim stderr line naming the meter and the `--device <id>` that pins it.
 
 <!-- devices:start -->
 | Value | Aliases | Description |
@@ -72,28 +72,22 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `mock` |  | Mock (simulated, no hardware required) |
 <!-- devices:end -->
 
-Display counts, form factor, cable and which models share a protocol table are
-listed in [supported devices](supported-devices.md).
+**Experimental** families were reverse-engineered from vendor software and are
+not yet fully verified against real hardware; [supported
+devices](supported-devices.md) lists what each has confirmed, along with
+display counts, form factor and cable. When connecting to an experimental
+device, the CLI prints a yellow warning with a link to the device's
+verification issue on GitHub. Please report findings there.
 
-Non-UT61E+ families are marked **experimental** -- their protocols were reverse-engineered
-from vendor software, and most have not yet been verified against real hardware. The UT181A
-is the exception: two reporters have run it on a real meter over the CH9329 (UT-D09) cable,
-confirming V DC, V AC + Hz and dual-probe temperature. It keeps the experimental warning
-until the REL, MIN/MAX, Peak and COMP formats, the remote commands and the older CP2110
-cable are verified too. When connecting to an experimental device, the CLI prints a yellow
-warning with a link to the device's verification issue on GitHub. Please report findings
-there.
-
-The `mock` device generates synthetic measurements, cycling through every mode in the
-Mock Modes table below. It requires no USB hardware and is useful for development,
-demos, and testing output formats.
-Supports the `read`, `command`, `get` and `set` subcommands. The `info`, `debug`, and `capture`
-subcommands require real hardware and will exit with an error when used with `mock`.
+The `mock` device generates synthetic measurements, cycling through every mode
+in the table below. It requires no USB hardware and is useful for development,
+demos, and testing output formats. It supports `read`, `command`, `get` and
+`set`; `info`, `debug` and `capture` need real hardware.
 
 #### Mock Modes
 
 By default, the mock device cycles through all modes automatically. Use
-`--mock-mode` with `read` to pin to a specific mode:
+`--mock-mode` to pin it to one:
 
 | Mode | Description |
 |---|---|
@@ -115,7 +109,7 @@ By default, the mock device cycles through all modes automatically. Use
 **Examples:**
 
 ```bash
-# Default (UT61E+ family)
+# Detect the meter on the cable
 dmm-cli read
 
 # Connect as UT8803
@@ -189,22 +183,14 @@ CSV output begins with a `# device:` comment line identifying the meter model,
 followed by the column header. JSON output begins with a `_metadata` line
 containing the device model, followed by one measurement object per line.
 
-Meters that report sub-values alongside the reading — the UT181A's second
-thermocouple, its frequency and period displays, and its REL, MIN/MAX and Peak
-modes; the UT171's frequency aux — show them indented under the reading in text
-output and in an `aux` array in JSON. Capture reports carry them per sample
-under `aux`.
-
-CSV appends one `auxN_label,auxN_value,auxN_unit` group per sub-value the meter
-family can send: four for the UT181A, one for the UT171, two for the mock
-device. Single-display meters (UT61E+, UT61B+/D+, UT161x, UT8802, UT8803,
-UT803/UT804, VC-880, VC-890) send none, so their files carry the six original
-columns and are unchanged. The count is per meter family, not per mode, so a
-reading that fills fewer slots leaves the rest empty and every row of a file
-lines up. With `--integrate`, the `integral` and `integral_unit` columns come
-first, ahead of the aux groups. Software scaling adds one more group, always
-the last one, for the meter's own reading, so a scaled run has family slots + 1
-— see [Scaling readings in software](#scaling-readings-in-software).
+Meters with more than one display (the UT181A's second thermocouple,
+frequency and period, REL, MIN/MAX and Peak; the UT171's frequency) report
+those **sub-values** indented under the reading in text output and in an `aux`
+array in JSON. CSV adds one `auxN_label,auxN_value,auxN_unit` group per
+sub-value the meter family can send (four for the UT181A, one for the UT171),
+left empty when a reading uses fewer, so every row lines up. Single-display
+meters keep the six base columns. With `--integrate`, the `integral` columns
+come before the aux groups.
 
 ```
 # device: UNI-T UT181A
@@ -220,8 +206,7 @@ integral is also shown.
 Statistics and the integral cover a single mode and unit: if either changes
 mid-run — by turning the dial, or by auto-range crossing a decade — both reset
 and a note is printed to stderr, so the summary always describes one comparable
-series. Both are watched, not just the unit: `--unit` pins the label, so a dial
-turn would otherwise go unnoticed.
+series.
 
 **Examples:**
 
@@ -245,23 +230,17 @@ dmm-cli read --integrate --format csv -o discharge.csv
 sensors the meter knows nothing about — a current clamp's mV/A, a shunt, a
 probe divider, °C to °F. Nothing is sent to the meter.
 
-The factor is per **base unit**: the reading is converted to V, A, Ω, …
-before scaling, so a factor survives auto-ranging between mV and V. A
-10 mV/A clamp is `--scale 100` (0.010 V/A → 100 A per volt). Order: strip
-the SI prefix, multiply by `--scale`, add `--offset`, relabel with `--unit`;
+The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
+factor survives auto-ranging between mV and V: a 10 mV/A clamp is
+`--scale 100`. Then `--offset` is added and `--unit` relabels the result;
 without `--unit` the reading is shown in the base unit.
 
-The meter's own reading rides along as a `Raw` sub-value — indented in text,
-in the JSON `aux` array, and in the last CSV aux group (family slots + 1).
-That group is reserved for it, so `Raw` stays in the same columns whether or
-not the meter sent sub-values of its own on a given frame. Sub-values that
-measure the same quantity as the reading — a second thermocouple, a REL
-reference, the MIN/MAX extremes — are scaled with it and shown in the same
-unit; sub-values in another unit, such as a frequency beside a voltage, are
-left as the meter sent them. `OL` and NCV rows pass through with only the
-unit relabelled. Statistics and `--integrate` use the scaled reading, so a
-clamp relabelled to `A` integrates to Ah. A dim note on stderr marks a
-scaled run; stdout is untouched.
+The meter's own reading is kept as a `Raw` sub-value: indented in text, in
+the JSON `aux` array, and in one extra CSV aux group, always the last.
+Sub-values in the same unit as the reading (a second thermocouple, a REL
+reference, MIN/MAX) are scaled with it; sub-values in another unit are left as
+sent. Statistics and `--integrate` use the scaled reading, so a clamp
+relabelled to `A` integrates to Ah. A dim stderr note marks a scaled run.
 
 ```bash
 dmm-cli read --scale 100 --unit A                 # 10 mV/A clamp → amps
@@ -271,11 +250,13 @@ dmm-cli read --scale 1.8 --offset 32 --unit °F    # °C → °F
 
 ### dmm-cli command
 
-Send a remote command to the meter. Available commands depend on the
-device family. Run with no arguments to list available commands:
+Press one of the meter's buttons. Available commands depend on the device
+family; run with no arguments to list them. To switch to a mode, range or
+flag value by name instead of stepping to it with button presses, use
+[`dmm-cli set`](#dmm-cli-set).
 
 ```
-dmm-cli command              # list commands for default device
+dmm-cli command              # list commands for the connected device
 dmm-cli --device ut181a command  # list commands for UT181A
 dmm-cli command <ACTION>     # send a command
 ```
@@ -290,16 +271,11 @@ dmm-cli command <ACTION>     # send a command
 | `rel` | Toggle Relative mode |
 | `range` | Cycle manual range |
 | `auto` | Return to auto-range |
-| `select` | Select button (mode-dependent) |
-| `select2` | Select2 / Hz button (mode-dependent) |
+| `select` | Select button: steps to the dial position's next function |
+| `select2` | Select2 / Hz button: steps to the dial position's next function |
 | `light` | Toggle backlight |
 | `peak` | Enter Peak Min/Max mode |
 | `exit_peak` | Exit Peak Min/Max mode |
-
-`select` and `select2` are raw presses — each steps the dial position's ring
-one function on, whatever that turns out to be. To name the mode, range, HOLD,
-REL, MIN/MAX or Peak value you want instead of stepping to it, use
-[`dmm-cli set`](#dmm-cli-set).
 
 #### UT181A commands
 
@@ -313,11 +289,6 @@ REL, MIN/MAX or Peak value you want instead of stepping to it, use
 | `exit_minmax` | Disable Min/Max recording |
 | `monitor` | Enable streaming (SET_MONITOR) |
 | `save` | Save current measurement to device memory |
-
-`range` is refused in fixed-range modes; `rel` in continuity, diode,
-differential temperature and any mode's Hz or Peak variant. Naming the function
-within a dial position (V AC → V AC Hz, …), the range, HOLD, REL or MIN/MAX you
-want is [`dmm-cli set`](#dmm-cli-set).
 
 #### UT171 commands
 
@@ -337,11 +308,7 @@ want is [`dmm-cli set`](#dmm-cli-set).
 | `range_manual` | Switch to manual ranging |
 | `range_auto` | Return to auto-range |
 | `light` | Toggle backlight |
-| `select` | SHIFT/SETUP button (steps the dial position's functions) |
-
-None of these is confirmed on hardware (issues #13 and #14). Naming the
-function, range, HOLD, REL or MIN/MAX value you want instead of stepping to it
-is [`dmm-cli set`](#dmm-cli-set).
+| `select` | SHIFT/SETUP button: steps to the dial position's next function |
 
 #### UT8803
 
@@ -356,10 +323,9 @@ dmm-cli --device ut181a command hold
 
 ### dmm-cli get
 
-List what the meter's settings can be switched to from where it sits now —
-mode, range, HOLD, REL, MIN/MAX and Peak, without touching the dial
-(UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and mock). Run with no argument
-for every setting that offers a choice.
+List what the meter's settings can be switched to from the current dial
+position: mode, range, HOLD, REL, MIN/MAX and Peak (UT61+/UT161, UT181A,
+VC-880/VC650BT, VC-890 and mock).
 
 ```
 dmm-cli get                  # one row per setting, * = the live value
@@ -375,11 +341,9 @@ dmm-cli get <SETTING>        # that setting alone, with what to type for each va
 | `--format <FORMAT>` | `text` | Output format: `text` or `json`. |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
 
-Every listing is relative to where the meter sits: it names what can be reached
-without turning the dial. A setting the meter offers no choice in — Peak on a
-meter that has none, a dial position with a single function — is left out of
-the whole-meter listing, and on its own prints a note and exits 0. While the
-meter is autoranging, the range row says which rung it picked.
+A setting with no choice from the current position (Peak on a meter without
+it, a dial position with one function) is left out of the whole-meter listing;
+asked for alone, it prints a note and exits 0.
 
 ```
 $ dmm-cli get
@@ -390,8 +354,9 @@ Settings for UT61E+ (DC V):
 Tip: switch one by name, e.g. dmm-cli set mode "ac+dc"
 ```
 
-`--format json` prints one object per invocation — not one per line, unlike
-`read` — on stdout, with any note on stderr. `get <SETTING>` is flat:
+`--format json` prints one object per invocation. `get <SETTING>` gives one
+block; `get` alone nests one such block per setting under `settings`.
+`current` is `null` when the meter sits on none of the listed values.
 
 ```json
 {
@@ -407,31 +372,6 @@ Tip: switch one by name, e.g. dmm-cli set mode "ac+dc"
 }
 ```
 
-`get` with no setting nests the same blocks under `settings`, one per setting
-that offers a choice:
-
-```json
-{
-  "device": "UT61E+",
-  "mode": "DC V",
-  "range": "22V",
-  "settings": [
-    { "setting": "mode", "current": "DC V", "choices": [] },
-    { "setting": "range", "current": "Auto", "choices": [] }
-  ]
-}
-```
-
-| Field | Description |
-|---|---|
-| `device` | Model name of the connected meter. |
-| `mode` | What it is measuring, as `read` reports it. |
-| `range` | The live range label, autoranging included. |
-| `setting` | Which setting the block is about. |
-| `current` | Label the meter sits on, or `null` when the list names none. |
-| `choices[].label` | Display label, unique within the list — what `set` takes. |
-| `choices[].current` | Whether the meter is on this value. |
-
 **Example:**
 
 ```bash
@@ -443,8 +383,7 @@ dmm-cli --device ut181a get mode
 
 ### dmm-cli set
 
-Switch one of the meter's settings by name. Run without a choice to list what
-that setting reaches from here:
+Switch one of the meter's settings by name.
 
 ```
 dmm-cli set <SETTING>            # list the values (* = live) and what to type for each
@@ -454,36 +393,22 @@ dmm-cli set <SETTING> <CHOICE>   # switch, by label
 | Argument | Default | Description |
 |---|---|---|
 | `<SETTING>` | | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
-| `<CHOICE>` | list them | Label to switch to, or a unique fragment of one. |
+| `<CHOICE>` | list them | Label to switch to, case-insensitive, or a unique fragment of one (`on`, `off`, `auto` included). |
 
 | Option | Default | Description |
 |---|---|---|
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
 
-`<CHOICE>` is a label from the listing, case-insensitive, or a fragment of one
-that matches a single label — the listing prints the shortest such fragment
-beside each value, quoted where a shell needs it. `on`, `off` and `auto` are
-labels like any other. After switching, `dmm-cli` waits up to 2 s for the meter
-to report the new value and prints what it now is (`Meter now in AC+DC V`,
-`Meter now auto-ranging (22V)`, `Meter now HOLD on`); a refused or unconfirmed
-switch exits non-zero — check the dial position, and for a range that the input
-is within it. A setting with nothing to switch to prints a note and exits 0.
+After switching, `dmm-cli` waits for the meter to report the new value and
+prints it (`Meter now in AC+DC V`). A refused or unconfirmed switch exits
+non-zero: check the dial position, and for a range that the input is within it.
 
-The UT61+/UT161 meters take no set-mode command, so a switch there is a short
-burst of SELECT, Hz/% or RANGE presses, each one read back from the meter until
-the target shows — slower than a single command, and audible on the meter. One
-caveat comes with that: Hz and Duty % are reported with the same mode byte from
-every dial position, and each `dmm-cli` run starts without history, so while the
-meter shows one of them `get mode` lists only Hz and Duty %. To get back to the
-position's voltage or current function, press Hz/% until it shows
-(`dmm-cli command select2`, once from Duty % on the UT61E+); the next `get mode`
-lists everything again. The GUI
-keeps track across readings, so it only has this gap until it has seen one
-other mode from the position.
-
-The Voltcraft VC-880/VC650BT and VC-890 work the same way through their
-SHIFT/SETUP button. Their dial tables come from the manuals and no meter has
-confirmed them yet — see `docs/verification-backlog.md`.
+On the UT61+/UT161 and the Voltcraft meters a switch is a burst of button
+presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
+shows, so it is slower than a single command and audible on the meter. One
+gap follows from that: while a UT61+/UT161 shows Hz or Duty %, `get mode`
+lists only those two. Press Hz/% (`dmm-cli command select2`) until the
+position's voltage or current function shows and the full list is back.
 
 **Example:**
 
@@ -499,7 +424,8 @@ dmm-cli --device ut181a set mode "V AC Hz"
 ### dmm-cli debug
 
 Raw hex dump mode for protocol debugging. Prints transport info (bridge type and
-version) on startup, then shows decoded fields alongside each parsed measurement.
+version) on startup, then shows decoded fields alongside each parsed measurement,
+with any sub-values on an indented `sub-values:` line.
 
 ```
 dmm-cli debug [OPTIONS]
@@ -509,9 +435,6 @@ dmm-cli debug [OPTIONS]
 |---|---|---|
 | `--count <N>` | `1` | Number of requests to send. 0 = unlimited. |
 | `--interval-ms <MS>` | `500` | Interval between requests in milliseconds. |
-
-When the reading carries sub-values, they are listed on an indented
-`sub-values:` line under it.
 
 For full wire-level tracing, combine with the `RUST_LOG` environment variable:
 
@@ -550,8 +473,8 @@ dmm-cli completions powershell >> $PROFILE
 ### dmm-cli capture
 
 Guided protocol capture tool for bug reports and verification. Walks you
-through measuring known values in each mode and records the raw protocol data.
-See [Capture Design](capture-design.md) for the workflow's design and report schema.
+through measuring known values in each mode and records the raw protocol data
+to a YAML report ([format](capture-design.md)).
 
 ```
 dmm-cli capture [OPTIONS]
@@ -562,116 +485,43 @@ dmm-cli capture [OPTIONS]
 | `-o, --output <FILE>` | `capture-<device>.yaml` | Output file path. |
 | `--steps <IDS>` | all | Only run specific steps (comma-separated, e.g. `dcmv,temp,duty`). An ID no step matches is an error. |
 | `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
-| `--plan <FILE>` | | Run the steps in a plan file instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
-| `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one. |
-| `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step. |
-| `--settle <MS>` | `0` | Wait this long before every sample, for readings that settle slowly. |
-| `--list-steps` | | List the selected device's step IDs and exit. |
-| `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use (printed to stdout). |
+| `--plan <FILE>` | | Run the steps in a [plan file](#capture-plan-files) instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
+| `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one by hand. |
+| `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step (for a receive-only cable). |
+| `--settle <MS>` | `0` | Wait this long before every sample, for readings that settle slowly. Costs that much per step, so pair it with `--steps`. |
+| `--list-steps` | | List the selected device's step IDs and exit. `✓` marks a step confirmed on hardware, `gate` a step that checks the decoder. |
+| `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use. |
 
 The steps come from the selected device's protocol; `--list-steps` shows what
-will run for it (pass `--device` for another). Each step is marked `✓`
-(confirmed on hardware) or `·`; `--unverified` runs just the `·` ones and
-narrows further with `--steps`. `--list-steps --format md` prints the same
-list as the checklist the verification issues carry. The run ends with how
-many unverified steps the report covers and the issue to attach it to.
+will run for it (pass `--device` for another).
 
-The run opens with what it needs on the bench (shorted leads, a DC source, a
-thermocouple), numbered. Give the numbers of anything you don't have; those
-steps are recorded as skipped and stay runnable with `--steps`. A piped run
-attempts everything.
+The run opens with a numbered list of what it needs on the bench (shorted
+leads, a DC source, a thermocouple). Give the numbers of anything you don't
+have; those steps are skipped and stay runnable later with `--steps`.
 
 Steps advance on the meter, not on a keypress: the tool captures once the
 meter settles into the state the instruction asks for. Enter captures now,
 `s` skips, `q` finishes and saves. A meter settled in something else is
-reported once (`meter shows: mode is "AC V", want "DC V"`) and the step keeps
-waiting; after 45 seconds Enter is offered too. Enter is offered at once when
-the step stays at the previous reading's dial position (only the leads move)
-or needs something on the probes; the latter still captures on its own once
-the reading has changed from a failing one, as continuity going OL to a
-reading does. A button step whose flag does not flip is recorded as
-`did nothing` rather than filing the reading from before the press.
+reported once and the step keeps waiting. Each sample is then read back for
+you to check against the screen: Enter accepts, `r` retakes, anything else is
+taken as what the meter showed.
 
-A step samples as soon as its wait ends, and that wait watches the state, not
-the digits — so a reading still on its way files the transient. A UT61E+'s
-top two Ω rungs read fifty times high 200 ms after the range changes and take
-seconds to come down. `--settle 3000` waits three seconds before every sample,
-driven sub-steps included, and files nothing read before the wait. It costs
-that much per step, so pair it with `--steps`.
+The steps marked `gate` (DC V and Ω open and shorted, a negative reading)
+check the decoder's digits, decimal point, OL and sign. Once all of them are
+confirmed, later steps capture without stopping and are listed once at the
+end for review; if any is corrected or skipped, every later step keeps asking.
 
-Each sample is read back for you to check against the screen, sub-values
-included (`239.22 VAC [AUTO HV!] (Frequency 50.01 Hz, Period 20.00 ms)`).
-Enter accepts, `r` retakes the step, anything else is what the meter showed.
-
-Steps marked `gate` in `--list-steps` (DC V open and shorted, Ω open, across
-the body and shorted, a negative reading) establish digits, decimal point, OL
-and sign, and each stops for that check. All confirmed: the report records
-`core_semantics: confirmed` and later steps capture without stopping. One
-corrected or skipped: `core_semantics: failed`, the IDs in `gate_failures`,
-and every later step keeps asking. A verified family starts trusted; `tier`
-in the report says where the run ended (`sniff`, `gate` or `trusted`).
-
-On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock) each
-mode step past the gate is followed by a walk of hold, REL, MIN/MAX, peak and
-every range, filed as `<step>/<setting>:<label>` sub-steps (`dcv/range:22V`);
-the meter is left on auto range with its flags off. A mode a button reaches
-from the current dial position (continuity from Ω) is switched to by the tool.
-A refused command is filed as an error sub-step; three refusals of functions
-the meter has not accepted elsewhere in the run stop the sweeps (`drive` in
-the report: `on`, `off` or `disabled`). Sub-steps are never confirmed by
-hand. `--no-drive` opts out, for a receive-only cable.
-
-Readings captured without a stop are listed once at the end, numbered. Enter
-accepts them all; otherwise give the numbers that did not match and type what
-the meter showed (`confirmed_by: batch`). There is no retake there. A piped
-run skips the review.
-
-`--sniff` is for a parser nobody trusts: every step advances on raw bytes
-changing, is confirmed on the spot, and the gate never promotes the run.
-
-The report records every byte exchanged: `frames` under each step,
-`init_frames` for the handshake. Rejected bytes are there with the reason
-under `diagnostics`; a step with an unknown mode, a parse error or fewer
-samples than asked for is marked `needs_attention: true`.
-
-`--plan` runs a step list a maintainer wrote for one investigation, so a
-reporter needs no release. It replaces the device's list for the run: same
-watching, confirmations, needs checklist, sweeps and freeform pass. A step
-takes `id`, `instruction`, and optionally `command` (a button, as `dmm-cli
-command` names it), `samples` (default 5), `needs` (`shorted_leads`,
-`dc_source`, `thermocouple`, `live_wire`, `transistor`, `scr`) and `expect`:
-`mode` as the family's mode table spells it, `flags` by report name (`hold`,
-`rel`, `auto_range`, …), `range` (`auto`/`manual`), `value` (`overload`,
-`negative`, `finite`, `ncv`) and `at_least` (magnitude a numeric reading must
-reach, sign aside). Any other key, unknown name, repeated id or the reserved
-id `extra` is an error naming the file and step.
-
-```yaml
-steps:
-  - id: dcv_open
-    instruction: Set the meter to DC V with the probes open
-    expect:
-      mode: DC V
-      value: finite
-  - id: dcv_hold
-    instruction: Leave it there
-    command: hold
-    samples: 3
-    expect:
-      flags:
-        hold: true
-  - id: dcv_release
-    instruction: Press HOLD again on the meter itself
-```
-
-Plan steps never gate the run. The report records `plan: <file>`, the run
-ends with `Plan <file>: N of M steps captured`, and the default output is
-`capture-<device>-<plan file stem>.yaml`, so a plan run never resumes into the
-full report.
+On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock),
+each mode step is followed by an automatic walk through hold, REL, MIN/MAX,
+Peak and every range, and the meter is left on auto range with its flags
+off. `--no-drive` turns this off.
 
 After the device's own steps, capture offers **freeform captures**: describe
 any mode the list doesn't cover and the tool records the samples with your
 confirmation. `--steps extra` runs just this pass.
+
+The run ends with how many unverified steps the report covers and the issue
+to attach it to.
 
 **Examples:**
 
@@ -697,6 +547,9 @@ dmm-cli --device vc890 capture --list-steps --format md
 # Check every step by hand, ignoring what the decoder says
 dmm-cli --device vc890 capture --sniff
 
+# Wait three seconds before each Ω sample
+dmm-cli capture --steps ohm --settle 3000
+
 # Run a maintainer's step list from an issue
 dmm-cli --device vc890 capture --plan edge.yaml
 ```
@@ -707,6 +560,49 @@ dmm-cli --device vc890 capture --plan edge.yaml
 |---|---|
 | `RUST_LOG` | Controls log verbosity. Use `dmm_lib=trace` for wire-level debugging. |
 | `NO_COLOR` | Set to `1` to disable colored terminal output. |
+
+## Appendix
+
+### Capture plan files
+
+`dmm-cli capture --plan <FILE>` runs a step list a maintainer wrote for one
+investigation, typically attached to a GitHub issue, in place of the device's
+own steps. Plan steps never act as gate steps, and the report goes to
+`capture-<device>-<plan file stem>.yaml` by default.
+
+| Key | Required | Meaning |
+|---|---|---|
+| `id` | yes | Step ID, unique in the file. `extra` is reserved. |
+| `instruction` | yes | What to do on the bench. |
+| `command` | | A button to press first, as `dmm-cli command` names it. |
+| `samples` | | Readings to record (default 5). |
+| `needs` | | Bench items the step needs: `shorted_leads`, `dc_source`, `thermocouple`, `live_wire`, `transistor`, `scr`. |
+| `expect.mode` | | Mode name as the family's mode table spells it. |
+| `expect.flags` | | Flags by report name (`hold`, `rel`, `auto_range`, …), each `true` or `false`. |
+| `expect.range` | | `auto` or `manual`. |
+| `expect.value` | | `overload`, `negative`, `finite` or `ncv`. |
+| `expect.at_least` | | Magnitude a numeric reading must reach, sign aside. |
+
+Any other key, unknown name or repeated id is an error naming the file and
+step.
+
+```yaml
+steps:
+  - id: dcv_open
+    instruction: Set the meter to DC V with the probes open
+    expect:
+      mode: DC V
+      value: finite
+  - id: dcv_hold
+    instruction: Leave it there
+    command: hold
+    samples: 3
+    expect:
+      flags:
+        hold: true
+  - id: dcv_release
+    instruction: Press HOLD again on the meter itself
+```
 
 ## See Also
 
