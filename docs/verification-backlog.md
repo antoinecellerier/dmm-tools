@@ -367,8 +367,10 @@ Left open on this model:
   `--unverified` and `--steps`, neither of which reaches a step already
   marked verified. `capture --steps acv` with the leads open covers it.
 - **Capacitance rungs 1-4 and 6** — pinned by arithmetic, but worth a real
-  measurement if capacitors turn up, because this is the one open ladder
-  whose units change mid-way (nF/µF/mF), and `unit` comes straight from the
+  measurement if capacitors turn up, because it is one of the two open
+  ladders whose units change mid-way (nF/µF/mF; the Hz ladder is the other,
+  and Ω is the third such ladder but fully verified), and `unit` comes
+  straight from the
   range table (`ut61eplus/mod.rs:866`), so a wrong rung here is a 1000x
   error rather than a wrong label. Rung 0 is pinned by `   0.03` (60.00 nF)
   and rung 5 by `  4.514` (6.000 mF, a capacitor on 2026-09-11); with both
