@@ -257,7 +257,7 @@ impl App {
         .on_hover_text("Open the dmm-tools project page on GitHub");
         let shortcuts_btn = ui
             .button("?")
-            .on_hover_text("Show keyboard shortcuts and mouse gestures (?)")
+            .on_hover_text("Show keyboard shortcuts and mouse gestures (? or F1)")
             .a11y_label("Keyboard shortcuts and mouse gestures");
         if shortcuts_btn.clicked() {
             let will_open = !self.shortcut_help.open;

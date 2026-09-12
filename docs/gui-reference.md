@@ -431,11 +431,11 @@ do not modify the persisted `settings.json`.
 
 ## Keyboard Shortcuts
 
-Press `?` or click the `?` button in the top bar to open an in-app reference of keyboard shortcuts and mouse gestures.
+Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures.
 
 ### General
 
-On macOS, `Cmd` replaces `Ctrl` in every shortcut below, and the in-app help
+On macOS, `Cmd` replaces `Ctrl` in the shortcuts below, and the in-app help
 shows the macOS spelling.
 
 | Shortcut | Action |
@@ -448,10 +448,12 @@ shows the macOS spelling.
 | `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
 | `Ctrl+D` | Toggle window decorations |
 | `Ctrl+E` | Export CSV |
+| `F11` (`Ctrl+Cmd+F` on macOS) | Toggle fullscreen |
+| `Cmd+M` (macOS) | Minimise window |
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
 | `Ctrl+0` | Reset zoom to 100% |
-| `Ctrl+Q` | Quit |
-| `?` | Toggle keyboard & mouse help overlay |
+| `Ctrl+Q` / `Ctrl+W` | Quit |
+| `?` / `F1` | Toggle keyboard & mouse help overlay |
 | `Esc` / `Ctrl+W` | Close help overlay |
 
 ### Graph Navigation
@@ -466,6 +468,8 @@ shows the macOS spelling.
 Graph and `Space` shortcuts are disabled while any widget holds keyboard
 focus — not just text fields but any button reached with `Tab`, since `Space`
 and the arrow keys drive the focused widget. Press `Escape` to release it.
+`Ctrl+W` stays with a focused text field, where it deletes the previous word;
+with the focus anywhere else it closes the help overlay or quits.
 
 ## Layout Modes
 
