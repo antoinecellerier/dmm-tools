@@ -33,11 +33,7 @@ Set `NO_COLOR=1` to disable colored output.
 
 ### Devices
 
-The `--device` flag selects which device model and protocol to use. Each model has
-its own entry with model-specific protocol tables (e.g., UT61B+ uses different
-mode/range mappings than UT61E+).
-
-`auto` (the default) works out which meter is on the cable from its replies
+The `--device` flag selects the meter model. `auto` (the default) works out which meter is on the cable from its replies
 ([how](detection-design.md)); naming a model skips the probe. The probe makes a
 UT61+/UT161 beep once. If nothing answers, the CLI lists what each meter needs
 switched on.
@@ -287,7 +283,7 @@ dmm-cli command <ACTION>     # send a command
 | `rel` | Toggle relative (REL) mode |
 | `minmax` | Enable Min/Max recording |
 | `exit_minmax` | Disable Min/Max recording |
-| `monitor` | Enable streaming (SET_MONITOR) |
+| `monitor` | Enable streaming |
 | `save` | Save current measurement to device memory |
 
 #### UT171 commands

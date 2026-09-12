@@ -69,8 +69,7 @@ top-right corner in every layout and expire on their own.
 
 ![Reading display with HOLD and REL flags active, and remote control buttons](../assets/gui-reading-controls.png)
 
-- Primary value in large monospace font, using the meter's raw 7-character
-  display string for stable width (no jitter between readings)
+- Primary value in large monospace font, as the meter displays it
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
 - Sub-value rows under the reading for meters that send them (UT181A, UT171):
   label, value and unit, plus `@Ns` for the MIN/MAX timestamps. The narrow
@@ -163,7 +162,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 
 ### Main Plot
 
-- Time-series line plot with auto-scaling Y axis (10% padding)
+- Time-series line plot with auto-scaling Y axis
 - Axis labels include units (e.g. "1.0 mV", "10 s")
 - Crosshair tooltip shows time and value with units, and names the series it
   is over when several are drawn
@@ -211,8 +210,7 @@ A thin strip below the main plot showing the full capture history.
 ## Specifications
 
 Shows per-range electrical specifications from the device manual, updated live
-as the meter changes mode/range. Helps users understand the precision and
-limitations of their current reading.
+as the meter changes mode/range.
 
 - **Resolution** — smallest increment the meter can display in the current range
 - **Accuracy** — rated accuracy as ±(% of reading + counts). AC modes show
@@ -248,7 +246,7 @@ UT61E+). Other devices show only the Manual link.
 - **Count** — number of samples
 - **Int** — cumulative time-integral (shown only for current and voltage modes).
   For current modes, displays charge in Ah/mAh/µAh. For voltage modes, V·s.
-  Uses the trapezoidal rule over the sample stream. Resets with the Reset button.
+  Resets with the Reset button.
 - **Reset** button — clears statistics and integral
 - Stats persist across reconnects (use Clear for full reset)
 - In wide layout, a second row shows **visible window stats** — min/max/avg
@@ -263,8 +261,7 @@ UT61E+). Other devices show only the Manual link.
 
 - **Record (●) / Stop (■)** toggle button — starting clears the buffer, so
   it asks first if the buffer holds samples you haven't exported
-- **Export CSV** button — opens a file save dialog (runs on a background
-  thread, does not freeze the UI)
+- **Export CSV** button — opens a file save dialog
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values
@@ -472,17 +469,17 @@ Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect
 ### Keyboard
 
 - Every feature is reachable from the keyboard. See [Keyboard Shortcuts](#keyboard-shortcuts) for the full list.
-- Tab and Shift+Tab cycle through every control in visual order. The currently focused control shows a visible outline, including on the color-picker swatches, the **Customize colors** disclosure header, the graph minimap, the recording-panel resize divider, and the left side-panel resize handle.
-- Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the 2D saturation/value square and the 1D hue gradient also accept arrow keys (2 % step, horizontal for saturation/hue, vertical for value).
+- Tab and Shift+Tab cycle through every control in visual order, with a visible focus outline.
+- Custom widgets respond to arrow keys when focused: **Left/Right** pans the graph minimap, **Up/Down** resizes the recording-panel divider, and **Left/Right** resizes the left side-panel handle. Inside the Customize colors popup, the saturation/value square and the hue gradient also accept arrow keys.
 - The mode and range dropdowns under the reading open on Enter or Space; Up/Down move, Enter picks, Esc or Tab closes.
 - Text inputs (Y axis min/max, envelope window seconds, reference values) carry hint text that screen readers announce as the field name.
-- The `?` keyboard-shortcut help overlay traps focus inside while open and restores focus to the `?` button when closed (Esc or Ctrl+W). The version label opens a separate **What's New** OS window — that window has its own focus management, but closing it restores focus to the version label in the main window.
+- The `?` help overlay and the **What's New** window keep focus inside while open and return it to the control that opened them when closed.
 
 ### Screen reader
 
 Screen reader support is built on [AccessKit](https://accesskit.dev/) and exposed through each platform's native accessibility API: AT-SPI on Linux (used by [Orca](https://orca.gnome.org/)), UI Automation on Windows, and NSAccessibility on macOS. The labels described below are wired up in the code but have **not yet been walked end-to-end with a real screen reader** — verification is [tracked as an open item](verification-backlog.md). Reports of what does and doesn't come through as expected are welcome.
 
-- Every button, toggle, text field, and custom widget has a spoken name. Icon-only buttons (Settings, Help, Min/Max exit, big-meter toggle), color swatches in the settings panel, the graph minimap, and the recording resize bar all announce what they do instead of their literal glyph or color. The clickable version label in the top bar announces "Show release notes" rather than the literal version string.
+- Every button, toggle, text field, and custom widget has a spoken name; icon-only buttons, color swatches, the graph minimap and the resize bars announce what they do instead of their glyph or color.
 - Toggle buttons like HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK, the graph's LIVE button and **Scale** announce whether they are currently on or off — you don't have to rely on the color change.
 - The graph toolbar's **Plot:** chips announce as "Plot \<name\>" radio buttons and its **Show:** chips as "Show \<name\> trace" toggles.
 - The main reading updates as a polite live region: new values are spoken at natural pauses, not interrupting you. Sub-values are spoken after the mode, MIN/MAX timestamps included. Active status flags (HOLD, REL, MIN, MAX, AUTO, ...) are spoken alongside the value so toggling them via the on-device buttons gives audible confirmation. A reading passed through a software [scale](#scale) ends with ", software scaled".
@@ -493,8 +490,8 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 
 - There is no per-sample keyboard navigation inside the graph — you can't step from one data point to the next and hear each value spoken. Use the Statistics panel for min/max/average and the Recording panel's sample list for point-level readings; the sample list is a scrollable text log that screen readers read row by row.
 - Graph measurement cursors (A/B) can only be placed by clicking on the plot.
-- In the **Customize colors** popup, the RGBA drag-value fields use egui's default drag-value behaviour: press Enter to enter edit mode, then Up/Down to change the value. The 2D saturation/value and 1D hue gradient sliders accept arrow keys when Tab-focused (2 % step, horizontal for saturation/hue, vertical for value), but mouse drag remains the fastest way to pick a color.
-- The graph plot's X and Y axes are separate Tab stops that don't show a focus ring — egui_plot allocates focusable drag responses for each axis that can't be customised from outside the crate.
+- In the **Customize colors** popup, the RGBA fields need Enter to enter edit mode, then Up/Down to change the value; mouse drag remains the fastest way to pick a color.
+- The graph plot's X and Y axes are separate Tab stops that don't show a focus ring.
 
 ## See Also
 
