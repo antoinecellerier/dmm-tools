@@ -1,0 +1,18 @@
+# DC V 1.6109 V off a battery, a positive reading with a live bar graph on the 2.2V range, captured 2026-09-07 from a UT61E+ (ut61eplus-verify4-plan.yaml, step bat_auto)
+# Replaces the hand-built dcv_5.678, whose bar-graph bytes were 00 00 behind a 5.678 V reading - a frame the meter cannot send.
+raw_hex: "02 30 20 31 2E 36 31 30 39 03 02 30 30 30"
+mode: "DC V"
+value: "1.6109"
+unit: "V"
+range_label: "2.2V"
+flags:
+  hold: false
+  rel: false
+  auto_range: true
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

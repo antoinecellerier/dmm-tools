@@ -1762,9 +1762,13 @@ raw_payload=14"#
         assert!(matches!(m.value, MeasuredValue::Normal(_)), "{:?}", m.value);
     }
 
-    /// A digit in the NCV display is the detection level, not a reading.
+    /// The numeric branch of the NCV level, which **no meter has been seen to
+    /// use**: both a UT61E+ and a UT61B+ draw the level as "-" segments. The
+    /// branch is a guess at other firmware, so it is tested here and nowhere
+    /// else — there was a `ncv_3` golden fixture asserting this frame until
+    /// 2026-09-12, which made a hand-built payload look like a captured one.
     #[test]
-    fn parse_ncv() {
+    fn parse_ncv_numeric_fallback() {
         let table = Ut61ePlusTable::new();
         let payload = make_payload(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
         let m = parse_measurement(&payload, &table).unwrap();

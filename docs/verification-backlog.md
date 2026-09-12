@@ -1163,13 +1163,25 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   ladders driven rung by rung, HOLD/REL/MIN/MAX in Ω and DC V, HOLD over a
   forward-biased diode, all three overload shapes, both NCV levels seen,
   mains AC V with the HV warning.
-- **Golden YAML fidelity (2026-06 review):** two hand-built UT61E+ fixtures
-  remain, `dcv_5.678` and `ncv_3` — the DC V case lacks the DC-indicator bit
-  (verified set on real DC V) and bar-graph bytes are 00 00 despite a
-  non-zero reading. Re-capture from the real meter (`dmm-cli capture`) so
-  the goldens match verified device behavior. The third, `ohm_overload`,
-  whose `OL` had no decimal point, was replaced on 2026-09-11 by the real
-  220Ω frame from the 82 kΩ run.
+- ~~**Golden YAML fidelity (2026-06 review):**~~ — **DONE** 2026-09-12; every
+  UT61E+ golden fixture is now a captured frame. The last two hand-built ones
+  went without a new hardware run:
+  - `dcv_5.678` → `dcv_battery`, a real 1.6109 V frame off a battery on the
+    2.2V rung (2026-09-07, `ut61eplus-verify4-plan.yaml`, step `bat_auto`).
+    Its bar-graph bytes were the real defect — `00 00` behind a 5.678 V
+    reading on the 22V rung, which the meter cannot send. **This item's
+    other stated reason was wrong**: it said the fixture lacked "the
+    DC-indicator bit (verified set on real DC V)", but flag3 bit 3 is set
+    only in AC+DC V frames, and no real DC V frame in any capture sets it.
+    Bit 0 there is bar polarity, correctly clear for a positive reading.
+  - `ncv_3` deleted, not replaced. It asserted a frame shape no meter sends:
+    a literal ASCII `3` where both meters draw the level as "-" segments
+    (`ncv` at one dash on the E+, `ncv_4` at four on the B+, both captured).
+    It was the only cover for `parse_measurement`'s numeric-NCV fallback,
+    which is a guess at other firmware — that now lives in
+    `parse_ncv_numeric_fallback`, where a hand-built payload belongs.
+  The third, `ohm_overload`, whose `OL` had no decimal point, was replaced on
+  2026-09-11 by the real 220Ω frame from the 82 kΩ run.
 - **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
   The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
   the current reading; one rung per press and the 1000V→2.2V wrap were
