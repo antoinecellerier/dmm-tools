@@ -435,6 +435,9 @@ Press `?` or click the `?` button in the top bar to open an in-app reference of 
 
 ### General
 
+On macOS, `Cmd` replaces `Ctrl` in every shortcut below, and the in-app help
+shows the macOS spelling.
+
 | Shortcut | Action |
 |---|---|
 | `Ctrl+O` | Connect / Disconnect |

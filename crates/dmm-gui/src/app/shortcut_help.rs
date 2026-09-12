@@ -54,7 +54,7 @@ impl App {
                         ui.end_row();
                         // Rendered from the same table `handle_keyboard_shortcuts`
                         // dispatches, so the two cannot drift.
-                        for (key, action, inert) in shortcuts::help_rows(self.on_wayland) {
+                        for (key, action, inert) in shortcuts::help_rows(ctx, self.on_wayland) {
                             let mut key = RichText::new(key).monospace();
                             let mut action = RichText::new(action);
                             // Greyed like the setting it mirrors; the text

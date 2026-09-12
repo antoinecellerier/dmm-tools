@@ -162,16 +162,30 @@ impl Shortcut {
     /// folded into another row. `inert` marks a key that does nothing in
     /// this session, so the modal can grey the row as well as say so.
     ///
+    /// The keys are rendered by `ctx`, not spelled out here: the bindings
+    /// use `Modifiers::COMMAND`, which is Cmd on macOS, so a literal
+    /// "Ctrl+O" would name a key macOS users don't have.
+    ///
     /// `on_wayland` marks the one key the compositor makes inert.
-    fn help_row(self, on_wayland: bool) -> Option<(&'static str, &'static str, bool)> {
+    fn help_row(
+        self,
+        ctx: &egui::Context,
+        on_wayland: bool,
+    ) -> Option<(String, &'static str, bool)> {
+        let keys = |modifiers: Modifiers, key: Key| {
+            ctx.format_shortcut(&egui::KeyboardShortcut::new(modifiers, key))
+        };
         let (key, action) = match self {
-            Self::ConnectToggle => ("Ctrl+O", "Connect / Disconnect"),
-            Self::TogglePause => ("Space", "Pause / Resume"),
-            Self::ClearSession => ("Ctrl+L", "Clear graph & statistics"),
-            Self::ToggleRecording => ("Ctrl+R", "Toggle recording"),
-            Self::CycleBigMeter => ("Ctrl+B", "Cycle big meter (off / full / minimal)"),
+            Self::ConnectToggle => (keys(Modifiers::COMMAND, Key::O), "Connect / Disconnect"),
+            Self::TogglePause => (keys(Modifiers::NONE, Key::Space), "Pause / Resume"),
+            Self::ClearSession => (keys(Modifiers::COMMAND, Key::L), "Clear graph & statistics"),
+            Self::ToggleRecording => (keys(Modifiers::COMMAND, Key::R), "Toggle recording"),
+            Self::CycleBigMeter => (
+                keys(Modifiers::COMMAND, Key::B),
+                "Cycle big meter (off / full / minimal)",
+            ),
             Self::ToggleAlwaysOnTop => (
-                "Ctrl+T",
+                keys(Modifiers::COMMAND, Key::T),
                 if on_wayland {
                     // Same explanation as the settings caption and the
                     // toast, so the three surfaces read alike — a test
@@ -181,14 +195,25 @@ impl Shortcut {
                     "Toggle always on top"
                 },
             ),
-            Self::ToggleDecorations => ("Ctrl+D", "Toggle window decorations"),
-            Self::ExportCsv => ("Ctrl+E", "Export CSV"),
-            Self::ZoomIn => ("Ctrl+Plus/Minus", "Zoom in / out"),
+            Self::ToggleDecorations => (
+                keys(Modifiers::COMMAND, Key::D),
+                "Toggle window decorations",
+            ),
+            Self::ExportCsv => (keys(Modifiers::COMMAND, Key::E), "Export CSV"),
+            Self::ZoomIn => (
+                format!("{}Plus/Minus", command_prefix(ctx)),
+                "Zoom in / out",
+            ),
             // Folded into the row above.
             Self::ZoomOut => return None,
-            Self::ZoomReset => ("Ctrl+0", "Reset zoom to 100%"),
-            Self::CloseHelp => ("Esc / Ctrl+W", "Close this help"),
-            Self::Quit => ("Ctrl+Q", "Quit"),
+            Self::ZoomReset => (keys(Modifiers::COMMAND, Key::Num0), "Reset zoom to 100%"),
+            // Escape is egui's own (`Modal::should_close`), so it has no
+            // binding to render — only the Ctrl+W half comes from the table.
+            Self::CloseHelp => (
+                format!("Esc / {}", keys(Modifiers::COMMAND, Key::W)),
+                "Close this help",
+            ),
+            Self::Quit => (keys(Modifiers::COMMAND, Key::Q), "Quit"),
             // Not listed: the grid it opens *is* the documentation, and the
             // toolbar's `?` button spells the key out in its tooltip.
             Self::ToggleHelp => return None,
@@ -198,13 +223,29 @@ impl Shortcut {
     }
 }
 
+/// The command modifier as this machine renders it, followed by whatever
+/// egui puts between it and the key: `+` where the modifier is spelled out
+/// (`Ctrl+`, or `Cmd+` on a macOS whose body font has no `⌘`), nothing where
+/// it is drawn as a symbol (`⌘`). A row that folds two keys into one label
+/// has to join them the way the single-key rows above it do.
+fn command_prefix(ctx: &egui::Context) -> String {
+    // `Key::Num0` renders as "0" both ways, so trimming it off a formatted
+    // Ctrl+0 leaves exactly the modifier and the separator.
+    let mut formatted =
+        ctx.format_shortcut(&egui::KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0));
+    let prefix_len = formatted.trim_end_matches(Key::Num0.name()).len();
+    formatted.truncate(prefix_len);
+    formatted
+}
+
 /// The "General" grid of the shortcut help modal, in display order.
 pub(super) fn help_rows(
+    ctx: &egui::Context,
     on_wayland: bool,
-) -> impl Iterator<Item = (&'static str, &'static str, bool)> {
+) -> impl Iterator<Item = (String, &'static str, bool)> {
     Shortcut::HELP_ORDER
         .iter()
-        .filter_map(move |s| s.help_row(on_wayland))
+        .filter_map(move |s| s.help_row(ctx, on_wayland))
 }
 
 impl App {
@@ -312,12 +353,22 @@ impl App {
 mod tests {
     use super::*;
 
+    /// Rows are rendered per OS, so the tests that pin their text say which
+    /// OS they are pinning. `Nix` is the `Ctrl` rendering — the one the docs
+    /// and the literal list below describe.
+    fn nix_context() -> egui::Context {
+        let ctx = egui::Context::default();
+        ctx.set_os(egui::os::OperatingSystem::Nix);
+        ctx
+    }
+
     /// The modal is where these keys are documented, so a new binding has to
     /// bring a row with it — or be one of the two deliberate omissions. The
     /// reverse direction matters just as much: `HELP_ORDER` is a second list,
     /// and a row that documents a key nothing binds is worse than no row.
     #[test]
     fn every_shortcut_has_a_help_row_or_is_folded() {
+        let ctx = nix_context();
         for binding in BINDINGS {
             let folded = matches!(
                 binding.shortcut,
@@ -327,7 +378,7 @@ mod tests {
                     | Shortcut::ToggleHelp
             );
             assert_eq!(
-                binding.shortcut.help_row(false).is_some(),
+                binding.shortcut.help_row(&ctx, false).is_some(),
                 !folded,
                 "{:?} help row disagrees with the folded list",
                 binding.shortcut
@@ -361,9 +412,11 @@ mod tests {
     /// literal list in `show_shortcut_help`.
     #[test]
     fn help_rows_are_the_twelve_documented_general_rows() {
+        let ctx = nix_context();
+        let rows: Vec<_> = help_rows(&ctx, false).collect();
         assert_eq!(
-            help_rows(false)
-                .map(|(key, action, _)| (key, action))
+            rows.iter()
+                .map(|(key, action, _)| (key.as_str(), *action))
                 .collect::<Vec<_>>(),
             vec![
                 ("Ctrl+O", "Connect / Disconnect"),
@@ -387,13 +440,14 @@ mod tests {
     /// session. The explanation is the settings caption's, word for word.
     #[test]
     fn wayland_annotates_only_the_always_on_top_row() {
+        let ctx = nix_context();
         let annotated = "Always on top: not available on Wayland — right-click the title bar to keep the window above others";
         // The shared hint, minus its capital first letter.
         assert!(
             annotated.ends_with(&ALWAYS_ON_TOP_WAYLAND_HINT[1..]),
             "the Ctrl+T row has drifted from ALWAYS_ON_TOP_WAYLAND_HINT"
         );
-        let expected: Vec<_> = help_rows(false)
+        let expected: Vec<_> = help_rows(&ctx, false)
             .map(|(key, action, inert)| {
                 assert!(!inert, "{key} is inert off Wayland");
                 if key == "Ctrl+T" {
@@ -403,6 +457,34 @@ mod tests {
                 }
             })
             .collect();
-        assert_eq!(help_rows(true).collect::<Vec<_>>(), expected);
+        assert_eq!(help_rows(&ctx, true).collect::<Vec<_>>(), expected);
+    }
+
+    /// The bindings are `Modifiers::COMMAND`, so on macOS they are Cmd —
+    /// the grid has to say so. Which of the two macOS renderings egui picks
+    /// depends on whether the body font carries `⌘`, so accept either, but
+    /// no row may still claim Ctrl.
+    #[test]
+    fn mac_rows_use_cmd() {
+        let ctx = egui::Context::default();
+        ctx.set_os(egui::os::OperatingSystem::Mac);
+        // egui asks the fonts whether they can draw `⌘`, and fonts only
+        // exist inside a pass.
+        let mut rows = Vec::new();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            rows = help_rows(ui.ctx(), false).collect::<Vec<_>>();
+        });
+        // The pass built a font atlas that a real app would upload; nothing
+        // here paints, and TexturesDelta panics if it is dropped unapplied.
+        output.textures_delta.clear();
+
+        let (connect, _, _) = &rows[0];
+        assert!(
+            connect == "⌘O" || connect == "Cmd+O",
+            "Connect row reads {connect:?} on macOS"
+        );
+        for (key, _, _) in &rows {
+            assert!(!key.contains("Ctrl"), "{key:?} still names Ctrl on macOS");
+        }
     }
 }

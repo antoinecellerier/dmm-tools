@@ -21,6 +21,7 @@
 - **The gaps warning in the stats panel meets AA in the light theme** — "⚠ N gaps skipped" sat at 2.8:1 in egui's fixed orange.
 - **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.
 - **`Ctrl+O` connects and disconnects** — the documented `Ctrl+Shift+C` was taken as a clipboard copy and never fired.
+- **Shortcut help shows `Cmd` keys on macOS** — every row said `Ctrl`.
 - **Cable-not-found help suggests trying another USB port** — on Windows the steps stopped at the driver download.
 - **Always on top says it is unavailable on Wayland** — the checkbox and `Ctrl+T` toggled a setting that did nothing there.
 
