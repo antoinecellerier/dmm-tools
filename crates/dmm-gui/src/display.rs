@@ -21,11 +21,21 @@ pub(crate) const MIN_BIG_METER_FONT_SIZE: f32 = 12.0;
 /// Font size for the primary reading in the compact (narrow) layout.
 const COMPACT_READING_FONT_SIZE: f32 = 28.0;
 
-/// Floor for the sub-value rows. They derive their size from the caller's
+/// Floor for the readout's secondary text: the sub-value rows and the big
+/// meter's connection notice. Both derive their size from the caller's
 /// reading size, which shrinks to `MIN_BIG_METER_FONT_SIZE` in a tiny big-meter
 /// window; without this floor the derived size would fall under the 11 pt
 /// minimum `.claude/rules/gui.md` sets.
 const MIN_AUX_FONT_SIZE: f32 = 11.0;
+
+/// What the readout says when there is nothing to show and nothing to blame.
+const NO_READING_TITLE: &str = "No reading";
+
+/// Size of the big meter's hint line relative to the notice title above it.
+const NOTICE_HINT_SIZE_RATIO: f32 = 0.6;
+
+/// Size of the mode line relative to the reading value above or beside it.
+const MODE_SIZE_RATIO: f32 = 0.4;
 
 /// Largest font a readout selector's popup entries use. The readout itself
 /// follows the reading — a 200 px big-meter reading puts it at 80 px — but
@@ -77,7 +87,12 @@ fn format_value_display(m: &Measurement) -> String {
 /// readers. Used as the live-region label on the primary reading. Uses the
 /// same value formatting as the visible display so AT users hear exactly
 /// what sighted users see.
-fn live_region_label(measurement: Option<&Measurement>, scaled: bool) -> String {
+///
+/// `no_reading` is what the placeholder says when there is no measurement —
+/// [`NO_READING_TITLE`], or the connection issue the big meter puts in the
+/// readout instead, so AT hears the problem and not a bare "No reading". It
+/// is ignored when a measurement is given.
+fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading: &str) -> String {
     match measurement {
         Some(m) => {
             let value = match &m.value {
@@ -133,7 +148,7 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool) -> String 
             }
             parts
         }
-        None => "No reading".to_string(),
+        None => no_reading.to_string(),
     }
 }
 
@@ -243,7 +258,11 @@ fn flags_bits(flags: &StatusFlags) -> u16 {
 /// Build a u64 fingerprint that changes whenever `live_region_label` would
 /// produce different output. Lets `set_live_region_cached` skip per-frame
 /// `format!`/`String` allocation when the measurement is unchanged.
-fn live_region_fingerprint(measurement: Option<&Measurement>, scaled: bool) -> u64 {
+fn live_region_fingerprint(
+    measurement: Option<&Measurement>,
+    scaled: bool,
+    no_reading: &str,
+) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     // Toggling the transform changes the spoken label without necessarily
@@ -251,7 +270,13 @@ fn live_region_fingerprint(measurement: Option<&Measurement>, scaled: bool) -> u
     // cached announcement would never be rebuilt.
     scaled.hash(&mut h);
     match measurement {
-        None => 0u8.hash(&mut h),
+        None => {
+            0u8.hash(&mut h);
+            // The placeholder's whole label: one connection issue replacing
+            // another has to be announced, not swallowed by a fingerprint
+            // that only ever saw "No reading".
+            no_reading.hash(&mut h);
+        }
         Some(m) => {
             1u8.hash(&mut h);
             match &m.value {
@@ -717,8 +742,8 @@ fn show_reading_line_with_selector(
 ) -> Option<(Setting, u16)> {
     ui.horizontal(|ui| {
         ui.live_region_horizontal(
-            live_region_fingerprint(Some(m), scaled),
-            || live_region_label(Some(m), scaled),
+            live_region_fingerprint(Some(m), scaled, NO_READING_TITLE),
+            || live_region_label(Some(m), scaled, NO_READING_TITLE),
             |ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 draw_value(ui);
@@ -749,8 +774,8 @@ fn show_reading_line_plain(
     tc: &ThemeColors,
 ) {
     ui.live_region_horizontal(
-        live_region_fingerprint(Some(m), scaled),
-        || live_region_label(Some(m), scaled),
+        live_region_fingerprint(Some(m), scaled, NO_READING_TITLE),
+        || live_region_label(Some(m), scaled, NO_READING_TITLE),
         |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             draw_value(ui);
@@ -768,16 +793,166 @@ fn show_reading_line_plain(
     );
 }
 
+/// What stands in for a reading when there is none.
+///
+/// [`NoReadingText::Plain`] is the weak "No reading" every normal layout has
+/// always drawn. [`NoReadingText::Notice`] is the big meter's form: with the
+/// reading scaled to fill the window there is no room under it for the
+/// connection help, so the issue's title takes the readout's place, a hint
+/// line says how to get the steps back, and the steps themselves ride along
+/// as hover text.
+#[derive(Clone, Copy)]
+pub(crate) enum NoReadingText<'a> {
+    Plain,
+    Notice {
+        /// One line naming the problem, in place of "No reading".
+        title: &'a str,
+        /// Weak line under the title — how to reach the full help.
+        hint: &'a str,
+        /// The help body, which only fits as a tooltip here.
+        tooltip: &'a str,
+        /// Title colour; the warning colour, not the weak text colour.
+        color: Color32,
+    },
+}
+
+impl<'a> NoReadingText<'a> {
+    /// What a screen reader hears in place of a reading.
+    fn title(&self) -> &'a str {
+        match self {
+            Self::Plain => NO_READING_TITLE,
+            Self::Notice { title, .. } => title,
+        }
+    }
+
+    fn is_notice(&self) -> bool {
+        matches!(self, Self::Notice { .. })
+    }
+
+    /// The notice's title with the hint under it, as one two-line galley —
+    /// `None` for the plain placeholder.
+    ///
+    /// One galley rather than a nested `ui.vertical`: a child layout claims
+    /// the top of the row it is placed in, so beside a reading-sized row of
+    /// dashes the two lines would sit level with the top of that row instead
+    /// of centred against it. `title_size` is the reading's mode size, so
+    /// the notice scales with the meter exactly as the mode line would —
+    /// floored, because in a tiny window it is the only thing left to read.
+    fn notice_block(&self, ui: &Ui, title_size: f32) -> Option<LayoutJob> {
+        let Self::Notice {
+            title, hint, color, ..
+        } = self
+        else {
+            return None;
+        };
+        let title_size = title_size.max(MIN_AUX_FONT_SIZE);
+        let hint_format = TextFormat {
+            font_id: FontId::proportional(
+                (title_size * NOTICE_HINT_SIZE_RATIO).max(MIN_AUX_FONT_SIZE),
+            ),
+            color: ui.visuals().weak_text_color(),
+            ..Default::default()
+        };
+        let mut block = LayoutJob::default();
+        block.append(
+            title,
+            0.0,
+            TextFormat {
+                font_id: FontId::proportional(title_size),
+                color: *color,
+                ..Default::default()
+            },
+        );
+        block.append("\n", 0.0, hint_format.clone());
+        block.append(hint, 0.0, hint_format);
+        Some(block)
+    }
+
+    /// Both big-meter layouts' dimensions per point of reading font, worked
+    /// out from the galleys rather than read back from a drawn frame.
+    ///
+    /// The fit re-measures only the layout it drew, so the other one keeps
+    /// whatever ratio the cache holds — for a placeholder that is the default
+    /// tuned to a seven-character value, twice the width of three dashes and
+    /// a title. Compared against that, the inline row won a 3:2 window it had
+    /// no business winning, and once picked it was the only one ever
+    /// measured again. Laying both out here costs two galleys and removes
+    /// the guess. Measured at the base size: the floors under the title and
+    /// hint make the ratio drift slightly at tiny sizes, where the fit is at
+    /// its own floor anyway.
+    fn layout_ratios(&self, ui: &Ui) -> Option<ReadingRatios> {
+        let base = BASE_READING_FONT_SIZE;
+        let block = self.notice_block(ui, base * MODE_SIZE_RATIO)?;
+        let painter = ui.painter();
+        let bars = painter
+            .layout_no_wrap(
+                crate::NO_DATA.to_string(),
+                FontId::monospace(base),
+                Color32::PLACEHOLDER,
+            )
+            .size();
+        let block = painter.layout_job(block).size();
+        let spacing = ui.spacing().item_spacing;
+        Some(ReadingRatios {
+            w: bars.x.max(block.x) / base,
+            h: (bars.y + spacing.y + block.y) / base,
+            inline_w: (bars.x + spacing.x + block.x) / base,
+            inline_h: bars.y.max(block.y) / base,
+        })
+    }
+
+    /// Draw the title, and for a notice the hint under it, as one block whose
+    /// hover text is the help body.
+    ///
+    /// `title_size` is the reading's mode size, so the notice scales with the
+    /// meter exactly as the mode line would — floored, because in a tiny
+    /// window it is the only thing left to read. The plain placeholder keeps
+    /// the body-sized weak label the normal layouts have always shown.
+    fn show_text(&self, ui: &mut Ui, title_size: f32) {
+        let Some(block) = self.notice_block(ui, title_size) else {
+            ui.label(RichText::new(NO_READING_TITLE).color(ui.visuals().weak_text_color()));
+            return;
+        };
+        let Self::Notice { tooltip, .. } = self else {
+            return;
+        };
+        let block = ui.label(block);
+        // Detection, the one notice with no steps to give, has an empty body;
+        // an empty tooltip would still pop a box up under the pointer.
+        if !tooltip.is_empty() {
+            block.on_hover_text(*tooltip);
+        }
+    }
+}
+
+/// The dashes that stand in for a value.
+fn no_reading_bars(ui: &mut Ui, value_size: f32) {
+    ui.label(
+        RichText::new(crate::NO_DATA)
+            .font(FontId::monospace(value_size))
+            .color(ui.visuals().weak_text_color()),
+    );
+}
+
 /// What each layout shows in place of a reading.
 ///
 /// Wrap the placeholder + caption in a horizontal scope so the live-region
 /// label is attached to the scope id rather than to the inner `ui.label()`
 /// Response. egui maps Role::Label overrides to set_value, not set_label, so
 /// attaching directly to the label would silently drop the live-region label.
-fn no_reading_placeholder(ui: &mut Ui, scaled: bool, add_contents: impl FnOnce(&mut Ui)) {
+fn no_reading_placeholder(
+    ui: &mut Ui,
+    scaled: bool,
+    title: &str,
+    add_contents: impl FnOnce(&mut Ui),
+) {
+    // Trailing dots are animation, not speech: the waiting notice cycles
+    // through one to four of them, and a fingerprint that hashed them would
+    // have a screen reader repeat the same sentence every timeout.
+    let spoken = title.trim_end_matches(['.', ' ']);
     ui.live_region_horizontal(
-        live_region_fingerprint(None, scaled),
-        || live_region_label(None, scaled),
+        live_region_fingerprint(None, scaled, spoken),
+        || live_region_label(None, scaled, spoken),
         add_contents,
     );
 }
@@ -792,17 +967,18 @@ fn show_reading_sized(
     tc: &ThemeColors,
     scaled: bool,
     choices: ReadoutChoices<'_>,
+    no_reading: NoReadingText<'_>,
 ) -> Option<(Setting, u16)> {
     let unit_size = value_size;
-    let mode_size = value_size * 0.4;
+    let mode_size = value_size * MODE_SIZE_RATIO;
 
     match measurement {
         Some(m) => {
             let (value_text, value_color) = value_display(ui, m, tc);
 
             ui.live_region_horizontal(
-                live_region_fingerprint(Some(m), scaled),
-                || live_region_label(Some(m), scaled),
+                live_region_fingerprint(Some(m), scaled, NO_READING_TITLE),
+                || live_region_label(Some(m), scaled, NO_READING_TITLE),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
                     ui.label(
@@ -832,13 +1008,20 @@ fn show_reading_sized(
             .inner
         }
         None => {
-            no_reading_placeholder(ui, scaled, |ui| {
-                ui.label(
-                    RichText::new(crate::NO_DATA)
-                        .font(FontId::monospace(value_size))
-                        .color(ui.visuals().weak_text_color()),
-                );
-                ui.label(RichText::new("No reading").color(ui.visuals().weak_text_color()));
+            no_reading_placeholder(ui, scaled, no_reading.title(), |ui| {
+                if no_reading.is_notice() {
+                    // A notice stacks under the bars, the shape this layout
+                    // already gives a reading and its mode line: an issue
+                    // title set beside a scaled-up row of dashes would push
+                    // the fitted font down to nothing.
+                    ui.vertical(|ui| {
+                        no_reading_bars(ui, value_size);
+                        no_reading.show_text(ui, mode_size);
+                    });
+                } else {
+                    no_reading_bars(ui, value_size);
+                    no_reading.show_text(ui, mode_size);
+                }
             });
             None
         }
@@ -855,9 +1038,10 @@ fn show_reading_inline(
     tc: &ThemeColors,
     scaled: bool,
     choices: ReadoutChoices<'_>,
+    no_reading: NoReadingText<'_>,
 ) -> Option<(Setting, u16)> {
     let unit_size = value_size;
-    let mode_size = value_size * 0.4;
+    let mode_size = value_size * MODE_SIZE_RATIO;
 
     match measurement {
         Some(m) => {
@@ -895,12 +1079,17 @@ fn show_reading_inline(
             picked
         }
         None => {
-            no_reading_placeholder(ui, scaled, |ui| {
-                ui.label(
-                    RichText::new(format!("{} No reading", crate::NO_DATA))
-                        .font(FontId::monospace(value_size))
-                        .color(ui.visuals().weak_text_color()),
-                );
+            no_reading_placeholder(ui, scaled, no_reading.title(), |ui| {
+                if no_reading.is_notice() {
+                    no_reading_bars(ui, value_size);
+                    no_reading.show_text(ui, mode_size);
+                } else {
+                    ui.label(
+                        RichText::new(format!("{} {NO_READING_TITLE}", crate::NO_DATA))
+                            .font(FontId::monospace(value_size))
+                            .color(ui.visuals().weak_text_color()),
+                    );
+                }
             });
             None
         }
@@ -920,7 +1109,15 @@ pub fn show_reading(
     scaled: bool,
     choices: ReadoutChoices<'_>,
 ) -> Option<(Setting, u16)> {
-    show_reading_sized(ui, measurement, BASE_READING_FONT_SIZE, tc, scaled, choices)
+    show_reading_sized(
+        ui,
+        measurement,
+        BASE_READING_FONT_SIZE,
+        tc,
+        scaled,
+        choices,
+        NoReadingText::Plain,
+    )
 }
 
 /// Cached ratios of rendered reading dimensions to font size.
@@ -949,6 +1146,17 @@ impl Default for ReadingRatios {
     }
 }
 
+/// The cached measurements the big meter sizes its font from. One parameter
+/// because the two are measured, cached and invalidated together, and the
+/// solver needs both to arrive at a single font size.
+pub struct ReadingFit<'a> {
+    /// Total height of all content below the reading (buttons, stats, etc.)
+    /// rendered at scale=1. The caller measures it once and passes it back
+    /// in so the optimal scale can be computed.
+    pub base_content_height: f32,
+    pub ratios: &'a ReadingRatios,
+}
+
 /// Render an extra-large reading that scales to fill available space.
 /// Used when graph and recording panels are hidden ("big meter" mode).
 /// Returns `(scale_factor, measured_ratios, picked)`. The caller should
@@ -957,18 +1165,28 @@ impl Default for ReadingRatios {
 /// the setting and value the user chose in a selector, as for
 /// [`show_reading`].
 ///
-/// `base_content_height`: total height of all content below the reading
-/// (buttons, stats, etc.) rendered at scale=1. The caller measures this
-/// once and passes it in so we can compute the optimal scale.
+/// `no_reading` is what takes the reading's place when there is none — the
+/// connection issue's title, where the caller has one.
 pub fn show_reading_large(
     ui: &mut Ui,
     measurement: Option<&Measurement>,
-    base_content_height: f32,
-    ratios: &ReadingRatios,
+    fit: ReadingFit<'_>,
     tc: &ThemeColors,
     scaled: bool,
     choices: ReadoutChoices<'_>,
+    no_reading: NoReadingText<'_>,
 ) -> (f32, ReadingRatios, Option<(Setting, u16)>) {
+    let ReadingFit {
+        base_content_height,
+        ratios,
+    } = fit;
+    // A notice placeholder sizes both layouts from its own text; see
+    // `NoReadingText::layout_ratios` for why the cache cannot be trusted.
+    let own_ratios = measurement
+        .is_none()
+        .then(|| no_reading.layout_ratios(ui))
+        .flatten();
+    let ratios = own_ratios.as_ref().unwrap_or(ratios);
     let available_w = ui.available_width();
     let available_h = ui.available_height();
 
@@ -998,9 +1216,9 @@ pub fn show_reading_large(
     // Render and measure actual dimensions.
     let before = ui.cursor().top();
     let picked = if use_inline {
-        show_reading_inline(ui, measurement, size, tc, scaled, choices)
+        show_reading_inline(ui, measurement, size, tc, scaled, choices, no_reading)
     } else {
-        show_reading_sized(ui, measurement, size, tc, scaled, choices)
+        show_reading_sized(ui, measurement, size, tc, scaled, choices, no_reading)
     };
     let reading_w = ui.min_rect().width();
     let reading_h = ui.cursor().top() - before;
@@ -1062,9 +1280,9 @@ pub fn show_reading_compact(
             picked
         }
         None => {
-            no_reading_placeholder(ui, scaled, |ui| {
+            no_reading_placeholder(ui, scaled, NO_READING_TITLE, |ui| {
                 ui.label(
-                    RichText::new(format!("{} No reading", crate::NO_DATA))
+                    RichText::new(format!("{} {NO_READING_TITLE}", crate::NO_DATA))
                         .font(FontId::monospace(COMPACT_READING_FONT_SIZE))
                         .color(ui.visuals().weak_text_color()),
                 );
@@ -1178,7 +1396,7 @@ mod tests {
         let mut m = Measurement::test_fixture(MeasuredValue::Overload, "Ω", StatusFlags::default());
         m.display_raw = Some("    0".to_string());
         assert_eq!(format_value_display(&m).trim(), "OL");
-        assert!(live_region_label(Some(&m), false).starts_with("overload"));
+        assert!(live_region_label(Some(&m), false, NO_READING_TITLE).starts_with("overload"));
     }
 
     #[test]
@@ -1192,7 +1410,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert!(label.contains("V"), "got {label:?}");
         assert!(label.contains("DC V"), "got {label:?}");
         assert!(label.contains("auto range"), "got {label:?}");
@@ -1212,7 +1430,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         let hv = label.find("high voltage").expect("HV must be announced");
         let auto = label
             .find("auto range")
@@ -1220,10 +1438,30 @@ mod tests {
         assert!(hv < auto, "HV must come first, got {label:?}");
     }
 
+    /// The big meter puts the connection issue where the reading goes, so the
+    /// live region has to speak it: a screen-reader user would otherwise hear
+    /// "No reading" and never learn that the meter had stopped answering.
+    #[test]
+    fn the_placeholder_label_carries_the_connection_issue() {
+        assert_eq!(
+            live_region_label(None, false, "No response from meter"),
+            "No response from meter"
+        );
+        assert_eq!(
+            live_region_label(None, false, NO_READING_TITLE),
+            NO_READING_TITLE
+        );
+        assert_ne!(
+            live_region_fingerprint(None, false, "No response from meter"),
+            live_region_fingerprint(None, false, NO_READING_TITLE),
+            "one placeholder replacing another has to be re-announced"
+        );
+    }
+
     #[test]
     fn live_region_label_no_flags_when_inactive() {
         let m = Measurement::test_fixture(MeasuredValue::Normal(0.0), "V", StatusFlags::default());
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         // StatusFlags::default() is all-false, so no flag phrases should
         // appear in the spoken label.
         assert!(!label.contains("hold"), "got {label:?}");
@@ -1235,13 +1473,13 @@ mod tests {
     fn live_region_fingerprint_changes_on_flag_toggle() {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
-        let fp1 = live_region_fingerprint(Some(&m), false);
+        let fp1 = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
         m.flags.hold = true;
-        let fp2 = live_region_fingerprint(Some(&m), false);
+        let fp2 = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
         assert_ne!(fp1, fp2, "toggling HOLD must change the fingerprint");
         m.flags.hold = false;
         m.flags.rel = true;
-        let fp3 = live_region_fingerprint(Some(&m), false);
+        let fp3 = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
         assert_ne!(fp1, fp3, "toggling REL must change the fingerprint");
         assert_ne!(fp2, fp3, "REL and HOLD must produce distinct fingerprints");
     }
@@ -1455,7 +1693,7 @@ mod tests {
             aux("Period", "20.00", "ms"),
         ];
 
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert!(label.contains("Frequency 50.01 Hz"), "got {label:?}");
         assert!(label.contains("Period 20.00 ms"), "got {label:?}");
         let mode = label.find("DC V").expect("mode still announced");
@@ -1479,7 +1717,7 @@ mod tests {
         let plain = aux("Avg", "4.5000", "");
         m.aux_values = vec![max, min, plain];
 
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert!(
             label.contains("Max 5.9010 V at 12 seconds"),
             "got {label:?}"
@@ -1502,7 +1740,7 @@ mod tests {
         min.value = MeasuredValue::Overload;
         m.aux_values = vec![max, min];
 
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert!(label.contains("Max 5.0123 V"), "got {label:?}");
         assert!(label.contains("Min overload V"), "got {label:?}");
     }
@@ -1520,7 +1758,7 @@ mod tests {
         );
         m.display_raw = Some("   23.5".to_string());
         m.aux_values = vec![aux("T2", "24.10", "\u{00B0}C")];
-        let label = live_region_label(Some(&m), false);
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert!(label.starts_with("23.5 degrees C"), "got {label:?}");
         assert!(label.contains("T2 24.10 degrees C"), "got {label:?}");
         assert!(
@@ -1542,7 +1780,10 @@ mod tests {
             },
         );
         assert!(m.aux_values.is_empty());
-        assert_eq!(live_region_label(Some(&m), false), "5.678 V, DC V, hold");
+        assert_eq!(
+            live_region_label(Some(&m), false, NO_READING_TITLE),
+            "5.678 V, DC V, hold"
+        );
     }
 
     /// A MIN/MAX extreme can move while the live reading is unchanged, so
@@ -1551,24 +1792,24 @@ mod tests {
     fn live_region_fingerprint_changes_on_sub_value_change() {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
-        let bare = live_region_fingerprint(Some(&m), false);
+        let bare = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
 
         m.aux_values = vec![aux("Max", "5.0123", "")];
-        let with_aux = live_region_fingerprint(Some(&m), false);
+        let with_aux = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
         assert_ne!(bare, with_aux, "a sub-value appearing must be noticed");
 
         m.aux_values[0] = aux("Max", "5.0456", "");
-        let moved = live_region_fingerprint(Some(&m), false);
+        let moved = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
         assert_ne!(with_aux, moved, "a sub-value changing must be noticed");
 
         m.aux_values[0].elapsed_secs = Some(12);
-        let stamped = live_region_fingerprint(Some(&m), false);
+        let stamped = live_region_fingerprint(Some(&m), false, NO_READING_TITLE);
         assert_ne!(moved, stamped, "the @Ns column changing must be noticed");
 
         m.aux_values[0].label = "Min".into();
         assert_ne!(
             stamped,
-            live_region_fingerprint(Some(&m), false),
+            live_region_fingerprint(Some(&m), false, NO_READING_TITLE),
             "a relabelled sub-value must be noticed"
         );
     }
@@ -1646,7 +1887,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let mode_size = value_size * 0.4;
+        let mode_size = value_size * MODE_SIZE_RATIO;
         let ranges = range_choices();
         let mut rects = [egui::Rect::NOTHING; 3];
         for _ in 0..2 {
@@ -1739,9 +1980,9 @@ mod tests {
     fn the_live_region_label_says_when_the_reading_is_software_scaled() {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(12.34), "A", StatusFlags::default());
-        let plain = live_region_label(Some(&m), false);
+        let plain = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert!(!plain.contains("software scaled"), "{plain:?}");
-        let scaled = live_region_label(Some(&m), true);
+        let scaled = live_region_label(Some(&m), true, NO_READING_TITLE);
         assert!(scaled.ends_with(", software scaled"), "{scaled:?}");
         assert!(scaled.starts_with(&plain), "{scaled:?} vs {plain:?}");
     }
@@ -1753,8 +1994,8 @@ mod tests {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(12.34), "A", StatusFlags::default());
         assert_ne!(
-            live_region_fingerprint(Some(&m), false),
-            live_region_fingerprint(Some(&m), true)
+            live_region_fingerprint(Some(&m), false, NO_READING_TITLE),
+            live_region_fingerprint(Some(&m), true, NO_READING_TITLE)
         );
     }
 
@@ -1845,12 +2086,24 @@ mod tests {
     ) -> Option<(Setting, u16)> {
         let tc = crate::settings::Settings::default().theme_colors(true);
         match layout {
-            "two-line" => {
-                show_reading_sized(ui, Some(m), BASE_READING_FONT_SIZE, &tc, false, choices)
-            }
-            "inline" => {
-                show_reading_inline(ui, Some(m), BASE_READING_FONT_SIZE, &tc, false, choices)
-            }
+            "two-line" => show_reading_sized(
+                ui,
+                Some(m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                choices,
+                NoReadingText::Plain,
+            ),
+            "inline" => show_reading_inline(
+                ui,
+                Some(m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                choices,
+                NoReadingText::Plain,
+            ),
             _ => show_reading_compact(ui, Some(m), &tc, false, choices),
         }
     }
@@ -2074,8 +2327,17 @@ mod tests {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         let choices = two_choices();
-        let mut draw =
-            |ui: &mut Ui| show_reading_sized(ui, Some(&m), 200.0, &tc, false, modes(&choices));
+        let mut draw = |ui: &mut Ui| {
+            show_reading_sized(
+                ui,
+                Some(&m),
+                200.0,
+                &tc,
+                false,
+                modes(&choices),
+                NoReadingText::Plain,
+            )
+        };
 
         let f = run_frame(&ctx, vec![], &mut draw);
         let combo = centre(
@@ -2119,6 +2381,7 @@ mod tests {
                 &tc,
                 false,
                 modes(&choices),
+                NoReadingText::Plain,
             )
         };
 
@@ -2351,6 +2614,7 @@ mod tests {
                 &tc,
                 false,
                 modes(&choices),
+                NoReadingText::Plain,
             )
         };
 
@@ -2387,6 +2651,7 @@ mod tests {
                 &tc,
                 false,
                 modes(&choices),
+                NoReadingText::Plain,
             )
         };
         open_with_keyboard(&ctx, &mut draw);
@@ -2431,6 +2696,7 @@ mod tests {
                 &tc,
                 false,
                 modes(&choices),
+                NoReadingText::Plain,
             )
         };
         let f = open_with_keyboard(&ctx, &mut draw);
@@ -2465,6 +2731,7 @@ mod tests {
                 &tc,
                 false,
                 modes(&choices),
+                NoReadingText::Plain,
             )
         };
         open_with_keyboard(&ctx, &mut draw);
@@ -2498,6 +2765,7 @@ mod tests {
                     &tc,
                     false,
                     modes(&choices),
+                    NoReadingText::Plain,
                 )
             };
             open_with_keyboard(&ctx, &mut draw);

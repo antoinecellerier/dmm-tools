@@ -11,6 +11,7 @@ use eframe::egui;
 use std::hash::{Hash, Hasher};
 
 use super::BigMeterMode;
+use super::messages::NoticeKind;
 use crate::display::{self, ReadingRatios};
 
 /// Initial estimate for non-reading content height in big meter mode.
@@ -135,6 +136,11 @@ pub(super) struct FitInputs {
     /// for the reading.
     pub(super) transform_editor_open: bool,
     pub(super) transform_is_identity: bool,
+    /// Which connection notice, if any, stands in for the reading. Its title
+    /// takes the readout's place in the big-meter modes and the titles differ
+    /// in length, so the fitted font has to be re-measured when one replaces
+    /// another.
+    pub(super) notice_kind: Option<NoticeKind>,
 }
 
 impl FitInputs {
@@ -180,6 +186,7 @@ mod tests {
             big_meter_mode: BigMeterMode::Off,
             transform_editor_open: false,
             transform_is_identity: true,
+            notice_kind: None,
         }
     }
 
@@ -283,6 +290,35 @@ mod tests {
         assert!(!fit.needs_recalc(&inputs));
     }
 
+    /// The connection issue's title stands in for the reading in the
+    /// big-meter modes, and the titles differ in length — so a notice
+    /// arriving, going, or being replaced has to re-open the fit even though
+    /// nothing else about the window moved.
+    #[test]
+    fn a_new_notice_reopens_the_fit() {
+        let mut fit = MeterFit::new();
+        let quiet = inputs();
+        fit.record_pass(&quiet, fit.content_height, ReadingRatios::default());
+        assert!(!fit.needs_recalc(&quiet));
+
+        let failed = FitInputs {
+            notice_kind: Some(NoticeKind::NoResponse),
+            ..inputs()
+        };
+        assert!(
+            fit.needs_recalc(&failed),
+            "the notice never reached the fit"
+        );
+        fit.record_pass(&failed, fit.content_height, ReadingRatios::default());
+        assert!(
+            fit.needs_recalc(&FitInputs {
+                notice_kind: Some(NoticeKind::DeviceNotFound),
+                ..inputs()
+            }),
+            "one notice replacing another never reached the fit"
+        );
+    }
+
     /// A content height that keeps moving would re-measure forever. After
     /// the cap the largest height seen wins, so nothing is clipped.
     #[test]
@@ -347,6 +383,10 @@ mod tests {
         });
         mutations.push(FitInputs {
             transform_is_identity: false,
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            notice_kind: Some(NoticeKind::NoResponse),
             ..inputs()
         });
         for (i, m) in mutations.iter().enumerate() {

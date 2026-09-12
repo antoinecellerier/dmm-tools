@@ -44,6 +44,34 @@ pub(crate) enum ConnectionIssue {
     Other(String),
 }
 
+/// Which connection notice is on screen.
+///
+/// The big meter keys its fit cache on this: the titles differ in length, so
+/// the fitted font has to be re-measured when one notice replaces another.
+/// Not derived from the text, which the waiting notice changes every timeout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(super) enum NoticeKind {
+    Detecting,
+    Waiting,
+    DeviceNotFound,
+    AdapterNotFound,
+    NotIdentified,
+    NoResponse,
+}
+
+/// What the reading column has to say about why there is nothing to show,
+/// in pieces, so a layout can render as much of it as it has room for.
+pub(super) struct ConnectionNotice {
+    pub(super) kind: NoticeKind,
+    /// One line naming the problem.
+    pub(super) title: String,
+    /// The steps that resolve it. Several hard-wrapped lines; empty while
+    /// detection is still running, where there is nothing to do but wait.
+    pub(super) body: String,
+    /// The experimental-support feedback link, as `(text, url)`.
+    pub(super) experimental_link: Option<(String, String)>,
+}
+
 impl ConnectionIssue {
     /// Classify an error the acquisition thread hands over whole.
     ///
@@ -613,11 +641,20 @@ impl App {
         }
     }
 
-    pub(super) fn show_connection_help(&self, ui: &mut Ui) {
-        let warn_color = self
-            .settings
-            .theme_colors(ui.visuals().dark_mode)
-            .status_warning();
+    /// What the session currently has to say about why there are no readings,
+    /// or `None` when there is nothing to report.
+    ///
+    /// Split from the rendering because the big-meter modes cannot draw all of
+    /// it: with the reading scaled to fill the window there is no room below
+    /// it, so they put `title` where the reading's placeholder goes and hand
+    /// `body` to a tooltip. The normal layouts still draw every piece.
+    pub(super) fn connection_notice(&self) -> Option<ConnectionNotice> {
+        let notice = |kind, title: String, body: String| ConnectionNotice {
+            kind,
+            title,
+            body,
+            experimental_link: None,
+        };
 
         // The probe is still running: nothing names the meter, the channel is
         // up, and neither a connection nor a failure has come back yet. It
@@ -628,44 +665,39 @@ impl App {
             && self.connection.rx.is_some()
             && self.connection.last_error.is_none()
         {
-            ui.add_space(4.0);
-            ui.label(RichText::new("Detecting the meter\u{2026}").color(warn_color));
-            return;
+            return Some(notice(
+                NoticeKind::Detecting,
+                "Detecting the meter\u{2026}".to_string(),
+                String::new(),
+            ));
         }
 
         // Show waiting indicator before error threshold
         if self.connection.waiting_timeouts > 0 && self.connection.last_error.is_none() {
-            ui.add_space(4.0);
             let dots = ".".repeat((self.connection.waiting_timeouts as usize % 4) + 1);
-            ui.label(RichText::new(format!("Waiting for meter{dots}")).color(warn_color));
+            // Padded to a fixed field: in the big meter this title is measured
+            // to fit the window, and a line that grows and shrinks four times
+            // a second would either re-fit on every dot or overflow by three
+            // characters. The padding is invisible either way.
+            let title = format!("Waiting for meter{dots:<4}");
             // Under Auto-detect there is no selection to check, so the hint is
             // the other two things that make a quiet meter talk. With a family
             // selected the way out is named too: the value may have been saved
             // by a detected connect rather than picked, and the user swapping
             // meters has no reason to connect the silence to it.
-            let hint = if self.selected_device().is_some() {
+            let body = if self.selected_device().is_some() {
                 "Check that the correct device is selected in Settings (\u{2699}), \
                  or pick Auto-detect there"
             } else {
                 "Switch on the meter's USB mode, or pick the model in Settings (\u{2699})"
             };
-            ui.label(
-                RichText::new(hint)
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
-            return;
+            return Some(notice(NoticeKind::Waiting, title, body.to_string()));
         }
 
-        let Some(issue) = &self.connection.last_error else {
-            return;
-        };
-
-        ui.add_space(8.0);
+        let issue = self.connection.last_error.as_ref()?;
 
         if *issue == ConnectionIssue::DeviceNotFound {
             // HID device not found — dongle issue
-            ui.label(RichText::new("USB cable not found").color(warn_color));
             // The hint's lines come from the library so the CLI's cable-not-found
             // help and this panel stay the same advice; only the closing line is
             // the GUI's, since the CLI has no Connect button.
@@ -673,50 +705,43 @@ impl App {
                 "{}\n\nClick \"Connect\" after resolving the issue.",
                 dmm_lib::binary_help::transport_setup_hint().join("\n")
             );
-            ui.label(
-                RichText::new(platform_hint)
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
             // Auto-detect names no meter, so there is no protocol to warn
             // about until one answers.
-            if let Some(profile) = self
+            let experimental_link = self
                 .selected_profile
                 .as_ref()
                 .filter(|p| p.stability == dmm_lib::protocol::Stability::Experimental)
-            {
-                ui.hyperlink_to(
-                    RichText::new(format!(
-                        "{} Report feedback.",
-                        dmm_lib::binary_help::experimental_warning(profile.model_name)
-                    ))
-                    .small()
-                    .color(warn_color),
-                    profile.feedback_url(),
-                )
-                .on_hover_text(
-                    "Opens the GitHub issue tracker to report experimental-support feedback",
-                );
-            }
+                .map(|profile| {
+                    (
+                        format!(
+                            "{} Report feedback.",
+                            dmm_lib::binary_help::experimental_warning(profile.model_name)
+                        ),
+                        profile.feedback_url(),
+                    )
+                });
+            Some(ConnectionNotice {
+                kind: NoticeKind::DeviceNotFound,
+                title: "USB cable not found".to_string(),
+                body: platform_hint,
+                experimental_link,
+            })
         } else if let ConnectionIssue::AdapterNotFound { help } = issue {
-            ui.label(RichText::new("Adapter not found").color(warn_color));
-            ui.label(
-                RichText::new(help)
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
+            Some(notice(
+                NoticeKind::AdapterNotFound,
+                "Adapter not found".to_string(),
+                help.clone(),
+            ))
         } else if let ConnectionIssue::NotIdentified { help } = issue {
             // The cable is fine and the probe ran; nothing on the far end
             // spoke a protocol we know.
-            ui.label(RichText::new("No meter answered over the USB cable").color(warn_color));
-            ui.label(
-                RichText::new(help)
-                    .small()
-                    .color(ui.visuals().weak_text_color()),
-            );
+            Some(notice(
+                NoticeKind::NotIdentified,
+                "No meter answered over the USB cable".to_string(),
+                help.clone(),
+            ))
         } else {
-            // Dongle found but meter not responding
-            ui.label(RichText::new("No response from meter").color(warn_color));
+            // Dongle found but meter not responding.
             // The meter this session is talking about: the one picked, or the
             // one detection found. Under Auto-detect, before anything answered,
             // there is neither a model to name nor steps to give.
@@ -734,11 +759,46 @@ impl App {
                          USB mode, or pick the model in Settings (\u{2699})."
                     .to_string(),
             };
+            Some(notice(
+                NoticeKind::NoResponse,
+                "No response from meter".to_string(),
+                instructions,
+            ))
+        }
+    }
+
+    /// Draw the whole notice under the reading: title, steps, and the
+    /// experimental-support link where there is one.
+    ///
+    /// The big-meter modes do not call this — see [`App::connection_notice`].
+    pub(super) fn show_connection_help(&self, ui: &mut Ui) {
+        let Some(notice) = self.connection_notice() else {
+            return;
+        };
+        let warn_color = self
+            .settings
+            .theme_colors(ui.visuals().dark_mode)
+            .status_warning();
+
+        // The two transient notices sit closer to the reading than an error
+        // does, as they always have: they replace themselves within seconds.
+        ui.add_space(match notice.kind {
+            NoticeKind::Detecting | NoticeKind::Waiting => 4.0,
+            _ => 8.0,
+        });
+        ui.label(RichText::new(&notice.title).color(warn_color));
+        if !notice.body.is_empty() {
             ui.label(
-                RichText::new(instructions)
+                RichText::new(&notice.body)
                     .small()
                     .color(ui.visuals().weak_text_color()),
             );
+        }
+        if let Some((text, url)) = &notice.experimental_link {
+            ui.hyperlink_to(RichText::new(text).small().color(warn_color), url)
+                .on_hover_text(
+                    "Opens the GitHub issue tracker to report experimental-support feedback",
+                );
         }
     }
 }
@@ -764,6 +824,94 @@ mod tests {
 
     fn toast_text(app: &App) -> Option<&str> {
         app.toast.as_ref().map(|(msg, _, _)| msg.as_str())
+    }
+
+    /// The notice the app would draw, with `issue` as the failure on record.
+    fn notice_for(app: &mut App, issue: ConnectionIssue) -> ConnectionNotice {
+        app.connection.last_error = Some(issue);
+        app.connection_notice()
+            .expect("a failure is always a notice")
+    }
+
+    /// A session with nothing wrong has nothing to say: the reading column
+    /// draws the reading and stops there.
+    #[test]
+    fn a_quiet_session_has_no_notice() {
+        let app = app("ut61eplus", false);
+        assert!(app.connection_notice().is_none());
+    }
+
+    /// Every failure splits into a title that names the problem and a body
+    /// that says what to do about it — the split the big meter needs, which
+    /// has room for the title only and hands the body to a tooltip.
+    #[test]
+    fn each_connection_issue_gets_its_own_notice() {
+        let mut app = app("ut61eplus", false);
+
+        let n = notice_for(&mut app, ConnectionIssue::DeviceNotFound);
+        assert_eq!(n.kind, NoticeKind::DeviceNotFound);
+        assert_eq!(n.title, "USB cable not found");
+        assert!(n.body.contains("Connect"), "got {:?}", n.body);
+
+        let n = notice_for(
+            &mut app,
+            ConnectionIssue::AdapterNotFound {
+                help: "no adapter matched".to_string(),
+            },
+        );
+        assert_eq!(n.kind, NoticeKind::AdapterNotFound);
+        assert_eq!(n.title, "Adapter not found");
+        assert_eq!(n.body, "no adapter matched");
+
+        let n = notice_for(
+            &mut app,
+            ConnectionIssue::NotIdentified {
+                help: "switch USB mode on".to_string(),
+            },
+        );
+        assert_eq!(n.kind, NoticeKind::NotIdentified);
+        assert_eq!(n.title, "No meter answered over the USB cable");
+        assert_eq!(n.body, "switch USB mode on");
+
+        let n = notice_for(&mut app, ConnectionIssue::Other("timed out".to_string()));
+        assert_eq!(n.kind, NoticeKind::NoResponse);
+        assert_eq!(n.title, "No response from meter");
+        assert!(
+            n.body.contains("enable data transmission"),
+            "the selected meter's steps belong in the body, got {:?}",
+            n.body
+        );
+    }
+
+    /// The waiting notice is measured to fit the big meter's window, so its
+    /// animated dots must not change its width: the fit would otherwise be
+    /// redone, or the line overflow, at every timeout.
+    #[test]
+    fn the_waiting_title_keeps_one_width() {
+        let mut app = app("ut61eplus", false);
+        let titles: Vec<String> = (1..=9)
+            .map(|timeouts| {
+                app.connection.waiting_timeouts = timeouts;
+                let n = app.connection_notice().expect("waiting is a notice");
+                assert_eq!(n.kind, NoticeKind::Waiting);
+                n.title
+            })
+            .collect();
+        let widths: Vec<usize> = titles.iter().map(|t| t.chars().count()).collect();
+        assert!(
+            widths.windows(2).all(|w| w[0] == w[1]),
+            "the title changes width as the dots cycle: {titles:?}"
+        );
+        // The dots are still animating — a fixed width must not have been
+        // bought by dropping them.
+        assert!(
+            titles
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                >= 4,
+            "the dots stopped cycling: {titles:?}"
+        );
     }
 
     /// The mitigation itself: the meter that answered the probe is saved, so

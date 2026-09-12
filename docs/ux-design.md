@@ -101,6 +101,7 @@ and scrolls inside its own frame rather than being clipped by it.
 - Font size computed from both available width and height using cached measured text ratios
 - Buttons and stats scale proportionally with the reading
 - Quick toggle via **⊞** button (near remote controls) or **Ctrl+B** — temporarily hides all panels without changing saved settings
+- A connection problem replaces the reading's placeholder with its title, hover text carrying the steps — nothing is drawn below a reading sized to the window
 - Useful as a large bench-meter display or for presentations
 
 ### Reading Display

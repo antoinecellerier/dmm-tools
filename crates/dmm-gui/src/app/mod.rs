@@ -555,6 +555,153 @@ impl App {
             "Reconnecting...".to_string()
         }
     }
+
+    /// The big meter: one reading scaled to fill the window, with the command
+    /// buttons under it — and, when the mode is `Off` and it is only the
+    /// hidden panels that left the reading alone, the connection help, specs
+    /// and statistics too.
+    ///
+    /// Its own method rather than a block in [`eframe::App::ui`] so a headless
+    /// test can drive exactly what a frame draws here.
+    fn show_meter_only(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, minimal: bool) {
+        // Big meter mode: compute scale from window size, only recalculate
+        // when the window is resized to avoid frame-to-frame oscillation.
+        // Shrink panel margins at small window sizes so the reading fills
+        // the space tighter.
+        let margin_scale = meter_fit::margin_scale(ctx.content_rect().size());
+        let default_margin = ctx.global_style().spacing.window_margin;
+        let frame = egui::Frame::central_panel(ctx.global_style().as_ref())
+            .inner_margin(default_margin * margin_scale);
+
+        // Full and Minimal fill the window with the reading, leaving nowhere
+        // to draw the connection help: the issue takes the reading's place
+        // instead, and the steps become its hover text. Built here, outside
+        // the closure that borrows `self` mutably.
+        let notice = (self.big_meter_mode != BigMeterMode::Off)
+            .then(|| self.connection_notice())
+            .flatten();
+        // Rendered by the context rather than spelled out: the binding uses
+        // `Modifiers::COMMAND`, which is Cmd on macOS.
+        let hint = notice.is_some().then(|| {
+            format!(
+                "{} for details",
+                ctx.format_shortcut(&egui::KeyboardShortcut::new(
+                    egui::Modifiers::COMMAND,
+                    egui::Key::B
+                ))
+            )
+        });
+
+        let main = egui::CentralPanel::default().frame(frame).show(ui, |ui| {
+            let size = ctx.content_rect();
+            let fit_inputs = FitInputs {
+                width: size.width() as u32,
+                height: size.height() as u32,
+                mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
+                aux_values: self
+                    .last_measurement
+                    .as_ref()
+                    .map_or(0, |m| m.aux_values.len()),
+                mode_offered: self.connection.choices.mode_offered(),
+                range_offered: self.connection.choices.range_offered(),
+                show_stats: self.settings.show_stats,
+                show_specs: self.settings.show_specs,
+                big_meter_mode: self.big_meter_mode,
+                transform_editor_open: self.transform_editor.open,
+                transform_is_identity: self.transform.is_identity(),
+                notice_kind: notice.as_ref().map(|n| n.kind),
+            };
+            let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
+
+            let panel_rect = ui.max_rect();
+            let mut add_content = |ui: &mut egui::Ui| {
+                ui.vertical(|ui| {
+                    // In minimal mode there's nothing below the reading,
+                    // so pass 0 to let the reading fill all available space.
+                    let content_h = if minimal {
+                        0.0
+                    } else {
+                        self.meter_fit.content_height
+                    };
+                    let tc = self.settings.theme_colors(ui.visuals().dark_mode);
+                    let no_reading = match (notice.as_ref(), hint.as_deref()) {
+                        (Some(n), Some(hint)) => display::NoReadingText::Notice {
+                            title: &n.title,
+                            hint,
+                            tooltip: &n.body,
+                            color: tc.status_warning(),
+                        },
+                        _ => display::NoReadingText::Plain,
+                    };
+                    let (scale, measured_ratios, picked) = display::show_reading_large(
+                        ui,
+                        self.last_measurement.as_ref(),
+                        display::ReadingFit {
+                            base_content_height: content_h,
+                            ratios: &self.meter_fit.reading_ratios,
+                        },
+                        &tc,
+                        !self.transform.is_identity(),
+                        self.connection.choices.readouts(),
+                        no_reading,
+                    );
+                    if let Some((setting, id)) = picked {
+                        self.select(setting, id);
+                    }
+                    let after_reading = ui.cursor().top();
+
+                    if !minimal {
+                        // The big-meter toggle sits in the panel corner
+                        // here, not on the row: nothing to keep clear of.
+                        self.show_remote_controls(ui, scale, 0.0);
+                        self.show_transform_editor(ui, scale);
+                    }
+
+                    if self.big_meter_mode == BigMeterMode::Off {
+                        // Only here: in Full and Minimal the notice is
+                        // already in the readout, and the help drawn under a
+                        // window-filling reading would land off-screen.
+                        self.show_connection_help(ui);
+                        self.show_specs_section_inline(ui, scale);
+
+                        if self.settings.show_stats {
+                            ui.add_space(12.0 * scale);
+                            ui.separator();
+                            self.show_stats_section(ui, false, scale);
+                        }
+                    }
+
+                    // Update cached dimensions on window resize. Run twice
+                    // (by not closing the cache the first time) so the
+                    // second pass uses the measured values from the first.
+                    if needs_recalc && scale > 0.0 {
+                        let total_below_reading = ui.cursor().top() - after_reading;
+                        self.meter_fit.record_pass(
+                            &fit_inputs,
+                            total_below_reading / scale,
+                            measured_ratios,
+                        );
+                    }
+                });
+            };
+            if minimal {
+                add_content(ui);
+            } else {
+                ui.centered_and_justified(add_content);
+            }
+            // Overlay toggle button in the bottom-right, outside the
+            // measured content so it doesn't affect scaling convergence.
+            // Hide when the panel is too small to avoid overlapping the reading.
+            if panel_rect.width() > 100.0 && panel_rect.height() > 80.0 {
+                let btn_rect = egui::Rect::from_min_size(
+                    egui::pos2(panel_rect.right() - 32.0, panel_rect.bottom() - 32.0),
+                    egui::vec2(28.0, 28.0),
+                );
+                self.show_big_meter_toggle_at(ui, btn_rect);
+            }
+        });
+        main.response.a11y_role(egui::accesskit::Role::Main);
+    }
 }
 
 impl eframe::App for App {
@@ -674,107 +821,7 @@ impl eframe::App for App {
         }
 
         if meter_only {
-            // Big meter mode: compute scale from window size, only recalculate
-            // when the window is resized to avoid frame-to-frame oscillation.
-            // Shrink panel margins at small window sizes so the reading fills
-            // the space tighter.
-            let margin_scale = meter_fit::margin_scale(ctx.content_rect().size());
-            let default_margin = ctx.global_style().spacing.window_margin;
-            let frame = egui::Frame::central_panel(ctx.global_style().as_ref())
-                .inner_margin(default_margin * margin_scale);
-            let main = egui::CentralPanel::default().frame(frame).show(ui, |ui| {
-                let size = ctx.content_rect();
-                let fit_inputs = FitInputs {
-                    width: size.width() as u32,
-                    height: size.height() as u32,
-                    mode_raw: self.last_measurement.as_ref().map_or(0, |m| m.mode_raw),
-                    aux_values: self
-                        .last_measurement
-                        .as_ref()
-                        .map_or(0, |m| m.aux_values.len()),
-                    mode_offered: self.connection.choices.mode_offered(),
-                    range_offered: self.connection.choices.range_offered(),
-                    show_stats: self.settings.show_stats,
-                    show_specs: self.settings.show_specs,
-                    big_meter_mode: self.big_meter_mode,
-                    transform_editor_open: self.transform_editor.open,
-                    transform_is_identity: self.transform.is_identity(),
-                };
-                let needs_recalc = self.meter_fit.needs_recalc(&fit_inputs);
-
-                let panel_rect = ui.max_rect();
-                let mut add_content = |ui: &mut egui::Ui| {
-                    ui.vertical(|ui| {
-                        // In minimal mode there's nothing below the reading,
-                        // so pass 0 to let the reading fill all available space.
-                        let content_h = if minimal {
-                            0.0
-                        } else {
-                            self.meter_fit.content_height
-                        };
-                        let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                        let (scale, measured_ratios, picked) = display::show_reading_large(
-                            ui,
-                            self.last_measurement.as_ref(),
-                            content_h,
-                            &self.meter_fit.reading_ratios,
-                            &tc,
-                            !self.transform.is_identity(),
-                            self.connection.choices.readouts(),
-                        );
-                        if let Some((setting, id)) = picked {
-                            self.select(setting, id);
-                        }
-                        let after_reading = ui.cursor().top();
-
-                        if !minimal {
-                            // The big-meter toggle sits in the panel corner
-                            // here, not on the row: nothing to keep clear of.
-                            self.show_remote_controls(ui, scale, 0.0);
-                            self.show_transform_editor(ui, scale);
-                        }
-                        self.show_connection_help(ui);
-
-                        if self.big_meter_mode == BigMeterMode::Off {
-                            self.show_specs_section_inline(ui, scale);
-
-                            if self.settings.show_stats {
-                                ui.add_space(12.0 * scale);
-                                ui.separator();
-                                self.show_stats_section(ui, false, scale);
-                            }
-                        }
-
-                        // Update cached dimensions on window resize. Run twice
-                        // (by not closing the cache the first time) so the
-                        // second pass uses the measured values from the first.
-                        if needs_recalc && scale > 0.0 {
-                            let total_below_reading = ui.cursor().top() - after_reading;
-                            self.meter_fit.record_pass(
-                                &fit_inputs,
-                                total_below_reading / scale,
-                                measured_ratios,
-                            );
-                        }
-                    });
-                };
-                if minimal {
-                    add_content(ui);
-                } else {
-                    ui.centered_and_justified(add_content);
-                }
-                // Overlay toggle button in the bottom-right, outside the
-                // measured content so it doesn't affect scaling convergence.
-                // Hide when the panel is too small to avoid overlapping the reading.
-                if panel_rect.width() > 100.0 && panel_rect.height() > 80.0 {
-                    let btn_rect = egui::Rect::from_min_size(
-                        egui::pos2(panel_rect.right() - 32.0, panel_rect.bottom() - 32.0),
-                        egui::vec2(28.0, 28.0),
-                    );
-                    self.show_big_meter_toggle_at(ui, btn_rect);
-                }
-            });
-            main.response.a11y_role(egui::accesskit::Role::Main);
+            self.show_meter_only(ui, &ctx, minimal);
         } else if wide {
             // Wide: left side panel for reading + stats (resizable)
             let reading_panel = egui::Panel::left("reading_panel")
@@ -856,6 +903,7 @@ impl eframe::App for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui::accesskit::{Node, NodeId};
 
     fn app(device: &str, mock_mode: &str) -> App {
         let mut settings = Settings::default();
@@ -943,5 +991,191 @@ mod tests {
             "the picked model outranks the connected one"
         );
         assert_eq!(app.active_device().map(|d| d.id), Some("ut61b+"));
+    }
+
+    /// The distinctive sentence out of the "No response from meter" body —
+    /// the steps the big meter has no room to draw.
+    const BODY_PHRASE: &str = "enable data transmission";
+
+    /// An app with a meter selected, no reading, and the acquisition thread
+    /// reporting silence: the state the readout's placeholder speaks for.
+    fn stalled_app(mode: BigMeterMode) -> App {
+        let mut settings = Settings {
+            // No acquisition thread: the failure is set by hand.
+            auto_connect: false,
+            ..Settings::default()
+        };
+        settings.shared.device_family = "ut61eplus".to_string();
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        app.big_meter_mode = mode;
+        app.connection.last_error = Some(ConnectionIssue::Other("timed out".to_string()));
+        app
+    }
+
+    /// Run `draw` in a `w` x `h` window and return the last frame's
+    /// accessibility nodes. Several frames, because the big meter's fit
+    /// re-measures itself from the one before.
+    fn frame_nodes(
+        app: &mut App,
+        w: f32,
+        h: f32,
+        mut draw: impl FnMut(&mut App, &mut egui::Ui),
+    ) -> Vec<(NodeId, Node)> {
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+        let mut nodes = Vec::new();
+        for _ in 0..6 {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ui| draw(app, ui),
+            );
+            // epaint 0.36 debug-asserts on dropping unapplied texture deltas;
+            // this harness renders without a painter.
+            out.textures_delta.clear();
+            nodes = out
+                .platform_output
+                .accesskit_update
+                .map(|update| update.nodes)
+                .unwrap_or_default();
+        }
+        nodes
+    }
+
+    /// The meter-only branch in [`eframe::App::ui`]'s order: the top bar where
+    /// there is one, then the big meter.
+    fn meter_nodes(app: &mut App, w: f32, h: f32) -> Vec<(NodeId, Node)> {
+        frame_nodes(app, w, h, |app, ui| {
+            let ctx = ui.ctx().clone();
+            let minimal = app.big_meter_mode == BigMeterMode::Minimal;
+            if !minimal {
+                egui::Panel::top("top_bar").show(ui, |ui| app.show_top_bar(ui, &ctx));
+            }
+            app.show_meter_only(ui, &ctx, minimal);
+        })
+    }
+
+    /// The text AccessKit reports for a node: a plain label carries it as the
+    /// node's value, a button or a link as its label.
+    fn node_text(node: &Node) -> Option<&str> {
+        node.value().or_else(|| node.label())
+    }
+
+    fn shows_text(nodes: &[(NodeId, Node)], needle: &str) -> bool {
+        nodes
+            .iter()
+            .any(|(_, n)| node_text(n).is_some_and(|t| t.contains(needle)))
+    }
+
+    /// Where the first node whose text contains `needle` was drawn.
+    fn text_bounds(nodes: &[(NodeId, Node)], needle: &str) -> Option<egui::Rect> {
+        let (_, node) = nodes
+            .iter()
+            .find(|(_, n)| node_text(n).is_some_and(|t| t.contains(needle)))?;
+        let b = node.bounds().expect("a drawn label has bounds");
+        Some(egui::Rect::from_min_max(
+            egui::pos2(b.x0 as f32, b.y0 as f32),
+            egui::pos2(b.x1 as f32, b.y1 as f32),
+        ))
+    }
+
+    /// The big meter fills the window with the reading, so the connection
+    /// help drawn under it used to overflow the bottom edge or miss the
+    /// window entirely. The issue now takes the reading's place: the title is
+    /// on screen whatever shape the window is, the steps are not drawn there
+    /// at all, and a hint line says how to get them back.
+    /// The fit re-measures only the layout it drew, so the notice used to be
+    /// judged against a cached default tuned to a seven-character value and
+    /// lost the stacked layout in windows that plainly had the height for it.
+    /// A 3:2 window stacks the title under the dashes; a strip lays them out
+    /// side by side.
+    #[test]
+    fn the_notice_stacks_unless_the_window_is_a_strip() {
+        let placed = |w: f32, h: f32| {
+            let mut app = stalled_app(BigMeterMode::Full);
+            let nodes = meter_nodes(&mut app, w, h);
+            let bars = text_bounds(&nodes, crate::NO_DATA).expect("the dashes are drawn");
+            let title = text_bounds(&nodes, "No response from meter").expect("the title is drawn");
+            (bars, title)
+        };
+
+        let (bars, title) = placed(1920.0, 1280.0);
+        assert!(
+            title.top() >= bars.bottom(),
+            "3:2 window: the title {title:?} should sit under the dashes {bars:?}"
+        );
+
+        let (bars, title) = placed(1920.0, 435.0);
+        assert!(
+            title.left() >= bars.right(),
+            "strip window: the title {title:?} should sit beside the dashes {bars:?}"
+        );
+    }
+
+    #[test]
+    fn the_big_meter_puts_the_connection_issue_in_the_readout() {
+        for mode in [BigMeterMode::Full, BigMeterMode::Minimal] {
+            for (w, h) in [(1920.0, 1280.0), (1920.0, 435.0), (400.0, 300.0)] {
+                let case = format!("{mode:?} at {w}x{h}");
+                let mut app = stalled_app(mode);
+                let nodes = meter_nodes(&mut app, w, h);
+                let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+
+                let title = text_bounds(&nodes, "No response from meter")
+                    .unwrap_or_else(|| panic!("{case}: the issue never reached the readout"));
+                assert!(
+                    screen.contains_rect(title),
+                    "{case}: the title {title:?} hangs out of {screen:?}"
+                );
+                assert!(
+                    !shows_text(&nodes, BODY_PHRASE),
+                    "{case}: the steps were drawn under a window-filling reading"
+                );
+                let hint = text_bounds(&nodes, "for details")
+                    .unwrap_or_else(|| panic!("{case}: nothing says how to reach the steps"));
+                assert!(
+                    screen.contains_rect(hint),
+                    "{case}: the hint {hint:?} hangs out of {screen:?}"
+                );
+            }
+        }
+    }
+
+    /// With the big meter off, the readout and the help below it are exactly
+    /// what they always were — the placeholder says "No reading" and the
+    /// steps are on screen, not hidden behind a hover. Both layouts that keep
+    /// the help: the reading column, and the meter-only branch the hidden
+    /// panels also lead to.
+    #[test]
+    fn the_normal_layout_still_draws_the_whole_help() {
+        let mut app = stalled_app(BigMeterMode::Off);
+        let column = frame_nodes(&mut app, 1000.0, 700.0, |app, ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                app.show_reading_column(ui, ContentLayout::Wide);
+            });
+        });
+
+        // The case the meter-only branch also serves: both panels hidden.
+        app.settings.show_graph = false;
+        app.settings.show_recording = false;
+        let meter = meter_nodes(&mut app, 1000.0, 700.0);
+
+        for (name, nodes) in [("the reading column", column), ("the big meter off", meter)] {
+            assert!(
+                shows_text(&nodes, "No reading"),
+                "{name}: the readout stopped saying \"No reading\""
+            );
+            assert!(
+                shows_text(&nodes, "No response from meter"),
+                "{name}: the help lost its title"
+            );
+            assert!(
+                shows_text(&nodes, BODY_PHRASE),
+                "{name}: the help lost its steps"
+            );
+        }
     }
 }

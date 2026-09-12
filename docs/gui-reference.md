@@ -528,6 +528,9 @@ Shown automatically when connection fails:
   during initial timeouts, then step-by-step instructions to enable USB mode
   (insert module, turn on, long-press USB/Hz until S icon appears)
 
+In big meter and minimal mode only the title is shown; hover it for the
+steps, or press **Ctrl+B** to leave the mode.
+
 Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
 (or press `Ctrl+O`) while it is retrying to stop the loop.
 
