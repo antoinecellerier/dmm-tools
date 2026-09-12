@@ -3,56 +3,40 @@
 ## Unreleased
 
 ### GUI
-- **Auto-detect is the default device** — the meter on the cable is worked out for you and saved, so later sessions open it directly instead of probing the cable again.
-- **Switch the meter's function and range from the readout** — on meters that allow it (UT61+/UT161, UT181A, VC-880, VC-890, mock) the mode and range labels are dropdowns naming what the dial position offers, Auto included.
-- **Scale button converts readings from probes and sensors the meter doesn't know** — after a rule at the end of the meter's buttons; a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
-- **The graph zooms on Ctrl + scroll wheel, or a pinch** — a plain wheel tick anywhere in the window zoomed it and left live mode, and the wheel now scrolls instead.
-- **The shortcut help scrolls when the window is too short** — its lower rows were cut off; `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` move it.
-- **The settings rows scroll when the window is too short** — Zoom, Always on top and Hide decorations were cut off; Tab brings the focused control into view.
-- **The reading and graph columns scroll when the window is too short** — the stats, and in a narrow window the graph and recording below them, were cut off.
-- **Toasts show in every layout** — they were drawn in the top bar, so minimal mode never showed them and a narrow bar cut them off; they are now a bordered box with a `✔`/`⚠` glyph that stays 8 seconds, or until its `×` is clicked.
-- **Big meter modes name the connection problem** — the help overflowed below a window-filling reading; hover the line or press `Ctrl+B` for the steps.
-- **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a new **Buffer size** setting moves the bound for graph and recording together.
-- **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were parsed but never shown.
+- **Auto-detect is the default device** — the meter on the cable is identified and remembered, so later sessions open it directly.
+- **Switch the meter's function and range from the readout** — the mode and range labels are dropdowns on the UT61+/UT161, UT181A, VC-880 and VC-890.
+- **Scale button converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
+- **Ctrl + wheel zooms the graph, a plain wheel scrolls** — any wheel tick used to zoom the graph and leave live mode; a pinch zooms too.
+- **Every panel scrolls when the window is too short** — the shortcut help, the settings rows and the stats, graph and recording below the reading were cut off.
+- **Toasts show in every layout** — minimal mode never showed them and a narrow top bar cut them off; they now float over the window.
+- **Big meter modes name the connection problem** — the help steps were pushed off screen below the reading; hover the line for them.
+- **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a **Buffer size** setting moves the bound.
+- **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were never shown.
 - **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
-- **Graph plots sub-values and overlays same-unit ones** — **Plot:** picks the primary series; **Show:** toggles each same-unit trace (T2, a REL reference, MIN/MAX extremes), drawn dashed with a key.
-- **Screen readers say which group a graph toolbar chip belongs to** — the **Plot:** and **Show:** chips both announced only the sub-value's name.
-- **Screen readers speak when a MIN/MAX extreme was captured** — the `@12s` beside the value was left out of the spoken reading.
-- **The meter's toggle buttons fill in when their mode is on** — HOLD, REL, RANGE, MIN/MAX, Scale and the graph's LIVE kept one grey frame either way.
-- **Border and Weak text colours in the Customize colors panel** — separators, panel edges and the plot outline were egui's fixed grey; the mode line, hints and captions were fixed per preset.
-- **A custom Accent colour fills the toggles and chips that are on** — HOLD, REL, the settings chips and the graph's toggles kept egui's fixed blue.
-- **A custom Text colour keeps its hue in bold headings** — a saturated red washed out to near-white in the device name, the section headings and What's New.
-- **Minimap trace stays smooth as the session grows** — past about one sample per pixel it broke into beads and dashes.
-- **Dark labels are brighter and secondary text meets AA** — the mode line, sub-value labels and hint captions sat near 2.7:1 dark and 2.9:1 light, below AA.
-- **The gaps warning in the stats panel meets AA in the light theme** — "⚠ N gaps skipped" sat at 2.8:1 in egui's fixed orange.
-- **Small captions are 11 pt** — the status line, hints, toolbar captions and the graph's LIVE button were 9 pt.
-- **`Ctrl+O` connects and disconnects** — the documented `Ctrl+Shift+C` was taken as a clipboard copy and never fired.
-- **`Ctrl+W` quits** — it only closed the shortcut help; `Cmd+W` on macOS.
-- **`F1` opens the shortcut help** — the only key was `?`.
-- **`F11` toggles fullscreen** — `Ctrl+Cmd+F` on macOS.
-- **`Cmd+M` minimises the window on macOS** — the app has no Window menu.
-- **Shortcut help shows `Cmd` keys on macOS** — every row said `Ctrl`.
-- **Cable-not-found help suggests trying another USB port** — on Windows the steps stopped at the driver download.
+- **Graph plots sub-values** — **Plot:** picks the series; **Show:** overlays same-unit ones such as T2 or a REL reference, dashed.
+- **The meter's toggle buttons fill in when their mode is on**
+- **Border and Weak text colours in Customize colors** — separators, panel edges, hints and captions were fixed per preset.
+- **Custom Accent and Text colours reach the toggles and headings** — toggles that are on kept a fixed blue; a saturated Text colour washed out in bold headings.
+- **Secondary text meets AA contrast** — the mode line, sub-value labels, hint captions and the gaps warning were too faint.
+- **The status line, hints and toolbar captions are larger**
+- **`Ctrl+O` connects, `Ctrl+W` quits, `F1` opens help, `F11` toggles fullscreen** — the documented `Ctrl+Shift+C` never fired, `Ctrl+W` only closed the help and `?` was the only help key.
+- **macOS shortcuts use `Cmd`, and `Cmd+M` minimises** — the shortcut help said `Ctrl` on every row.
+- **Cable-not-found help suggests another USB port** — on Windows the steps stopped at the driver download.
 - **Always on top says it is unavailable on Wayland** — the checkbox and `Ctrl+T` toggled a setting that did nothing there.
 
 ### CLI
 
-- **The meter on the cable is identified for you** — `--device` now only pins a meter model; when nothing answers, you get the steps that switch each meter's transmission on.
-- **`dmm-cli get` and `set` list and switch the meter's settings by name** — mode, range, HOLD, REL, MIN/MAX and Peak without touching the meter, on the UT61+/UT161, UT181A, VC-880/VC650BT, VC-890 and the mock; `get --format json` for scripts.
-- **REL on the UT181A** — neither `dmm-cli command rel` nor the GUI's REL button existed for that meter.
-- **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
+- **The meter on the cable is identified for you** — `--device` now only pins a model; when nothing answers, the steps that switch each meter's output on are printed.
+- **`get` and `set` read and switch the meter's mode, range and toggles** — on the UT61+/UT161, UT181A, VC-880/VC650BT and VC-890; `get --format json` for scripts.
+- **REL on the UT181A** — in the CLI and the GUI.
+- **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
-- **Mock modes with sub-values** — `--mock-mode acv-hz` (frequency and period), `temp2` (second thermocouple), `temp-diff` and `temp-diff-rev` (their difference) stand in for a UT181A in the CLI and GUI.
-- **A noisy mock mode with spikes** — `--mock-mode noise`, a DC millivolt signal for checking the graph and minimap, in the CLI and GUI.
+- **Mock modes with sub-values and noise** — `--mock-mode acv-hz`, `temp2`, `temp-diff` and `temp-diff-rev` stand in for a UT181A; `noise` is a spiky DC signal for the graph.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.
-- **Capture confirmations and `debug` list sub-values** — both showed only the main reading, so a second thermocouple or frequency display went unconfirmed.
-- **Capture steps advance on the meter's own state** — a keypress filed whatever was on screen; a step needing something on the probes waits for the reading to change; `r` retakes one; `--settle` waits out a reading that needs longer.
-- **Capture sets every range, flag and sub-mode it can** — on the UT61+/UT161, UT181A, VC-880 and VC-890 each mode step captured only the range auto-ranging picked; `--no-drive` turns it off.
-- **Capture confirms the first few steps and reviews the rest at the end** — every step stopped for an Enter; `--sniff` keeps per-step checks for a parser nobody trusts yet.
-- **Capture reports carry every wire byte and parse error** — a step the tool couldn't decode was saved empty.
-- **Capture lists what a run needs up front** — a thermocouple or battery turned up mid-run as a step nobody could do; say what you lack and those steps are skipped.
-- **`capture --unverified` and `--plan` run what an issue asks for** — a reporter copied a hand-written `--steps` list, and an edge case waited for a release; `--list-steps --format md` prints the issue's checklist.
-- **Capture steps cover every sub-mode** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB modes had no step; a model is asked only for its own dial positions.
+- **Capture drives the meter and waits for readings itself** — every step stopped for an Enter and filed whatever was on screen; on meters that take commands it sets each range, flag and sub-mode.
+- **Capture covers every sub-mode and lists the equipment up front** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB had no step; a thermocouple or battery turned up mid-run.
+- **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; confirmations and `debug` showed only the main reading.
+- **`capture --unverified` runs only the steps no report has confirmed** — `--list-steps --format md` prints that checklist for an issue; `--plan` runs a maintainer-written step file.
 
 ### Library
 
@@ -60,22 +44,22 @@
 
 ### Bug fixes
 
-- **Colour swatches wrap in a narrow settings panel** — with **Customize colors** open, the Graph row ran off the right edge and the rows above stopped reflowing with the window.
+- **Colour swatches wrap in a narrow settings panel** — the Graph row ran off the right edge with **Customize colors** open.
 - **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, diode, capacitance, Hz, duty, NCV and AC+DC V offered controls that did nothing.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
-- **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V, a value the manual's AC table does not list.
-- **UT61E+ NCV shows the detected level** — every detection read as level 0.
-- **Resuming a capture keeps its freeform steps** — a second run numbered from `extra_0` again and overwrote them.
-- **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.
-- **Clicking a theme chip keeps keyboard focus on it** — the focus ring landed on the chip after the one clicked.
-- **The graph's time axis keeps its seconds past the first hour** — a 1 m window read "1h 2m" on every grid mark.
-- **UT8802 negative readings show their sign** — the display and CSV dropped the minus; only the JSON value carried it.
-- **A UT181A command the meter refuses is reported as an error** — every command reported as sent, whether the meter acted on it or not.
+- **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V.
+- **UT61E+ NCV shows the detected level**
+- **Resuming a capture keeps its freeform steps**
+- **VC-880 and VC-890 report the AVG flag**
+- **Clicking a theme chip keeps keyboard focus on it** — the focus ring landed on the next chip.
+- **The graph's time axis keeps its seconds past the first hour** — a zoomed-in window then labelled every grid mark alike.
+- **Minimap trace stays smooth as the session grows** — past about one sample per pixel it broke into beads and dashes.
+- **UT8802 negative readings show their sign**
+- **A UT181A command the meter refuses is reported as an error**
 - **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.
-- **Capture reports' confirmation line names every flag** — a sample taken with HV, LOW BAT, LEAD ERR, COMP or REC showed only "[AUTO]".
-- **Peak MIN/MAX badges show in the reading display** — screen readers announced them but the badge row left them out; badges now follow the CSV flags column order.
-- **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked the two integral cells the header named, shifting every sub-value column.
-- **The shortcut help's close button shows an ×** — it drew a missing-glyph box.
+- **Capture reports' confirmation line names every flag** — HV, LOW BAT, LEAD ERR, COMP and REC were left out.
+- **Peak MIN/MAX badges show in the reading display**
+- **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked two cells, shifting the sub-value columns.
 - **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 
 ### Internal
