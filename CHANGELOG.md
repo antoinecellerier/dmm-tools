@@ -5,7 +5,7 @@
 ### GUI
 - **Auto-detect is the default device** — the meter on the cable is worked out for you and saved, so later sessions open it directly instead of probing the cable again.
 - **Switch the meter's function and range from the readout** — on meters that allow it (UT61+/UT161, UT181A, VC-880, VC-890, mock) the mode and range labels are dropdowns naming what the dial position offers, Auto included.
-- **Scale row converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
+- **Scale button converts readings from probes and sensors the meter doesn't know** — after a rule at the end of the meter's buttons; a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **The graph zooms on Ctrl + scroll wheel, or a pinch** — a plain wheel tick anywhere in the window zoomed it and left live mode, and the wheel now scrolls instead.
 - **The shortcut help scrolls when the window is too short** — its lower rows were cut off; `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` move it.
 - **The settings rows scroll when the window is too short** — Zoom, Always on top and Hide decorations were cut off; Tab brings the focused control into view.

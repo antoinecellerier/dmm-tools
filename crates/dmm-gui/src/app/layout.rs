@@ -68,7 +68,7 @@ impl App {
             self.select(setting, id);
         }
         let controls_top = ui.cursor().top();
-        self.show_remote_controls(ui, 1.0);
+        self.show_remote_controls(ui, 1.0, Self::big_meter_toggle_width(ui));
         let controls_bottom = ui.cursor().top();
         // Overlay toggle on the last controls row, right-aligned.
         let toggle_rect = egui::Rect::from_min_max(
@@ -76,7 +76,7 @@ impl App {
             egui::pos2(ui.max_rect().right(), controls_bottom),
         );
         self.show_big_meter_toggle_at(ui, toggle_rect);
-        self.show_transform_row(ui, 1.0);
+        self.show_transform_editor(ui, 1.0);
         self.show_connection_help(ui);
 
         match layout {
@@ -121,8 +121,25 @@ impl App {
     }
 
     /// Paint the big meter toggle button at a given rect (overlay, no layout impact).
-    pub(super) fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
-        let (icon, tooltip) = match self.big_meter_mode {
+    /// Width the toggle drawn by [`show_big_meter_toggle_at`]
+    /// (Self::show_big_meter_toggle_at) covers at the right edge of the
+    /// controls row, so that row can keep its last chip clear of it.
+    pub(super) fn big_meter_toggle_width(ui: &Ui) -> f32 {
+        // Both icons are the same glyph width; measure the one shown when
+        // the toggle sits on the controls row.
+        let galley = egui::WidgetText::from(Self::big_meter_toggle_icon(BigMeterMode::Off).0)
+            .into_galley(
+                ui,
+                Some(egui::TextWrapMode::Extend),
+                f32::INFINITY,
+                egui::TextStyle::Button,
+            );
+        galley.size().x + 2.0 * ui.spacing().button_padding.x
+    }
+
+    /// Icon and tooltip of the big-meter toggle in `mode`.
+    fn big_meter_toggle_icon(mode: BigMeterMode) -> (RichText, &'static str) {
+        let (icon, tooltip) = match mode {
             BigMeterMode::Off => (
                 "\u{229E}",
                 "Hide side panels and show the meter reading full-screen (Ctrl+B)",
@@ -132,10 +149,15 @@ impl App {
                 "Return to the normal multi-panel layout (Ctrl+B)",
             ),
         };
+        (RichText::new(icon).size(14.0), tooltip)
+    }
+
+    pub(super) fn show_big_meter_toggle_at(&mut self, ui: &mut Ui, rect: egui::Rect) {
+        let (icon, tooltip) = Self::big_meter_toggle_icon(self.big_meter_mode);
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));
         child.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
             let color = ui.visuals().weak_text_color();
-            let btn = egui::Button::new(RichText::new(icon).size(14.0).color(color));
+            let btn = egui::Button::new(icon.color(color));
             let response = ui.add(btn).on_hover_text(tooltip).a11y_label(tooltip);
             if response.clicked() {
                 if self.big_meter_mode == BigMeterMode::Off {

@@ -129,10 +129,9 @@ measurement. LIGHT has no protocol feedback, so it does not highlight.
 
 ## Scale
 
-**Scale**, on its own row under the remote controls, applies a software
-transform to the reading — a current clamp's 10 mV/A, a shunt, a probe
-divider, °C to °F. It changes nothing on the meter, which is why it sits
-apart from the buttons above it. Clicking it opens three fields:
+**Scale**, next to the remote controls, applies a software transform to the
+reading — a current clamp's 10 mV/A, a shunt, a probe divider, °C to °F. It
+changes nothing on the meter. Clicking it opens three fields:
 
 | Field | Meaning | Left empty |
 |---|---|---|

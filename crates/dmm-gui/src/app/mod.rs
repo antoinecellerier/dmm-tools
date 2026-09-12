@@ -723,8 +723,10 @@ impl eframe::App for App {
                         let after_reading = ui.cursor().top();
 
                         if !minimal {
-                            self.show_remote_controls(ui, scale);
-                            self.show_transform_row(ui, scale);
+                            // The big-meter toggle sits in the panel corner
+                            // here, not on the row: nothing to keep clear of.
+                            self.show_remote_controls(ui, scale, 0.0);
+                            self.show_transform_editor(ui, scale);
                         }
                         self.show_connection_help(ui);
 

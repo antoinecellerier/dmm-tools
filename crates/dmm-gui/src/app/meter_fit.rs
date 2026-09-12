@@ -130,8 +130,9 @@ pub(super) struct FitInputs {
     pub(super) show_stats: bool,
     pub(super) show_specs: bool,
     pub(super) big_meter_mode: BigMeterMode,
-    /// The Scale row adds a button row, and opening its editor adds a second
-    /// one — both change how much room is left for the reading.
+    /// Opening the Scale editor adds a row under the buttons, and an active
+    /// scale adds the `Raw` sub-value — both change how much room is left
+    /// for the reading.
     pub(super) transform_editor_open: bool,
     pub(super) transform_is_identity: bool,
 }

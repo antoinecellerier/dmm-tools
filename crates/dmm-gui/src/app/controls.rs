@@ -88,15 +88,37 @@ fn settings_scroll_cap(window_h: f32, top: f32) -> f32 {
         .floor()
 }
 
+/// Width of the rule between the meter's buttons and the Scale chip, in
+/// points before zoom: egui's own separator spacing.
+pub(super) const SCALE_RULE_WIDTH: f32 = 6.0;
+
 impl App {
-    pub(super) fn show_remote_controls(&mut self, ui: &mut Ui, scale: f32) {
+    /// The meter's buttons, with the **Scale** chip on the end of their last
+    /// line when it fits and on a line of its own otherwise. `right_reserve`
+    /// is width the caller paints over at the row's right edge (the big-meter
+    /// toggle), which the chip must not run under.
+    pub(super) fn show_remote_controls(&mut self, ui: &mut Ui, scale: f32, right_reserve: f32) {
         use super::ConnectionState;
+
+        let font_size = 12.0 * scale;
+        let spacing = 3.0 * scale;
 
         // Only show controls when connected with measurement data and supported commands
         if self.connection.state != ConnectionState::Connected
             || self.last_measurement.is_none()
             || self.connection.supported_commands.is_empty()
         {
+            // No button row to join: Scale keeps its own, so an active
+            // scale can still be turned off while disconnected.
+            let clicked = ui
+                .horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = spacing;
+                    self.show_scale_button(ui, font_size)
+                })
+                .inner;
+            if clicked {
+                self.toggle_transform_editor();
+            }
             return;
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
@@ -104,10 +126,14 @@ impl App {
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let active_color = tc.accent();
 
-        let font_size = 12.0 * scale;
-
+        // Collected rather than acted on inside the closure, which holds
+        // `has_cmd`'s borrow of `self`.
+        let mut scale_clicked = false;
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0 * scale;
+            ui.spacing_mut().item_spacing.x = spacing;
+            // Whether any meter button landed on the row: only then is there
+            // something for the Scale chip to be set apart from.
+            let mut placed = false;
 
             let hold = flags.is_some_and(|f| f.hold);
             let rel = flags.is_some_and(|f| f.rel);
@@ -145,6 +171,7 @@ impl App {
                 let resp = ui
                     .add(egui::Button::new(text).selected(active))
                     .on_hover_text(tooltip);
+                placed = true;
                 if resp.clicked() {
                     self.send_command(cmd);
                 }
@@ -176,6 +203,7 @@ impl App {
                 let resp = ui
                     .add(egui::Button::new(text).selected(active))
                     .on_hover_text(tooltip);
+                placed = true;
                 if resp.clicked() {
                     self.send_command(cycle_cmd);
                 }
@@ -215,8 +243,35 @@ impl App {
                 {
                     self.send_command(cmd);
                 }
+                placed = true;
             }
+
+            // Scale, set apart by a rule: it changes nothing on the meter,
+            // and sitting it among the buttons with no boundary would
+            // suggest the meter knows about the factor. Measured as one
+            // unit before placing, so the rule can never be left dangling
+            // at the end of a line the chip wrapped off. On a line of its
+            // own the line break is the boundary and the rule is dropped.
+            let rule_width = SCALE_RULE_WIDTH * scale;
+            let chip_width = Self::scale_button_width(ui, font_size);
+            let needed = rule_width + spacing + chip_width + spacing + right_reserve;
+            if placed && needed <= ui.available_size_before_wrap().x {
+                let height = ui.cursor().height();
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(rule_width, height), egui::Sense::hover());
+                ui.painter().vline(
+                    rect.center().x,
+                    rect.y_range(),
+                    ui.visuals().widgets.noninteractive.bg_stroke,
+                );
+            } else if placed {
+                ui.end_row();
+            }
+            scale_clicked = self.show_scale_button(ui, font_size);
         });
+        if scale_clicked {
+            self.toggle_transform_editor();
+        }
     }
 
     /// The rows below the bar row while the settings are open. Returns the

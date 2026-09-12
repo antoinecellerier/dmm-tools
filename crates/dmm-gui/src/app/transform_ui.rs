@@ -1,4 +1,5 @@
-//! The **Scale** row: a session-only software transform over the reading.
+//! The **Scale** button and editor: a session-only software transform over
+//! the reading.
 //!
 //! A current clamp reads 10 mV/A, a pressure transducer reads V/PSI — the
 //! meter knows nothing about either. This row lets the user say what the
@@ -8,7 +9,7 @@
 //! Deliberately *not* persisted, for the same reason `Graph::selected_series`
 //! isn't: a factor left in a settings file would silently corrupt the next
 //! session's readings, which is far worse than retyping it. It does survive
-//! disconnect/reconnect, a change of device and `Ctrl+L`, and the row is
+//! disconnect/reconnect, a change of device and `Ctrl+L`, and the button is
 //! always on screen so an active transform can always be turned back off.
 
 use dmm_lib::transform::{FactorError, RAW_LABEL, Transform};
@@ -44,6 +45,12 @@ const SCALE_HOVER: &str = "Scale, offset or relabel the reading in software (app
 
 /// Width of each of the three fields, in points before zoom.
 const FIELD_WIDTH: f32 = 50.0;
+
+/// The chip's label at the remote-controls font, so the chip and the
+/// measurement of it in [`App::scale_button_width`] cannot drift apart.
+fn scale_label(font_size: f32) -> RichText {
+    RichText::new("Scale").font(egui::FontId::proportional(font_size))
+}
 
 /// Turn the three draft strings into a [`Transform`].
 ///
@@ -87,35 +94,52 @@ fn parse_field(
 }
 
 impl App {
-    pub(super) fn show_transform_row(&mut self, ui: &mut Ui, scale: f32) {
+    /// Width the [`show_scale_button`](Self::show_scale_button) chip takes at
+    /// `font_size`, so the remote-controls row can tell before placing it
+    /// whether it fits on the line.
+    pub(super) fn scale_button_width(ui: &Ui, font_size: f32) -> f32 {
+        let galley = egui::WidgetText::from(scale_label(font_size)).into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Button,
+        );
+        galley.size().x + 2.0 * ui.spacing().button_padding.x
+    }
+
+    /// The **Scale** toggle chip, placed wherever the caller's row has its
+    /// cursor; returns whether it was clicked, for the caller to hand to
+    /// [`toggle_transform_editor`](Self::toggle_transform_editor) once its
+    /// row closure has let go of `self`. Styled like the remote buttons
+    /// (filled while a scale is active), which is why a caller sitting it
+    /// next to them draws a rule in between: those mirror and drive the
+    /// meter's own state, this one changes nothing on the meter at all.
+    pub(super) fn show_scale_button(&self, ui: &mut Ui, font_size: f32) -> bool {
         let active = !self.transform.is_identity();
+        // `selected` puts the state in the widget info for AT users, whom
+        // the fill alone doesn't reach; the frame stays when off so the
+        // chip still reads as actionable.
+        ui.add(egui::Button::new(scale_label(font_size)).selected(active))
+            .on_hover_text(SCALE_HOVER)
+            .clicked()
+    }
+
+    /// Open the editor row if closed, close it if open.
+    pub(super) fn toggle_transform_editor(&mut self) {
+        self.transform_editor.open = !self.transform_editor.open;
+    }
+
+    /// The `× [scale] + [offset] → [unit] [Apply] [Off]` row under the
+    /// buttons, shown while the editor is open.
+    pub(super) fn show_transform_editor(&mut self, ui: &mut Ui, scale: f32) {
+        if !self.transform_editor.open {
+            return;
+        }
         // Floored at the 11 pt minimum: unlike the remote buttons this row
         // holds text the user has to type into, and the big meter's scale
         // factor goes below 0.4 in a small window.
         let font_size = (12.0 * scale).max(SMALL_TEXT_SIZE);
         let font = egui::FontId::proportional(font_size);
-
-        // Its own row, not folded in with HOLD/REL/RANGE/AUTO: those mirror
-        // and drive the meter's own state, this one changes nothing on the
-        // meter at all. Sitting them side by side would suggest the meter
-        // knows about the factor.
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 3.0 * scale;
-            let label = RichText::new("Scale").font(font.clone());
-            // `selected` puts the state in the widget info for AT users, whom
-            // the fill alone doesn't reach; the frame stays when off so the
-            // chip still reads as actionable.
-            let resp = ui
-                .add(egui::Button::new(label).selected(active))
-                .on_hover_text(SCALE_HOVER);
-            if resp.clicked() {
-                self.transform_editor.open = !self.transform_editor.open;
-            }
-        });
-
-        if !self.transform_editor.open {
-            return;
-        }
 
         // Collected rather than acted on inside the closure: the field
         // borrows of `transform_editor` are live in there, and applying
@@ -223,7 +247,96 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    use super::super::controls::SCALE_RULE_WIDTH;
     use super::*;
+    use crate::settings::Settings;
+    use eframe::egui::accesskit::Node;
+    use eframe::egui::{Pos2, Rect, vec2};
+
+    /// Bounds of the meter's `LIGHT` chip and the `Scale` chip after laying
+    /// the connected reading column out in a window `width` points wide. Two
+    /// frames: a wrapped row is cut at the width the previous frame settled.
+    fn chip_bounds(width: f32) -> (egui::accesskit::Rect, egui::accesskit::Rect) {
+        let settings = Settings {
+            // No acquisition thread: the connected state is set by hand.
+            auto_connect: false,
+            ..Settings::default()
+        };
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        app.connection.state = super::super::ConnectionState::Connected;
+        app.connection.supported_commands = [
+            "hold", "rel", "range", "auto", "minmax", "peak", "select", "light",
+        ]
+        .map(String::from)
+        .to_vec();
+        app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        ));
+
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(width, 600.0));
+        let mut nodes: Vec<(egui::accesskit::NodeId, Node)> = Vec::new();
+        for _ in 0..2 {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ui| {
+                    egui::CentralPanel::default().show(ui, |ui| {
+                        app.show_reading_column(ui, super::super::layout::ContentLayout::Narrow);
+                    });
+                },
+            );
+            // This harness renders without a painter.
+            out.textures_delta.clear();
+            nodes = out
+                .platform_output
+                .accesskit_update
+                .map(|update| update.nodes)
+                .unwrap_or_default();
+        }
+        let bounds = |label: &str| {
+            nodes
+                .iter()
+                .find(|(_, n)| n.label() == Some(label))
+                .and_then(|(_, n)| n.bounds())
+                .unwrap_or_else(|| panic!("{label} chip is drawn"))
+        };
+        (bounds("LIGHT"), bounds("Scale"))
+    }
+
+    /// With room to spare the Scale chip ends the meter's button line, set
+    /// off by a rule's width rather than a button gap.
+    #[test]
+    fn scale_chip_joins_the_button_line_when_it_fits() {
+        let (light, scale) = chip_bounds(900.0);
+        assert!(
+            (light.y0 - scale.y0).abs() < 0.5,
+            "Scale sits on the LIGHT line: LIGHT {light:?}, Scale {scale:?}"
+        );
+        let gap = scale.x0 - light.x1;
+        assert!(
+            gap > SCALE_RULE_WIDTH as f64,
+            "a rule separates Scale from LIGHT (gap {gap})"
+        );
+    }
+
+    /// With no room left on the button line the chip drops to a line of its
+    /// own, as it always did, instead of running under the big-meter toggle.
+    #[test]
+    fn scale_chip_takes_its_own_line_when_the_button_line_is_full() {
+        let (light, scale) = chip_bounds(420.0);
+        assert!(
+            scale.y0 >= light.y1,
+            "Scale sits below LIGHT: LIGHT {light:?}, Scale {scale:?}"
+        );
+        // A fresh line starts at the margin, with no rule in front of it.
+        assert!(scale.x0 < light.x0, "Scale starts its line at the margin");
+    }
 
     /// The 10 mV/A clamp: ×100, no offset, relabelled to amps.
     #[test]

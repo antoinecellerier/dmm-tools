@@ -129,14 +129,18 @@ readout dropdowns' job.
 - **SELECT** — cycles sub-modes (no toggle state, mode change visible in reading)
 - **LIGHT** — toggles backlight (no protocol feedback for state)
 
-### Scale Row
+### Scale Button
 
-A **Scale** toggle on a row of its own under the remote controls, opening
-`× [scale] + [offset] → [unit] [Apply] [Off]` when clicked. Styled like the
-remote buttons (filled while a scale is active) but deliberately
-**kept apart from them**: those buttons mirror and drive the meter's own
-state, whereas this changes nothing on the meter. Sitting them side by side
-would suggest the meter knows about the factor.
+A **Scale** toggle at the end of the remote controls' last line, opening
+`× [scale] + [offset] → [unit] [Apply] [Off]` on a row below when clicked.
+Styled like the remote buttons (filled while a scale is active) but
+deliberately **set apart from them by a vertical rule**: those buttons mirror
+and drive the meter's own state, whereas this changes nothing on the meter.
+Sitting among them with no boundary would suggest the meter knows about the
+factor. When the rule and the button no longer fit on the line (the big-meter
+toggle at the row's right edge counts), the button drops to a line of its own
+and the line break is the boundary; while disconnected it has that line
+anyway, so an active scale can always be turned off.
 
 - Commits on **Apply** or Enter in a field, never on keystroke — a
   half-typed number would clear the graph and statistics on every character.
@@ -150,6 +154,8 @@ would suggest the meter knows about the factor.
   disconnect/reconnect, a change of device and Ctrl+L, and the row stays
   visible so an active scale can always be turned off.
 - Hidden in big-meter Minimal mode, like the remote buttons.
+- Headless tests in `app/transform_ui.rs` pin both placements — on the LIGHT
+  line at 900 pt, on its own line at 420 pt.
 
 ### Specifications Panel
 
