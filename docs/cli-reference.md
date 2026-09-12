@@ -33,10 +33,10 @@ Set `NO_COLOR=1` to disable colored output.
 
 ### Devices
 
-The `--device` flag selects the meter model. `auto` (the default) works out which meter is on the cable from its replies
-([how](detection-design.md)); naming a model skips the probe. The probe makes a
-UT61+/UT161 beep once. If nothing answers, the CLI lists what each meter needs
-switched on.
+The `--device` flag selects the meter model. `auto` (the default) works out
+which meter is on the cable from its replies ([how](detection-design.md));
+naming a model skips the probe. The probe makes a UT61+/UT161 beep once. If
+nothing answers, the CLI lists what each meter needs switched on.
 
 **Device resolution precedence** (highest to lowest):
 
@@ -75,32 +75,9 @@ display counts, form factor and cable. When connecting to an experimental
 device, the CLI prints a yellow warning with a link to the device's
 verification issue on GitHub. Please report findings there.
 
-The `mock` device generates synthetic measurements, cycling through every mode
-in the table below. It requires no USB hardware and is useful for development,
-demos, and testing output formats. It supports `read`, `command`, `get` and
-`set`; `info`, `debug` and `capture` need real hardware.
-
-#### Mock Modes
-
-By default, the mock device cycles through all modes automatically. Use
-`--mock-mode` to pin it to one:
-
-| Mode | Description |
-|---|---|
-| `dcv` | DC Voltage (sine wave around 5V) |
-| `acv` | AC Voltage (sine wave around 120V) |
-| `ohm` | Resistance (step 1-10 kΩ) |
-| `cap` | Capacitance (ramp 1-20 µF) |
-| `hz` | Frequency (sine wave around 60Hz) |
-| `temp` | Temperature (ramp 20-30°C) |
-| `dcma` | DC mA (sine wave around 50mA) |
-| `ohm-ol` | Resistance overload (OL) |
-| `ncv` | NCV (cycling levels 0-4) |
-| `acv-hz` | AC Voltage with frequency and period sub-displays |
-| `temp2` | Temperature with a second thermocouple (T2) |
-| `temp-diff` | Temperature difference T1-T2 |
-| `temp-diff-rev` | Temperature difference T2-T1 |
-| `noise` | DC mV, noisy with spikes (for graph and minimap checks) |
+The `mock` device generates synthetic measurements without hardware, cycling
+through the scenarios listed under [Mock modes](#mock-modes); `--mock-mode`
+pins one. It supports `read`, `command`, `get` and `set`.
 
 **Examples:**
 
@@ -116,9 +93,6 @@ dmm-cli --device ut181a info
 
 # Use simulated device (no hardware)
 dmm-cli --device mock read
-
-# Pin mock to DC voltage mode
-dmm-cli --device mock read --mock-mode dcv
 ```
 
 ## Commands
@@ -169,7 +143,7 @@ dmm-cli read [OPTIONS]
 | `--format <FORMAT>` | `text` | Output format: `text`, `csv`, or `json`. |
 | `-o, --output <FILE>` | stdout | Write output to a file instead of stdout. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
-| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
+| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
 | `--offset <VALUE>` | `0` | Add VALUE after scaling. |
@@ -242,6 +216,106 @@ relabelled to `A` integrates to Ah. A dim stderr note marks a scaled run.
 dmm-cli read --scale 100 --unit A                 # 10 mV/A clamp → amps
 dmm-cli read --scale 100                          # 100:1 HV probe, stays in V
 dmm-cli read --scale 1.8 --offset 32 --unit °F    # °C → °F
+```
+
+### dmm-cli get
+
+List what the meter's settings can be switched to from the current dial
+position: mode, range, HOLD, REL, MIN/MAX and Peak (UT61+/UT161, UT181A,
+VC-880/VC650BT, VC-890 and mock).
+
+```
+dmm-cli get                  # one row per setting, * = the live value
+dmm-cli get <SETTING>        # that setting alone, with what to type for each value
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `<SETTING>` | all of them | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
+
+| Option | Default | Description |
+|---|---|---|
+| `--format <FORMAT>` | `text` | Output format: `text` or `json`. |
+| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
+
+A setting with no choice from the current position (Peak on a meter without
+it, a dial position with one function) is left out of the whole-meter listing;
+asked for alone, it prints a note and exits 0.
+
+```
+$ dmm-cli get
+Settings for UT61E+ (DC V):
+  mode   * DC V  AC+DC V
+  range  * Auto  2.2V  22V  220V  1000V  (auto-ranging in 22V)
+
+Tip: switch one by name, e.g. dmm-cli set mode "ac+dc"
+```
+
+`--format json` prints one object per invocation. `get <SETTING>` gives one
+block; `get` alone nests one such block per setting under `settings`.
+`current` is `null` when the meter sits on none of the listed values.
+
+```json
+{
+  "device": "UT61E+",
+  "mode": "DC V",
+  "range": "22V",
+  "setting": "range",
+  "current": "Auto",
+  "choices": [
+    { "label": "Auto", "current": true },
+    { "label": "2.2V", "current": false }
+  ]
+}
+```
+
+**Example:**
+
+```bash
+dmm-cli get                        # everything switchable from where it sits
+dmm-cli get range                  # the ranges the current mode offers
+dmm-cli get --format json          # one object, for scripts
+dmm-cli --device ut181a get mode
+```
+
+### dmm-cli set
+
+Switch one of the meter's settings by name.
+
+```
+dmm-cli set <SETTING>            # list the values (* = live) and what to type for each
+dmm-cli set <SETTING> <CHOICE>   # switch, by label
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `<SETTING>` | | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
+| `<CHOICE>` | list them | Label to switch to, case-insensitive, or a unique fragment of one (`on`, `off`, `auto` included). |
+
+| Option | Default | Description |
+|---|---|---|
+| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
+
+After switching, `dmm-cli` waits for the meter to report the new value and
+prints it (`Meter now in AC+DC V`). A refused or unconfirmed switch exits
+non-zero: check the dial position, and for a range that the input is within it.
+
+On the UT61+/UT161 and the Voltcraft meters a switch is a burst of button
+presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
+shows, so it is slower than a single command and audible on the meter. One
+gap follows from that: while a UT61+/UT161 shows Hz or Duty %, `get mode`
+lists only those two. Press Hz/% (`dmm-cli command select2`) until the
+position's voltage or current function shows and the full list is back.
+
+**Example:**
+
+```bash
+dmm-cli set mode                   # a UT61E+ on the V⎓ dial: DC V, AC+DC V
+dmm-cli set mode "AC+DC V"
+dmm-cli set range 22V              # pin the range
+dmm-cli set range auto
+dmm-cli set hold on
+dmm-cli --device ut181a set mode "V AC Hz"
 ```
 
 ### dmm-cli command
@@ -317,106 +391,6 @@ dmm-cli command hold
 dmm-cli --device ut181a command hold
 ```
 
-### dmm-cli get
-
-List what the meter's settings can be switched to from the current dial
-position: mode, range, HOLD, REL, MIN/MAX and Peak (UT61+/UT161, UT181A,
-VC-880/VC650BT, VC-890 and mock).
-
-```
-dmm-cli get                  # one row per setting, * = the live value
-dmm-cli get <SETTING>        # that setting alone, with what to type for each value
-```
-
-| Argument | Default | Description |
-|---|---|---|
-| `<SETTING>` | all of them | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
-
-| Option | Default | Description |
-|---|---|---|
-| `--format <FORMAT>` | `text` | Output format: `text` or `json`. |
-| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
-
-A setting with no choice from the current position (Peak on a meter without
-it, a dial position with one function) is left out of the whole-meter listing;
-asked for alone, it prints a note and exits 0.
-
-```
-$ dmm-cli get
-Settings for UT61E+ (DC V):
-  mode   * DC V  AC+DC V
-  range  * Auto  2.2V  22V  220V  1000V  (auto-ranging in 22V)
-
-Tip: switch one by name, e.g. dmm-cli set mode "ac+dc"
-```
-
-`--format json` prints one object per invocation. `get <SETTING>` gives one
-block; `get` alone nests one such block per setting under `settings`.
-`current` is `null` when the meter sits on none of the listed values.
-
-```json
-{
-  "device": "UT61E+",
-  "mode": "DC V",
-  "range": "22V",
-  "setting": "range",
-  "current": "Auto",
-  "choices": [
-    { "label": "Auto", "current": true },
-    { "label": "2.2V", "current": false }
-  ]
-}
-```
-
-**Example:**
-
-```bash
-dmm-cli get                        # everything switchable from where it sits
-dmm-cli get range                  # the ranges the current mode offers
-dmm-cli get --format json          # one object, for scripts
-dmm-cli --device ut181a get mode
-```
-
-### dmm-cli set
-
-Switch one of the meter's settings by name.
-
-```
-dmm-cli set <SETTING>            # list the values (* = live) and what to type for each
-dmm-cli set <SETTING> <CHOICE>   # switch, by label
-```
-
-| Argument | Default | Description |
-|---|---|---|
-| `<SETTING>` | | `mode`, `range`, `hold`, `rel`, `minmax` or `peak`. |
-| `<CHOICE>` | list them | Label to switch to, case-insensitive, or a unique fragment of one (`on`, `off`, `auto` included). |
-
-| Option | Default | Description |
-|---|---|---|
-| `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock Modes](#mock-modes). |
-
-After switching, `dmm-cli` waits for the meter to report the new value and
-prints it (`Meter now in AC+DC V`). A refused or unconfirmed switch exits
-non-zero: check the dial position, and for a range that the input is within it.
-
-On the UT61+/UT161 and the Voltcraft meters a switch is a burst of button
-presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
-shows, so it is slower than a single command and audible on the meter. One
-gap follows from that: while a UT61+/UT161 shows Hz or Duty %, `get mode`
-lists only those two. Press Hz/% (`dmm-cli command select2`) until the
-position's voltage or current function shows and the full list is back.
-
-**Example:**
-
-```bash
-dmm-cli set mode                   # a UT61E+ on the V⎓ dial: DC V, AC+DC V
-dmm-cli set mode "AC+DC V"
-dmm-cli set range 22V              # pin the range
-dmm-cli set range auto
-dmm-cli set hold on
-dmm-cli --device ut181a set mode "V AC Hz"
-```
-
 ### dmm-cli debug
 
 Raw hex dump mode for protocol debugging. Prints transport info (bridge type and
@@ -436,34 +410,6 @@ For full wire-level tracing, combine with the `RUST_LOG` environment variable:
 
 ```bash
 RUST_LOG=dmm_lib=trace dmm-cli debug --count 0
-```
-
-### dmm-cli completions
-
-Generate shell completion scripts.
-
-```
-dmm-cli completions [SHELL]
-```
-
-Supported shells: `bash`, `elvish`, `fish`, `powershell`, `zsh`.
-
-Running without a shell argument prints install instructions.
-
-**Install completions:**
-
-```bash
-# Bash
-dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
-
-# Zsh (ensure ~/.zfunc is in fpath and compinit is called)
-dmm-cli completions zsh > ~/.zfunc/_dmm-cli
-
-# Fish
-dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
-
-# PowerShell
-dmm-cli completions powershell >> $PROFILE
 ```
 
 ### dmm-cli capture
@@ -550,6 +496,34 @@ dmm-cli capture --steps ohm --settle 3000
 dmm-cli --device vc890 capture --plan edge.yaml
 ```
 
+### dmm-cli completions
+
+Generate shell completion scripts.
+
+```
+dmm-cli completions [SHELL]
+```
+
+Supported shells: `bash`, `elvish`, `fish`, `powershell`, `zsh`.
+
+Running without a shell argument prints install instructions.
+
+**Install completions:**
+
+```bash
+# Bash
+dmm-cli completions bash > ~/.local/share/bash-completion/completions/dmm-cli
+
+# Zsh (ensure ~/.zfunc is in fpath and compinit is called)
+dmm-cli completions zsh > ~/.zfunc/_dmm-cli
+
+# Fish
+dmm-cli completions fish > ~/.config/fish/completions/dmm-cli.fish
+
+# PowerShell
+dmm-cli completions powershell >> $PROFILE
+```
+
 ## Environment Variables
 
 | Variable | Description |
@@ -558,6 +532,32 @@ dmm-cli --device vc890 capture --plan edge.yaml
 | `NO_COLOR` | Set to `1` to disable colored terminal output. |
 
 ## Appendix
+
+### Mock modes
+
+`--device mock` cycles through these scenarios; `--mock-mode <MODE>` on
+`read`, `get` or `set` pins one:
+
+| Mode | Description |
+|---|---|
+| `dcv` | DC Voltage (sine wave around 5V) |
+| `acv` | AC Voltage (sine wave around 120V) |
+| `ohm` | Resistance (step 1-10 kΩ) |
+| `cap` | Capacitance (ramp 1-20 µF) |
+| `hz` | Frequency (sine wave around 60Hz) |
+| `temp` | Temperature (ramp 20-30°C) |
+| `dcma` | DC mA (sine wave around 50mA) |
+| `ohm-ol` | Resistance overload (OL) |
+| `ncv` | NCV (cycling levels 0-4) |
+| `acv-hz` | AC Voltage with frequency and period sub-displays |
+| `temp2` | Temperature with a second thermocouple (T2) |
+| `temp-diff` | Temperature difference T1-T2 |
+| `temp-diff-rev` | Temperature difference T2-T1 |
+| `noise` | DC mV, noisy with spikes (for graph and minimap checks) |
+
+```bash
+dmm-cli --device mock read --mock-mode dcv
+```
 
 ### Capture plan files
 

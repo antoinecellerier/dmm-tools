@@ -19,28 +19,38 @@ dmm-gui [OPTIONS]
 A desktop GUI for live measurement display, time-series graphing, recording,
 and remote control of UNI-T and Voltcraft multimeters.
 
+![Wide layout — live measurement with graph, statistics, recording, and minimap](../assets/gui-wide-layout.png)
+
+## Connecting
+
 The Settings panel includes a **Device** selector. **Auto-detect**, the
 default, works out which meter is on the USB cable from its replies
 ([how](detection-design.md)), shows it in the top bar and saves it as the
 **Device**; pick **Auto-detect** again after swapping meters. The probe makes
-a UT61+/UT161 beep once. If nothing answers, the reading column lists what
-each meter needs switched on.
+a UT61+/UT161 beep once.
 
 The other choices are every supported model (see [supported
-devices](supported-devices.md)) and **Mock (simulated)**; picking one skips
-detection. The selection persists across sessions and requires a reconnect to
-take effect. When connected to an experimental protocol, an orange
-**EXPERIMENTAL** badge appears in the top bar; clicking it opens the device's
-verification issue on GitHub, where you can report feedback.
+devices](supported-devices.md)) and **Mock (simulated)**, which generates
+synthetic measurements without hardware; picking one skips detection. The
+selection persists across sessions and requires a reconnect to take effect.
+When connected to an experimental protocol, an orange **EXPERIMENTAL** badge
+appears in the top bar; clicking it opens the device's verification issue on
+GitHub, where you can report feedback.
 
-The **Mock (simulated)** device generates synthetic measurements without
-hardware, cycling through its modes. A **Mock mode** row in Settings pins it
-to one mode instead (the modes are listed under
-[Command-Line Options](#command-line-options)). Remote control buttons
-respond to toggle flags, and SELECT, or a pick in the mode dropdown, moves to
-the next mode.
+Help is shown automatically when connection fails:
 
-![Wide layout — live measurement with graph, statistics, recording, and minimap](../assets/gui-wide-layout.png)
+- **USB cable not found:** platform-specific instructions (Linux: udev rule
+  install; Windows: Device Manager guidance to check if a driver is needed).
+  All cable variants are detected automatically.
+- **No response from meter:** animated "Waiting for meter..." indicator
+  during initial timeouts, then what each meter needs switched on (insert
+  module, turn on, long-press USB/Hz until S icon appears).
+
+In big meter and minimal mode only the title is shown; hover it for the
+steps.
+
+Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
+(or press `Ctrl+O`) while it is retrying to stop the loop.
 
 ## Top Bar
 
@@ -106,37 +116,9 @@ A row of buttons shown when connected and receiving data (visible in the
 | **LIGHT** | Toggle backlight |
 
 Buttons highlight blue when the corresponding flag is active in the current
-measurement. LIGHT has no protocol feedback, so it does not highlight.
-
-## Scale
-
-**Scale**, next to the remote controls, applies a software transform to the
-reading — a current clamp's 10 mV/A, a shunt, a probe divider, °C to °F.
-Nothing is sent to the meter. Clicking it opens three fields:
-
-| Field | Meaning | Left empty |
-|---|---|---|
-| **×** (Scale factor) | multiply the reading by this | ×1 |
-| **+** (Offset) | add this afterwards | +0 |
-| **→** (Unit label) | show this unit instead of the base unit | no relabel |
-
-**Apply**, or Enter in a field, commits; **Off** turns scaling off.
-
-The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
-factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. With no unit
-label the reading shows in the base unit.
-
-The meter's own reading is kept as a **Raw** sub-value in the reading
-display, the graph's **Plot:** and **Show:** groups, the recording log and
-the CSV export; its **Show:** trace starts hidden. Sub-values in the same
-unit as the reading (a second thermocouple, a REL reference, MIN/MAX) are
-scaled with it; sub-values in another unit are left as sent. Statistics and
-the integral use the scaled reading.
-
-Applying or clearing a scale resets the graph and statistics, like
-**Clear**; a recording in progress continues with scaled values. The setting
-is session-only and survives disconnect and `Ctrl+L`. `dmm-cli read` offers
-the same transform as `--scale`, `--offset` and `--unit`.
+measurement. LIGHT has no protocol feedback, so it does not highlight. On the
+mock, the buttons respond to toggle flags and SELECT, or a pick in the mode
+dropdown, moves to the next scenario.
 
 ## Graph
 
@@ -207,39 +189,6 @@ A thin strip below the main plot showing the full capture history.
 - Drag the bracket edges to resize the viewport to an arbitrary time width
 - Clicking near the end re-enables live mode
 
-## Specifications
-
-Shows per-range electrical specifications from the device manual, updated live
-as the meter changes mode/range.
-
-- **Resolution** — smallest increment the meter can display in the current range
-- **Accuracy** — rated accuracy as ±(% of reading + counts). AC modes show
-  separate accuracy for each frequency band (e.g., 40Hz–1kHz and 1kHz–10kHz).
-  Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
-  LPF mode shows its own accuracy (separate from AC V).
-- **Input Z** — input impedance (e.g., ~10 MΩ), when applicable
-- **Notes** — additional info like "True RMS", thermocouple type, fuse ratings
-- **Manual** — hyperlink to the manufacturer's product page (shown whenever a
-  URL is configured for the device, even without per-range spec data)
-
-Panel visibility is controlled by the **Specifications** checkbox in Settings.
-Default: on.
-
-**Layout behavior:**
-
-| Layout | Display style |
-|---|---|
-| Wide (≥ 900px) | Full panel in the left sidebar, between controls and statistics |
-| Big meter | Pipe-separated inline summary, scaled with the reading |
-| Narrow (< 900px) | Compact single line below the reading |
-
-When no spec data is available (unsupported device or unrecognized mode), only
-the Manual link is shown (if configured). If neither specs nor manual URL exist,
-nothing renders.
-
-**Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, and Mock (delegates to
-UT61E+). Other devices show only the Manual link.
-
 ## Statistics
 
 - **Min**, **Max**, **Avg** values in monospace with fixed-width formatting
@@ -281,123 +230,68 @@ and a software [scale](#scale) adds one more such group holding the meter's
 own **Raw** reading. The column layout is the same as `dmm-cli read`'s and
 is described in the [CLI reference](cli-reference.md#dmm-cli-read).
 
-## Settings
+## Specifications
 
-Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Linux (XDG config dir under the `dmm-tools` project name; macOS and Windows use the equivalent platform-specific location).
+Shows per-range electrical specifications from the device manual, updated live
+as the meter changes mode/range.
 
-| Setting | Default | Description |
+- **Resolution** — smallest increment the meter can display in the current range
+- **Accuracy** — rated accuracy as ±(% of reading + counts). AC modes show
+  separate accuracy for each frequency band (e.g., 40Hz–1kHz and 1kHz–10kHz).
+  Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
+  LPF mode shows its own accuracy (separate from AC V).
+- **Input Z** — input impedance (e.g., ~10 MΩ), when applicable
+- **Notes** — additional info like "True RMS", thermocouple type, fuse ratings
+- **Manual** — hyperlink to the manufacturer's product page (shown whenever a
+  URL is configured for the device, even without per-range spec data)
+
+Panel visibility is controlled by the **Specifications** checkbox in Settings.
+Default: on.
+
+**Layout behavior:**
+
+| Layout | Display style |
+|---|---|
+| Wide (≥ 900px) | Full panel in the left sidebar, between controls and statistics |
+| Big meter | Pipe-separated inline summary, scaled with the reading |
+| Narrow (< 900px) | Compact single line below the reading |
+
+When no spec data is available (unsupported device or unrecognized mode), only
+the Manual link is shown (if configured). If neither specs nor manual URL exist,
+nothing renders.
+
+**Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, and Mock (delegates to
+UT61E+). Other devices show only the Manual link.
+
+## Scale
+
+**Scale**, next to the remote controls, applies a software transform to the
+reading — a current clamp's 10 mV/A, a shunt, a probe divider, °C to °F.
+Nothing is sent to the meter. Clicking it opens three fields:
+
+| Field | Meaning | Left empty |
 |---|---|---|
-| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none) |
-| **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
-| **Show Graph** | on | Toggle graph panel visibility |
-| **Show Statistics** | on | Toggle statistics panel visibility |
-| **Show Recording** | on | Toggle recording panel visibility |
-| **Show Specifications** | on | Toggle specifications panel visibility |
-| **Auto-connect** | on | Connect to meter automatically on startup |
-| **Query device name** | on | Ask meter for its name on connect (causes a beep). Skipped when Auto-detect already has the name. |
-| **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
-| **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
-| **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
-| **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to a specific measurement mode, or cycles through all modes. Requires reconnect. |
-| **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
-| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
-| **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
+| **×** (Scale factor) | multiply the reading by this | ×1 |
+| **+** (Offset) | add this afterwards | +0 |
+| **→** (Unit label) | show this unit instead of the base unit | no relabel |
 
-### Color Customization
+**Apply**, or Enter in a field, commits; **Off** turns scaling off.
 
-Three color presets are available:
+The reading is converted to its base unit (V, A, Ω, …) before scaling, so a
+factor survives auto-ranging: a 10 mV/A clamp is `× 100 → A`. With no unit
+label the reading shows in the base unit.
 
-- **Default** — warm palette (red/pink graph line, green mean, orange cursor)
-- **High Contrast** — bolder, higher-saturation colors for maximum visibility
-- **Colorblind** — deuteranopia/protanopia safe palette (blue/orange/purple, avoids red-green)
+The meter's own reading is kept as a **Raw** sub-value in the reading
+display, the graph's **Plot:** and **Show:** groups, the recording log and
+the CSV export; its **Show:** trace starts hidden. Sub-values in the same
+unit as the reading (a second thermocouple, a REL reference, MIN/MAX) are
+scaled with it; sub-values in another unit are left as sent. Statistics and
+the integral use the scaled reading.
 
-Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
-
-**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 23 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently.
-
-**JSON overrides:** Colors can also be edited directly in `settings.json` using hex strings:
-
-```json
-{
-  "color_preset": "Default",
-  "color_overrides": {
-    "dark": {
-      "background": "#1B1B1B",
-      "graph_line": "#64C8FF"
-    },
-    "light": {
-      "graph_line": "#0050A0"
-    }
-  }
-}
-```
-
-Available color fields:
-
-- **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`, `accent`
-- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
-- **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`
-- **Minimap:** `minimap_viewport`
-
-Format: `#RRGGBB` or `#RRGGBBAA`.
-
-Derived colors auto-track their base: cursor dim/delta from `graph_cursor`, minimap line from `graph_line`, recording warning from `status_warning`, button hover/active from `button`, plot grid and axis labels from `text`. `text` also governs button captions and headings, and `accent` selected toggles and chips, focus rings and selected text; left unset, both keep egui's defaults. `border` is set only by the High Contrast preset.
-
-## Command-Line Options
-
-All options override saved settings for the current session only — they
-do not modify the persisted `settings.json`.
-
-| Option | Description |
-|--------|-------------|
-| `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
-| `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
-| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
-| `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
-| `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
-| `-V`, `--version` | Print version and exit. |
-| `-h`, `--help` | Print help and exit. |
-
-## Keyboard Shortcuts
-
-Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures.
-
-### General
-
-On macOS, `Cmd` replaces `Ctrl` in the shortcuts below, and the in-app help
-shows the macOS spelling.
-
-| Shortcut | Action |
-|---|---|
-| `Ctrl+O` | Connect / Disconnect |
-| `Space` | Pause / Resume (when connected) |
-| `Ctrl+L` | Clear graph & statistics |
-| `Ctrl+R` | Toggle recording |
-| `Ctrl+B` | Cycle big meter mode (off / full / minimal) |
-| `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
-| `Ctrl+D` | Toggle window decorations |
-| `Ctrl+E` | Export CSV |
-| `F11` (`Ctrl+Cmd+F` on macOS) | Toggle fullscreen |
-| `Cmd+M` (macOS) | Minimise window |
-| `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
-| `Ctrl+0` | Reset zoom to 100% |
-| `Ctrl+Q` | Quit |
-| `Ctrl+W` | Close the help overlay, or quit when it is closed |
-| `?` / `F1` | Toggle keyboard & mouse help overlay |
-| `Esc` | Close help overlay |
-
-### Graph Navigation
-
-| Shortcut | Action |
-|---|---|
-| `[` / `]` | Cycle to shorter / longer time window preset |
-| `Left` / `Right` | Scroll view (exits live mode) |
-| `Home` | Jump to start of data |
-| `End` | Jump to live mode |
-
-Graph and `Space` shortcuts are disabled while any widget holds keyboard
-focus — not just text fields but any button reached with `Tab`, since `Space`
-and the arrow keys drive the focused widget. Press `Escape` to release it.
+Applying or clearing a scale resets the graph and statistics, like
+**Clear**; a recording in progress continues with scaled values. The setting
+is session-only and survives disconnect and `Ctrl+L`. `dmm-cli read` offers
+the same transform as `--scale`, `--offset` and `--unit`.
 
 ## Layout Modes
 
@@ -441,22 +335,95 @@ too small to show the **⊞** button, **Ctrl+B** is the way out.
 If all panels are already hidden via settings, **⊞** restores all panels
 to their defaults.
 
-## Connection Help
+## Settings
 
-Shown automatically when connection fails:
+Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Linux (XDG config dir under the `dmm-tools` project name; macOS and Windows use the equivalent platform-specific location).
 
-- **USB cable not found:** platform-specific instructions (Linux: udev rule
-  install; Windows: Device Manager guidance to check if a driver is needed).
-  All cable variants are detected automatically.
-- **No response from meter:** animated "Waiting for meter..." indicator
-  during initial timeouts, then step-by-step instructions to enable USB mode
-  (insert module, turn on, long-press USB/Hz until S icon appears)
+| Setting | Default | Description |
+|---|---|---|
+| **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none) |
+| **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
+| **Show Graph** | on | Toggle graph panel visibility |
+| **Show Statistics** | on | Toggle statistics panel visibility |
+| **Show Recording** | on | Toggle recording panel visibility |
+| **Show Specifications** | on | Toggle specifications panel visibility |
+| **Auto-connect** | on | Connect to meter automatically on startup |
+| **Query device name** | on | Ask meter for its name on connect (causes a beep). Skipped when Auto-detect already has the name. |
+| **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
+| **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
+| **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
+| **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
+| **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
+| **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
+| **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
 
-In big meter and minimal mode only the title is shown; hover it for the
-steps.
+### Color Customization
 
-Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
-(or press `Ctrl+O`) while it is retrying to stop the loop.
+Three color presets are available:
+
+- **Default** — warm palette (red/pink graph line, green mean, orange cursor)
+- **High Contrast** — bolder, higher-saturation colors for maximum visibility
+- **Colorblind** — deuteranopia/protanopia safe palette (blue/orange/purple, avoids red-green)
+
+Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
+
+**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 23 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently. The same colors can be set in `settings.json`; see [Color fields](#color-fields) in the appendix.
+
+## Keyboard Shortcuts
+
+Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures.
+
+### General
+
+On macOS, `Cmd` replaces `Ctrl` in the shortcuts below, and the in-app help
+shows the macOS spelling.
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+O` | Connect / Disconnect |
+| `Space` | Pause / Resume (when connected) |
+| `Ctrl+L` | Clear graph & statistics |
+| `Ctrl+R` | Toggle recording |
+| `Ctrl+B` | Cycle big meter mode (off / full / minimal) |
+| `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
+| `Ctrl+D` | Toggle window decorations |
+| `Ctrl+E` | Export CSV |
+| `F11` (`Ctrl+Cmd+F` on macOS) | Toggle fullscreen |
+| `Cmd+M` (macOS) | Minimise window |
+| `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
+| `Ctrl+0` | Reset zoom to 100% |
+| `Ctrl+Q` | Quit |
+| `Ctrl+W` | Close the help overlay, or quit when it is closed |
+| `?` / `F1` | Toggle keyboard & mouse help overlay |
+| `Esc` | Close help overlay |
+
+### Graph Navigation
+
+| Shortcut | Action |
+|---|---|
+| `[` / `]` | Cycle to shorter / longer time window preset |
+| `Left` / `Right` | Scroll view (exits live mode) |
+| `Home` | Jump to start of data |
+| `End` | Jump to live mode |
+
+Graph and `Space` shortcuts are disabled while any widget holds keyboard
+focus — not just text fields but any button reached with `Tab`, since `Space`
+and the arrow keys drive the focused widget. Press `Escape` to release it.
+
+## Command-Line Options
+
+All options override saved settings for the current session only — they
+do not modify the persisted `settings.json`.
+
+| Option | Description |
+|--------|-------------|
+| `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
+| `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
+| `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
+| `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
+| `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
+| `-V`, `--version` | Print version and exit. |
+| `-h`, `--help` | Print help and exit. |
 
 ## Accessibility
 
@@ -492,6 +459,37 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 - Graph measurement cursors (A/B) can only be placed by clicking on the plot.
 - In the **Customize colors** popup, the RGBA fields need Enter to enter edit mode, then Up/Down to change the value; mouse drag remains the fastest way to pick a color.
 - The graph plot's X and Y axes are separate Tab stops that don't show a focus ring.
+
+## Appendix
+
+### Color fields
+
+Colors can be edited directly in `settings.json` using hex strings
+(`#RRGGBB` or `#RRGGBBAA`), per theme mode:
+
+```json
+{
+  "color_preset": "Default",
+  "color_overrides": {
+    "dark": {
+      "background": "#1B1B1B",
+      "graph_line": "#64C8FF"
+    },
+    "light": {
+      "graph_line": "#0050A0"
+    }
+  }
+}
+```
+
+Available color fields:
+
+- **UI chrome:** `background`, `text`, `weak_text`, `button`, `border`, `accent`
+- **Graph:** `graph_line`, `graph_gap`, `graph_mean`, `graph_ref`, `graph_crossing`, `graph_cursor`, `graph_envelope`, `graph_overlay_1`, `graph_overlay_2`, `graph_overlay_3`, `plot_background`, `graph_crosshair`
+- **Status:** `status_ok`, `status_warning`, `status_error`, `status_inactive`
+- **Minimap:** `minimap_viewport`
+
+Derived colors auto-track their base: cursor dim/delta from `graph_cursor`, minimap line from `graph_line`, recording warning from `status_warning`, button hover/active from `button`, plot grid and axis labels from `text`. `text` also governs button captions and headings, and `accent` selected toggles and chips, focus rings and selected text; left unset, both keep egui's defaults. `border` is set only by the High Contrast preset.
 
 ## See Also
 
