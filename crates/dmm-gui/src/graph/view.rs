@@ -285,15 +285,14 @@ impl Graph {
         self.y_user_set = true;
     }
 
-    /// Process drag, scroll, zoom, and cursor-click interactions on the plot.
+    /// Process drag, zoom, and cursor-click interactions on the plot.
     pub(super) fn handle_interaction(
         &mut self,
         ui: &Ui,
         plot_response: &egui::Response,
         transform: &PlotTransform,
-        can_interact: bool,
     ) {
-        // Bounding-box zoom (Shift + left-drag). Runs before the pan/scroll
+        // Bounding-box zoom (Shift + left-drag). Runs before the pan and zoom
         // branches so it can claim the gesture and short-circuit them.
         let shift_held = ui.input(|i| i.modifiers.shift);
         let (primary_pressed, primary_down) =
@@ -306,7 +305,7 @@ impl Graph {
         }
 
         // Start: Shift held and primary just went down over the plot. We
-        // intentionally do NOT gate on can_interact here — shift-drag should
+        // intentionally do NOT gate on live mode here — shift-drag should
         // also work from live mode, and we drop out of live on release.
         if shift_held
             && primary_pressed
@@ -373,33 +372,39 @@ impl Graph {
             self.apply_pan(time_delta);
         }
 
-        // Handle scroll wheel zoom on X axis — zoom centered on cursor position
-        if can_interact {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll.abs() > 0.1 {
-                let factor = if scroll > 0.0 { 0.9 } else { 1.1 };
-                // Find cursor X position in time coordinates for centered zoom
-                if let Some(hover_pos) = plot_response.hover_pos() {
-                    let cursor_t = transform.value_from_position(hover_pos).x;
-                    let old_half = self.time_window_secs / 2.0;
-                    self.time_window_secs = (self.time_window_secs * factor).clamp(2.0, 3600.0);
-                    let new_half = self.time_window_secs / 2.0;
-                    // Adjust center so cursor stays at same relative position
-                    let rel = (cursor_t - (self.view_center - old_half)) / (old_half * 2.0);
-                    self.view_center = cursor_t - (rel - 0.5) * new_half * 2.0;
-                } else {
-                    self.time_window_secs = (self.time_window_secs * factor).clamp(2.0, 3600.0);
-                }
-            }
-        }
-
-        // Scroll while in live mode → exit live mode to browse
-        if self.live {
-            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
-            if scroll.abs() > 0.1 {
+        // X-axis zoom on Ctrl + wheel — and on a touch pinch, which egui folds
+        // into the same signal. Both are kept out of `smooth_scroll_delta`, so
+        // a plain wheel tick belongs to whatever scroll area the graph panel
+        // sits in and never reaches this handler.
+        //
+        // The hover test is the other half of that: without it a tick anywhere
+        // in the window zoomed the graph, including over the shortcut modal.
+        let zoom_delta = ui.input(|i| i.zoom_delta()) as f64;
+        if zoom_delta != 1.0 && plot_response.contains_pointer() {
+            if self.live {
+                // Snap to the end of data before leaving live, as the drag
+                // path does: the snapped bounds equal the live bounds on this
+                // frame, so the zoom below has no jump in front of it.
                 let (_, data_max) = self.data_time_range();
                 self.view_center = data_max - self.time_window_secs / 2.0;
                 self.live = false;
+            }
+            // Wheel up / pinch open reads as `zoom_delta > 1`, which has to
+            // narrow the window — the direction the wheel had before.
+            let old_half = self.time_window_secs / 2.0;
+            self.time_window_secs = (self.time_window_secs / zoom_delta).clamp(2.0, 3600.0);
+            let new_half = self.time_window_secs / 2.0;
+            // Keep the time under the cursor where it is. `contains_pointer`
+            // holds in cases `hover_pos` doesn't (another widget above the
+            // plot has the hover), so fall back to the raw pointer position
+            // the way egui_plot's own zoom does.
+            if let Some(hover_pos) = plot_response
+                .hover_pos()
+                .or_else(|| ui.input(|i| i.pointer.hover_pos()))
+            {
+                let cursor_t = transform.value_from_position(hover_pos).x;
+                let rel = (cursor_t - (self.view_center - old_half)) / (old_half * 2.0);
+                self.view_center = cursor_t - (rel - 0.5) * new_half * 2.0;
             }
         }
 

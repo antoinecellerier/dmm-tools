@@ -363,15 +363,12 @@ impl Graph {
         // to the plain form.
         let main_name = self.plotted_series_name();
 
-        let can_interact = !self.live;
         let shift_held = ui.input(|i| i.modifiers.shift);
         let bbox_active = self.bbox_zoom_start_px.is_some();
         // Plain drag-to-pan is allowed even in live mode — starting a drag
-        // drops out of live (see handle_interaction). Scroll-zoom stays gated
-        // on !live: the first scroll exits live without zooming, the second
-        // zooms. Bbox and shift-drag always suppress the built-in pan.
+        // drops out of live (see handle_interaction). Bbox and shift-drag
+        // always suppress the built-in pan.
         let allow_plot_x_drag = !shift_held && !bbox_active;
-        let allow_plot_x_zoom = can_interact && !bbox_active;
 
         // Compute Y bounds from visible data
         let (y_min, y_max) = self
@@ -420,7 +417,13 @@ impl Graph {
         let plot = Plot::new("main_plot")
             .height(ui.available_height().max(60.0))
             .allow_drag(Vec2b::new(allow_plot_x_drag, false))
-            .allow_zoom(Vec2b::new(allow_plot_x_zoom, false))
+            // handle_interaction owns the Ctrl+wheel zoom: it reads the same
+            // `zoom_delta` egui_plot would, so leaving egui_plot's own zoom on
+            // applies the tick twice — once to `time_window_secs`, once to the
+            // transform the frame is drawn with. It gates nothing else; the
+            // Shift+drag bbox is ours and egui_plot's own boxed zoom is on
+            // `allow_boxed_zoom` with the secondary button.
+            .allow_zoom(Vec2b::FALSE)
             .allow_scroll(Vec2b::new(false, false))
             .allow_double_click_reset(false)
             .reset()
@@ -620,7 +623,7 @@ impl Graph {
         // Top-left, where `paint_overlay_labels` never draws — the Mean/Ref
         // and cursor labels are anchored to the right edge.
         Self::paint_plot_key(ui, response.response.rect, &key_entries, tc);
-        self.handle_interaction(ui, &response.response, &response.transform, can_interact);
+        self.handle_interaction(ui, &response.response, &response.transform);
         self.update_plot_a11y_label(ui, response.response.id, y_min, y_max);
         // Draw a focus ring on the main plot body when it's keyboard-focused.
         // Note: egui_plot also allocates separate focusable responses for the

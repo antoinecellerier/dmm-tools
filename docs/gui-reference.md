@@ -239,8 +239,8 @@ it, and several dropouts between the same two readings collapse into one gap.
 
 | Action | Effect |
 |---|---|
-| **Scroll wheel** (browse mode) | Zoom X axis centered on cursor (2s–3600s range) |
-| **Scroll wheel** (live mode) | Exit live mode, jump to scrolled position |
+| **Ctrl + scroll wheel** (or pinch) | Zoom X axis centered on cursor (2s–3600s range), over the plot only; leaves live mode |
+| **Scroll wheel** | Scrolls the panel — the graph ignores it |
 | **Click & drag** | Pan left/right through history |
 | **Shift + click & drag** | Draw a bounding box to zoom both time and value to the selected region. Release to apply; press Escape to cancel. |
 | **Double-click** | Return to live mode with auto Y |

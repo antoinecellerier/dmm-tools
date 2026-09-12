@@ -179,9 +179,9 @@ Three components stacked vertically:
 - `egui_plot` time series with auto-scaling Y axis (10% padding)
 - Y axis tick labels include unit (e.g. "1.0 mV" not "1.0"), X axis labels include unit ("10 s", "1 m")
 - Crosshair tooltip shows time and value with units
-- In LIVE mode: auto-scrolls to latest data, drag/zoom disabled
-- In browse mode (click LIVE to toggle, or click minimap): drag to pan X, scroll wheel to zoom X (centered on cursor). Y auto-scales to visible data.
-- Scroll while in LIVE mode exits to browse mode
+- In LIVE mode: auto-scrolls to latest data
+- In browse mode (click LIVE to toggle, or click minimap): drag to pan X, Ctrl + scroll wheel (or pinch) over the plot to zoom X (centered on cursor). Y auto-scales to visible data.
+- Dragging or Ctrl + scroll wheel while in LIVE mode exits to browse mode; the plain wheel scrolls the panel and leaves the graph alone
 - Double-click to return to LIVE mode
 - Sub-values sharing the plotted series' unit are drawn as extra dashed/dotted lines (up to four). Different-unit sub-values (Hz, ms beside VAC) are never overlaid — a shared axis would imply a relationship that isn't there — and stay reachable through the **Plot:** selector. Line style, not just colour, distinguishes them.
 - A static key in the plot's top-left names each drawn line with its colour and dash pattern, painted only while something is overlaid. It is a key, not a control: `Plot::reset()` pins the view every frame and clears egui_plot's own legend state, so the show/hide affordance is the toolbar's **Show:** chips instead.

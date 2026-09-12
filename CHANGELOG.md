@@ -6,6 +6,7 @@
 - **Auto-detect is the default device** — the meter on the cable is worked out for you and saved, so later sessions open it directly instead of probing the cable again.
 - **Switch the meter's function and range from the readout** — on meters that allow it (UT61+/UT161, UT181A, VC-880, VC-890, mock) the mode and range labels are dropdowns naming what the dial position offers, Auto included.
 - **Scale row converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
+- **The graph zooms on Ctrl + scroll wheel, or a pinch** — a plain wheel tick anywhere in the window zoomed it and left live mode.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a new **Buffer size** setting moves the bound for graph and recording together.
 - **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were parsed but never shown.
 - **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171; single-display meters' files are unchanged.

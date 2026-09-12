@@ -2,6 +2,7 @@ use super::render::{KeyStyle, quantize_for_hash};
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
 use super::*;
+use crate::settings::{ColorPreset, PaletteOverrides};
 use std::time::Duration;
 
 #[test]
@@ -2363,4 +2364,136 @@ fn push_and_frame_cost_do_not_scale_with_history() {
     );
     assert!(ratio(push_short, push_long) < 2.0, "push cost grew");
     assert!(ratio(frame_short, frame_long) < 2.0, "frame cost grew");
+}
+
+// ── Pointer gestures on the main plot ───────────────────────────────────────
+//
+// These drive `show_main` through a real `egui::Context` so the gesture goes
+// the way it does in the app: through egui's input state (which is what folds
+// Ctrl+wheel into `zoom_delta` and keeps it out of `smooth_scroll_delta`) and
+// through the plot's own hit testing.
+
+/// Big enough that the plot gets a real rect. Pointer positions below are in
+/// these coordinates.
+fn gesture_screen() -> egui::Rect {
+    egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))
+}
+
+/// Inside the plot body.
+fn over_plot() -> egui::Pos2 {
+    egui::pos2(400.0, 300.0)
+}
+
+/// Outside it: the Y-axis strip is at least 60 pt wide (`y_axis_min_width`),
+/// so the top-left corner belongs to the axis widget, not the plot.
+fn off_plot() -> egui::Pos2 {
+    egui::pos2(2.0, 2.0)
+}
+
+fn wheel_event(modifiers: egui::Modifiers) -> egui::Event {
+    egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        // Under 8 points, which is what makes egui apply the tick in this
+        // pass instead of smoothing it out over the next few.
+        delta: egui::vec2(0.0, 4.0),
+        phase: egui::TouchPhase::Move,
+        modifiers,
+    }
+}
+
+/// Drive one headless frame of the main graph with the pointer at `pointer`
+/// and `events` delivered to that frame.
+///
+/// egui hit-tests against the previous pass's widget rects, so the plot only
+/// reports `contains_pointer` from the second frame the pointer is over it —
+/// every caller runs a warm-up frame first.
+fn gesture_frame(g: &mut Graph, ctx: &egui::Context, pointer: egui::Pos2, events: &[egui::Event]) {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let mut input = egui::RawInput {
+        screen_rect: Some(gesture_screen()),
+        ..Default::default()
+    };
+    input.events.push(egui::Event::PointerMoved(pointer));
+    input.events.extend_from_slice(events);
+    let mut output = ctx.run_ui(input, |ui| g.show_main(ui, &tc));
+    // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
+    output.textures_delta.clear();
+}
+
+fn graph_with_a_minute_of_data() -> Graph {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..60_u64 {
+        g.push(
+            (i as f64) * 0.1,
+            t0 + Duration::from_millis(i * 100),
+            "DC V",
+            "V",
+            None,
+        );
+    }
+    g
+}
+
+/// The panels the graph sits in need the plain wheel for scrolling, so a bare
+/// tick must leave the graph exactly as it was — no zoom, and no drop out of
+/// live either, which is what the old handler did on the first tick.
+#[test]
+fn plain_wheel_over_the_plot_leaves_the_graph_alone() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    let window = g.time_window_secs;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    gesture_frame(
+        &mut g,
+        &ctx,
+        over_plot(),
+        &[wheel_event(egui::Modifiers::NONE)],
+    );
+    assert_eq!(g.time_window_secs, window, "plain wheel zoomed the graph");
+    assert!(g.live, "plain wheel dropped out of live mode");
+}
+
+/// Ctrl+wheel is the zoom gesture. Wheel up narrows the window, and the tick
+/// also has to leave live mode, or the zoom would be undone by the next
+/// sample snapping the view back.
+#[test]
+fn ctrl_wheel_over_the_plot_zooms_and_leaves_live() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    let window = g.time_window_secs;
+    gesture_frame(&mut g, &ctx, over_plot(), &[]);
+    gesture_frame(
+        &mut g,
+        &ctx,
+        over_plot(),
+        &[wheel_event(egui::Modifiers::CTRL)],
+    );
+    assert!(
+        g.time_window_secs < window,
+        "wheel up must zoom in: window went from {window} to {}",
+        g.time_window_secs
+    );
+    assert!(!g.live, "a zoom has to leave live mode to survive");
+}
+
+/// The gesture is the plot's, not the window's: over the toolbar, the stats
+/// panel or a modal the graph must not move.
+#[test]
+fn ctrl_wheel_off_the_plot_changes_nothing() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    let window = g.time_window_secs;
+    gesture_frame(&mut g, &ctx, off_plot(), &[]);
+    gesture_frame(
+        &mut g,
+        &ctx,
+        off_plot(),
+        &[wheel_event(egui::Modifiers::CTRL)],
+    );
+    assert_eq!(
+        g.time_window_secs, window,
+        "zoomed without the pointer over the plot"
+    );
+    assert!(g.live, "left live mode without the pointer over the plot");
 }

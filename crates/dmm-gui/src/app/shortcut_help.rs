@@ -102,7 +102,8 @@ impl App {
                         for (gesture, action) in [
                             ("Drag", "Pan left / right through history"),
                             ("Shift + drag", "Zoom to bounding box (time & value)"),
-                            ("Scroll wheel", "Zoom X axis centered on cursor"),
+                            ("Ctrl + scroll wheel", "Zoom X axis centered on cursor"),
+                            ("Scroll wheel", "Scroll the panel"),
                             ("Double-click", "Reset to live follow + auto Y"),
                             ("Click (cursors on)", "Place cursor A / B at nearest point"),
                             ("Minimap drag", "Jump to time / resize viewport"),
