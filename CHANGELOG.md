@@ -50,6 +50,7 @@
 
 - **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, diode, capacitance, Hz, duty, NCV and AC+DC V offered controls that did nothing.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
+- **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V, a value the manual's AC table does not list.
 - **UT61E+ NCV shows the detected level** — every detection read as level 0.
 - **Resuming a capture keeps its freeform steps** — a second run numbered from `extra_0` again and overwrote them.
 - **VC-880 and VC-890 report the AVG flag** — the AVG step of the meter's MAX/MIN/AVG cycle showed no flag at all.

@@ -1,0 +1,18 @@
+# AC V 0 V on the manual top rung, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acv/range:750V as the step was then named)
+# One decimal here is the 1000.0V row's 0.1V resolution in the manual's AC table; the rung was labelled 750V until the table was corrected.
+raw_hex: "00 33 20 20 20 20 30 2E 30 00 00 30 34 30"
+mode: "AC V"
+value: "0"
+unit: "V"
+range_label: "1000V"
+flags:
+  hold: false
+  rel: false
+  auto_range: false
+  min: false
+  max: false
+  low_battery: false
+  hv_warning: false
+  dc: false
+  peak_min: false
+  peak_max: false

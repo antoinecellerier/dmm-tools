@@ -48,7 +48,7 @@ pub static DC_V_MODE: ModeSpecInfo = ModeSpecInfo {
 
 // ── AC Voltage (manual page 27) ─────────────────────────────────────────
 
-// Range order: 2.2V, 22V, 220V, 750V
+// Range order: 2.2V, 22V, 220V, 1000V
 // The 220mV row is AC mV (AC_MV_SPECS index 0), a mode of its own.
 pub static AC_V_SPECS: &[SpecInfo] = &[
     SpecInfo {

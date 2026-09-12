@@ -47,7 +47,7 @@ pub static DC_V_MODE: ModeSpecInfo = ModeSpecInfo {
 
 // ── AC Voltage (manual page 27) ─────────────────────────────────────────
 
-// Range order: 6V, 60V, 600V, 750V; the mV rows are AC_MV_SPECS
+// Range order: 6V, 60V, 600V, 1000V; the mV rows are AC_MV_SPECS
 // UT61B+ frequency response: 40Hz–500Hz (single band)
 pub static AC_V_SPECS: &[SpecInfo] = &[
     SpecInfo {

@@ -47,7 +47,9 @@ impl Ut61dPlusTable {
             // 60mV/600mV belong to the mV modes (0x03/0x01) on their own dial
             // position. Unverified on a UT61D+ — issue #7.
             dc_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("1000V", "V")],
-            ac_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("750V", "V")],
+            // Top rung is 1000V, not 750V — the manual's AC table shares its
+            // UT61B+/UT61D+ column (printed page 27, rendered).
+            ac_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("1000V", "V")],
             dc_mv: [r("60mV", "mV"), r("600mV", "mV")],
             ac_mv: [r("60mV", "mV"), r("600mV", "mV")],
             // 6 ranges: 600Ω, 6kΩ, 60kΩ, 600kΩ, 6MΩ, 60MΩ
@@ -323,7 +325,7 @@ mod tests {
     fn acv_ranges() {
         let t = table();
         assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "6V");
-        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "750V");
+        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "1000V");
         assert!(t.range_info(Mode::AcV, 4).is_none());
     }
 

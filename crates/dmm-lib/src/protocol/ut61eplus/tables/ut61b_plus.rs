@@ -6,10 +6,13 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// Device table for the UNI-T UT61B+ (and UT161B).
 ///
 /// 6,000-count (3¾ digit) model. Range values from the UT61+ Series User
-/// Manual. Ascending index order is [VERIFIED] at the rungs three UT61B+
+/// Manual. Ascending index order is [VERIFIED] at the rungs four UT61B+
 /// captures reached (2026-09-09 to 2026-09-11, issue #19): every Ω rung,
-/// every DC V rung, AC V 0 and 2, capacitance 0 and 5, and µA, mA and A 0-1.
-/// Still [DEDUCED]: AC V 1 and 3, capacitance 1-4 and 6, and both mV tables.
+/// every DC V rung, AC V 0 and 2, capacitance 0 and 5, both mV rung 0s, and
+/// µA, mA and A 0-1. The rungs left over sit *between* measured ends of an
+/// ascending ladder, so they have nowhere else to be: AC V 1 and 3,
+/// capacitance 1-4 and 6, mV 1. Only `hz` is still guesswork — see
+/// `docs/verification-backlog.md`.
 ///
 /// Key differences from UT61E+ (22,000-count):
 /// - DC/AC V: 4 ranges (6V..1000V) vs 4 (2.2V..1000V)
@@ -49,7 +52,10 @@ impl Ut61bPlusTable {
             dc_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("1000V", "V")],
             // Same structure as DC voltage for AC; the same capture read
             // "  0.037" at range 0 in V~, which the meter showed as volts.
-            ac_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("750V", "V")],
+            // Top rung is 1000V, not 750V: the manual's AC table (printed
+            // page 27, rendered) reads 6.000V/60.00V/600.0V/1000V for this
+            // model, and gives overload protection as 1000V.
+            ac_v: [r("6V", "V"), r("60V", "V"), r("600V", "V"), r("1000V", "V")],
             // mV modes: their own dial position, not a rung of the V tables
             dc_mv: [r("60mV", "mV"), r("600mV", "mV")],
             ac_mv: [r("60mV", "mV"), r("600mV", "mV")],
@@ -73,7 +79,13 @@ impl Ut61bPlusTable {
                 r("60mF", "mF"),
             ],
             // Hz: 6,000-count models max out at 10 MHz (manual)
-            // Using same 5-range structure, scaled to 6000-count values
+            // Using same 5-range structure, scaled to 6000-count values.
+            // [DEDUCED] and known not to match the meter: the manual gives a
+            // span and no rungs, two runs read different full scales at index
+            // 0, and RANGE is dead here so no walk can settle it. These are
+            // also the only rungs in this table whose units differ, so a
+            // wrong one misreports by 1000x. Parked for want of a signal
+            // generator — docs/verification-backlog.md.
             hz: [
                 r("60Hz", "Hz"),
                 r("600Hz", "Hz"),
@@ -296,7 +308,7 @@ mod tests {
     fn acv_ranges() {
         let t = table();
         assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "6V");
-        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "750V");
+        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "1000V");
         assert!(t.range_info(Mode::AcV, 4).is_none());
     }
 

@@ -608,7 +608,7 @@ Source: `ut61e_plus.rs` (50 ranges).
 | `ac_v` | AcV | 0 | 2.2V | V | 2.2 | -2.2 |
 | `ac_v` | AcV | 1 | 22V | V | 22 | -22 |
 | `ac_v` | AcV | 2 | 220V | V | 220 | -220 |
-| `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
+| `ac_v` | AcV | 3 | 1000V | V | 1000 | -1000 |
 | `dc_mv` | DcMv, AcDcMv, LpfMv | 0 | 220mV | mV | 220 | -220 |
 | `dc_mv` | DcMv, AcDcMv, LpfMv | 1 | 2.2V | mV | 2200 | -2200 |
 | `ac_mv` | AcMv | 0 | 220mV | mV | 220 | -220 |
@@ -670,7 +670,7 @@ Source: `ut61b_plus.rs` (45 ranges).
 | `ac_v` | AcV | 0 | 6V | V | 6 | -6 |
 | `ac_v` | AcV | 1 | 60V | V | 60 | -60 |
 | `ac_v` | AcV | 2 | 600V | V | 600 | -600 |
-| `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
+| `ac_v` | AcV | 3 | 1000V | V | 1000 | -1000 |
 | `dc_mv` | DcMv | 0 | 60mV | mV | 60 | -60 |
 | `dc_mv` | DcMv | 1 | 600mV | mV | 600 | -600 |
 | `ac_mv` | AcMv | 0 | 60mV | mV | 60 | -60 |
@@ -722,7 +722,7 @@ Source: `ut61d_plus.rs` (49 ranges).
 | `ac_v` | AcV | 0 | 6V | V | 6 | -6 |
 | `ac_v` | AcV | 1 | 60V | V | 60 | -60 |
 | `ac_v` | AcV | 2 | 600V | V | 600 | -600 |
-| `ac_v` | AcV | 3 | 750V | V | 750 | -750 |
+| `ac_v` | AcV | 3 | 1000V | V | 1000 | -1000 |
 | `dc_mv` | DcMv | 0 | 60mV | mV | 60 | -60 |
 | `dc_mv` | DcMv | 1 | 600mV | mV | 600 | -600 |
 | `ac_mv` | AcMv | 0 | 60mV | mV | 60 | -60 |

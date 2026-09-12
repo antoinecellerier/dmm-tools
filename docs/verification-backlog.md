@@ -346,13 +346,19 @@ Settled:
 
 Left open on this model:
 
-- **AC V rungs 1 (60V) and 3 (750V)** and the AC V RANGE walk. No new step is
-  needed for these: `acv` is not a gate step, so the sweep walks its ladder as
-  it does any other mode step's. It went unswept on 2026-09-10 only because it
+- **AC V rungs 1 (60V) and 3 (1000V)** — **not a hardware ask**. The ladder
+  has four entries in ascending order, which this meter has shown across
+  every Ω and DC V rung and both current ladders; rung 0 is pinned by
+  `  0.589` (three decimals, 6.000V full scale) and rung 2 by 236.6 V of
+  mains. Rungs 1 and 3 have nowhere else to sit, and every AC V rung carries
+  unit `V`, so a wrong label here cannot change a reading — only the
+  `range_label` string. Rung 3's value came from the manual on 2026-09-12
+  (below); no safe capture can confirm it. A run would still be welcome for
+  its own sake: `acv` is not a gate step, so the sweep walks its ladder as it
+  does any other mode step's — it went unswept on 2026-09-10 only because it
   then sat before the gate closed (below), and the two runs since were
-  `--unverified` and `--steps`, neither of which reaches a step already marked
-  verified. `capture --steps acv` with the leads open covers both rungs, the
-  decimal count naming each.
+  `--unverified` and `--steps`, neither of which reaches a step already
+  marked verified. `capture --steps acv` with the leads open covers it.
 - **Capacitance rungs 1-4 and 6** and **the mV ladder** — auto-ranging never
   left rung 0 with open leads, and RANGE is dead in capacitance (below); rung
   5 came from a capacitor held to the leads on 2026-09-11.
@@ -1059,11 +1065,25 @@ same day — see "Range tables" below.
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 
 - Range byte values for most modes still need verification against real device.
-- **AC V top range: 750V vs 1000V conflict (2026-06 review).** The
-  UT61+ Series manual's AC tables end at 1000V (E+ column: 1000.0V),
-  but the code uses 750V for E+/B+/D+ (from the vendor decompile).
-  Testable on our UT61E+: dial AC V, manual-range up to the
-  top range, and read the range byte + display.
+- ~~**AC V top range: 750V vs 1000V conflict (2026-06 review).**~~ —
+  **RESOLVED** 2026-09-12 in favour of **1000V**, from the manual's AC table
+  read off the PDF rendering (printed page 27): the UT61E+ column ends at
+  `1000.0V / 0.1V`, the shared UT61B+/UT61D+ column at `1000V / 1V`, and
+  neither has a 750V row. The same section gives max input voltage and
+  overload protection as 1000V, and the LoZ ACV rows the UT61D+ adds are
+  600.0V and 1000V, which `ut61d_plus.rs` already had right.
+  **The 750V had no source.** It is absent from the archived vendor
+  decompile, which carries no range-label strings at all — nor do `DMM.exe`
+  and `MyCore.dll` in either ASCII or UTF-16 — so the "from the vendor
+  decompile" attribution in this item was wrong; `git log -S` puts it in the
+  bootstrap commit 048d44b. Corrected for all three models, with the family
+  spec's three `ac_v` rows.
+  **Hardware is consistent but cannot arbitrate this one.** The 2026-09-07
+  UT61E+ RANGE walk reached the rung and read one decimal there
+  (`    0.0`, range byte 3), which is the manual's 0.1V resolution — but a
+  750.0V rung would also carry 0.1V on a 22,000-count display, so the
+  decimal count cannot separate them. Only applying more than 750V AC could,
+  which is not a test worth running; the manual settles it instead.
 - **UT61D+ amps: manual lists 6.000A and 20.00A; code has only 20A**
   (`ut61d_plus.rs` dc_a/ac_a copied from E+). Needs the 6A range row;
   blocked on D+ hardware for index ordering (issue #7).

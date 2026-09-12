@@ -40,11 +40,17 @@ impl Ut61ePlusTable {
                 r("220V", "V"),
                 r("1000V", "V"),
             ],
+            // Top rung is 1000.0V, not the 750V this table carried from the
+            // bootstrap commit: the UT61+ Series User Manual's AC table
+            // (printed page 27, rendered) lists 1000.0V at 0.1V resolution
+            // with no 750V row, and gives max input and overload protection as
+            // 1000V. The 2026-09-07 RANGE walk read one decimal there, which
+            // is that row's resolution.
             ac_v: [
                 r("2.2V", "V"),
                 r("22V", "V"),
                 r("220V", "V"),
-                r("750V", "V"),
+                r("1000V", "V"),
             ],
             dc_mv: [r("220mV", "mV"), r("2.2V", "mV")],
             ac_mv: [r("220mV", "mV"), r("2.2V", "mV")],
@@ -317,7 +323,7 @@ mod tests {
     fn acv_ranges() {
         let t = table();
         assert_eq!(t.range_info(Mode::AcV, 0).unwrap().label, "2.2V");
-        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "750V");
+        assert_eq!(t.range_info(Mode::AcV, 3).unwrap().label, "1000V");
         assert!(t.range_info(Mode::AcV, 4).is_none());
     }
 
