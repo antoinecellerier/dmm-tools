@@ -38,6 +38,20 @@ stop — a short section is never the defect.
 - A cross-reference to another command appears once per section.
 - A list (mock modes, devices, shortcuts) appears once per file.
 
+## Order
+
+- Sections follow the reader's path: confirm the meter is recognised, read,
+  control, analyse, configure, then what only a few readers need. The first
+  sections are what every user meets on the first run; the last serve bug
+  reporters, scripters and assistive-technology users.
+- Rank by the changelog ladder: works at all, then core capability, then more
+  of a capability, then lookup tables and polish. A feature for one sensor or
+  one meter family ranks below one every user meets.
+- Within a section, the screen's own order: top to bottom, left to right.
+- Detail a few readers need goes to the Appendix, linked from the section
+  that uses it.
+- A new section is inserted by rank, never appended.
+
 ## Before commit
 
 - Compare the new text with the sections around it. A section longer than its
