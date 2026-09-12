@@ -571,12 +571,13 @@ mod tests {
 
     /// The models real hardware has answered for: our UT61E+, and the UT61B+
     /// from two captures reported in issue #19 (2026-09-09 and 2026-09-10).
-    /// The UT181A has partial hardware coverage but is held at Experimental on
-    /// purpose (see its profile); everything else must stay flagged so the GUI
-    /// shows the EXPERIMENTAL badge and links to the verification issue.
+    /// The UT181A has run for its main modes only, so it is PartlyVerified
+    /// (see its profile); everything else must stay flagged so the GUI shows
+    /// the EXPERIMENTAL badge and links to the verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+"];
+        const PARTLY_VERIFIED: &[&str] = &["ut181a"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -585,6 +586,8 @@ mod tests {
             let profile = protocol.profile();
             let expected = if VERIFIED.contains(&device.id) {
                 Stability::Verified
+            } else if PARTLY_VERIFIED.contains(&device.id) {
+                Stability::PartlyVerified
             } else {
                 Stability::Experimental
             };
@@ -593,10 +596,11 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if expected == Stability::Experimental {
+            if !expected.is_verified() {
                 assert!(
                     profile.verification_issue.is_some(),
-                    "experimental device {} must link to a verification issue",
+                    "{} device {} must link to a verification issue",
+                    expected.label(),
                     device.id
                 );
             }

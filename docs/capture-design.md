@@ -89,7 +89,7 @@ One file to attach stays the rule: no sidecar trace.
 | Tier | When | Detector | Confirmation | Remote driving |
 |---|---|---|---|---|
 | 0 Sniff | `--sniff` | raw-diff | every step, inline | none |
-| 1 Gate | `Stability::Experimental` | semantic where the step declares an expectation | every step, inline | after the gate passes |
+| 1 Gate | short of `Stability::Verified` | semantic where the step declares an expectation | every step, inline | after the gate passes |
 | 2 Trusted | `Stability::Verified`, or gate passed | semantic where the step declares an expectation | gate steps inline; deferred batch review for the rest | yes |
 
 The **gate** is a small block of steps marked `gate: true` in the family's step list: DC V

@@ -104,7 +104,9 @@ pub(crate) enum DmmMessage {
         /// or the entry the user picked. `None` only if a protocol ever
         /// reports a model no entry claims.
         device_id: Option<&'static str>,
-        experimental: bool,
+        /// How far the protocol is verified; anything short of `Verified`
+        /// shows the badge, and the level words its hover text.
+        stability: Stability,
         /// URL for reporting feedback on experimental protocols.
         feedback_url: String,
         supported_commands: Vec<String>,
@@ -154,7 +156,7 @@ fn establish_connection<T: Transport>(
     ctx: &egui::Context,
 ) {
     let profile = dmm.profile();
-    let experimental = profile.stability == Stability::Experimental;
+    let stability = profile.stability;
     let feedback_url = profile.feedback_url();
     let cmds: Vec<String> = profile
         .supported_commands
@@ -181,7 +183,7 @@ fn establish_connection<T: Transport>(
         name,
         model_name,
         device_id,
-        experimental,
+        stability,
         feedback_url,
         supported_commands: cmds,
         max_aux_values,

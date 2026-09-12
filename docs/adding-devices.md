@@ -212,7 +212,7 @@ These are real bugs we discovered only through device testing — expect similar
 
 ### Verification sign-off
 Once verified:
-1. Change `Stability::Experimental` to `Stability::Verified` in the device profile
+1. Change `Stability::Experimental` to `Stability::Verified` in the device profile (`Stability::PartlyVerified` once connection and the main modes are confirmed but formats or commands remain; it behaves as Experimental and only changes the label)
 2. Update `docs/verification-backlog.md` — mark items as completed with date, and in the same commit mark the capture steps they cover `.verified()` so `--unverified` stops asking for them
 3. Add golden test files from the capture output
 4. Update `docs/supported-devices.md` with verification status

@@ -729,14 +729,14 @@ fn warn_if_experimental(
     device: &'static SelectableDevice,
     profile: &dmm_lib::protocol::DeviceProfile,
 ) {
-    if profile.stability != dmm_lib::protocol::Stability::Experimental {
+    if profile.stability.is_verified() {
         return;
     }
     eprintln!(
         "{}",
         style(format!(
             "WARNING: {}",
-            dmm_lib::binary_help::experimental_warning(profile.model_name)
+            dmm_lib::binary_help::experimental_warning(profile.model_name, profile.stability)
         ))
         .yellow()
         .bold()
@@ -793,12 +793,15 @@ fn open_error_help(
             if let Selection::Device(device) = selection {
                 let proto = (device.new_protocol)();
                 let profile = proto.profile();
-                if profile.stability == dmm_lib::protocol::Stability::Experimental {
+                if !profile.stability.is_verified() {
                     eprintln!(
                         "{}",
                         style(format!(
                             "{} Report feedback: {}",
-                            dmm_lib::binary_help::experimental_warning(profile.model_name),
+                            dmm_lib::binary_help::experimental_warning(
+                                profile.model_name,
+                                profile.stability
+                            ),
                             profile.feedback_url()
                         ))
                         .yellow()
@@ -934,7 +937,7 @@ fn cmd_read(
     refuse_clock_on_hardware(selection, &clock)?;
     if requires_hardware(selection) {
         let (mut dmm, device) = open_with_help(selection, adapter)?;
-        let experimental = dmm.profile().stability == dmm_lib::protocol::Stability::Experimental;
+        let experimental = !dmm.profile().stability.is_verified();
         info!("connected, starting measurement loop");
         run_read_loop(
             &mut dmm,

@@ -161,26 +161,27 @@ impl App {
                 // that is the only thing that names a meter at all — and from
                 // the selected entry's profile otherwise.
                 let badge = if self.connection.state == ConnectionState::Connected {
-                    self.connection.experimental.then(|| {
+                    (!self.connection.stability.is_verified()).then(|| {
                         (
                             self.connection.model_name.clone(),
+                            self.connection.stability,
                             self.connection.feedback_url.clone(),
                         )
                     })
                 } else {
                     self.selected_profile
                         .as_ref()
-                        .filter(|p| p.stability == dmm_lib::protocol::Stability::Experimental)
-                        .map(|p| (p.model_name.to_string(), p.feedback_url()))
+                        .filter(|p| !p.stability.is_verified())
+                        .map(|p| (p.model_name.to_string(), p.stability, p.feedback_url()))
                 };
-                if let Some((model_name, url)) = badge {
+                if let Some((model_name, stability, url)) = badge {
                     ui.hyperlink_to(
                         RichText::new("EXPERIMENTAL").small().strong().color(orange),
                         url,
                     )
                     .on_hover_text(format!(
                         "{} Click to report feedback.",
-                        dmm_lib::binary_help::experimental_warning(&model_name)
+                        dmm_lib::binary_help::experimental_warning(&model_name, stability)
                     ));
                 }
             });

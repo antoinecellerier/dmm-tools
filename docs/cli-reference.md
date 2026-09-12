@@ -61,18 +61,18 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut803` |  | UT803 (experimental) |
 | `ut804` |  | UT804 (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
-| `ut181a` | `ut181` | UT181A (experimental) |
+| `ut181a` | `ut181` | UT181A (partly verified) |
 | `vc880` | `vc-880` | Voltcraft VC-880 (experimental) |
 | `vc650bt` | `vc-650bt` | Voltcraft VC650BT (experimental) |
 | `vc890` | `vc-890` | Voltcraft VC-890 (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 <!-- devices:end -->
 
-**Experimental** families were reverse-engineered from vendor software and are
-not yet fully verified against real hardware; [supported
-devices](supported-devices.md) lists what each has confirmed, along with
-display counts, form factor and cable. When connecting to an experimental
-device, the CLI prints a yellow warning with a link to the device's
+**Experimental** families were reverse-engineered from vendor software and
+not yet run on real hardware; a **partly verified** one has run for its main
+modes. [Supported devices](supported-devices.md) lists what each has
+confirmed, along with display counts, form factor and cable. Short of
+verified, the CLI prints a yellow warning with a link to the device's
 verification issue on GitHub. Please report findings there.
 
 The `mock` device generates synthetic measurements without hardware, cycling

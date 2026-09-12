@@ -33,8 +33,9 @@ The other choices are every supported model (see [supported
 devices](supported-devices.md)) and **Mock (simulated)**, which generates
 synthetic measurements without hardware; picking one skips detection. The
 selection persists across sessions and requires a reconnect to take effect.
-When connected to an experimental protocol, an orange **EXPERIMENTAL** badge
-appears in the top bar; clicking it opens the device's verification issue on
+When the connected protocol is not fully verified, an orange
+**EXPERIMENTAL** badge appears in the top bar; hovering it says how far the
+meter is verified, and clicking it opens the device's verification issue on
 GitHub, where you can report feedback.
 
 Help is shown automatically when connection fails:

@@ -120,12 +120,36 @@ pub(crate) mod test_support {
 }
 
 /// Protocol stability level.
+///
+/// Only `Verified` changes behaviour (no warning, no badge, capture starts
+/// trusted). `PartlyVerified` is `Experimental` with a different label, so a
+/// meter real hardware has answered for is not listed like one nobody has
+/// run; the words come from [`Stability::label`] so every surface agrees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stability {
     /// Verified against real hardware.
     Verified,
+    /// Connection and the main modes confirmed on real hardware; other
+    /// formats or commands still unverified.
+    PartlyVerified,
     /// Based on reverse engineering, not yet verified against real hardware.
     Experimental,
+}
+
+impl Stability {
+    /// Whether the protocol needs no warning: only `Verified` does.
+    pub fn is_verified(self) -> bool {
+        self == Stability::Verified
+    }
+
+    /// The word the docs, `--help` and the warnings use for this level.
+    pub fn label(self) -> &'static str {
+        match self {
+            Stability::Verified => "verified",
+            Stability::PartlyVerified => "partly verified",
+            Stability::Experimental => "experimental",
+        }
+    }
 }
 
 /// Static profile information about a device.
@@ -646,15 +670,16 @@ mod tests {
         }
     }
 
-    /// An experimental device is one nobody has finished running, so its step
-    /// list must still have something left to confirm.
+    /// A device short of `Verified` is one nobody has finished running, so its
+    /// step list must still have something left to confirm.
     #[test]
-    fn experimental_devices_leave_steps_to_verify() {
+    fn unverified_devices_leave_steps_to_verify() {
         for (id, stability, steps) in all_steps() {
-            if stability == Stability::Experimental {
+            if !stability.is_verified() {
                 assert!(
                     steps.iter().any(|s| !s.verified),
-                    "{id} is experimental but every capture step is verified"
+                    "{id} is {} but every capture step is verified",
+                    stability.label()
                 );
             }
         }
@@ -672,8 +697,8 @@ mod tests {
                 );
                 continue;
             }
-            let ut61_sibling = (d_family(id) == Some(DeviceFamily::Ut61EPlus))
-                && stability == Stability::Experimental;
+            let ut61_sibling =
+                (d_family(id) == Some(DeviceFamily::Ut61EPlus)) && !stability.is_verified();
             if ut61_sibling {
                 assert!(
                     steps.iter().all(|s| !s.verified),

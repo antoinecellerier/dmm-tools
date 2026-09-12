@@ -51,11 +51,11 @@ pub fn device_help(intro: &str) -> String {
     for d in registry::DEVICES {
         let stability = (d.new_protocol)().profile().stability;
         let tag = if !d.requires_hardware {
-            " (no hardware required)"
-        } else if stability == Stability::Experimental {
-            " (experimental)"
+            " (no hardware required)".to_string()
+        } else if stability.is_verified() {
+            String::new()
         } else {
-            ""
+            format!(" ({})", stability.label())
         };
         help.push_str(&format!("  {:<12} {}{}\n", d.id, d.display_name, tag));
     }
@@ -124,13 +124,18 @@ pub fn transport_setup_hint() -> &'static [&'static str] {
     SETUP_HINT
 }
 
-/// The sentence both binaries use to say a protocol is unverified.
+/// The sentence both binaries use to say a protocol is not fully verified.
 ///
 /// Only the claim is shared: each site appends its own call to action (the
 /// CLI a `capture` command, the GUI a link), because they differ in what the
 /// user can do next. Four hand-written spellings had drifted apart here.
-pub fn experimental_warning(model_name: &str) -> String {
-    format!("{model_name} support is experimental (unverified against real hardware).")
+pub fn experimental_warning(model_name: &str, stability: Stability) -> String {
+    let detail = match stability {
+        Stability::Verified => "verified against real hardware",
+        Stability::PartlyVerified => "some modes and commands unconfirmed on real hardware",
+        Stability::Experimental => "unverified against real hardware",
+    };
+    format!("{model_name} support is {} ({detail}).", stability.label())
 }
 
 /// What both binaries answer when the clock flags meet a hardware device.
@@ -282,17 +287,22 @@ mod tests {
     }
 
     #[test]
-    fn experimental_warning_names_the_model() {
+    fn experimental_warning_names_the_model_and_the_level() {
         assert_eq!(
-            experimental_warning("UNI-T UT8803"),
+            experimental_warning("UNI-T UT8803", Stability::Experimental),
             "UNI-T UT8803 support is experimental (unverified against real hardware)."
+        );
+        assert_eq!(
+            experimental_warning("UNI-T UT181A", Stability::PartlyVerified),
+            "UNI-T UT181A support is partly verified (some modes and commands unconfirmed on real hardware)."
         );
     }
 
-    /// The mock needs no hardware and several families are experimental; both
-    /// tags tell the user what to expect before they plug anything in.
+    /// The mock needs no hardware and the families short of verified carry
+    /// their level; the tags tell the user what to expect before they plug
+    /// anything in.
     #[test]
-    fn device_help_tags_mock_and_experimental_devices() {
+    fn device_help_tags_mock_and_unverified_devices() {
         let help = device_help("x");
         let mock_line = help
             .lines()
@@ -300,5 +310,6 @@ mod tests {
             .expect("mock listed");
         assert!(mock_line.contains("(no hardware required)"), "{mock_line}");
         assert!(help.contains("(experimental)"));
+        assert!(help.contains("(partly verified)"));
     }
 }

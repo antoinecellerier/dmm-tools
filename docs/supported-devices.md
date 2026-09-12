@@ -8,9 +8,11 @@ which cable and which meter are attached from the bytes the meter sends
 beyond switching the meter's USB output on, as listed per family below.
 
 **✅ Verified** means the model's protocol tables have been confirmed on real
-hardware. **🧪 Experimental** means the protocol was reverse-engineered from
-vendor software and manuals; the linked issue collects hardware reports, and
-the tool prints a warning on connect. The per-family research is under
+hardware. **🟡 Partly verified** means connection and the main modes are
+confirmed and the rest is still to verify. **🧪 Experimental** means the
+protocol was reverse-engineered from vendor software and manuals. Short of
+verified, the linked issue collects hardware reports and the tool prints a
+warning on connect. The per-family research is under
 [docs/research/](research/); what remains to verify is in the
 [verification backlog](verification-backlog.md).
 
@@ -73,7 +75,7 @@ ON; the UT181A forgets this at power-off.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT171A/B/C | — | 🧪 Experimental ([#4](https://github.com/antoinecellerier/dmm-tools/issues/4)) | not yet run on a meter |
-| UT181A | — | 🧪 Experimental ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)) | logging meter |
+| UT181A | — | 🟡 Partly verified ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)) | logging meter |
 
 Two reporters have run the UT181A over the CH9329 cable: connection, V DC,
 V AC + Hz and dual-probe temperature are confirmed. The MIN/MAX, REL, Peak

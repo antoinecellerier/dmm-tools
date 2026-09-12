@@ -6,7 +6,7 @@
 //! is only checked for omissions. Not in [`crate::binary_help`], which is
 //! terminal help text, not repository markdown.
 
-use crate::protocol::{Stability, registry};
+use crate::protocol::registry;
 
 /// The CLI reference's `--device` table: one row per selectable device.
 ///
@@ -29,10 +29,8 @@ pub fn cli_reference_table() -> String {
         let mut tags: Vec<&str> = Vec::new();
         if !device.requires_hardware {
             tags.push("no hardware required");
-        } else if (device.new_protocol)().profile().stability == Stability::Verified {
-            tags.push("verified");
         } else {
-            tags.push("experimental");
+            tags.push((device.new_protocol)().profile().stability.label());
         }
         let tags = tags.join(", ");
         // A display name that already ends in a parenthetical — the mock's
@@ -93,6 +91,7 @@ mod tests {
         assert!(table.contains("| UT61E+ (verified) |"), "{table}");
         assert_eq!(table.matches("default").count(), 1, "{table}");
         assert!(table.contains("| UT171A/B/C (experimental) |"), "{table}");
+        assert!(table.contains("| UT181A (partly verified) |"), "{table}");
         assert!(
             table.contains("| Mock (simulated, no hardware required) |"),
             "{table}"

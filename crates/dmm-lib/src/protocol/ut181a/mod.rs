@@ -82,9 +82,11 @@ impl Ut181aProtocol {
                 // are traced from the vendor Windows app rather than guessed
                 // (research spec §6.1), but no meter has answered one yet, and the
                 // reply frame that would say whether it did is itself unverified.
-                // Stays Experimental so the badge keeps linking to the verification
-                // issue; README and docs/supported-devices.md say the same.
-                stability: Stability::Experimental,
+                // PartlyVerified keeps the warning and the badge linking to the
+                // verification issue while listing the meter apart from ones
+                // nobody has run; README and docs/supported-devices.md say the
+                // same.
+                stability: Stability::PartlyVerified,
                 supported_commands: UT181A_COMMANDS,
                 // aux1 + aux2 + COMP High + COMP Low.
                 max_aux_values: 4,

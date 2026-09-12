@@ -403,7 +403,7 @@ impl App {
         // the next connect asks the cable again.
         self.connection.detected = None;
         self.connection.model_name.clear();
-        self.connection.experimental = false;
+        self.connection.stability = dmm_lib::protocol::Stability::Verified;
         self.connection.feedback_url.clear();
         self.connection.supported_commands.clear();
         self.connection.choices.clear();
@@ -456,7 +456,7 @@ impl App {
                     name,
                     model_name,
                     device_id,
-                    experimental: exp,
+                    stability,
                     feedback_url,
                     supported_commands: cmds,
                     max_aux_values,
@@ -467,7 +467,7 @@ impl App {
                     self.connection.detected =
                         device_id.and_then(dmm_lib::protocol::registry::find_device);
                     self.connection.model_name = model_name;
-                    self.connection.experimental = exp;
+                    self.connection.stability = stability;
                     self.capture_layout.device_aux_slots = max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
                     // in-flight capture picks the slot count back up — it was
@@ -710,12 +710,15 @@ impl App {
             let experimental_link = self
                 .selected_profile
                 .as_ref()
-                .filter(|p| p.stability == dmm_lib::protocol::Stability::Experimental)
+                .filter(|p| !p.stability.is_verified())
                 .map(|profile| {
                     (
                         format!(
                             "{} Report feedback.",
-                            dmm_lib::binary_help::experimental_warning(profile.model_name)
+                            dmm_lib::binary_help::experimental_warning(
+                                profile.model_name,
+                                profile.stability
+                            )
                         ),
                         profile.feedback_url(),
                     )

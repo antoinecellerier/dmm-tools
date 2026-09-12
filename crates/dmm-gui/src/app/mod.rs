@@ -257,8 +257,9 @@ pub(super) struct Connection {
     /// Model name the connected protocol reports, for the text that has to
     /// name it (the experimental warning). Empty while disconnected.
     pub(super) model_name: String,
-    /// Whether the connected protocol is experimental (unverified).
-    pub(super) experimental: bool,
+    /// How far the connected protocol is verified; the badge shows for
+    /// anything short of `Verified`.
+    pub(super) stability: dmm_lib::protocol::Stability,
     /// URL for reporting feedback on experimental protocols.
     pub(super) feedback_url: String,
     /// Commands supported by the connected protocol.
@@ -294,7 +295,7 @@ impl Default for Connection {
             device_name: None,
             detected: None,
             model_name: String::new(),
-            experimental: false,
+            stability: dmm_lib::protocol::Stability::Verified,
             feedback_url: String::new(),
             supported_commands: Vec::new(),
             choices: SettingChoices::default(),
