@@ -399,6 +399,17 @@ Left open on this model:
   presses, so a duplicate would be in the bridge or the meter's own handling.
   One observation, on one cable; the check is whether a RANGE walk on our own
   meter over CH9329 ever gains a rung it did not press for.
+- **The SELECT and Hz/% ring orders**, and the ring contents with them, are
+  [UNVERIFIED] on this model: the four captures reached every mode, but the
+  operator turned the dial and pressed the buttons, so the driver never
+  walked a ring itself. Nothing rests on the order — `cycle.rs` presses and
+  reads the mode back until the target shows, which works whatever the real
+  order is — so a wrong *order* cannot break anything; wrong ring
+  *contents* could leave `set mode` unable to reach a mode. The B+ has no
+  AC+DC and no LPF, so its V~ position has no SELECT ring at all, and it
+  splits the E+'s single Ω position in two (family spec §3.1). Any
+  `dmm-cli --device ut61b+ set mode <name>` answers it in one go. Issue #7,
+  now that issue #19 is closed.
 - **The Hz ladder — PARKED 2026-09-12, needs a signal generator we do not
   have.** Raise it again if one turns up, or if a reporter offers. This is
   the only open item on the model with a real correctness risk: the Hz rungs

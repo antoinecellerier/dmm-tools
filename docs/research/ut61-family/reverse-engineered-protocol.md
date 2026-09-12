@@ -226,8 +226,9 @@ manual says SELECT cycles between them.
 
 This model has no AC+DC and no LPF, so its V~ position has no SELECT ring at
 all, and it splits the E+'s single Ω position in two. No temperature, no hFE,
-no LoZ. Both ring contents and ring order are **[UNVERIFIED]** — the three
-UT61B+ captures (issue #19) never pressed SELECT through a ring.
+no LoZ. Both ring contents and ring order are **[UNVERIFIED]** — none of the four
+UT61B+ captures (issue #19) had the driver press SELECT through a ring.
+Tracked in issue #7; see `docs/verification-backlog.md`.
 
 ---
 
