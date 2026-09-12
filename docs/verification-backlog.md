@@ -1135,11 +1135,28 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   ends of a ladder measured, AC V 1, capacitance 1–4 and 6 and mV 1 have
   nowhere else to sit. Only the Hz ladder is still genuinely unknown, and
   the whole D+ table remains [DEDUCED] for want of D+ hardware. Issue #7.
-- **UT61B+/D+ mV ladders are offered to the RANGE driver, untested** —
-  `range_is_fixed` covers DC mV and AC mV on the E+, where RANGE is dead
-  (2026-09-07), but the 6,000-count tables give both modes two rungs and
-  no run has pressed RANGE there. The `dcv_ranges` step does not reach
-  them; the mV position needs its own. Issue #7.
+- **UT61B+/D+ mV ladders are offered to the RANGE driver, untested — but
+  needs no ask and no new step.** The `dcmv` and `acmv` steps are not gate
+  steps, so the sweep walks their ladders like any other mode step's; they
+  came back without range sub-steps on 2026-09-10 only because they then ran
+  before the gate closed (above). The next plain `capture` run on a B+ or D+
+  files either `dcmv/range:600mV` or a `RANGE did nothing` error, whichever
+  is true.
+  **Our UT61E+ cannot answer it.** `range_is_fixed` covers DC mV and AC mV
+  there on real runs (DC mV 2026-03-21, AC mV 2026-09-07, three presses with
+  the range byte and the AUTO annunciator unmoved), so the sweep offers
+  nothing in mV on that model and a rerun cannot produce a mV rung. The
+  reason it is dead there does not carry over either: the E+'s mV dial has
+  one usable rung, its table's second entry being another model's, so
+  "RANGE does nothing" needs no explanation beyond having nowhere to step.
+  **The B+'s own evidence points the other way**: on 2026-09-10 RANGE drove
+  all six of its two-rung ladders to both rungs — `dcua`, `acua`, `dcma`,
+  `acma`, `dca`, `aca`, twelve range sub-steps, every one captured — so two
+  rungs are not inherently fixed on that model; mV would have to be
+  specially dead.
+  Low stakes whichever way it falls: both rungs carry unit `mV`, so no
+  reading can be misreported, and the only cost of being wrong is offering a
+  control the meter refuses. Issue #7.
 - **UT61B+ golden set** — 46 fixtures in
   `crates/dmm-lib/tests/golden/ut61b+/`, lifted from the four issue #19
   reports: every mode the dial reaches, the Ω, DC V and both current
