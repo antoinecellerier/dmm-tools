@@ -5,6 +5,7 @@
 use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, RichText, Ui};
 
+use super::recording_panel::MIN_SPLIT_HEIGHT;
 use super::{App, BigMeterMode};
 use crate::a11y::ResponseA11yExt;
 use crate::display;
@@ -20,6 +21,22 @@ pub(super) enum ContentLayout {
 }
 
 impl App {
+    /// The reading column inside the page scroller both multi-panel layouts
+    /// wrap it in: in a window too short for the column, the stats — and in
+    /// the narrow layout the graph and recording below them — used to be cut
+    /// off at the bottom with no way to reach them.
+    ///
+    /// Returns the scroller's output so tests can see whether it had to scroll.
+    pub(super) fn show_reading_column_scrolled(
+        &mut self,
+        ui: &mut Ui,
+        layout: ContentLayout,
+    ) -> egui::scroll_area::ScrollAreaOutput<()> {
+        egui::ScrollArea::vertical()
+            .id_salt("reading_column")
+            .show(ui, |ui| self.show_reading_column(ui, layout))
+    }
+
     /// Reading, controls, specs and stats — the column shared by the wide and
     /// narrow multi-panel layouts. The two differ only in the reading widget,
     /// the specs section, the stats section's compact flag, and whether the
@@ -86,7 +103,16 @@ impl App {
             && (self.settings.show_graph || self.settings.show_recording)
         {
             ui.separator();
-            self.show_graph_recording_split(ui, true);
+            // The split reads `ui.available_height()`, which inside the
+            // column's scroller is the viewport rather than what is left of
+            // the window, so give it an explicit height: the rest of the
+            // viewport while the column fits — content then equals viewport
+            // and no scrollbar appears — and `MIN_SPLIT_HEIGHT` once it
+            // doesn't, so the graph stays usable and the column scrolls.
+            let height = ui.available_height().max(MIN_SPLIT_HEIGHT).floor();
+            ui.allocate_ui(egui::vec2(ui.available_width(), height), |ui| {
+                self.show_graph_recording_split(ui, true);
+            });
         }
     }
 
@@ -186,5 +212,180 @@ impl App {
     /// Render specs for the narrow (compact single-line) layout.
     fn show_specs_section_compact(&self, ui: &mut Ui) {
         self.show_specs_with(ui, 1.0, specs::show_specs_compact_scaled);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{SIDE_PANEL_DEFAULT_WIDTH, SIDE_PANEL_MAX_WIDTH, SIDE_PANEL_MIN_WIDTH};
+    use super::*;
+    use crate::settings::Settings;
+    use eframe::egui::scroll_area::ScrollAreaOutput;
+
+    /// The page scrollers one multi-panel layout ends up with: the wide
+    /// layout has one per column, the narrow layout only the reading column
+    /// (the graph is stacked inside it).
+    struct Columns {
+        reading: ScrollAreaOutput<()>,
+        graph: Option<ScrollAreaOutput<()>>,
+    }
+
+    /// Lay the panels out at `width` x `height` the way `App::ui` does — top
+    /// bar pinned outside the scrollers, then the wide or narrow branch — and
+    /// return the last frame's scrollers. Three frames because a scroll area
+    /// sizes itself from the state the previous one left.
+    fn run_layout(width: f32, height: f32) -> Columns {
+        run_layout_with(width, height, Settings::default())
+    }
+
+    /// As [`run_layout`], with the panels the given settings show.
+    fn run_layout_with(width: f32, height: f32, settings: Settings) -> Columns {
+        let settings = Settings {
+            // No acquisition thread: this is about layout only.
+            auto_connect: false,
+            ..settings
+        };
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        // A session's worth of data: only then does the graph draw its traces
+        // and the recording its sample log, and only then does the split fill
+        // its allocation to the last pixel — the case where a stray fraction
+        // of content would raise a scrollbar on a window that fits.
+        let m = dmm_lib::measurement::Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        );
+        app.recording.toggle(app.clock.now());
+        for _ in 0..50 {
+            app.graph.push(
+                1.234,
+                std::time::Instant::now(),
+                "DC V",
+                "V",
+                Some("  1.234"),
+            );
+            app.recording.push(&m, &app.wall_clock, 0);
+        }
+        app.last_measurement = Some(m);
+
+        let ctx = egui::Context::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height));
+        let wide = super::super::meter_fit::is_wide(width);
+        let mut columns = None;
+
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(screen),
+                    ..Default::default()
+                },
+                |ui| {
+                    let ctx = ui.ctx().clone();
+                    egui::Panel::top("top_bar").show(ui, |ui| {
+                        app.show_top_bar(ui, &ctx);
+                        app.show_settings_panel(ui);
+                    });
+                    columns = Some(if wide {
+                        let reading = egui::Panel::left("reading_panel")
+                            .default_size(SIDE_PANEL_DEFAULT_WIDTH)
+                            .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
+                            .resizable(true)
+                            .show(ui, |ui| {
+                                app.show_reading_column_scrolled(ui, ContentLayout::Wide)
+                            })
+                            .inner;
+                        let graph = egui::CentralPanel::default()
+                            .show(ui, |ui| app.show_graph_column(ui))
+                            .inner;
+                        Columns {
+                            reading,
+                            graph: Some(graph),
+                        }
+                    } else {
+                        let reading = egui::CentralPanel::default()
+                            .show(ui, |ui| {
+                                app.show_reading_column_scrolled(ui, ContentLayout::Narrow)
+                            })
+                            .inner;
+                        Columns {
+                            reading,
+                            graph: None,
+                        }
+                    });
+                },
+            );
+            // epaint 0.36 debug-asserts on dropping unapplied texture deltas;
+            // this harness renders without a painter.
+            out.textures_delta.clear();
+        }
+
+        columns.expect("the layout closure runs every frame")
+    }
+
+    /// A column whose content is no taller than its viewport: egui raises a
+    /// scrollbar — and starts taking the wheel — the moment it is taller.
+    fn assert_no_scrollbar(name: &str, column: &ScrollAreaOutput<()>) {
+        assert!(
+            column.content_size.y <= column.inner_rect.height() + 0.01,
+            "{name}: content {} taller than the {} viewport",
+            column.content_size.y,
+            column.inner_rect.height(),
+        );
+        assert_eq!(column.state.offset, egui::Vec2::ZERO, "{name} is scrolled");
+    }
+
+    /// A window with room for everything looks exactly as it did before the
+    /// columns became scrollable: no scrollbar over the reading or the graph,
+    /// and nothing scrolled out of sight at the top.
+    #[test]
+    fn a_wide_window_that_fits_shows_no_scrollbar_on_either_column() {
+        let columns = run_layout(1000.0, 640.0);
+        assert_no_scrollbar("the reading column", &columns.reading);
+        assert_no_scrollbar(
+            "the graph column",
+            columns.graph.as_ref().expect("wide has a graph column"),
+        );
+    }
+
+    /// With the recording panel hidden the graph is alone in the column and
+    /// sizes itself, so nothing downstream can absorb a pixel it overshoots by.
+    #[test]
+    fn a_wide_window_without_the_recording_panel_shows_no_scrollbar() {
+        let columns = run_layout_with(
+            1000.0,
+            640.0,
+            Settings {
+                show_recording: false,
+                ..Settings::default()
+            },
+        );
+        assert_no_scrollbar(
+            "the graph column",
+            columns.graph.as_ref().expect("wide has a graph column"),
+        );
+    }
+
+    /// The narrow column stacks the graph and recording below the reading, so
+    /// it is the one that has to fill its viewport exactly — the split is
+    /// handed the height that is left rather than reading the viewport itself.
+    #[test]
+    fn a_narrow_window_that_fits_shows_no_scrollbar() {
+        let columns = run_layout(700.0, 640.0);
+        assert_no_scrollbar("the narrow column", &columns.reading);
+        assert!(columns.graph.is_none(), "narrow has one column");
+    }
+
+    /// Too short for the stack: the graph keeps its floor and the column grows
+    /// past the viewport, which is what hands the user a scrollbar and the
+    /// wheel instead of cropping the graph.
+    #[test]
+    fn a_window_too_short_for_the_stack_scrolls_the_column() {
+        let columns = run_layout(700.0, 300.0);
+        assert!(
+            columns.reading.content_size.y > columns.reading.inner_rect.height() + 1.0,
+            "content {} fits the {} viewport, so nothing would scroll",
+            columns.reading.content_size.y,
+            columns.reading.inner_rect.height(),
+        );
     }
 }

@@ -755,7 +755,7 @@ impl eframe::App for App {
                 .size_range(SIDE_PANEL_MIN_WIDTH..=SIDE_PANEL_MAX_WIDTH)
                 .resizable(true)
                 .show(ui, |ui| {
-                    self.show_reading_column(ui, ContentLayout::Wide);
+                    self.show_reading_column_scrolled(ui, ContentLayout::Wide);
                 });
             // egui's `Panel::left(..).resizable(true)` allocates a
             // drag-sense resize handle at its right edge, which is focusable
@@ -801,7 +801,7 @@ impl eframe::App for App {
             // Wide: center panel for graph + recording
             egui::CentralPanel::default()
                 .show(ui, |ui| {
-                    self.show_graph_recording_split(ui, false);
+                    self.show_graph_column(ui);
                 })
                 .response
                 .a11y_role(egui::accesskit::Role::Main);
@@ -809,7 +809,7 @@ impl eframe::App for App {
             // Narrow: single column
             egui::CentralPanel::default()
                 .show(ui, |ui| {
-                    self.show_reading_column(ui, ContentLayout::Narrow);
+                    self.show_reading_column_scrolled(ui, ContentLayout::Narrow);
                 })
                 .response
                 .a11y_role(egui::accesskit::Role::Main);

@@ -489,6 +489,10 @@ Two-column layout with a resizable left sidebar (180–400px):
 Single-column stack: reading, controls, help, specifications (compact),
 statistics, graph, recording.
 
+In a window too short for a column, that column scrolls with the mouse wheel
+and the graph area keeps a minimum height instead of shrinking away; the top
+bar stays in place.
+
 ### Big Meter Mode
 
 ![Big meter mode — reading and statistics scaled to fill the window](../assets/gui-big-meter.png)

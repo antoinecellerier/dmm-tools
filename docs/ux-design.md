@@ -89,6 +89,10 @@ Threshold at ~900px available width:
 - Graph (toolbar + main + minimap)
 - Recording (resizable via drag handle)
 
+Each column is a page scroller: too short a window scrolls it rather than
+cropping it, the graph area keeping a minimum height. The top bar is outside
+the scrollers and stays pinned.
+
 **Big meter mode (graph + recording both hidden):** Single centered display.
 - Reading, buttons, specs (inline), and stats scale to fill available space
 - Font size computed from both available width and height using cached measured text ratios

@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### GUI
+- **The reading and graph columns scroll in a short window** — the stats, and in a narrow window the graph and recording below them, were cut off at the bottom.
 - **Auto-detect is the default device** — the meter on the cable is worked out for you and saved, so later sessions open it directly instead of probing the cable again.
 - **Switch the meter's function and range from the readout** — on meters that allow it (UT61+/UT161, UT181A, VC-880, VC-890, mock) the mode and range labels are dropdowns naming what the dial position offers, Auto included.
 - **Scale row converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading and its same-quantity sub-values into what the sensor measures; the meter's value stays alongside as `Raw`.
