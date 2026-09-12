@@ -431,7 +431,7 @@ do not modify the persisted `settings.json`.
 
 ## Keyboard Shortcuts
 
-Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures.
+Press `?` or `F1`, or click the `?` button in the top bar, to open an in-app reference of keyboard shortcuts and mouse gestures. In a window too short for the whole list, `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` scroll it.
 
 ### General
 
@@ -455,6 +455,7 @@ shows the macOS spelling.
 | `Ctrl+Q` / `Ctrl+W` | Quit |
 | `?` / `F1` | Toggle keyboard & mouse help overlay |
 | `Esc` / `Ctrl+W` | Close help overlay |
+| `Up` / `Down`, `PgUp` / `PgDn`, `Home` / `End` | Scroll the help overlay (while it is open) |
 
 ### Graph Navigation
 

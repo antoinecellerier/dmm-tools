@@ -26,6 +26,7 @@
 - **`Ctrl+O` connects and disconnects** — the documented `Ctrl+Shift+C` was taken as a clipboard copy and never fired.
 - **`Ctrl+W` quits** — it only closed the shortcut help; `Cmd+W` on macOS.
 - **`F1` opens the shortcut help** — the only key was `?`.
+- **The shortcut help scrolls when the window is too short for it** — its lower rows were cut off with no way to reach them; `Up`/`Down`, `PgUp`/`PgDn` and `Home`/`End` move it.
 - **`F11` toggles fullscreen** — `Ctrl+Cmd+F` on macOS.
 - **`Cmd+M` minimises the window on macOS** — the app has no Window menu.
 - **Shortcut help shows `Cmd` keys on macOS** — every row said `Ctrl`.

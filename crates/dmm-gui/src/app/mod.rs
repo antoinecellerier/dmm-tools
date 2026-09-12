@@ -103,6 +103,25 @@ struct ShortcutHelp {
     /// Set on the frame the shortcut help window is opened so the next frame
     /// can focus the first widget inside it (one-shot trigger).
     focus_pending: bool,
+    /// Scroll the help's scroller is owed this frame, from a key the modal
+    /// has to handle itself. Set by `handle_shortcut_help_keys` before the
+    /// panels and spent when the modal draws.
+    scroll: HelpScroll,
+}
+
+/// A pending keyboard scroll of the shortcut help.
+///
+/// `Lines` and `Page` carry a direction: `1.0` towards the end of the list,
+/// `-1.0` towards its start. How far a line or a page is depends on the text
+/// style and the viewport, so only the modal can turn these into pixels.
+#[derive(Default, Clone, Copy, PartialEq, Debug)]
+enum HelpScroll {
+    #[default]
+    None,
+    Lines(f32),
+    Page(f32),
+    Top,
+    Bottom,
 }
 
 /// The "What's New" changelog viewport: whether it is showing, the focus to
@@ -556,6 +575,7 @@ impl eframe::App for App {
         self.apply_color_overrides(&ctx);
         self.apply_zoom(&ctx);
         self.handle_keyboard_shortcuts(&ctx);
+        self.handle_shortcut_help_keys(&ctx);
         self.drain_messages();
         self.poll_export_result();
 
