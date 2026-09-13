@@ -179,6 +179,15 @@ and the one after a skip or a resume. A mode
 off the ring is asked for as before, and a refused switch prints what to do by hand and
 counts against the same failure budget.
 
+The switch is filed ahead of its step as the sub-step `<step>/mode:<label>`: its frames,
+its `error` when refused, and one reading taken afterwards either way, since a timeout's
+text does not say where the presses left the meter. It is flagged `needs_attention` when
+refused or when that reading shows another mode. Filed apart, the frames survive the
+step's wait for a hand switch, which would trim them off the step's cap — issue #20, a
+UT61B+ timing out partway through a two-press Hz/% walk. A plan naming modes on one dial
+position reproduces such a bug without the GUI, keeping the dial history a fresh
+`dmm-cli set` lacks.
+
 `--no-drive` opts out, for receive-only cables (CH9325) or a cautious reporter.
 The report records `drive: on | off | disabled` — `off` for `--no-drive` and
 for a family that offered no choice at all, `disabled` when the budget ran out.
@@ -256,7 +265,7 @@ that are not in its list — and the default output file is
 Report level: `device_id`, `init_frames`, `wire_events_dropped` (B); `unverified_only`
 (E); `tier`, `core_semantics`, `gate_failures` (C); `drive` (D); `plan` (H). Per step:
 `frames`, `frames_dropped`, `diagnostics` and `needs_attention` (B); `confirmed`, `lcd` (typed corrections
-only) and `confirmed_by` (F); sub-step ids (D). Frames are raw wire transfers; a rejected
+only) and `confirmed_by` (F); sub-step ids, mode switches included (D). Frames are raw wire transfers; a rejected
 one is visible as a frame with no matching sample and a line under `diagnostics`. Every
 addition is optional on read, so older reports still resume.
 

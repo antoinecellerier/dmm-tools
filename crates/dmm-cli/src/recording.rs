@@ -67,6 +67,18 @@ impl Recorder {
         self.events.drain(..).collect()
     }
 
+    /// Take the events tagged `id` and leave the rest buffered: a sub-step
+    /// filed partway through its parent step must not carry off the frames
+    /// the parent recorded before it.
+    pub(crate) fn take_step(&mut self, id: &str) -> Vec<WireEvent> {
+        let (mine, rest): (Vec<_>, Vec<_>) = self
+            .events
+            .drain(..)
+            .partition(|e| e.step.as_deref() == Some(id));
+        self.events = rest.into();
+        mine
+    }
+
     /// Events dropped because the buffer was full, over the whole session.
     pub(crate) fn dropped(&self) -> u64 {
         self.dropped
@@ -221,6 +233,25 @@ mod tests {
         assert_eq!(events[1].step.as_deref(), Some("dcv"));
         assert_eq!(events[2].step, None);
         assert!(lock(&rec).drain().is_empty(), "drain must empty the buffer");
+    }
+
+    /// A mode switch files its own frames in the middle of a step; the step's
+    /// earlier and later frames stay where they are, in order.
+    #[test]
+    fn taking_one_step_leaves_the_others_buffered() {
+        let mut r = Recorder::new();
+        r.set_step(Some("acv"));
+        r.push_at(0, Direction::Tx, false, &[0x01]);
+        r.set_step(Some("acv/mode:Hz"));
+        r.push_at(10, Direction::Tx, false, &[0x02]);
+        r.set_step(Some("acv"));
+        r.push_at(20, Direction::Tx, false, &[0x03]);
+
+        let taken = r.take_step("acv/mode:Hz");
+        assert_eq!(taken.len(), 1);
+        assert_eq!(taken[0].bytes, vec![0x02]);
+        let left: Vec<Vec<u8>> = r.drain().into_iter().map(|e| e.bytes).collect();
+        assert_eq!(left, vec![vec![0x01], vec![0x03]]);
     }
 
     /// A silent read is not a wire event — recording it would bury the real

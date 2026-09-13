@@ -169,10 +169,11 @@ fn sub_step_id(step_id: &str, setting: Setting, label: &str) -> String {
     )
 }
 
-/// The label as it reads in an id and an instruction. Range labels are the
-/// meter's own (`22V`, `2.2V`); on/off-style labels read better lowercased.
+/// The label as it reads in an id and an instruction. Range and mode labels
+/// are the meter's own (`22V`, `AC V`); on/off-style labels read better
+/// lowercased.
 fn choice_slug(setting: Setting, label: &str) -> String {
-    if setting == Setting::Range {
+    if matches!(setting, Setting::Range | Setting::Mode) {
         label.to_string()
     } else {
         label.to_lowercase()
@@ -336,9 +337,11 @@ pub(crate) fn sweep_step(
 /// hands a reporter. The meter is right here, so ask it where it is.
 pub(crate) fn switch_mode_from(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
     step: &CaptureStep,
     prev: Option<&Measurement>,
     driver: &mut Driver,
+    report: &mut CaptureReport,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     let last = match prev {
         Some(m) => m.clone(),
@@ -349,14 +352,23 @@ pub(crate) fn switch_mode_from(
             Err(_) => return Ok(false),
         },
     };
-    switch_mode(dmm, step, &last, driver)
+    switch_mode(dmm, recorder, step, &last, driver, report)
 }
 
+/// The switch itself, filed as the sub-step `<step>/mode:<label>` ahead of
+/// the step: its frames stay whole however long the step then waits, and a
+/// refusal reaches the report instead of only the terminal.
+///
+/// Issue #20 is why: a UT61B+ timed out partway through a two-press Hz/%
+/// walk, and the step's own wait for a hand switch would have trimmed the
+/// frames that show which press went unanswered.
 pub(crate) fn switch_mode(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
     step: &CaptureStep,
     last: &Measurement,
     driver: &mut Driver,
+    report: &mut CaptureReport,
 ) -> Result<bool, Box<dyn std::error::Error>> {
     // A command step's own command is what puts the meter where it belongs,
     // and a step that names no mode has nothing to switch to.
@@ -378,7 +390,48 @@ pub(crate) fn switch_mode(
         "  {}",
         style(format!("\u{21b3} switching to {want} (sent by the tool)")).dim()
     );
-    match dmm.select(Setting::Mode, choice.id) {
+    let id = sub_step_id(step.id, Setting::Mode, want);
+    recording::lock(recorder).set_step(Some(&id));
+    let selected = dmm.select(Setting::Mode, choice.id);
+    // One reading whatever the outcome: after a refusal it is the only record
+    // of where the presses left the meter, which a timeout's text never says.
+    let mut errors = ErrorLog::default();
+    let samples: Vec<SampleData> = capture_samples(dmm, 1, &mut errors)
+        .iter()
+        .map(SampleData::from_measurement)
+        .collect();
+    let (frames, frames_dropped) = {
+        let mut rec = recording::lock(recorder);
+        rec.set_step(Some(step.id));
+        frames_for_step(&rec.take_step(&id), &id)
+    };
+    let landed = samples.last().is_some_and(|s| s.mode == want);
+    let error = selected.as_ref().err().map(ToString::to_string);
+    upsert_step(
+        report,
+        StepResult {
+            // The ring said a press reaches this mode, so a refusal or a
+            // meter somewhere else is the family's table or its driver
+            // disagreeing with the hardware.
+            needs_attention: error.is_some() || !landed,
+            samples,
+            frames,
+            frames_dropped,
+            diagnostics: errors.into_diagnostics(),
+            error,
+            ..StepResult::new(
+                &id,
+                &sub_step_instruction(Setting::Mode, want),
+                if selected.is_ok() {
+                    StepStatus::Captured
+                } else {
+                    StepStatus::Error
+                },
+            )
+        },
+    );
+
+    match selected {
         // The family reads the mode back before returning, and the step's
         // watcher still demands its matching frames.
         Ok(()) => Ok(true),
@@ -757,18 +810,50 @@ mod tests {
     }
 
     /// A meter on the mock's AC V ring, which offers the "AC V Hz" sub-mode
-    /// the way a real dial position's button does.
-    fn meter(
-        proto: Box<dyn dmm_lib::protocol::Protocol>,
-    ) -> (
-        dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
-        Measurement,
-    ) {
+    /// the way a real dial position's button does, recorded the way a capture
+    /// run records it, with an empty report to file into.
+    struct Bench {
+        dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+        recorder: SharedRecorder,
+        last: Measurement,
+        report: CaptureReport,
+    }
+
+    fn meter(proto: Box<dyn dmm_lib::protocol::Protocol>) -> Bench {
         use dmm_lib::transport::{NullTransport, Transport};
-        let mut dmm =
-            dmm_lib::Dmm::new(Box::new(NullTransport) as Box<dyn Transport>, proto).unwrap();
+        let (transport, recorder) =
+            crate::recording::RecordingTransport::new(Box::new(NullTransport));
+        let mut dmm = dmm_lib::Dmm::new(Box::new(transport) as Box<dyn Transport>, proto).unwrap();
         let last = dmm.request_measurement().unwrap();
-        (dmm, last)
+        Bench {
+            dmm,
+            recorder,
+            last,
+            report: CaptureReport::default(),
+        }
+    }
+
+    impl Bench {
+        fn switch(&mut self, step: &CaptureStep, driver: &mut Driver) -> bool {
+            let last = self.last.clone();
+            switch_mode(
+                &mut self.dmm,
+                &self.recorder,
+                step,
+                &last,
+                driver,
+                &mut self.report,
+            )
+            .unwrap()
+        }
+
+        fn mode(&mut self) -> String {
+            self.dmm.request_measurement().unwrap().mode.to_string()
+        }
+
+        fn ids(&self) -> Vec<&str> {
+            self.report.steps.iter().map(|s| s.id.as_str()).collect()
+        }
     }
 
     fn mock(mode: dmm_lib::mock::MockMode) -> Box<dyn dmm_lib::protocol::Protocol> {
@@ -789,14 +874,29 @@ mod tests {
     }
 
     /// The sub-mode is on the ring the dial already sits on, so the tool
-    /// presses the button instead of asking.
+    /// presses the button instead of asking, and files the switch as a
+    /// sub-step of its own showing where the meter landed.
     #[test]
     fn a_mode_the_ring_offers_is_switched_to() {
-        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut bench = meter(mock(dmm_lib::mock::MockMode::AcV));
         let mut driver = Driver::new(true);
-        assert!(switch_mode(&mut dmm, &mode_step("AC V Hz"), &last, &mut driver).unwrap());
-        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V Hz");
+        assert!(bench.switch(&mode_step("AC V Hz"), &mut driver));
+        assert_eq!(bench.mode(), "AC V Hz");
         assert_eq!(driver.failures, 0);
+
+        assert_eq!(bench.ids(), ["step/mode:AC V Hz"]);
+        let filed = &bench.report.steps[0];
+        assert_eq!(filed.status, StepStatus::Captured);
+        assert_eq!(
+            filed.instruction,
+            "mode \u{2192} AC V Hz (sent by the tool)"
+        );
+        assert_eq!(
+            filed.samples.last().map(|s| s.mode.as_str()),
+            Some("AC V Hz")
+        );
+        assert!(filed.error.is_none());
+        assert!(!filed.needs_attention);
     }
 
     /// Nothing earlier in the run left a reading, which is every step of a
@@ -804,41 +904,53 @@ mod tests {
     /// press the button.
     #[test]
     fn a_step_with_no_earlier_reading_still_switches() {
-        let (mut dmm, _) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut bench = meter(mock(dmm_lib::mock::MockMode::AcV));
         let mut driver = Driver::new(true);
-        assert!(switch_mode_from(&mut dmm, &mode_step("AC V Hz"), None, &mut driver).unwrap());
-        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V Hz");
+        assert!(
+            switch_mode_from(
+                &mut bench.dmm,
+                &bench.recorder,
+                &mode_step("AC V Hz"),
+                None,
+                &mut driver,
+                &mut bench.report,
+            )
+            .unwrap()
+        );
+        assert_eq!(bench.mode(), "AC V Hz");
         assert_eq!(driver.failures, 0);
     }
 
     /// A mode the ring does not reach needs the dial turned, which is the
-    /// operator's job: the tool must ask rather than send anything.
+    /// operator's job: the tool must ask rather than send anything, and
+    /// there is no switch to file.
     #[test]
     fn a_mode_off_the_ring_is_left_to_the_operator() {
-        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut bench = meter(mock(dmm_lib::mock::MockMode::AcV));
         let mut driver = Driver::new(true);
-        assert!(!switch_mode(&mut dmm, &mode_step("DC V"), &last, &mut driver).unwrap());
-        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V");
+        assert!(!bench.switch(&mode_step("DC V"), &mut driver));
+        assert_eq!(bench.mode(), "AC V");
 
         // A dial position offering no ring at all is the same case.
-        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::Ohm));
-        assert!(!switch_mode(&mut dmm, &mode_step("Capacitance"), &last, &mut driver).unwrap());
-        assert_eq!(dmm.request_measurement().unwrap().mode, "\u{03A9}");
+        let mut bench = meter(mock(dmm_lib::mock::MockMode::Ohm));
+        assert!(!bench.switch(&mode_step("Capacitance"), &mut driver));
+        assert_eq!(bench.mode(), "\u{03A9}");
         assert_eq!(driver.failures, 0);
+        assert!(bench.report.steps.is_empty());
     }
 
     /// A command step sends its own command; switching the mode under it
     /// would be undoing what the step is there to test.
     #[test]
     fn a_command_step_is_never_switched() {
-        let (mut dmm, last) = meter(mock(dmm_lib::mock::MockMode::AcV));
+        let mut bench = meter(mock(dmm_lib::mock::MockMode::AcV));
         let step = CaptureStep {
             command: Some("hold"),
             ..mode_step("AC V Hz")
         };
         let mut driver = Driver::new(true);
-        assert!(!switch_mode(&mut dmm, &step, &last, &mut driver).unwrap());
-        assert_eq!(dmm.request_measurement().unwrap().mode, "AC V");
+        assert!(!bench.switch(&step, &mut driver));
+        assert_eq!(bench.mode(), "AC V");
     }
 
     /// The mock, but one setting's values are refused the way a meter
@@ -915,11 +1027,28 @@ mod tests {
     /// refusals that end remote control for the run.
     #[test]
     fn a_refused_switch_counts_against_the_budget() {
-        let (mut dmm, last) = meter(Refuses::boxed(dmm_lib::mock::MockMode::AcV, Setting::Mode));
+        let mut bench = meter(Refuses::boxed(dmm_lib::mock::MockMode::AcV, Setting::Mode));
         let mut driver = Driver::new(true);
-        assert!(!switch_mode(&mut dmm, &mode_step("AC V Hz"), &last, &mut driver).unwrap());
+        assert!(!bench.switch(&mode_step("AC V Hz"), &mut driver));
         assert_eq!(driver.failures, 1);
         assert!(driver.active());
+    }
+
+    /// The refusal is in the report, not only on the terminal, with the
+    /// reading that says where the meter was left — the evidence issue #20
+    /// needed and a timeout's own text does not carry.
+    #[test]
+    fn a_refused_switch_is_filed_with_where_the_meter_was_left() {
+        let mut bench = meter(Refuses::boxed(dmm_lib::mock::MockMode::AcV, Setting::Mode));
+        let mut driver = Driver::new(true);
+        bench.switch(&mode_step("AC V Hz"), &mut driver);
+
+        assert_eq!(bench.ids(), ["step/mode:AC V Hz"]);
+        let filed = &bench.report.steps[0];
+        assert_eq!(filed.status, StepStatus::Error);
+        assert_eq!(filed.error.as_deref(), Some("command rejected: no"));
+        assert_eq!(filed.samples.last().map(|s| s.mode.as_str()), Some("AC V"));
+        assert!(filed.needs_attention);
     }
 
     /// The meter refuses REL on an OL reading, so the sweep must not spend a
