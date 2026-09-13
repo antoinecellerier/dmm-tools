@@ -175,6 +175,11 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
 - Every leg needed one press. The meter reported the new mode on the first
   read ~300 ms after the press in all but one case (one extra ~100 ms read on
   the Ω ring), which is what the driver's 150 ms delay / 3 reads settle covers.
+- One walk takes two presses in a row: Hz → Duty % → AC V, which only the GUI
+  can ask for (a CLI process that starts in Hz can't tell the dial position).
+  It went through from the GUI on 2026-09-13 **[VERIFIED]**, the new mode
+  showing ~0.3 s after the press into Duty % and ~0.6 s after the press into
+  AC V. A UT61B+ fails this walk (issue #20).
 - Pressing SELECT while the meter is in Hz or Duty % leaves the Hz/% ring for
   the *other* member of the position's SELECT ring — LPF V on V~, DC mV, DC µA,
   DC mA, DC A — not the junction mode. On the Hz/% position SELECT toggles

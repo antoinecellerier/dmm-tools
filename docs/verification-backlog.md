@@ -415,7 +415,21 @@ Left open on this model:
   back until the target shows, so a wrong order costs at most an extra press
   — but wrong *contents* could leave `set mode` unable to reach a mode. Any
   `dmm-cli --device ut61b+ set mode duty` from AC V answers the lot. Issue
-  #7, now that issue #19 is closed.
+  #7, now that issue #19 is closed. Issue #20's recording shows the V~
+  ring's first press from Hz landing on Duty %, as the table says.
+- **Hz → AC V and Hz → AC mV switches time out (issue #20, 88e80ed, GUI).**
+  The walk is two Hz/% presses in a row; per the reporter's recording the
+  meter takes the first (Hz → Duty %) and stops there, and the GUI reports a
+  timeout. Our UT61E+ (CP2110) did the same walk from the GUI on 2026-09-13
+  without error, so it is this model or its CH9329 cable. The one timed B+
+  press on record (6406037, step `duty`) took 849 ms from the press to the
+  first Duty % frame, against ~0.3 s on the E+, and the driver sends the next
+  press within a millisecond of the frame that confirms a step — the same
+  back-to-back pattern as the RANGE walk that gained a rung (above). Either
+  the read after the first press timed out, or the second press went out and
+  the meter neither took it nor answered for 2 s. `cycle.rs` propagates the
+  timeout from `observe_after_press` where `dmm-cli set` waits through one.
+  Waiting on a `RUST_LOG=dmm_lib=trace` GUI log of one failing switch.
 - **The Hz ladder — PARKED 2026-09-12, needs a signal generator we do not
   have.** Raise it again if one turns up, or if a reporter offers. This is
   the only open item on the model with a real correctness risk: the Hz rungs
