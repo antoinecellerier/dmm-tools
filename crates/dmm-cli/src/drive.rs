@@ -257,6 +257,7 @@ pub(crate) fn sweep_step(
         driver.offered = true;
 
         let mut moved = false;
+        let mut charged = false;
         let mut exhausted = false;
         for choice in choices.iter().filter(|c| !c.current) {
             if filed >= MAX_DRIVE_SUBSTEPS_PER_STEP || !driver.active() {
@@ -287,31 +288,34 @@ pub(crate) fn sweep_step(
             if driven.hit {
                 driver.prove(setting);
             }
-            // A refused setting left nothing to restore; a restore that the
-            // meter also refused would cost budget for the same refusal.
-            if !driven.refused {
-                moved = true;
-            }
+            // Restored after a failure too: an error can follow presses that
+            // landed — issue #20's HOLD press did, and only its read-back timed
+            // out — and a restore of a setting that never moved is a no-op.
+            moved = true;
             if let Some(m) = driven.last {
                 current = m;
             }
             save_report(report, output_path)?;
-            if driven.refused {
+            if driven.failed {
                 // A setting that has already worked this run is refused
                 // because this mode has no such function, which is the meter
                 // being right: only an unproven one accuses the protocol.
                 if !driver.proven(setting) {
                     driver.fail();
+                    charged = true;
                 }
-                // Its other values would be refused for the same reason, so
-                // they are not asked for — the restore below still runs.
+                // Its other values would fail for the same reason, so they
+                // are not asked for — the restore below still runs.
                 break;
             }
         }
 
         // Restored even once the budget is spent: leaving the meter latched in
-        // HOLD or on a manual range is worse than one more command.
-        if moved && let Some(m) = restore(dmm, setting, &choices, driver)? {
+        // HOLD or on a manual range is worse than one more command. A restore
+        // that fails after a failure already charged is not charged again: a
+        // meter that went quiet fails both, and that is one fault, not two.
+        // After an uncharged one it is, or a quiet meter never ends the sweeps.
+        if moved && let Some(m) = restore(dmm, setting, &choices, driver, !charged)? {
             current = m;
         }
         if exhausted {
@@ -450,10 +454,10 @@ pub(crate) fn switch_mode(
 }
 
 /// What one driven choice left behind: the reading the next choice is
-/// computed from, and whether the meter refused the command.
+/// computed from, and whether the command failed.
 struct Driven {
     last: Option<Measurement>,
-    refused: bool,
+    failed: bool,
     /// The read-back showed the value, so the setting is one the meter and
     /// the protocol agree on.
     hit: bool,
@@ -545,7 +549,7 @@ fn drive_choice(
     );
     Ok(Driven {
         last: measurements.into_iter().next_back(),
-        refused: selected.is_err(),
+        failed: selected.is_err(),
         hit,
     })
 }
@@ -557,19 +561,27 @@ fn short_id(id: &str) -> &str {
 }
 
 /// Put the setting back to auto range or off before the next mode step, and
-/// say so when the meter would not go.
+/// say so when the meter would not go. `charge` says whether that failure
+/// spends one of the run's failures.
 fn restore(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     setting: Setting,
     choices: &[dmm_lib::protocol::Choice],
     driver: &mut Driver,
+    charge: bool,
 ) -> Result<Option<Measurement>, Box<dyn std::error::Error>> {
     let Some(off) = choices.iter().find(|c| c.id == RESET_ID) else {
         return Ok(None);
     };
-    let reading = dmm
-        .select(setting, RESET_ID)
-        .and_then(|()| dmm.request_measurement());
+    let reading = match dmm.select(setting, RESET_ID) {
+        // A failed walk can leave the meter in a mode without this setting
+        // (RANGE once flipped a UT61E+ into AC+DC V): nothing to put back,
+        // but the next setting is offered from where the meter is now.
+        Err(dmm_lib::error::Error::UnsupportedCommand(_)) => {
+            return Ok(dmm.request_measurement().ok());
+        }
+        selected => selected.and_then(|()| dmm.request_measurement()),
+    };
     if let Ok(m) = &reading
         && shows_target(
             setting,
@@ -587,7 +599,9 @@ fn restore(
         ))
         .yellow()
     );
-    driver.fail();
+    if charge {
+        driver.fail();
+    }
     Ok(None)
 }
 
@@ -957,24 +971,52 @@ mod tests {
     /// answers a function the mode it is in does not have. Turning the
     /// setting off still works: it is already off, which is what the
     /// families' `select` checks before it presses anything.
-    struct Refuses {
-        inner: dmm_lib::mock::MockProtocol,
-        setting: Setting,
+    /// How [`Fails`] fails its one setting.
+    #[derive(Clone, Copy)]
+    enum Failure {
+        /// The meter says no and nothing moves.
+        Refused,
+        /// The value lands and only the read-back is lost, as issue #20's HOLD
+        /// press was.
+        TimedOutAfterLanding,
+        /// The value lands and the walk still ends in a refusal, as a RANGE
+        /// press that flips the mode does.
+        RefusedAfterLanding,
+        /// Nothing answers, putting the setting back included.
+        Silent,
+        /// The meter says no, and the mode it is left in has no such setting
+        /// to put back.
+        RefusedIntoAnotherMode,
     }
 
-    impl Refuses {
+    struct Fails {
+        inner: dmm_lib::mock::MockProtocol,
+        setting: Setting,
+        failure: Failure,
+    }
+
+    impl Fails {
         fn boxed(
             mode: dmm_lib::mock::MockMode,
             setting: Setting,
+            failure: Failure,
         ) -> Box<dyn dmm_lib::protocol::Protocol> {
-            Box::new(Refuses {
+            Box::new(Fails {
                 inner: dmm_lib::mock::MockProtocol::with_mode(mode),
                 setting,
+                failure,
             })
+        }
+
+        fn refusing(
+            mode: dmm_lib::mock::MockMode,
+            setting: Setting,
+        ) -> Box<dyn dmm_lib::protocol::Protocol> {
+            Self::boxed(mode, setting, Failure::Refused)
         }
     }
 
-    impl dmm_lib::protocol::Protocol for Refuses {
+    impl dmm_lib::protocol::Protocol for Fails {
         fn init(&mut self, t: &dyn dmm_lib::transport::Transport) -> dmm_lib::error::Result<()> {
             self.inner.init(t)
         }
@@ -1016,10 +1058,28 @@ mod tests {
             setting: Setting,
             id: u16,
         ) -> dmm_lib::error::Result<()> {
-            if setting == self.setting && id != RESET_ID {
-                return Err(dmm_lib::error::Error::CommandRejected("no".into()));
+            use dmm_lib::error::Error;
+            if setting != self.setting {
+                return self.inner.select(t, setting, id);
             }
-            self.inner.select(t, setting, id)
+            match self.failure {
+                Failure::Silent => Err(Error::Timeout),
+                Failure::RefusedIntoAnotherMode if id == RESET_ID => {
+                    Err(Error::UnsupportedCommand("no such setting here".into()))
+                }
+                _ if id == RESET_ID => self.inner.select(t, setting, id),
+                Failure::Refused | Failure::RefusedIntoAnotherMode => {
+                    Err(Error::CommandRejected("no".into()))
+                }
+                Failure::TimedOutAfterLanding => {
+                    self.inner.select(t, setting, id)?;
+                    Err(Error::Timeout)
+                }
+                Failure::RefusedAfterLanding => {
+                    self.inner.select(t, setting, id)?;
+                    Err(Error::CommandRejected("gave up".into()))
+                }
+            }
         }
     }
 
@@ -1027,7 +1087,7 @@ mod tests {
     /// refusals that end remote control for the run.
     #[test]
     fn a_refused_switch_counts_against_the_budget() {
-        let mut bench = meter(Refuses::boxed(dmm_lib::mock::MockMode::AcV, Setting::Mode));
+        let mut bench = meter(Fails::refusing(dmm_lib::mock::MockMode::AcV, Setting::Mode));
         let mut driver = Driver::new(true);
         assert!(!bench.switch(&mode_step("AC V Hz"), &mut driver));
         assert_eq!(driver.failures, 1);
@@ -1039,7 +1099,7 @@ mod tests {
     /// needed and a timeout's own text does not carry.
     #[test]
     fn a_refused_switch_is_filed_with_where_the_meter_was_left() {
-        let mut bench = meter(Refuses::boxed(dmm_lib::mock::MockMode::AcV, Setting::Mode));
+        let mut bench = meter(Fails::refusing(dmm_lib::mock::MockMode::AcV, Setting::Mode));
         let mut driver = Driver::new(true);
         bench.switch(&mode_step("AC V Hz"), &mut driver);
 
@@ -1091,7 +1151,7 @@ mod tests {
         assert!(driver.proven(Setting::MinMax));
         driver.prove_command("light");
         let report = swept_by(
-            Refuses::boxed(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
+            Fails::refusing(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
             "dcv",
             "dmm-cli-test-drive-proven.yaml",
             &mut driver,
@@ -1111,13 +1171,83 @@ mod tests {
         assert!(!refused.needs_attention, "a proven setting was flagged");
     }
 
+    /// A HOLD press that landed is put back off whatever error followed it,
+    /// or the rest of the run happens under HOLD: in issue #20 a timed-out
+    /// read-back left it on, and it swallowed the next step's Hz/% press.
+    #[test]
+    fn a_setting_that_failed_after_landing_is_still_restored() {
+        for failure in [Failure::TimedOutAfterLanding, Failure::RefusedAfterLanding] {
+            let mut driver = Driver::new(true);
+            let report = swept_by(
+                Fails::boxed(dmm_lib::mock::MockMode::DcV, Setting::Hold, failure),
+                "dcv",
+                "dmm-cli-test-drive-landed.yaml",
+                &mut driver,
+            );
+            let hold = report
+                .steps
+                .iter()
+                .find(|s| s.id == "dcv/hold:on")
+                .expect("the HOLD sub-step is filed");
+            assert_eq!(hold.status, StepStatus::Error);
+            // HOLD drops REL, so REL landing says HOLD went back off.
+            let rel = report
+                .steps
+                .iter()
+                .find(|s| s.id == "dcv/rel:on")
+                .expect("the sweep went on to REL");
+            assert_eq!(rel.status, StepStatus::Captured, "{:?}", rel.error);
+            assert!(rel.samples.iter().all(|s| !s.flags.hold));
+        }
+    }
+
+    /// A meter that stops answering fails the setting and then its restore:
+    /// one fault, so one failure. Not two, or two such settings end remote
+    /// control; not zero on a proven setting, whose own failure goes
+    /// uncharged, or a quiet meter is swept for the rest of the run.
+    #[test]
+    fn a_silent_meter_spends_one_failure() {
+        for proven in [false, true] {
+            let mut driver = Driver::new(true);
+            if proven {
+                driver.prove_command("hold");
+            }
+            swept_by(
+                Fails::boxed(dmm_lib::mock::MockMode::DcV, Setting::Hold, Failure::Silent),
+                "dcv",
+                "dmm-cli-test-drive-silent.yaml",
+                &mut driver,
+            );
+            assert_eq!(driver.failures, 1, "proven: {proven}");
+        }
+    }
+
+    /// A proven setting refused is the meter being right, and a mode left
+    /// with no such setting has nothing to restore: neither costs a failure.
+    #[test]
+    fn a_restore_with_nothing_to_restore_costs_no_failure() {
+        let mut driver = Driver::new(true);
+        driver.prove_command("hold");
+        swept_by(
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Hold,
+                Failure::RefusedIntoAnotherMode,
+            ),
+            "dcv",
+            "dmm-cli-test-drive-modeless.yaml",
+            &mut driver,
+        );
+        assert_eq!(driver.failures, 0);
+    }
+
     /// A setting nothing has driven yet is the case the budget exists for,
     /// and one refusal answers for every value of it.
     #[test]
     fn a_refusal_of_an_unproven_setting_spends_one_failure() {
         let mut driver = Driver::new(true);
         let report = swept_by(
-            Refuses::boxed(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
+            Fails::refusing(dmm_lib::mock::MockMode::DcV, Setting::MinMax),
             "dcv",
             "dmm-cli-test-drive-unproven.yaml",
             &mut driver,
