@@ -241,10 +241,12 @@ all, and it splits the E+'s single Ω position in two. No temperature, no hFE,
 no LoZ. Ring contents are **[VERIFIED]** for six legs, each reached in one press by
 the driver in the 2026-09-10 capture (issue #19): SELECT took Ω → Continuity,
 Diode → Capacitance, and DC → AC on µA, mA and A, and Hz/% took Hz → Duty %
-on the Hz/% position. **[UNVERIFIED]**: the mV position's SELECT leg
-(DC mV ↔ AC mV), which the operator pressed rather than the driver, and every
-three-member Hz/% ring (AC V/AC mV/AC µA/AC mA/AC A → Hz → Duty %) — the only
-rings on this model where order could differ from the table. Tracked in issue
+on the Hz/% position. The V~ Hz/% ring is **[VERIFIED]** in the table's order,
+AC V → Hz → Duty % → AC V, one press per step (2026-09-14 capture, issue #20).
+**[UNVERIFIED]**: the mV position's SELECT leg (DC mV ↔ AC mV), which the
+operator pressed rather than the driver, and the other three-member Hz/% rings
+(AC mV/AC µA/AC mA/AC A → Hz → Duty %) — the only rings on this model where
+order could differ from the table. Tracked in issue
 #7; see `docs/verification-backlog.md`.
 
 ---
@@ -536,9 +538,11 @@ Our UT61E+ over CP2110, leads open: `dmm-cli set hold on`, one raw
   meter stayed in Hz for the next five frames over 2.5 s, and REL was still
   off.
 - The front-panel SELECT and Hz/% buttons behave the same way by hand.
-- A UT61B+ owner reports the buttons ignored under HOLD on the V~ position
-  (issue #20, 2026-09-14, by hand), where section 3.1 gives that model a Hz/%
-  ring and no SELECT ring. Range and Auto under HOLD are unasked on the B+.
+- A UT61B+ drops Hz/% under HOLD too. In Hz on the V~ position (issue #20
+  capture, 2026-09-14) a 0x49 was acked and the following frames stayed in Hz
+  with HOLD lit, and the owner found the buttons ignored by hand. Section 3.1
+  gives that position a Hz/% ring and no SELECT ring. Range and Auto under
+  HOLD are unasked on the B+.
 
 ---
 

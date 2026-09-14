@@ -409,31 +409,44 @@ Left open on this model:
   Ω → Continuity (step `continuity`), Diode → Capacitance (`capacitance`) and
   DC → AC on µA, mA and A (`acua`, `acma`, `aca`), plus Hz/% for
   Hz → Duty % (`duty`). All six are two-member rings, where order is trivial.
+  The V~ ring is [VERIFIED] too, in the table's order: issue #20's
+  `hz-walk.yaml` run (2026-09-14) pressed Hz/% once per step, AC V → Hz →
+  Duty % → AC V, each press reaching the next mode.
   What is left is the mV position's SELECT leg (DC mV ↔ AC mV — the operator
-  pressed that one, so `acmv` carries no press of ours) and the five
-  three-member Hz/% rings, AC V/AC mV/AC µA/AC mA/AC A → Hz → Duty %, which
+  pressed that one, so `acmv` carries no press of ours) and the other four
+  three-member Hz/% rings, AC mV/AC µA/AC mA/AC A → Hz → Duty %, which
   are the only rings on the model where the order could differ from the
   table. Nothing rests on the order — `cycle.rs` presses and reads the mode
   back until the target shows, so a wrong order costs at most an extra press
-  — but wrong *contents* could leave `set mode` unable to reach a mode. Any
-  `dmm-cli --device ut61b+ set mode duty` from AC V answers the lot. Issue
-  #7, now that issue #19 is closed. Issue #20's recording shows the V~
-  ring's first press from Hz landing on Duty %, as the table says.
+  — but wrong *contents* could leave `set mode` unable to reach a mode. A
+  `dmm-cli --device ut61b+ set mode duty` from each of those AC modes answers
+  the rest. Issue #7, now that issue #19 is closed.
 - **Hz → AC V and Hz → AC mV switches time out (issue #20, 88e80ed, GUI).**
   The walk is two Hz/% presses in a row; per the reporter's recording the
   meter takes the first (Hz → Duty %) and stops there, and the GUI reports a
-  timeout. Our UT61E+ (CP2110) did the same walk from the GUI on 2026-09-13
-  without error, so it is this model or its CH9329 cable. The one timed B+
-  press on record (6406037, step `duty`) took 849 ms from the press to the
-  first Duty % frame, against ~0.3 s on the E+, and the driver sends the next
-  press within a millisecond of the frame that confirms a step — the same
-  back-to-back pattern as the RANGE walk that gained a rung (above). Either
-  the read after the first press timed out, or the second press went out and
-  the meter neither took it nor answered for 2 s. `cycle.rs` propagates the
-  timeout from `observe_after_press` where `dmm-cli set` waits through one.
-  Waiting on a `RUST_LOG=dmm_lib=trace` GUI log of one failing switch.
+  timeout. Our UT61E+ (CP2110) does the same walk without error. The
+  reporter's `hz-walk.yaml` capture (7b48053, 2026-09-14, leads open) caught
+  a timeout of the same shape, on a HOLD press in Hz (`hz_tool/hold:on`): the
+  driver polled 202 ms after the press, the press's ack came 14 ms after that
+  poll, and the poll was never answered — 2 s, then the error, with HOLD lit
+  on the next frame. In open-lead Hz this meter acks 216–217 ms after a
+  press, past the driver's 200 ms read-back. Across every capture on record a
+  poll went out ahead of its ack 12 times on this model (this one lost, the
+  closest; the rest 65–165 ms ahead and answered) and 55 times on our E+
+  (26–214 ms ahead, all answered): one loss, not a rule, and the bytes cannot
+  say whether the meter or the CH9329 dropped it. The GUI walk's first press
+  is Hz/% in Hz with the same timing, which fits the recording — the press
+  lands on Duty % and the read after it times out. Nothing supports the
+  other reading, a second press ignored: of the run's 22 presses only Hz/%
+  under HOLD changed nothing. The capture's own Hz → AC V switch never ran
+  (next item). Whether the #20 run had open leads was never said.
 - **Buttons under HOLD (issue #20).** The reporter found the meter's buttons
-  ignored while HOLD is lit on the V~ position (2026-09-14, by hand). Our
+  ignored while HOLD is lit on the V~ position (2026-09-14, by hand),
+  apparently during the `hz-walk.yaml` run above: the timed-out HOLD step
+  left HOLD on, because the capture sweep skips its restore after any error.
+  The next step's Hz/% press in Hz was acked and the meter stayed in Hz with
+  HOLD lit; ~12 s later the frames show HOLD released and Hz/% pressed twice
+  by hand. So this model drops Hz/% under HOLD on the wire too. Our
   UT61E+ ignores Hz/% the same way, and takes SELECT, RANGE and AUTO, each of
   which clears HOLD (ut61-family spec §6.3). RANGE and AUTO under HOLD are
   unasked on the B+. A mode or range walk now presses HOLD off and sends a
