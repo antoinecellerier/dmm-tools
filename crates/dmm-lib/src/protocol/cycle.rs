@@ -40,6 +40,17 @@
 //! family reaches auto-ranging with a command of its own
 //! ([`CycleMeter::set_auto_range`]).
 //!
+//! # HOLD
+//!
+//! A held meter takes some presses and drops others: a UT61E+ switches and
+//! leaves HOLD on SELECT, RANGE and AUTO, but ignores Hz/% outright
+//! (ut61-family spec §6.3). The mode and range walks don't need to know
+//! which. A press that changed nothing while the reading shows HOLD lit is
+//! answered by pressing HOLD off and sending the press again, as turning the
+//! dial would have released HOLD. The ignored press was dropped, not
+//! deferred, so the second one cannot step past the target. The flag
+//! settings never do this: HOLD is one of them.
+//!
 //! A family implements [`CycleMeter`], keeps a [`DialState`] updated with
 //! [`DialState::observe`] from every measurement it parses, and forwards
 //! `Protocol::choices` / `Protocol::select` to the free functions
@@ -311,6 +322,14 @@ pub(crate) trait Observable<M: CycleMeter + ?Sized> {
 
     /// Display name for one value, for the messages the walk produces.
     fn label(&self, meter: &M, value: u16) -> Cow<'static, str>;
+
+    /// Whether a press that changed nothing under HOLD is sent again once
+    /// HOLD is released (see the module docs).
+    ///
+    /// Only for what a dial turn changes — the mode and the range.
+    fn may_release_hold(&self) -> bool {
+        false
+    }
 }
 
 /// The mode byte: what [`select_mode`] walks.
@@ -323,6 +342,10 @@ impl<M: CycleMeter + ?Sized> Observable<M> for ModeWalk {
 
     fn label(&self, meter: &M, value: u16) -> Cow<'static, str> {
         meter.mode_label(value)
+    }
+
+    fn may_release_hold(&self) -> bool {
+        true
     }
 }
 
@@ -364,6 +387,10 @@ impl<M: CycleMeter + ?Sized> Observable<M> for RangeWalk {
                 .cloned()
                 .unwrap_or_else(|| Cow::Owned(format!("range {value}"))),
         }
+    }
+
+    fn may_release_hold(&self) -> bool {
+        true
     }
 }
 
@@ -659,28 +686,26 @@ fn walk<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
     obs: &O,
     start: u16,
 ) -> Result<()> {
-    let settle = meter.settle();
     // One more than the ring length: a healthy ring needs at most one press
     // per other mode, and the spare press keeps an unexpected extra step from
     // reading as a failure.
     let budget = leg.ring_len + 1;
+    let button = leg.button;
+    let name = meter.button_name(button);
     let mut seen = start;
     for _ in 0..budget {
         debug!(
-            "cycle: pressing {} (in {}, want {})",
-            meter.button_name(leg.button),
+            "cycle: pressing {name} (in {}, want {})",
             obs.label(meter, seen),
             obs.label(meter, leg.target)
         );
-        meter.press(transport, leg.button)?;
-        let now = observe_after_press(meter, transport, obs, seen, settle)?;
+        let now = press_and_observe(meter, transport, obs, name, seen, |m, t| m.press(t, button))?;
         if now == leg.target {
             return Ok(());
         }
         if now == seen {
             return Err(Error::CommandRejected(format!(
-                "{} did nothing in {}",
-                meter.button_name(leg.button),
+                "{name} did nothing in {}",
                 obs.label(meter, seen)
             )));
         }
@@ -694,10 +719,59 @@ fn walk<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
         seen = now;
     }
     Err(Error::CommandRejected(format!(
-        "gave up after {budget} presses of {}; the meter is in {}",
-        meter.button_name(leg.button),
+        "gave up after {budget} presses of {name}; the meter is in {}",
         obs.label(meter, seen)
     )))
+}
+
+/// Send `act` — a press, or the command standing in for one — and read the
+/// meter back with [`observe_after_press`].
+///
+/// When the reading still shows `seen` with HOLD lit, and `obs` is a walk
+/// HOLD may be released for, HOLD is pressed off and `act` sent once more
+/// (see the module docs). A family that doesn't drive HOLD in that mode has
+/// nothing to press, and the caller reports the press that did nothing, as
+/// it would without HOLD. `what` names `act` in the log.
+fn press_and_observe<M, O, A>(
+    meter: &mut M,
+    transport: &dyn Transport,
+    obs: &O,
+    what: &str,
+    seen: u16,
+    act: A,
+) -> Result<u16>
+where
+    M: CycleMeter + ?Sized,
+    O: Observable<M> + ?Sized,
+    A: Fn(&mut M, &dyn Transport) -> Result<()>,
+{
+    let settle = meter.settle();
+    act(meter, transport)?;
+    let (now, reading) = observe_after_press(meter, transport, obs, seen, settle)?;
+    if now != seen || !reading.flags.hold || !obs.may_release_hold() {
+        return Ok(now);
+    }
+    let hold = FlagSetting::Hold;
+    let states = meter.flag_states(hold, reading.mode_raw);
+    if states.is_empty() {
+        return Ok(now);
+    }
+    debug!("cycle: {what} did nothing with HOLD lit; releasing HOLD");
+    let leg = Leg {
+        button: hold.button(),
+        ring_len: states.len(),
+        target: OFF_STATE,
+    };
+    walk(
+        meter,
+        transport,
+        &leg,
+        &FlagWalk(hold),
+        hold.state(&reading.flags),
+    )?;
+    debug!("cycle: sending {what} again");
+    act(meter, transport)?;
+    Ok(observe_after_press(meter, transport, obs, seen, settle)?.0)
 }
 
 /// Take one reading and let it update the inferred dial position.
@@ -718,32 +792,33 @@ fn read_and_observe<M: CycleMeter + ?Sized>(
 ///
 /// Waits `settle.delay` before each read and takes up to `settle.reads` of
 /// them (always at least one), stopping at the first reading that differs.
-/// Returns `seen` when none does — the caller decides what that means.
+/// Returns the last reading and its value, which is `seen` when none
+/// differed — the caller decides what that means.
 fn observe_after_press<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
     meter: &mut M,
     transport: &dyn Transport,
     obs: &O,
     seen: u16,
     settle: Settle,
-) -> Result<u16> {
-    let mut last = seen;
-    for _ in 0..settle.reads.max(1) {
+) -> Result<(u16, Measurement)> {
+    let mut reads_left = settle.reads.max(1);
+    loop {
         if !settle.delay.is_zero() {
             // Real time, not the session clock: this waits for the meter's own
             // display to settle, which no clock flag makes faster.
             std::thread::sleep(settle.delay);
         }
         let reading = read_and_observe(meter, transport)?;
-        last = obs.value(meter, &reading)?;
-        if last != seen {
-            break;
+        let value = obs.value(meter, &reading)?;
+        reads_left -= 1;
+        if value != seen || reads_left == 0 {
+            return Ok((value, reading));
         }
         debug!(
             "cycle: meter still reports {}, re-reading",
             obs.label(meter, seen)
         );
     }
-    Ok(last)
 }
 
 /// The ladder `mode` offers, once `id` is known to be one of its rungs.
@@ -834,14 +909,14 @@ pub(crate) fn select_range<M: CycleMeter + ?Sized>(
     if seen == id {
         return Ok(());
     }
-    let settle = meter.settle();
     if id == AUTO_RANGE_ID {
         debug!(
             "cycle: setting auto-range (in {})",
             walk_obs.label(meter, seen)
         );
-        meter.set_auto_range(transport)?;
-        let now = observe_after_press(meter, transport, &walk_obs, seen, settle)?;
+        let now = press_and_observe(meter, transport, &walk_obs, "AUTO", seen, |m, t| {
+            m.set_auto_range(t)
+        })?;
         return if now == AUTO_RANGE_ID {
             Ok(())
         } else {
@@ -937,7 +1012,6 @@ pub(crate) fn select_flag<M: CycleMeter + ?Sized>(
     if seen == id {
         return Ok(());
     }
-    let settle = meter.settle();
     let button = meter.button_name(setting.button());
     if id == OFF_STATE && !setting.toggles() {
         debug!(
@@ -945,8 +1019,9 @@ pub(crate) fn select_flag<M: CycleMeter + ?Sized>(
             setting.setting(),
             walk_obs.label(meter, seen)
         );
-        meter.exit_flag(transport, setting)?;
-        let now = observe_after_press(meter, transport, &walk_obs, seen, settle)?;
+        let now = press_and_observe(meter, transport, &walk_obs, "EXIT", seen, |m, t| {
+            m.exit_flag(t, setting)
+        })?;
         return if now == OFF_STATE {
             Ok(())
         } else {
@@ -1273,6 +1348,14 @@ mod tests {
         /// Exit commands sent, and whether the meter obeys them.
         exits: usize,
         exit_works: bool,
+        /// Function buttons a held meter drops, the way a UT61E+ drops Hz/%
+        /// (ut61-family spec §6.3). Any other SELECT, Hz/% or RANGE press
+        /// under HOLD lands and clears HOLD, as SELECT and RANGE do there.
+        hold_blocks: Vec<CycleButton>,
+        /// The same for the auto-range command.
+        hold_blocks_auto: bool,
+        /// Whether this meter drives HOLD remotely in every mode.
+        offers_hold: bool,
     }
 
     impl FakeMeter {
@@ -1301,7 +1384,24 @@ mod tests {
                 offers_peak: false,
                 exits: 0,
                 exit_works: true,
+                hold_blocks: Vec::new(),
+                hold_blocks_auto: false,
+                offers_hold: true,
             }
+        }
+
+        /// A press or command under HOLD: false when the meter drops it,
+        /// otherwise HOLD goes out as the press lands.
+        fn lands_under_hold(&mut self, blocked: bool) -> bool {
+            if !self.flags.hold {
+                return true;
+            }
+            if blocked {
+                return false;
+            }
+            self.stale_flags = self.flags;
+            self.flags.hold = false;
+            true
         }
 
         /// The one-ring SELECT meter with its badges already in `flags`.
@@ -1384,6 +1484,11 @@ mod tests {
 
         fn press(&mut self, _transport: &dyn Transport, button: CycleButton) -> Result<()> {
             self.presses.push(button);
+            if flag_setting_of(button).is_none()
+                && !self.lands_under_hold(self.hold_blocks.contains(&button))
+            {
+                return Ok(());
+            }
             let next = self
                 .rings
                 .iter()
@@ -1437,6 +1542,7 @@ mod tests {
 
         fn flag_states(&self, setting: FlagSetting, _mode: u16) -> &'static [u16] {
             match setting {
+                FlagSetting::Hold if !self.offers_hold => &[],
                 FlagSetting::Hold | FlagSetting::Rel => &[0, 1],
                 FlagSetting::MinMax => &[0, 1, 2],
                 FlagSetting::Peak if self.offers_peak => &[0, 1, 2],
@@ -1461,6 +1567,9 @@ mod tests {
 
         fn set_auto_range(&mut self, _transport: &dyn Transport) -> Result<()> {
             self.autos += 1;
+            if !self.lands_under_hold(self.hold_blocks_auto) {
+                return Ok(());
+            }
             if self.auto_works {
                 self.stale_state = (self.mode, self.rung);
                 self.rung = AUTO_RANGE_ID;
@@ -2036,6 +2145,111 @@ mod tests {
         assert!(usable_ladder(vec![Cow::Borrowed("20A")]).is_empty());
         assert!(usable_ladder(vec![Cow::Borrowed("20A"), Cow::Borrowed("20A")]).is_empty());
         assert_eq!(usable_ladder(dc_v_ladder()).len(), 4);
+    }
+
+    // ---- HOLD ----
+
+    /// The two-ring V~ meter held in AC V, dropping Hz/% the way a UT61E+
+    /// does under HOLD.
+    fn held_v_ac() -> FakeMeter {
+        let mut meter = FakeMeter::v_ac(AC_V);
+        meter.flags.hold = true;
+        meter.hold_blocks = vec![CycleButton::Hz];
+        meter
+    }
+
+    /// Issue #20: the meter beeps at Hz/% under HOLD and changes nothing, so
+    /// HOLD is pressed off and Hz/% sent again, once.
+    #[test]
+    fn a_press_hold_dropped_is_sent_again_once_hold_is_off() {
+        let mut meter = held_v_ac();
+        select_mode(&mut meter, &NullTransport, HZ).expect("switched");
+        assert_eq!(
+            meter.presses,
+            vec![CycleButton::Hz, CycleButton::Hold, CycleButton::Hz]
+        );
+        assert_eq!(meter.mode, HZ);
+        assert!(!meter.flags.hold);
+    }
+
+    /// SELECT lands under HOLD and clears it itself: nothing extra is
+    /// pressed.
+    #[test]
+    fn a_press_that_lands_under_hold_is_not_repeated() {
+        let mut meter = held_v_ac();
+        select_mode(&mut meter, &NullTransport, LPF_V).expect("switched");
+        assert_eq!(meter.presses, vec![CycleButton::Select]);
+        assert!(!meter.flags.hold);
+    }
+
+    #[test]
+    fn a_range_press_hold_dropped_is_sent_again() {
+        let mut meter = FakeMeter::on_ladder(1);
+        meter.flags.hold = true;
+        meter.hold_blocks = vec![CycleButton::Range];
+        select_range(&mut meter, &NullTransport, 2).expect("switched");
+        assert_eq!(
+            meter.presses,
+            vec![CycleButton::Range, CycleButton::Hold, CycleButton::Range]
+        );
+        assert_eq!(meter.rung, 2);
+    }
+
+    #[test]
+    fn an_auto_command_hold_dropped_is_sent_again() {
+        let mut meter = FakeMeter::on_ladder(2);
+        meter.flags.hold = true;
+        meter.hold_blocks_auto = true;
+        select_range(&mut meter, &NullTransport, AUTO_RANGE_ID).expect("back to auto");
+        assert_eq!(meter.autos, 2);
+        assert_eq!(meter.presses, vec![CycleButton::Hold]);
+        assert_eq!(meter.rung, AUTO_RANGE_ID);
+    }
+
+    /// A HOLD that won't go out ends the switch there, and the dropped press
+    /// is not sent again.
+    #[test]
+    fn a_hold_that_will_not_release_is_reported() {
+        let mut meter = held_v_ac();
+        meter.dead = vec![CycleButton::Hold];
+        let err = select_mode(&mut meter, &NullTransport, HZ).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m) if m == "HOLD did nothing in on"),
+            "{err}"
+        );
+        assert_eq!(meter.presses, vec![CycleButton::Hz, CycleButton::Hold]);
+    }
+
+    /// Where the family doesn't drive HOLD there is nothing to press, and the
+    /// press is reported as it would be without HOLD.
+    #[test]
+    fn a_family_without_remote_hold_reports_the_dropped_press() {
+        let mut meter = held_v_ac();
+        meter.offers_hold = false;
+        let err = select_mode(&mut meter, &NullTransport, HZ).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m) if m == "Hz/% did nothing in AC V"),
+            "{err}"
+        );
+        assert_eq!(meter.presses, vec![CycleButton::Hz]);
+    }
+
+    /// The flag settings are the meter's own buttons, not a dial turn: HOLD
+    /// stays the user's to release.
+    #[test]
+    fn a_flag_setting_never_releases_hold() {
+        let mut meter = FakeMeter::showing(StatusFlags {
+            hold: true,
+            ..Default::default()
+        });
+        meter.dead = vec![CycleButton::Rel];
+        let err = select_flag(&mut meter, &NullTransport, FlagSetting::Rel, 1).unwrap_err();
+        assert!(
+            matches!(&err, Error::CommandRejected(m) if m == "REL did nothing in off"),
+            "{err}"
+        );
+        assert_eq!(meter.presses, vec![CycleButton::Rel]);
+        assert!(meter.flags.hold);
     }
 
     // ---- table invariants ----

@@ -434,7 +434,9 @@ Left open on this model:
   ignored while HOLD is lit on the V~ position (2026-09-14, by hand). Our
   UT61E+ ignores Hz/% the same way, and takes SELECT, RANGE and AUTO, each of
   which clears HOLD (ut61-family spec §6.3). RANGE and AUTO under HOLD are
-  unasked on the B+.
+  unasked on the B+. A mode or range walk now presses HOLD off and sends a
+  press that changed nothing under HOLD again; unverified on the B+, where
+  `set hold on` then `set mode Hz` from AC V exercises it.
 - **The Hz ladder — PARKED 2026-09-12, needs a signal generator we do not
   have.** Raise it again if one turns up, or if a reporter offers. This is
   the only open item on the model with a real correctness risk: the Hz rungs
@@ -607,7 +609,9 @@ plus what no step reaches.
   above wants, since it only succeeds if byte 31 bit 1 is read back. Then
   `set hold on` / `set hold off` and `set rel on` / `set rel off` on two or
   three dial positions. Run them under `RUST_LOG=dmm_lib=debug` and paste
-  the `cycle:` lines
+  the `cycle:` lines. Also unknown: which buttons a held meter drops. A
+  mode or range walk presses HOLD off and sends a dropped press again;
+  `set hold on` then `set mode` or `set range` exercises it
 - `dmm-cli --device vc890 capture` exercises all of the above on its own
   since 2026-09-07: once the gate steps pass, every mode step is followed by
   `set range`/`hold`/`rel`/`minmax` through each value, filed as
@@ -689,7 +693,10 @@ plus what no step reaches.
   AVG flag item above wants, since it only succeeds if byte 31 bit 1 is
   read back. Then `set hold on` / `set hold off` and `set rel on` /
   `set rel off` on two or three dial positions. Run them under
-  `RUST_LOG=dmm_lib=debug` and paste the `cycle:` lines
+  `RUST_LOG=dmm_lib=debug` and paste the `cycle:` lines. Also unknown: which
+  buttons a held meter drops. A mode or range walk presses HOLD off and sends
+  a dropped press again; `set hold on` then `set mode` or `set range`
+  exercises it
 - `dmm-cli --device vc880 capture` exercises all of the above on its own
   since 2026-09-07: once the gate steps pass, every mode step is followed by
   `set range`/`hold`/`rel`/`minmax` through each value, filed as
@@ -1379,6 +1386,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV and, 2026-09-07, on AC V; context-dependent, no effect on DC V) |
 | Remote Exit Peak | 0x4E | Verified (clears peak flags, returns to live readings; used by `set peak off`, 2026-09-07) |
 | Remote range/flag setting (`dmm-cli set range`/`hold`/`rel`/`minmax`/`peak`) | 0x46-0x4E | Verified 2026-09-07 on UT61E+: one press per step, each confirmed by read-back; a stale frame is re-read, not re-pressed; MIN/MAX and Peak leave by 0x42 / 0x4E |
+| Mode and range switches under HOLD | 0x49 + 0x4A | Verified 2026-09-14 on UT61E+: from held AC V, `set mode Hz` pressed Hz/%, saw nothing change over three reads, pressed HOLD off and Hz/% again, and landed in Hz; `set mode "LPF V"`, `set range 22V` and `set range auto` under HOLD took their own presses with no release; `set rel on` under HOLD was refused and HOLD left lit |
 | Modes with no range choice (UT61E+) | — | Verified 2026-09-07: `get` prints no range row in DC mV, AC mV, DC A or AC A |
 | Capture steps `dcv_negative`, `ohm_body`, `acdcv`, `lpfv`, `acmv`, `acua`, `acma`, `aca` | — | Verified 2026-09-07 on UT61E+ (captures 4 and 5): sign on a AAA battery, body resistance, and each SELECT sub-mode read back by the tool with open leads |
 | Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name) |

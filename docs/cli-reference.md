@@ -302,7 +302,8 @@ non-zero: check the dial position, and for a range that the input is within it.
 
 On the UT61+/UT161 and the Voltcraft meters a switch is a burst of button
 presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
-shows, so it is slower than a single command and audible on the meter. One
+shows, so it is slower than a single command and audible on the meter. A
+switch on a UT61+/UT161 in HOLD turns HOLD off. One
 gap follows from that: while a UT61+/UT161 shows Hz or Duty %, `get mode`
 lists only those two. Press Hz/% (`dmm-cli command select2`) until the
 position's voltage or current function shows and the full list is back.
