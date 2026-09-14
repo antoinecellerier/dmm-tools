@@ -169,14 +169,26 @@ impl MeterState {
     /// instant `value` was evaluated at, which is where the sub-values are
     /// re-evaluated while the display is frozen.
     pub(super) fn press_hold(&mut self, value: MeasuredValue, elapsed: f64) {
-        self.hold = !self.hold;
         if self.hold {
+            self.release_hold();
+        } else {
+            self.hold = true;
             self.held_value = Some(value);
             self.held_elapsed = Some(elapsed);
-        } else {
-            self.held_value = None;
-            self.held_elapsed = None;
         }
+    }
+
+    /// Whether HOLD has the display frozen.
+    pub(super) fn held(&self) -> bool {
+        self.hold
+    }
+
+    /// Unfreeze the display, as a UT61E+ does when SELECT, RANGE or AUTO
+    /// lands under HOLD (ut61-family spec §6.3). Nothing when not held.
+    pub(super) fn release_hold(&mut self) {
+        self.hold = false;
+        self.held_value = None;
+        self.held_elapsed = None;
     }
 
     /// REL: take `value` as the baseline later readings are measured

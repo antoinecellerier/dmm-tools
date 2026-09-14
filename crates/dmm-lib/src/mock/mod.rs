@@ -443,6 +443,9 @@ impl MockProtocol {
         };
         self.current_scenario = idx;
         self.scenario_started = self.clock.now();
+        // A UT61E+ switch never ends held: SELECT clears HOLD, and the
+        // driver releases it for the Hz/% press HOLD drops.
+        self.state.release_hold();
         Ok(())
     }
 
@@ -592,15 +595,22 @@ impl Protocol for MockProtocol {
                 let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
                 self.state.press_hold(value, elapsed);
             }
+            // Under HOLD the UT61E+ drops REL and Hz/%, and SELECT, RANGE and
+            // AUTO land and release it (ut61-family spec §6.3).
+            "rel" if self.state.held() => {}
             "rel" => {
                 let value = (scenario.value_fn)(elapsed, scenario.duration_secs);
                 self.state.press_rel(value);
             }
             "range" => {
+                self.state.release_hold();
                 let ladder = self.range_ladder(scenario.mode_raw);
                 self.state.press_range(ladder.len(), scenario.range_raw);
             }
-            "auto" => self.state.set_auto_range(),
+            "auto" => {
+                self.state.release_hold();
+                self.state.set_auto_range();
+            }
             "minmax" => self.state.press_minmax(),
             "exit_minmax" => self.state.exit_minmax(),
             "peak" => {
@@ -611,7 +621,9 @@ impl Protocol for MockProtocol {
                 }
             }
             "exit_peak" => self.state.exit_peak(),
+            "select2" if self.state.held() => {}
             "select" | "select2" => {
+                self.state.release_hold();
                 self.advance_scenario();
             }
             "light" => { /* no-op */ }
@@ -1586,6 +1598,57 @@ mod tests {
         clock.advance(Duration::from_secs(60));
         proto.request_measurement(&transport).unwrap();
         assert_ne!(proto.current_mode(), MockMode::AcVHz);
+    }
+
+    /// The UT61E+ under HOLD (ut61-family spec §6.3): Hz/% and REL are
+    /// dropped, SELECT lands and releases HOLD.
+    #[test]
+    fn hold_drops_select2_and_rel_but_not_select() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::AcV);
+        proto.send_command(&transport, "hold").unwrap();
+        proto.send_command(&transport, "select2").unwrap();
+        proto.send_command(&transport, "rel").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_eq!(proto.current_mode(), MockMode::AcV);
+        assert!(m.flags.hold && !m.flags.rel);
+
+        proto.send_command(&transport, "select").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert_ne!(proto.current_mode(), MockMode::AcV);
+        assert!(!m.flags.hold);
+    }
+
+    #[test]
+    fn range_and_auto_release_hold() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::DcV);
+        proto.send_command(&transport, "hold").unwrap();
+        proto.send_command(&transport, "range").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(!m.flags.hold && !m.flags.auto_range);
+
+        proto.send_command(&transport, "hold").unwrap();
+        proto.send_command(&transport, "auto").unwrap();
+        let m = proto.request_measurement(&transport).unwrap();
+        assert!(!m.flags.hold && m.flags.auto_range);
+    }
+
+    /// A mode or range picked from the list ends with HOLD off, as it does
+    /// on the meter.
+    #[test]
+    fn a_switch_under_hold_leaves_hold_off() {
+        let transport = NullTransport;
+        let mut proto = MockProtocol::with_mode(MockMode::AcV);
+        proto.send_command(&transport, "hold").unwrap();
+        proto.select(&transport, Setting::Range, 2).unwrap();
+        assert!(!proto.request_measurement(&transport).unwrap().flags.hold);
+
+        proto.send_command(&transport, "hold").unwrap();
+        let id = MockMode::AcVHz.choice_id().unwrap();
+        proto.select(&transport, Setting::Mode, id).unwrap();
+        assert_eq!(proto.current_mode(), MockMode::AcVHz);
+        assert!(!proto.request_measurement(&transport).unwrap().flags.hold);
     }
 
     // --- Flag-backed settings ----------------------------------------------

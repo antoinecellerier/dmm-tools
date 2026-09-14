@@ -183,7 +183,8 @@ every range. Not encoded.
 
 The mock follows the same matrix from 2026-09-10, since a mock that offers a
 control the meter ignores is the false confidence `.claude/rules/protocol.md`
-warns about. One divergence is left and predates this: the mock offers Peak in
+warns about. From 2026-09-14 it also meets HOLD as the E+ does: REL and
+Hz/% dropped, SELECT, RANGE and AUTO releasing it (ut61-family spec §6.3). One divergence is left and predates this: the mock offers Peak in
 Hz, Ω, capacitance, temperature and NCV, where the E+ offers it only in the
 five pure-AC modes (`AC_PEAK_MODES`). `Scenario::peak_applies` is what would
 narrow it.
