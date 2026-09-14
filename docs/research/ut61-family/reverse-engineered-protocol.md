@@ -189,9 +189,10 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
   through and the press clears HOLD, but a Hz/% press does nothing
   (section 6.3). AUTO is back once the target mode shows. LPF V always
   reports manual range (flag byte 15 bit 2 set) and the AUTO button does not
-  change that — a property of the meter, not of the switch. Once, on
-  2026-09-14, the first two LPF V frames after the press read 361.1 V with
-  the HV warning on open leads; reads a minute later showed 0.0 V.
+  change that — a property of the meter, not of the switch. Entering LPF V
+  on open leads reads high at first: on 2026-09-14 three entries opened at
+  361.1 V, 164.8 V and 35.5 V with the HV warning lit, the last decaying
+  through 5.1 V to 0.0 V over three reads 300 ms apart, with or without HOLD.
 - Modes 0x15 (LoZ V), 0x16 (LoZ V 2) and 0x17 (LPF) are reachable from no
   position of this model, which is why the table above lists none of them.
 
@@ -524,11 +525,13 @@ Our UT61E+ over CP2110, leads open: `dmm-cli set hold on`, one raw
 |---------|--------------|------------|
 | Select 0x4C | AC V, Hz | Switches (to LPF V) and clears HOLD |
 | Select2 0x49 | AC V, Hz | **No effect** — the meter beeps, HOLD stays lit |
-| Range 0x46 | DC V on auto | Goes manual on the rung showing and clears HOLD |
-| Auto 0x47 | DC V on a manual rung | Back to auto and clears HOLD |
+| Range 0x46 | DC V and AC V on auto | Goes manual on the rung showing and clears HOLD |
+| Auto 0x47 | DC V and AC V on a manual rung | Back to auto and clears HOLD |
+| Rel 0x48 | AC V | **No effect** — HOLD stays lit |
 
-- **The ignored Select2 press is dropped, not deferred**: after HOLD was
-  released the meter stayed in Hz for the next five frames over 2.5 s.
+- **An ignored press is dropped, not deferred**: after HOLD was released the
+  meter stayed in Hz for the next five frames over 2.5 s, and REL was still
+  off.
 - The front-panel SELECT and Hz/% buttons behave the same way by hand.
 - A UT61B+ owner reports the buttons ignored under HOLD on the V~ position
   (issue #20, 2026-09-14, by hand), where section 3.1 gives that model a Hz/%
