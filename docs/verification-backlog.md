@@ -440,7 +440,12 @@ Left open on this model:
   other reading, a second press ignored: of the run's 22 presses only Hz/%
   under HOLD changed nothing. The capture's own Hz → AC V switch never ran
   (next item). Whether the #20 run had open leads was never said. A press
-  now waits for the meter's ack (up to 1 s) before anything is polled.
+  now waits for the meter's ack (up to 1 s) before anything is polled, and
+  a read-back that times out is read again, never pressed again. Both are
+  unverified on this model: a re-run of the same `hz-walk.yaml` answers them.
+  Our UT61E+ ran that plan clean with both on 2026-09-14: none of its 27
+  presses was followed by a poll before the ack (acks 63–382 ms), and the
+  Hz → Duty % → AC V switch took its two presses.
 - **Buttons under HOLD (issue #20).** The reporter found the meter's buttons
   ignored while HOLD is lit on the V~ position (2026-09-14, by hand),
   apparently during the `hz-walk.yaml` run above: the timed-out HOLD step

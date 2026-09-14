@@ -56,7 +56,7 @@
 //! `Protocol::choices` / `Protocol::select` to the free functions
 //! here.
 
-use log::debug;
+use log::{debug, warn};
 use std::borrow::Cow;
 use std::time::Duration;
 
@@ -158,7 +158,8 @@ impl DialPosition {
 ///
 /// A meter that is mid-frame when the press lands reports the old mode once
 /// more; that stale frame must cost a re-read, never a second press, which
-/// would overshoot the target.
+/// would overshoot the target. A read the meter never answers costs a re-read
+/// the same way: the press it follows may well have landed.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Settle {
     pub(crate) delay: Duration,
@@ -808,9 +809,18 @@ fn observe_after_press<M: CycleMeter + ?Sized, O: Observable<M> + ?Sized>(
             // display to settle, which no clock flag makes faster.
             std::thread::sleep(settle.delay);
         }
-        let reading = read_and_observe(meter, transport)?;
-        let value = obs.value(meter, &reading)?;
         reads_left -= 1;
+        let reading = match read_and_observe(meter, transport) {
+            Ok(reading) => reading,
+            // A UT61B+ once left the poll after a press unanswered while the
+            // press itself landed (issue #20): ask again.
+            Err(Error::Timeout) if reads_left > 0 => {
+                warn!("cycle: no reading after the press, reading again");
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
+        let value = obs.value(meter, &reading)?;
         if value != seen || reads_left == 0 {
             return Ok((value, reading));
         }
@@ -1317,6 +1327,9 @@ mod tests {
         /// Readings after a press that still report the pre-press state.
         stale: usize,
         stale_left: usize,
+        /// Reads after a press that go unanswered, before the stale ones.
+        unanswered: usize,
+        unanswered_left: usize,
         stale_state: (u16, u16),
         settle_reads: usize,
         /// The ladder the *driver* is told about — the family's table.
@@ -1369,6 +1382,8 @@ mod tests {
                 reads: 0,
                 stale: 0,
                 stale_left: 0,
+                unanswered: 0,
+                unanswered_left: 0,
                 stale_state: (mode, 0),
                 settle_reads: 1,
                 ladder: Vec::new(),
@@ -1484,6 +1499,7 @@ mod tests {
 
         fn press(&mut self, _transport: &dyn Transport, button: CycleButton) -> Result<()> {
             self.presses.push(button);
+            self.unanswered_left = self.unanswered;
             if flag_setting_of(button).is_none()
                 && !self.lands_under_hold(self.hold_blocks.contains(&button))
             {
@@ -1532,6 +1548,10 @@ mod tests {
 
         fn read(&mut self, _transport: &dyn Transport) -> Result<Measurement> {
             self.reads += 1;
+            if self.unanswered_left > 0 {
+                self.unanswered_left -= 1;
+                return Err(Error::Timeout);
+            }
             if self.stale_left > 0 {
                 self.stale_left -= 1;
                 let (mode, rung) = self.stale_state;
@@ -1957,6 +1977,34 @@ mod tests {
         assert_eq!(meter.presses, vec![CycleButton::Select]);
         assert_eq!(meter.reads, 3);
         assert_eq!(meter.mode, ACDC_V);
+    }
+
+    /// A read after a press can go unanswered while the press landed (a
+    /// UT61B+, issue #20). Like a stale frame it costs a read, so the two-press
+    /// Hz → AC V walk still lands.
+    #[test]
+    fn an_unanswered_read_after_a_press_costs_a_read_not_a_press() {
+        let mut meter = FakeMeter::v_ac(HZ);
+        meter.unanswered = 1;
+        meter.settle_reads = 3;
+        select_mode(&mut meter, &NullTransport, AC_V).expect("switched");
+        assert_eq!(meter.presses, vec![CycleButton::Hz, CycleButton::Hz]);
+        assert_eq!(meter.mode, AC_V);
+        assert_eq!(
+            meter.reads, 4,
+            "each press: one lost read, one that shows it"
+        );
+    }
+
+    #[test]
+    fn a_meter_silent_after_a_press_times_out_without_a_second_press() {
+        let mut meter = FakeMeter::v_ac(HZ);
+        meter.unanswered = 3;
+        meter.settle_reads = 3;
+        let err = select_mode(&mut meter, &NullTransport, AC_V).unwrap_err();
+        assert!(matches!(err, Error::Timeout), "got {err:?}");
+        assert_eq!(meter.presses, vec![CycleButton::Hz]);
+        assert_eq!(meter.reads, 3);
     }
 
     #[test]
