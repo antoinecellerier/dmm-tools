@@ -121,7 +121,11 @@ where
 /// first one as a timeout aborted every single frame read.
 ///
 /// Returns `Ok(0)` once `deadline` has passed, i.e. a genuine timeout.
-fn read_uart_bytes(transport: &dyn Transport, buf: &mut [u8], deadline: Instant) -> Result<usize> {
+pub(crate) fn read_uart_bytes(
+    transport: &dyn Transport,
+    buf: &mut [u8],
+    deadline: Instant,
+) -> Result<usize> {
     // Every empty report costs a USB poll interval (~10 ms), so the deadline
     // is normally what stops us. The counter is a guard against a transport
     // that returns empty without blocking, which would otherwise busy-spin

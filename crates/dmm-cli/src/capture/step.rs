@@ -857,7 +857,7 @@ mod tests {
 
         let filed = |settle: Duration| {
             let mut responses = vec![measurement_frame(); 3]; // the baseline
-            responses.extend(vec![measurement_frame(); 3]); // drained by the press
+            responses.push(frame(&[0xFF, 0x00])); // the press's ack
             responses.extend(vec![held(b"  5.678"); 3]); // ends the watcher's wait
             responses.extend(vec![held(b"  1.234"); 2]); // what it settles to
             let mut dmm = dmm_replaying(responses);

@@ -16,7 +16,7 @@ use command::Command;
 use log::{debug, warn};
 use mode::Mode;
 use std::borrow::Cow;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tables::DeviceTable;
 
 const UT61EPLUS_COMMANDS: &[&str] = &[
@@ -182,23 +182,43 @@ impl Ut61PlusProtocol {
         Err(Error::Timeout)
     }
 
-    /// Write one command frame and drain whatever the meter answers with.
+    /// Write one command frame and wait for the meter's ack before returning.
     ///
-    /// The meter acks a button press with a short frame; leaving it in the
-    /// buffer would make the next measurement read start mid-stream.
+    /// Whatever arrives up to and including the ack is discarded: leaving it
+    /// in the buffer would make the next measurement read start mid-stream.
+    /// Waiting matters as much as discarding — see [`PRESS_ACK_TIMEOUT`].
     fn press_command(&mut self, transport: &dyn Transport, cmd: Command) -> Result<()> {
         let encoded = cmd.encode();
         transport.write(&encoded)?;
 
-        // Drain any ack/response the meter sends back.
         self.rx_buf.clear();
+        // Real time, not the session clock: this waits on the meter itself.
+        let sent = Instant::now();
+        let deadline = sent + PRESS_ACK_TIMEOUT;
+        // The bytes seen so far, trimmed to the tail an ack could still start
+        // in: a CP2110 can hand over `AB CD 04` and `FF 00 02 7B` in separate
+        // reads.
+        let mut seen: Vec<u8> = Vec::with_capacity(64 + ACK_FRAME.len());
         let mut tmp = [0u8; 64];
-        for _ in 0..3 {
-            let n = transport.read_timeout(&mut tmp, 50)?;
+        loop {
+            let n = framing::read_uart_bytes(transport, &mut tmp, deadline)?;
             if n == 0 {
+                warn!(
+                    "no ack within {} ms of the command",
+                    PRESS_ACK_TIMEOUT.as_millis()
+                );
                 break;
             }
-            debug!("drained {} bytes after command", n);
+            seen.extend_from_slice(&tmp[..n]);
+            if seen.windows(ACK_FRAME.len()).any(|w| w == ACK_FRAME) {
+                let waited = Instant::now()
+                    .checked_duration_since(sent)
+                    .unwrap_or_default();
+                debug!("ack {} ms after the command", waited.as_millis());
+                break;
+            }
+            let keep_from = seen.len().saturating_sub(ACK_FRAME.len() - 1);
+            seen.drain(..keep_from);
         }
 
         Ok(())
@@ -540,6 +560,10 @@ pub(crate) fn is_ack(payload: &[u8]) -> bool {
     payload == [0xFF, 0x00]
 }
 
+/// The whole ack frame on the wire: [`is_ack`]'s payload with its header,
+/// length and checksum.
+const ACK_FRAME: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+
 /// The model name in a Get Name reply, `None` for a payload that is not one.
 ///
 /// The name is printable ASCII, e.g. `"UT61E+"` (§6). The length bounds are
@@ -620,13 +644,28 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
 /// family reads with, even where a sibling's ranges differ.
 const FALLBACK_ID: &str = "ut61eplus";
 
-/// How long to leave the meter alone after a button press before asking it
-/// what mode it is in.
+/// How long a press waits for the meter's ack before the next command goes
+/// out.
+///
+/// A poll sent ahead of the ack can go unanswered: a UT61B+ over CH9329 never
+/// answered one that went out 14 ms before a late ack, and the switch it was
+/// confirming failed with a timeout (issue #20). Waiting costs a healthy meter
+/// nothing, since a poll sent early is only answered after the ack anyway. The
+/// slowest acks on record are 415 ms on a UT61E+ (HOLD over a live DC V
+/// reading) and 217 ms on a UT61B+ (in Hz with the leads open). Every press on
+/// record was acked, so the cap only matters if one goes missing.
+const PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(1000);
+
+/// How long to leave the meter alone after it acks a button press before
+/// asking it what mode it is in.
 ///
 /// The meter is polled, so a press can land while a frame is already on its
 /// way and the reading after it still shows the old mode. On a UT61E+ the
-/// first read after this delay (which follows `press_command`'s own 150 ms
-/// drain) showed the new mode in every leg but one, where a second read did.
+/// first read ~200 ms after the press (this delay after a 50 ms drain, before
+/// presses waited for the ack) showed the new mode in every leg but one, where
+/// a second read did. Counted from the ack instead, which that meter sends
+/// 39–415 ms after the press, the first read showed the new mode, range or
+/// flag after every press of a mode, range and flag walk (2026-09-14).
 const SELECT_SETTLE_DELAY: Duration = Duration::from_millis(150);
 /// Readings taken after a press before concluding it changed nothing.
 ///
@@ -1098,6 +1137,41 @@ mod tests {
         assert_eq!(written[1], [0xAB, 0xCD, 0x03, 0x49, 0x01, 0xC4]);
     }
 
+    /// A frame already in flight when the press landed is discarded with the
+    /// ack; the reading after the ack is the next poll's.
+    #[test]
+    fn a_press_waits_for_the_ack_and_leaves_what_follows() {
+        let mock = MockTransport::new(vec![
+            vec![],
+            frame_in(0x02),
+            vec![],
+            ACK_FRAME.to_vec(),
+            frame_in(0x19),
+        ]);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.press(&mock, CycleButton::Select).unwrap();
+        assert_eq!(proto.request_measurement(&mock).unwrap().mode, "AC+DC V");
+    }
+
+    /// A CP2110 can hand the ack over in two reads (`ut61eplus-verify5.yaml`).
+    #[test]
+    fn an_ack_split_across_reads_ends_the_wait() {
+        let (head, tail) = ACK_FRAME.split_at(3);
+        let mock = MockTransport::new(vec![head.to_vec(), vec![], tail.to_vec(), frame_in(0x05)]);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.press(&mock, CycleButton::Hz).unwrap();
+        assert_eq!(proto.request_measurement(&mock).unwrap().mode, "Duty %");
+    }
+
+    #[test]
+    fn a_press_without_an_ack_gives_up_and_the_poll_still_reads() {
+        let mock = MockTransport::new(vec![]);
+        let mut proto = Ut61PlusProtocol::new();
+        proto.press(&mock, CycleButton::Hold).unwrap();
+        mock.push_response(frame_in(0x04));
+        assert_eq!(proto.request_measurement(&mock).unwrap().mode, "Hz");
+    }
+
     #[test]
     fn mode_choices_on_the_dc_volts_dial_offer_ac_dc() {
         let mock = MockTransport::new(vec![frame_in(0x02)]);
@@ -1119,8 +1193,8 @@ mod tests {
     /// A UT61E+ on the V⎓ dial: it answers 0x5E with a reading, and SELECT
     /// (0x4C) flips DC V ↔ AC+DC V and acks with `FF 00`.
     ///
-    /// `MockTransport` cannot stand in here — it ignores writes, so the drain
-    /// after a press would swallow a queued measurement frame.
+    /// `MockTransport` cannot stand in here — it ignores writes, so a press
+    /// waiting for its ack would swallow a queued measurement frame.
     struct VoltsDial {
         mode: Cell<u8>,
         queued: RefCell<VecDeque<Vec<u8>>>,

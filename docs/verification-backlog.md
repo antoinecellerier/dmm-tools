@@ -439,7 +439,8 @@ Left open on this model:
   lands on Duty % and the read after it times out. Nothing supports the
   other reading, a second press ignored: of the run's 22 presses only Hz/%
   under HOLD changed nothing. The capture's own Hz → AC V switch never ran
-  (next item). Whether the #20 run had open leads was never said.
+  (next item). Whether the #20 run had open leads was never said. A press
+  now waits for the meter's ack (up to 1 s) before anything is polled.
 - **Buttons under HOLD (issue #20).** The reporter found the meter's buttons
   ignored while HOLD is lit on the V~ position (2026-09-14, by hand),
   apparently during the `hz-walk.yaml` run above: the timed-out HOLD step
