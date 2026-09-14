@@ -185,10 +185,13 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
   DC mA, DC A — not the junction mode. On the Hz/% position SELECT toggles
   Hz ↔ Duty % like Hz/% does. The driver does not rely on either: it only
   ever presses SELECT from a SELECT-ring mode.
-- A switch goes through under HOLD (the SELECT press also clears HOLD) and
-  under MIN/MAX. AUTO is back once the target mode shows. LPF V always
+- A switch goes through under MIN/MAX. Under HOLD a SELECT switch goes
+  through and the press clears HOLD, but a Hz/% press does nothing
+  (section 6.3). AUTO is back once the target mode shows. LPF V always
   reports manual range (flag byte 15 bit 2 set) and the AUTO button does not
-  change that — a property of the meter, not of the switch.
+  change that — a property of the meter, not of the switch. Once, on
+  2026-09-14, the first two LPF V frames after the press read 361.1 V with
+  the HV warning on open leads; reads a minute later showed 0.0 V.
 - Modes 0x15 (LoZ V), 0x16 (LoZ V 2) and 0x17 (LPF) are reachable from no
   position of this model, which is why the table above lists none of them.
 
@@ -511,6 +514,25 @@ The rows in bold are the ones the code acts on (`HOLD_DEAD`, `REL_DEAD`,
 `tables/mod.rs`); the rest stay offered. The D+ and the UT161 models are
 [DEDUCED] to match: section 1 establishes that all six run the same command
 code.
+
+### 6.3 Commands under HOLD — [VERIFIED] (UT61E+, 2026-09-14)
+
+Our UT61E+ over CP2110, leads open: `dmm-cli set hold on`, one raw
+`dmm-cli command` press, then `debug` frames read back and the LCD watched.
+
+| Command | Pressed from | Under HOLD |
+|---------|--------------|------------|
+| Select 0x4C | AC V, Hz | Switches (to LPF V) and clears HOLD |
+| Select2 0x49 | AC V, Hz | **No effect** — the meter beeps, HOLD stays lit |
+| Range 0x46 | DC V on auto | Goes manual on the rung showing and clears HOLD |
+| Auto 0x47 | DC V on a manual rung | Back to auto and clears HOLD |
+
+- **The ignored Select2 press is dropped, not deferred**: after HOLD was
+  released the meter stayed in Hz for the next five frames over 2.5 s.
+- The front-panel SELECT and Hz/% buttons behave the same way by hand.
+- A UT61B+ owner reports the buttons ignored under HOLD on the V~ position
+  (issue #20, 2026-09-14, by hand), where section 3.1 gives that model a Hz/%
+  ring and no SELECT ring. Range and Auto under HOLD are unasked on the B+.
 
 ---
 

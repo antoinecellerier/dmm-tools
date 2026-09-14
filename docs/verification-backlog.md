@@ -430,6 +430,11 @@ Left open on this model:
   the meter neither took it nor answered for 2 s. `cycle.rs` propagates the
   timeout from `observe_after_press` where `dmm-cli set` waits through one.
   Waiting on a `RUST_LOG=dmm_lib=trace` GUI log of one failing switch.
+- **Buttons under HOLD (issue #20).** The reporter found the meter's buttons
+  ignored while HOLD is lit on the V~ position (2026-09-14, by hand). Our
+  UT61E+ ignores Hz/% the same way, and takes SELECT, RANGE and AUTO, each of
+  which clears HOLD (ut61-family spec §6.3). RANGE and AUTO under HOLD are
+  unasked on the B+.
 - **The Hz ladder — PARKED 2026-09-12, needs a signal generator we do not
   have.** Raise it again if one turns up, or if a reporter offers. This is
   the only open item on the model with a real correctness risk: the Hz rungs
@@ -1368,7 +1373,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Remote RANGE | 0x46 | Verified 2026-09-07 on UT61E+: from auto the first press engages manual on the rung already showing, each further press steps one rung up, 1000V wraps to 2.2V; the mode byte never moves |
 | Remote AUTO | 0x47 | Verified 2026-09-07: restores auto-ranging from a manual rung in one command |
 | Remote SELECT | 0x4C | Verified on every dial position (§3.1 of the ut61-family spec: V⎓, V~, mV, Ω, µA, mA, A rings; inert on hFE, NCV) |
-| Remote mode switching (`dmm-cli set mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under HOLD and MIN/MAX; settle 150 ms / 3 reads |
+| Remote mode switching (`dmm-cli set mode`, GUI dropdown) | 0x4C / 0x49 | Verified 2026-09-07: every listed entry on every UT61E+ dial position, one press per leg, junction crossings, under MIN/MAX, and under HOLD for SELECT; 2026-09-14: a Hz/% press under HOLD does nothing (ut61-family spec §6.3); settle 150 ms / 3 reads |
 | Remote LIGHT | 0x4B | Verified |
 | Remote SELECT2 | 0x49 | Verified (AC V/mV/µA/mA/A → Hz → Duty Cycle → back; Hz ↔ Duty on the Hz/% dial; inert on V⎓, DC mV, hFE, NCV) |
 | Remote Peak MIN/MAX | 0x4D | Verified (activates on AC mV and, 2026-09-07, on AC V; context-dependent, no effect on DC V) |
