@@ -69,7 +69,8 @@ meter the same day, every position and every entry (Completed table below).
 
 Observed 2026-09-07 on our E+, and deliberate: once the meter is in
 Hz (0x04), `get mode` lists only `Hz, Duty %` and `set mode "AC V"` is
-refused as unknown there. The mode byte carries no dial information, and the
+refused as unknown there. The mode byte carries no dial information, nor does
+the rest of an open-lead frame (ut61-family spec §3.1), and the
 driver does not guess between dial positions that do not nest, so from Hz it
 will not walk back to the position's AC mode. `set mode "%"` still works (one
 press), and from Duty % a raw `dmm-cli --device ut61eplus command select2`

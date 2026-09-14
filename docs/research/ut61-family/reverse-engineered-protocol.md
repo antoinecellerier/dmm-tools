@@ -145,8 +145,11 @@ the second.
 
 **Hz (0x04) and Duty % (0x05) carry no dial information** — [VERIFIED]: the
 meter sends the same two bytes from every position that offers them, so a
-reading in Hz cannot say which position produced it. History is what
-disambiguates: a meter last seen in AC mV is on the mV position.
+reading in Hz cannot say which position produced it. Nor can the rest of the
+frame, at least with the leads open: a UT61E+ Hz frame from V~ (2026-09-14)
+matches the one from the Hz/% position (2026-09-07) byte for byte,
+`04 30 20 20 20 30 2E 30 30 00 00 30 30 30`. History is what disambiguates: a
+meter last seen in AC mV is on the mV position.
 
 #### UT61E+ / UT161E
 
