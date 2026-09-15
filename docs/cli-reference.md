@@ -140,11 +140,10 @@ dmm-cli read [OPTIONS]
 | Option | Default | Description |
 |---|---|---|
 | `--interval-ms <MS>` | `0` | Interval between readings in milliseconds. 0 = fastest (~10 Hz). |
-| `--format <FORMAT>` | `text` | Output format: `text`, `csv`, or `json`. |
-| `-o, --output <FILE>` | stdout | Write output to a file instead of stdout. |
+| `--format <FORMAT>` | `text` | Output format: `text`, `csv`, `json` or `replay`. A replay file holds the meter's own frames for `--replay`, so `--scale`, `--offset`, `--unit` and `--integrate` are refused with it; writing one asks the meter its name (a UT61+ beeps once). |
+| `-o, --output [<FILE>]` | stdout | Write to FILE, whose extension — `.csv`, `.json`, `.replay`, `.txt` — picks the format unless `--format` names one; a `--format` that disagrees with the extension wins, and is noted on stderr. Given with no FILE, the run names the file `measurements-<meter>-<mode>-<start>.<ext>` and prints its path when it ends. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
-| `--record <FILE>` | | Save every frame the meter sends, for `--replay`. Asks the meter its name (a UT61+ beeps once). |
-| `--replay <FILE>` | | Play back a `--record` file instead of opening a meter; `--count` or Ctrl+C ends it. The file names the device. |
+| `--replay <FILE>` | | Play back a `--format replay` file instead of opening a meter; `--count` or Ctrl+C ends it. The file names the device. |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
@@ -201,8 +200,11 @@ dmm-cli read --format json --interval-ms 1000
 # Measure battery discharge capacity (coulomb counter)
 dmm-cli read --integrate --format csv -o discharge.csv
 
+# Let the run name the file after the meter, the mode and the start time
+dmm-cli read --format csv -o
+
 # Keep a session to replay later
-dmm-cli read --record bench.replay --count 600
+dmm-cli read --format replay -o bench.replay --count 600
 ```
 
 #### Scaling readings in software

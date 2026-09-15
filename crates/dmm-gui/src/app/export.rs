@@ -43,32 +43,11 @@ impl ExportFormat {
         }
     }
 
-    /// The name the dialog opens with: the meter, the mode it stayed in and
-    /// the moment the recording started, as
-    /// `measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv`, so a folder of
-    /// exports sorts by meter and by run. A recording that crossed a
-    /// function switch has no one mode and leaves that segment out.
+    /// The name the dialog opens with. Shared with `dmm-cli read -o`, so an
+    /// export saved here and one the CLI wrote sort together.
     fn default_name(self, model: &str, mode: Option<&str>, start: DateTime<Local>) -> String {
-        let mode = mode
-            .map(|m| format!("{}-", file_safe(m)))
-            .unwrap_or_default();
-        format!(
-            "measurements-{}-{mode}{}.{}",
-            file_safe(model),
-            start.format("%Y-%m-%d_%H-%M-%S"),
-            self.filter().1
-        )
+        dmm_settings::export::default_name(model, mode, start, self.filter().1)
     }
-}
-
-/// A meter or mode name as one file-name word: runs of whitespace become a
-/// single `-` and the separators a path could read drop out, so "Mock
-/// UT61E+" exports as `Mock-UT61E+`.
-fn file_safe(name: &str) -> String {
-    name.replace(['/', '\\', ':'], "")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join("-")
 }
 
 /// The mode the whole buffer stayed in, for the file name.
@@ -382,17 +361,6 @@ mod tests {
             ExportFormat::Csv.default_name("UT61E+", None, start),
             "measurements-UT61E+-2026-09-15_14-30-05.csv"
         );
-    }
-
-    /// A model or mode name goes into the file name as one word: the dialog
-    /// opens on a name the user can save as typed, not one carrying a path
-    /// separator.
-    #[test]
-    fn a_name_is_folded_into_one_file_name_word() {
-        assert_eq!(file_safe("Mock UT61E+"), "Mock-UT61E+");
-        assert_eq!(file_safe("UT61E+ / UT61B+"), "UT61E+-UT61B+");
-        assert_eq!(file_safe("DC V"), "DC-V");
-        assert_eq!(file_safe("\u{3a9}"), "\u{3a9}");
     }
 
     /// The mode names the file only while the whole recording stayed in it —

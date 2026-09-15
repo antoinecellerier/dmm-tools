@@ -3,6 +3,7 @@ use dmm_lib::WallClock;
 use dmm_lib::export::CsvLayout;
 use dmm_lib::measurement::{MeasuredValue, Measurement};
 use std::io::Write;
+use std::time::Instant;
 
 use crate::OutputFormat;
 
@@ -16,21 +17,102 @@ fn timestamp_rfc3339(m: &Measurement, wall_clock: &WallClock) -> String {
     dt.to_rfc3339()
 }
 
-pub fn format_measurement(
-    w: &mut dyn Write,
-    m: &Measurement,
-    wall_clock: &WallClock,
-    format: &OutputFormat,
-    experimental: bool,
-    integral: Option<(f64, &str)>,
-    // Column layout for CSV. The text and JSON formats size themselves per
-    // reading and never see it.
-    layout: CsvLayout,
-) -> std::io::Result<()> {
-    match format {
-        OutputFormat::Text => format_text(w, m, integral),
-        OutputFormat::Csv => format_csv(w, m, wall_clock, integral, layout),
-        OutputFormat::Json => format_json(w, m, wall_clock, experimental, integral),
+/// What a `read` run writes, with whatever that format needs for the whole
+/// run: [`OutputFormat`] is what the user asked for, this is what the loop
+/// writes through.
+///
+/// Three of the four render the reading; `Replay` writes the frame the meter
+/// sent instead, so a recording can be played back through the family's own
+/// parser.
+pub enum Output {
+    Text,
+    /// The column layout is fixed for the run, so a reading that fills fewer
+    /// sub-value slots than the meter can send leaves the rest empty rather
+    /// than shortening its row.
+    Csv(CsvLayout),
+    /// `experimental` marks readings decoded by a protocol no report has
+    /// confirmed, so a script can tell them apart.
+    Json {
+        experimental: bool,
+    },
+    /// The meter's own frames, under the header naming the meter they came
+    /// from — only the caller knows which meter that is.
+    Replay {
+        header: String,
+        /// When the first frame arrived. Offsets are measured from it, so a
+        /// recording starts at zero however long the meter took to answer.
+        first: Option<Instant>,
+    },
+}
+
+impl Output {
+    /// The output for `format`, sized to the meter that is about to answer.
+    ///
+    /// `replay_header` is only called for `--format replay`: on a UT61+ the
+    /// name it carries costs a command the meter answers with a beep.
+    pub fn new(
+        format: OutputFormat,
+        layout: CsvLayout,
+        experimental: bool,
+        replay_header: impl FnOnce() -> String,
+    ) -> Self {
+        match format {
+            OutputFormat::Text => Self::Text,
+            OutputFormat::Csv => Self::Csv(layout),
+            OutputFormat::Json => Self::Json { experimental },
+            OutputFormat::Replay => Self::Replay {
+                header: replay_header(),
+                first: None,
+            },
+        }
+    }
+
+    /// What opens the file, for the formats that have a header. `model_name`
+    /// is the meter's, as the CSV comment and the JSON metadata name it.
+    pub fn header(&self, model_name: &str) -> std::io::Result<Option<String>> {
+        Ok(match self {
+            Self::Text => None,
+            Self::Csv(layout) => Some(format!(
+                "{}\n{}\n",
+                dmm_lib::export::device_comment(model_name),
+                layout.header().join(","),
+            )),
+            Self::Json { .. } => Some(format!(
+                "{}\n",
+                serde_json::to_string(&serde_json::json!({"_metadata":{"device": model_name}}))
+                    .map_err(std::io::Error::other)?
+            )),
+            Self::Replay { header, .. } => Some(header.clone()),
+        })
+    }
+
+    /// Write one reading.
+    pub fn write(
+        &mut self,
+        w: &mut dyn Write,
+        m: &Measurement,
+        wall_clock: &WallClock,
+        integral: Option<(f64, &str)>,
+    ) -> std::io::Result<()> {
+        match self {
+            Self::Text => format_text(w, m, integral),
+            Self::Csv(layout) => format_csv(w, m, wall_clock, integral, *layout),
+            Self::Json { experimental } => format_json(w, m, wall_clock, *experimental, integral),
+            Self::Replay { first, .. } => {
+                let first = *first.get_or_insert(m.timestamp);
+                let offset = m
+                    .timestamp
+                    .checked_duration_since(first)
+                    .unwrap_or_default();
+                // The payload as the meter sent it: a `--scale` is a choice
+                // the run that plays the file back makes for itself, and this
+                // is one of the reasons it is refused alongside this format.
+                //
+                // Through `dmm_lib::replay`, which also parses these lines, so
+                // the two ends of a recording cannot drift apart.
+                w.write_all(dmm_lib::replay::sample_line(offset, &m.raw_payload).as_bytes())
+            }
+        }
     }
 }
 
@@ -165,20 +247,29 @@ mod tests {
     use super::*;
     use dmm_lib::flags::StatusFlags;
 
+    /// One reading, as `output` writes it.
+    fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
+        let mut buf = Vec::new();
+        output
+            .write(&mut buf, m, &WallClock::new(), integral)
+            .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    fn text_for(m: &Measurement) -> String {
+        rendered(Output::Text, m, None)
+    }
+
     fn json_for(flags: StatusFlags) -> serde_json::Value {
         let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", flags);
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
+        serde_json::from_str(&rendered(
+            Output::Json {
+                experimental: false,
+            },
             &m,
-            &WallClock::new(),
-            &OutputFormat::Json,
-            false,
             None,
-            CsvLayout::default(),
-        )
-        .unwrap();
-        serde_json::from_slice(&buf).unwrap()
+        ))
+        .unwrap()
     }
 
     /// The JSON flags object used to be hand-written and had drifted: `loz`
@@ -233,18 +324,7 @@ mod tests {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         with_aux(&mut m);
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
-            &m,
-            &WallClock::new(),
-            &OutputFormat::Text,
-            false,
-            None,
-            CsvLayout::default(),
-        )
-        .unwrap();
-        let out = String::from_utf8(buf).unwrap();
+        let out = text_for(&m);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.len(), 3, "reading plus two sub-values: {out}");
         assert!(lines[1].contains("Reference"), "got {}", lines[1]);
@@ -259,18 +339,14 @@ mod tests {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
         with_aux(&mut m);
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
+        let v: serde_json::Value = serde_json::from_str(&rendered(
+            Output::Json {
+                experimental: false,
+            },
             &m,
-            &WallClock::new(),
-            &OutputFormat::Json,
-            false,
             None,
-            CsvLayout::default(),
-        )
+        ))
         .unwrap();
-        let v: serde_json::Value = serde_json::from_slice(&buf).unwrap();
         let aux = v["aux"].as_array().expect("aux array");
         assert_eq!(aux.len(), 2);
         assert_eq!(aux[0]["label"], "Reference");
@@ -285,34 +361,12 @@ mod tests {
     fn no_aux_means_no_change_to_either_format() {
         let m =
             Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
-            &m,
-            &WallClock::new(),
-            &OutputFormat::Text,
-            false,
-            None,
-            CsvLayout::default(),
-        )
-        .unwrap();
-        assert_eq!(String::from_utf8(buf).unwrap().lines().count(), 1);
+        assert_eq!(text_for(&m).lines().count(), 1);
         assert!(json_for(StatusFlags::default()).get("aux").is_none());
     }
 
     fn csv_for(m: &Measurement) -> String {
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
-            m,
-            &WallClock::new(),
-            &OutputFormat::Csv,
-            false,
-            None,
-            CsvLayout::default(),
-        )
-        .unwrap();
-        String::from_utf8(buf).unwrap()
+        rendered(Output::Csv(CsvLayout::default()), m, None)
     }
 
     /// A comma in any device-derived field used to shift every column after
@@ -375,18 +429,11 @@ mod tests {
         family: usize,
         extra: usize,
     ) -> String {
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
+        rendered(
+            Output::Csv(layout_of(integral.is_some(), family, extra)),
             m,
-            &WallClock::new(),
-            &OutputFormat::Csv,
-            false,
             integral,
-            layout_of(integral.is_some(), family, extra),
         )
-        .unwrap();
-        String::from_utf8(buf).unwrap()
     }
 
     fn csv_fields(line: &str) -> Vec<String> {
@@ -576,18 +623,7 @@ mod tests {
         use dmm_lib::transform::Transform;
         let mut m = scaled_reading();
         Transform::linear(100.0, 0.0, Some("A".to_string())).apply(&mut m);
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
-            &m,
-            &WallClock::new(),
-            &OutputFormat::Text,
-            false,
-            None,
-            layout_of(false, 0, 1),
-        )
-        .unwrap();
-        let out = String::from_utf8(buf).unwrap();
+        let out = text_for(&m);
         let lines: Vec<&str> = out.lines().collect();
         assert_eq!(lines.len(), 2, "reading plus the Raw sub-value: {out}");
         assert!(lines[0].starts_with("12.34 A"), "got {}", lines[0]);
@@ -602,18 +638,41 @@ mod tests {
             ..Default::default()
         };
         let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", flags);
-        let mut buf = Vec::new();
-        format_measurement(
-            &mut buf,
-            &m,
-            &WallClock::new(),
-            &OutputFormat::Text,
-            false,
-            None,
-            CsvLayout::default(),
-        )
-        .unwrap();
-        assert!(String::from_utf8(buf).unwrap().contains("VOID"));
+        assert!(text_for(&m).contains("VOID"));
         assert_eq!(json_for(flags)["flags"]["void"], serde_json::json!(true));
+    }
+
+    /// The one check that writer and parser agree, short of a meter: a bench
+    /// recording has to come back as the session it was.
+    #[test]
+    fn a_replay_run_writes_a_file_that_parses_back_as_a_replay() {
+        use dmm_lib::protocol::ut61eplus::make_test_measurement;
+        use dmm_lib::replay::Replay;
+        use std::time::Duration;
+
+        // The `dcv_battery` golden frame, 1.6109 V on the 2.2V range.
+        let mut m = make_test_measurement(0x02, 0x30, b" 1.6109", (0x03, 0x02), (0x30, 0x30, 0x30));
+        let first = m.timestamp;
+        let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
+            dmm_lib::replay::header("ut61eplus", "2026-09-16T10:22:31.123+02:00", Some("UT61E+"))
+        });
+
+        let mut file = Vec::new();
+        let header = output.header("UNI-T UT61E+").unwrap().expect("a header");
+        file.extend_from_slice(header.as_bytes());
+        output
+            .write(&mut file, &m, &WallClock::new(), None)
+            .unwrap();
+        m.timestamp = first + Duration::from_millis(250);
+        output
+            .write(&mut file, &m, &WallClock::new(), None)
+            .unwrap();
+
+        let text = String::from_utf8(file).expect("a replay file is UTF-8");
+        let replay = Replay::parse(&text).expect("parses as a replay");
+        assert_eq!(replay.device.id, "ut61eplus");
+        assert_eq!(replay.model.as_deref(), Some("UT61E+"));
+        // Offsets run from the first frame, not from wherever the session was.
+        assert_eq!(replay.duration(), Duration::from_millis(250));
     }
 }

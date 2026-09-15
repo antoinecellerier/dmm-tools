@@ -429,7 +429,7 @@ do not modify the persisted `settings.json`.
 | `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
 | `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
-| `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --record` — instead of connecting to a meter. |
+| `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
 | `-V`, `--version` | Print version and exit. |

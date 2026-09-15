@@ -1,9 +1,9 @@
 mod capture;
 mod drive;
 mod format;
+mod output;
 mod plan;
 mod recording;
-mod replay_record;
 mod watch;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
@@ -67,12 +67,13 @@ enum Cmd {
         /// Interval between readings in milliseconds (0 = fastest, ~10 Hz)
         #[arg(long, default_value = "0")]
         interval_ms: u64,
-        /// Output format
-        #[arg(long, default_value = "text")]
-        format: OutputFormat,
-        /// Output file (stdout if not specified)
-        #[arg(short, long)]
-        output: Option<String>,
+        /// Output format [default: text, or what -o's extension names]
+        #[arg(long)]
+        format: Option<OutputFormat>,
+        /// Output file (stdout if not specified). Given without a name, the
+        /// file is named after the meter, its mode and the run's start.
+        #[arg(short, long, value_name = "FILE", num_args(0..=1))]
+        output: Option<Option<String>>,
         /// Number of readings (0 = unlimited, Ctrl+C to stop)
         #[arg(long, default_value = "0")]
         count: usize,
@@ -85,10 +86,7 @@ enum Cmd {
         /// Without this, mock cycles through all modes automatically.
         #[arg(long, long_help = build_mock_mode_help())]
         mock_mode: Option<String>,
-        /// Save every frame the meter sends to FILE, for --replay
-        #[arg(long, value_name = "FILE", conflicts_with = "replay")]
-        record: Option<PathBuf>,
-        /// Play back a file written by --record instead of opening a meter
+        /// Play back a file written by --format replay instead of opening a meter
         #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
         replay: Option<PathBuf>,
         /// Run session time at this multiple of real time (mock only).
@@ -215,6 +213,19 @@ impl TransformArgs {
             self.unit.clone(),
         )
     }
+
+    /// The first of the three flags that was given, so a refusal names the one
+    /// the user typed rather than listing all three.
+    fn flag_given(&self) -> Option<&'static str> {
+        match self {
+            Self { scale: Some(_), .. } => Some("--scale"),
+            Self {
+                offset: Some(_), ..
+            } => Some("--offset"),
+            Self { unit: Some(_), .. } => Some("--unit"),
+            _ => None,
+        }
+    }
 }
 
 /// Parse a transform flag's number and check it against the rules
@@ -251,11 +262,45 @@ fn parse_offset(s: &str) -> Result<f64, String> {
     parse_factor("offset", s, Transform::check_offset)
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
 pub enum OutputFormat {
     Text,
     Csv,
     Json,
+    /// The meter's own frames, for --replay to play back
+    Replay,
+}
+
+impl OutputFormat {
+    /// What `--format` calls this format, for a message that quotes the flag
+    /// back at the user.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Csv => "csv",
+            Self::Json => "json",
+            Self::Replay => "replay",
+        }
+    }
+
+    /// The extension a file of this format carries: what a bare `-o` names its
+    /// file with, and what picks the format when `-o` names a file and
+    /// `--format` doesn't.
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Text => "txt",
+            Self::Csv => "csv",
+            Self::Json => "json",
+            Self::Replay => "replay",
+        }
+    }
+
+    /// The format a file extension names, if it names one.
+    fn from_extension(extension: &str) -> Option<Self> {
+        [Self::Text, Self::Csv, Self::Json, Self::Replay]
+            .into_iter()
+            .find(|f| f.extension().eq_ignore_ascii_case(extension))
+    }
 }
 
 /// What `get` and `set` name on the command line, one word per
@@ -384,7 +429,6 @@ fn main() {
             integrate,
             transform,
             mock_mode,
-            record,
             replay,
             mock_clock_scale,
             mock_clock_preseed,
@@ -413,20 +457,25 @@ fn main() {
                 );
                 std::process::exit(1);
             }
-            cmd_read(
-                selection,
-                adapter,
-                interval_ms,
-                format,
-                output,
-                count,
-                integrate,
-                &transform.to_transform(),
-                mock_mode,
-                record,
-                replay,
-                clock,
-            )
+            // Settled before anything opens, so a run that cannot write what
+            // it was asked for fails with no meter attached.
+            let (format, destination) = resolve_output(&format, output);
+            match refuse_replay_format(format, selection, replay.is_some(), &transform, integrate) {
+                Some(message) => Err(message.into()),
+                None => cmd_read(
+                    selection,
+                    adapter,
+                    interval_ms,
+                    format,
+                    destination,
+                    count,
+                    integrate,
+                    &transform.to_transform(),
+                    mock_mode,
+                    replay,
+                    clock,
+                ),
+            }
         }
         Cmd::Command { action } => cmd_command(selection, adapter, action),
         Cmd::Get {
@@ -954,12 +1003,11 @@ fn cmd_read(
     adapter: Option<&str>,
     interval_ms: u64,
     format: OutputFormat,
-    output_path: Option<String>,
+    destination: output::Destination,
     count: usize,
     integrate: bool,
     transform: &Transform,
     mock_mode: Option<String>,
-    record: Option<PathBuf>,
     replay: Option<PathBuf>,
     // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
     clock: dmm_lib::Clock,
@@ -971,7 +1019,7 @@ fn cmd_read(
             path,
             interval_ms,
             format,
-            output_path,
+            destination,
             count,
             integrate,
             transform,
@@ -981,74 +1029,160 @@ fn cmd_read(
     refuse_clock_on_hardware(selection, &clock)?;
     if requires_hardware(selection) {
         let (mut dmm, device) = open_with_help(selection, adapter)?;
-        let experimental = !dmm.profile().stability.is_verified();
-        // Once, before the loop: on a UT61+ this is a command the meter
-        // answers with a beep, and the name goes in the file's header.
-        let mut recorder = match &record {
-            Some(path) => {
-                let model = dmm.get_name().ok().flatten();
-                Some(replay_record::ReplayWriter::create(
-                    path,
-                    device.id,
-                    model.as_deref(),
-                )?)
-            }
-            None => None,
-        };
+        // Once, before the loop: on a UT61+ asking the meter its name is a
+        // command it answers with a beep, so only a replay file — whose
+        // header carries the name — pays for it.
+        let model = (format == OutputFormat::Replay)
+            .then(|| dmm.get_name().ok().flatten())
+            .flatten();
+        let out = read_output(format, &dmm, transform, integrate, || {
+            dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref())
+        });
         info!("connected, starting measurement loop");
-        let result = run_read_loop(
+        // The name the meter gave, where the run already asked for one.
+        let meter_name = model.as_deref().unwrap_or(device.display_name);
+        run_read_loop(
             &mut dmm,
             interval_ms,
-            &format,
-            output_path,
+            out,
+            destination,
+            meter_name,
             count,
-            experimental,
             Some(device),
             integrate,
             transform,
-            recorder.as_mut(),
-        );
-        // After the summary, and whether or not the loop ended well: the
-        // frames already on disk are worth naming either way.
-        if let (Some(recorder), Some(path)) = (recorder, &record) {
-            let frames = recorder.finish()?;
-            eprintln!(
-                "{}",
-                style(format!("Recorded {frames} frames to {}", path.display())).dim()
-            );
-        }
-        result
+        )
     } else {
-        if record.is_some() {
-            return Err(record_needs_hardware(selection).into());
-        }
         let mut dmm = open_mock_device(mock_mode, clock)?;
         info!("mock device connected, starting measurement loop");
         // Mock returns instantly — use 100ms floor to simulate ~10 Hz
         let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
-        // No timeout to warn about and nothing experimental to flag: the mock
-        // always answers, and its profile is Verified.
+        // `--format replay` is refused for a device that synthesises its
+        // readings, so the header below is never built.
+        let out = read_output(format, &dmm, transform, integrate, || {
+            dmm_lib::replay::header(selection_id(selection), &recorded_now(), None)
+        });
+        // Not hardware, so the selection names a registry entry — `auto` is a
+        // cable to open and never lands here.
+        let meter_name = opened_device(selection)
+            .map_or_else(|| selection_id(selection), |device| device.display_name);
+        // No timeout to warn about: the mock always answers.
         run_read_loop(
             &mut dmm,
             interval_ms,
-            &format,
-            output_path,
+            out,
+            destination,
+            meter_name,
             count,
-            false,
             None,
             integrate,
             transform,
-            None,
         )
     }
 }
 
-/// Why `--record` is refused on a device that synthesises its readings.
-fn record_needs_hardware(selection: Selection) -> String {
-    format!(
-        "--record needs a real meter; nothing to record from --device {}",
-        selection_id(selection),
-    )
+/// The output a `read` run writes, sized to the meter that is about to
+/// answer: the CSV layout comes from its profile, and JSON flags a protocol
+/// no report has confirmed.
+fn read_output<T: dmm_lib::transport::Transport>(
+    format: OutputFormat,
+    dmm: &dmm_lib::Dmm<T>,
+    transform: &Transform,
+    integrate: bool,
+    replay_header: impl FnOnce() -> String,
+) -> format::Output {
+    // Fixed for the whole run: the CSV column layout is per meter family, so
+    // a mode that reports fewer sub-values than the family can leaves its own
+    // slots empty rather than shortening the row. A software transform adds
+    // one more group, kept trailing, for the meter's own reading — so `Raw`
+    // stays in the same columns whether or not the meter sent sub-values of
+    // its own that frame.
+    let layout = dmm_lib::export::CsvLayout {
+        family_slots: dmm.profile().max_aux_values,
+        extra_slots: transform.extra_aux_count(),
+        integral: integrate,
+    };
+    let experimental = !dmm.profile().stability.is_verified();
+    format::Output::new(format, layout, experimental, replay_header)
+}
+
+/// When a recording being written now was made, for its header.
+fn recorded_now() -> String {
+    chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, false)
+}
+
+/// The format a run writes and the note it earns: `--format` when given, else
+/// what the `-o` file's extension names, else text.
+///
+/// The flag wins over the extension — the file is what the user asked for by
+/// name — so a `.json` file holding CSV is a note rather than a refusal.
+fn resolve_format(
+    asked: Option<OutputFormat>,
+    path: Option<&str>,
+) -> (OutputFormat, Option<String>) {
+    let named = path
+        .and_then(|p| Path::new(p).extension()?.to_str())
+        .and_then(OutputFormat::from_extension);
+    match (asked, named, path) {
+        (Some(asked), Some(named), Some(path)) if asked != named => (
+            asked,
+            Some(format!("--format {} written to {path}", asked.name())),
+        ),
+        (Some(asked), _, _) => (asked, None),
+        (None, Some(named), _) => (named, None),
+        (None, None, _) => (OutputFormat::Text, None),
+    }
+}
+
+/// What `read` writes and where it goes.
+fn resolve_output(
+    asked: &Option<OutputFormat>,
+    output: Option<Option<String>>,
+) -> (OutputFormat, output::Destination) {
+    let (format, note) = resolve_format(*asked, output.as_ref().and_then(|o| o.as_deref()));
+    if let Some(note) = note {
+        eprintln!("{} {note}", style("Note:").yellow());
+    }
+    let destination = match output {
+        None => output::Destination::Stdout,
+        // A bare `-o`: the first reading names the file.
+        Some(None) => output::Destination::Auto {
+            extension: format.extension(),
+        },
+        Some(Some(path)) => output::Destination::Path(path.into()),
+    };
+    (format, destination)
+}
+
+/// Why `--format replay` is refused alongside the flags that re-express or
+/// accumulate the reading, and on a device that synthesises its readings.
+///
+/// A replay file holds the meter's own frames, so what to make of them is a
+/// choice for the run that plays them back.
+fn refuse_replay_format(
+    format: OutputFormat,
+    selection: Selection,
+    // A run already playing a recording has the frames to copy, whatever the
+    // settings file names as the meter.
+    replaying: bool,
+    transform: &TransformArgs,
+    integrate: bool,
+) -> Option<String> {
+    if format != OutputFormat::Replay {
+        return None;
+    }
+    if !replaying && !requires_hardware(selection) {
+        return Some(format!(
+            "--format replay needs a real meter; nothing to record from --device {}",
+            selection_id(selection),
+        ));
+    }
+    let flag = transform
+        .flag_given()
+        .or(integrate.then_some("--integrate"))?;
+    Some(format!(
+        "a replay holds the meter's own frames; pass {flag} when playing it back"
+    ))
 }
 
 /// Why `--device` is refused alongside `--replay`.
@@ -1065,7 +1199,7 @@ fn read_replay(
     path: &Path,
     interval_ms: u64,
     format: OutputFormat,
-    output_path: Option<String>,
+    destination: output::Destination,
     count: usize,
     integrate: bool,
     transform: &Transform,
@@ -1081,7 +1215,11 @@ fn read_replay(
         )
     })?;
     let mut dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
-    let experimental = !dmm.profile().stability.is_verified();
+    // A copy keeps the session it came from, so the frames it holds export at
+    // the times they were measured at whichever file they are played from.
+    let out = read_output(format, &dmm, transform, integrate, || {
+        dmm_lib::replay::header(replay.device.id, &replay.recorded, replay.model.as_deref())
+    });
     // A log line, not a banner: a replay's output is what the meter's was,
     // and a note on stderr would land in every doc snippet taken from one.
     info!(
@@ -1094,17 +1232,20 @@ fn read_replay(
     run_read_loop(
         &mut dmm,
         interval_ms,
-        &format,
-        output_path,
+        out,
+        destination,
+        // The name the meter reported when the recording was made.
+        replay
+            .model
+            .as_deref()
+            .unwrap_or(replay.device.display_name),
         count,
-        experimental,
         // A gap in the recording plays back as timeouts, and they are not a
         // quiet meter: there is no `--device` to check and nothing on the
         // cable to enable data transmission on.
         None,
         integrate,
         transform,
-        None,
     )
 }
 
@@ -1149,38 +1290,27 @@ fn open_mock_device(
 fn run_read_loop<T: dmm_lib::transport::Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     interval_ms: u64,
-    format: &OutputFormat,
-    output_path: Option<String>,
+    mut out: format::Output,
+    destination: output::Destination,
+    // What the meter calls itself, for a file the run has to name: the name it
+    // reported where the run already has one, else the registry's. The same
+    // rule the GUI's Export… names its files by, so the two agree.
+    meter_name: &str,
     count: usize,
-    experimental: bool,
     // When set, timeout warnings include device-specific activation instructions.
     device: Option<&'static SelectableDevice>,
     integrate: bool,
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
     transform: &Transform,
-    // `--record`, when given: every frame goes in as the meter sent it.
-    mut recorder: Option<&mut replay_record::ReplayWriter>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
-    let mut writer: Box<dyn Write> = match &output_path {
-        Some(path) => Box::new(std::fs::File::create(path).map(std::io::BufWriter::new)?),
-        None => Box::new(std::io::stdout().lock()),
-    };
-
+    // The profile's name, which the CSV comment and the JSON metadata carry,
+    // is the family's — `meter_name` is what this meter answers to.
     let model_name = dmm.profile().model_name;
-    // Fixed for the whole run: the CSV column layout is per meter family, so
-    // a mode that reports fewer sub-values than the family can leaves its own
-    // slots empty rather than shortening the row. A software transform adds
-    // one more group, kept trailing, for the meter's own reading — so `Raw`
-    // stays in the same columns whether or not the meter sent sub-values of
-    // its own that frame.
-    let layout = dmm_lib::export::CsvLayout {
-        family_slots: dmm.profile().max_aux_values,
-        extra_slots: transform.extra_aux_count(),
-        integral: integrate,
-    };
+    let mut writer = output::Writer::new(destination, meter_name)?;
+
     if !transform.is_identity() {
         // On stderr so a redirected CSV or JSON stream stays machine-readable,
         // but visible: nothing in the output itself says the numbers are not
@@ -1194,20 +1324,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             .dim()
         );
     }
-    match format {
-        OutputFormat::Csv => {
-            writeln!(writer, "{}", dmm_lib::export::device_comment(model_name))?;
-            writeln!(writer, "{}", layout.header().join(","))?;
-        }
-        OutputFormat::Json => {
-            writeln!(
-                writer,
-                "{}",
-                serde_json::to_string(&serde_json::json!({"_metadata":{"device": model_name}}))
-                    .map_err(std::io::Error::other)?
-            )?;
-        }
-        OutputFormat::Text => {}
+    if let Some(header) = out.header(model_name)? {
+        write!(writer, "{header}")?;
     }
 
     let tick = Duration::from_millis(interval_ms);
@@ -1220,6 +1338,9 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     let mut session = dmm_lib::stats::SeriesStats::new(integrate);
     let mut i = 0usize;
     let mut protocol_errors = 0usize;
+    // The failure that ended the run, reported once the readings it did get
+    // have been summarised and their file settled and named.
+    let mut fatal = None;
     // Give the pacing sleep the same Ctrl-C flag the loop checks, so a long
     // --interval doesn't swallow the interrupt for a whole tick.
     let cancel = running.clone();
@@ -1229,13 +1350,6 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
-                // Recorded before the transform: a replay file holds the
-                // meter's own frames, and `--scale` is a choice the run that
-                // plays it back makes for itself.
-                if let Some(recorder) = recorder.as_deref_mut() {
-                    recorder.push(&m)?;
-                }
-
                 // Before everything else: the unit-change check, the stats,
                 // the integrator and the formatter must all see the same
                 // series, and after a transform that series is the scaled one.
@@ -1260,15 +1374,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 // Already `None` unless --integrate was given.
                 let integral_display = session.integral_display();
 
-                format::format_measurement(
-                    &mut writer,
-                    &m,
-                    &wall_clock,
-                    format,
-                    experimental,
-                    integral_display,
-                    layout,
-                )?;
+                // Before the write: a file the run names itself is named after
+                // the first reading, and later readings say whether the mode
+                // in that name still describes the run.
+                writer.saw(&m.mode, wall_clock.wall_time_for(m.timestamp).into())?;
+                out.write(&mut writer, &m, &wall_clock, integral_display)?;
                 writer.flush()?;
                 i += 1;
             }
@@ -1304,7 +1414,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 }
             }
             Err(e) => {
-                return Err(e.into());
+                fatal = Some(e);
+                break;
             }
         }
     }
@@ -1357,7 +1468,16 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             }
         }
     }
-    Ok(())
+
+    // Only a file the run named itself is worth a line: every other
+    // destination is in the command the user typed.
+    if let Some(path) = writer.finish()? {
+        eprintln!("{}", style(format!("Written to {}", path.display())).dim());
+    }
+    match fatal {
+        Some(e) => Err(e.into()),
+        None => Ok(()),
+    }
 }
 
 fn cmd_command(
@@ -2131,13 +2251,13 @@ mod tests {
                 integrate,
                 transform,
                 mock_mode,
-                record,
                 replay,
                 mock_clock_scale,
                 mock_clock_preseed,
             } => {
                 assert_eq!(interval_ms, 0);
-                assert!(matches!(format, OutputFormat::Text));
+                // Neither given, so the run prints text on stdout.
+                assert!(format.is_none());
                 assert!(output.is_none());
                 assert_eq!(count, 0);
                 assert!(!integrate);
@@ -2146,8 +2266,7 @@ mod tests {
                 assert_eq!(transform.to_transform(), Transform::default());
                 assert!(transform.to_transform().is_identity());
                 assert!(mock_mode.is_none());
-                // Neither recording nor replaying: `read` opens the meter.
-                assert!(record.is_none());
+                // Nothing to play back: `read` opens the meter.
                 assert!(replay.is_none());
                 // No flag means the wall clock, so `read` paces as it always did.
                 assert!(mock_clock_scale.is_none());
@@ -2158,16 +2277,7 @@ mod tests {
     }
 
     #[test]
-    fn clap_parse_read_record_and_replay() {
-        let recording = Cli::try_parse_from(["dmm-cli", "read", "--record", "bench.replay"])
-            .expect("--record parses");
-        match recording.command {
-            Cmd::Read { record, .. } => {
-                assert_eq!(record.as_deref(), Some(Path::new("bench.replay")));
-            }
-            _ => panic!("expected Read"),
-        }
-
+    fn clap_parse_read_replay() {
         let playback = Cli::try_parse_from(["dmm-cli", "read", "--replay", "bench.replay"])
             .expect("--replay parses");
         match playback.command {
@@ -2178,17 +2288,40 @@ mod tests {
         }
     }
 
-    /// A run either takes frames from a meter or gives them back, and the
-    /// mock has none to record — clap says so before anything opens.
+    /// `read` has no positional argument, so `-o` can take its file name or
+    /// leave it to the run — and the flag after a bare one is still a flag.
     #[test]
-    fn clap_refuses_record_with_replay_and_replay_with_mock_mode() {
-        assert!(
-            Cli::try_parse_from(["dmm-cli", "read", "--record", "a", "--replay", "b"]).is_err()
+    fn clap_parse_read_output_with_and_without_a_name() {
+        let output_of = |args: &[&str]| {
+            let cli = Cli::try_parse_from(["dmm-cli", "read"].iter().chain(args).copied())
+                .expect("-o parses");
+            match cli.command {
+                Cmd::Read { output, count, .. } => (output, count),
+                _ => panic!("expected Read"),
+            }
+        };
+        assert_eq!(
+            output_of(&["-o", "bench.csv"]),
+            (Some(Some("bench.csv".to_string())), 0)
         );
+        assert_eq!(output_of(&["-o", "--count", "3"]), (Some(None), 3));
+        assert_eq!(output_of(&["--count", "3", "-o"]), (Some(None), 3));
+    }
+
+    /// A run gives frames back or takes them from the meter, never both.
+    #[test]
+    fn clap_refuses_replay_with_mock_mode() {
         assert!(
             Cli::try_parse_from(["dmm-cli", "read", "--replay", "b", "--mock-mode", "dcv"])
                 .is_err()
         );
+    }
+
+    /// The flag a recording used to be written with; it is `--format replay`
+    /// now, and nothing should quietly accept the old spelling.
+    #[test]
+    fn clap_refuses_the_old_record_flag() {
+        assert!(Cli::try_parse_from(["dmm-cli", "read", "--record", "bench.replay"]).is_err());
     }
 
     /// Hidden, but they still have to parse — nothing in `--help` would catch
@@ -2241,14 +2374,13 @@ mod tests {
                 mock_mode: _,
                 integrate: _,
                 transform: _,
-                record: _,
                 replay: _,
                 mock_clock_scale: _,
                 mock_clock_preseed: _,
             } => {
                 assert_eq!(interval_ms, 100);
-                assert!(matches!(format, OutputFormat::Csv));
-                assert_eq!(output.as_deref(), Some("test.csv"));
+                assert_eq!(format, Some(OutputFormat::Csv));
+                assert_eq!(output, Some(Some("test.csv".to_string())));
                 assert_eq!(count, 10);
             }
             _ => panic!("expected Read"),
@@ -2383,7 +2515,7 @@ mod tests {
                     transform.to_transform(),
                     Transform::linear(100.0, 0.0, Some("A".to_string()))
                 );
-                assert!(matches!(format, OutputFormat::Csv));
+                assert_eq!(format, Some(OutputFormat::Csv));
             }
             _ => panic!("expected Read"),
         }
@@ -3320,21 +3452,30 @@ mod tests {
         assert_eq!(cli.device, None);
     }
 
+    /// One reading, as `output` writes it.
+    fn rendered(mut output: format::Output, m: &dmm_lib::measurement::Measurement) -> String {
+        let mut buf = Vec::new();
+        output
+            .write(&mut buf, m, &dmm_lib::WallClock::new(), None)
+            .unwrap();
+        String::from_utf8(buf).unwrap()
+    }
+
+    fn csv_of(m: &dmm_lib::measurement::Measurement) -> String {
+        rendered(
+            format::Output::Csv(dmm_lib::export::CsvLayout::default()),
+            m,
+        )
+    }
+
+    fn json_of(m: &dmm_lib::measurement::Measurement, experimental: bool) -> serde_json::Value {
+        serde_json::from_str(&rendered(format::Output::Json { experimental }, m)).unwrap()
+    }
+
     #[test]
     fn format_text_output() {
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Text,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
+        let output = rendered(format::Output::Text, &m);
         assert!(output.contains("5.678"));
         assert!(output.contains("V"));
     }
@@ -3342,27 +3483,15 @@ mod tests {
     #[test]
     fn format_csv_output() {
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Csv,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
+        let output = csv_of(&m);
         let fields: Vec<&str> = output.trim().split(',').collect();
         assert!(fields.len() >= 6);
         assert_eq!(fields[1], "DC V");
         assert_eq!(fields[2], "5.678");
         assert_eq!(fields[3], "V");
-        assert_eq!(fields[4], "22V");
     }
 
-    /// Multi-display meters carry their sub-values in fixed trailing columns,
+    /// A meter that can report sub-values gets one column group per slot,
     /// sized by the family's `max_aux_values` so every row of a file lines up
     /// even when a mode reports fewer than the family can.
     #[test]
@@ -3377,35 +3506,17 @@ mod tests {
             display_raw: Some("50.01".to_string()),
             elapsed_secs: None,
         }];
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Csv,
-            false,
-            None,
-            dmm_lib::export::CsvLayout {
-                family_slots: 2,
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
+        let layout = dmm_lib::export::CsvLayout {
+            family_slots: 2,
+            ..Default::default()
+        };
+        let output = rendered(format::Output::Csv(layout), &m);
         let fields: Vec<&str> = output.trim_end().split(',').collect();
         assert_eq!(fields.len(), 6 + 2 * 3, "got {output}");
         assert_eq!(&fields[6..9], ["Frequency", "50.01", "Hz"]);
         // The unused second slot is present but empty.
         assert_eq!(&fields[9..12], ["", "", ""]);
-        assert_eq!(
-            dmm_lib::export::CsvLayout {
-                family_slots: 2,
-                ..Default::default()
-            }
-            .header()
-            .len(),
-            fields.len()
-        );
+        assert_eq!(layout.header().len(), fields.len());
     }
 
     /// The UT61E+ separates the sign from the digits on some ranges. That
@@ -3413,18 +3524,7 @@ mod tests {
     #[test]
     fn format_csv_negative_value_is_numeric() {
         let m = make_test_measurement(0x02, 0x01, b"- 55.79", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Csv,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
+        let output = csv_of(&m);
         let fields: Vec<&str> = output.trim().split(',').collect();
         assert_eq!(fields[2], "-55.79");
         assert_eq!(fields[2].parse::<f64>().unwrap(), -55.79);
@@ -3434,19 +3534,7 @@ mod tests {
     fn format_json_output() {
         // flag1=0x02 (HOLD), flag2=0x00 (AUTO on, inverted logic)
         let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x02, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Json,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        let parsed = json_of(&m, false);
         assert_eq!(parsed["mode"], "DC V");
         assert_eq!(parsed["value"], 5.678);
         assert_eq!(parsed["unit"], "V");
@@ -3458,57 +3546,19 @@ mod tests {
     #[test]
     fn format_json_experimental_flag() {
         let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Json,
-            true,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
-        assert_eq!(parsed["experimental"], true);
+        assert_eq!(json_of(&m, true)["experimental"], true);
     }
 
     #[test]
     fn format_csv_overload() {
         let m = make_test_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Csv,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        assert!(output.contains(",OL,"));
+        assert!(csv_of(&m).contains(",OL,"));
     }
 
     #[test]
     fn format_json_overload() {
         let m = make_test_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Json,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
-        assert_eq!(parsed["value"], "OL");
+        assert_eq!(json_of(&m, false)["value"], "OL");
     }
 
     #[test]
@@ -3525,37 +3575,13 @@ mod tests {
     #[test]
     fn format_csv_ncv() {
         let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Csv,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        assert!(output.contains("NCV:3"));
+        assert!(csv_of(&m).contains("NCV:3"));
     }
 
     #[test]
     fn format_json_ncv() {
         let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Json,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        let parsed = json_of(&m, false);
         assert_eq!(parsed["value"]["ncv_level"], 3);
         assert_eq!(parsed["mode"], "NCV");
     }
@@ -3563,18 +3589,7 @@ mod tests {
     #[test]
     fn format_text_includes_flags() {
         let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x0F, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Text,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
+        let output = rendered(format::Output::Text, &m);
         assert!(output.contains("HOLD"));
         assert!(output.contains("REL"));
     }
@@ -3582,19 +3597,137 @@ mod tests {
     #[test]
     fn format_json_negative_value() {
         let m = make_test_measurement(0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x00, 0x00));
-        let mut buf = Vec::new();
-        format::format_measurement(
-            &mut buf,
-            &m,
-            &dmm_lib::WallClock::new(),
-            &OutputFormat::Json,
-            false,
-            None,
-            dmm_lib::export::CsvLayout::default(),
-        )
-        .unwrap();
-        let output = String::from_utf8(buf).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        let parsed = json_of(&m, false);
         assert!((parsed["value"].as_f64().unwrap() - (-12.345)).abs() < 1e-6);
+    }
+
+    /// Every format names the file it writes, and every one of those names
+    /// picks it back out of an `-o` file name.
+    #[test]
+    fn a_format_and_its_file_extension_name_each_other() {
+        for format in [
+            OutputFormat::Text,
+            OutputFormat::Csv,
+            OutputFormat::Json,
+            OutputFormat::Replay,
+        ] {
+            assert_eq!(
+                OutputFormat::from_extension(format.extension()),
+                Some(format),
+                "{}",
+                format.name()
+            );
+            // The name a message quotes back is the one `--format` takes.
+            assert_eq!(
+                format
+                    .to_possible_value()
+                    .expect("a --format value")
+                    .get_name(),
+                format.name()
+            );
+        }
+        assert_eq!(OutputFormat::from_extension("dat"), None);
+    }
+
+    /// Without `--format`, the file's extension says what to write; an
+    /// extension nothing recognises, or no file at all, is text.
+    #[test]
+    fn the_output_file_extension_picks_the_format() {
+        for (path, expected) in [
+            ("readings.csv", OutputFormat::Csv),
+            ("readings.json", OutputFormat::Json),
+            ("bench.replay", OutputFormat::Replay),
+            ("readings.TXT", OutputFormat::Text),
+            ("readings.dat", OutputFormat::Text),
+            ("readings", OutputFormat::Text),
+        ] {
+            let (format, note) = resolve_format(None, Some(path));
+            assert_eq!(format, expected, "{path}");
+            assert!(note.is_none(), "{path}");
+        }
+        assert_eq!(resolve_format(None, None).0, OutputFormat::Text);
+    }
+
+    /// `--format` wins over the name of the file it writes to — but a `.json`
+    /// file holding CSV is worth a word.
+    #[test]
+    fn an_explicit_format_wins_over_the_extension_and_says_so() {
+        let (format, note) = resolve_format(Some(OutputFormat::Csv), Some("readings.json"));
+        assert_eq!(format, OutputFormat::Csv);
+        assert_eq!(
+            note.as_deref(),
+            Some("--format csv written to readings.json")
+        );
+        // Matching or unrecognised extensions say nothing.
+        for path in ["readings.csv", "readings.dat", "readings"] {
+            assert!(
+                resolve_format(Some(OutputFormat::Csv), Some(path))
+                    .1
+                    .is_none(),
+                "{path}"
+            );
+        }
+    }
+
+    /// A replay file holds the meter's own frames, so the flags that
+    /// re-express or accumulate the reading have nothing to act on.
+    #[test]
+    fn a_replay_run_refuses_the_flags_that_change_the_reading() {
+        let read = |args: &[&str]| {
+            let cli = Cli::try_parse_from(
+                ["dmm-cli", "read", "--format", "replay"]
+                    .iter()
+                    .chain(args)
+                    .copied(),
+            )
+            .expect("the flags parse");
+            match cli.command {
+                Cmd::Read {
+                    transform,
+                    integrate,
+                    ..
+                } => refuse_replay_format(
+                    OutputFormat::Replay,
+                    Selection::Auto,
+                    false,
+                    &transform,
+                    integrate,
+                ),
+                _ => panic!("expected Read"),
+            }
+        };
+        for (args, flag) in [
+            (["--scale", "100"].as_slice(), "--scale"),
+            (["--offset", "1"].as_slice(), "--offset"),
+            (["--unit", "A"].as_slice(), "--unit"),
+            (["--integrate"].as_slice(), "--integrate"),
+        ] {
+            let message = read(args).unwrap_or_else(|| panic!("{flag} should be refused"));
+            assert!(message.contains(flag), "got {message}");
+            assert!(message.contains("playing it back"), "got {message}");
+        }
+        assert!(read(&[]).is_none(), "a plain replay run is fine");
+    }
+
+    /// The mock synthesises its readings, so there are no frames to record —
+    /// unless the run is copying a recording it was given.
+    #[test]
+    fn a_replay_run_needs_frames_to_record() {
+        let mock = registry::resolve_selection("mock").expect("the mock is a registry device");
+        let transform = TransformArgs {
+            scale: None,
+            offset: None,
+            unit: None,
+        };
+        let message = refuse_replay_format(OutputFormat::Replay, mock, false, &transform, false)
+            .expect("the mock has no frames");
+        assert!(
+            message.contains("--format replay needs a real meter"),
+            "got {message}"
+        );
+        assert!(
+            refuse_replay_format(OutputFormat::Replay, mock, true, &transform, false).is_none(),
+            "a recording being copied brings its own frames"
+        );
     }
 }

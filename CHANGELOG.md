@@ -12,7 +12,7 @@
 - **Auto-detect is the default device** — the meter on the cable is identified and remembered, so later sessions open it directly.
 - **Switch the meter's function and range from the readout** — the mode and range labels are dropdowns on the UT61+/UT161, UT181A, VC-880 and VC-890.
 - **Scale button converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
-- **Export… saves the recording as a replay file that `--replay` plays back** — from the arrow beside the button; a `dmm-cli read --record` file plays back too.
+- **Export… saves the recording as a replay file that `--replay` plays back** — from the arrow beside the button; a `dmm-cli read --format replay` file plays back too.
 - **An export is named after the meter, its mode and the recording's start** — every save opened on `measurements.csv`.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a **Buffer size** setting moves the bound.
 - **Ctrl + wheel zooms the graph, a plain wheel scrolls** — any wheel tick used to zoom the graph and leave live mode; a pinch zooms too.
@@ -38,12 +38,13 @@
 - **The meter on the cable is identified for you** — `--device` now only pins a model; when nothing answers, the steps that switch each meter's output on are printed.
 - **`get` and `set` read and switch the meter's mode, range and toggles** — on the UT61+/UT161, UT181A, VC-880/VC650BT and VC-890; `get --format json` for scripts.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
-- **`read --record` saves the meter's frames and `read --replay` plays them back** — the CLI runs a recording with no meter attached.
+- **`read --format replay` saves the meter's frames and `read --replay` plays them back** — the CLI runs a recording with no meter attached.
 - **Capture drives the meter and waits for readings itself** — every step stopped for an Enter and filed whatever was on screen; on meters that take commands it sets each range, flag and sub-mode.
 - **Capture covers every sub-mode and lists the equipment up front** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB had no step; a thermocouple or battery turned up mid-run.
 - **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; a meter that never answered left nothing; confirmations and `debug` showed only the main reading.
 - **`capture --unverified` runs only the steps no report has confirmed** — `--list-steps --format md` prints that checklist for an issue; `--plan` runs a maintainer-written step file.
 - **REL on the UT181A** — in the CLI and the GUI.
+- **`read -o` picks the format from the file name** — `-o readings.json` writes JSON; `-o` alone names the file after the meter and the run.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values and noise** — `--mock-mode acv-hz`, `temp2`, `temp-diff` and `temp-diff-rev` stand in for a UT181A; `noise` is a spiky DC signal for the graph.

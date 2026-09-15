@@ -14,7 +14,10 @@
 //! to the file, and [`write_atomic`]: both persist user data (settings, capture
 //! reports, CSV exports) and all of it must survive a crash mid-write, so the
 //! one durable write helper lives here rather than being reimplemented per
-//! crate.
+//! crate. [`export`] is the same idea for what the two write out: an export
+//! saved from the GUI and one written by the CLI carry the same name.
+
+pub mod export;
 
 use serde::{Deserialize, Serialize};
 use std::fs;

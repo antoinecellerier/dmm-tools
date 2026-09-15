@@ -1031,6 +1031,7 @@ dependencies = [
 name = "dmm-settings"
 version = "0.7.0-dev"
 dependencies = [
+ "chrono",
  "directories",
  "serde",
  "serde_json",
