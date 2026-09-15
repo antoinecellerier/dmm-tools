@@ -16,7 +16,7 @@ Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
 - Live reading with the meter's flags and sub-values, and buttons to switch mode, range, HOLD, REL and MIN/MAX from the screen
 - Time-series graph with minimap, cursors, mean and min/max overlays, and reference lines with threshold triggers
-- Recording for hours at a time, with CSV export
+- Recording for hours at a time, exported as CSV, JSON or a replay file
 - Software scale, offset and unit relabel for clamps, shunts and sensors
 - Live specifications (resolution, accuracy) for the current range
 - Big meter mode for bench-mount use

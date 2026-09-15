@@ -1324,7 +1324,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             .dim()
         );
     }
-    if let Some(header) = out.header(model_name)? {
+    if let Some(header) = out.header(model_name) {
         write!(writer, "{header}")?;
     }
 

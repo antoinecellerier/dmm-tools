@@ -213,8 +213,8 @@ A thin strip below the main plot showing the full capture history.
   it asks first if the buffer holds samples you haven't exported
 - **Export…** button — saves the recording as a CSV, named after the meter,
   the mode it stayed in and the recording's start time; the arrow beside it
-  offers a replay file instead, which [`--replay`](#command-line-options)
-  plays back
+  offers JSON instead, or a replay file that
+  [`--replay`](#command-line-options) plays back
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values
@@ -232,7 +232,8 @@ timestamp,mode,value,unit,range,flags
 Meters that report sub-values add `auxN_label,auxN_value,auxN_unit` columns,
 and a software [scale](#scale) adds one more such group holding the meter's
 own **Raw** reading. The column layout is the same as `dmm-cli read`'s and
-is described in the [CLI reference](cli-reference.md#dmm-cli-read).
+is described in the [CLI reference](cli-reference.md#dmm-cli-read), as is the
+JSON export's one-object-per-line shape.
 
 ## Specifications
 

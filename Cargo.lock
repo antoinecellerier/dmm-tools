@@ -1033,6 +1033,7 @@ version = "0.7.0-dev"
 dependencies = [
  "chrono",
  "directories",
+ "dmm-lib",
  "serde",
  "serde_json",
 ]

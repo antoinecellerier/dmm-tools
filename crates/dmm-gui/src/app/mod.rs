@@ -171,6 +171,11 @@ struct CaptureLayout {
     /// `None` for the mock, whose readings are synthesised rather than decoded
     /// from frames — there is nothing to play back.
     device_id: Option<&'static str>,
+    /// Whether that meter's protocol was short of verified, for the JSON
+    /// export's `experimental` field. Taken alongside `device` and for the
+    /// same reason: disconnecting clears the connection's stability, so read
+    /// at export time it would mark an unplugged UT181A's readings verified.
+    experimental: bool,
     /// Sub-value slots the connected meter family can report, from its
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.

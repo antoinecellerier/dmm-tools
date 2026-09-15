@@ -85,6 +85,7 @@ impl App {
                 .active_device()
                 .filter(|d| d.requires_hardware)
                 .map(|d| d.id);
+            self.capture_layout.experimental = !self.connection.stability.is_verified();
             self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
             // after the meter's — see `extra_slots`.
@@ -223,8 +224,8 @@ impl App {
     }
 
     /// The Export… split button: the label saves a CSV in one click, the
-    /// arrow beside it drops a menu that also offers a replay file. The
-    /// format is settled here, before the save dialog opens — see
+    /// arrow beside it drops a menu that also offers JSON and a replay file.
+    /// The format is settled here, before the save dialog opens — see
     /// `ExportFormat` for why the dialog cannot be the one to ask.
     fn show_export_button(&mut self, ui: &mut Ui) {
         ui.scope(|ui| {
@@ -252,7 +253,7 @@ impl App {
                         ..radius
                     }),
                 )
-                .on_hover_text("Save the recording as a CSV or replay file")
+                .on_hover_text("Save the recording as a CSV, JSON or replay file")
                 .a11y_label("Export file type");
             self.show_export_menu(ui, &arrow);
         });
@@ -304,6 +305,12 @@ impl App {
             if was_open && csv.clicked() {
                 picked = Some(ExportFormat::Csv);
             }
+            let json = ui
+                .button("JSON\u{2026}")
+                .on_hover_text("One object per line, as dmm-cli read --format json prints");
+            if was_open && json.clicked() {
+                picked = Some(ExportFormat::Json);
+            }
             let replay = ui
                 .add_enabled(replay_possible, egui::Button::new("Replay\u{2026}"))
                 .on_hover_text("A file dmm-gui --replay plays back as the meter")
@@ -314,10 +321,11 @@ impl App {
             // Menu entries have no frame, so egui's focus styling is a fill
             // too faint to find; ring the focused one.
             crate::a11y::paint_focus_ring(ui, &csv);
+            crate::a11y::paint_focus_ring(ui, &json);
             crate::a11y::paint_focus_ring(ui, &replay);
             // A disabled entry cannot take the focus, so it is not a stop
             // for the arrows either: Down would strand the focus on it.
-            let entries: Vec<_> = [csv, replay]
+            let entries: Vec<_> = [csv, json, replay]
                 .into_iter()
                 .filter(|entry| entry.enabled())
                 .collect();
@@ -557,8 +565,9 @@ mod tests {
     }
 
     /// The menu's keyboard contract — the readout lists' — end to end:
-    /// focus lands on CSV… as the arrow opens it, Down moves it to Replay…,
-    /// and Esc closes the menu with the focus back on the arrow.
+    /// focus lands on CSV… as the arrow opens it, Down walks it through
+    /// JSON… to Replay…, and Esc closes the menu with the focus back on the
+    /// arrow.
     #[test]
     fn the_export_menu_is_keyboard_reachable() {
         let mut run = MenuRun::new();
@@ -570,11 +579,19 @@ mod tests {
         let csv = run.focused_rect().expect("the first entry takes the focus");
         assert!(csv.top() >= arrow.bottom(), "focus is in the menu: {csv:?}");
 
-        run.key(Key::ArrowDown);
-        let replay = run
-            .focused_rect()
-            .expect("Down keeps the focus in the menu");
-        assert!(replay.top() >= csv.bottom(), "Down moved to the next entry");
+        let mut above = csv;
+        for entry in ["JSON\u{2026}", "Replay\u{2026}"] {
+            run.key(Key::ArrowDown);
+            let focused = run
+                .focused_rect()
+                .expect("Down keeps the focus in the menu");
+            assert!(focused.top() >= above.bottom(), "Down moved to {entry}");
+            above = focused;
+        }
+        // And back up the way it came.
+        run.key(Key::ArrowUp);
+        let back_up = run.focused_rect().expect("Up keeps the focus in the menu");
+        assert!(back_up.bottom() <= above.top(), "Up moved to JSON\u{2026}");
 
         run.key(Key::Escape);
         let back = run.focused_rect().expect("Esc leaves the focus somewhere");
@@ -615,8 +632,8 @@ mod tests {
         );
     }
 
-    /// With no wire format to write, Replay… is disabled and Down stays on
-    /// CSV… rather than stranding the focus on an entry that cannot take it.
+    /// With no wire format to write, Replay… is disabled and Down stops at
+    /// JSON… rather than stranding the focus on an entry that cannot take it.
     #[test]
     fn down_skips_a_disabled_entry() {
         let mut run = MenuRun::new();
@@ -626,12 +643,15 @@ mod tests {
         let arrow = run.node_rect("Export file type");
 
         run.click(arrow.center());
-        let csv = run.focused_rect().expect("the first entry takes the focus");
+        run.key(Key::ArrowDown);
+        let json = run
+            .focused_rect()
+            .expect("Down keeps the focus in the menu");
         run.key(Key::ArrowDown);
         let after = run
             .focused_rect()
             .expect("Down keeps the focus in the menu");
-        assert_eq!(after, csv, "Down stayed on CSV…");
+        assert_eq!(after, json, "Down stayed on JSON…");
     }
 
     /// `Fonts::has_glyph` is a false negative for the icon font — see

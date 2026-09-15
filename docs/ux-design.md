@@ -226,7 +226,7 @@ Three components stacked vertically:
 ### Recording Panel
 
 - Record/Stop toggle button
-- Export… split button (file dialog on a separate thread — no UI freeze; the label saves a CSV, the arrow's menu picks CSV or replay: the format is settled before the dialog opens because rfd returns the path but not the file type picked, and the GTK chooser keeps the name's extension when its filter changes)
+- Export… split button (file dialog on a separate thread — no UI freeze; the label saves a CSV, the arrow's menu picks CSV, JSON or replay: the format is settled before the dialog opens because rfd returns the path but not the file type picked, and the GTK chooser keeps the name's extension when its filter changes)
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand
 - Scrollable sample log showing recent samples (timestamp, value, unit, flags, and any sub-values) in monospace. Auto-scrolls to bottom, caps at last 500 entries.

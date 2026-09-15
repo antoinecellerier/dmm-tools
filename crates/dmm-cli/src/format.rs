@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::export::CsvLayout;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::Measurement;
 use std::io::Write;
 use std::time::Instant;
 
@@ -69,8 +69,8 @@ impl Output {
 
     /// What opens the file, for the formats that have a header. `model_name`
     /// is the meter's, as the CSV comment and the JSON metadata name it.
-    pub fn header(&self, model_name: &str) -> std::io::Result<Option<String>> {
-        Ok(match self {
+    pub fn header(&self, model_name: &str) -> Option<String> {
+        match self {
             Self::Text => None,
             Self::Csv(layout) => Some(format!(
                 "{}\n{}\n",
@@ -79,11 +79,10 @@ impl Output {
             )),
             Self::Json { .. } => Some(format!(
                 "{}\n",
-                serde_json::to_string(&serde_json::json!({"_metadata":{"device": model_name}}))
-                    .map_err(std::io::Error::other)?
+                dmm_settings::export::metadata_line(model_name)
             )),
             Self::Replay { header, .. } => Some(header.clone()),
-        })
+        }
     }
 
     /// Write one reading.
@@ -180,6 +179,8 @@ fn format_csv(
     wtr.flush()
 }
 
+/// One reading as a JSON object, through the builder the GUI's JSON export
+/// also calls — the two cannot drift, because there is only one of them.
 fn format_json(
     w: &mut dyn Write,
     m: &Measurement,
@@ -187,65 +188,20 @@ fn format_json(
     experimental: bool,
     integral: Option<(f64, &str)>,
 ) -> std::io::Result<()> {
-    let value = match &m.value {
-        MeasuredValue::Normal(v) => serde_json::json!(v),
-        MeasuredValue::Overload => serde_json::json!("OL"),
-        MeasuredValue::NcvLevel(l) => serde_json::json!({"ncv_level": l}),
-    };
-    // Built from StatusFlags::as_pairs rather than a hand-written list: the
-    // old list had drifted and was missing `loz` and `void`, so a VC-890
-    // reading the meter had marked invalid was indistinguishable from a good
-    // one in JSON — while the text and CSV formats reported it.
-    let flags: serde_json::Map<String, serde_json::Value> = m
-        .flags
-        .as_pairs()
-        .into_iter()
-        .map(|(name, set)| (name.to_string(), serde_json::json!(set)))
-        .collect();
-    let mut obj = serde_json::json!({
-        "timestamp": timestamp_rfc3339(m, wall_clock),
-        "mode": m.mode,
-        "value": value,
-        "unit": m.unit,
-        "range": m.range_label,
-        "display_raw": m.display_raw,
-        "progress": m.progress,
-        "experimental": experimental,
-        "flags": flags,
-    });
-    // Omitted entirely when there are none, so output for the families that
-    // never produce sub-values is unchanged.
-    if !m.aux_values.is_empty() {
-        obj["aux"] = serde_json::json!(
-            m.aux_values
-                .iter()
-                .map(|aux| {
-                    let unit = aux.unit_or(&m.unit);
-                    serde_json::json!({
-                        "label": aux.label,
-                        "value": aux.value_str(),
-                        "unit": unit,
-                        "elapsed_secs": aux.elapsed_secs,
-                    })
-                })
-                .collect::<Vec<_>>()
-        );
-    }
-    if let Some((val, unit)) = integral {
-        obj["integral"] = serde_json::json!(val);
-        obj["integral_unit"] = serde_json::json!(unit);
-    }
-    writeln!(
-        w,
-        "{}",
-        serde_json::to_string(&obj).map_err(std::io::Error::other)?
-    )
+    let obj = dmm_settings::export::measurement_json(
+        m,
+        &timestamp_rfc3339(m, wall_clock),
+        experimental,
+        integral,
+    );
+    writeln!(w, "{obj}")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::MeasuredValue;
 
     /// One reading, as `output` writes it.
     fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
@@ -658,7 +614,7 @@ mod tests {
         });
 
         let mut file = Vec::new();
-        let header = output.header("UNI-T UT61E+").unwrap().expect("a header");
+        let header = output.header("UNI-T UT61E+").expect("a header");
         file.extend_from_slice(header.as_bytes());
         output
             .write(&mut file, &m, &WallClock::new(), None)

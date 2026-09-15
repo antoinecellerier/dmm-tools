@@ -107,7 +107,7 @@ by `"auto"` — a `Fingerprint` the entry points at; nothing in `detect.rs`, zer
 
 ### dmm-settings
 
-Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` + `chrono` only; no UI, no device, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location), `SharedSettings::load_if_exists()` for reading the file, `resolve_device_family()` — the `--device` flag → `device_family` → caller's default precedence both binaries apply, returning a `DeviceSource` so the CLI can print its fallback notice — and `write_atomic()`, the `.tmp` + fsync + rename helper both binaries use to persist user data (settings, capture reports, CSV exports) without risking a torn file. `export::default_name()` is the same idea for what the two write out: the `measurements-<meter>-<mode>-<start>.<ext>` name the GUI's Export… dialog opens on and `dmm-cli read -o` (given no file name) writes to. The fallback is passed into `resolve_device_family()` rather than looked up — a registry id, or `AUTO_DEVICE_ID` to let detection settle it — keeping the crate free of a `dmm-lib` dependency.
+Tiny shared crate holding the `SharedSettings` struct — currently just one field, `device_family`, but the natural home for anything the CLI and GUI both need to agree on. Depends on `serde` + `serde_json` + `directories` + `chrono` + `dmm-lib` (for the `Measurement` its JSON builder reads); no UI, no transport, no hardware code. Owns `config_path()` (the canonical `~/.config/dmm-tools/settings.json` location), `SharedSettings::load_if_exists()` for reading the file, `resolve_device_family()` — the `--device` flag → `device_family` → caller's default precedence both binaries apply, returning a `DeviceSource` so the CLI can print its fallback notice — and `write_atomic()`, the `.tmp` + fsync + rename helper both binaries use to persist user data (settings, capture reports, CSV exports) without risking a torn file. The `export` module is the same idea for what the two write out: `default_name()` is the `measurements-<meter>-<mode>-<start>.<ext>` name the GUI's Export… dialog opens on and `dmm-cli read -o` (given no file name) writes to, and `metadata_line()` + `measurement_json()` are the JSON both the GUI's export and `dmm-cli read --format json` emit — one builder, so a field added to a reading reaches both binaries at once. The fallback is passed into `resolve_device_family()` rather than looked up — a registry id, or `AUTO_DEVICE_ID` to let detection settle it — so the settings half of the crate does not reach into the registry.
 
 The GUI's full `Settings` struct includes `SharedSettings` via `#[serde(flatten)]` so the on-disk JSON stays flat (`device_family` at the top level alongside `theme`, `show_graph`, etc.). The CLI deserializes the same file directly into `SharedSettings`, silently ignoring any GUI-only fields. Because both sides reference exactly one Rust type for the shared fields, renaming or retyping `device_family` breaks both compilations simultaneously — the contract is compile-enforced.
 
@@ -172,14 +172,14 @@ methods to it, so no panel owns state of its own.
 | `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |
 | `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
 | `app/recording_panel.rs` | Record/Export row, sample log, discard prompt, and the graph/recording split |
-| `app/export.rs` | CSV export: rendering the buffer, the save dialog and write off the UI thread, and the result toast |
+| `app/export.rs` | Export: which format the menu picked, the save dialog and write off the UI thread, and the result toast |
 | `app/transform_ui.rs` | The **Scale** row and its editor for the software transform |
 | `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The "What's New" release-notes viewport |
 | `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
 | `display.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
-| `recording.rs` | The bounded sample buffer and its CSV rendering |
+| `recording.rs` | The bounded sample buffer and its CSV, JSON and replay rendering |
 | `settings.rs` | Persisted settings and the colour presets |
 | `specs.rs` | Per-range specification rendering |
 | `theme.rs` | Theme colour tables (WCAG-checked in both modes) |

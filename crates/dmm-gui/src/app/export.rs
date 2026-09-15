@@ -1,6 +1,6 @@
-//! Export: rendering the recording buffer as a CSV or a replay file, running
-//! the save dialog and the write off the UI thread, and folding the outcome
-//! back into a toast.
+//! Export: rendering the recording buffer as a CSV, a JSON document or a
+//! replay file, running the save dialog and the write off the UI thread, and
+//! folding the outcome back into a toast.
 
 use chrono::{DateTime, Local};
 use dmm_lib::export::CsvLayout;
@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use super::App;
-use crate::recording::{Sample, render_csv, render_replay};
+use crate::recording::{Sample, render_csv, render_json, render_replay};
 
 /// What the CSV's `# device:` comment says when nothing ever identified the
 /// meter — a recording toggled on under Auto-detect before one answered.
@@ -31,6 +31,7 @@ pub(super) const NO_WIRE_FORMAT: &str =
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ExportFormat {
     Csv,
+    Json,
     Replay,
 }
 
@@ -39,6 +40,7 @@ impl ExportFormat {
     fn filter(self) -> (&'static str, &'static str) {
         match self {
             Self::Csv => ("CSV", "csv"),
+            Self::Json => ("JSON", "json"),
             Self::Replay => ("Replay", REPLAY_EXTENSION),
         }
     }
@@ -173,6 +175,12 @@ impl App {
                     }
                 }
             }
+            ExportFormat::Json => render_json(
+                &self.recording.samples,
+                device_model,
+                self.capture_layout.experimental,
+            )
+            .into_bytes(),
             ExportFormat::Replay => {
                 let text = self
                     .replay_device_id()
@@ -351,6 +359,11 @@ mod tests {
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"
         );
         assert_eq!(ExportFormat::Csv.filter(), ("CSV", "csv"));
+        assert_eq!(
+            ExportFormat::Json.default_name("UT61E+", Some("DC V"), start),
+            "measurements-UT61E+-DC-V-2026-09-15_14-30-05.json"
+        );
+        assert_eq!(ExportFormat::Json.filter(), ("JSON", "json"));
         assert_eq!(
             ExportFormat::Replay.default_name("UT61E+", Some("DC V"), start),
             "measurements-UT61E+-DC-V-2026-09-15_14-30-05.replay"

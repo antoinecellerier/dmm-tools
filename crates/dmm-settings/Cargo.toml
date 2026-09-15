@@ -6,7 +6,13 @@ license.workspace = true
 description = "Shared settings schema for dmm-cli and dmm-gui (config file format)"
 
 [dependencies]
+dmm-lib = { path = "../dmm-lib" }
 serde.workspace = true
-serde_json.workspace = true
+# The field order of an exported reading is part of what both binaries write,
+# so it must not depend on which of them is in the build.
+serde_json = { workspace = true, features = ["preserve_order"] }
 directories.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+dmm-lib = { path = "../dmm-lib", features = ["test-support"] }

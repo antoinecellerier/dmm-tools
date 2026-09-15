@@ -42,6 +42,30 @@ pub fn render_csv(
     Ok(buf)
 }
 
+/// Render samples as a JSON document: the `_metadata` line naming the meter,
+/// then one object per sample.
+///
+/// Every line comes from [`dmm_settings::export`], which is also what
+/// `dmm-cli read --format json` prints, so a script reading one binary's file
+/// works on the other's. `experimental` marks readings decoded by a protocol
+/// no report has confirmed, as the CLI's does.
+pub(crate) fn render_json(samples: &[Sample], device_model: &str, experimental: bool) -> String {
+    let mut out = dmm_settings::export::metadata_line(device_model);
+    out.push('\n');
+    // A reading with no sub-values runs to roughly 400 bytes; growing from
+    // there beats growing from nothing on a half-million-sample buffer.
+    out.reserve(samples.len() * 400);
+    for s in samples {
+        let ts = s.wall_time.to_rfc3339();
+        out.push_str(
+            &dmm_settings::export::measurement_json(&s.measurement, &ts, experimental, None)
+                .to_string(),
+        );
+        out.push('\n');
+    }
+    out
+}
+
 /// Render samples as a replay file `--replay` can play back, or `None` when
 /// they carry no wire bytes to play.
 ///
@@ -844,5 +868,50 @@ mod tests {
         samples[1].measurement.raw_payload = Vec::new();
         assert!(render_replay(&samples, "ut61eplus", None).is_none());
         assert!(render_replay(&[], "ut61eplus", None).is_none());
+    }
+
+    /// The export and `dmm-cli read --format json` cannot drift, because both
+    /// are these two calls into `dmm_settings::export` — so this checks the
+    /// document the GUI builds around them, not the objects themselves.
+    #[test]
+    fn render_json_is_the_metadata_line_and_one_object_per_sample() {
+        let samples = replay_samples();
+        let text = render_json(&samples[..2], "UNI-T UT61E+", true);
+
+        let mut expected = dmm_settings::export::metadata_line("UNI-T UT61E+");
+        for s in &samples[..2] {
+            expected.push('\n');
+            expected.push_str(
+                &dmm_settings::export::measurement_json(
+                    &s.measurement,
+                    &s.wall_time.to_rfc3339(),
+                    true,
+                    None,
+                )
+                .to_string(),
+            );
+        }
+        expected.push('\n');
+        assert_eq!(text, expected);
+
+        // And every line of it is a JSON object, as a script reading it
+        // line by line expects.
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(lines.len(), 3);
+        for line in lines {
+            let v: serde_json::Value = serde_json::from_str(line).expect("a JSON object per line");
+            assert!(v.is_object(), "{line}");
+        }
+        assert!(lines_hold_the_reading(&text), "{text}");
+    }
+
+    /// The fields a reader of the GUI's JSON would look for, on the line the
+    /// first sample wrote.
+    fn lines_hold_the_reading(text: &str) -> bool {
+        let Some(first) = text.lines().nth(1) else {
+            return false;
+        };
+        let v: serde_json::Value = serde_json::from_str(first).expect("a JSON object");
+        v["mode"] == "DC V" && v["value"] == 1.234 && v["unit"] == "V" && v["experimental"] == true
     }
 }
