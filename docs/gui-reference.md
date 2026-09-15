@@ -214,7 +214,9 @@ A thin strip below the main plot showing the full capture history.
 - **Export…** button — saves the recording as a CSV, named after the meter,
   the mode it stayed in and the recording's start time; the arrow beside it
   offers JSON instead, or a replay file that
-  [`--replay`](#command-line-options) plays back
+  [`--replay`](#command-line-options) plays back — attach one to a bug report
+  about the graph or timing; a parsing problem wants a
+  [`dmm-cli capture`](cli-reference.md#dmm-cli-capture) report
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values

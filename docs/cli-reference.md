@@ -153,6 +153,9 @@ dmm-cli read [OPTIONS]
 CSV output begins with a `# device:` comment line identifying the meter model,
 followed by the column header. JSON output begins with a `_metadata` line
 containing the device model, followed by one measurement object per line.
+Replay output is the meter's frames themselves, for playing a whole session
+back; to document what each mode shows instead, use
+[`capture`](#dmm-cli-capture).
 
 Meters with more than one display (the UT181A's second thermocouple,
 frequency and period, REL, MIN/MAX and Peak; the UT171's frequency) report
@@ -428,7 +431,9 @@ dmm-cli --device ut181a command hold
 
 Raw hex dump mode for protocol debugging. Prints transport info (bridge type and
 version) on startup, then shows decoded fields alongside each parsed measurement,
-with any sub-values on an indented `sub-values:` line.
+with any sub-values on an indented `sub-values:` line. It is a live dump: for
+bytes worth keeping, use [`capture`](#dmm-cli-capture) per mode or
+[`read --format replay`](#dmm-cli-read) for a whole session.
 
 ```
 dmm-cli debug [OPTIONS]
@@ -449,7 +454,8 @@ RUST_LOG=dmm_lib=trace dmm-cli debug --count 0
 
 Guided protocol capture tool for bug reports and verification. Walks you
 through measuring known values in each mode and records the raw protocol data
-to a YAML report ([format](capture-design.md)).
+to a YAML report ([format](capture-design.md)). For a continuous session
+rather than per-mode evidence, use [`read --format replay`](#dmm-cli-read).
 
 ```
 dmm-cli capture [OPTIONS]
