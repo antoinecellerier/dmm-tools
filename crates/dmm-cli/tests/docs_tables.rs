@@ -12,20 +12,15 @@
 //! run fails with a diff. This lives in `dmm-cli` because that is the binary
 //! whose `--help` and reference the tables describe.
 
+mod common;
+
+use common::{repo_root, unified_diff};
 use dmm_lib::docs_tables;
 use dmm_lib::protocol::{DeviceFamily, registry};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const START: &str = "<!-- devices:start -->";
 const END: &str = "<!-- devices:end -->";
-
-/// The repository root, from this crate's manifest directory.
-fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("repo root")
-}
 
 /// A doc's full text and the byte range its marked block spans.
 ///
@@ -37,39 +32,6 @@ fn marked_block(relative: &str) -> (PathBuf, String, std::ops::Range<usize>) {
     let start = text.find(START).expect("start marker") + START.len();
     let end = start + text[start..].find(END).expect("end marker");
     (path, text, start..end)
-}
-
-/// A unified diff of the two blocks, trimmed to the lines that differ.
-///
-/// Adding one device changes one row; printing the whole table would bury it.
-fn unified_diff(name: &str, found: &str, wanted: &str) -> String {
-    let found: Vec<&str> = found.lines().collect();
-    let wanted: Vec<&str> = wanted.lines().collect();
-    let head = found
-        .iter()
-        .zip(&wanted)
-        .take_while(|(a, b)| a == b)
-        .count();
-    let tail = found[head..]
-        .iter()
-        .rev()
-        .zip(wanted[head..].iter().rev())
-        .take_while(|(a, b)| a == b)
-        .count();
-    let mut diff = format!(
-        "--- {name} (in the file)\n+++ {name} (from the registry)\n@@ -{},{} +{},{} @@\n",
-        head + 1,
-        found.len() - head - tail,
-        head + 1,
-        wanted.len() - head - tail
-    );
-    for line in &found[head..found.len() - tail] {
-        diff.push_str(&format!("-{line}\n"));
-    }
-    for line in &wanted[head..wanted.len() - tail] {
-        diff.push_str(&format!("+{line}\n"));
-    }
-    diff
 }
 
 /// Each hardware protocol family as `(family_name, model display names)`, in
@@ -111,7 +73,7 @@ fn cli_reference_device_table_matches_the_registry() {
     }
     panic!(
         "{relative} is out of date with the device registry:\n\n{}\nrun `UPDATE_DOCS=1 cargo test -p dmm-cli` to regenerate",
-        unified_diff(relative, &text[block], &wanted)
+        unified_diff(relative, &text[block], &wanted, "from the registry")
     );
 }
 

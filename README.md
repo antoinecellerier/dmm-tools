@@ -51,16 +51,22 @@ $ dmm-cli read --format json --count 1
 Send remote commands, or switch the meter's mode, range, HOLD, REL, MIN/MAX and
 Peak without touching it:
 
+<!-- snippet via=mock:acv
+dmm-cli command hold
+dmm-cli set mode "AC V Hz"
+dmm-cli set range 220V
+-->
 ```
 $ dmm-cli command hold
 Sent hold
 
-$ dmm-cli set mode "AC+DC V"
-Meter now in AC+DC V
+$ dmm-cli set mode "AC V Hz"
+Meter now in AC V Hz
 
-$ dmm-cli set range 22V
-Meter now in 22V (manual range)
+$ dmm-cli set range 220V
+Meter now in 220V (manual range)
 ```
+<!-- /snippet -->
 
 The meter on the cable is detected automatically; `--device` pins a model:
 

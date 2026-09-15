@@ -130,6 +130,18 @@ hand, or the test fails with a diff. The one in `README.md` is hand-written on
 purpose — the test only checks that every protocol family and every
 verification issue still appears in it.
 
+## Doc snippets
+
+The command-output blocks in `README.md` and `docs/cli-reference.md` sit
+between `<!-- snippet via=… -->` and `<!-- /snippet -->`, with the commands
+themselves in the opening marker; a `dmm-cli` test runs each one and compares
+what it prints with the block. `via=mock[:<mode>]` runs the command against the
+mock device and `via=<name>.replay` against `assets/replays/<name>.replay`, so
+a snippet that shows a meter's readings needs its recording committed there
+first. The block shows the command as a user would type it, without either
+flag. A plain `cargo test -p dmm-cli` fails with a diff;
+`UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites it.
+
 ## Shell Completions
 
 Generate completions for your shell:

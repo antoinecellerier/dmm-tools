@@ -164,12 +164,18 @@ left empty when a reading uses fewer, so every row lines up. Single-display
 meters keep the six base columns. With `--integrate`, the `integral` columns
 come before the aux groups.
 
+<!-- snippet via=ut181a-vac-hz.replay
+dmm-cli read --format csv --count 1
+-->
 ```
+$ dmm-cli read --format csv --count 1
 # device: UNI-T UT181A
 timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label,aux2_value,aux2_unit,aux3_label,aux3_value,aux3_unit,aux4_label,aux4_value,aux4_unit
-2026-09-02T09:33:56.123+02:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
-2026-09-02T09:34:10.456+02:00,°C,25.4,°C,,AUTO,T2,24.6,°C,,,,,,,,,
+2026-09-02T00:00:00+00:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
+
+--- 1 samples | Min: 239.2200 VAC | Max: 239.2200 VAC | Avg: 239.2200 VAC
 ```
+<!-- /snippet -->
 
 When the session ends, a summary line (sample count, min, max, average, each
 with its unit) is printed to stderr. When `--integrate` is active, the total
@@ -247,32 +253,51 @@ A setting with no choice from the current position (Peak on a meter without
 it, a dial position with one function) is left out of the whole-meter listing;
 asked for alone, it prints a note and exits 0.
 
+<!-- snippet via=mock:acv
+dmm-cli get
+-->
 ```
 $ dmm-cli get
-Settings for UT61E+ (DC V):
-  mode   * DC V  AC+DC V
-  range  * Auto  2.2V  22V  220V  1000V  (auto-ranging in 22V)
+Settings for Mock UT61E+ (AC V):
+  mode    * AC V  AC V Hz
+  range   * Auto  2.2V  22V  220V  1000V  (auto-ranging in 220V)
+  hold    * off   on
+  rel     * off   on
+  minmax  * off   MAX  MIN
+  peak    * off   P-MAX  P-MIN
 
-Tip: switch one by name, e.g. dmm-cli set mode "ac+dc"
+Tip: switch one by name, e.g. dmm-cli set mode hz
 ```
+<!-- /snippet -->
 
 `--format json` prints one object per invocation. `get <SETTING>` gives one
 block; `get` alone nests one such block per setting under `settings`.
 `current` is `null` when the meter sits on none of the listed values.
 
-```json
+<!-- snippet via=mock:acv
+dmm-cli get mode --format json
+-->
+```
+$ dmm-cli get mode --format json
 {
-  "device": "UT61E+",
-  "mode": "DC V",
-  "range": "22V",
-  "setting": "range",
-  "current": "Auto",
+  "device": "Mock UT61E+",
+  "mode": "AC V",
+  "range": "220V",
+  "setting": "mode",
+  "current": "AC V",
   "choices": [
-    { "label": "Auto", "current": true },
-    { "label": "2.2V", "current": false }
+    {
+      "label": "AC V",
+      "current": true
+    },
+    {
+      "label": "AC V Hz",
+      "current": false
+    }
   ]
 }
 ```
+<!-- /snippet -->
 
 **Example:**
 
