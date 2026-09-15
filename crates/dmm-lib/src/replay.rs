@@ -363,10 +363,26 @@ impl Protocol for ReplayProtocol {
         // file usable as a steady reading.
         let (due, index) = match self.samples.get(self.next) {
             Some((offset, _)) => (*offset, self.next),
-            None => (self.next_due, self.samples.len().saturating_sub(1)),
+            None => {
+                // Repeats already past are dropped as the recorded samples
+                // are, so a caller polling slower than the cadence gets the
+                // newest one rather than every one it missed. Along the grid
+                // the cadence lays down, which keeps the timestamps the same
+                // whenever the poll comes.
+                while self.next_due.saturating_add(self.cadence) <= now {
+                    self.next_due = self.next_due.saturating_add(self.cadence);
+                }
+                (self.next_due, self.samples.len().saturating_sub(1))
+            }
         };
         self.wait_until(due, now)?;
 
+        // Past the sample before it is parsed: a frame the family refuses is
+        // skipped, the way a corrupt frame off the wire is. Leaving `next` on
+        // it would hand the same bytes to the next poll, as fast as the caller
+        // asks — and for ever, if it is the last frame in the file.
+        self.next = self.next.saturating_add(1);
+        self.next_due = due.saturating_add(self.cadence);
         let Some((_, payload)) = self.samples.get(index) else {
             return Err(Error::Replay("no samples".to_string()));
         };
@@ -374,8 +390,6 @@ impl Protocol for ReplayProtocol {
         // The sample's own session time, not the instant the sleep ended:
         // an export of a replay is the recording's timestamps, to the digit.
         m.timestamp = self.start.checked_add(due).unwrap_or(self.start);
-        self.next = self.next.saturating_add(1);
-        self.next_due = due.saturating_add(self.cadence);
         Ok(m)
     }
 
@@ -630,6 +644,53 @@ mod tests {
                 "hold {step}"
             );
         }
+    }
+
+    /// A caller polling slower than the cadence — a GUI sample interval above
+    /// the file's, or a session resumed after a pause — is handed the newest
+    /// repeat, not the run of them it was away for.
+    #[test]
+    fn a_late_poll_past_the_end_gets_one_repeat_at_the_newest_grid_point() {
+        let (mut dmm, clock, start) = open_manual();
+        for _ in 0..3 {
+            dmm.request_measurement().expect("a recorded frame");
+        }
+        // The file's own 200 ms cadence, ten repeats of it missed.
+        let cadence = Duration::from_millis(200);
+        clock.advance(cadence * 10);
+
+        let m = dmm.request_measurement().expect("the held frame");
+        assert_eq!(m.timestamp, start + Duration::from_millis(2300));
+        assert_eq!(clock.now(), m.timestamp, "the newest repeat, no waiting");
+        // And the grid is kept, so the next one is a cadence on.
+        let next = dmm.request_measurement().expect("the next held frame");
+        assert_eq!(next.timestamp, m.timestamp + cadence);
+    }
+
+    /// A frame the family refuses is reported and skipped, as a corrupt frame
+    /// off the wire is. Retrying it meant the next poll failed on the same
+    /// bytes at once — and for ever, had it been the last frame.
+    #[test]
+    fn a_frame_that_will_not_parse_is_reported_once_and_skipped() {
+        let clock = Clock::manual();
+        let start = clock.now();
+        let mut dmm = parsed(&file(&[
+            (0, DCV_BATTERY),
+            (100, "02 30 20"),
+            (200, OHM_82K),
+        ]))
+        .open(clock.clone())
+        .expect("the replay opens");
+        dmm.request_measurement().expect("the first frame");
+
+        let err = dmm
+            .request_measurement()
+            .expect_err("a truncated frame does not parse");
+        assert_eq!(err.kind(), crate::error::ErrorKind::Protocol, "got {err}");
+
+        let m = dmm.request_measurement().expect("the frame after it");
+        assert_eq!(m.value_export_str(), "80.45");
+        assert_eq!(m.timestamp, start + Duration::from_millis(200));
     }
 
     /// A file with nothing to derive a cadence from still plays as a steady
