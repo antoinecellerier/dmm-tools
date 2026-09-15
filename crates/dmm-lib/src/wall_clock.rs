@@ -25,12 +25,22 @@ impl WallClock {
 
     /// Capture the origin pair against a session [`Clock`].
     ///
-    /// The system origin is backdated by the clock's preseed burst: those
-    /// first readings carry session time that is already spent when the
+    /// A clock that carries a wall origin already says what its session zero
+    /// stands for, and that is taken verbatim: a replay's readings export the
+    /// times its recording was made at, whatever the burst.
+    ///
+    /// Otherwise the system origin is backdated by the clock's preseed burst:
+    /// those first readings carry session time that is already spent when the
     /// process starts, so without the backdate a 90 s burst would export 900
     /// readings all stamped with the launch time. On a real clock the burst is
     /// zero and this is [`WallClock::new`].
     pub fn from_clock(clock: &Clock) -> Self {
+        if let Some((instant_origin, system_origin)) = clock.wall_origin() {
+            return Self {
+                instant_origin,
+                system_origin,
+            };
+        }
         let now = SystemTime::now();
         Self {
             instant_origin: clock.now(),
@@ -102,6 +112,23 @@ mod tests {
         assert!(
             skew < Duration::from_secs(1),
             "live reading is {skew:?} old"
+        );
+    }
+
+    /// A replay's session zero *is* the moment its recording was made, so the
+    /// burst that fills its history must not backdate anything on top: a
+    /// reading 60 s in exports 60 s past the recording's own time.
+    #[test]
+    fn a_wall_origin_pins_session_zero_to_it() {
+        let recorded = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let clock = Clock::real().with_preseed(60.0).with_wall_origin(recorded);
+        let (origin, _) = clock.wall_origin().expect("the origin was just pinned");
+
+        let wc = WallClock::from_clock(&clock);
+        assert_eq!(wc.wall_time_for(origin), recorded);
+        assert_eq!(
+            wc.wall_time_for(origin + Duration::from_secs(60)),
+            recorded + Duration::from_secs(60)
         );
     }
 

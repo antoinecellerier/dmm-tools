@@ -16,7 +16,7 @@
 //! make a meter answer sooner.
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 /// Longest burst [`Clock::from_flags`] accepts, in seconds.
 ///
@@ -31,6 +31,11 @@ const MAX_PRESEED_SECS: f64 = 86_400.0;
 #[derive(Clone, Debug)]
 pub struct Clock {
     inner: Inner,
+    /// What wall time this session's zero stands for, once something has
+    /// pinned it (see [`Clock::with_wall_origin`]). Outside the shared
+    /// `Inner` on purpose: it is decided once, before the clones are handed
+    /// out, and unlike the burst there is nothing to spend.
+    wall_origin: Option<(Instant, SystemTime)>,
 }
 
 #[derive(Clone, Debug)]
@@ -67,7 +72,10 @@ struct ScaledState {
 impl Clock {
     /// The wall clock: what every session runs on unless a flag says otherwise.
     pub fn real() -> Self {
-        Self { inner: Inner::Real }
+        Self {
+            inner: Inner::Real,
+            wall_origin: None,
+        }
     }
 
     /// Session time running `factor` times faster than real time.
@@ -87,6 +95,7 @@ impl Clock {
     pub fn manual() -> Self {
         Self {
             inner: Inner::Manual(Arc::new(Mutex::new(Instant::now()))),
+            wall_origin: None,
         }
     }
 
@@ -106,11 +115,35 @@ impl Clock {
             "a manual clock has no burst to hand out"
         );
         let burst = Duration::try_from_secs_f64(secs).unwrap_or(Duration::ZERO);
-        match &self.inner {
+        let preseeded = match &self.inner {
             Inner::Real => Self::scaled_with_burst(1.0, burst),
             Inner::Scaled(s) => Self::scaled_with_burst(s.factor, burst),
-            Inner::Manual(_) => self,
+            Inner::Manual(_) => return self,
+        };
+        // A pinned origin says what session zero means, not how fast time
+        // runs, so it survives being given a burst.
+        Self {
+            wall_origin: self.wall_origin,
+            ..preseeded
         }
+    }
+
+    /// Pin this session's *current* time to the wall time `at`.
+    ///
+    /// A replay's session zero is the moment its recording was made, so a
+    /// [`WallClock`](crate::WallClock) built from this clock maps readings to
+    /// the times the meter produced them rather than to the run playing them
+    /// back. Nothing else pins an origin: a live or mock session's zero is
+    /// simply when it started.
+    pub fn with_wall_origin(mut self, at: SystemTime) -> Self {
+        self.wall_origin = Some((self.now(), at));
+        self
+    }
+
+    /// The pinned origin: the session instant and the wall time it stands
+    /// for. `None` unless [`Clock::with_wall_origin`] set one.
+    pub fn wall_origin(&self) -> Option<(Instant, SystemTime)> {
+        self.wall_origin
     }
 
     /// Build the session clock from the `--mock-clock-*` flag values.
@@ -223,6 +256,7 @@ impl Clock {
             1.0
         };
         Self {
+            wall_origin: None,
             inner: Inner::Scaled(Arc::new(Scaled {
                 origin: Instant::now(),
                 factor,

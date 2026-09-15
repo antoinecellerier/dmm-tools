@@ -142,11 +142,14 @@ pub fn experimental_warning(model_name: &str, stability: Stability) -> String {
 ///
 /// `--mock-clock-scale` and `--mock-clock-preseed` bend session time, and a
 /// real meter is paced by USB: honouring them there would stamp readings with
-/// instants the meter never produced. Shared so the CLI and the GUI refuse
-/// with the same sentence.
+/// instants the meter never produced. A replay takes them too — its readings
+/// are already recorded, so time can be run through them at any speed. Shared
+/// so the CLI and the GUI refuse with the same sentence. The name predates
+/// the replay and is left alone: both binaries print it by it.
 pub const MOCK_CLOCK_MOCK_ONLY: &str = "--mock-clock-scale and --mock-clock-preseed \
-                                        only apply to the mock device. Re-run with \
-                                        --device mock, or without the clock flags.";
+                                        only apply to the mock device and to a replay. \
+                                        Re-run with --device mock or --replay, or \
+                                        without the clock flags.";
 
 /// What the bus held when an `--adapter` selector matched nothing.
 ///

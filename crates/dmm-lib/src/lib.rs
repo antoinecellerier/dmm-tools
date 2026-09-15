@@ -8,6 +8,7 @@ pub mod flags;
 pub mod measurement;
 pub mod mock;
 pub mod protocol;
+pub mod replay;
 pub mod specs;
 pub mod stats;
 pub mod stream;
@@ -29,9 +30,12 @@ use transport::{Transport, ch9325, ch9329, cp2110};
 pub struct Dmm<T: Transport> {
     transport: T,
     protocol: Box<dyn Protocol>,
-    /// The session's time base. Real unless a mock session was opened with a
-    /// clock of its own; see [`Dmm::clock`].
+    /// The session's time base. Real unless a mock or replay session was
+    /// opened with a clock of its own; see [`Dmm::clock`].
     clock: Clock,
+    /// Whether the protocol stamps its own readings; see
+    /// [`Dmm::with_protocol_timestamps`].
+    protocol_stamps: bool,
 }
 
 impl<T: Transport> Dmm<T> {
@@ -47,15 +51,28 @@ impl<T: Transport> Dmm<T> {
             transport,
             protocol,
             clock: Clock::real(),
+            protocol_stamps: false,
         })
     }
 
     /// Stamp this session's readings with `clock` instead of wall time.
     ///
     /// `pub(crate)` because the only sessions that run on a non-real clock are
-    /// mock ones, opened through [`mock::open_mock_clocked`].
+    /// mock and replay ones, opened through [`mock::open_mock_clocked`] and
+    /// [`replay::Replay::open`].
     pub(crate) fn with_clock(mut self, clock: Clock) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// Keep the timestamp the protocol put on each reading.
+    ///
+    /// `pub(crate)` for [`replay`], the one protocol that knows when its
+    /// readings happened: a recording's samples carry the session time they
+    /// were taken at, and re-stamping them would move each one to whenever
+    /// its playback sleep happened to end.
+    pub(crate) fn with_protocol_timestamps(mut self) -> Self {
+        self.protocol_stamps = true;
         self
     }
 
@@ -85,8 +102,12 @@ impl<T: Transport> Dmm<T> {
         m.mode_spec = self.protocol.mode_spec_info(m.mode_raw);
         // Session time is stamped here and nowhere else: the parsers set
         // `Instant::now()` when they build the measurement, which is the same
-        // thing on a real clock and wrong on any other.
-        m.timestamp = self.clock.now();
+        // thing on a real clock and wrong on any other. The exception is a
+        // replay, whose samples already carry the session time they were
+        // recorded at — so its exports are the recording's own timestamps.
+        if !self.protocol_stamps {
+            m.timestamp = self.clock.now();
+        }
         Ok(m)
     }
 

@@ -33,6 +33,11 @@ pub enum Error {
     #[error("unknown device: {0}")]
     UnknownDevice(String),
 
+    /// A replay file could not be read or makes no sense. The message names
+    /// the offending line, so a hand-edited recording says where it broke.
+    #[error("replay file: {0}")]
+    Replay(String),
+
     #[error("adapter not found: {0}")]
     AdapterNotFound(String),
 
@@ -136,7 +141,8 @@ impl Error {
             Self::UnknownDevice(_)
             | Self::AdapterNotFound(_)
             | Self::UnsupportedCommand(_)
-            | Self::CommandRejected(_) => ErrorKind::Configuration,
+            | Self::CommandRejected(_)
+            | Self::Replay(_) => ErrorKind::Configuration,
         }
     }
 }
@@ -198,6 +204,12 @@ mod tests {
         );
         assert_eq!(
             Error::UnsupportedCommand("bar".into()).kind(),
+            ErrorKind::Configuration
+        );
+        // A bad replay file is a file the user has to fix, not a meter that
+        // might answer the next poll.
+        assert_eq!(
+            Error::Replay("line 3: `ZZ` is not a hex byte".into()).kind(),
             ErrorKind::Configuration
         );
         // A refused command must not look like a transport fault: the GUI
