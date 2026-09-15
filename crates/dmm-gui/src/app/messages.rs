@@ -9,7 +9,7 @@ use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use super::connection::{
     self, DmmMessage, RemoteCommand, ThreadContext, ThreadControl, handle_thread_panic,
@@ -275,6 +275,25 @@ impl App {
         ));
     }
 
+    /// Make this Connect the session's zero, the first time a recording is
+    /// opened.
+    ///
+    /// Playback measures every frame's offset from the origin, so pinning it
+    /// while the arguments were parsed dropped whatever fell due while the
+    /// window and the GPU were starting — and with auto-connect off, a Connect
+    /// past the recording's length found nothing left but the held last frame.
+    /// A later Disconnect/Connect keeps the origin, so the recording resumes
+    /// where the session has got to.
+    fn pin_replay_origin(&mut self, recorded: SystemTime) {
+        if self.clock.wall_origin().is_some() {
+            return;
+        }
+        self.clock = self.clock.clone().with_wall_origin(recorded);
+        // The pair the recording and its exports date their samples by was
+        // captured before there was an origin to take.
+        self.wall_clock = dmm_lib::WallClock::from_clock(&self.clock);
+    }
+
     pub(super) fn connect(&mut self, ctx: &egui::Context) {
         self.disconnect();
 
@@ -294,11 +313,12 @@ impl App {
         let device_entry = self.selected_device();
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
-        if let Some(replay) = self
+        let source = self
             .replay
             .as_ref()
-            .map(|source| Arc::clone(&source.replay))
-        {
+            .map(|source| (Arc::clone(&source.replay), source.recorded));
+        if let Some((replay, recorded)) = source {
+            self.pin_replay_origin(recorded);
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
             let selected = Some(replay.device);
@@ -310,10 +330,11 @@ impl App {
                     run_device_thread(
                         // A replay cannot fail once it is open, so the retry
                         // loop never re-runs this; a manual Disconnect then
-                        // Connect does. The clock's wall origin is pinned for
-                        // the whole session, so re-opening picks the recording
-                        // up where the session has got to instead of starting
-                        // it again. Nothing to detect — the file names it.
+                        // Connect does. The origin the first Connect pinned
+                        // stands for the rest of the session, so re-opening
+                        // picks the recording up where the session has got to
+                        // instead of starting it again. Nothing to detect —
+                        // the file names it.
                         move || replay.open(clock.clone()).map(|dmm| (dmm, None)),
                         ThreadContext {
                             msg_tx,
@@ -652,6 +673,20 @@ impl App {
                         clear_channel = true;
                     }
                 }
+                DmmMessage::NoResponse => {
+                    // A gap in a recording plays back as timeouts and reaches
+                    // this threshold too. It is not a quiet meter: there is no
+                    // device selection to check, no USB mode to switch on, and
+                    // the file carries on by itself once the gap is over.
+                    if self.replay.is_none() {
+                        error!("UI: error: {}", connection::NO_RESPONSE);
+                        self.connection.last_error =
+                            Some(ConnectionIssue::Other(connection::NO_RESPONSE.to_string()));
+                        if self.connection.state == ConnectionState::Disconnected {
+                            clear_channel = true;
+                        }
+                    }
+                }
                 DmmMessage::CommandFailed(msg) => {
                     self.toast = Some((msg, true, Instant::now()));
                 }
@@ -714,6 +749,16 @@ impl App {
 
         // Show waiting indicator before error threshold
         if self.connection.waiting_timeouts > 0 && self.connection.last_error.is_none() {
+            // A stretch of the recording with nothing in it, which no meter
+            // and no cable can be asked about. Said plainly and left there:
+            // the file plays on by itself once the gap is over.
+            if self.replay.is_some() {
+                return Some(notice(
+                    NoticeKind::Waiting,
+                    "No frames in the recording here".to_string(),
+                    String::new(),
+                ));
+            }
             let dots = ".".repeat((self.connection.waiting_timeouts as usize % 4) + 1);
             // Padded to a fixed field: in the big meter this title is measured
             // to fit the window, and a line that grows and shrinks four times
@@ -924,6 +969,82 @@ mod tests {
             "the selected meter's steps belong in the body, got {:?}",
             n.body
         );
+    }
+
+    /// Hand `app` one message from the acquisition thread. The sender is
+    /// still alive while it drains, so the channel is not taken for one whose
+    /// thread has died.
+    fn deliver(app: &mut App, msg: DmmMessage) {
+        let (tx, rx) = mpsc::channel();
+        tx.send(msg).expect("the channel is open");
+        app.connection.rx = Some(rx);
+        app.drain_messages();
+    }
+
+    /// A gap in a recording plays back as timeouts, and they are not a quiet
+    /// meter: nothing is on the cable to select and no USB mode to switch on.
+    /// The gap says what it is, and the help stays away.
+    #[test]
+    fn a_replay_gap_is_not_a_quiet_meter() {
+        let mut app = app("ut61eplus", false);
+        app.replay = Some(crate::ReplaySource::fixture());
+        app.connection.waiting_timeouts = connection::NO_RESPONSE_TIMEOUTS;
+        deliver(&mut app, DmmMessage::NoResponse);
+
+        assert!(app.connection.last_error.is_none(), "no failure on record");
+        let n = app.connection_notice().expect("the gap is still reported");
+        assert_eq!(n.title, "No frames in the recording here");
+        assert!(n.body.is_empty(), "got {:?}", n.body);
+    }
+
+    /// And a meter that really did go quiet still gets the steps it always
+    /// did.
+    #[test]
+    fn a_quiet_meter_still_gets_the_no_response_help() {
+        let mut app = app("ut61eplus", false);
+        app.connection.waiting_timeouts = connection::NO_RESPONSE_TIMEOUTS;
+        deliver(&mut app, DmmMessage::NoResponse);
+
+        let n = app.connection_notice().expect("a quiet meter is a failure");
+        assert_eq!(n.kind, NoticeKind::NoResponse);
+        assert!(
+            n.body.contains("enable data transmission"),
+            "got {:?}",
+            n.body
+        );
+    }
+
+    /// Session zero is the Connect, not the launch: playback measures every
+    /// frame's offset from the origin, so pinning it while the arguments were
+    /// parsed dropped whatever fell due while the window was starting.
+    #[test]
+    fn a_replay_pins_session_zero_at_the_first_connect() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        app.replay = Some(crate::ReplaySource::fixture());
+        let recorded = app.replay.as_ref().expect("the recording").recorded;
+        assert!(
+            app.clock.wall_origin().is_none(),
+            "nothing pinned at launch"
+        );
+
+        // Whatever the window and the GPU spent starting is behind us.
+        let connected_at = Instant::now();
+        app.connect(&egui::Context::default());
+        let (origin, at) = app.clock.wall_origin().expect("the Connect pins it");
+        assert_eq!(at, recorded);
+        assert!(
+            origin >= connected_at,
+            "the recording starts at the Connect"
+        );
+        // The pair the recording and its exports date samples by sees it too.
+        assert_eq!(app.wall_clock.wall_time_for(origin), recorded);
+
+        // A Disconnect/Connect keeps the origin, so the recording resumes
+        // where the session has got to rather than starting again.
+        app.disconnect();
+        app.connect(&egui::Context::default());
+        assert_eq!(app.clock.wall_origin().expect("still pinned").0, origin);
+        app.disconnect();
     }
 
     /// The waiting notice is measured to fit the big meter's window, so its

@@ -1009,6 +1009,7 @@ mod tests {
                 replay: Some(crate::ReplaySource {
                     replay: Arc::new(replay),
                     path: std::path::PathBuf::from("dcv-steps.replay"),
+                    recorded: std::time::SystemTime::UNIX_EPOCH,
                 }),
             },
         );

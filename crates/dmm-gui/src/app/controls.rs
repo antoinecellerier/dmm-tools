@@ -318,6 +318,24 @@ impl App {
         Some(scrolled)
     }
 
+    /// Why the session's meter is not the Device row's to change, when it
+    /// isn't: the note the pinned row carries, saying how to get it back.
+    ///
+    /// A replay's frames come from the file whatever the row names — Connect
+    /// re-opens the recording — and the clock flags bend session time, which
+    /// only the mock can be asked to run on (`main.rs` refuses them beside a
+    /// hardware `--device`), so picking a meter would leave the session timing
+    /// its recording and dating its exports by a clock no meter ever ran on.
+    fn device_row_pin(&self) -> Option<&'static str> {
+        if self.replay.is_some() {
+            Some("(restart without --replay to pick a meter)")
+        } else if !self.clock.is_real() {
+            Some("(restart without the clock flags to pick a meter)")
+        } else {
+            None
+        }
+    }
+
     /// The settings rows, top to bottom. Drawn inside the scroll area that
     /// [`Self::show_settings_panel`] caps, and kept in their own method so
     /// that the rows stay at one indentation level.
@@ -528,12 +546,7 @@ impl App {
         });
 
         ui.horizontal_wrapped(|ui| {
-            // The clock flags bend session time, which only the mock can be
-            // asked to run on: `main.rs` refuses them beside a hardware
-            // `--device`, and picking a meter here would leave the session
-            // timing its recording and dating its exports by a clock no meter
-            // ever ran on. Pin the row instead.
-            let pinned_to_mock = !self.clock.is_real();
+            let pinned = self.device_row_pin();
             let has_override = self.settings.overrides.has_device();
             // What the selection resolves to, not what the file spells: an
             // alias, or an id no entry answers to, would otherwise leave the
@@ -571,15 +584,15 @@ impl App {
             let chips = auto.chain(devices);
             let picked = ui
                 .scope(|ui| {
-                    if pinned_to_mock {
+                    if pinned.is_some() {
                         ui.disable();
                     }
                     chip_row(ui, "Device:", chips)
                 })
                 .inner;
-            if pinned_to_mock {
+            if let Some(note) = pinned {
                 ui.label(
-                    RichText::new("(restart without the clock flags to pick a meter)")
+                    RichText::new(note)
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 );
@@ -1320,6 +1333,29 @@ mod tests {
             last.y0 > first.y1,
             "the Device chips did not reflow: UT61E+ at {first:?}, VC-890 at {last:?}"
         );
+    }
+
+    /// A replay's frames come from the file whatever this row names — Connect
+    /// re-opens the recording — so the row is pinned the way the clock flags
+    /// pin it. Picking a meter used to save the choice and reconnect, and the
+    /// session went on playing the file under the name of another meter.
+    #[test]
+    fn a_replay_pins_the_device_row() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.app.replay = Some(crate::ReplaySource::fixture());
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+
+        let disabled = frame
+            .nodes
+            .iter()
+            .find(|(_, n)| n.label() == Some("UT61E+"))
+            .map(|(_, n)| n.is_disabled())
+            .expect("the Device row is drawn");
+        assert!(disabled, "the chips are still pickable during a replay");
+        // And the row says how to get the choice back.
+        node_bounds(&frame, "(restart without --replay to pick a meter)");
     }
 
     #[test]

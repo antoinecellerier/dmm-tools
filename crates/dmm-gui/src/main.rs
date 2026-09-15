@@ -98,8 +98,8 @@ pub struct CliOverrides {
     pub renderer: Option<eframe::Renderer>,
     pub adapter: Option<String>,
     /// Time base for this session's readings: real unless a `--mock-clock-*`
-    /// flag was given, and pinned to the recording's own start under
-    /// `--replay`.
+    /// flag was given. Under `--replay` the first Connect pins its origin to
+    /// the recording's own start.
     pub clock: dmm_lib::Clock,
     /// The recording this session plays instead of opening a meter.
     pub replay: Option<ReplaySource>,
@@ -113,6 +113,31 @@ pub struct CliOverrides {
 pub struct ReplaySource {
     pub replay: Arc<Replay>,
     pub path: PathBuf,
+    /// Wall time the recording started at, which the first Connect makes this
+    /// session's zero.
+    pub recorded: SystemTime,
+}
+
+#[cfg(test)]
+impl ReplaySource {
+    /// A one-frame UT61E+ recording, for tests that only need the session to
+    /// be a playback.
+    pub(crate) fn fixture() -> Self {
+        Self {
+            replay: Arc::new(
+                Replay::parse(
+                    "# dmm-replay 1\n\
+                     # device: ut61eplus\n\
+                     # recorded: 2026-09-02T10:00:00Z\n\
+                     0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n",
+                )
+                .expect("a well-formed recording"),
+            ),
+            path: PathBuf::from("bench.replay"),
+            // The `# recorded:` line above, as the loader would parse it.
+            recorded: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_788_343_200),
+        }
+    }
 }
 
 /// Load `--replay`'s file, with the wall time its header says the recording
@@ -120,7 +145,7 @@ pub struct ReplaySource {
 ///
 /// A file that will not load is a bad flag value, reported the way a bad
 /// `--device` is: at the command line, before a window exists to show it in.
-fn load_replay(path: PathBuf) -> (ReplaySource, SystemTime) {
+fn load_replay(path: PathBuf) -> ReplaySource {
     let invalid = |message: String| -> ! {
         Args::command()
             .error(clap::error::ErrorKind::InvalidValue, message)
@@ -136,13 +161,11 @@ fn load_replay(path: PathBuf) -> (ReplaySource, SystemTime) {
             replay.recorded
         ))
     });
-    (
-        ReplaySource {
-            replay: Arc::new(replay),
-            path,
-        },
-        recorded.into(),
-    )
+    ReplaySource {
+        replay: Arc::new(replay),
+        path,
+        recorded: recorded.into(),
+    }
 }
 
 /// Resolve the device and the session clock from the flags that decide them.
@@ -263,7 +286,7 @@ fn parse_args() -> CliOverrides {
 
     let (device, clock) = resolve_device_and_clock(
         device,
-        replay.as_ref().map(|(source, _)| source.replay.device.id),
+        replay.as_ref().map(|source| source.replay.device.id),
         mock_mode.is_some(),
         args.mock_clock_scale,
         args.mock_clock_preseed,
@@ -273,14 +296,6 @@ fn parse_args() -> CliOverrides {
             .error(clap::error::ErrorKind::InvalidValue, message)
             .exit()
     });
-
-    // Session zero is when the recording was made, so the recording panel and
-    // the CSV export carry the times the meter produced rather than the times
-    // this playback ran at.
-    let (replay, clock) = match replay {
-        Some((source, recorded)) => (Some(source), clock.with_wall_origin(recorded)),
-        None => (None, clock),
-    };
 
     CliOverrides {
         device,

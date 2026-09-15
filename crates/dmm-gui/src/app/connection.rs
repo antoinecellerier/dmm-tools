@@ -55,6 +55,10 @@ const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
 /// loss of data rather than a quiet meter.
 pub(super) const NO_RESPONSE_TIMEOUTS: u32 = 5;
 
+/// What the UI records as the failure once that threshold is crossed.
+pub(super) const NO_RESPONSE: &str = "No response from meter \u{2014} check device selection and \
+                                      USB mode";
+
 /// How often a paused thread wakes to look for work.
 ///
 /// Nothing is read from the meter while paused, but device commands (HOLD,
@@ -126,9 +130,13 @@ pub(crate) enum DmmMessage {
     /// classifies it by [`ErrorKind`] and by variant, which a message string
     /// can only be string-matched back into.
     Error(dmm_lib::error::Error),
-    /// A failure the GUI itself diagnosed — a panicking thread, or a meter
-    /// that stopped answering. No library error stands behind these.
+    /// A failure the GUI itself diagnosed, such as a panicking thread. No
+    /// library error stands behind these.
     ErrorText(String),
+    /// Nothing has been read for [`NO_RESPONSE_TIMEOUTS`] polls running. Its
+    /// own message rather than an [`DmmMessage::ErrorText`]: a replay's gaps
+    /// come through here too, and they are not a meter to go looking for.
+    NoResponse,
     /// A command the user sent was refused or could not be sent. Shown as a
     /// toast, not as a connection issue: the link is fine and the meter is
     /// still streaming, so neither the help text nor a reconnect applies.
@@ -383,10 +391,7 @@ where
                 let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive));
                 ctx.request_repaint();
                 if consecutive == NO_RESPONSE_TIMEOUTS {
-                    let _ = msg_tx.send(DmmMessage::ErrorText(
-                        "No response from meter \u{2014} check device selection and USB mode"
-                            .to_string(),
-                    ));
+                    let _ = msg_tx.send(DmmMessage::NoResponse);
                     ctx.request_repaint();
                 }
             }
