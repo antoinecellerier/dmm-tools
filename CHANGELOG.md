@@ -16,6 +16,7 @@
 - **Ctrl + wheel zooms the graph, a plain wheel scrolls** — any wheel tick used to zoom the graph and leave live mode; a pinch zooms too.
 - **`Ctrl+O` connects, `Ctrl+W` quits, `F1` opens help, `F11` toggles fullscreen** — the documented `Ctrl+Shift+C` never fired, `Ctrl+W` only closed the help and `?` was the only help key.
 - **macOS shortcuts use `Cmd`, and `Cmd+M` minimises** — the shortcut help said `Ctrl` on every row.
+- **Graph overlays toggle from the keyboard** — `M` mean, `X` min/max, `R` reference values, `T` triggers, `C` cursors.
 - **Sub-values in the reading display and recording log** — a UT181A's second thermocouple, frequency and period, REL reference or MIN/MAX extremes were never shown; screen readers read them too.
 - **Graph plots sub-values** — **Plot:** picks the series; **Show:** overlays same-unit ones such as T2 or a REL reference, dashed.
 - **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.

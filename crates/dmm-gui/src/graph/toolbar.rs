@@ -87,17 +87,24 @@ pub(super) fn overlay_chip_label(label: &str) -> String {
     format!("Show {label} trace")
 }
 
-/// One toolbar toggle chip: a `selectable_label` showing `on`'s state, with
-/// hover text, flipping the flag when clicked.
+/// One toolbar chip: a `selectable_label` showing `on`'s state, with hover
+/// text, reporting whether it was clicked and changing nothing itself.
+///
+/// What the click does is the caller's, so that a chip whose flip carries
+/// side effects can run the same method its keyboard shortcut does.
+fn chip(ui: &mut Ui, on: bool, label: &str, hover: &str) -> bool {
+    ui.selectable_label(on, label)
+        .on_hover_text(hover)
+        .clicked()
+}
+
+/// A [`chip`] over a plain flag, flipped in place when clicked.
 ///
 /// Returns whether it was clicked, so a caller with extra work to do on the
 /// transition can see it — the flag is already flipped by then, so such a
 /// caller tests the *new* state.
 fn toggle_chip(ui: &mut Ui, on: &mut bool, label: &str, hover: &str) -> bool {
-    let clicked = ui
-        .selectable_label(*on, label)
-        .on_hover_text(hover)
-        .clicked();
+    let clicked = chip(ui, *on, label, hover);
     if clicked {
         *on = !*on;
     }
@@ -105,9 +112,16 @@ fn toggle_chip(ui: &mut Ui, on: &mut bool, label: &str, hover: &str) -> bool {
 }
 
 /// One toolbar text entry: a fixed-width single-line edit with hint and hover
-/// text, returning `changed()`. Parsing stays at the call site — each field
-/// accepts a different shape of value.
-fn text_field(ui: &mut Ui, text: &mut String, width: f32, hint: &str, hover: &str) -> bool {
+/// text. Parsing stays at the call site — each field accepts a different
+/// shape of value — and so does the response, which the reference field also
+/// takes the focus from.
+fn text_field(
+    ui: &mut Ui,
+    text: &mut String,
+    width: f32,
+    hint: &str,
+    hover: &str,
+) -> egui::Response {
     let resp = ui.add(
         egui::TextEdit::singleline(text)
             .desired_width(width)
@@ -116,7 +130,7 @@ fn text_field(ui: &mut Ui, text: &mut String, width: f32, hint: &str, hover: &st
     // egui's own focused frame is invisible under a pinned Accent; the ring
     // is the field's only keyboard cue then (`a11y::paint_focus_ring`).
     crate::a11y::paint_focus_ring(ui, &resp);
-    resp.on_hover_text(hover).changed()
+    resp.on_hover_text(hover)
 }
 
 impl Graph {
@@ -209,7 +223,8 @@ impl Graph {
                     field_width,
                     "Y axis minimum",
                     "Lower bound of the fixed Y axis",
-                );
+                )
+                .changed();
                 ui.label(
                     egui::RichText::new("..")
                         .small()
@@ -221,7 +236,8 @@ impl Graph {
                     field_width,
                     "Y axis maximum",
                     "Upper bound of the fixed Y axis",
-                );
+                )
+                .changed();
                 if changed_min && self.y_min.parse() {
                     self.y_user_set = true;
                 }
@@ -261,13 +277,13 @@ impl Graph {
                 ui,
                 &mut self.show_mean,
                 "Mean",
-                "Draw a horizontal line at the mean of visible samples",
+                "Draw a horizontal line at the mean of visible samples (M)",
             );
             toggle_chip(
                 ui,
                 &mut self.show_envelope,
                 "Min/Max",
-                "Draw a shaded band between the rolling min and max",
+                "Draw a shaded band between the rolling min and max (X)",
             );
             if self.show_envelope {
                 let changed = text_field(
@@ -276,7 +292,8 @@ impl Graph {
                     30.0,
                     "Min/Max window, seconds",
                     "Window size (seconds) used to compute the Min/Max envelope",
-                );
+                )
+                .changed();
                 if changed {
                     // A zero or negative window would bucket every sample
                     // together, so it is left as a draft.
@@ -288,40 +305,42 @@ impl Graph {
                         .color(ui.visuals().weak_text_color()),
                 );
             }
-            toggle_chip(
+            if chip(
                 ui,
-                &mut self.show_ref_line,
+                self.show_ref_line,
                 "Ref",
-                "Draw horizontal reference lines at the values in the next field",
-            );
+                "Draw horizontal reference lines at the values in the next field (R)",
+            ) {
+                self.toggle_ref_lines();
+            }
             if self.show_ref_line {
-                let changed = text_field(
+                let resp = text_field(
                     ui,
                     self.ref_lines.text_mut(),
                     80.0,
                     "Reference values",
                     "Reference values, comma- or semicolon-separated (e.g. 3.3, 5, 12)",
                 );
-                if changed {
+                if std::mem::take(&mut self.focus_ref_field) {
+                    resp.request_focus();
+                }
+                if resp.changed() {
                     self.ref_lines.parse();
                 }
                 toggle_chip(
                     ui,
                     &mut self.show_crossings,
                     "Triggers",
-                    "Mark the points where the signal crosses a reference line",
+                    "Mark the points where the signal crosses a reference line (T)",
                 );
             }
-            if toggle_chip(
+            if chip(
                 ui,
-                &mut self.cursors_active,
+                self.cursors_active,
                 "Cursors",
-                "Click the graph to place two cursors and read Δt / Δv / integral",
-            ) && !self.cursors_active
-            {
-                self.cursor_a = None;
-                self.cursor_b = None;
-                self.cursor_next_is_b = false;
+                "Click the graph to place two cursors and read Δt / Δv / integral (C)",
+            ) {
+                self.toggle_cursors();
             }
             if self.cursors_active {
                 if let (Some(ta), Some(tb)) = (self.cursor_a, self.cursor_b) {
@@ -476,6 +495,28 @@ impl Graph {
         }
 
         ui.add_space(6.0);
+    }
+
+    /// Flip the reference lines, taking the caret into the values field when
+    /// they come on: the field is where the lines are actually chosen, and
+    /// on an empty one the chip alone draws nothing.
+    ///
+    /// Shared by the **Ref** chip and its key, as [`Graph::toggle_cursors`]
+    /// is — the two paths would otherwise be free to drift apart.
+    pub(super) fn toggle_ref_lines(&mut self) {
+        self.show_ref_line = !self.show_ref_line;
+        self.focus_ref_field = self.show_ref_line;
+    }
+
+    /// Flip the measurement cursors, dropping any placed cursor when they go
+    /// off so that switching them back on starts a fresh measurement.
+    pub(super) fn toggle_cursors(&mut self) {
+        self.cursors_active = !self.cursors_active;
+        if !self.cursors_active {
+            self.cursor_a = None;
+            self.cursor_b = None;
+            self.cursor_next_is_b = false;
+        }
     }
 
     /// Flip one sub-value trace between drawn and hidden.

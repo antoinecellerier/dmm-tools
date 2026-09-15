@@ -213,6 +213,10 @@ pub struct Graph {
     pub show_crossings: bool,
     /// Values the reference lines are drawn at, as typed and as parsed.
     ref_lines: NumberListField,
+    /// Put the caret in the reference-values field the next time it is drawn.
+    /// Set when the lines are switched on, by the chip or by its key: the
+    /// field appears empty, and nothing is drawn until a value is typed.
+    focus_ref_field: bool,
     /// Measurement cursors: two vertical lines with ΔT/ΔV readout.
     pub cursors_active: bool,
     /// Cursor positions in seconds from origin. None = not yet placed.
@@ -278,6 +282,7 @@ impl Graph {
             show_ref_line: false,
             show_crossings: true,
             ref_lines: NumberListField::default(),
+            focus_ref_field: false,
             cursors_active: false,
             cursor_a: None,
             cursor_b: None,

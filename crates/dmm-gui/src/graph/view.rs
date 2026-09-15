@@ -1,5 +1,7 @@
 //! View state and navigation: which slice of the history the main graph
-//! shows, and the keyboard, pan and zoom gestures that move it.
+//! shows, and the keyboard, pan and zoom gestures that move it. The key
+//! handler also carries the plain keys behind the toolbar's analysis chips,
+//! so that the graph takes its keyboard input in one place.
 
 use eframe::egui::{self, Ui};
 use egui_plot::PlotTransform;
@@ -18,7 +20,8 @@ pub(super) fn pad_range(y_min: f64, y_max: f64) -> (f64, f64) {
 }
 
 impl Graph {
-    /// Handle keyboard shortcuts for graph navigation.
+    /// Handle the graph's keyboard shortcuts: the view keys, and the plain
+    /// keys behind the toolbar's analysis chips.
     ///
     /// Minimap pan keys are NOT handled here — they live in `show_minimap`
     /// instead, gated on `pointer_response.has_focus()`. Doing the focus
@@ -56,6 +59,29 @@ impl Graph {
         }
         if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::End)) {
             self.live = true;
+        }
+
+        // The analysis overlays. Mean and Min/Max are plain flags; the Ref
+        // and Cursors chips do more than flip one, so key and click share
+        // the one method. The toolbar is drawn later in the same frame,
+        // where the chips pick the new state up.
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::M)) {
+            self.show_mean = !self.show_mean;
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::X)) {
+            self.show_envelope = !self.show_envelope;
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::R)) {
+            self.toggle_ref_lines();
+        }
+        // Consumed whether or not it does anything, like the app's own keys:
+        // the Triggers chip exists only while the reference lines do, and
+        // the key is inert exactly where the chip is absent.
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::T)) && self.show_ref_line {
+            self.show_crossings = !self.show_crossings;
+        }
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::C)) {
+            self.toggle_cursors();
         }
     }
 

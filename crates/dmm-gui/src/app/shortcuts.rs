@@ -6,8 +6,9 @@
 //! shortcuts into the help modal's "General" grid, so a binding cannot be
 //! added or retired in one place and forgotten in the other.
 //!
-//! The graph's own keys (`[`, `]`, arrows, Home/End) are handled in
-//! `graph.rs` and documented by their own grid in the modal.
+//! The graph's own keys (`[`, `]`, arrows, Home/End, and the overlay
+//! toggles) are handled in `graph::view` and documented by their own grid in
+//! the modal.
 
 use eframe::egui::{self, Key, Modifiers};
 

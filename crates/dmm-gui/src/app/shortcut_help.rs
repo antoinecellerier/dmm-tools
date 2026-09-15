@@ -194,6 +194,11 @@ impl App {
                                     ("Left / Right", "Scroll view"),
                                     ("Home", "Jump to start"),
                                     ("End", "Jump to live"),
+                                    ("M", "Toggle the mean line"),
+                                    ("X", "Toggle the min/max band"),
+                                    ("R", "Toggle reference lines, and type the values"),
+                                    ("T", "Toggle trigger markers (with Ref on)"),
+                                    ("C", "Toggle cursors"),
                                 ] {
                                     ui.label(RichText::new(key).monospace());
                                     ui.add(egui::Label::new(action).wrap());

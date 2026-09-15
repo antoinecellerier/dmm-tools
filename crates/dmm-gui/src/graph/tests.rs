@@ -2497,3 +2497,126 @@ fn ctrl_wheel_off_the_plot_changes_nothing() {
     );
     assert!(g.live, "left live mode without the pointer over the plot");
 }
+
+// --- Overlay shortcuts -------------------------------------------------
+//
+// Driven through `Graph::show`, the way the app calls it: the key handler
+// runs before the toolbar is drawn, so a chip that appears in the same frame
+// already shows the new state — which is what lets the `R` test read the
+// caret off the field it opens.
+
+/// A key pressed and released within one frame.
+fn key_press(key: egui::Key) -> Vec<egui::Event> {
+    [true, false]
+        .into_iter()
+        .map(|pressed| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        })
+        .collect()
+}
+
+/// One headless frame of the whole graph — toolbar included — with `events`
+/// delivered to it.
+fn graph_frame(g: &mut Graph, ctx: &egui::Context, events: Vec<egui::Event>) {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let mut output = ctx.run_ui(
+        egui::RawInput {
+            screen_rect: Some(gesture_screen()),
+            events,
+            ..Default::default()
+        },
+        |ui| g.show(ui, &tc),
+    );
+    // Nothing here paints, and TexturesDelta panics if it is dropped unapplied.
+    output.textures_delta.clear();
+}
+
+#[test]
+fn m_and_x_toggle_the_mean_and_the_envelope() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    graph_frame(&mut g, &ctx, key_press(egui::Key::M));
+    assert!(g.show_mean, "M did not draw the mean line");
+    graph_frame(&mut g, &ctx, key_press(egui::Key::X));
+    assert!(g.show_envelope, "X did not draw the min/max band");
+    graph_frame(&mut g, &ctx, key_press(egui::Key::M));
+    graph_frame(&mut g, &ctx, key_press(egui::Key::X));
+    assert!(
+        !g.show_mean && !g.show_envelope,
+        "a second press left them on"
+    );
+}
+
+/// The Triggers chip is drawn only while the reference lines are, so its key
+/// has nothing to toggle until they are on.
+#[test]
+fn t_waits_for_the_reference_lines() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    let crossings = g.show_crossings;
+    graph_frame(&mut g, &ctx, key_press(egui::Key::T));
+    assert_eq!(
+        g.show_crossings, crossings,
+        "T moved the triggers with Ref off"
+    );
+    g.show_ref_line = true;
+    graph_frame(&mut g, &ctx, key_press(egui::Key::T));
+    assert_eq!(
+        g.show_crossings, !crossings,
+        "T left the triggers alone with Ref on"
+    );
+}
+
+/// Switching the lines on from the keyboard has to land the caret in the
+/// field their values are typed into — nothing is drawn until one is.
+#[test]
+fn r_opens_the_reference_field_and_takes_the_caret_to_it() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    graph_frame(&mut g, &ctx, key_press(egui::Key::R));
+    assert!(g.show_ref_line, "R did not switch the reference lines on");
+    assert!(
+        !g.focus_ref_field,
+        "the field left the focus request pending"
+    );
+    // The one text entry the toolbar draws here: Y:Fixed and Min/Max are off.
+    assert!(ctx.text_edit_focused(), "the caret is not in a text field");
+}
+
+/// The keys belong to whatever holds the keyboard, so the caret `R` just
+/// placed in the values field types there instead.
+#[test]
+fn a_focused_field_keeps_the_overlay_keys() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    graph_frame(&mut g, &ctx, key_press(egui::Key::R));
+    graph_frame(&mut g, &ctx, key_press(egui::Key::M));
+    assert!(!g.show_mean, "M drew the mean line from inside the field");
+    graph_frame(&mut g, &ctx, key_press(egui::Key::R));
+    assert!(
+        g.show_ref_line,
+        "R switched the lines off from their own field"
+    );
+}
+
+/// Cursors off is the chip's clearing too: a pair left behind would come
+/// back with the next press, measuring between two points the user has
+/// forgotten placing.
+#[test]
+fn c_clears_the_cursors_on_the_way_off() {
+    let ctx = egui::Context::default();
+    let mut g = graph_with_a_minute_of_data();
+    graph_frame(&mut g, &ctx, key_press(egui::Key::C));
+    assert!(g.cursors_active, "C did not switch the cursors on");
+    g.cursor_a = Some(1.0);
+    g.cursor_b = Some(2.0);
+    g.cursor_next_is_b = true;
+    graph_frame(&mut g, &ctx, key_press(egui::Key::C));
+    assert!(!g.cursors_active, "C did not switch the cursors off");
+    assert_eq!((g.cursor_a, g.cursor_b), (None, None), "a cursor survived");
+    assert!(!g.cursor_next_is_b, "the next-click side survived");
+}

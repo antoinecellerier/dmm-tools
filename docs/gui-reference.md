@@ -398,7 +398,7 @@ shows the macOS spelling.
 | `?` / `F1` | Toggle keyboard & mouse help overlay |
 | `Esc` | Close help overlay |
 
-### Graph Navigation
+### Graph
 
 | Shortcut | Action |
 |---|---|
@@ -406,6 +406,11 @@ shows the macOS spelling.
 | `Left` / `Right` | Scroll view (exits live mode) |
 | `Home` | Jump to start of data |
 | `End` | Jump to live mode |
+| `M` | Toggle the mean line |
+| `X` | Toggle the min/max band |
+| `R` | Toggle reference lines, and put the caret in the values field |
+| `T` | Toggle trigger markers (needs reference lines on) |
+| `C` | Toggle cursors |
 
 Graph and `Space` shortcuts are disabled while any widget holds keyboard
 focus — not just text fields but any button reached with `Tab`, since `Space`
