@@ -294,7 +294,47 @@ impl App {
         let device_entry = self.selected_device();
         self.graph.set_sample_interval_ms(sample_interval_ms);
 
-        if device_entry.is_some_and(|d| !d.requires_hardware) {
+        if let Some(replay) = self
+            .replay
+            .as_ref()
+            .map(|source| Arc::clone(&source.replay))
+        {
+            // The file says which meter its frames came from, so that entry is
+            // reported rather than whatever the Settings row currently names.
+            let selected = Some(replay.device);
+            let clock = self.clock.clone();
+            std::thread::spawn(move || {
+                let panic_tx = msg_tx.clone();
+                let panic_ctx = ctx_clone.clone();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run_device_thread(
+                        // A replay cannot fail once it is open, so the retry
+                        // loop never re-runs this; a manual Disconnect then
+                        // Connect does. The clock's wall origin is pinned for
+                        // the whole session, so re-opening picks the recording
+                        // up where the session has got to instead of starting
+                        // it again. Nothing to detect — the file names it.
+                        move || replay.open(clock.clone()).map(|dmm| (dmm, None)),
+                        ThreadContext {
+                            msg_tx,
+                            ctrl_rx,
+                            cmd_rx,
+                            ctx: ctx_clone,
+                            selected,
+                            query_name,
+                            // No floor: the recording's own spacing is the
+                            // cadence, and the protocol sleeps until each
+                            // frame is due rather than returning at once.
+                            sample_interval_ms,
+                            stop_flag,
+                        },
+                    );
+                }));
+                if let Err(panic) = result {
+                    handle_thread_panic(panic, &panic_tx, &panic_ctx);
+                }
+            });
+        } else if device_entry.is_some_and(|d| !d.requires_hardware) {
             let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
                 None
             } else {

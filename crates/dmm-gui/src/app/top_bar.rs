@@ -154,7 +154,13 @@ impl App {
                 let (rect, _) =
                     ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 ui.painter().circle_filled(rect.center(), 5.0, dot_color);
-                ui.label(RichText::new(&status_text).small());
+                let status = ui.label(RichText::new(&status_text).small());
+                // A replayed session is a meter session in every visible way,
+                // which is the point — so the file it is coming from is said
+                // where a human can find it and a screenshot cannot.
+                if let Some(source) = &self.replay {
+                    status.on_hover_text(format!("Replaying {}", source.path.display()));
+                }
 
                 // The EXPERIMENTAL badge names a protocol, so it comes from
                 // the connected one where there is one — under Auto-detect

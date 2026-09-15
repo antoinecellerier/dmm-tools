@@ -130,7 +130,7 @@ cmd_start() {
 
 cmd_run() {
 	require xdotool cargo
-	local root disp pid wid i dev=""
+	local root disp pid wid i dev="" replay=0
 	root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 	[ -f "$root/Cargo.toml" ] || die "no Cargo.toml in $root"
 	local script_dir
@@ -144,11 +144,14 @@ cmd_run() {
 		case "${args[i]}" in
 		--device) dev="${args[i + 1]:-}" ;;
 		--device=*) dev="${args[i]#--device=}" ;;
+		# A recording names its own meter and opens no cable, so it neither
+		# takes the --device mock default nor counts as hardware.
+		--replay | --replay=*) replay=1 ;;
 		esac
 	done
-	if [ -z "$dev" ]; then
+	if [ -z "$dev" ] && [ "$replay" = 0 ]; then
 		args=(--device mock ${args[@]+"${args[@]}"})
-	elif [ "$dev" != mock ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
+	elif [ -n "$dev" ] && [ "$dev" != mock ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		# Real meters need the user's go-ahead (CLAUDE.md); this grant is prompt-free.
 		die "--device $dev would open real hardware; ask the user, then set VERIFY_GUI_ALLOW_HW=1"
 	fi

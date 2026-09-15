@@ -343,6 +343,10 @@ pub struct App {
     /// session age (the recording duration) agree. UI cadence — toasts,
     /// repaint, control-channel waits — stays on real time.
     clock: dmm_lib::Clock,
+    /// The recording this session plays instead of opening a meter, from
+    /// `--replay`. Session-only, like the clock: the meter it names reaches
+    /// the settings as an override, so nothing about a playback is saved.
+    replay: Option<crate::ReplaySource>,
 
     capture_layout: CaptureLayout,
     /// Profile of the selected device, refreshed only when the selection
@@ -379,7 +383,25 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, cli: crate::CliOverrides) -> Self {
         install_text_styles(&cc.egui_ctx);
         cc.egui_ctx.set_fonts(font_definitions());
-        let mut settings = Settings::load();
+        // Asked once, here: the display handle says which backend the window
+        // actually got, where `WAYLAND_DISPLAY` only says which one is on
+        // offer.
+        let on_wayland = cc
+            .display_handle()
+            .is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)));
+        let mut app = Self::from_cli(Settings::load(), cli);
+        app.on_wayland = on_wayland;
+        app
+    }
+
+    /// The session `settings` and the flags that override them describe.
+    /// Separate from [`App::new`] so tests can build one without an eframe
+    /// context.
+    ///
+    /// Every overridden field is recorded in `settings.overrides`, which is
+    /// what [`Settings::save`] puts back before writing: a flag changes this
+    /// session, never the file.
+    fn from_cli(mut settings: Settings, cli: crate::CliOverrides) -> Self {
         if let Some(device) = cli.device {
             settings.overrides.device_family = Some(settings.shared.device_family.clone());
             settings.shared.device_family = device;
@@ -396,14 +418,8 @@ impl App {
             settings.theme = theme;
         }
         settings.overrides.adapter = cli.adapter;
-        // Asked once, here: the display handle says which backend the window
-        // actually got, where `WAYLAND_DISPLAY` only says which one is on
-        // offer.
-        let on_wayland = cc
-            .display_handle()
-            .is_ok_and(|handle| matches!(handle.as_raw(), RawDisplayHandle::Wayland(_)));
         let mut app = Self::from_settings(settings, cli.clock);
-        app.on_wayland = on_wayland;
+        app.replay = cli.replay;
         app
     }
 
@@ -429,6 +445,7 @@ impl App {
             recording,
             wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
+            replay: None,
             capture_layout: CaptureLayout::default(),
             selected_profile: initial_device.map(|d| *(d.new_protocol)().profile()),
             selected_profile_id: initial_device.map_or(registry::AUTO_DEVICE_ID, |d| d.id),
@@ -951,6 +968,52 @@ mod tests {
         let mut app = app("ut181a", "temp2");
         assert!(!app.repin_mock(0x1121));
         assert_eq!(app.settings.mock_mode, "temp2");
+    }
+
+    /// `--replay` runs the session as the meter the recording came from —
+    /// for this session only. The meter the user picked is kept in
+    /// `overrides`, which is what [`Settings::save`] writes back, so a
+    /// playback cannot leave a device behind in the settings file.
+    #[test]
+    fn a_replay_device_never_reaches_the_saved_settings() {
+        let replay = dmm_lib::replay::Replay::parse(
+            "# dmm-replay 1\n\
+             # device: ut61eplus\n\
+             # recorded: 2026-09-16T10:22:31.123+02:00\n\
+             0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30\n",
+        )
+        .expect("a well-formed recording");
+        let mut settings = Settings {
+            // No acquisition thread: this is about the settings only.
+            auto_connect: false,
+            ..Settings::default()
+        };
+        settings.shared.device_family = "mock".to_string();
+
+        let app = App::from_cli(
+            settings,
+            crate::CliOverrides {
+                // What `parse_args` resolves a `--replay` file to.
+                device: Some(replay.device.id.to_string()),
+                mock_mode: None,
+                theme: None,
+                renderer: None,
+                adapter: None,
+                clock: dmm_lib::Clock::real(),
+                replay: Some(crate::ReplaySource {
+                    replay: Arc::new(replay),
+                    path: std::path::PathBuf::from("dcv-steps.replay"),
+                }),
+            },
+        );
+
+        assert_eq!(app.settings.shared.device_family, "ut61eplus");
+        assert_eq!(
+            app.settings.overrides.device_family.as_deref(),
+            Some("mock"),
+            "the saved device is the one Settings::save puts back"
+        );
+        assert!(app.replay.is_some(), "the session plays the recording");
     }
 
     /// A named meter still resolves to its entry, aliases included; `auto`

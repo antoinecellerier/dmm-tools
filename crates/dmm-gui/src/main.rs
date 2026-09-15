@@ -10,6 +10,10 @@ mod theme;
 
 use clap::{CommandFactory, FromArgMatches, Parser};
 use dmm_lib::protocol::registry;
+use dmm_lib::replay::Replay;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::SystemTime;
 
 /// Placeholder string for missing/unavailable data values in the UI.
 pub(crate) const NO_DATA: &str = "---";
@@ -52,6 +56,10 @@ struct Args {
     #[arg(long, value_name = "SERIAL_OR_PATH")]
     adapter: Option<String>,
 
+    /// Play back a dmm-cli --record file instead of connecting to a meter
+    #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode"])]
+    replay: Option<PathBuf>,
+
     /// Run session time at FACTOR times real time (mock only, implies
     /// --device mock). Hidden: a contributor tool for screenshots and
     /// performance runs, documented in docs/development.md.
@@ -90,8 +98,51 @@ pub struct CliOverrides {
     pub renderer: Option<eframe::Renderer>,
     pub adapter: Option<String>,
     /// Time base for this session's readings: real unless a `--mock-clock-*`
-    /// flag was given.
+    /// flag was given, and pinned to the recording's own start under
+    /// `--replay`.
     pub clock: dmm_lib::Clock,
+    /// The recording this session plays instead of opening a meter.
+    pub replay: Option<ReplaySource>,
+}
+
+/// A recording to play back, and the file it came from.
+///
+/// The parsed recording is shared rather than re-read: a Disconnect/Connect
+/// re-opens it. The path is carried alongside because only the file name says
+/// *which* session is on screen, and the recording itself does not know it.
+pub struct ReplaySource {
+    pub replay: Arc<Replay>,
+    pub path: PathBuf,
+}
+
+/// Load `--replay`'s file, with the wall time its header says the recording
+/// started at.
+///
+/// A file that will not load is a bad flag value, reported the way a bad
+/// `--device` is: at the command line, before a window exists to show it in.
+fn load_replay(path: PathBuf) -> (ReplaySource, SystemTime) {
+    let invalid = |message: String| -> ! {
+        Args::command()
+            .error(clap::error::ErrorKind::InvalidValue, message)
+            .exit()
+    };
+    let replay = Replay::load(&path).unwrap_or_else(|e| invalid(e.to_string()));
+    // dmm-lib keeps the header's date as written, having no date library of
+    // its own; turning it into a session origin is this side's job.
+    let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).unwrap_or_else(|e| {
+        invalid(format!(
+            "{}: `# recorded: {}` is not an RFC 3339 date: {e}",
+            path.display(),
+            replay.recorded
+        ))
+    });
+    (
+        ReplaySource {
+            replay: Arc::new(replay),
+            path,
+        },
+        recorded.into(),
+    )
 }
 
 /// Resolve the device and the session clock from the flags that decide them.
@@ -103,9 +154,11 @@ pub struct CliOverrides {
 /// instants a USB-paced meter never produced.
 ///
 /// `device` is the canonical id `--device` resolved to, `None` when the flag
-/// was not given.
+/// was not given. `replay_device` is the meter a `--replay` file names, which
+/// clap has already refused `--device` alongside.
 fn resolve_device_and_clock(
     device: Option<String>,
+    replay_device: Option<&'static str>,
     mock_mode_given: bool,
     scale: Option<f64>,
     preseed: Option<f64>,
@@ -115,22 +168,27 @@ fn resolve_device_and_clock(
 
     // Auto counts as hardware: it names no meter, but the meter it finds is a
     // real one, and bending session time under it would stamp readings with
-    // instants no USB-paced meter produced.
-    let hardware = match device.as_deref().and_then(registry::resolve_selection) {
-        Some(registry::Selection::Auto) => true,
-        Some(registry::Selection::Device(d)) => d.requires_hardware,
-        None => false,
-    };
+    // instants no USB-paced meter produced. A replay names a hardware meter
+    // too, but nothing is on the cable and the file paces itself, so the
+    // clock flags apply to it as they do to the mock.
+    let hardware = replay_device.is_none()
+        && match device.as_deref().and_then(registry::resolve_selection) {
+            Some(registry::Selection::Auto) => true,
+            Some(registry::Selection::Device(d)) => d.requires_hardware,
+            None => false,
+        };
     if !clock.is_real() && hardware {
         return Err(dmm_lib::binary_help::MOCK_CLOCK_MOCK_ONLY.to_string());
     }
 
-    // --mock-mode and either clock flag each imply --device mock, so
-    // `dmm-gui --mock-clock-preseed 90` is a complete invocation.
-    let device = match device {
-        d @ Some(_) => d,
-        None if mock_mode_given || !clock.is_real() => Some("mock".to_string()),
-        None => None,
+    // A replay is the session's device; failing that, --mock-mode and either
+    // clock flag each imply --device mock, so `dmm-gui --mock-clock-preseed
+    // 90` is a complete invocation.
+    let device = match (replay_device, device) {
+        (Some(id), _) => Some(id.to_string()),
+        (None, d @ Some(_)) => d,
+        (None, None) if mock_mode_given || !clock.is_real() => Some("mock".to_string()),
+        (None, None) => None,
     };
     Ok((device, clock))
 }
@@ -201,8 +259,11 @@ fn parse_args() -> CliOverrides {
         }
     });
 
+    let replay = args.replay.map(load_replay);
+
     let (device, clock) = resolve_device_and_clock(
         device,
+        replay.as_ref().map(|(source, _)| source.replay.device.id),
         mock_mode.is_some(),
         args.mock_clock_scale,
         args.mock_clock_preseed,
@@ -213,6 +274,14 @@ fn parse_args() -> CliOverrides {
             .exit()
     });
 
+    // Session zero is when the recording was made, so the recording panel and
+    // the CSV export carry the times the meter produced rather than the times
+    // this playback ran at.
+    let (replay, clock) = match replay {
+        Some((source, recorded)) => (Some(source), clock.with_wall_origin(recorded)),
+        None => (None, clock),
+    };
+
     CliOverrides {
         device,
         mock_mode,
@@ -220,6 +289,7 @@ fn parse_args() -> CliOverrides {
         renderer,
         adapter: args.adapter,
         clock,
+        replay,
     }
 }
 
@@ -380,7 +450,15 @@ mod tests {
         scale: Option<f64>,
         preseed: Option<f64>,
     ) -> Result<(Option<String>, dmm_lib::Clock), String> {
-        resolve_device_and_clock(device.map(str::to_string), false, scale, preseed)
+        resolve_device_and_clock(device.map(str::to_string), None, false, scale, preseed)
+    }
+
+    /// As [`resolve`], for a session playing back a recording of `device`.
+    fn resolve_replay(
+        device: &'static str,
+        preseed: Option<f64>,
+    ) -> Result<(Option<String>, dmm_lib::Clock), String> {
+        resolve_device_and_clock(None, Some(device), false, None, preseed)
     }
 
     #[test]
@@ -436,6 +514,45 @@ mod tests {
         let (device, clock) = resolve(Some("auto"), None, None).expect("no clock flags");
         assert_eq!(device.as_deref(), Some("auto"));
         assert!(clock.is_real());
+    }
+
+    /// A recording is a hardware meter's frames, but no meter is on the cable
+    /// and the file paces its own playback — so the clock flags apply, and a
+    /// preseed can put a whole recording on screen at launch.
+    #[test]
+    fn a_replay_takes_the_clock_flags() {
+        let (device, clock) = resolve_replay("ut61eplus", Some(90.0)).expect("replay");
+        assert_eq!(device.as_deref(), Some("ut61eplus"));
+        assert_eq!(clock.preseed(), std::time::Duration::from_secs(90));
+    }
+
+    /// The file says which meter it was recorded from, so that is the meter
+    /// the session runs as — clap refuses a `--device` that would disagree.
+    #[test]
+    fn a_replay_names_its_own_device() {
+        let (device, clock) = resolve_replay("ut181a", None).expect("replay");
+        assert_eq!(device.as_deref(), Some("ut181a"));
+        assert!(clock.is_real());
+    }
+
+    /// And the refusal is clap's, so it is spelled out before anything opens.
+    #[test]
+    fn a_replay_refuses_a_second_answer_to_which_meter() {
+        for extra in [["--device", "mock"], ["--mock-mode", "dcv"]] {
+            let err = Args::try_parse_from(
+                ["dmm-gui", "--replay", "session.replay"]
+                    .into_iter()
+                    .chain(extra),
+            )
+            // `.err()`, not `expect_err`: `Args` is not `Debug`.
+            .err()
+            .expect("the recording already names the meter");
+            assert_eq!(
+                err.kind(),
+                clap::error::ErrorKind::ArgumentConflict,
+                "{err}"
+            );
+        }
     }
 
     /// The message clap prints has to say which flag was wrong; the value
