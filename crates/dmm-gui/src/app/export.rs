@@ -2,13 +2,14 @@
 //! the save dialog and the write off the UI thread, and folding the outcome
 //! back into a toast.
 
+use chrono::{DateTime, Local};
 use dmm_lib::export::CsvLayout;
 use log::{error, info, warn};
 use std::path::Path;
 use std::time::Instant;
 
 use super::App;
-use crate::recording::{render_csv, render_replay};
+use crate::recording::{Sample, render_csv, render_replay};
 
 /// What the CSV's `# device:` comment says when nothing ever identified the
 /// meter — a recording toggled on under Auto-detect before one answered.
@@ -42,10 +43,44 @@ impl ExportFormat {
         }
     }
 
-    /// The name the dialog opens with.
-    fn default_name(self) -> String {
-        format!("measurements.{}", self.filter().1)
+    /// The name the dialog opens with: the meter, the mode it stayed in and
+    /// the moment the recording started, as
+    /// `measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv`, so a folder of
+    /// exports sorts by meter and by run. A recording that crossed a
+    /// function switch has no one mode and leaves that segment out.
+    fn default_name(self, model: &str, mode: Option<&str>, start: DateTime<Local>) -> String {
+        let mode = mode
+            .map(|m| format!("{}-", file_safe(m)))
+            .unwrap_or_default();
+        format!(
+            "measurements-{}-{mode}{}.{}",
+            file_safe(model),
+            start.format("%Y-%m-%d_%H-%M-%S"),
+            self.filter().1
+        )
     }
+}
+
+/// A meter or mode name as one file-name word: runs of whitespace become a
+/// single `-` and the separators a path could read drop out, so "Mock
+/// UT61E+" exports as `Mock-UT61E+`.
+fn file_safe(name: &str) -> String {
+    name.replace(['/', '\\', ':'], "")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// The mode the whole buffer stayed in, for the file name.
+///
+/// `None` once a recording crossed a function switch: naming that file after
+/// the mode it started in would credit every later reading to it.
+fn single_mode(samples: &[Sample]) -> Option<&str> {
+    let first = samples.first()?.measurement.mode.as_ref();
+    samples
+        .iter()
+        .all(|s| s.measurement.mode == first)
+        .then_some(first)
 }
 
 /// Result of an export, sent from the writer thread to the UI.
@@ -140,6 +175,14 @@ impl App {
         // 500K cap. The rendered file is a fraction of that size, and building
         // it is cheaper than 500K allocations.
         let sample_count = self.recording.samples.len();
+        // Built here rather than in the dialog thread, which holds only the
+        // rendered bytes: the first sample is the recording's start, and the
+        // buffer is known non-empty above.
+        let default_name = format.default_name(
+            device_model,
+            single_mode(&self.recording.samples),
+            self.recording.samples[0].wall_time,
+        );
         let bytes = match format {
             ExportFormat::Csv => {
                 match render_csv(&self.recording.samples, device_model, self.csv_layout()) {
@@ -170,7 +213,7 @@ impl App {
         std::thread::spawn(move || {
             let (label, extension) = format.filter();
             let Some(path) = rfd::FileDialog::new()
-                .set_file_name(format.default_name())
+                .set_file_name(default_name)
                 .add_filter(label, &[extension])
                 .save_file()
             else {
@@ -211,6 +254,7 @@ impl App {
 mod tests {
     use super::*;
     use crate::settings::Settings;
+    use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
     use dmm_lib::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 
@@ -319,10 +363,46 @@ mod tests {
     /// a user who keeps the default gets the file the menu promised.
     #[test]
     fn each_format_names_its_own_file() {
-        assert_eq!(ExportFormat::Csv.default_name(), "measurements.csv");
+        let start = Local
+            .with_ymd_and_hms(2026, 9, 15, 14, 30, 5)
+            .single()
+            .expect("a fixed local timestamp");
+        assert_eq!(
+            ExportFormat::Csv.default_name("UT61E+", Some("DC V"), start),
+            "measurements-UT61E+-DC-V-2026-09-15_14-30-05.csv"
+        );
         assert_eq!(ExportFormat::Csv.filter(), ("CSV", "csv"));
-        assert_eq!(ExportFormat::Replay.default_name(), "measurements.replay");
+        assert_eq!(
+            ExportFormat::Replay.default_name("UT61E+", Some("DC V"), start),
+            "measurements-UT61E+-DC-V-2026-09-15_14-30-05.replay"
+        );
         assert_eq!(ExportFormat::Replay.filter(), ("Replay", "replay"));
+        // A recording with no one mode keeps meter and time, nothing between.
+        assert_eq!(
+            ExportFormat::Csv.default_name("UT61E+", None, start),
+            "measurements-UT61E+-2026-09-15_14-30-05.csv"
+        );
+    }
+
+    /// A model or mode name goes into the file name as one word: the dialog
+    /// opens on a name the user can save as typed, not one carrying a path
+    /// separator.
+    #[test]
+    fn a_name_is_folded_into_one_file_name_word() {
+        assert_eq!(file_safe("Mock UT61E+"), "Mock-UT61E+");
+        assert_eq!(file_safe("UT61E+ / UT61B+"), "UT61E+-UT61B+");
+        assert_eq!(file_safe("DC V"), "DC-V");
+        assert_eq!(file_safe("\u{3a9}"), "\u{3a9}");
+    }
+
+    /// The mode names the file only while the whole recording stayed in it —
+    /// a buffer that crossed a function switch is no one mode's.
+    #[test]
+    fn the_mode_names_the_file_only_while_the_buffer_holds_one() {
+        let mut app = app_holding(0, 0, &[0, 0]);
+        assert_eq!(single_mode(&app.recording.samples), Some("DC V"));
+        app.recording.samples[1].measurement.mode = "AC V".into();
+        assert_eq!(single_mode(&app.recording.samples), None);
     }
 
     /// A transform's appended sub-value gets the trailing group, and comes

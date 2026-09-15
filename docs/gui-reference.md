@@ -211,7 +211,8 @@ A thin strip below the main plot showing the full capture history.
 
 - **Record (●) / Stop (■)** toggle button — starting clears the buffer, so
   it asks first if the buffer holds samples you haven't exported
-- **Export…** button — saves the recording as a CSV; the arrow beside it
+- **Export…** button — saves the recording as a CSV, named after the meter,
+  the mode it stayed in and the recording's start time; the arrow beside it
   offers a replay file instead, which [`--replay`](#command-line-options)
   plays back
 - Sample counter and duration shown while recording
