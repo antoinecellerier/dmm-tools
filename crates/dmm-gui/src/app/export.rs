@@ -1,18 +1,54 @@
-//! CSV export: rendering the recording buffer, running the save dialog and
-//! the write off the UI thread, and folding the outcome back into a toast.
+//! Export: rendering the recording buffer as a CSV or a replay file, running
+//! the save dialog and the write off the UI thread, and folding the outcome
+//! back into a toast.
 
 use dmm_lib::export::CsvLayout;
-use log::{error, info};
+use log::{error, info, warn};
+use std::path::Path;
 use std::time::Instant;
 
 use super::App;
-use crate::recording::render_csv;
+use crate::recording::{render_csv, render_replay};
 
 /// What the CSV's `# device:` comment says when nothing ever identified the
 /// meter — a recording toggled on under Auto-detect before one answered.
 const UNKNOWN_DEVICE: &str = "unknown";
 
-/// Result of a CSV export, sent from the writer thread to the UI.
+/// Extension of a replay file: the dialog's filter and default name for one.
+/// `--replay` reads the file's header, not its name.
+const REPLAY_EXTENSION: &str = "replay";
+
+/// Why a mock recording cannot be written as a replay file. The menu entry
+/// is disabled for the mock, so this only guards the call itself.
+pub(super) const NO_WIRE_FORMAT: &str =
+    "The mock has no wire format to export; record a real meter";
+
+/// Which file the export writes. Settled before the dialog opens — by the
+/// Export… label (a CSV) or the menu on its arrow — because the dialog hands
+/// back the path the user saved and not the file type they picked, and the
+/// GTK chooser keeps the name's extension when its filter changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ExportFormat {
+    Csv,
+    Replay,
+}
+
+impl ExportFormat {
+    /// The dialog's one filter: its label and extension.
+    fn filter(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Csv => ("CSV", "csv"),
+            Self::Replay => ("Replay", REPLAY_EXTENSION),
+        }
+    }
+
+    /// The name the dialog opens with.
+    fn default_name(self) -> String {
+        format!("measurements.{}", self.filter().1)
+    }
+}
+
+/// Result of an export, sent from the writer thread to the UI.
 pub(super) struct ExportOutcome {
     /// Toast text.
     message: String,
@@ -20,6 +56,37 @@ pub(super) struct ExportOutcome {
     /// Samples written, on success. Drives the recording's "saved" mark, so
     /// a buffer that reached a file doesn't prompt before being discarded.
     exported: Option<usize>,
+}
+
+/// Write one export to the path the user chose and say how it went.
+///
+/// Writes a sibling .tmp and renames it into place, so a crash mid-export
+/// can't leave a truncated file at the user-chosen path.
+fn write_export(path: &Path, bytes: &[u8], sample_count: usize) -> ExportOutcome {
+    match dmm_settings::write_atomic(path, bytes) {
+        Ok(()) => {
+            info!("exported {sample_count} samples to {}", path.display());
+            // The file name, not the whole path: its extension names the
+            // format written, which is the part the user needs confirmed.
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string());
+            ExportOutcome {
+                message: format!("Exported {sample_count} samples to {file_name}"),
+                is_error: false,
+                exported: Some(sample_count),
+            }
+        }
+        Err(e) => {
+            error!("export failed: {e}");
+            ExportOutcome {
+                message: format!("Export failed: {e}"),
+                is_error: true,
+                exported: None,
+            }
+        }
+    }
 }
 
 impl App {
@@ -44,7 +111,7 @@ impl App {
         }
     }
 
-    pub(super) fn export_csv(&mut self) {
+    pub(super) fn export_recording(&mut self, format: ExportFormat) {
         if self.recording.samples.is_empty() {
             // Returning silently made the button and Ctrl+E look broken:
             // no file dialog, no message, nothing in the log. Say why.
@@ -70,53 +137,59 @@ impl App {
         // sample buffer instead — which is what this used to do so the dialog
         // and write could run off the UI thread — duplicated every Sample,
         // each with its own heap string, roughly doubling peak memory at the
-        // 500K cap. The rendered CSV is a fraction of that size, and building
+        // 500K cap. The rendered file is a fraction of that size, and building
         // it is cheaper than 500K allocations.
         let sample_count = self.recording.samples.len();
-        let csv_bytes = match render_csv(&self.recording.samples, device_model, self.csv_layout()) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                error!("CSV export failed: {e}");
-                self.toast = Some((format!("Export failed: {e}"), true, Instant::now()));
-                return;
+        let bytes = match format {
+            ExportFormat::Csv => {
+                match render_csv(&self.recording.samples, device_model, self.csv_layout()) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        error!("CSV export failed: {e}");
+                        self.toast = Some((format!("Export failed: {e}"), true, Instant::now()));
+                        return;
+                    }
+                }
+            }
+            ExportFormat::Replay => {
+                let text = self
+                    .replay_device_id()
+                    .and_then(|id| render_replay(&self.recording.samples, id, Some(device_model)));
+                match text {
+                    Some(text) => text.into_bytes(),
+                    None => {
+                        warn!("replay export refused: the buffered samples carry no meter frames");
+                        self.toast = Some((NO_WIRE_FORMAT.to_string(), true, Instant::now()));
+                        return;
+                    }
+                }
             }
         };
 
         let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
         std::thread::spawn(move || {
-            if let Some(path) = rfd::FileDialog::new()
-                .set_file_name("measurements.csv")
-                .add_filter("CSV", &["csv"])
+            let (label, extension) = format.filter();
+            let Some(path) = rfd::FileDialog::new()
+                .set_file_name(format.default_name())
+                .add_filter(label, &[extension])
                 .save_file()
-            {
-                // Writes a sibling .tmp and renames it into place, so a crash
-                // mid-export can't leave a truncated file at the user-chosen
-                // path.
-                match dmm_settings::write_atomic(&path, &csv_bytes) {
-                    Ok(()) => {
-                        info!("exported {sample_count} samples to {}", path.display());
-                        let file_name = path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_else(|| path.display().to_string());
-                        let _ = tx.send(ExportOutcome {
-                            message: format!("Exported {sample_count} samples to {file_name}"),
-                            is_error: false,
-                            exported: Some(sample_count),
-                        });
-                    }
-                    Err(e) => {
-                        error!("CSV export failed: {e}");
-                        let _ = tx.send(ExportOutcome {
-                            message: format!("Export failed: {e}"),
-                            is_error: true,
-                            exported: None,
-                        });
-                    }
-                }
-            }
+            else {
+                return;
+            };
+            let _ = tx.send(write_export(&path, &bytes, sample_count));
         });
         self.export_result_rx = Some(rx);
+    }
+
+    /// The meter whose frames a replay file would carry: the one the
+    /// recording named, else the one selected or detected now, as the CSV's
+    /// provenance falls back. `None` for the mock, which has no wire format.
+    pub(super) fn replay_device_id(&self) -> Option<&'static str> {
+        self.capture_layout.device_id.or_else(|| {
+            self.active_device()
+                .filter(|d| d.requires_hardware)
+                .map(|d| d.id)
+        })
     }
 
     pub(super) fn poll_export_result(&mut self) {
@@ -240,6 +313,16 @@ mod tests {
             rows[3][6..],
             ["sub0", "0", "V", "sub1", "1", "V", "", "", "", "", "", ""]
         );
+    }
+
+    /// Each format opens the dialog on a name and a filter of its own, so
+    /// a user who keeps the default gets the file the menu promised.
+    #[test]
+    fn each_format_names_its_own_file() {
+        assert_eq!(ExportFormat::Csv.default_name(), "measurements.csv");
+        assert_eq!(ExportFormat::Csv.filter(), ("CSV", "csv"));
+        assert_eq!(ExportFormat::Replay.default_name(), "measurements.replay");
+        assert_eq!(ExportFormat::Replay.filter(), ("Replay", "replay"));
     }
 
     /// A transform's appended sub-value gets the trailing group, and comes

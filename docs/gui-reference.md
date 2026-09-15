@@ -211,7 +211,9 @@ A thin strip below the main plot showing the full capture history.
 
 - **Record (●) / Stop (■)** toggle button — starting clears the buffer, so
   it asks first if the buffer holds samples you haven't exported
-- **Export CSV** button — opens a file save dialog
+- **Export…** button — saves the recording as a CSV; the arrow beside it
+  offers a replay file instead, which [`--replay`](#command-line-options)
+  plays back
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values
@@ -388,7 +390,7 @@ shows the macOS spelling.
 | `Ctrl+B` | Cycle big meter mode (off / full / minimal) |
 | `Ctrl+T` | Toggle always on top (not available on Wayland — right-click the title bar instead) |
 | `Ctrl+D` | Toggle window decorations |
-| `Ctrl+E` | Export CSV |
+| `Ctrl+E` | Export CSV… |
 | `F11` (`Ctrl+Cmd+F` on macOS) | Toggle fullscreen |
 | `Cmd+M` (macOS) | Minimise window |
 | `Ctrl+Plus` / `Ctrl+Minus` | Zoom in / out |
@@ -426,7 +428,7 @@ do not modify the persisted `settings.json`.
 | `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
 | `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
-| `--replay <FILE>` | Play back a `dmm-cli read --record` file instead of connecting to a meter. |
+| `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --record` — instead of connecting to a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |
 | `--renderer <RENDERER>` | Graphics renderer: `wgpu` (default) or `glow` (OpenGL, better compatibility on older GPUs). If wgpu fails at startup, glow is tried automatically. |
 | `-V`, `--version` | Print version and exit. |

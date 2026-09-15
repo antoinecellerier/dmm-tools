@@ -255,7 +255,7 @@ impl App {
         let kept = format_sample_count(self.recording.samples.len());
         self.toast = Some((
             format!(
-                "Recording stopped \u{2014} its {kept} samples are kept, Export CSV saves them"
+                "Recording stopped \u{2014} its {kept} samples are kept, Export\u{2026} saves them"
             ),
             true,
             Instant::now(),

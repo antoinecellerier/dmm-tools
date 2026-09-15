@@ -2,10 +2,15 @@
 //! the prompt shown before a new capture would discard unexported samples,
 //! and the drag-resizable split between the graph and the recording panel.
 
-use eframe::egui::{self, RichText, Ui};
+use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 
+use super::export::{ExportFormat, NO_WIRE_FORMAT};
 use super::{App, DEFAULT_RECORDING_HEIGHT};
 use crate::a11y::ResponseA11yExt;
+
+/// The arrow segment of the Export… split button (U+23F7, in egui's icon
+/// font like the `⏵` its submenus use).
+const EXPORT_MENU_ARROW: &str = "\u{23F7}";
 
 /// Smallest height the graph + recording split is squeezed into; below it the
 /// column that holds the split scrolls instead of shrinking it further.
@@ -27,6 +32,9 @@ pub(super) struct RecordingPanel {
     /// for the user to confirm discarding them.
     confirm_discard_open: bool,
     confirm_discard_focus_pending: bool,
+    /// The Export… menu opened this frame; its first entry still has to be
+    /// given the focus — see `show_export_menu`.
+    export_menu_focus_pending: bool,
 }
 
 impl Default for RecordingPanel {
@@ -35,6 +43,7 @@ impl Default for RecordingPanel {
             height: DEFAULT_RECORDING_HEIGHT,
             confirm_discard_open: false,
             confirm_discard_focus_pending: false,
+            export_menu_focus_pending: false,
         }
     }
 }
@@ -70,6 +79,12 @@ impl App {
             // with nothing connected there is no meter to name, and the export
             // falls back to its own placeholder.
             self.capture_layout.device = self.active_device().map(|d| d.display_name);
+            // Only a meter's frames can be replayed, so the mock names no
+            // device here and the export offers no replay file for it.
+            self.capture_layout.device_id = self
+                .active_device()
+                .filter(|d| d.requires_hardware)
+                .map(|d| d.id);
             self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
             // after the meter's — see `extra_slots`.
@@ -78,7 +93,7 @@ impl App {
     }
 
     /// Confirmation shown when starting a recording would discard samples
-    /// that have not been written to a CSV.
+    /// that have not been exported.
     pub(super) fn show_discard_confirmation(&mut self, ctx: &egui::Context) {
         if !self.recording_panel.confirm_discard_open {
             return;
@@ -144,13 +159,7 @@ impl App {
             if ui.button(btn_label).on_hover_text(btn_tooltip).clicked() {
                 self.toggle_recording();
             }
-            if ui
-                .button("Export CSV")
-                .on_hover_text("Save the recording buffer to a CSV file (Ctrl+E)")
-                .clicked()
-            {
-                self.export_csv();
-            }
+            self.show_export_button(ui);
             let count = self.recording.samples.len();
             if self.recording.active {
                 let status = format!(
@@ -210,6 +219,128 @@ impl App {
                         );
                     }
                 });
+        }
+    }
+
+    /// The Export… split button: the label saves a CSV in one click, the
+    /// arrow beside it drops a menu that also offers a replay file. The
+    /// format is settled here, before the save dialog opens — see
+    /// `ExportFormat` for why the dialog cannot be the one to ask.
+    fn show_export_button(&mut self, ui: &mut Ui) {
+        ui.scope(|ui| {
+            // The two segments touch, and only the outer corners are round,
+            // so they read as one button.
+            ui.spacing_mut().item_spacing.x = 0.0;
+            let radius = ui.visuals().widgets.inactive.corner_radius;
+            let main = ui
+                .add(
+                    egui::Button::new("Export\u{2026}").corner_radius(egui::CornerRadius {
+                        ne: 0,
+                        se: 0,
+                        ..radius
+                    }),
+                )
+                .on_hover_text("Save the recording as a CSV file (Ctrl+E)");
+            if main.clicked() {
+                self.export_recording(ExportFormat::Csv);
+            }
+            let arrow = ui
+                .add(
+                    egui::Button::new(EXPORT_MENU_ARROW).corner_radius(egui::CornerRadius {
+                        nw: 0,
+                        sw: 0,
+                        ..radius
+                    }),
+                )
+                .on_hover_text("Save the recording as a CSV or replay file")
+                .a11y_label("Export file type");
+            self.show_export_menu(ui, &arrow);
+        });
+    }
+
+    /// The menu under the Export… arrow. Keyboard handling follows the
+    /// readout lists in `display.rs`: focus lands on the first entry as the
+    /// menu opens, the arrows move it, Enter picks, and Tab or Esc leave
+    /// with the focus back on the arrow.
+    fn show_export_menu(&mut self, ui: &mut Ui, arrow: &egui::Response) {
+        let ctx = ui.ctx().clone();
+        let popup_id = arrow.id.with("export_menu");
+        // Read before `show`, which is where the arrow's click toggles it:
+        // "the menu was open as this frame began".
+        let was_open = egui::Popup::is_id_open(&ctx, popup_id);
+
+        // Handled before the menu is drawn so this frame already shows it
+        // closed; `move_focus(None)` cancels the jump egui queued from Tab.
+        if was_open {
+            let leave = ctx.input_mut(|i| {
+                i.consume_key(Modifiers::NONE, Key::Tab)
+                    | i.consume_key(Modifiers::SHIFT, Key::Tab)
+                    | i.consume_key(Modifiers::NONE, Key::Escape)
+            });
+            if leave {
+                egui::Popup::close_id(&ctx, popup_id);
+                ctx.memory_mut(|m| m.move_focus(FocusDirection::None));
+            }
+        }
+
+        let replay_possible = self.replay_device_id().is_some();
+        // The click that opens the menu counts as a click outside the entry
+        // that takes the focus, so egui surrenders that focus the next time
+        // the entry is read back (`Context::get_response`) — which the page
+        // scroller does every frame, to keep the focused widget in view. So
+        // the request is repeated on the following frame, once the click is
+        // gone; the opening frame is an invisible sizing pass anyway.
+        let focus_again = std::mem::take(&mut self.recording_panel.export_menu_focus_pending);
+        let mut picked = None;
+        egui::Popup::menu(arrow).id(popup_id).show(|ui| {
+            let csv = ui.button("CSV\u{2026}");
+            if !was_open || focus_again {
+                csv.request_focus();
+            }
+            // Picks count from the next frame on: the Enter that opened the
+            // menu from the arrow is still "pressed" this frame, and egui
+            // reads a pressed Enter on a focused button as a click — the
+            // first entry took the focus just above.
+            if was_open && csv.clicked() {
+                picked = Some(ExportFormat::Csv);
+            }
+            let replay = ui
+                .add_enabled(replay_possible, egui::Button::new("Replay\u{2026}"))
+                .on_hover_text("A file dmm-gui --replay plays back as the meter")
+                .on_disabled_hover_text(NO_WIRE_FORMAT);
+            if was_open && replay.clicked() {
+                picked = Some(ExportFormat::Replay);
+            }
+            // Menu entries have no frame, so egui's focus styling is a fill
+            // too faint to find; ring the focused one.
+            crate::a11y::paint_focus_ring(ui, &csv);
+            crate::a11y::paint_focus_ring(ui, &replay);
+            // A disabled entry cannot take the focus, so it is not a stop
+            // for the arrows either: Down would strand the focus on it.
+            let entries: Vec<_> = [csv, replay]
+                .into_iter()
+                .filter(|entry| entry.enabled())
+                .collect();
+            crate::display::navigate_choice_entries(ui.ctx(), &entries);
+        });
+
+        if let Some(format) = picked {
+            // Enter and Space "click" without a pointer click, which is the
+            // only thing a menu popup closes on by itself.
+            egui::Popup::close_id(&ctx, popup_id);
+            self.export_recording(format);
+        }
+        let is_open = egui::Popup::is_id_open(&ctx, popup_id);
+        // Opened this frame: ask for the focus again next frame.
+        if !was_open && is_open {
+            self.recording_panel.export_menu_focus_pending = true;
+        }
+        // A click outside that closed the menu may have landed on another
+        // widget, which took the focus as it was drawn; that click is the
+        // user's choice of focus. Every other way out returns to the arrow.
+        let clicked_away = picked.is_none() && ctx.input(|i| i.pointer.any_click());
+        if was_open && !is_open && !clicked_away {
+            ctx.memory_mut(|m| m.request_focus(arrow.id));
         }
     }
 
@@ -294,5 +425,238 @@ impl App {
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::Settings;
+    use eframe::egui::{Pos2, Rect, vec2};
+
+    /// The recording row in a headless window, driven a frame at a time.
+    struct MenuRun {
+        app: App,
+        ctx: egui::Context,
+        seconds: f64,
+        /// The AccessKit tree the last frame produced, and the node it named
+        /// as focused. Rects are read from here rather than from
+        /// `Context::read_response`: that one answers from the pass state
+        /// egui swaps out at the end of a frame, so between frames it hands
+        /// back the rect from two frames ago, and it surrenders the focus of
+        /// the widget it is asked about when a click landed elsewhere the
+        /// same frame (`Context::get_response`).
+        tree: Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>,
+        focus: Option<egui::accesskit::NodeId>,
+    }
+
+    impl MenuRun {
+        fn new() -> Self {
+            let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+            // A meter's recording, so the Replay… entry is enabled.
+            app.capture_layout.device_id = Some("ut61eplus");
+            let ctx = egui::Context::default();
+            ctx.enable_accesskit();
+            Self {
+                app,
+                ctx,
+                seconds: 0.0,
+                tree: Vec::new(),
+                focus: None,
+            }
+        }
+
+        /// One frame; keeps the AccessKit tree it produced.
+        fn frame(&mut self, secs: f64, events: Vec<egui::Event>) {
+            self.seconds += secs;
+            let app = &mut self.app;
+            let mut out = self.ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0))),
+                    events,
+                    time: Some(self.seconds),
+                    ..Default::default()
+                },
+                |ui| {
+                    // The row is drawn inside the page scroller, which reads
+                    // the focused widget back to bring it into view — and that
+                    // read is what takes the focus off a menu entry the
+                    // opening click landed outside of.
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        app.show_recording_section(ui, false);
+                        crate::a11y::scroll_to_focus(ui);
+                    });
+                },
+            );
+            out.textures_delta.clear();
+            if let Some(update) = out.platform_output.accesskit_update {
+                self.tree = update.nodes;
+                self.focus = Some(update.focus);
+            }
+        }
+
+        /// Move, press and release on successive frames, as a mouse does.
+        fn click(&mut self, pos: Pos2) {
+            let button = |pressed| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            self.frame(1.0, vec![egui::Event::PointerMoved(pos)]);
+            self.frame(1.0, vec![egui::Event::PointerMoved(pos), button(true)]);
+            self.frame(0.1, vec![egui::Event::PointerMoved(pos), button(false)]);
+            self.frame(1.0, vec![]);
+        }
+
+        /// A key pressed and released within one frame, then a settling frame.
+        fn key(&mut self, key: Key) {
+            let events = [true, false]
+                .into_iter()
+                .map(|pressed| egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed,
+                    repeat: false,
+                    modifiers: Modifiers::NONE,
+                })
+                .collect();
+            self.frame(1.0, events);
+            self.frame(1.0, vec![]);
+        }
+
+        /// Where the widget AccessKit labels `label` was drawn last frame.
+        fn node_rect(&self, label: &str) -> Rect {
+            self.tree
+                .iter()
+                .find(|(_, n)| n.label() == Some(label))
+                .and_then(|(_, n)| n.bounds())
+                .map(to_rect)
+                .unwrap_or_else(|| panic!("no {label:?} widget in the row"))
+        }
+
+        /// Where the widget holding the keyboard focus was drawn last frame.
+        ///
+        /// The tree's root carries no bounds, and that is what an unfocused
+        /// frame names, so nothing focused reads as `None`.
+        fn focused_rect(&self) -> Option<Rect> {
+            let focus = self.focus?;
+            self.tree
+                .iter()
+                .find(|(id, _)| *id == focus)
+                .and_then(|(_, n)| n.bounds())
+                .map(to_rect)
+        }
+    }
+
+    fn to_rect(b: egui::accesskit::Rect) -> Rect {
+        Rect::from_min_max(
+            Pos2::new(b.x0 as f32, b.y0 as f32),
+            Pos2::new(b.x1 as f32, b.y1 as f32),
+        )
+    }
+
+    /// The menu's keyboard contract — the readout lists' — end to end:
+    /// focus lands on CSV… as the arrow opens it, Down moves it to Replay…,
+    /// and Esc closes the menu with the focus back on the arrow.
+    #[test]
+    fn the_export_menu_is_keyboard_reachable() {
+        let mut run = MenuRun::new();
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        let arrow = run.node_rect("Export file type");
+
+        run.click(arrow.center());
+        let csv = run.focused_rect().expect("the first entry takes the focus");
+        assert!(csv.top() >= arrow.bottom(), "focus is in the menu: {csv:?}");
+
+        run.key(Key::ArrowDown);
+        let replay = run
+            .focused_rect()
+            .expect("Down keeps the focus in the menu");
+        assert!(replay.top() >= csv.bottom(), "Down moved to the next entry");
+
+        run.key(Key::Escape);
+        let back = run.focused_rect().expect("Esc leaves the focus somewhere");
+        assert!(
+            (back.center() - arrow.center()).length() < 1.0,
+            "Esc returned the focus to the arrow, not {back:?}"
+        );
+        assert!(!egui::Popup::is_any_open(&run.ctx), "Esc closed the menu");
+    }
+
+    /// Enter on the arrow opens the menu and lands on the first entry without
+    /// picking it: egui reads a pressed Enter on a focused button as a click,
+    /// and the entry takes the focus in that same frame.
+    #[test]
+    fn enter_opens_the_menu_without_picking_an_entry() {
+        let mut run = MenuRun::new();
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        let arrow = run.node_rect("Export file type");
+
+        // Record, Export… and then the arrow.
+        for _ in 0..3 {
+            run.key(Key::Tab);
+        }
+        let focused = run.focused_rect().expect("Tab reached the arrow");
+        assert!(
+            (focused.center() - arrow.center()).length() < 1.0,
+            "Tab stopped on the arrow, not {focused:?}"
+        );
+
+        run.key(Key::Enter);
+        let csv = run.focused_rect().expect("the first entry takes the focus");
+        assert!(csv.top() >= arrow.bottom(), "focus is in the menu: {csv:?}");
+        // Picking CSV… on an empty buffer reports it; nothing was picked.
+        assert!(
+            run.app.toast.is_none(),
+            "Enter did not pick the first entry"
+        );
+    }
+
+    /// With no wire format to write, Replay… is disabled and Down stays on
+    /// CSV… rather than stranding the focus on an entry that cannot take it.
+    #[test]
+    fn down_skips_a_disabled_entry() {
+        let mut run = MenuRun::new();
+        run.app.capture_layout.device_id = None;
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        let arrow = run.node_rect("Export file type");
+
+        run.click(arrow.center());
+        let csv = run.focused_rect().expect("the first entry takes the focus");
+        run.key(Key::ArrowDown);
+        let after = run
+            .focused_rect()
+            .expect("Down keeps the focus in the menu");
+        assert_eq!(after, csv, "Down stayed on CSV…");
+    }
+
+    /// `Fonts::has_glyph` is a false negative for the icon font — see
+    /// `.claude/rules/gui.md` — so compare the atlas rect with the
+    /// replacement character's, as the toast's glyph test does.
+    #[test]
+    fn the_menu_arrow_has_a_glyph() {
+        let ctx = egui::Context::default();
+        ctx.set_fonts(crate::app::appearance::font_definitions());
+        let font = egui::FontId::proportional(14.0);
+        let atlas_rect = |ui: &egui::Ui, text: &str| {
+            let galley = ui.painter().layout_no_wrap(
+                text.to_string(),
+                font.clone(),
+                egui::Color32::PLACEHOLDER,
+            );
+            galley.rows[0].row.glyphs[0].uv_rect
+        };
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            assert_ne!(
+                atlas_rect(ui, EXPORT_MENU_ARROW),
+                atlas_rect(ui, "\u{25FB}"),
+                "the arrow draws as the replacement box"
+            );
+        });
+        out.textures_delta.clear();
     }
 }

@@ -25,7 +25,7 @@ enum Shortcut {
     CycleBigMeter,
     ToggleAlwaysOnTop,
     ToggleDecorations,
-    ExportCsv,
+    ExportRecording,
     ToggleFullscreen,
     Minimize,
     ZoomIn,
@@ -153,7 +153,7 @@ const BINDINGS: &[Binding] = &[
     Binding {
         modifiers: Modifiers::COMMAND,
         key: Key::E,
-        shortcut: Shortcut::ExportCsv,
+        shortcut: Shortcut::ExportRecording,
         os: Os::Any,
     },
     // Ctrl++ and Ctrl+= both zoom in: keyboards that need Shift for `+`
@@ -235,7 +235,7 @@ impl Shortcut {
         Self::TogglePause,
         Self::ClearSession,
         Self::ToggleRecording,
-        Self::ExportCsv,
+        Self::ExportRecording,
         Self::CycleBigMeter,
         Self::ToggleAlwaysOnTop,
         Self::ToggleDecorations,
@@ -289,7 +289,7 @@ impl Shortcut {
                 keys(Modifiers::COMMAND, Key::D),
                 "Toggle window decorations",
             ),
-            Self::ExportCsv => (keys(Modifiers::COMMAND, Key::E), "Export CSV"),
+            Self::ExportRecording => (keys(Modifiers::COMMAND, Key::E), "Export CSV\u{2026}"),
             // Two bindings, one per OS — the row shows the one this machine
             // answers to rather than both.
             Self::ToggleFullscreen => (
@@ -445,7 +445,9 @@ impl App {
                     self.apply_decorations(ctx);
                     self.settings.save();
                 }
-                Shortcut::ExportCsv => self.export_csv(),
+                Shortcut::ExportRecording => {
+                    self.export_recording(super::export::ExportFormat::Csv)
+                }
                 // Transient window state, deliberately not saved in settings:
                 // a session that ended fullscreen should not reopen that way.
                 Shortcut::ToggleFullscreen => {
@@ -591,7 +593,7 @@ mod tests {
                 ("Space", "Pause / Resume"),
                 ("Ctrl+L", "Clear graph & statistics"),
                 ("Ctrl+R", "Toggle recording"),
-                ("Ctrl+E", "Export CSV"),
+                ("Ctrl+E", "Export CSV\u{2026}"),
                 ("Ctrl+B", "Cycle big meter (off / full / minimal)"),
                 ("Ctrl+T", "Toggle always on top"),
                 ("Ctrl+D", "Toggle window decorations"),

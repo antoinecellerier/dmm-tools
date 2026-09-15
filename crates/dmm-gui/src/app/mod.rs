@@ -165,6 +165,12 @@ struct CaptureLayout {
     /// started. Outlives disconnect so a capture can still be exported with
     /// the right provenance after the meter is unplugged.
     device: Option<&'static str>,
+    /// Registry id of that meter, for a replay file's `# device:` line, taken
+    /// at the same moment and for the same reason as `device`.
+    ///
+    /// `None` for the mock, whose readings are synthesised rather than decoded
+    /// from frames — there is nothing to play back.
+    device_id: Option<&'static str>,
     /// Sub-value slots the connected meter family can report, from its
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.

@@ -12,7 +12,7 @@
 - **Auto-detect is the default device** — the meter on the cable is identified and remembered, so later sessions open it directly.
 - **Switch the meter's function and range from the readout** — the mode and range labels are dropdowns on the UT61+/UT161, UT181A, VC-880 and VC-890.
 - **Scale button converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
-- **`--replay` shows a recorded session instead of a meter** — a file saved by `dmm-cli read --record` plays back with the graph, statistics and CSV export.
+- **Export… saves the recording as a replay file that `--replay` plays back** — from the arrow beside the button; a `dmm-cli read --record` file plays back too.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a **Buffer size** setting moves the bound.
 - **Ctrl + wheel zooms the graph, a plain wheel scrolls** — any wheel tick used to zoom the graph and leave live mode; a pinch zooms too.
 - **`Ctrl+O` connects, `Ctrl+W` quits, `F1` opens help, `F11` toggles fullscreen** — the documented `Ctrl+Shift+C` never fired, `Ctrl+W` only closed the help and `?` was the only help key.

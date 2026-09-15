@@ -1,15 +1,16 @@
 use crate::settings::DEFAULT_MAX_SAMPLES;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, SecondsFormat};
 use dmm_lib::WallClock;
 use dmm_lib::export::{CsvLayout, device_comment};
 use dmm_lib::measurement::Measurement;
+use dmm_lib::replay;
 use std::io::Write;
 use std::time::Instant;
 
 /// Render samples as a CSV document, provenance header included.
 ///
 /// Returns the finished bytes so the caller can hand them to a writer thread
-/// without duplicating the sample buffer — a full buffer is ~140 MB of
+/// without duplicating the sample buffer — a full buffer is ~170 MB of
 /// `Sample`s, while the rendered CSV is a fraction of that and takes one pass
 /// instead of half a million allocations.
 ///
@@ -41,12 +42,55 @@ pub fn render_csv(
     Ok(buf)
 }
 
+/// Render samples as a replay file `--replay` can play back, or `None` when
+/// they carry no wire bytes to play.
+///
+/// Every line comes from [`dmm_lib::replay`], which also parses them, so the
+/// GUI's files cannot drift from what reads them.
+///
+/// Offsets are measured from the first sample's frame timestamp — the session
+/// instant the library stamped the frame with — rather than from wall times,
+/// so a recording made on a scaled or preseeded clock plays back at the
+/// spacing its readings actually arrived at. The `# recorded:` line is that
+/// first sample's wall time, which is what pins playback to a clock origin.
+///
+/// `None` when any sample has an empty payload: the mock synthesises its
+/// readings, so there is no frame to hand a parser.
+pub(crate) fn render_replay(
+    samples: &[Sample],
+    device_id: &str,
+    model: Option<&str>,
+) -> Option<String> {
+    let first = samples.first()?;
+    let recorded = first
+        .wall_time
+        .to_rfc3339_opts(SecondsFormat::Millis, false);
+    let mut out = replay::header(device_id, &recorded, model);
+    // Offset digits and a newline, plus three characters per payload byte.
+    // Frame length is fixed per family, so the first sample sizes the rest.
+    out.reserve(samples.len() * (10 + 3 * first.measurement.raw_payload.len()));
+    for s in samples {
+        if s.measurement.raw_payload.is_empty() {
+            return None;
+        }
+        let offset = s
+            .measurement
+            .timestamp
+            .saturating_duration_since(first.measurement.timestamp);
+        out.push_str(&replay::sample_line(offset, &s.measurement.raw_payload));
+    }
+    Some(out)
+}
+
 /// A single recorded sample.
 ///
 /// Holds the underlying `Measurement` directly so both the recording panel
-/// and CSV export consume exactly the same data shape the protocol produced,
+/// and the exports consume exactly the same data shape the protocol produced,
 /// and static-lookup-table strings (`mode`, `unit`, `range_label`) stay as
 /// `Cow::Borrowed` instead of being re-cloned onto the heap for every sample.
+///
+/// The meter's own frame is kept with it: it is what [`render_replay`] writes,
+/// and it is the only part of a reading no decoded field can reconstruct.
 #[derive(Debug, Clone)]
 pub struct Sample {
     pub wall_time: DateTime<Local>,
@@ -64,13 +108,9 @@ pub struct Sample {
 
 impl Sample {
     pub fn from_measurement(m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> Self {
-        let mut measurement = m.clone();
-        // Drop the debug-only wire bytes. Nothing in the GUI reads them, and
-        // retaining a heap Vec per sample costs ~50 MB across a full buffer.
-        measurement.raw_payload = Vec::new();
         Self {
             wall_time: wall_clock.wall_time_for(m.timestamp).into(),
-            measurement,
+            measurement: m.clone(),
             extra_aux,
         }
     }
@@ -103,9 +143,9 @@ pub struct Recording {
     /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
     /// mock run on a bent clock shows a duration its samples agree with.
     pub start_time: Option<Instant>,
-    /// How many samples are known to have reached a CSV file. Compared
-    /// against `samples.len()` to tell whether discarding the buffer would
-    /// lose anything the user hasn't saved.
+    /// How many samples are known to have reached a file, of either export
+    /// format. Compared against `samples.len()` to tell whether discarding the
+    /// buffer would lose anything the user hasn't saved.
     exported_count: usize,
     /// Most sub-values any buffered sample carries. The export sizes its aux
     /// columns from the device profile, but a profile is only known while
@@ -115,11 +155,12 @@ pub struct Recording {
     /// Samples this recording stops at, from the Buffer size setting (which
     /// bounds the graph history by the same number).
     ///
-    /// A sample carrying only the meter's main reading is roughly 280 bytes —
-    /// about 240 inline plus the `display_raw` heap string — so the default
-    /// 500K is on the order of 140 MB. Each sub-value the meter sends adds
-    /// another ~140 bytes, which puts a four-sub-value meter (UT181A) at
-    /// ~850 bytes per sample, or ~420 MB at the same bound.
+    /// A sample carrying only the meter's main reading is roughly 340 bytes —
+    /// about 240 inline, plus the `display_raw` heap string and the meter's
+    /// own frame — so the default 500K is on the order of 170 MB. Each
+    /// sub-value the meter sends adds another ~140 bytes, which puts a
+    /// four-sub-value meter (UT181A) at ~900 bytes per sample, or ~450 MB at
+    /// the same bound.
     max_samples: usize,
 }
 
@@ -485,17 +526,17 @@ mod tests {
         assert_eq!(s.measurement.value_export_str(), "NCV:2");
     }
 
-    /// The wire bytes are debug-only and nothing in the GUI reads them;
-    /// keeping one heap Vec per sample cost ~50 MB across a full buffer.
+    /// The wire bytes are what a replay export writes, so a buffered sample
+    /// has to keep the frame it was decoded from.
     #[test]
-    fn stored_samples_drop_the_debug_payload() {
+    fn stored_samples_keep_the_meters_frame() {
         let m = make_measurement(b"  1.234");
         assert!(
             !m.raw_payload.is_empty(),
             "fixture should carry wire bytes to begin with"
         );
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
-        assert!(s.measurement.raw_payload.is_empty());
+        assert_eq!(s.measurement.raw_payload, m.raw_payload);
     }
 
     #[test]
@@ -738,5 +779,70 @@ mod tests {
 
         let delta = s2.wall_time.signed_duration_since(s1.wall_time);
         assert_eq!(delta.num_milliseconds(), 500);
+    }
+
+    /// Three frames 250 ms apart, as the buffer would hold them.
+    fn replay_samples() -> Vec<Sample> {
+        let wc = WallClock::new();
+        let base = Instant::now();
+        (0..3)
+            .map(|i| {
+                let mut m = make_measurement(b"  1.234");
+                m.timestamp = base + Duration::from_millis(250 * i);
+                Sample::from_measurement(&m, &wc, 0)
+            })
+            .collect()
+    }
+
+    /// What the GUI writes has to be what `--replay` reads, down to the date
+    /// format the binaries turn into a clock origin — the library keeps the
+    /// `# recorded:` line verbatim and never looks at it.
+    #[test]
+    fn render_replay_round_trips_through_the_parser() {
+        let samples = replay_samples();
+        let text = render_replay(&samples, "ut61eplus", Some("UNI-T UT61E+"))
+            .expect("frames with wire bytes");
+
+        let replay = dmm_lib::replay::Replay::parse(&text).expect("a well-formed recording");
+        assert_eq!(replay.device.id, "ut61eplus");
+        assert_eq!(replay.model.as_deref(), Some("UNI-T UT61E+"));
+        assert_eq!(replay.duration(), Duration::from_millis(500));
+        chrono::DateTime::parse_from_rfc3339(&replay.recorded)
+            .expect("`# recorded:` is what --replay parses as a clock origin");
+
+        // Offsets run from the first frame, whatever session time it landed
+        // at, and carry the frame the meter actually sent.
+        let lines: Vec<&str> = text.lines().filter(|l| !l.starts_with('#')).collect();
+        assert_eq!(lines.len(), 3);
+        assert!(
+            lines[0].starts_with("0 02 31 20 20 31 2E 32 33 34"),
+            "{:?}",
+            lines[0]
+        );
+        assert!(lines[1].starts_with("250 "), "{:?}", lines[1]);
+        assert!(lines[2].starts_with("500 "), "{:?}", lines[2]);
+    }
+
+    /// The `# model:` line is optional, and a meter that never named itself
+    /// must not produce an empty one the parser would have to skip.
+    #[test]
+    fn render_replay_leaves_out_an_unknown_model() {
+        let text = render_replay(&replay_samples(), "ut61eplus", None).expect("frames");
+        assert!(!text.contains("# model:"), "{text}");
+        assert_eq!(
+            dmm_lib::replay::Replay::parse(&text).expect("parses").model,
+            None
+        );
+    }
+
+    /// The mock synthesises its readings, so its samples carry no frame. A
+    /// file of empty sample lines would not parse back — refuse it here, where
+    /// the caller can still say so.
+    #[test]
+    fn render_replay_refuses_a_sample_without_a_frame() {
+        let mut samples = replay_samples();
+        samples[1].measurement.raw_payload = Vec::new();
+        assert!(render_replay(&samples, "ut61eplus", None).is_none());
+        assert!(render_replay(&[], "ut61eplus", None).is_none());
     }
 }

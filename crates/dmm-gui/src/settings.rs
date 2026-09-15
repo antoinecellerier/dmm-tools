@@ -33,8 +33,10 @@ const GRAPH_BYTES_PER_POINT: usize = 48;
 /// (`Option<f64>`, kept in lockstep with the history).
 const GRAPH_BYTES_PER_OVERLAY_POINT: usize = 16;
 /// Bytes one recorded sample costs for the meter's main reading: about 240
-/// inline plus its `display_raw` heap string.
-const RECORDING_BYTES_PER_SAMPLE: usize = 280;
+/// inline, plus its `display_raw` heap string and the meter's own frame — 14
+/// to 57 bytes across the families, kept so a recording can be exported as a
+/// replay file.
+const RECORDING_BYTES_PER_SAMPLE: usize = 340;
 /// Bytes each sub-value adds to a recorded sample: an `AuxValue`'s two `Cow`
 /// strings, its own `display_raw` and the value.
 const RECORDING_BYTES_PER_AUX: usize = 140;
@@ -559,10 +561,10 @@ mod tests {
     }
 
     /// Both copies of the stream are counted, and the recording's share grows
-    /// with the meter's sub-values: 500K × (48 + 280 + 4 × 140) bytes.
+    /// with the meter's sub-values: 500K × (48 + 340 + 4 × 140) bytes.
     #[test]
     fn memory_estimate_counts_graph_and_recording() {
-        assert_eq!(buffer_memory_estimate(500_000, 0, 4), "\u{2248}444 MB");
+        assert_eq!(buffer_memory_estimate(500_000, 0, 4), "\u{2248}474 MB");
     }
 
     #[test]

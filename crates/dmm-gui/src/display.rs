@@ -686,7 +686,7 @@ fn show_choice_readout(
 /// focus between the entries, clamped at the ends; Home/End jump to the
 /// first and last. Nothing reaches the meter until Enter, Space or a click
 /// picks the focused entry.
-fn navigate_choice_entries(ctx: &Context, entries: &[Response]) {
+pub(crate) fn navigate_choice_entries(ctx: &Context, entries: &[Response]) {
     let Some(i) = entries.iter().position(Response::has_focus) else {
         return;
     };
