@@ -535,6 +535,13 @@ impl App {
                     // 0 before the first Connected of the session.
                     if self.recording.active {
                         self.capture_layout.aux_slots = max_aux_values;
+                        // The meter Record was pressed ahead of: the first one
+                        // to answer during this recording is the one its
+                        // samples come from, and the only one the export can
+                        // still name once the cable is out.
+                        self.capture_layout
+                            .experimental
+                            .get_or_insert(!stability.is_verified());
                     }
                     self.connection.feedback_url = feedback_url;
                     self.connection.supported_commands = cmds;

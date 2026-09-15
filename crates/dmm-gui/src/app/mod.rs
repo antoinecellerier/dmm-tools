@@ -175,7 +175,12 @@ struct CaptureLayout {
     /// export's `experimental` field. Taken alongside `device` and for the
     /// same reason: disconnecting clears the connection's stability, so read
     /// at export time it would mark an unplugged UT181A's readings verified.
-    experimental: bool,
+    ///
+    /// `None` until a meter has been connected during the recording — Record
+    /// works while disconnected, and the stability read then is the default
+    /// the disconnect left behind, not a meter's. The export falls back to the
+    /// live connection, as `device` and `device_id` do.
+    experimental: Option<bool>,
     /// Sub-value slots the connected meter family can report, from its
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.

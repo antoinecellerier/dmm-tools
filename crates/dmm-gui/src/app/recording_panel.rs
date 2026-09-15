@@ -5,7 +5,7 @@
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
-use super::{App, DEFAULT_RECORDING_HEIGHT};
+use super::{App, ConnectionState, DEFAULT_RECORDING_HEIGHT};
 use crate::a11y::ResponseA11yExt;
 
 /// The arrow segment of the Export… split button (U+23F7, in egui's icon
@@ -85,7 +85,12 @@ impl App {
                 .active_device()
                 .filter(|d| d.requires_hardware)
                 .map(|d| d.id);
-            self.capture_layout.experimental = !self.connection.stability.is_verified();
+            // Only from a live connection: disconnected, `stability` is the
+            // Verified default `disconnect()` restored, and latching that
+            // marked a UT181A connected after Record as a verified protocol.
+            self.capture_layout.experimental = (self.connection.state
+                != ConnectionState::Disconnected)
+                .then(|| !self.connection.stability.is_verified());
             self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
             // after the meter's — see `extra_slots`.

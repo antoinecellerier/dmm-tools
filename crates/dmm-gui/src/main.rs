@@ -56,7 +56,8 @@ struct Args {
     #[arg(long, value_name = "SERIAL_OR_PATH")]
     adapter: Option<String>,
 
-    /// Play back a dmm-cli --record file instead of connecting to a meter
+    /// Play back a file written by 'dmm-cli read --format replay' or by
+    /// Export… → Replay…, instead of connecting to a meter
     #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode"])]
     replay: Option<PathBuf>,
 

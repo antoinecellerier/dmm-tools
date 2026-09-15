@@ -175,12 +175,9 @@ impl App {
                     }
                 }
             }
-            ExportFormat::Json => render_json(
-                &self.recording.samples,
-                device_model,
-                self.capture_layout.experimental,
-            )
-            .into_bytes(),
+            ExportFormat::Json => {
+                render_json(&self.recording.samples, device_model, self.experimental()).into_bytes()
+            }
             ExportFormat::Replay => {
                 let text = self
                     .replay_device_id()
@@ -209,6 +206,15 @@ impl App {
             let _ = tx.send(write_export(&path, &bytes, sample_count));
         });
         self.export_result_rx = Some(rx);
+    }
+
+    /// Whether the exported readings came off a protocol short of verified:
+    /// what the recording latched from the meter it ran against, else the
+    /// connection as it stands, as the meter's name falls back.
+    pub(super) fn experimental(&self) -> bool {
+        self.capture_layout
+            .experimental
+            .unwrap_or_else(|| !self.connection.stability.is_verified())
     }
 
     /// The meter whose frames a replay file would carry: the one the
@@ -384,6 +390,57 @@ mod tests {
         assert_eq!(single_mode(&app.recording.samples), Some("DC V"));
         app.recording.samples[1].measurement.mode = "AC V".into();
         assert_eq!(single_mode(&app.recording.samples), None);
+    }
+
+    /// Record works with nothing connected, and `disconnect()` puts the
+    /// stability back to Verified — so a recording started before the meter
+    /// answered exported a UT181A's readings as a verified protocol.
+    #[test]
+    fn a_recording_started_before_the_meter_answered_is_still_experimental() {
+        use crate::app::connection::DmmMessage;
+        use dmm_lib::protocol::Stability;
+
+        // A named meter, so the Connected message below cannot reach the
+        // detected-device save and write the real config file.
+        let mut settings = Settings::default();
+        settings.shared.device_family = "ut181a".to_string();
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+
+        app.toggle_recording();
+        assert_eq!(
+            app.capture_layout.experimental, None,
+            "nothing was connected to take a stability from"
+        );
+
+        // The meter answers, on a protocol no report has confirmed.
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(DmmMessage::Connected {
+            name: "UT181A".to_string(),
+            model_name: "UNI-T UT181A".to_string(),
+            device_id: Some("ut181a"),
+            stability: Stability::Experimental,
+            feedback_url: String::new(),
+            supported_commands: Vec::new(),
+            max_aux_values: 0,
+        })
+        .expect("the channel is open");
+        app.connection.rx = Some(rx);
+        app.drain_messages();
+        app.recording.push(&measurement(0), &app.wall_clock, 0);
+
+        assert_eq!(app.capture_layout.experimental, Some(true));
+        assert!(app.experimental(), "the recording ran against that meter");
+        let json = render_json(&app.recording.samples, "UNI-T UT181A", app.experimental());
+        let readings: Vec<&str> = json.lines().skip(1).collect();
+        assert!(!readings.is_empty(), "got {json}");
+        assert!(
+            readings.iter().all(|l| l.contains("\"experimental\":true")),
+            "got {json}"
+        );
+
+        // And it survives the cable coming out, which is why it is latched.
+        app.disconnect();
+        assert!(app.experimental(), "the samples are still that meter's");
     }
 
     /// A transform's appended sub-value gets the trailing group, and comes
