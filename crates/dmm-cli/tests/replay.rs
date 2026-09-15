@@ -30,14 +30,30 @@ const TIMESTAMPS: [&str; 3] = [
     "2026-09-02T10:00:00.200+00:00",
 ];
 
-/// A directory of this test's own, with the recording already in it.
-fn recording_in(name: &str) -> PathBuf {
+/// Two frames six seconds apart: a meter that stopped answering part-way
+/// through the recording, which plays back as a run of timeouts.
+const RECORDING_WITH_A_GAP: &str = "\
+# dmm-replay 1
+# device: ut61eplus
+# recorded: 2026-09-02T10:00:00Z
+# model: UT61E+
+0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30
+6000 02 30 2D 30 2E 35 31 33 37 01 00 30 30 31
+";
+
+/// A directory of this test's own, with `text` in it as the recording.
+fn recording_of(name: &str, text: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("dmm-cli-replay-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create temp dir");
     let path = dir.join("bench.replay");
-    std::fs::write(&path, RECORDING).expect("write recording");
+    std::fs::write(&path, text).expect("write recording");
     path
+}
+
+/// A directory of this test's own, with the three-frame recording in it.
+fn recording_in(name: &str) -> PathBuf {
+    recording_of(name, RECORDING)
 }
 
 /// Run the binary as a user would, with nothing of the environment left to
@@ -105,6 +121,32 @@ fn replay_takes_the_clock_flags() {
     let (preseeded, _, ok) = read_csv(&path, &["--mock-clock-preseed", "10"]);
     assert!(ok, "preseeded replay failed: {preseeded}");
     assert_eq!(plain, preseeded);
+}
+
+/// A gap plays back as the timeouts it was, and they are not a quiet meter:
+/// there is no `--device` to check and nothing on the cable to switch a USB
+/// mode on. The preseed spends the six seconds of silence without waiting.
+#[test]
+fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
+    let path = recording_of("gap", RECORDING_WITH_A_GAP);
+    let (stdout, stderr, ok) = run(&[
+        "read",
+        "--replay",
+        path.to_str().expect("utf-8 path"),
+        "--count",
+        "2",
+        "--format",
+        "csv",
+        "--mock-clock-preseed",
+        "10",
+    ]);
+    assert!(ok, "replay failed: {stderr}");
+    assert!(
+        !stderr.contains("No response from meter"),
+        "the gap was reported as a quiet meter: {stderr}"
+    );
+    // And the frame on the far side of the gap still plays, at its own time.
+    assert!(stdout.contains("2026-09-02T10:00:06+00:00"), "got {stdout}");
 }
 
 #[test]

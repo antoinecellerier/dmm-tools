@@ -1098,7 +1098,10 @@ fn read_replay(
         output_path,
         count,
         experimental,
-        Some(replay.device),
+        // A gap in the recording plays back as timeouts, and they are not a
+        // quiet meter: there is no `--device` to check and nothing on the
+        // cable to enable data transmission on.
+        None,
         integrate,
         transform,
         None,
