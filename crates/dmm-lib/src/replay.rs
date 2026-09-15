@@ -31,6 +31,7 @@ use crate::protocol::registry::{self, SelectableDevice};
 use crate::protocol::{CaptureStep, Choice, DeviceProfile, Protocol, Setting};
 use crate::specs::{ModeSpecInfo, SpecInfo};
 use crate::transport::{NullTransport, Transport};
+use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -151,6 +152,24 @@ impl Replay {
             .wall_origin()
             .map(|(instant, _)| instant)
             .unwrap_or_else(|| clock.now());
+        // Session time already gone by is history: a re-open onto an origin
+        // pinned earlier — the GUI's Disconnect then Connect — picks the
+        // recording up where the session has got to rather than from the top.
+        let elapsed = clock.now().saturating_duration_since(start);
+        let next = if elapsed > self.duration() {
+            // Nothing recorded is still to come, so the session opens straight
+            // into the tail. Landing on the last frame instead would stamp it
+            // at its own offset, seconds before the readings the session has
+            // already handed out — backwards on the graph, and an export of
+            // that buffer is a replay file `parse` refuses.
+            self.samples.len()
+        } else {
+            // Of the samples already due only the newest is still on the wire,
+            // the same rule `request_measurement` plays a file by.
+            self.samples
+                .partition_point(|(offset, _)| *offset <= elapsed)
+                .saturating_sub(1)
+        };
         let protocol = ReplayProtocol {
             inner: (self.device.new_protocol)(),
             samples: self.samples.clone(),
@@ -158,8 +177,12 @@ impl Replay {
             cadence: cadence(&self.samples),
             clock: clock.clone(),
             start,
-            next: 0,
-            next_due: Duration::ZERO,
+            next,
+            // Opening past the end starts the tail on its grid, anchored on the
+            // last frame the way a walk through the file leaves it; the catch-up
+            // in `request_measurement` then steps it to the newest grid point.
+            next_due: self.duration(),
+            last_parsed: None,
         };
         let dmm = Dmm::new(NullTransport, Box::new(protocol))?;
         Ok(dmm.with_clock(clock).with_protocol_timestamps())
@@ -172,11 +195,6 @@ impl Replay {
             .map(|(offset, _)| *offset)
             .unwrap_or(Duration::ZERO)
     }
-}
-
-/// Load `path` and open it as a session in one step.
-pub fn open_replay(path: &Path, clock: Clock) -> Result<Dmm<NullTransport>> {
-    Replay::load(path)?.open(clock)
 }
 
 /// The header lines of a replay file, ending in a newline.
@@ -200,8 +218,9 @@ pub fn sample_line(offset: Duration, payload: &[u8]) -> String {
     let ms = u64::try_from(offset.as_millis()).unwrap_or(u64::MAX);
     let mut out = ms.to_string();
     for byte in payload {
-        out.push(' ');
-        out.push_str(&format!("{byte:02X}"));
+        // Formatted into the line rather than through a `String` per byte: a
+        // render walks every sample of a buffer up to the half-million bound.
+        let _ = write!(out, " {byte:02X}");
     }
     out.push('\n');
     out
@@ -319,6 +338,10 @@ struct ReplayProtocol {
     /// When the frame after the one just returned falls due. Only the tail
     /// reads it — until then the samples' own offsets say when they are due.
     next_due: Duration,
+    /// Index of the newest frame the family accepted, which is what the tail
+    /// holds. `None` until one parses: a file whose frames are all refused has
+    /// no reading to hold, so the tail keeps reporting the refusal.
+    last_parsed: Option<usize>,
 }
 
 impl ReplayProtocol {
@@ -372,7 +395,13 @@ impl Protocol for ReplayProtocol {
                 while self.next_due.saturating_add(self.cadence) <= now {
                     self.next_due = self.next_due.saturating_add(self.cadence);
                 }
-                (self.next_due, self.samples.len().saturating_sub(1))
+                // The newest frame the family accepted, not simply the last one
+                // in the file: holding a frame that does not parse fails every
+                // poll for ever, so a `--count` is never reached.
+                let held = self
+                    .last_parsed
+                    .unwrap_or_else(|| self.samples.len().saturating_sub(1));
+                (self.next_due, held)
             }
         };
         self.wait_until(due, now)?;
@@ -387,6 +416,7 @@ impl Protocol for ReplayProtocol {
             return Err(Error::Replay("no samples".to_string()));
         };
         let mut m = self.inner.parse_payload(payload)?;
+        self.last_parsed = Some(index);
         // The sample's own session time, not the instant the sleep ended:
         // an export of a replay is the recording's timestamps, to the digit.
         m.timestamp = self.start.checked_add(due).unwrap_or(self.start);
@@ -435,6 +465,7 @@ impl Protocol for ReplayProtocol {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::SystemTime;
 
     /// Frames a UT61E+ really sent, copied from the golden fixtures in
     /// `crates/dmm-lib/tests/golden/ut61eplus/`: 1.6109 V off a battery,
@@ -691,6 +722,83 @@ mod tests {
         let m = dmm.request_measurement().expect("the frame after it");
         assert_eq!(m.value_export_str(), "80.45");
         assert_eq!(m.timestamp, start + Duration::from_millis(200));
+    }
+
+    /// A last frame the family refuses cannot be the one the tail holds:
+    /// every poll would fail once a cadence for ever, so a `--count` would
+    /// never be reached.
+    #[test]
+    fn the_tail_holds_the_last_frame_that_parsed() {
+        let clock = Clock::manual();
+        let start = clock.now();
+        let mut dmm = parsed(&file(&[
+            (0, DCV_BATTERY),
+            (100, DCV_NEGATIVE),
+            (200, "02 30 20"),
+        ]))
+        .open(clock.clone())
+        .expect("the replay opens");
+        dmm.request_measurement().expect("the first frame");
+        dmm.request_measurement().expect("the second frame");
+        dmm.request_measurement()
+            .expect_err("a truncated frame does not parse");
+
+        for step in 1..=2 {
+            let m = dmm.request_measurement().expect("the held frame");
+            assert_eq!(m.value_export_str(), "-0.5137", "hold {step}");
+            assert_eq!(
+                m.timestamp,
+                start + Duration::from_millis(200 + 100 * step),
+                "hold {step}"
+            );
+        }
+    }
+
+    /// A GUI Disconnect then Connect re-opens the same recording on the same
+    /// clock, origin and all. The session time that passed meanwhile is
+    /// history, so the re-open holds the frame the file ended on at the
+    /// session's own time — a reading dated before the ones already taken
+    /// would go backwards on the graph and in an exported replay.
+    #[test]
+    fn a_reopen_past_the_end_holds_the_frame_at_the_session_time_reached() {
+        let clock = Clock::manual().with_wall_origin(SystemTime::now());
+        let start = clock.now();
+        let replay = parsed(&three_frames());
+        let mut dmm = replay.open(clock.clone()).expect("the replay opens");
+        let mut last = start;
+        for _ in 0..3 {
+            last = dmm
+                .request_measurement()
+                .expect("a recorded frame")
+                .timestamp;
+        }
+        assert_eq!(last, start + Duration::from_millis(300));
+        drop(dmm);
+
+        // Seconds of disconnected session time, then Connect: whole cadences,
+        // so the grid the walk left behind lands on the re-open instant.
+        clock.advance(Duration::from_millis(7_400));
+        let mut dmm = replay.open(clock.clone()).expect("the replay re-opens");
+        let m = dmm.request_measurement().expect("the held frame");
+        assert_eq!(m.value_export_str(), "80.45", "the frame the file ended on");
+        assert_eq!(m.timestamp, clock.now(), "on the grid at the re-open");
+        assert!(m.timestamp > last, "never before what was delivered");
+    }
+
+    /// Re-opening partway through the recording resumes at the newest frame
+    /// due, not at the top of the file.
+    #[test]
+    fn a_reopen_partway_through_resumes_at_the_newest_frame_due() {
+        let clock = Clock::manual().with_wall_origin(SystemTime::now());
+        let start = clock.now();
+        let replay = parsed(&three_frames());
+        drop(replay.open(clock.clone()).expect("the replay opens"));
+
+        clock.advance(Duration::from_millis(150));
+        let mut dmm = replay.open(clock.clone()).expect("the replay re-opens");
+        let m = dmm.request_measurement().expect("the newest frame due");
+        assert_eq!(m.value_export_str(), "-0.5137");
+        assert_eq!(m.timestamp, start + Duration::from_millis(100));
     }
 
     /// A file with nothing to derive a cadence from still plays as a steady
