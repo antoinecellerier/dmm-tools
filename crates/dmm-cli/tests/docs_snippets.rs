@@ -236,7 +236,7 @@ fn check_doc(relative: &str) -> Vec<String> {
 
     if !diffs.is_empty() && std::env::var_os("UPDATE_DOCS").is_some() {
         updated.push_str(&text[copied..]);
-        dmm_settings::write_atomic(Path::new(&path), updated.as_bytes()).expect("rewrite doc");
+        dmm_shared::write_atomic(Path::new(&path), updated.as_bytes()).expect("rewrite doc");
         return Vec::new();
     }
     diffs

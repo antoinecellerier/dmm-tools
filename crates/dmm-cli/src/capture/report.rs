@@ -572,7 +572,7 @@ pub(crate) fn save_report(
     let yaml = serde_yaml_ng::to_string(report)?;
     // Atomic write (.tmp + fsync + rename), so a crash mid-write doesn't
     // corrupt the existing report.
-    dmm_settings::write_atomic(std::path::Path::new(path), yaml.as_bytes())?;
+    dmm_shared::write_atomic(std::path::Path::new(path), yaml.as_bytes())?;
     Ok(())
 }
 

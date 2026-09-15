@@ -45,12 +45,12 @@ pub fn render_csv(
 /// Render samples as a JSON document: the `_metadata` line naming the meter,
 /// then one object per sample.
 ///
-/// Every line comes from [`dmm_settings::export`], which is also what
+/// Every line comes from [`dmm_shared::export`], which is also what
 /// `dmm-cli read --format json` prints, so a script reading one binary's file
 /// works on the other's. `experimental` marks readings decoded by a protocol
 /// no report has confirmed, as the CLI's does.
 pub(crate) fn render_json(samples: &[Sample], device_model: &str, experimental: bool) -> String {
-    let mut out = dmm_settings::export::metadata_line(device_model);
+    let mut out = dmm_shared::export::metadata_line(device_model);
     out.push('\n');
     // A reading with no sub-values runs to roughly 400 bytes; growing from
     // there beats growing from nothing on a half-million-sample buffer.
@@ -58,7 +58,7 @@ pub(crate) fn render_json(samples: &[Sample], device_model: &str, experimental: 
     for s in samples {
         let ts = s.wall_time.to_rfc3339();
         out.push_str(
-            &dmm_settings::export::measurement_json(&s.measurement, &ts, experimental, None)
+            &dmm_shared::export::measurement_json(&s.measurement, &ts, experimental, None)
                 .to_string(),
         );
         out.push('\n');
@@ -871,18 +871,18 @@ mod tests {
     }
 
     /// The export and `dmm-cli read --format json` cannot drift, because both
-    /// are these two calls into `dmm_settings::export` — so this checks the
+    /// are these two calls into `dmm_shared::export` — so this checks the
     /// document the GUI builds around them, not the objects themselves.
     #[test]
     fn render_json_is_the_metadata_line_and_one_object_per_sample() {
         let samples = replay_samples();
         let text = render_json(&samples[..2], "UNI-T UT61E+", true);
 
-        let mut expected = dmm_settings::export::metadata_line("UNI-T UT61E+");
+        let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+");
         for s in &samples[..2] {
             expected.push('\n');
             expected.push_str(
-                &dmm_settings::export::measurement_json(
+                &dmm_shared::export::measurement_json(
                     &s.measurement,
                     &s.wall_time.to_rfc3339(),
                     true,

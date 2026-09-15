@@ -1,9 +1,9 @@
 [package]
-name = "dmm-settings"
+name = "dmm-shared"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Shared settings schema for dmm-cli and dmm-gui (config file format)"
+description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settings schema, durable writes, export shapes and names"
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }

@@ -1,5 +1,5 @@
 use crate::theme::ThemeColors;
-use dmm_settings::SharedSettings;
+use dmm_shared::SharedSettings;
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -253,7 +253,7 @@ impl Overrides {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// Schema shared with `dmm-cli` via the `dmm-settings` crate.
+    /// Schema shared with `dmm-cli` via the `dmm-shared` crate.
     /// Flattened so fields (currently just `device_family`) appear at the
     /// top level of the JSON file, preserving the existing on-disk shape.
     #[serde(flatten)]
@@ -340,7 +340,7 @@ impl Settings {
     }
 
     fn config_path() -> Option<PathBuf> {
-        dmm_settings::config_path()
+        dmm_shared::config_path()
     }
 
     pub fn load() -> Self {
@@ -354,7 +354,7 @@ impl Settings {
         // fallback half. A saved id keeps naming its meter; an older config
         // or a fresh install falls through to detection instead of to a
         // model the user never picked.
-        let (family, _) = dmm_settings::resolve_device_family(
+        let (family, _) = dmm_shared::resolve_device_family(
             None,
             Some(&s.shared),
             dmm_lib::protocol::registry::AUTO_DEVICE_ID,
@@ -388,7 +388,7 @@ impl Settings {
             if let Ok(json) = serde_json::to_string_pretty(&to_save) {
                 // Atomic (.tmp + fsync + rename) so a kill or disk-full
                 // mid-write can't corrupt the existing config file.
-                if let Err(e) = dmm_settings::write_atomic(&path, json.as_bytes()) {
+                if let Err(e) = dmm_shared::write_atomic(&path, json.as_bytes()) {
                     log::warn!("failed to save settings to {}: {e}", path.display());
                 }
             }
@@ -422,7 +422,7 @@ mod tests {
         // And a config file written before the field existed lands there too,
         // rather than on a model the user never picked.
         let s: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
-        let (family, _) = dmm_settings::resolve_device_family(
+        let (family, _) = dmm_shared::resolve_device_family(
             None,
             Some(&s.shared),
             dmm_lib::protocol::registry::AUTO_DEVICE_ID,
@@ -450,7 +450,7 @@ mod tests {
     #[test]
     fn shared_settings_crate_can_read_gui_written_json() {
         // The core of the shared-schema contract: a JSON blob written by
-        // the GUI must deserialize cleanly into dmm_settings::SharedSettings
+        // the GUI must deserialize cleanly into dmm_shared::SharedSettings
         // with the correct device_family. If the contract drifts, this test
         // fails loudly instead of the CLI silently falling through to the
         // default device.
@@ -461,7 +461,7 @@ mod tests {
             ..Default::default()
         };
         let json = serde_json::to_string(&s).unwrap();
-        let shared: dmm_settings::SharedSettings = serde_json::from_str(&json).unwrap();
+        let shared: dmm_shared::SharedSettings = serde_json::from_str(&json).unwrap();
         assert_eq!(shared.device_family, "vc880");
     }
 

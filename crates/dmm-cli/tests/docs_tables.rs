@@ -68,7 +68,7 @@ fn cli_reference_device_table_matches_the_registry() {
     }
     if std::env::var_os("UPDATE_DOCS").is_some() {
         let updated = format!("{}{wanted}{}", &text[..block.start], &text[block.end..]);
-        dmm_settings::write_atomic(&path, updated.as_bytes()).expect("rewrite doc");
+        dmm_shared::write_atomic(&path, updated.as_bytes()).expect("rewrite doc");
         return;
     }
     panic!(

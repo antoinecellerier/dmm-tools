@@ -79,7 +79,7 @@ impl Output {
             )),
             Self::Json { .. } => Some(format!(
                 "{}\n",
-                dmm_settings::export::metadata_line(model_name)
+                dmm_shared::export::metadata_line(model_name)
             )),
             Self::Replay { header, .. } => Some(header.clone()),
         }
@@ -188,7 +188,7 @@ fn format_json(
     experimental: bool,
     integral: Option<(f64, &str)>,
 ) -> std::io::Result<()> {
-    let obj = dmm_settings::export::measurement_json(
+    let obj = dmm_shared::export::measurement_json(
         m,
         &timestamp_rfc3339(m, wall_clock),
         experimental,

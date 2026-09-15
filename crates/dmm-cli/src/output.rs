@@ -2,7 +2,7 @@
 //!
 //! Stdout and `-o FILE` are open before the first reading. A bare `-o` names
 //! its file after the meter, the mode and the moment the run started — the
-//! same name [`dmm-gui`'s Export… opens on](dmm_settings::export::default_name)
+//! same name [`dmm-gui`'s Export… opens on](dmm_shared::export::default_name)
 //! — so it cannot be created until a reading has arrived, and the header waits
 //! in memory until then.
 
@@ -80,7 +80,7 @@ impl Writer {
             return Ok(());
         };
         let Some(named) = &mut auto.named else {
-            let path = PathBuf::from(dmm_settings::export::default_name(
+            let path = PathBuf::from(dmm_shared::export::default_name(
                 &auto.meter,
                 Some(mode),
                 at,
@@ -125,7 +125,7 @@ impl Writer {
         if named.one_mode {
             return Ok(Some(named.path));
         }
-        let renamed = PathBuf::from(dmm_settings::export::default_name(
+        let renamed = PathBuf::from(dmm_shared::export::default_name(
             &meter,
             None,
             named.start,

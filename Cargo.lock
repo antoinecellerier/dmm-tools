@@ -985,7 +985,7 @@ dependencies = [
  "csv",
  "ctrlc",
  "dmm-lib",
- "dmm-settings",
+ "dmm-shared",
  "env_logger",
  "log",
  "serde",
@@ -1002,7 +1002,7 @@ dependencies = [
  "csv",
  "directories",
  "dmm-lib",
- "dmm-settings",
+ "dmm-shared",
  "eframe",
  "egui_commonmark",
  "egui_plot",
@@ -1028,7 +1028,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dmm-settings"
+name = "dmm-shared"
 version = "0.7.0-dev"
 dependencies = [
  "chrono",

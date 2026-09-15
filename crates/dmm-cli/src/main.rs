@@ -364,9 +364,9 @@ fn main() {
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants
     // one.
-    let (device_id, _source) = dmm_settings::resolve_device_family(
+    let (device_id, _source) = dmm_shared::resolve_device_family(
         cli.device.as_deref(),
-        dmm_settings::SharedSettings::load_if_exists().as_ref(),
+        dmm_shared::SharedSettings::load_if_exists().as_ref(),
         registry::AUTO_DEVICE_ID,
     );
     let selection = match registry::resolve_selection(&device_id) {
@@ -559,10 +559,10 @@ fn build_mock_mode_help() -> String {
 }
 
 /// Resolve the shared settings file path for display in help text.
-/// Returns the platform-specific location via `dmm-settings`, or a
+/// Returns the platform-specific location via `dmm-shared`, or a
 /// sensible placeholder if the platform config dir is unavailable.
 fn resolved_config_path_display() -> String {
-    dmm_settings::config_path()
+    dmm_shared::config_path()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "~/.config/dmm-tools/settings.json".to_string())
 }
@@ -2414,9 +2414,8 @@ mod tests {
     /// detection rather than a model nobody chose.
     #[test]
     fn no_flag_and_no_setting_detects_the_meter() {
-        let (id, source) =
-            dmm_settings::resolve_device_family(None, None, registry::AUTO_DEVICE_ID);
-        assert_eq!(source, dmm_settings::DeviceSource::Fallback);
+        let (id, source) = dmm_shared::resolve_device_family(None, None, registry::AUTO_DEVICE_ID);
+        assert_eq!(source, dmm_shared::DeviceSource::Fallback);
         assert!(matches!(
             registry::resolve_selection(&id),
             Some(Selection::Auto)
@@ -2427,23 +2426,23 @@ mod tests {
     /// A saved or flagged family still pins one, and skips detection.
     #[test]
     fn a_named_family_still_wins() {
-        let saved = dmm_settings::SharedSettings {
+        let saved = dmm_shared::SharedSettings {
             device_family: "ut8803".to_string(),
         };
         let (id, source) =
-            dmm_settings::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
-        assert_eq!(source, dmm_settings::DeviceSource::Settings);
+            dmm_shared::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
+        assert_eq!(source, dmm_shared::DeviceSource::Settings);
         let Some(Selection::Device(device)) = registry::resolve_selection(&id) else {
             panic!("a saved family must resolve to that device");
         };
         assert_eq!(device.id, "ut8803");
 
-        let (id, source) = dmm_settings::resolve_device_family(
+        let (id, source) = dmm_shared::resolve_device_family(
             Some("ut61b+"),
             Some(&saved),
             registry::AUTO_DEVICE_ID,
         );
-        assert_eq!(source, dmm_settings::DeviceSource::Cli);
+        assert_eq!(source, dmm_shared::DeviceSource::Cli);
         assert_eq!(selection_id(selection(&id)), "ut61b+");
     }
 

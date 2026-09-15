@@ -8,7 +8,7 @@ description = "GUI application for UNI-T and Voltcraft digital multimeters"
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
-dmm-settings = { path = "../dmm-settings" }
+dmm-shared = { path = "../dmm-shared" }
 eframe = { version = "0.36", features = ["glow", "wgpu"] }
 egui_commonmark = "0.25"
 egui_plot = "0.37"

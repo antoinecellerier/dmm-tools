@@ -48,7 +48,7 @@ impl ExportFormat {
     /// The name the dialog opens with. Shared with `dmm-cli read -o`, so an
     /// export saved here and one the CLI wrote sort together.
     fn default_name(self, model: &str, mode: Option<&str>, start: DateTime<Local>) -> String {
-        dmm_settings::export::default_name(model, mode, start, self.filter().1)
+        dmm_shared::export::default_name(model, mode, start, self.filter().1)
     }
 }
 
@@ -79,7 +79,7 @@ pub(super) struct ExportOutcome {
 /// Writes a sibling .tmp and renames it into place, so a crash mid-export
 /// can't leave a truncated file at the user-chosen path.
 fn write_export(path: &Path, bytes: &[u8], sample_count: usize) -> ExportOutcome {
-    match dmm_settings::write_atomic(path, bytes) {
+    match dmm_shared::write_atomic(path, bytes) {
         Ok(()) => {
             info!("exported {sample_count} samples to {}", path.display());
             // The file name, not the whole path: its extension names the

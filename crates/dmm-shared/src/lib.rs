@@ -1,21 +1,26 @@
-//! Shared settings schema for `dmm-cli` and `dmm-gui`.
+//! What `dmm-cli` and `dmm-gui` must agree on and `dmm-lib` must not carry.
 //!
-//! This crate owns the schema for the fields that BOTH tools need to agree on,
-//! so the contract is enforced by the Rust compiler instead of by two files
-//! that happen to spell `"device_family"` the same way. GUI-only settings
-//! (color overrides, panel visibility, theme, …) live in `dmm-gui` and are
-//! merged into the same flat JSON on disk via `#[serde(flatten)]`.
+//! The layering is `dmm-lib` ← `dmm-shared` ← `dmm-cli`, `dmm-gui`. The meter
+//! library stays self-contained — devices, protocols and transports, and no
+//! opinion about config files, platform directories or what an export is
+//! called — so the contracts the two binaries share sit here instead, one
+//! layer below them, enforced by the Rust compiler rather than by two files
+//! that happen to spell `"device_family"` the same way.
 //!
-//! The canonical on-disk location is
+//! What belongs here: the on-disk settings contract ([`SharedSettings`],
+//! [`config_path`], and [`resolve_device_family`] — the precedence both apply
+//! to the file); durable writes ([`write_atomic`], since settings, capture
+//! reports and exports are all user data that must survive a crash
+//! mid-write); and [`export`], the shape and file name of what the two write
+//! out, so a reading saved from the GUI and one written by the CLI read the
+//! same. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
-//! platform-specific path on macOS and Windows (computed via `directories`).
+//! platform path on macOS and Windows (computed via `directories`).
 //!
-//! It also owns [`resolve_device_family`], the precedence both binaries apply
-//! to the file, and [`write_atomic`]: both persist user data (settings, capture
-//! reports, CSV exports) and all of it must survive a crash mid-write, so the
-//! one durable write helper lives here rather than being reimplemented per
-//! crate. [`export`] is the same idea for what the two write out: an export
-//! saved from the GUI and one written by the CLI carry the same name.
+//! What does not: device, protocol and transport code stays in `dmm-lib`, and
+//! anything one binary alone needs stays in that binary — GUI-only settings
+//! (color overrides, panel visibility, theme, …) live in `dmm-gui` and merge
+//! into the same flat JSON on disk via `#[serde(flatten)]`.
 
 pub mod export;
 
@@ -161,7 +166,7 @@ mod tests {
     impl TempDir {
         fn new(label: &str) -> Self {
             let dir = std::env::temp_dir()
-                .join(format!("dmm-settings-test-{}-{label}", std::process::id()));
+                .join(format!("dmm-shared-test-{}-{label}", std::process::id()));
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).expect("create temp dir");
             TempDir(dir)
