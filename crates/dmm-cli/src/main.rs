@@ -459,22 +459,29 @@ fn main() {
             }
             // Settled before anything opens, so a run that cannot write what
             // it was asked for fails with no meter attached.
-            let (format, destination) = resolve_output(&format, output);
+            let (format, destination, note) = resolve_output(&format, output);
             match refuse_replay_format(format, selection, replay.is_some(), &transform, integrate) {
                 Some(message) => Err(message.into()),
-                None => cmd_read(
-                    selection,
-                    adapter,
-                    interval_ms,
-                    format,
-                    destination,
-                    count,
-                    integrate,
-                    &transform.to_transform(),
-                    mock_mode,
-                    replay,
-                    clock,
-                ),
+                None => {
+                    // After the refusals: a note about where output goes reads
+                    // as a run that started, and this one may not.
+                    if let Some(note) = note {
+                        eprintln!("{} {note}", style("Note:").yellow());
+                    }
+                    cmd_read(
+                        selection,
+                        adapter,
+                        interval_ms,
+                        format,
+                        destination,
+                        count,
+                        integrate,
+                        &transform.to_transform(),
+                        mock_mode,
+                        replay,
+                        clock,
+                    )
+                }
             }
         }
         Cmd::Command { action } => cmd_command(selection, adapter, action),
@@ -1039,14 +1046,12 @@ fn cmd_read(
             dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref())
         });
         info!("connected, starting measurement loop");
-        // The name the meter gave, where the run already asked for one.
-        let meter_name = model.as_deref().unwrap_or(device.display_name);
         run_read_loop(
             &mut dmm,
             interval_ms,
             out,
             destination,
-            meter_name,
+            device.display_name,
             count,
             Some(device),
             integrate,
@@ -1134,15 +1139,13 @@ fn resolve_format(
     }
 }
 
-/// What `read` writes and where it goes.
+/// What `read` writes, where it goes, and the note the pair earns — printed
+/// by the caller, which knows whether the run is going to happen at all.
 fn resolve_output(
     asked: &Option<OutputFormat>,
     output: Option<Option<String>>,
-) -> (OutputFormat, output::Destination) {
+) -> (OutputFormat, output::Destination, Option<String>) {
     let (format, note) = resolve_format(*asked, output.as_ref().and_then(|o| o.as_deref()));
-    if let Some(note) = note {
-        eprintln!("{} {note}", style("Note:").yellow());
-    }
     let destination = match output {
         None => output::Destination::Stdout,
         // A bare `-o`: the first reading names the file.
@@ -1151,7 +1154,7 @@ fn resolve_output(
         },
         Some(Some(path)) => output::Destination::Path(path.into()),
     };
-    (format, destination)
+    (format, destination, note)
 }
 
 /// Why `--format replay` is refused alongside the flags that re-express or
@@ -1234,11 +1237,9 @@ fn read_replay(
         interval_ms,
         out,
         destination,
-        // The name the meter reported when the recording was made.
-        replay
-            .model
-            .as_deref()
-            .unwrap_or(replay.device.display_name),
+        // The meter the file names, as the registry spells it — the name the
+        // recording's own meter reported stays in the `# model:` line.
+        replay.device.display_name,
         count,
         // A gap in the recording plays back as timeouts, and they are not a
         // quiet meter: there is no `--device` to check and nothing on the
@@ -1292,9 +1293,10 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     interval_ms: u64,
     mut out: format::Output,
     destination: output::Destination,
-    // What the meter calls itself, for a file the run has to name: the name it
-    // reported where the run already has one, else the registry's. The same
-    // rule the GUI's Export… names its files by, so the two agree.
+    // The meter a file the run has to name is named after: the registry's
+    // name for it, whatever the meter reports and whatever format is being
+    // written, so one meter's exports all sort together. The same rule the
+    // GUI's Export… names its files by.
     meter_name: &str,
     count: usize,
     // When set, timeout warnings include device-specific activation instructions.
@@ -1469,10 +1471,19 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
         }
     }
 
-    // Only a file the run named itself is worth a line: every other
-    // destination is in the command the user typed.
-    if let Some(path) = writer.finish()? {
-        eprintln!("{}", style(format!("Written to {}", path.display())).dim());
+    // Only a file the run named itself is worth a line, either way: every
+    // other destination is in the command the user typed.
+    match writer.finish()? {
+        output::Wrote::Named(path) => {
+            eprintln!("{}", style(format!("Written to {}", path.display())).dim());
+        }
+        // The reference promises `-o` prints the path it wrote, so a run with
+        // no reading to name a file after has to say that instead of nothing.
+        output::Wrote::Nothing => eprintln!(
+            "{}",
+            style("No readings arrived, so no file was written").dim()
+        ),
+        output::Wrote::AsAsked => {}
     }
     match fatal {
         Some(e) => Err(e.into()),

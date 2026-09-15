@@ -109,6 +109,15 @@ impl Output {
                 //
                 // Through `dmm_lib::replay`, which also parses these lines, so
                 // the two ends of a recording cannot drift apart.
+                if m.raw_payload.is_empty() {
+                    // A reading with no frame behind it would be written as a
+                    // bare offset, which `Replay::parse` refuses — the same
+                    // reading the GUI's replay export refuses to render.
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("a {} reading carries no meter frame to record", m.mode),
+                    ));
+                }
                 w.write_all(dmm_lib::replay::sample_line(offset, &m.raw_payload).as_bytes())
             }
         }
@@ -630,5 +639,28 @@ mod tests {
         assert_eq!(replay.model.as_deref(), Some("UT61E+"));
         // Offsets run from the first frame, not from wherever the session was.
         assert_eq!(replay.duration(), Duration::from_millis(250));
+    }
+
+    /// A reading with no frame behind it would go out as a bare offset, which
+    /// `Replay::parse` refuses. The families that can be recorded all carry
+    /// their payload, so this is the writer refusing to produce a file its own
+    /// parser would reject — the check the GUI's replay export already makes.
+    #[test]
+    fn a_reading_without_a_frame_is_not_written_as_a_replay() {
+        // The fixture carries no payload, which is exactly the case: a
+        // reading that reached the writer without the frame it was decoded
+        // from.
+        let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
+            dmm_lib::replay::header("ut61eplus", "2026-09-16T10:22:31.123+02:00", None)
+        });
+
+        let mut file = Vec::new();
+        let e = output
+            .write(&mut file, &m, &WallClock::new(), None)
+            .expect_err("a frameless reading has nothing to record");
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
+        assert!(e.to_string().contains("DC V"), "got {e}");
+        assert!(file.is_empty(), "nothing is written: {file:?}");
     }
 }

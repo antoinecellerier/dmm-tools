@@ -52,9 +52,20 @@ const RECORDING_ACROSS_MODES: &str = "\
 100 06 33 20 20 38 30 2E 34 35 01 06 30 30 30
 ";
 
+/// A recording whose only frame is truncated: it parses as a file, but the
+/// family refuses every frame in it, so a run of it never gets a reading.
+const RECORDING_ALL_CORRUPT: &str = "\
+# dmm-replay 1
+# device: ut61eplus
+# recorded: 2026-09-02T10:00:00Z
+# model: UT61E+
+0 02 30 20
+";
+
 /// What a file `-o` named itself is called, for the recordings above: the
-/// name the meter reported (the `# model:` line), and the first frame's own
-/// time. Not the family name the CSV comment carries.
+/// registry's name for the meter the file names, whatever the meter reported
+/// in its `# model:` line, and the first frame's own time. Not the family
+/// name the CSV comment carries.
 const AUTO_NAME_STEM: &str = "measurements-UT61E+";
 const AUTO_NAME_START: &str = "2026-09-02_10-00-00";
 
@@ -240,6 +251,41 @@ fn a_bare_output_names_the_file_after_the_meter_and_the_mode() {
     assert_eq!(written.lines().count(), 5, "comment, header, three rows");
 }
 
+/// The name carries the second the run started in, so two runs that start in
+/// the same one — here, two plays of the same recording — ask for the same
+/// file. The second steps aside instead of writing over the first.
+#[test]
+fn two_runs_that_name_the_same_file_both_keep_their_readings() {
+    let dir = dir_for("same-second");
+    let path = recording_in(&dir);
+    let args = [
+        "read",
+        "--replay",
+        path.to_str().expect("utf-8 path"),
+        "--count",
+        "3",
+        "--format",
+        "csv",
+        "-o",
+    ];
+    let (_, first, ok) = run_in(&dir, &args);
+    assert!(ok, "the first run failed: {first}");
+    let (_, second, ok) = run_in(&dir, &args);
+    assert!(ok, "the second run failed: {second}");
+
+    let name = format!("{AUTO_NAME_STEM}-DC-V-{AUTO_NAME_START}.csv");
+    let beside = format!("{AUTO_NAME_STEM}-DC-V-{AUTO_NAME_START}-2.csv");
+    assert!(first.contains(&format!("Written to {name}")), "got {first}");
+    assert!(
+        second.contains(&format!("Written to {beside}")),
+        "got {second}"
+    );
+    for file in [&name, &beside] {
+        let written = std::fs::read_to_string(dir.join(file)).expect("the named file");
+        assert_eq!(written.lines().count(), 5, "{file} holds {written}");
+    }
+}
+
 /// A run that crossed a function switch is no one mode's, so the mode comes
 /// back out of the name when the run ends.
 #[test]
@@ -274,6 +320,102 @@ fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
         .filter(|n| n.starts_with(AUTO_NAME_STEM) && *n != name)
         .collect();
     assert!(strays.is_empty(), "left behind {strays:?}");
+}
+
+/// The rename that drops the mode at the end of a run is a write too: the
+/// name it renames onto may be a file another run already left there.
+#[test]
+fn a_rename_onto_an_existing_name_steps_aside() {
+    let dir = dir_for("rename");
+    let path = recording_of(&dir, RECORDING_ACROSS_MODES);
+    let args = [
+        "read",
+        "--replay",
+        path.to_str().expect("utf-8 path"),
+        "--count",
+        "2",
+        "--format",
+        "csv",
+        "-o",
+    ];
+    let (_, first, ok) = run_in(&dir, &args);
+    assert!(ok, "the first run failed: {first}");
+    let (_, second, ok) = run_in(&dir, &args);
+    assert!(ok, "the second run failed: {second}");
+
+    let name = format!("{AUTO_NAME_STEM}-{AUTO_NAME_START}.csv");
+    let beside = format!("{AUTO_NAME_STEM}-{AUTO_NAME_START}-2.csv");
+    assert!(first.contains(&format!("Written to {name}")), "got {first}");
+    assert!(
+        second.contains(&format!("Written to {beside}")),
+        "got {second}"
+    );
+    for file in [&name, &beside] {
+        let written = std::fs::read_to_string(dir.join(file)).expect("the named file");
+        assert_eq!(written.lines().count(), 4, "{file} holds {written}");
+    }
+}
+
+/// A bare `-o` promises the path it wrote, so a run that never got a reading
+/// has to say there is no file rather than ending in silence.
+///
+/// Unix-only: nothing else ends a run with no readings to count, so the test
+/// interrupts it the way a user would.
+#[cfg(unix)]
+#[test]
+fn a_bare_output_with_no_readings_says_no_file_was_written() {
+    use std::io::BufRead;
+
+    let dir = dir_for("no-readings");
+    let path = recording_of(&dir, RECORDING_ALL_CORRUPT);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_dmm-cli"))
+        .args([
+            "read",
+            "--replay",
+            path.to_str().expect("utf-8 path"),
+            "--count",
+            "1",
+            "--format",
+            "csv",
+            "-o",
+        ])
+        .current_dir(&dir)
+        .env("TZ", "UTC")
+        .env("NO_COLOR", "1")
+        .env_remove("RUST_LOG")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run dmm-cli");
+
+    // Interrupt it once the frame has been refused, so the run is past the
+    // point where a file would have been named.
+    let mut lines = std::io::BufReader::new(child.stderr.take().expect("piped stderr")).lines();
+    let first = lines.next().expect("a line").expect("utf-8 stderr");
+    assert!(first.contains("invalid response"), "got {first}");
+    let killed = Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("send an interrupt");
+    assert!(killed.success(), "could not interrupt the run");
+
+    let rest: Vec<String> = lines.map_while(Result::ok).collect();
+    let status = child.wait().expect("the run ends");
+    assert!(
+        status.success(),
+        "an interrupted run ends cleanly: {rest:?}"
+    );
+    assert!(
+        rest.iter()
+            .any(|l| l.contains("No readings arrived, so no file was written")),
+        "got {rest:?}"
+    );
+    let files: Vec<String> = std::fs::read_dir(&dir)
+        .expect("read the run's directory")
+        .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+        .filter(|n| n.starts_with("measurements-"))
+        .collect();
+    assert!(files.is_empty(), "left behind {files:?}");
 }
 
 /// With no `--format`, the file name says what to write.
@@ -362,6 +504,34 @@ fn a_replay_run_refuses_the_flags_that_change_the_reading() {
         assert!(stderr.contains(flag), "got {stderr}");
         assert!(stderr.contains("playing it back"), "got {stderr}");
     }
+}
+
+/// A refusal ends the run, so it comes before the note about where the output
+/// would have gone: the note described a run that never happened.
+#[test]
+fn a_refused_run_prints_the_refusal_and_no_note() {
+    let dir = dir_for("refusal-first");
+    let path = recording_in(&dir);
+    let (_, stderr, ok) = run_in(
+        &dir,
+        &[
+            "read",
+            "--replay",
+            path.to_str().expect("utf-8 path"),
+            "--count",
+            "1",
+            "--format",
+            "replay",
+            "-o",
+            "readings.csv",
+            "--scale",
+            "2",
+        ],
+    );
+    assert!(!ok, "--scale should be refused: {stderr}");
+    assert!(stderr.contains("playing it back"), "got {stderr}");
+    assert!(!stderr.contains("Note:"), "got {stderr}");
+    assert!(!dir.join("readings.csv").exists(), "the run wrote a file");
 }
 
 #[test]

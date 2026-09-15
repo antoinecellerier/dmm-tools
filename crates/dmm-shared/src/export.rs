@@ -101,8 +101,12 @@ pub fn default_name(
 /// A meter or mode name as one file-name word: runs of whitespace become a
 /// single `-` and the separators a path could read drop out, so "Mock
 /// UT61E+" exports as `Mock-UT61E+`.
+///
+/// A slash separates words rather than vanishing — deleting it ran the
+/// registry's `UT171A/B/C` together as `UT171ABC`.
 pub fn file_safe(name: &str) -> String {
-    name.replace(['/', '\\', ':'], "")
+    name.replace(':', "")
+        .replace(['/', '\\'], " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join("-")
@@ -169,6 +173,10 @@ mod tests {
     fn a_name_is_folded_into_one_file_name_word() {
         assert_eq!(file_safe("Mock UT61E+"), "Mock-UT61E+");
         assert_eq!(file_safe("UT61E+ / UT61B+"), "UT61E+-UT61B+");
+        // A slash with no space around it is still a word boundary: the
+        // registry's own `UT171A/B/C` used to come out as `UT171ABC`.
+        assert_eq!(file_safe("UT171A/B/C"), "UT171A-B-C");
+        assert_eq!(file_safe("DC:V\\A"), "DCV-A");
         assert_eq!(file_safe("DC V"), "DC-V");
         assert_eq!(file_safe("\u{3a9}"), "\u{3a9}");
     }
