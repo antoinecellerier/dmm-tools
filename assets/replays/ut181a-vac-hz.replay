@@ -1,0 +1,5 @@
+# dmm-replay 1
+# device: ut181a
+# recorded: 2026-09-02T00:00:00Z
+# source: one frame reported in issue #5 (crates/dmm-lib/tests/golden/ut181a/vac_hz_mains.yaml); time of day not recorded
+0 02 0E 03 21 11 03 52 38 6F 43 20 56 41 43 00 00 00 00 00 F6 08 48 42 20 48 7A 00 00 00 00 00 5A D5 F8 9F 41 20 6D 73 00 43 00 00 00 00 3D 06 71 43 56 41 43 00 00 00 00 00
