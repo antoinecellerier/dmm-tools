@@ -35,6 +35,7 @@
 - **The meter on the cable is identified for you** — `--device` now only pins a model; when nothing answers, the steps that switch each meter's output on are printed.
 - **`get` and `set` read and switch the meter's mode, range and toggles** — on the UT61+/UT161, UT181A, VC-880/VC650BT and VC-890; `get --format json` for scripts.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
+- **`read --record` saves the meter's frames and `read --replay` plays them back** — the CLI runs a recording with no meter attached.
 - **Capture drives the meter and waits for readings itself** — every step stopped for an Enter and filed whatever was on screen; on meters that take commands it sets each range, flag and sub-mode.
 - **Capture covers every sub-mode and lists the equipment up front** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB had no step; a thermocouple or battery turned up mid-run.
 - **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; a meter that never answered left nothing; confirmations and `debug` showed only the main reading.

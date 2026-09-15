@@ -3,6 +3,7 @@ mod drive;
 mod format;
 mod plan;
 mod recording;
+mod replay_record;
 mod watch;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
@@ -16,6 +17,7 @@ use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transform::{FactorError, Transform};
 use log::{error, info};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -83,6 +85,12 @@ enum Cmd {
         /// Without this, mock cycles through all modes automatically.
         #[arg(long, long_help = build_mock_mode_help())]
         mock_mode: Option<String>,
+        /// Save every frame the meter sends to FILE, for --replay
+        #[arg(long, value_name = "FILE", conflicts_with = "replay")]
+        record: Option<PathBuf>,
+        /// Play back a file written by --record instead of opening a meter
+        #[arg(long, value_name = "FILE", conflicts_with = "mock_mode")]
+        replay: Option<PathBuf>,
         /// Run session time at this multiple of real time (mock only).
         /// Hidden: a contributor tool for fast runs, not a user-facing knob.
         #[arg(long, hide = true)]
@@ -304,6 +312,10 @@ fn main() {
     let cli =
         Cli::from_arg_matches_mut(&mut cmd.get_matches()).unwrap_or_else(|e: clap::Error| e.exit());
 
+    // Whether the meter was named on the command line, as opposed to coming
+    // from the settings file or from detection. Only `read --replay` asks.
+    let device_named = cli.device.is_some();
+
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants
     // one.
@@ -372,6 +384,8 @@ fn main() {
             integrate,
             transform,
             mock_mode,
+            record,
+            replay,
             mock_clock_scale,
             mock_clock_preseed,
         } => {
@@ -387,6 +401,18 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            // A replay file names its own meter, so a `--device` alongside it
+            // would either be ignored or contradict the file. Only a typed
+            // flag is refused: the settings file names a meter for every run,
+            // and a replay must not need it edited.
+            if replay.is_some() && device_named {
+                eprintln!(
+                    "{} {}",
+                    style("Error:").red().bold(),
+                    REPLAY_NAMES_ITS_DEVICE,
+                );
+                std::process::exit(1);
+            }
             cmd_read(
                 selection,
                 adapter,
@@ -397,6 +423,8 @@ fn main() {
                 integrate,
                 &transform.to_transform(),
                 mock_mode,
+                record,
+                replay,
                 clock,
             )
         }
@@ -931,15 +959,44 @@ fn cmd_read(
     integrate: bool,
     transform: &Transform,
     mock_mode: Option<String>,
+    record: Option<PathBuf>,
+    replay: Option<PathBuf>,
     // Virtual session time; real unless a --mock-clock-* flag asked otherwise.
     clock: dmm_lib::Clock,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(path) = &replay {
+        // No cable to pace this run, so the clock flags apply as they do to
+        // the mock and `refuse_clock_on_hardware` is not consulted.
+        return read_replay(
+            path,
+            interval_ms,
+            format,
+            output_path,
+            count,
+            integrate,
+            transform,
+            clock,
+        );
+    }
     refuse_clock_on_hardware(selection, &clock)?;
     if requires_hardware(selection) {
         let (mut dmm, device) = open_with_help(selection, adapter)?;
         let experimental = !dmm.profile().stability.is_verified();
+        // Once, before the loop: on a UT61+ this is a command the meter
+        // answers with a beep, and the name goes in the file's header.
+        let mut recorder = match &record {
+            Some(path) => {
+                let model = dmm.get_name().ok().flatten();
+                Some(replay_record::ReplayWriter::create(
+                    path,
+                    device.id,
+                    model.as_deref(),
+                )?)
+            }
+            None => None,
+        };
         info!("connected, starting measurement loop");
-        run_read_loop(
+        let result = run_read_loop(
             &mut dmm,
             interval_ms,
             &format,
@@ -949,8 +1006,22 @@ fn cmd_read(
             Some(device),
             integrate,
             transform,
-        )
+            recorder.as_mut(),
+        );
+        // After the summary, and whether or not the loop ended well: the
+        // frames already on disk are worth naming either way.
+        if let (Some(recorder), Some(path)) = (recorder, &record) {
+            let frames = recorder.finish()?;
+            eprintln!(
+                "{}",
+                style(format!("Recorded {frames} frames to {}", path.display())).dim()
+            );
+        }
+        result
     } else {
+        if record.is_some() {
+            return Err(record_needs_hardware(selection).into());
+        }
         let mut dmm = open_mock_device(mock_mode, clock)?;
         info!("mock device connected, starting measurement loop");
         // Mock returns instantly — use 100ms floor to simulate ~10 Hz
@@ -967,8 +1038,71 @@ fn cmd_read(
             None,
             integrate,
             transform,
+            None,
         )
     }
+}
+
+/// Why `--record` is refused on a device that synthesises its readings.
+fn record_needs_hardware(selection: Selection) -> String {
+    format!(
+        "--record needs a real meter; nothing to record from --device {}",
+        selection_id(selection),
+    )
+}
+
+/// Why `--device` is refused alongside `--replay`.
+const REPLAY_NAMES_ITS_DEVICE: &str =
+    "--replay names its own meter in the file; drop --device (dmm-cli read --replay FILE)";
+
+/// Play a recording back as the session, with no meter on the cable.
+///
+/// The clock carries the recording's own start, so every reading exports at
+/// the wall time it was measured at and two runs of the same file print the
+/// same timestamps.
+#[allow(clippy::too_many_arguments)]
+fn read_replay(
+    path: &Path,
+    interval_ms: u64,
+    format: OutputFormat,
+    output_path: Option<String>,
+    count: usize,
+    integrate: bool,
+    transform: &Transform,
+    clock: dmm_lib::Clock,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let replay = dmm_lib::replay::Replay::load(path)?;
+    // dmm-lib has no date library, so the header line comes back as text.
+    let recorded = chrono::DateTime::parse_from_rfc3339(&replay.recorded).map_err(|e| {
+        format!(
+            "{}: `# recorded: {}` is not an RFC3339 date ({e})",
+            path.display(),
+            replay.recorded,
+        )
+    })?;
+    let mut dmm = replay.open(clock.with_wall_origin(recorded.into()))?;
+    let experimental = !dmm.profile().stability.is_verified();
+    // A log line, not a banner: a replay's output is what the meter's was,
+    // and a note on stderr would land in every doc snippet taken from one.
+    info!(
+        "replaying {} ({}, recorded {})",
+        path.display(),
+        replay.device.id,
+        replay.recorded,
+    );
+    // No interval floor: the file's own offsets pace the run.
+    run_read_loop(
+        &mut dmm,
+        interval_ms,
+        &format,
+        output_path,
+        count,
+        experimental,
+        Some(replay.device),
+        integrate,
+        transform,
+        None,
+    )
 }
 
 /// Refuse a bent session clock on a device that is paced by USB.
@@ -1022,6 +1156,8 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     // Applied to every reading before anything else sees it; the identity
     // transform (no --scale/--offset/--unit) is a no-op.
     transform: &Transform,
+    // `--record`, when given: every frame goes in as the meter sent it.
+    mut recorder: Option<&mut replay_record::ReplayWriter>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
@@ -1090,6 +1226,13 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
+                // Recorded before the transform: a replay file holds the
+                // meter's own frames, and `--scale` is a choice the run that
+                // plays it back makes for itself.
+                if let Some(recorder) = recorder.as_deref_mut() {
+                    recorder.push(&m)?;
+                }
+
                 // Before everything else: the unit-change check, the stats,
                 // the integrator and the formatter must all see the same
                 // series, and after a transform that series is the scaled one.
@@ -1985,6 +2128,8 @@ mod tests {
                 integrate,
                 transform,
                 mock_mode,
+                record,
+                replay,
                 mock_clock_scale,
                 mock_clock_preseed,
             } => {
@@ -1998,12 +2143,49 @@ mod tests {
                 assert_eq!(transform.to_transform(), Transform::default());
                 assert!(transform.to_transform().is_identity());
                 assert!(mock_mode.is_none());
+                // Neither recording nor replaying: `read` opens the meter.
+                assert!(record.is_none());
+                assert!(replay.is_none());
                 // No flag means the wall clock, so `read` paces as it always did.
                 assert!(mock_clock_scale.is_none());
                 assert!(mock_clock_preseed.is_none());
             }
             _ => panic!("expected Read"),
         }
+    }
+
+    #[test]
+    fn clap_parse_read_record_and_replay() {
+        let recording = Cli::try_parse_from(["dmm-cli", "read", "--record", "bench.replay"])
+            .expect("--record parses");
+        match recording.command {
+            Cmd::Read { record, .. } => {
+                assert_eq!(record.as_deref(), Some(Path::new("bench.replay")));
+            }
+            _ => panic!("expected Read"),
+        }
+
+        let playback = Cli::try_parse_from(["dmm-cli", "read", "--replay", "bench.replay"])
+            .expect("--replay parses");
+        match playback.command {
+            Cmd::Read { replay, .. } => {
+                assert_eq!(replay.as_deref(), Some(Path::new("bench.replay")));
+            }
+            _ => panic!("expected Read"),
+        }
+    }
+
+    /// A run either takes frames from a meter or gives them back, and the
+    /// mock has none to record — clap says so before anything opens.
+    #[test]
+    fn clap_refuses_record_with_replay_and_replay_with_mock_mode() {
+        assert!(
+            Cli::try_parse_from(["dmm-cli", "read", "--record", "a", "--replay", "b"]).is_err()
+        );
+        assert!(
+            Cli::try_parse_from(["dmm-cli", "read", "--replay", "b", "--mock-mode", "dcv"])
+                .is_err()
+        );
     }
 
     /// Hidden, but they still have to parse — nothing in `--help` would catch
@@ -2056,6 +2238,8 @@ mod tests {
                 mock_mode: _,
                 integrate: _,
                 transform: _,
+                record: _,
+                replay: _,
                 mock_clock_scale: _,
                 mock_clock_preseed: _,
             } => {

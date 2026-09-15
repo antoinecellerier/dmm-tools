@@ -143,6 +143,8 @@ dmm-cli read [OPTIONS]
 | `--format <FORMAT>` | `text` | Output format: `text`, `csv`, or `json`. |
 | `-o, --output <FILE>` | stdout | Write output to a file instead of stdout. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
+| `--record <FILE>` | | Save every frame the meter sends, for `--replay`. Asks the meter its name (a UT61+ beeps once). |
+| `--replay <FILE>` | | Play back a `--record` file instead of opening a meter; `--count` or Ctrl+C ends it. The file names the device. |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
@@ -192,6 +194,9 @@ dmm-cli read --format json --interval-ms 1000
 
 # Measure battery discharge capacity (coulomb counter)
 dmm-cli read --integrate --format csv -o discharge.csv
+
+# Keep a session to replay later
+dmm-cli read --record bench.replay --count 600
 ```
 
 #### Scaling readings in software
