@@ -192,7 +192,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
         pid: ch9325::PID,
         name: "CH9325",
         init: |dev| {
-            let ch = ch9325::Ch9325::new(dev);
+            let mut ch = ch9325::Ch9325::new(dev);
             ch.init()?;
             Ok(Box::new(ch))
         },

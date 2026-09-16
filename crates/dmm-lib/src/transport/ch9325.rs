@@ -43,15 +43,55 @@ const PRIMARY_FEATURE_REPORT: [u8; 10] =
 const FALLBACK_FEATURE_REPORT: [u8; 10] =
     [0x00, 0x00, 0x4B, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
+const BRIDGE: &str = "CH9325 HID-to-UART bridge (WCH)";
+
+/// What start-up settled on: the rate the bridge was left at, and what the
+/// probe read there. Start-up takes any report as an answer, so the meter
+/// bytes it carried are what say whether the meter was heard at all.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Startup {
+    baud: u32,
+    /// Meter bytes in the probe's report; `None` when no report came.
+    probe_bytes: Option<usize>,
+}
+
+impl Startup {
+    fn describe(self) -> String {
+        match self.probe_bytes {
+            Some(n) => format!(
+                "{} baud, start-up report carried {n} meter bytes",
+                self.baud
+            ),
+            None => format!("{} baud, no start-up report", self.baud),
+        }
+    }
+}
+
 /// CH9325 HID transport wrapping a `HidDevice`.
 pub struct Ch9325 {
     device: HidDevice,
+    startup: Option<Startup>,
 }
 
 impl Ch9325 {
     /// Wrap an already-opened HID device.
     pub fn new(device: HidDevice) -> Self {
-        Self { device }
+        Self {
+            device,
+            startup: None,
+        }
+    }
+
+    /// Wait for one raw report and return how many meter bytes it carried,
+    /// or `None` when none came.
+    fn probe(&self) -> Result<Option<usize>> {
+        let mut raw = [0u8; HID_REPORT_DATA_SIZE + 1];
+        let n = self.device.read_timeout(&mut raw, 300)?;
+        if n == 0 {
+            return Ok(None);
+        }
+        trace!("CH9325 probe report ({n} bytes): {:02X?}", &raw[..n]);
+        Ok(Some(rx_payload(&raw, n).map_or(0, |(_, len)| len)))
     }
 
     /// Initialize the CH9325 transport by probing baud rates.
@@ -61,11 +101,12 @@ impl Ch9325 {
     /// sequence from FUN_1001ef50.
     ///
     /// Reference: §4.3–4.4
-    pub fn init(&self) -> Result<()> {
+    pub fn init(&mut self) -> Result<()> {
         debug!("CH9325: opening device (VID={VID:#06x} PID={PID:#06x})");
 
         // Primary init: 2400 baud + 0x5A trigger (§4.3)
         debug!("CH9325: trying primary init (2400 baud + trigger)");
+        trace!("CH9325 feature report: {:02X?}", PRIMARY_FEATURE_REPORT);
         self.device
             .send_feature_report(&PRIMARY_FEATURE_REPORT)
             .map_err(Error::Hid)?;
@@ -76,32 +117,44 @@ impl Ch9325 {
         tx_buf[0] = 0x00; // report ID for hidapi
         tx_buf[1] = 0x01; // 1 byte of UART data
         tx_buf[2] = 0x5A; // trigger byte
+        trace!("CH9325 TX: {:02X?}", &tx_buf[..3]);
         self.device.write(&tx_buf).map_err(Error::Hid)?;
 
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        // Probe: try to read data within 300ms (§2.2 step 3d)
-        let mut probe_buf = [0u8; HID_REPORT_DATA_SIZE + 1];
-        let n = self.device.read_timeout(&mut probe_buf, 300)?;
-        if n > 0 {
-            debug!("CH9325: primary init succeeded ({n} bytes received)");
+        // Probe: try to read data within 300ms (§2.2 step 3d). Any report
+        // counts, even one carrying no meter bytes.
+        if let Some(bytes) = self.probe()? {
+            debug!("CH9325: primary init got a report carrying {bytes} meter bytes");
+            self.startup = Some(Startup {
+                baud: 2400,
+                probe_bytes: Some(bytes),
+            });
             return Ok(());
         }
 
         // Fallback init: 19200 baud, no trigger (§4.4)
         debug!("CH9325: primary init failed, trying fallback (19200 baud)");
+        trace!("CH9325 feature report: {:02X?}", FALLBACK_FEATURE_REPORT);
         self.device
             .send_feature_report(&FALLBACK_FEATURE_REPORT)
             .map_err(Error::Hid)?;
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Probe again
-        let n = self.device.read_timeout(&mut probe_buf, 300)?;
-        if n > 0 {
-            debug!("CH9325: fallback init succeeded ({n} bytes received)");
-        } else {
-            warn!("CH9325: no data received after init — device may need manual activation");
+        let probe_bytes = self.probe()?;
+        match probe_bytes {
+            Some(bytes) => {
+                debug!("CH9325: fallback init got a report carrying {bytes} meter bytes")
+            }
+            None => {
+                warn!("CH9325: no data received after init — device may need manual activation")
+            }
         }
+        self.startup = Some(Startup {
+            baud: 19200,
+            probe_bytes,
+        });
 
         Ok(())
     }
@@ -130,6 +183,14 @@ fn locate_rx_payload(raw: &[u8], n: usize) -> Option<(u8, usize)> {
     }
 }
 
+/// Where the UART payload starts in one raw RX report and how many bytes it
+/// holds, or `None` for a report matching neither layout.
+fn rx_payload(raw: &[u8], n: usize) -> Option<(usize, usize)> {
+    let (header_byte, start) = locate_rx_payload(raw, n)?;
+    let len = ((header_byte & 0x0F) as usize).min(n.saturating_sub(start));
+    Some((start, len))
+}
+
 impl Transport for Ch9325 {
     fn write(&self, data: &[u8]) -> Result<()> {
         // Split UART data across multiple 8-byte HID reports if needed.
@@ -155,7 +216,7 @@ impl Transport for Ch9325 {
             return Ok(0);
         }
 
-        let Some((header_byte, payload_start)) = locate_rx_payload(&raw, n) else {
+        let Some((payload_start, payload_len)) = rx_payload(&raw, n) else {
             // Unexpected framing — log and return empty
             trace!(
                 "Ch9325 RX: unexpected framing, raw[0]={:#04x}, n={n}, skipping",
@@ -164,13 +225,11 @@ impl Transport for Ch9325 {
             return Ok(0);
         };
 
-        let payload_len = (header_byte & 0x0F) as usize;
         if payload_len == 0 {
             return Ok(0);
         }
 
-        let available = n.saturating_sub(payload_start);
-        let actual = payload_len.min(available).min(buf.len());
+        let actual = payload_len.min(buf.len());
         buf[..actual].copy_from_slice(&raw[payload_start..payload_start + actual]);
         trace!("CH9325 RX ({actual} bytes): {:02X?}", &buf[..actual]);
         Ok(actual)
@@ -183,7 +242,10 @@ impl Transport for Ch9325 {
     }
 
     fn transport_info(&self) -> Result<String> {
-        Ok("CH9325 HID-to-UART bridge (WCH)".to_string())
+        Ok(match self.startup {
+            Some(startup) => format!("{BRIDGE}, {}", startup.describe()),
+            None => BRIDGE.to_string(),
+        })
     }
 
     fn transport_name(&self) -> &'static str {
@@ -328,6 +390,36 @@ mod tests {
         // 0xF0 = 0 bytes (empty report)
         let payload_len = (0xF0u8 & 0x0F) as usize;
         assert_eq!(payload_len, 0);
+    }
+
+    /// The probe counts meter bytes, not the report: an empty report carries
+    /// none, and a short read no more than arrived.
+    #[test]
+    fn rx_payload_counts_the_meter_bytes() {
+        assert_eq!(rx_payload(&[0xF0, 0, 0, 0, 0, 0, 0, 0], 8), Some((1, 0)));
+        assert_eq!(
+            rx_payload(&[0x00, 0xF7, 1, 2, 3, 4, 5, 6, 7], 9),
+            Some((2, 7))
+        );
+        assert_eq!(rx_payload(&[0xF7, 1, 2], 3), Some((1, 2)));
+        assert_eq!(rx_payload(&[0x12, 0x34], 2), None);
+    }
+
+    #[test]
+    fn startup_says_the_rate_and_what_the_probe_heard() {
+        let heard = Startup {
+            baud: 2400,
+            probe_bytes: Some(7),
+        };
+        assert_eq!(
+            heard.describe(),
+            "2400 baud, start-up report carried 7 meter bytes"
+        );
+        let silent = Startup {
+            baud: 19200,
+            probe_bytes: None,
+        };
+        assert_eq!(silent.describe(), "19200 baud, no start-up report");
     }
 
     #[test]
