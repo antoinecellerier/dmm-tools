@@ -10,8 +10,15 @@
 2. **UT804.exe V2.00** — standalone PC software, Borland Delphi application.
    Ghidra decompilation + binary constant extraction.
 
+   For both apps (2026-09-16): the Delphi RTTI (class, method, field and
+   dynamic-method tables), the form resource, and a Ghidra 12.1.3
+   decompilation of the form's event handlers.
+
 3. **CH9325 HID transport** — reverse engineered separately from uci.dll
    (documented in `../uci-bench-family/`).
+
+4. **UT803 operating manual** — RS232 port settings and data output
+   button.
 
 ### Avoided (clean-room boundary)
 - No external open-source implementations were consulted during RE
@@ -30,10 +37,13 @@ This was based on:
 - The `"123456789ABCDE"` validation string (standard FS9721 byte indices)
 - The presence of 7-segment decode tables in both binaries
 
-**Actual finding:** The meters use FS9721 **framing** (14 bytes with index
-nibbles) but with a **proprietary data encoding**. The data nibbles carry
-structured measurement data (mode codes, range codes, digit values, status
-flags) rather than raw LCD segment bits.
+**Actual finding:** the data nibbles carry structured measurement data
+(mode codes, range codes, digit values, status flags) rather than raw LCD
+segment bits. *Corrected 2026-09-16: the meters send 11-byte packets
+ending CR LF, not 14-byte FS9721 frames. The 14-byte loops belong to
+each app's unreachable `Read` handler; the validation string and the
+7-segment table exist only in UT804.exe, as part of its unused
+UT60A/B/C path — `reverse-engineered-protocol.md` §2.*
 
 Evidence:
 1. Nibble 7 comparison constants in UT804.exe: `'D'`, `'A'`, `'B'`, `'C'`,
@@ -45,19 +55,14 @@ Evidence:
 4. Nibbles 10-11 always contain 0x0D/0x0A as format markers
 5. Digit nibbles (1-5) contain BCD values, not 7-segment bit patterns
 
-### 7-segment decode: secondary code path
+### 7-segment decode: unused code path
 
-*Corrected 2026-09-16: in UT804.exe the USB data handler does call
-FUN_0055a480 (`LcdDisplay60B`); the structured format belongs to the
-RS232 handler — `reverse-engineered-protocol.md` §2.3.*
-
-Both binaries contain 7-segment decode functions (FUN_0055a480 in UT804,
-equivalent in UT803) with a verified decode table. However, the main USB
-HID data path does NOT use these functions — the data is already structured.
-These functions may be for:
-- RS-232 serial output (standard FS9721 segment mode)
-- Legacy firmware compatibility
-- An alternative display mode
+UT804.exe's 7-segment decoder (FUN_0055a480, `LcdDisplay60B`) is reached
+only from the `Read` button's HID handler and from the RS232 handler
+`H60BRData`. The shipped form selects neither: the checkbox that would
+install `H60BRData` is unchecked, and the `Read` button lies under the
+chart. UT803.exe has no 7-segment decoder
+(`reverse-engineered-protocol.md` §2.4).
 
 ## Methodology
 
@@ -78,32 +83,48 @@ These functions may be for:
    data format by comparing function structures, constant patterns, and
    mode detection logic.
 
+5. **RTTI-seeded handler decompile (2026-09-16).** The full auto-analysis
+   had missed most of the form's event handlers, because only the RTTI
+   refers to them: the 12.0.4 decompile held 19 of UT804.exe's 78
+   published methods and 11 of UT803.exe's 64, and none of the HID
+   callbacks or connect handlers. A scan of the VMTs listed:
+   - the form's published methods and fields, with each field's class;
+   - the dynamic-method tables;
+   - the unnamed data handlers the form installs.
+
+   A Ghidra 12.1.3 script created and decompiled those functions. The
+   form resource gave each control's class, visibility, check state
+   and event bindings. Conditions were read from the disassembly,
+   because the decompiler drops the flag branches after Delphi string
+   compares. A search from every HID and `WriteFile` call site back to
+   the form code, following direct calls, found what the apps send. The `*-gap-decompiled.txt`
+   files from the first pass held only Ghidra logs.
+
 ## Confidence Assessment
 
-- **Frame format (14-byte, index nibbles):** HIGH — confirmed by assembly
-  analysis, validation string, and functional code. *2026-09-16: that
-  code is the USB path, which decodes LCD segments; see
-  `reverse-engineered-protocol.md` §2.3.*
+- **Packet format (11 bytes ending CR LF, low nibbles):** HIGH — both
+  apps' USB and RS232 handlers (2026-09-16). The earlier 14-byte reading
+  came from an unused path.
 - **Proprietary data nibbles:** HIGH — confirmed by binary constants and
   mode detection logic in both executables
 - **Mode codes 1-15:** HIGH for UT804, MEDIUM for UT803 (fewer modes, exact
   list not fully enumerated)
 - **Range/decimal point tables:** MEDIUM — logic identified but not all
   range values could be decoded from decompilation alone
-- **Status flag bits:** MEDIUM — HOLD and AUTO confirmed, others unverified
+- **Status flag bits:** MEDIUM — AUTO and sign confirmed, others unverified
 - **Digit encoding:** MEDIUM — 0-9 confirmed as digits, 0xA as blank, sign
   encoding unknown
-- **Nibbles 12-14:** LOW — purpose not determined
+- **Nibbles 12-14:** none; the packet is 11 bytes
 
 ## Cross-Reference with Community Sources
 
 Consulted after the vendor analysis above, for validation only (approved
 2026-09-16, after issue #16's first UT804 report). The finding-by-finding
 comparison is in `reverse-engineered-protocol.md` §8. In short: sigrok
-and `UT804.LOG` give the UT804 11-byte UT71x packets, the format of the
-vendor's RS232 path, whose payload matches §3 except for overloads; the
-14-byte framing belongs to the vendor's USB path; and every community
-CH9325 driver sends the UT803/UT804 apps' report layout.
+and `UT804.LOG` give the UT804 11-byte UT71x packets, which our handler decompile now finds on both the
+vendor's USB and RS232 paths; the payload matches §3 and §7.4 item 6,
+overloads included; and every community CH9325 driver sends the UT803/UT804
+apps' report layout.
 
 Reference implementations:
 

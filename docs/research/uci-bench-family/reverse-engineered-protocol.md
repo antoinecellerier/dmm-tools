@@ -106,19 +106,17 @@ This auto-detect logic applies to the UCI SDK (uci.dll) only. **The
 actual UT803 and UT804 meters do NOT use 0xAC or 0xABCD format.**
 
 Ghidra decompilation of the standalone UT803.exe and UT804.exe PC
-software (2026-04-10) revealed that both meters use a **14-byte LCD
-segment protocol** (FS9721/FS9922 family). The evidence:
-
-1. Two `CMP EBX, 14` loops in the HID data receive callback
-   (UT803: VA 0x55D0C1/0x55D0F0; UT804: VA 0x560BC1/0x560BF0)
-   — frame assembly counts exactly 14 bytes.
-2. Validation string `"123456789ABCDE"` (UT803: VA 0x55F091;
-   UT804: VA 0x560CC0) — the 14 valid FS9721 byte index nibbles
-   (high nibble 0x1–0xE).
-3. 7-segment lookup table in the display handler that decodes 56
-   LCD segment bits (14 nibbles × 4 bits) into digit values.
-4. The UT803 manual documents RS-232 at 19200/7/Odd — the standard
-   FS9721 serial format.
+software (2026-04-10) was first read as a **14-byte LCD segment
+protocol** (FS9721/FS9922 family), from two `CMP EBX, 14` loops in a HID
+data handler (UT803: VA 0x55D0C1/0x55D0F0; UT804: VA 0x560BC1/0x560BF0),
+the string `"123456789ABCDE"` (UT804: VA 0x560CC0; UT803.exe has none,
+and its VA 0x55F091 lies inside the runtime's hex-digit table) and
+UT804.exe's 7-segment table. **Corrected 2026-09-16:** those handlers
+belong to a `Read` button the user cannot reach. The apps'
+`USB Connect` and RS232 handlers take **11-byte packets ending CR LF**
+with structured data, and UT803.exe has no 7-segment decoder
+(`../ut803/reverse-engineered-protocol.md` §2). The UT803 manual
+documents RS-232 at 19200/7/Odd [KNOWN].
 
 The UCI SDK's 0xAC/0xABCD auto-detect for QinHeng VID:PID may be
 aspirational, for a different firmware version, or may require a
@@ -411,9 +409,10 @@ sources; it is compared in §9.*
 7 payload bytes, zero-padded to 8 bytes total.
 Example: `F2 35 41 00 00 00 00 00` = 2 bytes of UART data (0x35, 0x41).
 
-Vendor evidence: UT804.exe's USB data handler reads the payload length
-from the low hex digit of each report's first byte and treats 0 as an
-empty report (`../ut803/reverse-engineered-protocol.md` §2.3); the DLL
+Vendor evidence: the UT803/UT804 apps' USB data handlers read the
+payload length from the low hex digit of each report's first byte and
+end a packet at the first report without payload
+(`../ut803/reverse-engineered-protocol.md` §2.2); the DLL
 tests bytes for a high nibble of 0xF with a nonzero low nibble
 (FUN_1001fcc0, FUN_1001b970; callers not traced). Issue #16's cable
 returned 8-byte reports.
@@ -479,6 +478,8 @@ Used when primary init fails to receive data within 300ms:
 The vendor DLL probes two baud rates: 2400 first (common for older
 UNI-T meters like UT61B/UT61E), then 19200 as fallback. The UCI bench
 meters (UT632, UT803, UT804) respond at whichever rate they support.
+The standalone apps each set one rate: 19200 for the UT803, 2400 for the
+UT804 (`../ut803/reverse-engineered-protocol.md` §1.2).
 This differs from the CP2110 path which hard-codes 9600 baud.
 
 ### 4.5 QinHeng Chip Identity
@@ -735,11 +736,11 @@ speak; it is written up in
 | QinHeng: primary init = 2400 baud + 0x5A trigger | [VENDOR] | Ghidra FUN_1001d360 + disassembly |
 | QinHeng: fallback init = 19200 baud, no trigger | [VENDOR] | Ghidra FUN_1001d270 + disassembly |
 | QinHeng: VID 0x1A86, PID 0xE008 | [KNOWN] | Programming manual |
-| CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [VENDOR] | UT804.exe USB handler, uci.dll FUN_1001fcc0; 8-byte reports on issue #16's cable (§4.2) |
+| CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [VENDOR] | UT803.exe/UT804.exe USB handlers, uci.dll FUN_1001fcc0; 8-byte reports on issue #16's cable (§4.2) |
 | CH9325 feature report baud encoding: uint16 LE at bytes 1-2 | [VENDOR] | uci.dll and UT803/UT804.exe disassembly (§4.1) |
 | QinHeng wire format in UCI SDK: auto-detected 0xAC/0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
-| UT803/UT804 actual wire format: FS9721 framing with proprietary structured data (NOT LCD segments) | ~~[KNOWN]~~ contested | Ghidra decompilation + binary constant extraction from UT803.exe/UT804.exe (2026-04-10). 2026-09-16: the framing and the data format come from two different UT804.exe paths — `../ut803/reverse-engineered-protocol.md` §2.3 |
-| UT803/UT804 init: 2400 baud via CH9325 feature report | [VENDOR] | Ghidra UT804.exe FUN_00560668 |
+| UT803/UT804 wire format: 11-byte packets ending CR LF, structured data (NOT LCD segments) | [VENDOR] | UT803.exe/UT804.exe `USB Connect` and RS232 handlers (2026-09-16). The 2026-04-10 reading of 14-byte FS9721 frames came from an unused path — `../ut803/reverse-engineered-protocol.md` §2 |
+| UT803/UT804 init: CH9325 feature report, 19200 baud (UT803) or 2400 baud (UT804) | [VENDOR] | UT803.exe and UT804.exe `SetFeatureClick` (`../ut803/reverse-engineered-protocol.md` §1.2) |
 | UT804 range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A: serial port, 9600 baud | [KNOWN] | Programming manual |
@@ -754,13 +755,13 @@ speak; it is written up in
 | Finding | Question |
 |---------|----------|
 | ~~QinHeng feature report baud rate encoding~~ | **RESOLVED**: primary=2400 baud (0x0960 LE), fallback=19200 baud (0x4B00 LE) |
-| ~~Which wire format per QinHeng model~~ | **RESOLVED**: UT803/UT804 use FS9721 14-byte framing with proprietary structured data (NOT LCD segments, NOT 0xAC/0xABCD). Confirmed by binary constant extraction (2026-04-10). UCI SDK's auto-detect is for the SDK only. |
+| ~~Which wire format per QinHeng model~~ | **RESOLVED**: UT803/UT804 send 11-byte packets ending CR LF with structured data (NOT LCD segments, NOT 0xAC/0xABCD), per the standalone apps' handlers (2026-09-16; the 2026-04-10 reading of 14-byte FS9721 framing was wrong). UCI SDK's auto-detect is for the SDK only. |
 | UT805A serial frame format | UT805A manual documents ASCII text protocol (10-byte frames + CR/LF, single-letter commands). NOT the same as HID models. |
 | ~~UT805A 7-bit vs 8-bit data~~ | **RESOLVED**: UT805A manual says 9600/8N1. USB is virtual COM port (not HID). |
 | UT8802 byte 6 purpose | Bargraph? Secondary status? |
 | ~~UT8802 byte 7 exact bit assignments~~ | **RESOLVED**: MIN=bit 0, MAX=bit 1, AUTO=bit 2 (inverted), REL=bit 3, HOLD=bit 4, Sign=bit 7. See §3.5. |
 | UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
-| UT803/UT804 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding, nibbles 12-14 — all need verification against real hardware. See `docs/research/ut803/reverse-engineered-protocol.md` |
+| UT803/UT804 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding — all need verification against real hardware. See `docs/research/ut803/reverse-engineered-protocol.md` |
 | UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |
 
 ---

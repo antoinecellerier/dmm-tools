@@ -726,7 +726,33 @@ plus what no step reaches.
   `remote control unreliable on this meter` line if it appears — those are
   the commands this meter refused
 
-**UT803 / UT804 (CH9325 HID, proprietary FS9721 framing)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
+**UT803 / UT804 (CH9325 HID, proprietary structured packets)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
+- **Handler decompile (2026-09-16, spec §2)** — the form's event
+  handlers, missed by the first decompile, change what the driver needs.
+  Implementation waits for #16's traces:
+  - **Wire format**: both apps' `USB Connect` and RS232 handlers take
+    11-byte packets (9 data bytes, CR, LF) and use only low nibbles.
+    The 14-byte index-nibble check belongs to an unused UT60A/B/C
+    path. `framing::extract_frame_fs9721` can never match either
+    meter, so dev-17ea18f should still report "not responding" on #16.
+    Both meters need a CR LF splitter that keeps low nibbles
+  - **UT803 rate**: the UT803 app sets 19200 on the CH9325 and on its
+    serial port, and the UT803 manual gives 19200 7O1.
+    `transport/ch9325.rs` tries 2400 first and takes any report as an
+    answer, so a UT803 stays at 2400
+  - **UT803 positions**: the vendor parser's position k is packet byte
+    k-1. `parse_measurement_ut803` reads `nibbles[k]` as position k+1;
+    fed by a CR LF splitter (`nibbles[0]` = byte 1), it must read
+    position k from `nibbles[k-2]`
+  - **UT804 overload**: the vendor reads nibble 1 = A as an overload
+    unless nibble 2 = C, which it shows as "L0." with value 0 (spec
+    §7.4 item 6). `parse_measurement_ut804` has the test the other way
+    round (overload when nibble 2 = C)
+  - **Nothing sent**: the apps send only the feature report; no trigger
+    byte or command
+  - **Idle reports**: the apps end each packet at a report without
+    payload and release the connection after 1900 in a row, so the
+    vendor expects the bridge to report while the meter is silent
 - **Resolved (2026-06 review)** — see spec §7.4 for full evidence:
   - **Sign**: UT804 = nibble 9 bit 2 (previously misread as HOLD);
     UT803 = nibble 8 bit 2. The old "sign global with no writer" was
@@ -743,7 +769,7 @@ plus what no step reaches.
     Delphi-string access pattern); UT803 also ignores nibbles 1, 11-14.
   - UT803 HOLD = nibble 9 bit 3. UT804 HOLD wire encoding is unknown
     (in neither vendor parser).
-- Transport: CH9325 HID at 2400 baud — implemented.
+- Transport: CH9325 HID, 2400 baud first, 19200 fallback — implemented.
 - **Community cross-check (2026-09-16, spec §8)** — sigrok and
   `UT804.LOG` contradict the UT804 framing we implement:
   - **Wire format**: both give UT71x — 11 bytes, 2400 7O1, `0x30`-`0x3F`
@@ -753,12 +779,12 @@ plus what no step reaches.
     is those bytes' low nibbles, so the parser itself carries over. If
     #16's trace shows `3x`/`Bx` bytes ending `0D`/`8D` `0A`/`8A`, the
     UT804 needs a CR/LF extractor that clears bit 7 (sigrok does, for
-    UT71x on this chip); if it shows index-nibbled bytes, the payload is
-    FS9721 LCD segments (UT804.exe's USB path) and needs a segment
-    decoder. The UT803 was not cross-checked
+    UT71x on this chip). The handler decompile now shows the same
+    format on the vendor's side (above). The UT803 was not
+    cross-checked
   - **Overload**: `UT804.LOG` reads `::0<:` (nibbles A A 0 C A) as
-    overload; our rule reports it as "L0" 0.0, and the 4-20 mA underflow
-    `:<0::` as overload
+    overload, as the vendor does; our parser reports it as "L0" 0.0,
+    and the 4-20 mA underflow `:<0::` as overload (inverted test, above)
   - **HOLD and REL**: `UT804.LOG` says nothing is transmitted while HOLD
     is on and REL is never transmitted; a UT71x packet has no nibbles
     12-14
@@ -793,7 +819,7 @@ plus what no step reaches.
     apps' layout settles which one the bridge reads
   - CH9325 start-up takes any report as an answer, even one with no meter
     bytes, and falls back to 19200 baud when none comes within 300 ms —
-    a rate the UT804 app never sets (UT803.exe has a 19200 branch).
+    a rate the UT804 app never sets (the UT803 app's rate).
     Lukas Schwarz and sigrok both describe `F0` reports while the meter
     is silent, so a report at start-up proves nothing
   - Three parser behaviours surfaced by the 2026-09 snapshot tests, to

@@ -16,7 +16,7 @@ tables, flag bytes, command encoding, and hardware-verified behavior.
 - [UCI bench family — UT8802 and transport variants](research/uci-bench-family/reverse-engineered-protocol.md) (extends the UT8803 spec with the UT8802 0xAC wire format and the CP2110/CH9325/serial transport alternatives)
 - [UT171 series](research/ut171/reverse-engineered-protocol.md)
 - [UT181A](research/ut181/reverse-engineered-protocol.md)
-- [UT803 / UT804 — proprietary structured data in FS9721 framing](research/ut803/reverse-engineered-protocol.md)
+- [UT803 / UT804 — proprietary structured data in 11-byte CR LF packets](research/ut803/reverse-engineered-protocol.md)
 
 ## Voltcraft
 
@@ -31,7 +31,7 @@ differ in the details: UT61+/UT161, UT8803, VC880, and VC890 use a
 and UT181A use a 2-byte **little-endian** length (counting payload +
 checksum) plus a 16-bit **little-endian** sum. UT8802 uses a `0xAC`
 single-byte header with BCD frames and no checksum, and UT803/UT804
-carry proprietary structured data inside FS9721-style framing — see
+send proprietary structured data in 11-byte packets ending CR LF — see
 the per-family docs for the exact wire format.
 
 The UART byte stream is transport-agnostic within each family. Three
