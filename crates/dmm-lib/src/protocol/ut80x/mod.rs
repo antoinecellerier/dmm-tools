@@ -60,9 +60,8 @@ pub(crate) enum Model {
 /// past the last digit means an integer display).
 ///
 /// From the UT804.exe parse function `FUN_00558a7c` unit-string appends
-/// (ut804-decompiled.txt:224075-224184) and range switches
-/// (223961-224033, 224129-224170), with unit glyphs resolved from the
-/// vendor LCD fonts (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω).
+/// and range switches (spec §7.4 item 7), with unit glyphs resolved from
+/// the vendor LCD fonts (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω).
 fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u8)> {
     Some(match mode {
         // Modes 1 and 2 have byte-identical handlers; the AC/DC label
@@ -133,15 +132,15 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
 }
 
 /// UT804 modes whose AC/DC nibble value 0 defaults to a DC label
-/// (vendor applies "DC" to V/mV/µA/mA/A, ut804-decompiled.txt:224195-224215).
+/// (vendor applies "DC" to V/mV/µA/mA/A, spec §3.5).
 fn ut804_default_dc(mode: u8) -> bool {
     matches!(mode, 0x1 | 0x2 | 0x3 | 0x7 | 0x8 | 0x9)
 }
 
 /// UT803 per-(mode, range) display info, same convention as
 /// [`ut804_mode_info`] but with 4 digits and the UT803's own mode codes
-/// (ut803-decompiled.txt:224441-225068). `alt` is nibble 7 bit 3 (selects
-/// RPM for frequency, °C vs °F for temperature).
+/// (spec §7.4 item 4). `alt` is nibble 7 bit 3 (selects RPM for frequency,
+/// °C vs °F for temperature).
 fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'static str, u8)> {
     Some(match mode {
         0xB => match range {
@@ -316,7 +315,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     let acdc = nibbles[7];
     let status = nibbles[8];
 
-    // Status nibble (vendor char 9, ut804-decompiled.txt:224244-224266):
+    // Status nibble (vendor char 9, spec §3.6):
     // bit 3 stripped (unknown), bit 2 = sign, remaining value == 1 → AUTO.
     let sign_bit = status & 0x4 != 0;
     let auto_range = status & 0x3 == 0x1;
@@ -325,8 +324,8 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
         mode_info_or_unknown("ut804", ut804_mode_info(mode_code, range), mode_code, range);
 
     // In frequency mode the sign bit selects the duty-cycle display
-    // (ut804-decompiled.txt:224271-224283) — a negative frequency is
-    // impossible, so the bit is reused.
+    // (spec §7.4 item 7) — a negative frequency is impossible, so the
+    // bit is reused.
     let (mode, negative, dp_pos, unit): (Cow<'static, str>, bool, u8, &'static str) =
         if mode_code == 0xC && sign_bit {
             (Cow::Borrowed("Duty %"), false, 2, "%")
@@ -374,8 +373,8 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
 
     // Overload frames: digit 1 = 0xA. Vendor forces the displays to
     // "0L" (overload, possibly negative) when digit 2 == 0xC, or "L0"
-    // → value 0.0 otherwise (ut804-decompiled.txt:223810-223823,
-    // 224361-224391). An idle frame (digit 4 == 0xB) shows all zeros.
+    // → value 0.0 otherwise (spec §7.4 item 6). An idle frame (digit 4
+    // == 0xB) shows all zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
         if nibbles[1] == 0xC {
             (MeasuredValue::Overload, overload_display(negative))
@@ -421,7 +420,7 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
     let negative = nib8 & 0x4 != 0;
     let overload = nib8 & 0x1 != 0;
     // HOLD lights the LCDHold widget from char 9 bit 3
-    // (ut803-decompiled.txt:225086); bits 2-1 drive unlabeled indicators.
+    // (spec §7.4 item 2); bits 2-1 drive unlabeled indicators.
     let hold = nib9 & 0x8 != 0;
     let dc = nib10 & 0x8 != 0;
     let auto_range = nib10 & 0x2 != 0;

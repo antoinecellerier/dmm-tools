@@ -369,13 +369,14 @@ Temperature mode). Exact mode list [UNVERIFIED] without hardware.
 
 | Value | Meaning | Display string (UT804) |
 |-------|---------|------------------------|
-| 0 | Default (mode-dependent) | "DC" for V/mV modes, blank for others |
+| 0 | Default (mode-dependent) | "DC" for V, mV, µA, mA and A; blank for others |
 | 1 | AC | "AC" |
 | 2 | DC (explicit) | "DC" |
 | 3 | AC+DC | "AC+DC" |
 
 The "AC+DC" string at value 3 was found as a literal in UT804.exe
-(line 224240 in decompilation).
+(line 224240 in decompilation). The modes that value 0 labels "DC" come
+from ut804-decompiled.txt:224195-224215.
 
 ### 3.6 Status Flags (Nibble 9) — [VENDOR]
 
@@ -547,9 +548,9 @@ re-derived independently by an adversarial second pass:
    indicator and prepends `"-"`, VA 0x55a3dc; negative overload
    comparand `"-0@"` at 0x55a434; ut804-decompiled.txt:224244-224374).
    UT803: nibble 8 bit 2 (ut803-decompiled.txt:224458-224469). HOLD on
-   the UT803 is nibble 9 bit 3 (`LCDHold`, line 225086); HOLD's wire
-   encoding on the UT804 appears in **neither** parser and remains
-   unknown.
+   the UT803 is nibble 9 bit 3 (`LCDHold`, ut803-decompiled.txt:225086);
+   HOLD's wire encoding on the UT804 appears in **neither** parser and
+   remains unknown.
 3. **Nibbles 12-14 are genuinely never read** — confirmed with the
    correct access pattern: the frame arrives as a Delphi string of hex
    characters parsed via 1-based `Copy(s, idx, 1)` (which is why
@@ -568,14 +569,16 @@ re-derived independently by an adversarial second pass:
    `LcdDisplay71A` behind `USB Connect`; `LcdDisplay60B` only on the
    unused UT60A/B/C path (§2.2-§2.4).* The UT803
    uses its own layout (range=nibble 2, digits=nibbles 3-6, different
-   mode-code meanings — see §5).
+   mode-code meanings — see §5), with its mode and range tables at
+   ut803-decompiled.txt:224441-225068.
 5. **Decimal positions count from the left** (point after digit
    `pos+1`), per the display assembly at ut804-decompiled.txt:
    224289-224356 (point slots LcdP0-LcdP3 interleaved with the digit
    labels). The previous places-from-right reading inverted every
    table.
 6. **Nibble 1 = 0xA marks an overload frame** (digits forced to
-   "0L"/"L0" via the LCD font where '@' renders as 'L'); `"0@"` → +OL,
+   "0L"/"L0" via the LCD font where '@' renders as 'L';
+   ut804-decompiled.txt:223810-223823, 224361-224391); `"0@"` → +OL,
    `"-0@"` → −OL, `"@0"` → 0.0. It is not an "AC flag mode".
    *2026-09-16: nibble 2 = C gives `"@0"` (0.0, shown "L0."), any other
    nibble 2 gives `"0@"` (overload, negative with the sign bit);
@@ -584,10 +587,13 @@ re-derived independently by an adversarial second pass:
    unit-string constants + font glyphs (`#`=°C, `?`=°F, `)`=diode,
    `&`=beeper, `*`=Ω, `@`='L', `$`=battery): 6=Temp °C, 7=µA, 8=mA,
    9=A, A=Continuity, B=Diode, C=Frequency (duty-% via nibble 9 bit 2,
-   reused since negative frequency is impossible), D=Temp °F,
+   reused since negative frequency is impossible;
+   ut804-decompiled.txt:224271-224283), D=Temp °F,
    E=unknown glyph (possibly hFE), F="mA%" (likely 4-20 mA loop).
    Frequency unit boundaries: ranges 0-1 Hz, 2-4 kHz, 5-7 MHz; Ω:
-   range 1 Ω, 2-4 kΩ, 5-6 MΩ.
+   range 1 Ω, 2-4 kΩ, 5-6 MΩ. The unit strings are appended at
+   ut804-decompiled.txt:224075-224184, and the range switches are at
+   223961-224033 and 224129-224170.
 
 8. **The frame-string-builder is confirmed (2026-06 follow-up).** The
    one remaining inferred link — that the parser's positional
