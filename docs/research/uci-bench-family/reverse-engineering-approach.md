@@ -169,21 +169,18 @@ manual tables:
 | Finding | Confidence | Source |
 |---------|------------|--------|
 | UT632/803/804 use same wire format as UT8802 or UT8803 | **[KNOWN]** | Auto-detected at runtime; DLL scans for 0xAC or 0xABCD headers |
-| QinHeng feature reports: primary=2400, fallback=19200 baud | **[KNOWN]** | CH9325 baud = uint16 LE (sigrok wiki + Lukas Schwarz UT61B + HE2325U driver) |
+| QinHeng feature reports: primary=2400, fallback=19200 baud | **[VENDOR]** | Disassembly: little-endian rate word at bytes 1-2 (VA 0x1001D38F-0x1001D3AD, 0x1001D2B2-0x1001D2CD) |
 | UT805A serial likely uses same measurement frame format | **[DEDUCED]** | Same UCI layer; serial parsers in DLL are for older FS9721 meters |
 | Byte 6 in UT8802 frame is bargraph/progress indicator | **[DEDUCED]** | Passed to bitset construction function FUN_1001b9b0 |
 
 ### What Still Requires Device Verification
 
 1. ~~**QinHeng feature report baud rate encoding**~~ — **RESOLVED**
-   2026-04-09: CH9325 uses uint16 LE baud encoding. Primary report
-   `00 60 09 03...` = 2400 baud, fallback `00 00 4B 03...` = 19200 baud.
-   Confirmed via [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325),
-   [Lukas Schwarz UT61B analysis](https://lukasschwarz.de/ut61b), and
-   [HE2325U driver code](https://github.com/thomasf/uni-trend-ut61d).
-   *2026-09-16: those three sources confirm the rate in bytes 1-2 but all
-   send `0x03` in byte 5 after two zero bytes, not in byte 3 as the DLL
-   does — see `../ut803/reverse-engineered-protocol.md` §8.*
+   2026-04-09: the DLL writes the rate as a little-endian word at bytes
+   1-2. Primary report `00 60 09 03...` = 2400 baud, fallback
+   `00 00 4B 03...` = 19200 baud. What the `0x03` in byte 3 means is
+   [UNVERIFIED]; the UT803/UT804 apps put it in byte 5. Community
+   comparison: [Cross-Reference with Community Sources](#cross-reference-with-community-sources).
 
 2. ~~**Which wire format do UT632/803/804 use?**~~ — **RESOLVED**
    2026-04-09: The vendor DLL does not dispatch per model. All QinHeng
@@ -208,6 +205,23 @@ manual tables:
    against 0x10/0x11 on a 2-bit-wide variable -- likely decompiler
    artifacts. The actual flag bit meanings for diode direction need
    device verification. [UNVERIFIED]
+
+## Cross-Reference with Community Sources
+
+Consulted for the CH9325 only, after the vendor analysis above, for
+validation (2026-04-09, again 2026-09-16). The finding-by-finding table
+is in `reverse-engineered-protocol.md` §9. In short: the sigrok wiki and
+code, Lukas Schwarz and `he2325u.cpp` agree with the DLL on the rate
+encoding and the `0xF0` + length receive framing, and all send `0x03` in
+byte 5, as the UT803/UT804 apps do, rather than in byte 3 as the DLL
+does.
+
+Reference implementations:
+
+- [sigrok wiki, WCH CH9325](https://sigrok.org/wiki/WCH_CH9325)
+- [sigrok libsigrok](https://github.com/sigrokproject/libsigrok) — C
+- [Lukas Schwarz, UT61B analysis](https://lukasschwarz.de/ut61b)
+- [thomasf/uni-trend-ut61d](https://github.com/thomasf/uni-trend-ut61d) — C++, HE2325U reader
 
 ## File Inventory
 

@@ -388,25 +388,20 @@ with D2-D3 encoding diode/SCR probe direction from byte 5 bits 4-5.
 
 ---
 
-## 4. QinHeng HID Init -- [KNOWN]
+## 4. QinHeng HID Init -- [VENDOR]
 
 ### 4.1 CH9325 Feature Report Format
 
-Cross-referenced against the [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325),
-[Lukas Schwarz's UT61B analysis](https://lukasschwarz.de/ut61b), and the
-[HE2325U driver](https://github.com/thomasf/uni-trend-ut61d/blob/master/he2325u/he2325u.cpp).
+The DLL configures the bridge with one 10-byte feature report (§4.3,
+§4.4): report ID `0x00`, the baud rate as a little-endian word in bytes
+1-2, `0x03` in byte 3, zeros after. The UT803/UT804 standalone apps send
+the rate the same way with `0x03` in byte 5 instead
+(`../ut803/reverse-engineered-protocol.md` §1.2). The meaning of `0x03`
+and of the other bytes is not determined from the binaries [UNVERIFIED].
+The DLL uses two rates, 2400 and 19200.
 
-The CH9325 SET_REPORT (feature report) configures UART parameters:
-
-| Byte | Field | Notes |
-|------|-------|-------|
-| 0 | Report ID | Always 0x00 |
-| 1-2 | Baud rate | uint16 LE (`he2325u.cpp` writes bytes 1-4 as 32 bits) |
-| 3-4 | Parity/stop bits | Often 0x03/0x00; exact encoding uncertain. *2026-09-16: sigrok, Lukas Schwarz and `he2325u.cpp` all send 0x00 0x00 here and 0x03 in byte 5 — see `../ut803/reverse-engineered-protocol.md` §8* |
-| 5 | Data bits | 0=5bit, 1=6bit, 2=7bit, 3=8bit |
-| 6-9 | Padding | Zeros |
-
-Supported baud rates: 2400, 4800, 9600, 19200.
+*The byte table that stood here until 2026-09-16 came from community
+sources; it is compared in §9.*
 
 ### 4.2 CH9325 HID Data Framing
 
@@ -416,8 +411,16 @@ Supported baud rates: 2400, 4800, 9600, 19200.
 7 payload bytes, zero-padded to 8 bytes total.
 Example: `F2 35 41 00 00 00 00 00` = 2 bytes of UART data (0x35, 0x41).
 
-**TX (host→device)**: first byte = `payload_length`, then up to 7
-payload bytes, padded to 8 bytes total.
+Vendor evidence: UT804.exe's USB data handler reads the payload length
+from the low hex digit of each report's first byte and treats 0 as an
+empty report (`../ut803/reverse-engineered-protocol.md` §2.3); the DLL
+tests bytes for a high nibble of 0xF with a nonzero low nibble
+(FUN_1001fcc0, FUN_1001b970; callers not traced). Issue #16's cable
+returned 8-byte reports.
+
+**TX (host→device)**: no vendor code builds a CH9325 transmit report —
+the DLL writes its 0x5A byte raw (§4.3). The TX framing is
+community-sourced (§9).
 
 **Max 7 UART bytes per HID report** (vs 63 for CP2110/CH9329). This
 means protocol frames span multiple HID reports and must be reassembled.
@@ -431,7 +434,9 @@ Used as the first attempt for QinHeng devices (VID 0x1A86, PID 0xE008):
    [0x00, 0x60, 0x09, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
    → Baud rate: 0x0960 = 2400 baud, config byte: 0x03
 
-2. Send 0x5A trigger byte via UART write (1000ms timeout)
+2. Send 0x5A trigger byte (1000ms timeout) — FUN_1002a4d0 hands the
+   single byte to WriteFile on the HID handle (FUN_1002a500), with no
+   CH9325 length header
 
 3. Set HID input buffer count to 64 (HidD_SetNumInputBuffers)
 
@@ -441,9 +446,9 @@ Used as the first attempt for QinHeng devices (VID 0x1A86, PID 0xE008):
 **Feature report encoding**: The 10-byte buffer is constructed from
 `local_20 = 0x3096000` (LE qword) + `local_18 = 0` (16 bits). Byte
 layout: `00 60 09 03 00 00 00 00 00 00`. Bytes 1-2 = 0x0960 =
-**2400 baud** (confirmed by CH9325 baud encoding: uint16 LE). The
-disassembly agrees (VA 0x1001D38F-0x1001D3AD): the word 0x0960 lands at
-byte 1 and `0x03` at byte 3.
+**2400 baud**. The disassembly agrees (VA 0x1001D38F-0x1001D3AD): the
+word 0x0960 lands at byte 1 and `0x03` at byte 3. The fallback report
+is built the same way with 0x4B00 (VA 0x1001D2B2-0x1001D2CD).
 
 The UT803/UT804 standalone apps send the same rate with `0x03` two bytes
 further on, `xx 60 09 00 00 03 00 00 00 00` — see
@@ -478,12 +483,9 @@ This differs from the CP2110 path which hard-codes 9600 baud.
 
 ### 4.5 QinHeng Chip Identity
 
-The chip is identified by VID 0x1A86 (QinHeng/WCH), PID 0xE008.
-The specific chip model is CH9325 or its predecessor HE2325U (both
-use the same USB VID/PID and compatible HID protocol). Confirmed by
-cross-referencing with the [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325)
-and the UT-D04 cable identification. No chip model string was found
-in the decompilation.
+The chip is identified by VID 0x1A86 (QinHeng/WCH), PID 0xE008 [KNOWN].
+No chip model string was found in the decompilation; the CH9325 /
+HE2325U model name comes from community sources (§9).
 
 ### 4.6 Comparison: CP2110 vs QinHeng Init
 
@@ -730,14 +732,14 @@ speak; it is written up in
 | UT8802: position codes 0x01-0x2D | [KNOWN] | Programming manual page 10 |
 | UT8802: position-to-function mapping | [VENDOR] | Ghidra FUN_1001c7b0 matches manual |
 | UT8802: AUTO flag inverted logic | [VENDOR] | Ghidra: `~(byte7>>2)` |
-| QinHeng: primary init = 2400 baud + 0x5A trigger | [KNOWN] | Ghidra FUN_1001d360 + sigrok CH9325 baud encoding |
-| QinHeng: fallback init = 19200 baud, no trigger | [KNOWN] | Ghidra FUN_1001d270 + sigrok CH9325 baud encoding |
+| QinHeng: primary init = 2400 baud + 0x5A trigger | [VENDOR] | Ghidra FUN_1001d360 + disassembly |
+| QinHeng: fallback init = 19200 baud, no trigger | [VENDOR] | Ghidra FUN_1001d270 + disassembly |
 | QinHeng: VID 0x1A86, PID 0xE008 | [KNOWN] | Programming manual |
-| CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [KNOWN] | sigrok CH9325 wiki |
-| CH9325 feature report baud encoding: uint16 LE | [KNOWN] | sigrok + Lukas Schwarz UT61B + HE2325U driver |
+| CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [VENDOR] | UT804.exe USB handler, uci.dll FUN_1001fcc0; 8-byte reports on issue #16's cable (§4.2) |
+| CH9325 feature report baud encoding: uint16 LE at bytes 1-2 | [VENDOR] | uci.dll and UT803/UT804.exe disassembly (§4.1) |
 | QinHeng wire format in UCI SDK: auto-detected 0xAC/0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
-| UT803/UT804 actual wire format: FS9721 framing with proprietary structured data (NOT LCD segments) | ~~[KNOWN]~~ contested | Ghidra decompilation + binary constant extraction from UT803.exe/UT804.exe (2026-04-10). 2026-09-16: the framing and the data format come from two different UT804.exe paths; community sources give UT71x for the UT804 — `../ut803/reverse-engineered-protocol.md` §8 |
-| UT803/UT804 init: 2400 baud via CH9325 feature report | [KNOWN] | Ghidra UT804.exe FUN_00560668 |
+| UT803/UT804 actual wire format: FS9721 framing with proprietary structured data (NOT LCD segments) | ~~[KNOWN]~~ contested | Ghidra decompilation + binary constant extraction from UT803.exe/UT804.exe (2026-04-10). 2026-09-16: the framing and the data format come from two different UT804.exe paths — `../ut803/reverse-engineered-protocol.md` §2.3 |
+| UT803/UT804 init: 2400 baud via CH9325 feature report | [VENDOR] | Ghidra UT804.exe FUN_00560668 |
 | UT804 range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A: serial port, 9600 baud | [KNOWN] | Programming manual |
@@ -760,3 +762,34 @@ speak; it is written up in
 | UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
 | UT803/UT804 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding, nibbles 12-14 — all need verification against real hardware. See `docs/research/ut803/reverse-engineered-protocol.md` |
 | UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |
+
+---
+
+## 9. Cross-Reference with Community Sources
+
+Consulted for the CH9325 on 2026-04-09 and again on 2026-09-16, after the
+vendor analysis above, for validation only. The UT803/UT804 comparison
+is in `../ut803/reverse-engineered-protocol.md` §8.
+
+| Finding | Our RE | sigrok (wiki and libsigrok) | Lukas Schwarz | `he2325u.cpp` | Agreement |
+|---------|--------|-----------------------------|---------------|---------------|:---------:|
+| Rate encoding | Little-endian word at bytes 1-2 (§4.1) | Wiki: bytes 1-2 little-endian; code: `[lo, hi, …]` | `60 09` | Rate as 32 bits, bytes 1-4 | ✓ |
+| Bytes 3-4 | DLL `03 00`, UT803/UT804 apps `00 00` | Wiki: probably parity and stop bits, often omitted or `00`; code: `00 00` | `00 00` | Upper bytes of the rate | Apps ✓ |
+| Byte 5 | DLL `00`, apps `03` | Wiki: data-bit count, 0-3 = 5-8 bits; code: `03`, "unknown, always 0x03" | `03` | `03` ("3 = enable?") | Apps ✓¹ |
+| Rates | 2400 and 19200 (DLL) | Wiki: 2400, 4800, 9600, 19200; others fall back to 2400, yet the rate must be set | 2400 | 19230 | ✓ |
+| RX framing | `0xF0` + length, 8-byte reports (§4.2) | Same; wiki: an `F0` report at least every 12 ms while the UART is silent | `f1 XX …` per byte, `f0 …` when idle | Length in the low 3 bits | ✓ |
+| TX framing | — | Wiki: first byte = payload count, up to 7 bytes, 8-byte block | — | — | New |
+| Chip | VID 0x1A86, PID 0xE008 (§4.5) | WCH CH9325, in the UNI-T UT-D04 cable | HE2325U | HE2325U | ✓ |
+| Parity bit | — | Code: cleared (bit 7) for its 7O1 parsers (ES51922, UT71x) | — | Mask removed for the UT61B/C/D, "which use all eight bits" | New |
+
+¹ By the wiki's reading, the DLL's layout asks for 5 data bits. The byte
+table that §4.1 carried from 2026-04-09 to 2026-09-16 was built from
+these sources and read bytes 3-4 as "often 0x03/0x00", which none of
+them says.
+
+Reference implementations:
+
+- [sigrok wiki, WCH CH9325](https://sigrok.org/wiki/WCH_CH9325) — configuration bytes and report framing
+- [sigrok libsigrok](https://github.com/sigrokproject/libsigrok) — C; CH9325 set-up and read loop in `src/hardware/uni-t-dmm/protocol.c`
+- [Lukas Schwarz, UT61B analysis](https://lukasschwarz.de/ut61b) — protocol analysis and libusb driver
+- [thomasf/uni-trend-ut61d](https://github.com/thomasf/uni-trend-ut61d) — C++, `he2325u/he2325u.cpp`
