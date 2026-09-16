@@ -26,15 +26,58 @@ Both meters use the WCH CH9325 USB-to-UART HID bridge:
 
 ### 1.2 UART Parameters — [VENDOR]
 
-The UT804.exe init function (FUN_00560668) sends bytes `[0x60, 0x09, 0x03]`
-to the CH9325. The value `0x0960` (little-endian) = 2400 decimal, confirming:
-- **Baud rate: 2400**
-- Data bits: 7 (inferred from FS9721 convention)
-- Parity: Odd (inferred from FS9721 convention)
-- Stop bits: 1
+The UT804.exe init function (FUN_00560668) configures the CH9325 with one
+10-byte feature report. From the disassembly (VA 0x5606F2-0x560728): nine
+bytes from `-0x48(%ebp)` are zeroed, then `0x60`, `0x09` and `0x03` are
+written at offsets 0, 1 and 4, and the buffer handed to the SetFeature
+wrapper (FUN_0051afbc, length 10) starts one byte earlier, at
+`-0x49(%ebp)`:
 
-The CH9325 bridge handles parity stripping — the application receives clean
-data bytes.
+```
+[xx, 0x60, 0x09, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00]
+```
+
+- **Baud rate: 2400** — `0x0960`, little-endian in bytes 1-2 (and in bytes
+  1-4 read as 32 bits).
+- Byte 5 = `0x03`; per the table in
+  `../uci-bench-family/reverse-engineered-protocol.md` §4.1, 8 data bits.
+- Byte 0, the report ID, is not written by this function. It holds what
+  the stack held: whatever the `ReadBtn` click just before (below) left
+  there. Its value is not determined statically.
+
+The call is `HidD_SetFeature`: FUN_0051afbc calls through the pointer at
+`0x56B4A0`, which start-up fills from the export named `HidD_SetFeature`
+(VA 0x5190E3-0x5190EF). The caller discards the result (VA 0x56072D), so
+a rejected report — a nonzero byte 0 would likely be one — goes unnoticed,
+and the app working does not by itself show that the bridge took this
+layout.
+
+FUN_00560668 is the published method `SetFeatureClick`, the `OnClick` of a
+`TButton` named `SetFeature` on the main form. `USBConClick` (VA 0x5615D8),
+the USB connect handler, calls `ReadBtn.Click` and then `SetFeature.Click`
+(dynamic method index -21 through `CallDynaInst`, VA 0x5615EE-0x561607;
+-21 resolves to `TButton.Click` at 0x454F98, which calls `TControl.Click`
+at 0x45F070). The report is therefore sent on every USB connect.
+
+Ghidra's decompilation of FUN_00560668 starts the buffer at `local_4c` and
+drops the arguments of the SetFeature call; the offsets above are from the
+disassembly.
+
+A search for the same writes finds no other rate in UT804.exe. UT803.exe
+builds the same layout at five sites, each behind its own flag test (conditions not traced): 2400 at
+file offsets 0x15BF9A, 0x15BFD6, 0x15BFF4 and 0x15C012, and 19200 at
+0x15BFB8 (`00 4B 00 00 03`).
+
+**The UNI-T SDK DLL uses a different layout** for the same rate:
+`00 60 09 03 00 00 00 00 00 00`, `0x03` in byte 3
+(`../uci-bench-family/reverse-engineered-protocol.md` §4.3). Which layout
+the CH9325 reads is [UNVERIFIED]. This section previously quoted the
+UT804.exe bytes as `[0x60, 0x09, 0x03]`, which hid the difference.
+
+Earlier revisions inferred 7 data bits and odd parity from the FS9721
+convention. The vendor's frame check (§2.2) needs bit 7 for index nibbles
+0x8-0xE, so the application receives 8-bit bytes; the line format on the
+wire is [UNVERIFIED].
 
 ---
 

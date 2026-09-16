@@ -441,7 +441,14 @@ Used as the first attempt for QinHeng devices (VID 0x1A86, PID 0xE008):
 **Feature report encoding**: The 10-byte buffer is constructed from
 `local_20 = 0x3096000` (LE qword) + `local_18 = 0` (16 bits). Byte
 layout: `00 60 09 03 00 00 00 00 00 00`. Bytes 1-2 = 0x0960 =
-**2400 baud** (confirmed by CH9325 baud encoding: uint16 LE).
+**2400 baud** (confirmed by CH9325 baud encoding: uint16 LE). The
+disassembly agrees (VA 0x1001D38F-0x1001D3AD): the word 0x0960 lands at
+byte 1 and `0x03` at byte 3.
+
+The UT803/UT804 standalone apps send the same rate with `0x03` two bytes
+further on, `xx 60 09 00 00 03 00 00 00 00` — see
+`../ut803/reverse-engineered-protocol.md` §1.2. Which layout the CH9325
+reads is [UNVERIFIED].
 
 ### 4.4 Fallback Init (FUN_1001d270)
 

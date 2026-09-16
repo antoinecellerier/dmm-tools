@@ -754,6 +754,14 @@ plus what no step reaches.
     positions; which of modes 1/2 each V dial sends
   - UT803 frequency range 0 decimal position; tachometer (RPM) frames
   - Whether 0x5A trigger byte helps/hurts; streaming rate
+  - CH9325 feature-report layout: the UT803/UT804 apps send
+    `60 09 00 00 03` (`0x03` in byte 5), the SDK DLL `60 09 03 00 00`
+    (spec §1.2). `transport/ch9325.rs` sends the DLL's. First suspect if
+    bytes arrive but never frame — issue #16's UT804 connected but no
+    reading decoded (2026-09-16, trace pending)
+  - CH9325 start-up takes any report as an answer, even one with no meter
+    bytes, and falls back to 19200 baud when none comes within 300 ms —
+    a rate the UT804 app never sets (UT803.exe has a 19200 branch)
   - Three parser behaviours surfaced by the 2026-09 snapshot tests, to
     settle against real frames rather than change blind: `range_label`
     is never set for either model although the per-mode tables know the
