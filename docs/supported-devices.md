@@ -63,7 +63,7 @@ commands. Switch on: connect the cable and turn the meter on.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT803 | 6000 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) | |
-| UT804 | 4000 | 🧪 Experimental ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) | |
+| UT804 | 40000 | 🧪 Experimental ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) | |
 
 A UT804's packets arrive over the cable
 ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)); its

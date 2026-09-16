@@ -1,6 +1,6 @@
 # UT803 / UT804: Reverse-Engineered Protocol Specification
 
-Protocol specification for the UNI-T UT803 (6000-count) and UT804 (4000-count)
+Protocol specification for the UNI-T UT803 (6000-count) and UT804 (40000-count)
 bench multimeters.
 
 Based on:
@@ -9,6 +9,7 @@ Based on:
   and their form resources (2026-09-16)
 - Binary constant extraction from both executables
 - The UT803 operating manual's serial port settings
+- The UT804 operating manual's display counts
 - Bytes a UT804 sent over its CH9325 cable (issue #16, 2026-09-16)
 - CH9325 HID transport analysis (see `../uci-bench-family/reverse-engineered-protocol.md`)
 
@@ -476,7 +477,7 @@ manual has the user press the meter's RS232 button to start data output
 
 | Feature | UT803 | UT804 |
 |---------|-------|-------|
-| Display count | 6000 (3¾ digit, max 5999) | 4000 (3¾ digit, max 3999) |
+| Display count | 6000 (3¾ digit, max 5999) | 40000 (4¾ digit), 4000 when RANGE is held at power-on [KNOWN] (UT804 manual) |
 | Mode count | Fewer (exact list TBD) | 15 modes |
 | RPM mode | Yes (`kRPM` unit string) | Not seen |
 | ADP/Logic mode | Not seen | Yes (mode 14) |
@@ -753,6 +754,7 @@ Reference implementations:
   published methods and the handlers they install, seeded from the Delphi
   RTTI; disassembly of the conditions; the form resources
 - UT803 operating manual — RS232 settings and RS232 button
+- UT804 operating manual — display counts
 - Issue #16 — a UT804's CH9325 reports under dmm-tools 0.6.0 and 0.7.0-dev
   (2026-09-16)
 - CH9325 transport analysis — see `../uci-bench-family/reverse-engineered-protocol.md`

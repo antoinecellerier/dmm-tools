@@ -20,6 +20,8 @@
 4. **UT803 operating manual** — RS232 port settings and data output
    button.
 
+5. **UT804 operating manual** — display counts.
+
 ### Avoided (clean-room boundary)
 - No external open-source implementations were consulted during RE
 - sigrok FS9721 driver was NOT referenced (to avoid contamination, since

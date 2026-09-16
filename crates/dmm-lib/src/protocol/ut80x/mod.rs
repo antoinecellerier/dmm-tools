@@ -72,16 +72,16 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
             "V",
             "V",
             match range {
-                1 => 0, // 3.999
-                2 => 1, // 39.99
-                3 => 2, // 399.9
-                4 => 3, // 1000
+                1 => 0, // 3.9999
+                2 => 1, // 39.999
+                3 => 2, // 399.99
+                4 => 3, // 1000.0
                 _ => return None,
             },
         ),
-        0x3 => ("mV", "mV", 2), // 399.9 fixed
+        0x3 => ("mV", "mV", 2), // 399.99 fixed
         0x4 => match range {
-            1 => ("Ω", "Ω", 2), // 399.9 Ω
+            1 => ("Ω", "Ω", 2), // 399.99 Ω
             2 => ("Ω", "kΩ", 0),
             3 => ("Ω", "kΩ", 1),
             4 => ("Ω", "kΩ", 2),
@@ -101,16 +101,16 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
         },
         0x6 => ("Temperature", "°C", 3),
         0x7 => match range {
-            0 => ("µA", "µA", 2), // 399.9
-            1 => ("µA", "µA", 3), // 3999
+            0 => ("µA", "µA", 2), // 399.99
+            1 => ("µA", "µA", 3), // 3999.9
             _ => return None,
         },
         0x8 => match range {
-            0 => ("mA", "mA", 1), // 39.99
-            1 => ("mA", "mA", 2), // 399.9
+            0 => ("mA", "mA", 1), // 39.999
+            1 => ("mA", "mA", 2), // 399.99
             _ => return None,
         },
-        0x9 => ("A", "A", 1), // 10.00
+        0x9 => ("A", "A", 1), // 10.000
         0xA => ("Continuity", "Ω", 2),
         0xB => ("Diode", "V", 0),
         0xC => match range {
@@ -226,7 +226,7 @@ fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'st
 /// Build the display string and numeric value from MSD-first digit
 /// nibbles and a decimal position from the left (point after digit
 /// `dp_pos+1`). Digit nibble 0xA renders as a blank (trailing blank =
-/// 4-digit reading on the UT804's 5-digit field).
+/// 4-digit reading on the UT804's 5-digit field, its 4000-count setting).
 fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, f64)> {
     let mut s = String::with_capacity(digits.len() + 2);
     if negative {
@@ -1087,7 +1087,7 @@ mod tests {
 
     #[test]
     fn ut804_five_digit_reading() {
-        // All five digits present (no blank): 4-digit count plus extra digit.
+        // All five digits present (no blank): the 40000-count display.
         let p = ut804_payload(&[1, 2, 3, 4, 5], 2, 0x1, 2, 0x0);
         let m = parse_measurement_ut804(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 12.345).abs() < 1e-9));
