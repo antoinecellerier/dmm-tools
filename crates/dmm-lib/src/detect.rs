@@ -48,8 +48,17 @@ impl std::fmt::Debug for Detected {
 ///
 /// Real time, not the session clock: this paces physical USB. The UT61+ name
 /// frame has been seen 144–191 ms after the request on both bridges and the
-/// UT8803 streams at 2–3 Hz, so 600 ms clears the slowest frame we know of.
+/// UT8803 streams at 2–3 Hz, so 600 ms clears both. A step that sends nothing
+/// listens for [`LISTEN_ONLY_WINDOW`] instead.
 const WINDOW: Duration = Duration::from_millis(600);
+
+/// How long a step that sends nothing listens, on a bridge no probe belongs to.
+///
+/// There the meter sets the pace. The slowest stream measured, issue #16's
+/// UT804, sends a packet every 656 ms, and a [`WINDOW`] holds a whole one only
+/// when it starts in the first ~554 ms — about five runs in six. 1.5 s gives
+/// two chances.
+const LISTEN_ONLY_WINDOW: Duration = Duration::from_millis(1500);
 
 /// Per-read timeout inside a window. Short, because a window ends on its
 /// deadline rather than on a single read, and a frame split across reads has
@@ -173,17 +182,22 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
     let mut family_only: Option<FamilyEvidence> = None;
 
     for fp in probes {
-        match fp.trigger {
+        let window = match fp.trigger {
             Some(send) => {
                 debug!("detect: probing {bridge} with {}", fp.label);
                 send(transport)?;
                 probing.sent.push(fp.family);
+                WINDOW
             }
-            None => debug!("detect: listening on {bridge} for {}", fp.label),
-        }
+            None => {
+                debug!("detect: listening on {bridge} for {}", fp.label);
+                LISTEN_ONLY_WINDOW
+            }
+        };
         if let Some(detected) = listen(
             transport,
             &mut buf,
+            window,
             fp.label,
             &carried,
             &probing,
@@ -227,8 +241,8 @@ fn announce(detected: Detected, bridge: &'static str) -> Detected {
     detected
 }
 
-/// Read until the window's deadline (or the empty-read cap), classifying the
-/// whole buffer after every non-empty read.
+/// Read for `window` (or until the empty-read cap), classifying the whole
+/// buffer after every non-empty read.
 ///
 /// The buffer is the caller's, and never cleared: CP2110 can deliver a single
 /// UART byte per HID report, and a frame that straddles a step boundary has to
@@ -236,16 +250,18 @@ fn announce(detected: Detected, bridge: &'static str) -> Detected {
 fn listen(
     transport: &dyn Transport,
     buf: &mut Vec<u8>,
+    window: Duration,
     label: &str,
     recognisers: &[&'static Fingerprint],
     probing: &Probing,
     family_only: &mut Option<FamilyEvidence>,
 ) -> Result<Option<Detected>> {
-    let deadline = Instant::now() + WINDOW;
+    let deadline = Instant::now() + window;
     let mut chunk = [0u8; 64];
     // Consecutive, as in `framing::read_uart_bytes`: the CH9325 answers every
     // idle poll with an empty report, so a meter that is merely between frames
-    // would otherwise spend the whole cap long before the deadline.
+    // would otherwise spend the whole cap long before the deadline. At one
+    // such report every ~12 ms the cap is ~3 s, past the longest window.
     let mut empty_reads = 0usize;
 
     while empty_reads < MAX_EMPTY_READS && Instant::now() < deadline {
@@ -405,8 +421,13 @@ mod tests {
     use crate::protocol::vc8x0::vc890::{ACK_FRAME, POLL_FRAME};
     use crate::protocol::vc8x0::{MSG_TYPE_LIVE_DATA, Vc8x0Model, vc890::Vc890Model};
     use crate::transport::mock::MockTransport;
-    use std::cell::RefCell;
+    use std::cell::{OnceCell, RefCell};
     use std::collections::VecDeque;
+
+    /// A packet from issue #16's UT804: DC V, digits 00000, open leads.
+    const ISSUE16_DC_V_ZERO: [u8; 11] = [
+        0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0x31, 0x31, 0xB0, 0x31, 0x0D, 0x8A,
+    ];
 
     /// The two frames a UT61+ answers Get Name with: the ack, then the ASCII
     /// name. The bytes our UT61E+ sends over CP2110, and what
@@ -466,6 +487,41 @@ mod tests {
                 queued.push_front(frame[len..].to_vec());
             }
             Ok(len)
+        }
+
+        fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    /// A CH9325 whose meter is between packets when the listen starts: each
+    /// read takes ~12 ms, the bridge's idle report interval, and carries
+    /// nothing until `silent_for` has passed since the first read. Then
+    /// `packet` arrives one byte per read.
+    struct PacedStream {
+        silent_for: Duration,
+        packet: RefCell<VecDeque<u8>>,
+        first_read: OnceCell<Instant>,
+    }
+
+    impl Transport for PacedStream {
+        fn write(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            let first = *self.first_read.get_or_init(Instant::now);
+            std::thread::sleep(Duration::from_millis(12));
+            if first.elapsed() < self.silent_for {
+                return Ok(0);
+            }
+            match self.packet.borrow_mut().pop_front() {
+                Some(byte) => {
+                    buf[0] = byte;
+                    Ok(1)
+                }
+                None => Ok(0),
+            }
         }
 
         fn send_feature_report(&self, _data: &[u8]) -> Result<()> {
@@ -639,13 +695,10 @@ mod tests {
     fn the_ch9325_window_writes_nothing() {
         // Two packets from issue #16's UT804, one byte per report with empty
         // reports between them, joined mid-packet as a real listen would be.
-        const DC_V_ZERO: [u8; 11] = [
-            0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0x31, 0x31, 0xB0, 0x31, 0x0D, 0x8A,
-        ];
         const DC_V_MINUS_0_0013: [u8; 11] = [
             0xB0, 0xB0, 0xB0, 0x31, 0xB3, 0x31, 0x31, 0xB0, 0xB5, 0x0D, 0x8A,
         ];
-        let reports: Vec<Vec<u8>> = DC_V_ZERO[5..]
+        let reports: Vec<Vec<u8>> = ISSUE16_DC_V_ZERO[5..]
             .iter()
             .map(|&b| vec![b])
             .chain(std::iter::repeat_n(Vec::new(), 50))
@@ -654,6 +707,20 @@ mod tests {
         let mock = MockTransport::new(reports);
         assert_eq!(detect_device(&mock, "CH9325").unwrap().device.id, "ut804");
         assert!(mock.written.borrow().is_empty(), "nothing is sent");
+    }
+
+    /// The UT804 sends a packet every 656 ms, so a listen can start just
+    /// after one and hear nothing for longer than a probe window. The window
+    /// on a bridge that sends nothing still catches the next packet.
+    #[test]
+    fn a_listen_only_window_waits_out_a_slow_meters_gap() {
+        let meter = PacedStream {
+            silent_for: Duration::from_millis(700),
+            packet: RefCell::new(ISSUE16_DC_V_ZERO.into()),
+            first_read: OnceCell::new(),
+        };
+        assert!(meter.silent_for > WINDOW, "the gap outlasts a probe window");
+        assert_eq!(detect_device(&meter, "CH9325").unwrap().device.id, "ut804");
     }
 
     #[test]
