@@ -756,9 +756,10 @@ plus what no step reaches.
   - Whether 0x5A trigger byte helps/hurts; streaming rate
   - CH9325 feature-report layout: the UT803/UT804 apps send
     `60 09 00 00 03` (`0x03` in byte 5), the SDK DLL `60 09 03 00 00`
-    (spec §1.2). `transport/ch9325.rs` sends the DLL's. First suspect if
-    bytes arrive but never frame — issue #16's UT804 connected but no
-    reading decoded (2026-09-16, trace pending)
+    (spec §1.2). `transport/ch9325.rs` sent the DLL's until 2026-09-16 and
+    sends the apps' since, for both rates. Issue #16's UT804 connected but
+    decoded no reading with the DLL's layout; a run with the apps' layout
+    settles which one the bridge reads
   - CH9325 start-up takes any report as an answer, even one with no meter
     bytes, and falls back to 19200 baud when none comes within 300 ms —
     a rate the UT804 app never sets (UT803.exe has a 19200 branch)

@@ -28,20 +28,24 @@ const HID_REPORT_DATA_SIZE: usize = 8;
 /// Maximum UART payload bytes per HID report (8 bytes minus 1-byte header).
 const MAX_UART_PAYLOAD: usize = 7;
 
-/// Primary init feature report: 2400 baud (0x0960 LE), 8N1.
+/// Primary init feature report: 2400 baud, config `0x03` (8 data bits).
 ///
-/// Byte layout: `[report_id=0x00, baud_lo=0x60, baud_hi=0x09, config=0x03,
-///               0x00, 0x00, 0x00, 0x00, 0x00, 0x00]`
+/// Byte layout: `[report_id=0x00, 0x60, 0x09, 0x00, 0x00, config=0x03,
+///               0x00, 0x00, 0x00, 0x00]` — the baud rate little-endian in
+/// bytes 1-2 (1-4 as 32 bits), as the UT803/UT804 apps send it. The SDK
+/// DLL puts `0x03` in byte 3 instead; which layout the bridge reads is
+/// unverified.
 ///
-/// Reference: §4.3 (FUN_1001d360)
+/// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
 const PRIMARY_FEATURE_REPORT: [u8; 10] =
-    [0x00, 0x60, 0x09, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    [0x00, 0x60, 0x09, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00];
 
-/// Fallback init feature report: 19200 baud (0x4B00 LE), 8N1.
+/// Fallback init feature report: 19200 baud, the primary's layout (UT803.exe
+/// sends this one too).
 ///
-/// Reference: §4.4 (FUN_1001d270)
+/// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
 const FALLBACK_FEATURE_REPORT: [u8; 10] =
-    [0x00, 0x00, 0x4B, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    [0x00, 0x00, 0x4B, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00];
 
 const BRIDGE: &str = "CH9325 HID-to-UART bridge (WCH)";
 
@@ -275,22 +279,24 @@ mod tests {
         assert_eq!(MAX_UART_PAYLOAD, 7);
     }
 
+    /// The baud rate reads the same whether the bridge takes bytes 1-2 or
+    /// bytes 1-4, and `0x03` sits in byte 5, where the meters' apps put it.
+    fn assert_report(report: &[u8; 10], baud: u32) {
+        assert_eq!(report[0], 0x00); // report ID
+        let rate = u32::from_le_bytes([report[1], report[2], report[3], report[4]]);
+        assert_eq!(rate, baud);
+        assert_eq!(report[5], 0x03);
+        assert!(report[6..].iter().all(|&b| b == 0));
+    }
+
     #[test]
     fn primary_feature_report_encoding() {
-        // Baud rate bytes 1-2 encode 2400 (0x0960 LE)
-        let baud = u16::from_le_bytes([PRIMARY_FEATURE_REPORT[1], PRIMARY_FEATURE_REPORT[2]]);
-        assert_eq!(baud, 2400);
-        assert_eq!(PRIMARY_FEATURE_REPORT[0], 0x00); // report ID
-        assert_eq!(PRIMARY_FEATURE_REPORT[3], 0x03); // config (8N1)
+        assert_report(&PRIMARY_FEATURE_REPORT, 2400);
     }
 
     #[test]
     fn fallback_feature_report_encoding() {
-        // Baud rate bytes 1-2 encode 19200 (0x4B00 LE)
-        let baud = u16::from_le_bytes([FALLBACK_FEATURE_REPORT[1], FALLBACK_FEATURE_REPORT[2]]);
-        assert_eq!(baud, 19200);
-        assert_eq!(FALLBACK_FEATURE_REPORT[0], 0x00); // report ID
-        assert_eq!(FALLBACK_FEATURE_REPORT[3], 0x03); // config (8N1)
+        assert_report(&FALLBACK_FEATURE_REPORT, 19200);
     }
 
     #[test]
