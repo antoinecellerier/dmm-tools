@@ -187,7 +187,7 @@ fn create(path: &Path) -> io::Result<BufWriter<File>> {
 /// started in the same second ask for it, and the second would truncate the
 /// first's readings away. An `-o FILE` the user typed still overwrites — they
 /// named that file.
-fn create_new(path: &Path) -> io::Result<(PathBuf, File)> {
+pub(crate) fn create_new(path: &Path) -> io::Result<(PathBuf, File)> {
     for n in 1..=MOST_SAME_NAME {
         let candidate = if n == 1 {
             path.to_path_buf()

@@ -202,36 +202,10 @@ fn save_no_response(
     report.init_frames = events.iter().map(FrameRecord::from).collect();
 
     // Reserve a fresh name, then write over the reservation atomically.
-    let path = reserve(&no_response_path(output_override, device.id))?;
+    let (path, _) = crate::output::create_new(&no_response_path(output_override, device.id))?;
     let path = path.to_string_lossy().into_owned();
     save_report(&report, &path)?;
     Ok((path, rx_bytes))
-}
-
-/// Create `path` exclusively, stepping to `-2`, `-3` beside a taken name.
-fn reserve(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
-    const MOST_SAME_NAME: u32 = 100;
-    for n in 1..=MOST_SAME_NAME {
-        let candidate = if n == 1 {
-            path.to_path_buf()
-        } else {
-            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-            path.with_file_name(format!("{stem}-{n}.yaml"))
-        };
-        match std::fs::File::options()
-            .write(true)
-            .create_new(true)
-            .open(&candidate)
-        {
-            Ok(_) => return Ok(candidate),
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e),
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::AlreadyExists,
-        format!("{} and the names beside it are taken", path.display()),
-    ))
 }
 
 #[cfg(test)]
