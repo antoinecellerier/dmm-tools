@@ -1,33 +1,35 @@
 //! UT803/UT804 bench multimeter protocol.
 //!
-//! These meters use FS9721-style 14-byte framing (index nibble in high 4
-//! bits) but with a **proprietary data encoding** — the data nibbles carry
-//! structured measurement data (mode codes, range codes, digit values,
-//! status flags), NOT raw LCD segment data.
+//! These meters send 11-byte packets: 9 data bytes (`0x30`-`0x3F`, with odd
+//! parity in bit 7 on the UT804), then CR LF. No checksum. Only the low
+//! nibbles carry data, and they hold structured measurement data (mode
+//! codes, range codes, digit values, status flags), NOT raw LCD segment
+//! data.
 //!
 //! **UT803 and UT804 use different payload layouts** (2026-06 review,
 //! re-derived from UT803.exe V1.01 / UT804.exe V2.00 with string constants
-//! resolved from the recovered binaries and the vendor LCD fonts rendered):
+//! resolved from the recovered binaries and the vendor LCD fonts rendered).
+//! Positions are the vendor parsers' 1-based indices into the low nibbles.
 //!
-//! UT804 (nibble index = vendor 1-based char − 1):
-//! - nibbles 0-4: digits 1-5 (MSD first; 0xA = blank)
-//! - nibble 5: range (decimal point position via per-mode table)
-//! - nibble 6: mode code (1-15)
-//! - nibble 7: AC/DC (0=default, 1=AC, 2=DC, 3=AC+DC)
-//! - nibble 8: status — bit 3 unknown, bit 2 = **negative sign** (duty-%
+//! UT804 (position k = byte k):
+//! - positions 1-5: digits 1-5 (MSD first; 0xA = blank)
+//! - position 6: range (decimal point position via per-mode table)
+//! - position 7: mode code (1-15)
+//! - position 8: AC/DC (0=default, 1=AC, 2=DC, 3=AC+DC)
+//! - position 9: status — bit 3 unknown, bit 2 = **negative sign** (duty-%
 //!   selector in frequency mode), bits 1-0: AUTO when == 1
-//! - nibbles 9-10: format markers 0xD 0xA (low nibbles of CR/LF)
-//! - nibbles 11-13: never read by the vendor app; purpose unknown
+//! - positions 10-11: 0xD 0xA (low nibbles of CR/LF)
 //!
-//! UT803:
-//! - nibble 1: range
-//! - nibbles 2-5: digits 1-4 (MSD first)
-//! - nibble 6: mode code (different meanings from UT804!)
-//! - nibble 7: bit 3 = alt-mode (RPM / °C-vs-°F), bit 2 = **negative
+//! UT803 (position k = byte k-1: the vendor parser reads 0xA, bytes 1-9,
+//! then 0xD):
+//! - position 2: range
+//! - positions 3-6: digits 1-4 (MSD first)
+//! - position 7: mode code (different meanings from UT804!)
+//! - position 8: bit 3 = alt-mode (RPM / °C-vs-°F), bit 2 = **negative
 //!   sign**, bit 1 = unknown, bit 0 = overload
-//! - nibble 8: bit 3 = HOLD, bits 2-1 = unknown indicators
-//! - nibble 9: bit 3 = DC, bit 2 = AC, bit 1 = AUTO (else MANU)
-//! - nibbles 0, 10-13: never read by the vendor app
+//! - position 9: bit 3 = HOLD, bits 2-1 = unknown indicators
+//! - position 10: bit 3 = DC, bit 2 = AC, bit 1 = AUTO (else MANU)
+//! - positions 1, 11: the fixed 0xA and 0xD, never read by the parser
 //!
 //! The decimal point value in the per-mode range tables is the position
 //! FROM THE LEFT (point placed after digit position+1), matching the
@@ -47,7 +49,7 @@ use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
 
-/// Which meter model the frames come from — the two share framing but
+/// Which meter model the packets come from — the two share framing but
 /// not payload layout.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Model {
@@ -65,7 +67,7 @@ pub(crate) enum Model {
 fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u8)> {
     Some(match mode {
         // Modes 1 and 2 have byte-identical handlers; the AC/DC label
-        // comes solely from nibble 7. Which dial sends 1 vs 2 is unknown.
+        // comes solely from position 8. Which dial sends 1 vs 2 is unknown.
         0x1 | 0x2 => (
             "V",
             "V",
@@ -139,8 +141,8 @@ fn ut804_default_dc(mode: u8) -> bool {
 
 /// UT803 per-(mode, range) display info, same convention as
 /// [`ut804_mode_info`] but with 4 digits and the UT803's own mode codes
-/// (spec §7.4 item 4). `alt` is nibble 7 bit 3 (selects RPM for frequency,
-/// °C vs °F for temperature).
+/// (spec §7.4 item 4). `alt` is position 8 bit 3 (selects RPM for
+/// frequency, °C vs °F for temperature).
 fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'static str, u8)> {
     Some(match mode {
         0xB => match range {
@@ -258,18 +260,55 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
     Ok((trimmed, value))
 }
 
-/// Reject payloads with fewer than `min` data nibbles.
+/// Packet length: 9 data bytes, CR, LF (spec §2.1).
+const PACKET_LEN: usize = 11;
+
+/// The packet terminator, compared with bit 7 masked: issue #16's UT804
+/// sends CR as `0D` and LF as `8A`.
+const CR: u8 = 0x0D;
+const LF: u8 = 0x0A;
+
+/// Whether `bytes` is one whole packet: nine `0x30`-`0x3F` data bytes, CR,
+/// LF.
 ///
-/// Says "nibbles" where `protocol::check_len` says "bytes": these payloads
-/// are 4-bit data nibbles, so the byte wording would mislead.
-fn check_nibbles(nibbles: &[u8], min: usize) -> Result<()> {
-    if nibbles.len() < min {
+/// Bit 7 is masked, not checked. The UT804 puts odd parity there (7O1 read
+/// as 8N1, issue #16), but which data-bit setting the CH9325 takes from our
+/// feature report is unverified (spec §1.2), so a stream with the parity
+/// bit stripped is accepted too.
+fn is_packet(bytes: &[u8]) -> bool {
+    bytes.len() == PACKET_LEN
+        && bytes[..PACKET_LEN - 2].iter().all(|b| b & 0x70 == 0x30)
+        && bytes[PACKET_LEN - 2] & 0x7F == CR
+        && bytes[PACKET_LEN - 1] & 0x7F == LF
+}
+
+/// Find the first whole packet in `buf`.
+///
+/// Returns the packet's bytes as received, bit 7 included, and the offset
+/// just past it. Never fails: the stream has no header to resync on, so a
+/// partial first packet, or one that lost a byte, is only a window that is
+/// not a packet — the previous packet's CR or LF sits where a data byte
+/// should be. `Ok(None)` until a whole packet has arrived.
+fn extract_packet(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
+    Ok(buf
+        .windows(PACKET_LEN)
+        .position(is_packet)
+        .map(|start| (buf[start..start + PACKET_LEN].to_vec(), start + PACKET_LEN)))
+}
+
+/// The low nibbles of a whole packet: the UT804 parser's positions 1-11.
+fn low_nibbles(packet: &[u8]) -> Result<[u8; PACKET_LEN]> {
+    if !is_packet(packet) {
         return Err(Error::invalid_response(
-            format!("ut80x payload too short: {} nibbles", nibbles.len()),
-            nibbles,
+            "ut80x: not a packet of 9 data bytes and CR LF",
+            packet,
         ));
     }
-    Ok(())
+    let mut nibbles = [0u8; PACKET_LEN];
+    for (nibble, byte) in nibbles.iter_mut().zip(packet) {
+        *nibble = byte & 0x0F;
+    }
+    Ok(nibbles)
 }
 
 /// Mode name, unit and decimal point position, falling back to an unnamed
@@ -295,20 +334,10 @@ fn overload_display(negative: bool) -> Option<String> {
     })
 }
 
-/// Parse a UT804 measurement payload (14 data nibbles).
-pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
-    check_nibbles(nibbles, 11)?;
-
-    // Format markers (vendor chars 'D'/'A' = low nibbles of CR/LF).
-    if nibbles[9] != 0x0D || nibbles[10] != 0x0A {
-        return Err(Error::invalid_response(
-            format!(
-                "ut804 format markers {:#04x} {:#04x}, expected 0xD 0xA",
-                nibbles[9], nibbles[10]
-            ),
-            nibbles,
-        ));
-    }
+/// Parse a UT804 packet. Position k is byte k (spec §2.1), so
+/// `nibbles[k-1]` is position k.
+pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
+    let nibbles = low_nibbles(packet)?;
 
     let range = nibbles[5];
     let mode_code = nibbles[6];
@@ -332,7 +361,7 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
         } else if mode_name == "?" {
             (unknown_mode(mode_code), sign_bit, dp_pos, unit)
         } else {
-            // AC/DC labeling comes from nibble 7 for the V/mV/current
+            // AC/DC labeling comes from position 8 for the V/mV/current
             // modes (0 = default DC); other modes keep their plain name.
             let label = match (acdc, ut804_default_dc(mode_code)) {
                 (1, _) => match mode_name {
@@ -402,13 +431,19 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
         unit: Cow::Borrowed(unit),
         display_raw,
         flags,
-        ..Measurement::from_payload(nibbles)
+        ..Measurement::from_payload(packet)
     })
 }
 
-/// Parse a UT803 measurement payload (14 data nibbles).
-pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
-    check_nibbles(nibbles, 10)?;
+/// Parse a UT803 packet. The vendor parser reads 0xA, the low nibbles of
+/// bytes 1-9, then 0xD (spec §2.1); `nibbles` rebuilds that string, so
+/// `nibbles[k-1]` is position k, as for the UT804.
+pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
+    let wire = low_nibbles(packet)?;
+    let mut nibbles = [0u8; PACKET_LEN];
+    nibbles[0] = 0xA;
+    nibbles[1..PACKET_LEN - 1].copy_from_slice(&wire[..PACKET_LEN - 2]);
+    nibbles[PACKET_LEN - 1] = 0xD;
 
     let range = nibbles[1];
     let mode_code = nibbles[6];
@@ -467,33 +502,13 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
         unit: Cow::Borrowed(unit),
         display_raw,
         flags,
-        ..Measurement::from_payload(nibbles)
+        ..Measurement::from_payload(packet)
     })
 }
 
 // --- Protocol trait implementation ---
 
 const COMMANDS: &[&str] = &[];
-
-/// Known UT803 mode codes, used to filter garbage frames (the UT803
-/// layout has no format markers to key on).
-const UT803_MODES: &[u8] = &[0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x9, 0xB, 0xD, 0xE, 0xF];
-
-/// Whether `nibbles` can be a measurement frame for this model.
-///
-/// UT804 frames carry 0xD 0xA markers at nibbles 9-10; the UT803 has no
-/// markers, so a known mode code stands in. The stream filter uses this to
-/// resync, `Protocol::parse_payload` to refuse a payload that never went
-/// through the stream — the UT803 parser names an unrecognised mode code
-/// "Unknown" rather than failing, so without the gate a golden fixture
-/// holding anything at all would pin a plausible-looking measurement — and
-/// [`FINGERPRINT`] to split the two models on the wire.
-fn is_measurement_frame(model: Model, nibbles: &[u8]) -> bool {
-    match model {
-        Model::Ut804 => nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
-        Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
-    }
-}
 
 /// Protocol implementation for UT803/UT804 bench multimeters.
 pub(crate) struct Ut80xProtocol {
@@ -544,31 +559,23 @@ impl Protocol for Ut80xProtocol {
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        // The FS9721 extractor handles false starts internally (no Err
-        // from framing); `is_measurement_frame` filters what it hands back.
-        let model = self.model;
-        let payload = framing::read_frame(
+        // `extract_packet` never fails, so the skip pattern is never used;
+        // `read_frame` only needs it non-empty, and CR is always 0x0D.
+        let packet = framing::read_frame(
             &mut self.rx_buf,
             transport,
-            framing::extract_frame_fs9721,
-            |nibbles| is_measurement_frame(model, nibbles),
+            extract_packet,
+            |_| true,
             FrameErrorRecovery::Propagate,
             "ut80x",
-            &framing::FS9721_HEADER,
+            &[CR],
         )?;
-        match self.model {
-            Model::Ut803 => parse_measurement_ut803(&payload),
-            Model::Ut804 => parse_measurement_ut804(&payload),
-        }
+        self.parse_payload(&packet)
     }
 
+    /// The parsers refuse anything that is not a whole packet, so a golden
+    /// fixture can only pin what the stream would have delivered.
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
-        if !is_measurement_frame(self.model, payload) {
-            return Err(Error::invalid_response(
-                format!("ut80x: not a {} measurement frame", self.profile.model_name),
-                payload,
-            ));
-        }
         match self.model {
             Model::Ut803 => parse_measurement_ut803(payload),
             Model::Ut804 => parse_measurement_ut804(payload),
@@ -702,9 +709,8 @@ impl Protocol for Ut80xProtocol {
 
 /// Detection for the UT803/UT804.
 ///
-/// The meters stream 14-byte FS9721 frames and take no commands past the
-/// CH9325 transport's own init, so there is nothing to send. Both send the
-/// same frames, so only the payload separates them
+/// The meters stream 11-byte CR LF packets and take no commands past the
+/// CH9325 transport's own init, so there is nothing to send
 /// (`docs/research/ut803/reverse-engineered-protocol.md`).
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut80x,
@@ -716,53 +722,181 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 };
 
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
-    let mut offset = 0;
-    while let Ok(Some((nibbles, consumed))) = framing::extract_frame_fs9721(&buf[offset..]) {
-        // UT804 first: its `0xD 0xA` marker pair at nibbles 9-10 is positive
-        // evidence, where the UT803 check only asks whether the mode nibble is
-        // one of the codes we know — which a UT804 frame can satisfy by
-        // accident.
-        for model in [Model::Ut804, Model::Ut803] {
-            if is_measurement_frame(model, &nibbles) {
-                return Some(Evidence::Model {
-                    id: match model {
-                        Model::Ut804 => "ut804",
-                        Model::Ut803 => "ut803",
-                    },
-                    reported_name: None,
-                });
-            }
-        }
-        offset += consumed;
-    }
-    None
+    // A packet does not say which model sent it. The CH9325 starts at 2400
+    // baud, where only the UT804 is heard: the UT803 talks at 19200 (spec
+    // §1.2, §5), so it is not detected and has to be named.
+    extract_packet(buf).ok().flatten().map(|_| Evidence::Model {
+        id: "ut804",
+        reported_name: None,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::protocol::test_support::snapshot;
+    use crate::transport::mock::MockTransport;
 
-    /// `parse_payload` feeds golden fixtures straight to the parser, past the
-    /// stream filter, so it gates on the same predicate: the UT803 parser
-    /// names an unrecognised mode code "Unknown" rather than failing, and a
-    /// fixture holding a frame the stream would have dropped would pin that
-    /// as a reading.
+    // Real packets from a UT804 on its bundled CH9325 cable at 2400 baud
+    // (issue #16), all on DC V range 1 with AUTO on.
+
+    /// Open leads: digits 00000, range 1, mode 1, coupling 0, status 1.
+    const ISSUE16_OPEN_LEADS: [u8; 11] = [
+        0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0x31, 0x31, 0xB0, 0x31, 0x0D, 0x8A,
+    ];
+    /// Digits 00013 with status 5 (sign and AUTO).
+    const ISSUE16_MINUS_0_0013: [u8; 11] = [
+        0xB0, 0xB0, 0xB0, 0x31, 0xB3, 0x31, 0x31, 0xB0, 0xB5, 0x0D, 0x8A,
+    ];
+    /// Digits 00000 with the sign bit set.
+    const ISSUE16_SIGNED_ZERO: [u8; 11] = [
+        0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0x31, 0x31, 0xB0, 0xB5, 0x0D, 0x8A,
+    ];
+    /// Digits 00008 with status 5.
+    const ISSUE16_MINUS_0_0008: [u8; 11] = [
+        0xB0, 0xB0, 0xB0, 0xB0, 0x38, 0x31, 0x31, 0xB0, 0xB5, 0x0D, 0x8A,
+    ];
+
+    /// A packet as the UT804 sends it: each data nibble as `0x30 | n`, bit 7
+    /// set for odd parity, then CR LF as `0D 8A`.
+    fn wire(data: [u8; 9]) -> Vec<u8> {
+        let mut packet: Vec<u8> = data
+            .iter()
+            .map(|&n| {
+                let byte = 0x30 | n;
+                if byte.count_ones() % 2 == 0 {
+                    byte | 0x80
+                } else {
+                    byte
+                }
+            })
+            .collect();
+        packet.extend_from_slice(&[0x0D, 0x8A]);
+        packet
+    }
+
+    /// Reports as the CH9325 delivers them: one byte each.
+    fn one_byte_per_report(bytes: &[u8]) -> impl Iterator<Item = Vec<u8>> + '_ {
+        bytes.iter().map(|&b| vec![b])
+    }
+
     #[test]
-    fn parse_payload_refuses_what_the_stream_filter_drops() {
-        // Mode nibble 0x7 is not a UT803 mode, and nibbles 9-10 are not the
-        // UT804's 0xD 0xA markers.
-        let not_a_frame = [0x0u8; 12];
+    fn wire_builds_the_bytes_the_meter_sends() {
+        assert_eq!(wire([0, 0, 0, 0, 0, 1, 1, 0, 1]), ISSUE16_OPEN_LEADS);
+        assert_eq!(wire([0, 0, 0, 1, 3, 1, 1, 0, 5]), ISSUE16_MINUS_0_0013);
+        assert_eq!(wire([0, 0, 0, 0, 8, 1, 1, 0, 5]), ISSUE16_MINUS_0_0008);
+    }
+
+    // --- Packet extraction ---
+
+    #[test]
+    fn a_whole_packet_comes_back_as_received() {
+        let (packet, consumed) = extract_packet(&ISSUE16_OPEN_LEADS).unwrap().unwrap();
+        assert_eq!(packet, ISSUE16_OPEN_LEADS);
+        assert_eq!(consumed, PACKET_LEN);
+    }
+
+    /// Joining the stream mid-packet: the tail is not a packet, because the
+    /// CR and LF sit where data bytes should be.
+    #[test]
+    fn a_partial_first_packet_is_skipped() {
+        let mut buf = ISSUE16_OPEN_LEADS[4..].to_vec();
+        buf.extend_from_slice(&ISSUE16_MINUS_0_0013);
+        let (packet, consumed) = extract_packet(&buf).unwrap().unwrap();
+        assert_eq!(packet, ISSUE16_MINUS_0_0013);
+        assert_eq!(consumed, buf.len());
+    }
+
+    /// A packet that lost a data byte: the 11 bytes ending at its LF start
+    /// at the previous packet's LF, which is not a data byte.
+    #[test]
+    fn a_packet_that_lost_a_byte_is_skipped() {
+        let mut short = ISSUE16_MINUS_0_0013.to_vec();
+        short.remove(4);
+        let mut buf = vec![0x0D, 0x8A];
+        buf.extend_from_slice(&short);
+        assert_eq!(extract_packet(&buf).unwrap(), None);
+
+        buf.extend_from_slice(&ISSUE16_MINUS_0_0008);
+        let (packet, consumed) = extract_packet(&buf).unwrap().unwrap();
+        assert_eq!(packet, ISSUE16_MINUS_0_0008);
+        assert_eq!(consumed, buf.len());
+    }
+
+    #[test]
+    fn a_packet_is_not_whole_until_its_lf_arrives() {
+        assert_eq!(extract_packet(&ISSUE16_OPEN_LEADS[..10]).unwrap(), None);
+        assert_eq!(extract_packet(&[]).unwrap(), None);
+    }
+
+    /// The parity bit is masked, not checked: a parity-stripped stream and a
+    /// CR with bit 7 set are packets too, and read the same.
+    #[test]
+    fn bit_7_is_ignored() {
+        let stripped: Vec<u8> = ISSUE16_MINUS_0_0013.iter().map(|b| b & 0x7F).collect();
+        let mut cr_high = ISSUE16_MINUS_0_0013;
+        cr_high[9] = 0x8D;
+        for packet in [stripped.as_slice(), &cr_high] {
+            let (found, _) = extract_packet(packet).unwrap().unwrap();
+            assert_eq!(found, packet);
+            let m = parse_measurement_ut804(packet).unwrap();
+            assert_eq!(m.display_raw.as_deref(), Some("-0.0013"));
+        }
+    }
+
+    #[test]
+    fn a_data_byte_outside_0x30_to_0x3f_breaks_the_packet() {
+        for bad in [0x00, 0x2F, 0x40, 0xC0] {
+            let mut packet = ISSUE16_OPEN_LEADS;
+            packet[3] = bad;
+            assert_eq!(extract_packet(&packet).unwrap(), None, "{bad:#04x}");
+        }
+    }
+
+    /// `parse_payload` feeds golden fixtures straight to the parsers, which
+    /// take nothing but a whole packet.
+    #[test]
+    fn parse_payload_refuses_what_is_not_a_packet() {
+        let fs9721_frame: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
+        let mut no_lf = ISSUE16_OPEN_LEADS;
+        no_lf[10] = 0xB0;
+        let not_packets: [&[u8]; 4] =
+            [&[0u8; 12], &fs9721_frame, &no_lf, &ISSUE16_OPEN_LEADS[..10]];
         for proto in [
             Box::new(Ut80xProtocol::new_ut803()) as Box<dyn Protocol>,
             Box::new(Ut80xProtocol::new_ut804()),
         ] {
-            assert!(
-                proto.parse_payload(&not_a_frame).is_err(),
-                "{} should refuse it",
-                proto.profile().model_name
-            );
+            let name = proto.profile().model_name;
+            for bytes in not_packets {
+                assert!(proto.parse_payload(bytes).is_err(), "{name}: {bytes:02X?}");
+            }
+            assert!(proto.parse_payload(&ISSUE16_OPEN_LEADS).is_ok(), "{name}");
         }
+    }
+
+    /// Issue #16's cable delivers one byte per report and empty reports
+    /// between packets; a read that joins mid-packet waits for the next
+    /// whole one and keeps its wire bytes as the payload.
+    #[test]
+    fn request_measurement_reads_a_packet_a_byte_at_a_time() {
+        let reports: Vec<Vec<u8>> = one_byte_per_report(&ISSUE16_OPEN_LEADS[6..])
+            .chain(std::iter::repeat_n(Vec::new(), 50))
+            .chain(one_byte_per_report(&ISSUE16_MINUS_0_0013))
+            .chain(std::iter::repeat_n(Vec::new(), 50))
+            .chain(one_byte_per_report(&ISSUE16_MINUS_0_0008))
+            .collect();
+        let mock = MockTransport::new(reports);
+        let mut proto = Ut80xProtocol::new_ut804();
+
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("-0.0013"));
+        assert_eq!(m.raw_payload, ISSUE16_MINUS_0_0013);
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("-0.0008"));
+        assert!(matches!(
+            proto.request_measurement(&mock),
+            Err(Error::Timeout)
+        ));
     }
 
     /// A step may only ask for a label its own model's parser can report:
@@ -797,18 +931,19 @@ mod tests {
         assert_eq!(expected(&ut804, "rpm"), None, "the UT804 has no tachometer");
     }
 
-    /// Build a 14-nibble UT804 payload.
-    /// digits = MSD-first nibbles 0-4; then range, mode, acdc, status.
+    /// Build a UT804 packet.
+    /// digits = MSD-first positions 1-5; then range, mode, acdc, status at
+    /// positions 6-9.
     fn ut804_payload(digits: &[u8; 5], range: u8, mode: u8, acdc: u8, status: u8) -> Vec<u8> {
-        vec![
-            digits[0], digits[1], digits[2], digits[3], digits[4], range, mode, acdc, status, 0x0D,
-            0x0A, 0x0, 0x0, 0x0,
-        ]
+        wire([
+            digits[0], digits[1], digits[2], digits[3], digits[4], range, mode, acdc, status,
+        ])
     }
 
-    /// Build a 14-nibble UT803 payload.
-    /// digits = MSD-first nibbles 2-5; range at nibble 1; mode at 6;
-    /// nib8/nib9/nib10 at 7/8/9.
+    /// Build a UT803 packet.
+    /// Position k is byte k-1: range at position 2 (byte 1), digits =
+    /// MSD-first positions 3-6 (bytes 2-5), mode at 7 (byte 6), nib8/nib9/
+    /// nib10 at positions 8/9/10 (bytes 7-9).
     fn ut803_payload(
         digits: &[u8; 4],
         range: u8,
@@ -817,10 +952,9 @@ mod tests {
         nib9: u8,
         nib10: u8,
     ) -> Vec<u8> {
-        vec![
-            0x0, range, digits[0], digits[1], digits[2], digits[3], mode, nib8, nib9, nib10, 0x0,
-            0x0, 0x0, 0x0,
-        ]
+        wire([
+            range, digits[0], digits[1], digits[2], digits[3], mode, nib8, nib9, nib10,
+        ])
     }
 
     // --- UT804 ---
@@ -945,7 +1079,7 @@ mod tests {
     }
 
     #[test]
-    fn ut804_bad_markers_rejected() {
+    fn ut804_packet_without_cr_rejected() {
         let mut p = ut804_payload(&[1, 2, 3, 4, 0xA], 1, 0x1, 2, 0x0);
         p[9] = 0x0;
         assert!(parse_measurement_ut804(&p).is_err());
@@ -959,7 +1093,87 @@ mod tests {
         assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 12.345).abs() < 1e-9));
     }
 
+    /// Issue #16, open leads: an AUTO DC V reading of zero.
+    #[test]
+    fn ut804_snapshot_issue16_open_leads() {
+        let m = parse_measurement_ut804(&ISSUE16_OPEN_LEADS).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Normal(0.0)
+unit=V
+range_label=
+display_raw=Some("0.0000")
+flags=auto_range,dc
+aux=0
+raw_payload=11"#
+        );
+    }
+
+    /// Issue #16: the status nibble's sign bit alongside AUTO.
+    #[test]
+    fn ut804_snapshot_issue16_negative() {
+        let m = parse_measurement_ut804(&ISSUE16_MINUS_0_0013).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Normal(-0.0013)
+unit=V
+range_label=
+display_raw=Some("-0.0013")
+flags=auto_range,dc
+aux=0
+raw_payload=11"#
+        );
+    }
+
+    /// Issue #16: zero digits with the sign bit. Pinned as the parser reads
+    /// it today; what the LCD shows is open (backlog).
+    #[test]
+    fn ut804_snapshot_issue16_signed_zero() {
+        let m = parse_measurement_ut804(&ISSUE16_SIGNED_ZERO).unwrap();
+        assert_eq!(
+            snapshot(&m),
+            r#"mode=DC V
+mode_raw=0x01
+range_raw=0x01
+value=Normal(-0.0)
+unit=V
+range_label=
+display_raw=Some("-0.0000")
+flags=auto_range,dc
+aux=0
+raw_payload=11"#
+        );
+    }
+
+    #[test]
+    fn ut804_issue16_last_digit() {
+        let m = parse_measurement_ut804(&ISSUE16_MINUS_0_0008).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("-0.0008"));
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - (-0.0008)).abs() < 1e-12));
+        assert!(m.flags.auto_range);
+    }
+
     // --- UT803 ---
+
+    /// The UT803 parser reads positions 2-10, which are bytes 1-9.
+    #[test]
+    fn ut803_positions_2_to_10_are_bytes_1_to_9() {
+        // Byte 1 range, 2-5 digits, 6 mode, 7 sign, 8 HOLD, 9 DC + AUTO.
+        let packet = wire([0x1, 5, 6, 7, 8, 0xB, 0x4, 0x8, 0xA]);
+        let m = parse_measurement_ut803(&packet).unwrap();
+        assert_eq!(m.range_raw, 1);
+        assert_eq!(m.mode_raw, 0xB);
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(m.display_raw.as_deref(), Some("-56.78"));
+        assert!(m.flags.hold && m.flags.dc && m.flags.auto_range);
+        assert_eq!(m.raw_payload, packet);
+    }
 
     #[test]
     fn ut803_dcv() {
@@ -1074,7 +1288,7 @@ range_label=
 display_raw=Some("12.34")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1094,7 +1308,7 @@ range_label=
 display_raw=Some("-12.34")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1114,7 +1328,7 @@ range_label=
 display_raw=Some("0L")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1134,7 +1348,7 @@ range_label=
 display_raw=Some("-0L")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1156,7 +1370,7 @@ range_label=
 display_raw=Some("L0")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1176,7 +1390,7 @@ range_label=
 display_raw=Some("0")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1197,7 +1411,7 @@ range_label=
 display_raw=Some("1234")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1218,7 +1432,7 @@ range_label=
 display_raw=Some("1234")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1239,7 +1453,7 @@ range_label=
 display_raw=Some("500.0")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1259,7 +1473,7 @@ range_label=
 display_raw=Some("230.0")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1279,7 +1493,7 @@ range_label=
 display_raw=Some("230.0")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1299,7 +1513,7 @@ range_label=
 display_raw=Some("230.0")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1319,7 +1533,7 @@ range_label=
 display_raw=Some("230.0")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1339,7 +1553,7 @@ range_label=
 display_raw=Some("5.999")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1359,7 +1573,7 @@ range_label=
 display_raw=Some("-12.34")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1379,7 +1593,7 @@ range_label=
 display_raw=Some("0L")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1399,7 +1613,7 @@ range_label=
 display_raw=Some("-0L")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1419,7 +1633,7 @@ range_label=
 display_raw=Some("1000")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1440,7 +1654,7 @@ range_label=
 display_raw=Some("1234")
 flags=dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1460,7 +1674,7 @@ range_label=
 display_raw=Some("0077")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1480,7 +1694,7 @@ range_label=
 display_raw=Some("0025")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1500,7 +1714,7 @@ range_label=
 display_raw=Some("12.34")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1520,7 +1734,7 @@ range_label=
 display_raw=Some("12.34")
 flags=
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
@@ -1540,28 +1754,28 @@ range_label=
 display_raw=Some("12.34")
 flags=hold,auto_range,dc
 aux=0
-raw_payload=14"#
+raw_payload=11"#
         );
     }
 
-    /// The message a short payload produces, pinned so the wording survives
-    /// the shared length guard.
+    /// The message a non-packet produces, pinned so the wording survives
+    /// the shared packet check.
     #[test]
-    fn ut804_error_payload_too_short() {
+    fn ut804_error_not_a_packet() {
         let err = parse_measurement_ut804(&[0x1, 0x2]).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "invalid response: ut80x payload too short: 2 nibbles"
+            "invalid response: ut80x: not a packet of 9 data bytes and CR LF"
         );
     }
 
-    /// As `ut804_error_payload_too_short`, for the UT803 layout.
+    /// As `ut804_error_not_a_packet`, for the UT803 layout.
     #[test]
-    fn ut803_error_payload_too_short() {
+    fn ut803_error_not_a_packet() {
         let err = parse_measurement_ut803(&[0x1, 0x2]).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "invalid response: ut80x payload too short: 2 nibbles"
+            "invalid response: ut80x: not a packet of 9 data bytes and CR LF"
         );
     }
 
@@ -1589,30 +1803,20 @@ raw_payload=14"#
 
     // --- Detection (crate::detect) ---------------------------------------
 
-    /// Both models send the same 14-byte frames, so only the payload splits
-    /// them — and the UT804's marker pair is checked first, because the UT803
-    /// check only asks whether the mode nibble is one of the codes we know,
-    /// which a UT804 frame can satisfy by accident.
+    /// A packet does not name its model, and only the UT804 is heard at the
+    /// CH9325's 2400 baud start-up rate, so any whole packet is a UT804.
     #[test]
-    fn the_ut804_markers_are_checked_before_the_ut803_mode_codes() {
-        // 14 bytes, high nibble = index 1..14. Nibbles 9 and 10 carry the
-        // UT804's 0xD 0xA marker pair; the UT803 frame has a known mode code
-        // (0x2) at nibble 6 instead.
-        let mut ut804: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
-        ut804[9] |= 0x0D;
-        ut804[10] |= 0x0A;
-        let mut ut803: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
-        ut803[6] |= 0x02;
-
+    fn a_whole_packet_is_recognised_as_a_ut804() {
         let recognise = FINGERPRINT.recognise;
-        for (frame, id) in [(ut804, "ut804"), (ut803, "ut803")] {
-            assert_eq!(
-                recognise(&frame, &Probing::default()),
-                Some(Evidence::Model {
-                    id,
-                    reported_name: None,
-                })
-            );
-        }
+        let mut buf = ISSUE16_OPEN_LEADS[3..].to_vec();
+        assert_eq!(recognise(&buf, &Probing::default()), None);
+        buf.extend_from_slice(&ISSUE16_MINUS_0_0008);
+        assert_eq!(
+            recognise(&buf, &Probing::default()),
+            Some(Evidence::Model {
+                id: "ut804",
+                reported_name: None,
+            })
+        );
     }
 }

@@ -637,12 +637,21 @@ mod tests {
     /// only one it can identify.
     #[test]
     fn the_ch9325_window_writes_nothing() {
-        // 14 bytes, high nibble = index 1..14. Nibbles 9 and 10 carry the
-        // UT804's 0xD 0xA marker pair.
-        let mut ut804: Vec<u8> = (1..=14u8).map(|i| i << 4).collect();
-        ut804[9] |= 0x0D;
-        ut804[10] |= 0x0A;
-        let mock = MockTransport::new(vec![ut804]);
+        // Two packets from issue #16's UT804, one byte per report with empty
+        // reports between them, joined mid-packet as a real listen would be.
+        const DC_V_ZERO: [u8; 11] = [
+            0xB0, 0xB0, 0xB0, 0xB0, 0xB0, 0x31, 0x31, 0xB0, 0x31, 0x0D, 0x8A,
+        ];
+        const DC_V_MINUS_0_0013: [u8; 11] = [
+            0xB0, 0xB0, 0xB0, 0x31, 0xB3, 0x31, 0x31, 0xB0, 0xB5, 0x0D, 0x8A,
+        ];
+        let reports: Vec<Vec<u8>> = DC_V_ZERO[5..]
+            .iter()
+            .map(|&b| vec![b])
+            .chain(std::iter::repeat_n(Vec::new(), 50))
+            .chain(DC_V_MINUS_0_0013.iter().map(|&b| vec![b]))
+            .collect();
+        let mock = MockTransport::new(reports);
         assert_eq!(detect_device(&mock, "CH9325").unwrap().device.id, "ut804");
         assert!(mock.written.borrow().is_empty(), "nothing is sent");
     }

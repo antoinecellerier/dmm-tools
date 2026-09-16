@@ -18,7 +18,7 @@ is probed with, and how well that probe is backed:
 | UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 16- or 22-byte payload | Deduced from the vendor traces, unverified |
 | UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
 | UT8803 | nothing — the meter streams | `AB CD` frame, byte 3 `0x02`, 21-byte checksum | Deduced from the vendor traces, unverified |
-| UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | an FS9721 frame — UT804 by its `D`/`A` marker nibbles, otherwise UT803's mode nibbles | Deduced from the vendor traces, unverified |
+| UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, taken as a UT804; a UT803 (19200 baud) is not detected | Packets seen from [issue #16](https://github.com/antoinecellerier/dmm-tools/issues/16)'s UT804; detection itself unverified |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
 
@@ -728,22 +728,18 @@ plus what no step reaches.
 
 **UT803 / UT804 (CH9325 HID, proprietary structured packets)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
 - **Handler decompile (2026-09-16, spec §2)** — the form's event
-  handlers, missed by the first decompile, change what the driver needs.
-  Implementation waits for #16's traces:
-  - **Wire format**: both apps' `USB Connect` and RS232 handlers take
-    11-byte packets (9 data bytes, CR, LF) and use only low nibbles.
-    The 14-byte index-nibble check belongs to an unused UT60A/B/C
-    path. `framing::extract_frame_fs9721` can never match either
-    meter, so dev-17ea18f should still report "not responding" on #16.
-    Both meters need a CR LF splitter that keeps low nibbles
+  handlers, missed by the first decompile, change what the driver needs:
+  - ~~**Wire format**~~ **Fixed 2026-09-17**: both apps' `USB Connect`
+    and RS232 handlers take 11-byte packets (9 data bytes, CR, LF) and
+    use only low nibbles; the 14-byte index-nibble check belongs to an
+    unused UT60A/B/C path. The driver now splits the stream on CR LF
   - **UT803 rate**: the UT803 app sets 19200 on the CH9325 and on its
     serial port, and the UT803 manual gives 19200 7O1.
     `transport/ch9325.rs` tries 2400 first and takes any report as an
     answer, so a UT803 stays at 2400
-  - **UT803 positions**: the vendor parser's position k is packet byte
-    k-1. `parse_measurement_ut803` reads `nibbles[k]` as position k+1;
-    fed by a CR LF splitter (`nibbles[0]` = byte 1), it must read
-    position k from `nibbles[k-2]`
+  - ~~**UT803 positions**~~ **Fixed 2026-09-17**: the vendor parser's
+    position k is packet byte k-1; `parse_measurement_ut803` is fed `A`,
+    bytes 1-9 and `D`, as the vendor's is
   - ~~**UT804 overload**~~ **Fixed 2026-09-17**: the vendor reads
     nibble 1 = A as an overload unless nibble 2 = C, which it shows as
     "L0." with value 0 (spec §7.4 item 6), and so does
@@ -771,25 +767,17 @@ plus what no step reaches.
     (in neither vendor parser).
 - Transport: CH9325 HID, 2400 baud first, 19200 fallback — implemented.
 - **Community cross-check (2026-09-16, spec §8)** — sigrok and
-  `UT804.LOG` contradict the UT804 framing we implement:
-  - **Wire format**: both give UT71x — 11 bytes, 2400 7O1, `0x30`-`0x3F`
-    characters, CR LF. `framing::extract_frame_fs9721` wants 14 bytes
-    with index high nibbles 1-14 and can never match that, so a UT804
-    sending UT71x times out whatever the cable set-up. Our nibble layout
-    is those bytes' low nibbles, so the parser itself carries over. If
-    #16's trace shows `3x`/`Bx` bytes ending `0D`/`8D` `0A`/`8A`, the
-    UT804 needs a CR/LF extractor that clears bit 7 (sigrok does, for
-    UT71x on this chip). The handler decompile now shows the same
-    format on the vendor's side (above). The UT803 was not
-    cross-checked
+  `UT804.LOG` contradicted the UT804 framing we implemented then:
+  - ~~**Wire format**~~ **Fixed 2026-09-17**: both give UT71x — 11
+    bytes, 2400 7O1, `0x30`-`0x3F` characters, CR LF — and #16's UT804
+    sends exactly that (`3x`/`Bx` bytes, then `0D 8A`). The driver
+    splits on CR LF with bit 7 masked. The UT803 was not cross-checked
   - **Overload**: `UT804.LOG` reads `::0<:` (nibbles A A 0 C A) as
     overload and the 4-20 mA underflow `:<0::` as "L0", as the vendor
     does and, since the fix above, our parser
   - **HOLD and REL**: `UT804.LOG` says nothing is transmitted while HOLD
     is on and REL is never transmitted; a UT71x packet has no nibbles
     12-14
-  - **4000-count display**: sigrok reads byte 4 = `:` as a 4-digit
-    reading; our parser errors on that digit
   - `UT804.LOG` holds 36 real packets across 9 dial positions and their
     sub-functions. Run through `parse_measurement_ut804` as low nibbles
     (2026-09-16, throwaway test): mode, unit, decimal point, AUTO/MAN,
@@ -798,26 +786,26 @@ plus what no step reaches.
     overload fix. Test vectors
     once we decide on attribution (GPL-3.0 repository, author of the log
     unknown)
-- **Needs hardware verification** (all of the above is decompile-derived):
+- **Needs hardware verification** (the payload layouts above are
+  decompile-derived):
   - One frame per dial position on each meter (settles mode codes and
     decimal tables in one pass)
   - A negative reading (sign bits) and an overload (OL patterns)
-  - MIN/MAX/REL/low-battery toggles — candidates: nibbles 12-14,
-    UT803 nibble 9 bits 2-1, UT804 nibble 9 bits 3/1
+  - MIN/MAX/REL/low-battery toggles — candidates: UT803 nibble 9
+    bits 2-1, UT804 nibble 9 bits 3/1
   - UT804 modes 0xE (unknown glyph; hFE?) and 0xF ("mA%") dial
     positions; which of modes 1/2 each V dial sends
   - UT803 frequency range 0 decimal position; tachometer (RPM) frames
-  - Whether 0x5A trigger byte helps/hurts; streaming rate
+  - Whether 0x5A trigger byte helps/hurts; the UT803's streaming rate
   - CH9325 feature-report layout: the UT803/UT804 apps send
     `60 09 00 00 03` (`0x03` in byte 5), the SDK DLL `60 09 03 00 00`
     (spec §1.2). `transport/ch9325.rs` sent the DLL's until 2026-09-16 and
     sends the apps' since, for both rates. sigrok, Lukas Schwarz and
     `he2325u.cpp` all send the apps' layout (spec §8). The sigrok wiki
     reads byte 5 as the data-bit count, so the DLL's layout asks for 5
-    data bits: a 0.6.0 trace may show garbled bytes rather than none.
-    Issue #16's UT804
-    connected but decoded no reading with the DLL's layout; a run with the
-    apps' layout settles which one the bridge reads
+    data bits. Issue #16's UT804 gave clean bytes at 2400 with both
+    layouts (spec §1.2), which settles neither: 2400 may be the bridge's
+    default
   - CH9325 start-up takes any report as an answer, even one with no meter
     bytes, and falls back to 19200 baud when none comes within 300 ms —
     a rate the UT804 app never sets (the UT803 app's rate).
@@ -829,6 +817,14 @@ plus what no step reaches.
     range; a UT804 "L0" frame (digit 1 = 0xA, digit 2 = 0xC) is reported
     as `Normal(0.0)` with the display text "L0", which CSV/JSON export as
     the string `L0`; and UT804 `acdc == 3` (AC+DC) sets the DC flag.
+  - Signed zero: a UT804 packet with zero digits and the sign bit
+    (issue #16) reads `-0.0000`, value `-0.0`. What does the LCD show?
+  - After a long pause in reading, the kernel's HID report queue can
+    drop reports, and the bytes left could splice two packets into one
+    that passes the packet check (not seen yet)
+  - A UT803 is not auto-detected: the CH9325 starts at 2400 and the
+    UT803 talks at 19200, so it has to be named. Its packets are
+    unconfirmed on hardware
 - See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial

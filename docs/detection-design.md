@@ -24,7 +24,7 @@ verification status is not repeated here — it lives in the backlog's
 | UT8803 needs a `0x5A` trigger | Stale. Removed in the 2026-06 review; UT8803/UT8802 stream unprompted (`ut8803/mod.rs`). |
 | Get Name `0x5F` unverified beyond UT61E+ | Verified on UT61B+ too, over CH9329 ([verification-backlog.md](verification-backlog.md)). UT61D+/UT161x still unverified. |
 | 4 families | 8 hardware families plus the CH9325 bridge (UT803/UT804). VC-880/VC-890 share the UT61E+'s `AB CD` BE16 framing; VC-890 even polls with `0x5E`. |
-| No captures | 12 UT61E+ (CP2110) and 2 UT61B+ (CH9329) capture reports under `references/`, all with `init_frames`; UT181A traces in PR #8 (full CH9329 trace) and issue #5 (capture samples); 3 real UT181A frames in `ut181a/parse.rs` and `tests/golden/ut181a/`. Nothing for UT171, UT8802, UT8803, UT803/804, VC-880, VC-890. |
+| No captures | 12 UT61E+ (CP2110) and 2 UT61B+ (CH9329) capture reports under `references/`, all with `init_frames`; UT181A traces in PR #8 (full CH9329 trace) and issue #5 (capture samples); 3 real UT181A frames in `ut181a/parse.rs` and `tests/golden/ut181a/`. UT804 packets in issue #16. Nothing for UT171, UT8802, UT8803, UT803, VC-880, VC-890. |
 
 ## Evidence
 
@@ -90,7 +90,7 @@ every read, against every candidate offset in the buffer, and the strongest answ
 | 4 | a model the meter named itself | the UT61+ name frame, the only one that picks an exact sibling |
 | 3 | a model from a frame whose checksum held | UT8803, UT171, UT181A, VC-880, VC-890 |
 | 2 | `FamilyOnly` — a checksummed frame naming no model | a bare 14-byte UT61+ reading |
-| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), UT803/UT804 |
+| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), UT804 (any CR LF packet) |
 
 A `FamilyOnly` at the top is remembered rather than acted on: the window keeps listening, and a
 name frame arriving in it outranks the fallback (see
@@ -146,9 +146,10 @@ families listed on the bridge it opened — the same list the "no meter answered
 shortcut issue #9 assumed (CH9329 means UT181A) does not hold: a UT61B+ is verified over CH9329
 and older UT181A units ship the CP2110, so CP2110 and CH9329 run the same cascade. The CH9325
 carries the UT803/UT804 family alone; it is receive-only past its init, which already sends
-`0x5A`, so detection there is a single listen window with the UT804 marker checked first
-(`nibbles[9] == 0xD` and `nibbles[10] == 0xA`), then UT803's mode-nibble set. A family seen on a
-new cable joins detection there by being listed on it.
+`0x5A`, so detection there is a single listen window that takes any whole CR LF packet as a
+UT804. A packet does not name its model, and the CH9325 starts at 2400 baud, where only the UT804
+is heard: a UT803 talks at 19200, so it is not detected and has to be named (`--device ut803`). A
+family seen on a new cable joins detection there by being listed on it.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a

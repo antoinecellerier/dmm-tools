@@ -9,6 +9,7 @@ Based on:
   and their form resources (2026-09-16)
 - Binary constant extraction from both executables
 - The UT803 operating manual's serial port settings
+- Bytes a UT804 sent over its CH9325 cable (issue #16, 2026-09-16)
 - CH9325 HID transport analysis (see `../uci-bench-family/reverse-engineered-protocol.md`)
 
 Confidence levels:
@@ -95,6 +96,12 @@ unused, as in UT804.exe.
 the CH9325 reads is [UNVERIFIED]. This section previously quoted the
 UT804.exe bytes as `[0x60, 0x09, 0x03]`, which hid the difference.
 
+Observed on a UT804 (issue #16, 2026-09-16): dmm-tools 0.6.0 sent the
+DLL's layout (`00 60 09 03 00 00 00 00 00 00`) and 0.7.0-dev the apps'
+(`00 60 09 00 00 03 00 00 00 00`), and both gave clean bytes at 2400
+baud. That does not show the bridge reads either layout: 2400 may be its
+default.
+
 **Serial port.** Both apps read RS232 through a `TCommPortDriver`
 (`COMM2`) whose constructor sets 8 data bits, 1 stop bit and no parity
 (UT804 VA 0x4801E4-0x4801EC); the form data sets only the port and
@@ -106,8 +113,10 @@ The UT803 manual gives the meter's RS232 port as 19200 baud, 7 data
 bits, odd parity, 1 stop bit [KNOWN]. The apps still read such a meter
 correctly: their receive paths use only low nibbles, except that the
 RS232 handlers match CR as the whole byte 0x0D, and CR's odd-parity bit
-is 0 (§2). The UT804 manual gives no line format; the UT804's is
-[UNVERIFIED].
+is 0 (§2). The UT804 manual gives no line format. Observed on a UT804
+(issue #16, 2026-09-16): the line format is 7O1 — bit 7 of all 363
+bytes received is odd parity over the other seven, delivered by the
+bridge as an eighth bit.
 
 ---
 
@@ -124,6 +133,10 @@ is 0 (§2). The UT804 manual gives no line format; the UT804's is
 Both meters send 11-byte packets: 9 data bytes, CR (0x0D), LF (0x0A).
 Every live receive path (§2.2, §2.3) keeps only the low nibble of each
 byte; no high nibble is tested. **No checksum.**
+
+Observed on a UT804 (issue #16, 2026-09-16): the data bytes are
+`0x30`-`0x3F` plus the parity bit (§1.2); CR arrives as `0D`, LF as
+`8A`.
 
 The two parsers index the packet differently:
 
@@ -168,6 +181,10 @@ has parsed for about 300 ms: at 1900 it releases `USB Connect` and shows
 "USB interface cable is securely connected, please check if the meter
 is ready." (VA 0x55FDB8). The apps therefore depend on the bridge
 sending reports while the meter is silent.
+
+Observed on a UT804 (issue #16, 2026-09-16): the CH9325 delivers one
+byte per report, about 50 `F0` reports between packets, and no empty
+report inside a packet.
 
 ### 2.3 RS232 Receive Path — [VENDOR]
 
@@ -441,8 +458,9 @@ from UT804.exe, 19200 baud from UT803.exe, both as
 
 ### 4.2 Data Streaming
 
-After init, the meter streams measurement packets continuously at ~2-3 Hz
-(per UT803/UT804 manuals).
+After init, the meter streams measurement packets continuously. The
+UT803/UT804 manuals give 2-3 display updates per second. Observed on a
+UT804 (issue #16, 2026-09-16): a packet about every 656 ms.
 
 The feature report is the only thing either app sends: its
 `HidD_SetFeature` call is the only HID output in either binary, and no
@@ -498,7 +516,8 @@ cross-referencing with mode detection logic.
 ### 7.1 Packet Extraction
 
 Split the byte stream after each CR LF into 11-byte packets and keep the
-low nibbles (§2.1). The apps rely on empty reports between packets
+low nibbles (§2.1). Mask bit 7 before comparing CR and LF: the UT804's
+LF arrives as `8A` (§2.1). The apps rely on empty reports between packets
 instead (§2.2); splitting on CR LF does not depend on report timing. No
 checksum validation.
 
@@ -520,8 +539,9 @@ Parse the proprietary data nibbles, NOT LCD segments:
 - Range-to-decimal-point tables for all modes
 - Status flag bits (MIN, MAX, REL, Low Battery) — see §7.4
 - Whether the meter needs anything sent (the apps send nothing, §4.2)
-- Streaming rate
-- Line format on the wire (§1.2)
+- Streaming rate: a packet about every 656 ms on a UT804 (§4.2); the
+  UT803's is open
+- Line format on the wire (§1.2): 7O1 on a UT804; the UT803's is open
 - Digit encoding for values > 9 (0xA = blank confirmed, others unknown)
 - Whether nibble 4 = 'B' guard condition has meaning
 
@@ -733,4 +753,6 @@ Reference implementations:
   published methods and the handlers they install, seeded from the Delphi
   RTTI; disassembly of the conditions; the form resources
 - UT803 operating manual — RS232 settings and RS232 button
+- Issue #16 — a UT804's CH9325 reports under dmm-tools 0.6.0 and 0.7.0-dev
+  (2026-09-16)
 - CH9325 transport analysis — see `../uci-bench-family/reverse-engineered-protocol.md`
