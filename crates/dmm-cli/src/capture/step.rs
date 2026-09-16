@@ -123,6 +123,10 @@ pub(crate) fn frames_for_step(events: &[WireEvent], step_id: &str) -> (Vec<Frame
     )
 }
 
+/// What a step that read nothing prints. The UT804's HOLD instruction quotes
+/// it, since a meter silent in HOLD ends there.
+pub(super) const NO_RESPONSE: &str = "No response from meter.";
+
 /// How long a step watches the meter before offering the keyboard: long
 /// enough to fetch a thermocouple, short enough not to look stuck.
 const STEP_TIMEOUT: Duration = Duration::from_secs(45);
@@ -483,7 +487,7 @@ pub(crate) fn run_capture_step(
                 None
             }
         } else {
-            eprintln!("  {}", style("No response from meter.").yellow());
+            eprintln!("  {}", style(NO_RESPONSE).yellow());
             None
         };
 
@@ -604,6 +608,20 @@ mod tests {
             (device.new_protocol)(),
         )
         .unwrap()
+    }
+
+    /// A UT804 may send nothing while HOLD is on, and its step says the line
+    /// that follows is an answer: the quote has to be what the step prints.
+    #[test]
+    fn the_ut804_hold_step_quotes_the_no_response_line() {
+        let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
+        let steps = (device.new_protocol)().capture_steps();
+        let hold = steps.iter().find(|s| s.id == "hold").unwrap();
+        assert!(
+            hold.instruction.contains(&format!("\"{NO_RESPONSE}\"")),
+            "{:?}",
+            hold.instruction
+        );
     }
 
     /// A rejected frame used to end the step, so the report carried neither a

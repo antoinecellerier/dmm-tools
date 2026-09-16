@@ -698,10 +698,20 @@ impl Protocol for Ut80xProtocol {
                 for_model(Some("mA%"), None),
             ),
             // The HOLD wire encoding is what this step is for, so it asserts
-            // nothing about the flag.
+            // nothing about the flag. The UT804 may send nothing while HOLD
+            // is on (spec §8), which the step reports as "No response from
+            // meter." only after its sampling reads time out, so its
+            // instruction says that is a valid result, that it can take up to
+            // a minute, and how to leave HOLD for the rest of the run.
             CaptureStep::basic(
                 "hold",
-                "Press HOLD (wire encoding unknown — capture needed)",
+                if ut803 {
+                    "Press HOLD (wire encoding unknown — capture needed)"
+                } else {
+                    "Press HOLD on the meter, then Enter. If the meter stops sending, \
+                     \"No response from meter.\" shows within a minute: that is a valid result. \
+                     Press EXIT on the meter afterwards."
+                },
             ),
         ]
     }

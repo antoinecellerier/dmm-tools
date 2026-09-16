@@ -7,7 +7,9 @@ use super::report::{
     CaptureReport, SampleData, StepResult, StepStatus, Trust, already_captured,
     baseline_from_report, needs_attention, save_report, upsert_step,
 };
-use super::step::{CaptureStep, PrevState, capture_samples, frames_for_step, run_capture_step};
+use super::step::{
+    CaptureStep, NO_RESPONSE, PrevState, capture_samples, frames_for_step, run_capture_step,
+};
 use crate::recording::{self, SharedRecorder};
 use console::style;
 use dmm_lib::protocol::Need;
@@ -421,7 +423,7 @@ pub(super) fn run_freeform_captures(
                 last.summary()
             ))?)
         } else {
-            eprintln!("  No response from meter.");
+            eprintln!("  {NO_RESPONSE}");
             None
         };
 
