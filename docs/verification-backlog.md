@@ -744,10 +744,10 @@ plus what no step reaches.
     k-1. `parse_measurement_ut803` reads `nibbles[k]` as position k+1;
     fed by a CR LF splitter (`nibbles[0]` = byte 1), it must read
     position k from `nibbles[k-2]`
-  - **UT804 overload**: the vendor reads nibble 1 = A as an overload
-    unless nibble 2 = C, which it shows as "L0." with value 0 (spec
-    §7.4 item 6). `parse_measurement_ut804` has the test the other way
-    round (overload when nibble 2 = C)
+  - ~~**UT804 overload**~~ **Fixed 2026-09-17**: the vendor reads
+    nibble 1 = A as an overload unless nibble 2 = C, which it shows as
+    "L0." with value 0 (spec §7.4 item 6), and so does
+    `parse_measurement_ut804` now; hardware confirmation pending
   - **Nothing sent**: the apps send only the feature report; no trigger
     byte or command
   - **Idle reports**: the apps end each packet at a report without
@@ -783,8 +783,8 @@ plus what no step reaches.
     format on the vendor's side (above). The UT803 was not
     cross-checked
   - **Overload**: `UT804.LOG` reads `::0<:` (nibbles A A 0 C A) as
-    overload, as the vendor does; our parser reports it as "L0" 0.0,
-    and the 4-20 mA underflow `:<0::` as overload (inverted test, above)
+    overload and the 4-20 mA underflow `:<0::` as "L0", as the vendor
+    does and, since the fix above, our parser
   - **HOLD and REL**: `UT804.LOG` says nothing is transmitted while HOLD
     is on and REL is never transmitted; a UT71x packet has no nibbles
     12-14
@@ -794,7 +794,8 @@ plus what no step reaches.
     sub-functions. Run through `parse_measurement_ut804` as low nibbles
     (2026-09-16, throwaway test): mode, unit, decimal point, AUTO/MAN,
     coupling and sign match the log's labels on every non-overload
-    packet; all five overload packets come out as "L0" 0.0. Test vectors
+    packet; all five overload packets came out as "L0" 0.0 before the
+    overload fix. Test vectors
     once we decide on attribution (GPL-3.0 repository, author of the log
     unknown)
 - **Needs hardware verification** (all of the above is decompile-derived):
@@ -825,7 +826,7 @@ plus what no step reaches.
   - Three parser behaviours surfaced by the 2026-09 snapshot tests, to
     settle against real frames rather than change blind: `range_label`
     is never set for either model although the per-mode tables know the
-    range; a UT804 "L0" frame (digit 1 = 0xA, digit 2 != 0xC) is reported
+    range; a UT804 "L0" frame (digit 1 = 0xA, digit 2 = 0xC) is reported
     as `Normal(0.0)` with the display text "L0", which CSV/JSON export as
     the string `L0`; and UT804 `acdc == 3` (AC+DC) sets the DC flag.
 - See `docs/research/ut803/reverse-engineered-protocol.md` for full spec.

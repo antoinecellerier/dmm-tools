@@ -372,14 +372,14 @@ pub(crate) fn parse_measurement_ut804(nibbles: &[u8]) -> Result<Measurement> {
     let dc = matches!(acdc, 2 | 3) || (acdc == 0 && ut804_default_dc(mode_code));
 
     // Overload frames: digit 1 = 0xA. Vendor forces the displays to
-    // "0L" (overload, possibly negative) when digit 2 == 0xC, or "L0"
-    // → value 0.0 otherwise (spec §7.4 item 6). An idle frame (digit 4
-    // == 0xB) shows all zeros.
+    // "L0" → value 0.0 when digit 2 == 0xC, or "0L" (overload, possibly
+    // negative) otherwise; digits 3-5 are ignored (spec §7.4 item 6). An
+    // idle frame (digit 4 == 0xB) shows all zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
         if nibbles[1] == 0xC {
-            (MeasuredValue::Overload, overload_display(negative))
-        } else {
             (MeasuredValue::Normal(0.0), Some("L0".to_string()))
+        } else {
+            (MeasuredValue::Overload, overload_display(negative))
         }
     } else if nibbles[3] == 0xB {
         (MeasuredValue::Normal(0.0), Some("0".to_string()))
@@ -861,13 +861,13 @@ mod tests {
 
     #[test]
     fn ut804_overload_nibble1() {
-        // Digit1 = 0xA + digit2 = 0xC → overload.
-        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x4, 0, 0x0);
+        // Digit1 = 0xA + any digit2 but 0xC → overload.
+        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x4, 0, 0x0);
         let m = parse_measurement_ut804(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
 
         // Negative overload via status bit 2.
-        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x1, 2, 0x4);
+        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x1, 2, 0x4);
         let m = parse_measurement_ut804(&p).unwrap();
         assert!(matches!(m.value, MeasuredValue::Overload));
         assert_eq!(m.display_raw.as_deref(), Some("-0L"));
@@ -1098,10 +1098,10 @@ raw_payload=14"#
         );
     }
 
-    /// Overload: digit 1 = 0xA and digit 2 = 0xC.
+    /// Overload: digit 1 = 0xA and digit 2 anything but 0xC.
     #[test]
     fn ut804_snapshot_overload_positive() {
-        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x4, 0, 0x0);
+        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x4, 0, 0x0);
         let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(
             snapshot(&m),
@@ -1121,7 +1121,7 @@ raw_payload=14"#
     /// The same overload with the sign bit: the digits read "-0L".
     #[test]
     fn ut804_snapshot_overload_negative() {
-        let p = ut804_payload(&[0xA, 0xC, 0, 0, 0], 1, 0x1, 2, 0x4);
+        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x1, 2, 0x4);
         let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(
             snapshot(&m),
@@ -1138,11 +1138,12 @@ raw_payload=14"#
         );
     }
 
-    /// Digit 1 = 0xA with digit 2 != 0xC: the vendor's "L0" display, which
-    /// we report as a zero reading rather than an overload.
+    /// Digit 1 = 0xA with digit 2 = 0xC: the vendor's "L0" display, which
+    /// we report as a zero reading rather than an overload. Digits 3-5 are
+    /// ignored.
     #[test]
     fn ut804_snapshot_l0() {
-        let p = ut804_payload(&[0xA, 0x1, 2, 3, 4], 1, 0x1, 2, 0x0);
+        let p = ut804_payload(&[0xA, 0xC, 2, 3, 4], 1, 0x1, 2, 0x0);
         let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(
             snapshot(&m),
