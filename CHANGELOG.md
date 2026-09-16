@@ -37,7 +37,7 @@
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **Capture drives the meter and waits for readings itself** — every step stopped for an Enter and filed whatever was on screen; on meters that take commands it sets each range, flag and sub-mode.
 - **Capture covers every sub-mode and lists the equipment up front** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB had no step; a thermocouple or battery turned up mid-run.
-- **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; confirmations and `debug` showed only the main reading.
+- **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; a meter that never answered left nothing; confirmations and `debug` showed only the main reading.
 - **`capture --unverified` runs only the steps no report has confirmed** — `--list-steps --format md` prints that checklist for an issue; `--plan` runs a maintainer-written step file.
 - **REL on the UT181A** — in the CLI and the GUI.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.

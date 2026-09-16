@@ -39,6 +39,10 @@ pub(crate) struct CaptureReport {
     /// name query.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub init_frames: Vec<FrameRecord>,
+    /// The meter never answered the check before the first step: the report
+    /// has no steps, and `init_frames` is everything the cable delivered.
+    #[serde(skip_serializing_if = "is_false", default)]
+    pub no_response: bool,
     /// The run was `--unverified`, so verified steps are absent by request
     /// rather than skipped by the operator.
     #[serde(skip_serializing_if = "is_false", default)]
@@ -688,6 +692,22 @@ pub(super) fn load_or_create_report(
     };
 
     Ok(Some((report, output_path)))
+}
+
+/// Where the report of a meter that never answered goes: beside the path the
+/// run would have written, so `-o` still picks the directory, under its own
+/// name so a report in progress is never replaced by an empty one.
+pub(super) fn no_response_path(
+    output_override: Option<&str>,
+    device_id: &str,
+) -> std::path::PathBuf {
+    let path = std::path::PathBuf::from(
+        output_override
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("capture-{}.yaml", slug(device_id))),
+    );
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    path.with_file_name(format!("{stem}-no-response.yaml"))
 }
 
 /// Populate report metadata (date, version, device info).

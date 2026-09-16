@@ -17,7 +17,10 @@ pub(crate) use step::{CaptureStep, FREEFORM_STEP_ID, capture_samples, frames_for
 use crate::recording::{self, SharedRecorder};
 use console::style;
 use listing::validate_step_filter;
-use report::{FrameRecord, Trust, captured_count, load_or_create_report, populate_report_metadata};
+use report::{
+    FrameRecord, Trust, captured_count, load_or_create_report, no_response_path,
+    populate_report_metadata,
+};
 use session::{run_batch_review, run_freeform_captures, run_protocol_capture, verify_meter};
 
 #[allow(clippy::too_many_arguments)]
@@ -40,7 +43,25 @@ pub(crate) fn cmd_capture(
     // reporter's typo, and they should hear about it straight away.
     let plan_steps = plan_path.as_deref().map(crate::plan::load).transpose()?;
 
-    let (device_name, supported) = verify_meter(&mut dmm, device, known_name)?;
+    let (device_name, supported) = match verify_meter(&mut dmm, device, known_name) {
+        Ok(verified) => verified,
+        Err(e) => {
+            match save_no_response(&mut dmm, &recorder, device, output_override.as_deref()) {
+                Ok((path, rx_bytes)) => {
+                    eprintln!(
+                        "Bytes received: {rx_bytes}, saved to {}",
+                        style(&path).bold()
+                    );
+                    eprintln!(
+                        "If the meter is on and still not answering, attach that file to {}",
+                        dmm.profile().feedback_url()
+                    );
+                }
+                Err(save) => eprintln!("Could not save the bytes received: {save}"),
+            }
+            return Err(e);
+        }
+    };
 
     let input = Input::start();
     let (mut report, output_path) =
@@ -150,4 +171,158 @@ pub(crate) fn cmd_capture(
     }
     eprintln!("Attach the report to {}", dmm.profile().feedback_url());
     Ok(())
+}
+
+/// Keep what the cable delivered when the meter never answered: on a meter
+/// being brought up, bytes that did not decode are all the evidence there is.
+/// Returns the file written and how many bytes it holds.
+fn save_no_response(
+    dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
+    recorder: &SharedRecorder,
+    device: &'static dmm_lib::protocol::registry::SelectableDevice,
+    output_override: Option<&str>,
+) -> Result<(String, usize), Box<dyn std::error::Error>> {
+    let mut report = CaptureReport::default();
+    let supported = dmm.profile().stability.is_verified();
+    // `verify_meter` only fails when the meter gave no name, so there is none
+    // to put here; "unknown" is what a nameless meter's report says too.
+    populate_report_metadata(&mut report, dmm, "unknown".to_string(), supported);
+    report.device_id = Some(device.id.to_string());
+    report.no_response = true;
+    let events = {
+        let mut recorder = recording::lock(recorder);
+        report.wire_events_dropped = recorder.dropped();
+        recorder.drain()
+    };
+    let rx_bytes = events
+        .iter()
+        .filter(|e| e.dir == recording::Direction::Rx && !e.feature)
+        .map(|e| e.bytes.len())
+        .sum();
+    report.init_frames = events.iter().map(FrameRecord::from).collect();
+
+    // Reserve a fresh name, then write over the reservation atomically.
+    let path = reserve(&no_response_path(output_override, device.id))?;
+    let path = path.to_string_lossy().into_owned();
+    save_report(&report, &path)?;
+    Ok((path, rx_bytes))
+}
+
+/// Create `path` exclusively, stepping to `-2`, `-3` beside a taken name.
+fn reserve(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    const MOST_SAME_NAME: u32 = 100;
+    for n in 1..=MOST_SAME_NAME {
+        let candidate = if n == 1 {
+            path.to_path_buf()
+        } else {
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+            path.with_file_name(format!("{stem}-{n}.yaml"))
+        };
+        match std::fs::File::options()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(_) => return Ok(candidate),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        format!("{} and the names beside it are taken", path.display()),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use dmm_lib::transport::Transport;
+    use std::cell::RefCell;
+
+    /// Hands up `chunks` one read at a time, then nothing.
+    struct Chunks(RefCell<Vec<Vec<u8>>>);
+
+    impl Transport for Chunks {
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            let mut chunks = self.0.borrow_mut();
+            if chunks.is_empty() {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                return Ok(0);
+            }
+            let chunk = chunks.remove(0);
+            buf[..chunk.len()].copy_from_slice(&chunk);
+            Ok(chunk.len())
+        }
+
+        fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// A UT804 that sends bytes the decoder never frames: the run stops at
+    /// the meter check, and the bytes land in a report of their own beside
+    /// the one `-o` names, which a later run can still resume.
+    #[test]
+    fn a_meter_that_never_answers_leaves_its_bytes_beside_the_report() {
+        let dir = std::env::temp_dir().join(format!("dmm-no-response-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let output = dir.join("capture.yaml");
+        std::fs::write(&output, "steps: []\n").unwrap();
+        let taken = dir.join("capture-no-response.yaml");
+        std::fs::write(&taken, "an earlier run\n").unwrap();
+
+        let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
+        let wire = Chunks(RefCell::new(vec![vec![0x55, 0xAA, 0x01], vec![0x02]]));
+        let (transport, recorder) = crate::recording::RecordingTransport::new(Box::new(wire));
+        let dmm = dmm_lib::Dmm::new(
+            Box::new(transport) as Box<dyn Transport>,
+            (device.new_protocol)(),
+        )
+        .unwrap();
+
+        let result = cmd_capture(
+            Some(output.to_string_lossy().into_owned()),
+            None,
+            false,
+            false,
+            false,
+            std::time::Duration::ZERO,
+            None,
+            dmm,
+            recorder,
+            device,
+            None,
+        );
+        assert_eq!(result.unwrap_err().to_string(), "meter not responding");
+
+        assert_eq!(std::fs::read_to_string(&output).unwrap(), "steps: []\n");
+        assert_eq!(std::fs::read_to_string(&taken).unwrap(), "an earlier run\n");
+        let saved = dir.join("capture-no-response-2.yaml");
+        let report: CaptureReport =
+            serde_yaml_ng::from_str(&std::fs::read_to_string(&saved).unwrap()).unwrap();
+        assert!(report.no_response);
+        assert!(report.steps.is_empty());
+        assert_eq!(report.device_id.as_deref(), Some("ut804"));
+        let hex: Vec<&str> = report.init_frames.iter().map(|f| f.hex.as_str()).collect();
+        assert_eq!(hex, ["55 AA 01 02"]);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_no_response_report_is_named_after_the_device_or_the_output() {
+        assert_eq!(
+            no_response_path(None, "ut804"),
+            std::path::PathBuf::from("capture-ut804-no-response.yaml")
+        );
+        assert_eq!(
+            no_response_path(Some("runs/bench.yaml"), "ut804"),
+            std::path::PathBuf::from("runs/bench-no-response.yaml")
+        );
+    }
 }

@@ -82,6 +82,12 @@ most interesting frames. A step whose samples contain `Unknown(0x..)` in `mode`,
 unparsed value, is flagged `needs_attention: true` so a maintainer scanning the YAML finds it
 without grepping.
 
+A meter that never answers the check before the first step still leaves a report, the case
+bring-up hits most: `no_response: true`, no steps, and the bytes received in `init_frames`.
+It goes to `capture-<device>-no-response.yaml` (`<stem>-no-response.yaml` beside an `-o`
+file), created exclusively and stepping to `-2`, `-3` beside a taken name, so it never
+replaces a report in progress or an earlier failure.
+
 One file to attach stays the rule: no sidecar trace.
 
 ## C. Trust tiers
@@ -262,7 +268,7 @@ that are not in its list — and the default output file is
 
 ## Report schema additions
 
-Report level: `device_id`, `init_frames`, `wire_events_dropped` (B); `unverified_only`
+Report level: `device_id`, `init_frames`, `no_response`, `wire_events_dropped` (B); `unverified_only`
 (E); `tier`, `core_semantics`, `gate_failures` (C); `drive` (D); `plan` (H). Per step:
 `frames`, `frames_dropped`, `diagnostics` and `needs_attention` (B); `confirmed`, `lcd` (typed corrections
 only) and `confirmed_by` (F); sub-step ids, mode switches included (D). Frames are raw wire transfers; a rejected
