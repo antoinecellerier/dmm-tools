@@ -401,8 +401,8 @@ The CH9325 SET_REPORT (feature report) configures UART parameters:
 | Byte | Field | Notes |
 |------|-------|-------|
 | 0 | Report ID | Always 0x00 |
-| 1-2 | Baud rate | uint16 LE |
-| 3-4 | Parity/stop bits | Often 0x03/0x00; exact encoding uncertain |
+| 1-2 | Baud rate | uint16 LE (`he2325u.cpp` writes bytes 1-4 as 32 bits) |
+| 3-4 | Parity/stop bits | Often 0x03/0x00; exact encoding uncertain. *2026-09-16: sigrok, Lukas Schwarz and `he2325u.cpp` all send 0x00 0x00 here and 0x03 in byte 5 — see `../ut803/reverse-engineered-protocol.md` §8* |
 | 5 | Data bits | 0=5bit, 1=6bit, 2=7bit, 3=8bit |
 | 6-9 | Padding | Zeros |
 
@@ -736,7 +736,7 @@ speak; it is written up in
 | CH9325 HID data framing: 8-byte reports, 0xF0+len RX | [KNOWN] | sigrok CH9325 wiki |
 | CH9325 feature report baud encoding: uint16 LE | [KNOWN] | sigrok + Lukas Schwarz UT61B + HE2325U driver |
 | QinHeng wire format in UCI SDK: auto-detected 0xAC/0xABCD | [VENDOR] | Ghidra FUN_1001eb30 |
-| UT803/UT804 actual wire format: FS9721 framing with proprietary structured data (NOT LCD segments) | [KNOWN] | Ghidra decompilation + binary constant extraction from UT803.exe/UT804.exe (2026-04-10) |
+| UT803/UT804 actual wire format: FS9721 framing with proprietary structured data (NOT LCD segments) | ~~[KNOWN]~~ contested | Ghidra decompilation + binary constant extraction from UT803.exe/UT804.exe (2026-04-10). 2026-09-16: the framing and the data format come from two different UT804.exe paths; community sources give UT71x for the UT804 — `../ut803/reverse-engineered-protocol.md` §8 |
 | UT803/UT804 init: 2400 baud via CH9325 feature report | [KNOWN] | Ghidra UT804.exe FUN_00560668 |
 | UT804 range coding table | [KNOWN] | Programming manual page 12 |
 | UT805A range coding table | [KNOWN] | Programming manual page 12 |

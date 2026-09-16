@@ -17,6 +17,8 @@
 - No external open-source implementations were consulted during RE
 - sigrok FS9721 driver was NOT referenced (to avoid contamination, since
   the protocol turned out to be non-standard FS9721)
+- Opened 2026-09-16, with approval, after the analysis below — see
+  [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
 
 ## Key Findings
 
@@ -44,6 +46,10 @@ Evidence:
 5. Digit nibbles (1-5) contain BCD values, not 7-segment bit patterns
 
 ### 7-segment decode: secondary code path
+
+*Corrected 2026-09-16: in UT804.exe the USB data handler does call
+FUN_0055a480 (`LcdDisplay60B`); the structured format belongs to the
+RS232 handler — `reverse-engineered-protocol.md` §2.3.*
 
 Both binaries contain 7-segment decode functions (FUN_0055a480 in UT804,
 equivalent in UT803) with a verified decode table. However, the main USB
@@ -75,7 +81,9 @@ These functions may be for:
 ## Confidence Assessment
 
 - **Frame format (14-byte, index nibbles):** HIGH — confirmed by assembly
-  analysis, validation string, and functional code
+  analysis, validation string, and functional code. *2026-09-16: that
+  code is the USB path, which decodes LCD segments; see
+  `reverse-engineered-protocol.md` §2.3.*
 - **Proprietary data nibbles:** HIGH — confirmed by binary constants and
   mode detection logic in both executables
 - **Mode codes 1-15:** HIGH for UT804, MEDIUM for UT803 (fewer modes, exact
@@ -86,3 +94,21 @@ These functions may be for:
 - **Digit encoding:** MEDIUM — 0-9 confirmed as digits, 0xA as blank, sign
   encoding unknown
 - **Nibbles 12-14:** LOW — purpose not determined
+
+## Cross-Reference with Community Sources
+
+Consulted after the vendor analysis above, for validation only (approved
+2026-09-16, after issue #16's first UT804 report). The finding-by-finding
+comparison is in `reverse-engineered-protocol.md` §8. In short: sigrok
+and `UT804.LOG` give the UT804 11-byte UT71x packets, the format of the
+vendor's RS232 path, whose payload matches §3 except for overloads; the
+14-byte framing belongs to the vendor's USB path; and every community
+CH9325 driver sends the UT803/UT804 apps' report layout.
+
+Reference implementations:
+
+- [sigrok libsigrok](https://github.com/sigrokproject/libsigrok) — C; UT71x parser, UT804 entries, CH9325 set-up
+- [sigrok wiki, WCH CH9325](https://sigrok.org/wiki/WCH_CH9325) — CH9325 configuration bytes and report framing
+- [tmatejuk/ut804_linux_logger](https://github.com/tmatejuk/ut804_linux_logger) — C, UT804 RS232 logger; `UT804.LOG` lists real UT804 packets
+- [Lukas Schwarz, UT61B analysis](https://lukasschwarz.de/ut61b) — HE2325U/CH9325 set-up and report format
+- [thomasf/uni-trend-ut61d](https://github.com/thomasf/uni-trend-ut61d) — C++, HE2325U/CH9325 reader

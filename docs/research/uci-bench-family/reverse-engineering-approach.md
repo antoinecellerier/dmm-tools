@@ -181,6 +181,9 @@ manual tables:
    Confirmed via [sigrok CH9325 wiki](https://sigrok.org/wiki/WCH_CH9325),
    [Lukas Schwarz UT61B analysis](https://lukasschwarz.de/ut61b), and
    [HE2325U driver code](https://github.com/thomasf/uni-trend-ut61d).
+   *2026-09-16: those three sources confirm the rate in bytes 1-2 but all
+   send `0x03` in byte 5 after two zero bytes, not in byte 3 as the DLL
+   does — see `../ut803/reverse-engineered-protocol.md` §8.*
 
 2. ~~**Which wire format do UT632/803/804 use?**~~ — **RESOLVED**
    2026-04-09: The vendor DLL does not dispatch per model. All QinHeng

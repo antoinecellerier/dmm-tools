@@ -39,8 +39,7 @@ wrapper (FUN_0051afbc, length 10) starts one byte earlier, at
 
 - **Baud rate: 2400** — `0x0960`, little-endian in bytes 1-2 (and in bytes
   1-4 read as 32 bits).
-- Byte 5 = `0x03`; per the table in
-  `../uci-bench-family/reverse-engineered-protocol.md` §4.1, 8 data bits.
+- Byte 5 = `0x03`; its meaning is not determined from the binaries.
 - Byte 0, the report ID, is not written by this function. It holds what
   the stack held: whatever the `ReadBtn` click just before (below) left
   there. Its value is not determined statically.
@@ -75,13 +74,20 @@ the CH9325 reads is [UNVERIFIED]. This section previously quoted the
 UT804.exe bytes as `[0x60, 0x09, 0x03]`, which hid the difference.
 
 Earlier revisions inferred 7 data bits and odd parity from the FS9721
-convention. The vendor's frame check (§2.2) needs bit 7 for index nibbles
-0x8-0xE, so the application receives 8-bit bytes; the line format on the
-wire is [UNVERIFIED].
+convention. The USB path's frame check (§2.2) needs bit 7 for index
+nibbles 0x8-0xE, so that path expects 8-bit bytes. The RS232 path's
+`TCommPortDriver` (`COMM2`) stores only `ComPortSpeed = br2400` in the
+form data; its data bits and parity are the component's defaults. The
+line format on the wire is [UNVERIFIED].
 
 ---
 
 ## 2. Frame Format
+
+> **2026-09-16 correction:** this section is what UT804.exe's **USB**
+> data handler accepts, and that handler passes the frame to an FS9721
+> LCD-segment decoder, not to the §3 parser. §3 is parsed from what the
+> **RS232** handler receives: 11-byte packets ending CR LF (§2.3).
 
 ### 2.1 FS9721-Style 14-Byte Framing — [VENDOR]
 
@@ -107,6 +113,27 @@ The UT804.exe HID callback at VA 0x560A20 validates frames using the string
 `"123456789ABCDE"` — each byte's high nibble (shifted right 4) must match
 the corresponding character in this sequence. Confirmed by assembly analysis
 at VA 0x560BC1/0x560BF0 (`CMP EBX, 14` loop).
+
+### 2.3 Two Receive Paths in UT804.exe — [VENDOR] (2026-09-16)
+
+- **RS232.** `H71ARData` (VA 0x55822C) is the `OnReceiveData` handler of
+  a `TCommPortDriver`, installed in `FormCreate` (VA 0x55862B-0x558634).
+  It keeps each byte's low hex digit, closes a packet at CR (0x0D),
+  requires the characters before and at the CR to be `A` and `D` (the
+  previous LF and this CR), and hands 9 data nibbles plus `DA` to
+  `LcdDisplay71A` (FUN_00558a7c), the parser §3 was derived from. It
+  never tests high nibbles. The packet is therefore 11 bytes: 9 data
+  bytes, CR, LF.
+- **USB.** The HID data handler (VA 0x560A20, installed by
+  `ReadBtnClick`) appends the payload of each non-empty report. On the
+  first empty (`F0`) report it requires the high nibbles of the first 14
+  bytes to spell `123456789ABCDE` (§2.2) and passes their low nibbles to
+  `LcdDisplay60B` (FUN_0055a480), which compares 7-bit segment patterns
+  (`1111011`, `0101000`, ...): an FS9721 LCD decoder.
+
+§2.1-§2.2 describe the USB path and §3 the RS232 path's payload; no path
+in UT804.exe accepts the two together. Which format a UT804 sends on its
+bundled CH9325 cable is [UNVERIFIED].
 
 ---
 
@@ -136,9 +163,10 @@ This was confirmed by:
    directly as a mode code, never as segment data
 
 Both UT803.exe and UT804.exe also contain 7-segment decode functions
-(FUN_0055a480 in UT804, similar in UT803), but these appear to be for an
-alternative display mode or legacy compatibility — the primary USB HID data
-path uses the proprietary format.
+(FUN_0055a480 in UT804, similar in UT803). **Corrected 2026-09-16:** in
+UT804.exe that decoder (`LcdDisplay60B`) is the one the USB data handler
+calls; the §3 format is parsed by `LcdDisplay71A`, reached from the RS232
+handler (§2.3).
 
 ### 3.1 Nibble Layout — [VENDOR]
 
@@ -424,7 +452,7 @@ Parse the proprietary data nibbles, NOT LCD segments:
 
 The 2026-06 protocol-correctness review closed this section's open
 questions by recovering the analyzed binaries (wine administrative
-install of the vendor installers; MD5s match §8 exactly), raw-
+install of the vendor installers; MD5s match §9 exactly), raw-
 disassembling the cross-referenced globals, resolving every string
 constant, and rendering the bundled LCD fonts. Headline results, each
 re-derived independently by an adversarial second pass:
@@ -459,7 +487,9 @@ re-derived independently by an adversarial second pass:
    protocol paths selected by UI control (Delphi RTTI method table:
    `H71ARData`/`LcdDisplay71A` = the UT804 structured parser;
    `H60BRData`/`LcdDisplay60B` = a 7-segment decoder for legacy
-   UT60A/B/C support; `H70BRData`/`LcdDisplay70B` = dead). The UT803
+   UT60A/B/C support; `H70BRData`/`LcdDisplay70B` = dead). *2026-09-16:
+   `H71ARData` is a serial-port handler, and the USB handler calls
+   `LcdDisplay60B` — see §2.3.* The UT803
    uses its own layout (range=nibble 2, digits=nibbles 3-6, different
    mode-code meanings — see §5).
 5. **Decimal positions count from the left** (point after digit
@@ -482,7 +512,9 @@ re-derived independently by an adversarial second pass:
 8. **The frame-string-builder is confirmed (2026-06 follow-up).** The
    one remaining inferred link — that the parser's positional
    `Copy(s, idx, 1)` reads wire nibbles in FS9721 index order — was the
-   HID receive handler `H71ARData` (VA 0x55822c), which RTTI names but
+   receive handler `H71ARData` (VA 0x55822c; *2026-09-16: the serial
+   port's handler, not the HID one, and it never tests high nibbles —
+   see §2.3*), which RTTI names but
    Ghidra's call graph never reached (it appears in *neither*
    decompile). Raw-disassembling it from the recovered binary shows it
    converts each received byte to a 2-char hex string
@@ -545,7 +577,66 @@ positive.
 
 ---
 
-## 8. Sources
+## 8. Cross-Reference with Community Sources
+
+Consulted after the vendor analysis above, for validation only (approved
+2026-09-16, after issue #16's first UT804 report). The sigrok column is
+libsigrok's code unless it says "wiki".
+
+| Finding | Our RE | sigrok | `UT804.LOG` | Agreement |
+|---------|--------|--------|-------------|:---------:|
+| Wire framing | 14-byte FS9721 frames with index high nibbles (§2, USB path) | UT71x: 11 bytes ending CR LF, for the RS232 and the UT-D04 (CH9325) cable | 11 bytes ending CR LF | ✗¹ |
+| Line format | 2400 baud (§1.2) | 2400 7O1 | 2400 7O1 | ✓ rate; 7O1 new |
+| Payload layout | Nibbles 1-11 (§3.1) | Bytes 0-4 digits, 5 range, 6 function, 7 coupling, 8 flags, 9-10 CR LF | Same | ✓² |
+| Function codes | 1-F (§3.4); E and F uncertain | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
+| Range tables | §3.7 | — | Per function | ✓ (log) |
+| Coupling (nibble 8) | 0 = per mode, 1 AC, 2 DC, 3 AC+DC (§3.5) | Bit 0 AC, bit 1 DC | Same | ✓ |
+| Status (nibble 9) | Bit 0 AUTO, bit 2 sign, bits 1 and 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 new |
+| Duty cycle | Hz mode with the sign bit (§7.4) | Same | Same | ✓ |
+| Digit values A, C, F | A = blank or flag, B-F unknown (§3.2) | — | `:` blank, `<` 'L', `?` 'H' | ✓ A; C, F new |
+| Overload | Nibble 1 = A: "0L" when nibble 2 = C, else "L0" (§7.4) | `::0<:` overload, `:<0::` underload | `::0<:` overload; 4-20 mA `:<0::` "L0", `:?1::` "HI" | ✗³ |
+| Nibbles 12-14 | Never read (§7.4) | No such bytes | No such bytes | ✓ |
+| HOLD | Wire encoding unknown (§7.4) | — | Nothing transmitted while HOLD is on | New |
+| REL | Unknown | — | Never transmitted | New |
+| 4000-count display | — | Byte 4 = `:` | — | New |
+| CH9325 report layout | Apps: rate, `00 00`, `03`; SDK DLL: rate, `03` (§1.2) | `[lo, hi, 00, 00, 03]` | — | ✓ apps⁴ |
+| CH9325 report byte 5 | `03` in the apps' report, `00` in the SDK DLL's (§1.2); meaning unknown | Wiki: data-bit count, 0-3 = 5-8 bits | — | New⁴ |
+| Idle CH9325 reports | — | `F0` carries no data; wiki: at least one every 12 ms | — | New⁴ |
+| Parity bit through the CH9325 | — | Cleared (bit 7) for UT71x | — | New |
+
+¹ UT804.exe takes both, on different paths (§2.3): FS9721 frames over
+USB, decoded as LCD segments, and 11-byte packets over RS232, decoded as
+§3. Which one the bundled CH9325 cable delivers is [UNVERIFIED].
+
+² The §3 nibbles are the low nibbles of the 11 bytes, in order.
+`UT804.LOG` lists 36 real packets across 9 dial positions and their
+sub-functions.
+
+³ Under the §7.4 rule, `::0<:` reads as "L0" and `:<0::` as an overload.
+The vendor comparands (`0@`, `-0@`, `@0`) would agree with both sources
+if `LcdDisplay71A` drops the blanks before comparing [UNVERIFIED].
+
+⁴ Lukas Schwarz sends `60 09 00 00 03`, `he2325u.cpp` the rate as 32 bits
+then `0x03` ("3 = enable?"); libsigrok calls the byte "unknown, always
+0x03". The sigrok wiki's WCH CH9325 page reads bytes 3-4 as probably
+parity and stop bits (often omitted or zero) and byte 5 as the data-bit
+count, and notes vendor software sending `00 00 03`; by that reading the
+SDK DLL's layout asks for 5 data bits. The page also says the chip falls
+back to 2400 baud yet needs the rate set, and sends an `F0` report at
+least every 12 ms while the UART is silent. Lukas Schwarz also describes
+the `F0` idle reports.
+
+Reference implementations:
+
+- [sigrok libsigrok](https://github.com/sigrokproject/libsigrok) — C; `src/dmm/ut71x.c`, the UT804 entries in `src/hardware/uni-t-dmm/api.c` and `src/hardware/serial-dmm/api.c` (commit ca7d442692, 2020-02-08, no hardware note), CH9325 set-up in `src/hardware/uni-t-dmm/protocol.c`
+- [tmatejuk/ut804_linux_logger](https://github.com/tmatejuk/ut804_linux_logger) — C, RS232 logger; its `UT804.LOG` is a German write-up of real UT804 packets (author unknown)
+- [sigrok wiki, WCH CH9325](https://sigrok.org/wiki/WCH_CH9325) — CH9325 configuration bytes and report framing
+- [Lukas Schwarz, UT61B analysis](https://lukasschwarz.de/ut61b) — HE2325U/CH9325 set-up and report format
+- [thomasf/uni-trend-ut61d](https://github.com/thomasf/uni-trend-ut61d) — C++, `he2325u/he2325u.cpp` HE2325U/CH9325 reader
+
+---
+
+## 9. Sources
 
 - UT804.exe V2.00 (MD5: 9ef22cff570ba9e8b79e6f1867aad2e5) — Ghidra
   decompilation + binary constant extraction

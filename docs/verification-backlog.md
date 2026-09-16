@@ -744,6 +744,33 @@ plus what no step reaches.
   - UT803 HOLD = nibble 9 bit 3. UT804 HOLD wire encoding is unknown
     (in neither vendor parser).
 - Transport: CH9325 HID at 2400 baud — implemented.
+- **Community cross-check (2026-09-16, spec §8)** — sigrok and
+  `UT804.LOG` contradict the UT804 framing we implement:
+  - **Wire format**: both give UT71x — 11 bytes, 2400 7O1, `0x30`-`0x3F`
+    characters, CR LF. `framing::extract_frame_fs9721` wants 14 bytes
+    with index high nibbles 1-14 and can never match that, so a UT804
+    sending UT71x times out whatever the cable set-up. Our nibble layout
+    is those bytes' low nibbles, so the parser itself carries over. If
+    #16's trace shows `3x`/`Bx` bytes ending `0D`/`8D` `0A`/`8A`, the
+    UT804 needs a CR/LF extractor that clears bit 7 (sigrok does, for
+    UT71x on this chip); if it shows index-nibbled bytes, the payload is
+    FS9721 LCD segments (UT804.exe's USB path) and needs a segment
+    decoder. The UT803 was not cross-checked
+  - **Overload**: `UT804.LOG` reads `::0<:` (nibbles A A 0 C A) as
+    overload; our rule reports it as "L0" 0.0, and the 4-20 mA underflow
+    `:<0::` as overload
+  - **HOLD and REL**: `UT804.LOG` says nothing is transmitted while HOLD
+    is on and REL is never transmitted; a UT71x packet has no nibbles
+    12-14
+  - **4000-count display**: sigrok reads byte 4 = `:` as a 4-digit
+    reading; our parser errors on that digit
+  - `UT804.LOG` holds 36 real packets across 9 dial positions and their
+    sub-functions. Run through `parse_measurement_ut804` as low nibbles
+    (2026-09-16, throwaway test): mode, unit, decimal point, AUTO/MAN,
+    coupling and sign match the log's labels on every non-overload
+    packet; all five overload packets come out as "L0" 0.0. Test vectors
+    once we decide on attribution (GPL-3.0 repository, author of the log
+    unknown)
 - **Needs hardware verification** (all of the above is decompile-derived):
   - One frame per dial position on each meter (settles mode codes and
     decimal tables in one pass)
@@ -757,12 +784,18 @@ plus what no step reaches.
   - CH9325 feature-report layout: the UT803/UT804 apps send
     `60 09 00 00 03` (`0x03` in byte 5), the SDK DLL `60 09 03 00 00`
     (spec §1.2). `transport/ch9325.rs` sent the DLL's until 2026-09-16 and
-    sends the apps' since, for both rates. Issue #16's UT804 connected but
-    decoded no reading with the DLL's layout; a run with the apps' layout
-    settles which one the bridge reads
+    sends the apps' since, for both rates. sigrok, Lukas Schwarz and
+    `he2325u.cpp` all send the apps' layout (spec §8). The sigrok wiki
+    reads byte 5 as the data-bit count, so the DLL's layout asks for 5
+    data bits: a 0.6.0 trace may show garbled bytes rather than none.
+    Issue #16's UT804
+    connected but decoded no reading with the DLL's layout; a run with the
+    apps' layout settles which one the bridge reads
   - CH9325 start-up takes any report as an answer, even one with no meter
     bytes, and falls back to 19200 baud when none comes within 300 ms —
-    a rate the UT804 app never sets (UT803.exe has a 19200 branch)
+    a rate the UT804 app never sets (UT803.exe has a 19200 branch).
+    Lukas Schwarz and sigrok both describe `F0` reports while the meter
+    is silent, so a report at start-up proves nothing
   - Three parser behaviours surfaced by the 2026-09 snapshot tests, to
     settle against real frames rather than change blind: `range_label`
     is never set for either model although the per-mode tables know the
