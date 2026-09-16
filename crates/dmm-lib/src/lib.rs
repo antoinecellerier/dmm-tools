@@ -160,7 +160,7 @@ fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static st
         F::Ut8802 | F::Ut8803 | F::Vc880 | F::Vc890 => &["CP2110"],
         F::Ut61EPlus | F::Ut171 => &["CP2110", "CH9329"],
         F::Ut181a => &["CH9329", "CP2110"],
-        F::Fs9721 => &["CH9325"],
+        F::Ut80x => &["CH9325"],
         F::Mock => &[],
     }
 }
@@ -738,7 +738,7 @@ mod tests {
     /// unusual pairing still connects.
     #[test]
     fn preference_orders_without_excluding() {
-        let preferred = preferred_transports(protocol::DeviceFamily::Fs9721);
+        let preferred = preferred_transports(protocol::DeviceFamily::Ut80x);
         let ordered: Vec<&str> = preferred
             .iter()
             .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
@@ -772,17 +772,17 @@ mod tests {
         assert!(devices_on_bridge("no such bridge").is_empty());
     }
 
-    /// The CH9325 UT-D04 is the FS9721 meters' cable and nothing else's; the
+    /// The CH9325 UT-D04 is the UT803/UT804's cable and nothing else's; the
     /// help it prints must not offer a UT61+ setup to a UT803 owner.
     #[test]
-    fn ch9325_carries_exactly_the_fs9721_meters() {
+    fn ch9325_carries_exactly_the_ut80x_family() {
         let on_bridge: Vec<&str> = devices_on_bridge("CH9325").iter().map(|d| d.id).collect();
-        let fs9721: Vec<&str> = registry::DEVICES
+        let ut80x_family: Vec<&str> = registry::DEVICES
             .iter()
-            .filter(|d| d.family == protocol::DeviceFamily::Fs9721)
+            .filter(|d| d.family == protocol::DeviceFamily::Ut80x)
             .map(|d| d.id)
             .collect();
-        assert_eq!(on_bridge, fs9721);
+        assert_eq!(on_bridge, ut80x_family);
     }
 
     /// A UT61B+ is verified over the CH9329 (issue #19), so the help for a

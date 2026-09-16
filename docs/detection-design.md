@@ -90,7 +90,7 @@ every read, against every candidate offset in the buffer, and the strongest answ
 | 4 | a model the meter named itself | the UT61+ name frame, the only one that picks an exact sibling |
 | 3 | a model from a frame whose checksum held | UT8803, UT171, UT181A, VC-880, VC-890 |
 | 2 | `FamilyOnly` — a checksummed frame naming no model | a bare 14-byte UT61+ reading |
-| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), FS9721 |
+| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), UT803/UT804 |
 
 A `FamilyOnly` at the top is remembered rather than acted on: the window keeps listening, and a
 name frame arriving in it outranks the fallback (see
@@ -123,7 +123,7 @@ The overlaps the ranking arbitrates, each rule declining what is not its own:
   That format's validation passes roughly 1% of random bytes and UT181A frames carry arbitrary
   float32 payload, which is why an unchecksummed claim ranks below even a settled family.
 
-`fs9721` is the CH9325's rule and is the only one consulted there; the AB CD rules are the other
+`ut80x` is the CH9325's rule and is the only one consulted there; the AB CD rules are the other
 bridges' (see [Bridges and adapters](#bridges-and-adapters)).
 
 ## Names and the registry
@@ -145,10 +145,10 @@ Which rules a bridge gets is the registry's call, not `detect.rs`'s: `preferred_
 families listed on the bridge it opened — the same list the "no meter answered" help draws on. The
 shortcut issue #9 assumed (CH9329 means UT181A) does not hold: a UT61B+ is verified over CH9329
 and older UT181A units ship the CP2110, so CP2110 and CH9329 run the same cascade. The CH9325
-carries the FS9721 family alone; it is receive-only past its init, which already sends `0x5A`, so
-detection there is a single listen window with the UT804 marker checked first (`nibbles[9] == 0xD`
-and `nibbles[10] == 0xA`), then UT803's mode-nibble set. A family seen on a new cable joins
-detection there by being listed on it.
+carries the UT803/UT804 family alone; it is receive-only past its init, which already sends
+`0x5A`, so detection there is a single listen window with the UT804 marker checked first
+(`nibbles[9] == 0xD` and `nibbles[10] == 0xA`), then UT803's mode-nibble set. A family seen on a
+new cable joins detection there by being listed on it.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a

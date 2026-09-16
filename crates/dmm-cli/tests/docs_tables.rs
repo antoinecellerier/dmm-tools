@@ -116,9 +116,9 @@ fn cli_reference_device_table_matches_the_registry() {
 }
 
 /// The README's table is hand-written on purpose — it abbreviates runs of
-/// models ("UT161B/D/E"), spells families the way a reader would ("UT803/UT804"
-/// rather than the chip name), and carries status wording no enum holds — so
-/// this checks only that nothing is *missing*.
+/// models ("UT161B/D/E"), spells families the way a reader would
+/// ("VC-880/VC650BT" rather than "VC880"), and carries status wording no enum
+/// holds — so this checks only that nothing is *missing*.
 ///
 /// The rule is per protocol family, not per device, because those abbreviations
 /// mean a model need not appear under its own display name: a family counts as

@@ -607,7 +607,7 @@ re-derived independently by an adversarial second pass:
    (not LCD segments) and the 1-based-`Copy` indexing are both
    vendor-confirmed, not assumed.
 
-The Rust `fs9721` module now implements separate UT803/UT804 parsers
+The Rust `ut80x` module now implements separate UT803/UT804 parsers
 with these corrections. Clean-room note: approval was given to consult
 the sigrok FS9721 decoder and the FS9721-LP3 datasheet for this family,
 but the resolution above required neither — it is derived entirely
@@ -652,7 +652,7 @@ future investigation should either:
    nibble/bit carries each flag.
 
 Until one of those happens, this spec leaves nibbles 12-14 as
-`[UNVERIFIED]` and the Rust `fs9721` parser reports every reading as
+`[UNVERIFIED]` and the Rust `ut80x` parser reports every reading as
 positive.
 
 ---

@@ -1,5 +1,5 @@
-use super::fs9721::Fs9721Protocol;
 use super::ut61eplus::Ut61PlusProtocol;
+use super::ut80x::Ut80xProtocol;
 use super::ut171::Ut171Protocol;
 use super::ut181a::Ut181aProtocol;
 use super::ut8802::Ut8802Protocol;
@@ -7,7 +7,7 @@ use super::ut8803::Ut8803Protocol;
 use super::vc8x0::vc880::Vc880Protocol;
 use super::vc8x0::vc890::Vc890Protocol;
 use super::{
-    DeviceFamily, Fingerprint, Protocol, fs9721, ut61eplus, ut171, ut181a, ut8802, ut8803, vc8x0,
+    DeviceFamily, Fingerprint, Protocol, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0,
 };
 use crate::mock::MockProtocol;
 
@@ -199,9 +199,9 @@ pub static DEVICES: &[SelectableDevice] = &[
         aliases: &[],
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT803,
-        family: DeviceFamily::Fs9721,
-        new_protocol: || Box::new(Fs9721Protocol::new_ut803()),
-        fingerprint: Some(&fs9721::FINGERPRINT),
+        family: DeviceFamily::Ut80x,
+        new_protocol: || Box::new(Ut80xProtocol::new_ut803()),
+        fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
     },
     SelectableDevice {
@@ -210,9 +210,9 @@ pub static DEVICES: &[SelectableDevice] = &[
         aliases: &[],
         requires_hardware: true,
         activation_instructions: ACTIVATION_UT803,
-        family: DeviceFamily::Fs9721,
-        new_protocol: || Box::new(Fs9721Protocol::new_ut804()),
-        fingerprint: Some(&fs9721::FINGERPRINT),
+        family: DeviceFamily::Ut80x,
+        new_protocol: || Box::new(Ut80xProtocol::new_ut804()),
+        fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
     },
     SelectableDevice {

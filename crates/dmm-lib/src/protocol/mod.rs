@@ -1,11 +1,11 @@
 pub(crate) mod cycle;
 mod expect;
 pub(crate) mod framing;
-pub(crate) mod fs9721;
 pub mod registry;
 pub(crate) mod steps;
 pub(crate) mod ut171;
 pub(crate) mod ut181a;
+pub(crate) mod ut80x;
 // `ut61eplus` stays `pub`: the GUI specs panel consumes its tables, the CLI
 // its remote-control commands, and the GUI's export tests its parser.
 pub mod ut61eplus;
@@ -191,8 +191,8 @@ pub enum DeviceFamily {
     Ut8802,
     /// UT8803 / UT8803E bench multimeter
     Ut8803,
-    /// UT803 / UT804 bench multimeter (FS9721-style framing)
-    Fs9721,
+    /// UT803 / UT804 bench multimeter
+    Ut80x,
     /// UT171A / UT171B / UT171C
     Ut171,
     /// UT181A
@@ -211,7 +211,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Ut61EPlus => write!(f, "ut61eplus"),
             DeviceFamily::Ut8802 => write!(f, "ut8802"),
             DeviceFamily::Ut8803 => write!(f, "ut8803"),
-            DeviceFamily::Fs9721 => write!(f, "fs9721"),
+            DeviceFamily::Ut80x => write!(f, "ut80x"),
             DeviceFamily::Ut171 => write!(f, "ut171"),
             DeviceFamily::Ut181a => write!(f, "ut181a"),
             DeviceFamily::Vc880 => write!(f, "vc880"),
@@ -259,7 +259,7 @@ pub(crate) struct Fingerprint {
     /// there is nothing to protect there.
     pub(crate) send_after: &'static [DeviceFamily],
     /// Whether the extractor this rule uses validates a checksum. Ranks its
-    /// evidence above a rule that only pattern-matches (UT8802, FS9721) when
+    /// evidence above a rule that only pattern-matches (UT8802, UT80x) when
     /// two of them claim the same bytes.
     pub(crate) checksummed: bool,
     /// Classify the whole receive buffer. Called after every read, so it has

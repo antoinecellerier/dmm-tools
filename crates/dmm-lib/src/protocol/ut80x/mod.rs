@@ -50,7 +50,7 @@ use std::borrow::Cow;
 /// Which meter model the frames come from — the two share framing but
 /// not payload layout.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Fs9721Model {
+pub(crate) enum Model {
     Ut803,
     Ut804,
 }
@@ -241,7 +241,7 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
             0xA => {} // blank digit
             _ => {
                 return Err(Error::invalid_response(
-                    format!("fs9721 invalid digit nibble {d:#04x}"),
+                    format!("ut80x invalid digit nibble {d:#04x}"),
                     digits,
                 ));
             }
@@ -254,7 +254,7 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
     }
     let trimmed = s.trim_end_matches('.').to_string();
     let value: f64 = trimmed.parse().map_err(|_| {
-        Error::invalid_response(format!("fs9721 unparseable value {trimmed:?}"), digits)
+        Error::invalid_response(format!("ut80x unparseable value {trimmed:?}"), digits)
     })?;
     Ok((trimmed, value))
 }
@@ -266,7 +266,7 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
 fn check_nibbles(nibbles: &[u8], min: usize) -> Result<()> {
     if nibbles.len() < min {
         return Err(Error::invalid_response(
-            format!("fs9721 payload too short: {} nibbles", nibbles.len()),
+            format!("ut80x payload too short: {} nibbles", nibbles.len()),
             nibbles,
         ));
     }
@@ -474,7 +474,7 @@ pub(crate) fn parse_measurement_ut803(nibbles: &[u8]) -> Result<Measurement> {
 
 // --- Protocol trait implementation ---
 
-const FS9721_COMMANDS: &[&str] = &[];
+const COMMANDS: &[&str] = &[];
 
 /// Known UT803 mode codes, used to filter garbage frames (the UT803
 /// layout has no format markers to key on).
@@ -489,30 +489,30 @@ const UT803_MODES: &[u8] = &[0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x9, 0xB, 0xD, 0xE, 0
 /// "Unknown" rather than failing, so without the gate a golden fixture
 /// holding anything at all would pin a plausible-looking measurement — and
 /// [`FINGERPRINT`] to split the two models on the wire.
-fn is_measurement_frame(model: Fs9721Model, nibbles: &[u8]) -> bool {
+fn is_measurement_frame(model: Model, nibbles: &[u8]) -> bool {
     match model {
-        Fs9721Model::Ut804 => nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
-        Fs9721Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
+        Model::Ut804 => nibbles.len() >= 12 && nibbles[9] == 0x0D && nibbles[10] == 0x0A,
+        Model::Ut803 => nibbles.len() >= 12 && UT803_MODES.contains(&nibbles[6]),
     }
 }
 
 /// Protocol implementation for UT803/UT804 bench multimeters.
-pub(crate) struct Fs9721Protocol {
+pub(crate) struct Ut80xProtocol {
     rx_buf: Vec<u8>,
-    model: Fs9721Model,
+    model: Model,
     profile: DeviceProfile,
 }
 
-impl Fs9721Protocol {
+impl Ut80xProtocol {
     pub(crate) fn new_ut803() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
-            model: Fs9721Model::Ut803,
+            model: Model::Ut803,
             profile: DeviceProfile {
-                family_name: "FS9721",
+                family_name: "UT803/UT804",
                 model_name: "UNI-T UT803",
                 stability: Stability::Experimental,
-                supported_commands: FS9721_COMMANDS,
+                supported_commands: COMMANDS,
                 max_aux_values: 0,
                 verification_issue: Some(15),
             },
@@ -522,12 +522,12 @@ impl Fs9721Protocol {
     pub(crate) fn new_ut804() -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
-            model: Fs9721Model::Ut804,
+            model: Model::Ut804,
             profile: DeviceProfile {
-                family_name: "FS9721",
+                family_name: "UT803/UT804",
                 model_name: "UNI-T UT804",
                 stability: Stability::Experimental,
-                supported_commands: FS9721_COMMANDS,
+                supported_commands: COMMANDS,
                 max_aux_values: 0,
                 verification_issue: Some(16),
             },
@@ -535,12 +535,12 @@ impl Fs9721Protocol {
     }
 }
 
-impl Protocol for Fs9721Protocol {
+impl Protocol for Ut80xProtocol {
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The CH9325 transport handles baud rate configuration (2400 baud).
         // The meter streams continuously once the CH9325 is configured —
         // no trigger byte needed. [UNVERIFIED] whether 0x5A helps.
-        debug!("fs9721: init (no trigger needed, meter streams on CH9325 connect)");
+        debug!("ut80x: init (no trigger needed, meter streams on CH9325 connect)");
         Ok(())
     }
 
@@ -554,28 +554,25 @@ impl Protocol for Fs9721Protocol {
             framing::extract_frame_fs9721,
             |nibbles| is_measurement_frame(model, nibbles),
             FrameErrorRecovery::Propagate,
-            "fs9721",
+            "ut80x",
             &framing::FS9721_HEADER,
         )?;
         match self.model {
-            Fs9721Model::Ut803 => parse_measurement_ut803(&payload),
-            Fs9721Model::Ut804 => parse_measurement_ut804(&payload),
+            Model::Ut803 => parse_measurement_ut803(&payload),
+            Model::Ut804 => parse_measurement_ut804(&payload),
         }
     }
 
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
         if !is_measurement_frame(self.model, payload) {
             return Err(Error::invalid_response(
-                format!(
-                    "fs9721: not a {} measurement frame",
-                    self.profile.model_name
-                ),
+                format!("ut80x: not a {} measurement frame", self.profile.model_name),
                 payload,
             ));
         }
         match self.model {
-            Fs9721Model::Ut803 => parse_measurement_ut803(payload),
-            Fs9721Model::Ut804 => parse_measurement_ut804(payload),
+            Model::Ut803 => parse_measurement_ut803(payload),
+            Model::Ut804 => parse_measurement_ut804(payload),
         }
     }
 
@@ -593,7 +590,7 @@ impl Protocol for Fs9721Protocol {
         // prefix — its current modes are named by unit alone — and it has
         // neither the duty-cycle display nor the "mA%" mode, while the
         // tachometer and AC+DC are one model's each.
-        let ut803 = self.model == Fs9721Model::Ut803;
+        let ut803 = self.model == Model::Ut803;
         let for_model = |ut804: Option<&'static str>, ut803_label: Option<&'static str>| {
             if ut803 { ut803_label } else { ut804 }
         };
@@ -711,8 +708,8 @@ impl Protocol for Fs9721Protocol {
 /// same frames, so only the payload separates them
 /// (`docs/research/ut803/reverse-engineered-protocol.md`).
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
-    family: DeviceFamily::Fs9721,
-    label: "fs9721 stream",
+    family: DeviceFamily::Ut80x,
+    label: "ut80x stream",
     trigger: None,
     send_after: &[],
     checksummed: false,
@@ -726,12 +723,12 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         // evidence, where the UT803 check only asks whether the mode nibble is
         // one of the codes we know — which a UT804 frame can satisfy by
         // accident.
-        for model in [Fs9721Model::Ut804, Fs9721Model::Ut803] {
+        for model in [Model::Ut804, Model::Ut803] {
             if is_measurement_frame(model, &nibbles) {
                 return Some(Evidence::Model {
                     id: match model {
-                        Fs9721Model::Ut804 => "ut804",
-                        Fs9721Model::Ut803 => "ut803",
+                        Model::Ut804 => "ut804",
+                        Model::Ut803 => "ut803",
                     },
                     reported_name: None,
                 });
@@ -758,8 +755,8 @@ mod tests {
         // UT804's 0xD 0xA markers.
         let not_a_frame = [0x0u8; 12];
         for proto in [
-            Box::new(Fs9721Protocol::new_ut803()) as Box<dyn Protocol>,
-            Box::new(Fs9721Protocol::new_ut804()),
+            Box::new(Ut80xProtocol::new_ut803()) as Box<dyn Protocol>,
+            Box::new(Ut80xProtocol::new_ut804()),
         ] {
             assert!(
                 proto.parse_payload(&not_a_frame).is_err(),
@@ -784,7 +781,7 @@ mod tests {
                 .and_then(|e| e.mode)
         };
 
-        let ut803 = Fs9721Protocol::new_ut803();
+        let ut803 = Ut80xProtocol::new_ut803();
         assert_eq!(expected(&ut803, "dcua"), Some("µA"));
         assert_eq!(expected(&ut803, "acma"), Some("mA"));
         assert_eq!(expected(&ut803, "dca"), Some("A"));
@@ -794,7 +791,7 @@ mod tests {
             assert_eq!(expected(&ut803, id), None, "{id} asserted on the UT803");
         }
 
-        let ut804 = Fs9721Protocol::new_ut804();
+        let ut804 = Ut80xProtocol::new_ut804();
         assert_eq!(expected(&ut804, "dcua"), Some("DC µA"));
         assert_eq!(expected(&ut804, "duty"), Some("Duty %"));
         assert_eq!(expected(&ut804, "acdcv"), Some("AC+DC V"));
@@ -1554,7 +1551,7 @@ raw_payload=14"#
         let err = parse_measurement_ut804(&[0x1, 0x2]).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "invalid response: fs9721 payload too short: 2 nibbles"
+            "invalid response: ut80x payload too short: 2 nibbles"
         );
     }
 
@@ -1564,7 +1561,7 @@ raw_payload=14"#
         let err = parse_measurement_ut803(&[0x1, 0x2]).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "invalid response: fs9721 payload too short: 2 nibbles"
+            "invalid response: ut80x payload too short: 2 nibbles"
         );
     }
 
@@ -1575,7 +1572,7 @@ raw_payload=14"#
         let err = parse_measurement_ut804(&p).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "invalid response: fs9721 invalid digit nibble 0x0f"
+            "invalid response: ut80x invalid digit nibble 0x0f"
         );
     }
 
@@ -1586,7 +1583,7 @@ raw_payload=14"#
         let err = parse_measurement_ut803(&p).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "invalid response: fs9721 invalid digit nibble 0x0f"
+            "invalid response: ut80x invalid digit nibble 0x0f"
         );
     }
 

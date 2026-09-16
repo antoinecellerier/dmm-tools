@@ -16,7 +16,7 @@ const OHMS_MODE: &str = "Ω";
 /// wording has to be picked from constants, not formatted at run time.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Volts {
-    /// "DC V" — the UT61+, FS9721 and UT880x families, and Voltcraft.
+    /// "DC V" — the UT61+, UT80x and UT880x families, and Voltcraft.
     DcV,
     /// "V DC" — the UT171 and UT181A.
     VDc,

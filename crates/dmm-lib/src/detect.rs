@@ -78,11 +78,11 @@ struct FamilyEvidence {
 /// The fingerprints worth running on `bridge`, in registry order and each one
 /// once: the ones the entries the registry places on that cable point at.
 ///
-/// That is what keeps the AB CD probes off the CH9325, whose FS9721 meters
-/// they mean nothing to, and the FS9721 rule off every other bridge, where
-/// its frames cannot arrive — without this module knowing either bridge by
-/// name. A family has one fingerprint and several entries point at it, so the
-/// list is deduplicated by identity.
+/// That is what keeps the AB CD probes off the CH9325, whose UT803/UT804
+/// meters they mean nothing to, and the UT80x rule off every other bridge,
+/// where its frames cannot arrive — without this module knowing either bridge
+/// by name. A family has one fingerprint and several entries point at it, so
+/// the list is deduplicated by identity.
 fn fingerprints_on(bridge: &str) -> Vec<&'static Fingerprint> {
     let mut carried: Vec<&'static Fingerprint> = Vec::new();
     for fp in crate::devices_on_bridge(bridge)
@@ -304,7 +304,7 @@ fn push(buf: &mut Vec<u8>, bytes: &[u8]) {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Strength {
     /// A model claimed by a rule whose extractor validates no checksum
-    /// (UT8802, FS9721). The `0xAC` format passes roughly 1% of random
+    /// (UT8802, UT80x). The `0xAC` format passes roughly 1% of random
     /// bytes, and a UT181A frame is full of arbitrary float32 bytes.
     Unchecksummed,
     /// A checksummed frame that settles the family but names no model — a
@@ -633,7 +633,7 @@ mod tests {
         assert_eq!(detected.device.id, "vc890");
     }
 
-    /// The CH9325 window sends nothing at all, and the FS9721 family is the
+    /// The CH9325 window sends nothing at all, and the UT80x family is the
     /// only one it can identify.
     #[test]
     fn the_ch9325_window_writes_nothing() {
@@ -723,8 +723,8 @@ mod tests {
         let families = |bridge: &str| -> Vec<DeviceFamily> {
             fingerprints_on(bridge).iter().map(|fp| fp.family).collect()
         };
-        // The CH9325 is the FS9721 meters' cable and nothing else's.
-        assert_eq!(families("CH9325"), vec![DeviceFamily::Fs9721]);
+        // The CH9325 is the UT803/UT804's cable and nothing else's.
+        assert_eq!(families("CH9325"), vec![DeviceFamily::Ut80x]);
         // Every AB CD family: the UT61+, the two bench meters, the LE16 twins
         // and the Voltcraft pair.
         assert_eq!(
@@ -750,10 +750,7 @@ mod tests {
             ]
         );
         for bridge in ["CP2110", "CH9329"] {
-            assert!(
-                !families(bridge).contains(&DeviceFamily::Fs9721),
-                "{bridge}"
-            );
+            assert!(!families(bridge).contains(&DeviceFamily::Ut80x), "{bridge}");
         }
         assert!(fingerprints_on("no such bridge").is_empty());
     }
