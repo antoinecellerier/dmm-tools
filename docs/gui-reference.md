@@ -218,6 +218,8 @@ A thin strip below the main plot showing the full capture history.
   [`--replay`](#command-line-options) plays back — attach one to a bug report
   about the graph or timing; a parsing problem wants a
   [`dmm-cli capture`](cli-reference.md#dmm-cli-capture) report
+- **Discard** button — drops a stopped recording, asking first if it holds
+  samples you haven't exported; Export… then saves the graph's readings again
 - Sample counter and duration shown while recording
 - Scrollable log of the last 500 samples showing timestamp, value, unit, flags
   and any sub-values

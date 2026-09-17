@@ -1,9 +1,11 @@
-//! The sample buffer's UI: the Record / Export row, the recording's sample
-//! log or the line saying Export… saves the graph's samples, the prompt shown
-//! before a new capture would discard unexported samples, and the
-//! drag-resizable split between the graph and the recording panel.
+//! The sample buffer's UI: the Record / Export / Discard row, the recording's
+//! sample log or the line saying Export… saves the graph's samples, the prompt
+//! shown before a new capture or a Discard would lose unexported samples, and
+//! the drag-resizable split between the graph and the recording panel.
 
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
+use log::info;
+use std::time::Instant;
 
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
 use super::{App, ConnectionState, DEFAULT_RECORDING_HEIGHT};
@@ -29,14 +31,20 @@ fn export_tooltips(role: BufferRole) -> (&'static str, &'static str) {
     }
 }
 
+/// `n` samples, in words.
+fn sample_count(n: usize) -> String {
+    let noun = if n == 1 { "sample" } else { "samples" };
+    format!("{n} {noun}")
+}
+
 /// The line under the Record / Export row while nothing is recorded: what
 /// Export saves, and what Record is for — the graph's samples go with its
 /// restarts, a recording does not.
 fn history_hint(samples: usize) -> String {
-    let noun = if samples == 1 { "sample" } else { "samples" };
     format!(
-        "No recording. Export saves {samples} {noun} from the graph. \
-         Record to capture across mode changes."
+        "No recording. Export saves {} from the graph. \
+         Record to capture across mode changes.",
+        sample_count(samples)
     )
 }
 
@@ -51,14 +59,23 @@ fn history_hint(samples: usize) -> String {
 /// written out here rather than derived.
 pub(super) const MIN_SPLIT_HEIGHT: f32 = 240.0;
 
+/// What the discard prompt is asking to go ahead with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DiscardFor {
+    /// Record was pressed: a new recording replaces this one.
+    Record,
+    /// Discard was pressed: the buffer goes back to following the graph.
+    Discard,
+}
+
 /// The recording panel's own state: how tall the user dragged it, and the
 /// discard prompt that guards an unexported capture.
 pub(super) struct RecordingPanel {
     /// User-resizable recording panel height.
     height: f32,
-    /// Record was pressed while the buffer held unexported samples; waiting
-    /// for the user to confirm discarding them.
-    confirm_discard_open: bool,
+    /// Record or Discard was pressed while the recording held unexported
+    /// samples; waiting for the user to confirm losing them.
+    pending_discard: Option<DiscardFor>,
     confirm_discard_focus_pending: bool,
     /// The Export… menu opened this frame; its first entry still has to be
     /// given the focus — see `show_export_menu`.
@@ -69,7 +86,7 @@ impl Default for RecordingPanel {
     fn default() -> Self {
         Self {
             height: DEFAULT_RECORDING_HEIGHT,
-            confirm_discard_open: false,
+            pending_discard: None,
             confirm_discard_focus_pending: false,
             export_menu_focus_pending: false,
         }
@@ -85,11 +102,41 @@ impl App {
     /// toast, and nothing in the log.
     pub(super) fn toggle_recording(&mut self) {
         if !self.recording.active && self.recording.unexported_count() > 0 {
-            self.recording_panel.confirm_discard_open = true;
-            self.recording_panel.confirm_discard_focus_pending = true;
+            self.ask_before_discarding(DiscardFor::Record);
             return;
         }
         self.apply_recording_toggle();
+    }
+
+    /// Drop a stopped recording, asking first if it holds samples that were
+    /// never exported.
+    fn discard_recording(&mut self) {
+        if self.recording.unexported_count() > 0 {
+            self.ask_before_discarding(DiscardFor::Discard);
+            return;
+        }
+        self.apply_discard();
+    }
+
+    fn ask_before_discarding(&mut self, action: DiscardFor) {
+        self.recording_panel.pending_discard = Some(action);
+        self.recording_panel.confirm_discard_focus_pending = true;
+    }
+
+    /// Go ahead with what the prompt was asked about.
+    fn apply_pending_discard(&mut self, action: DiscardFor) {
+        self.recording_panel.pending_discard = None;
+        match action {
+            DiscardFor::Record => self.apply_recording_toggle(),
+            DiscardFor::Discard => self.apply_discard(),
+        }
+    }
+
+    fn apply_discard(&mut self) {
+        let count = self.recording.samples.len();
+        self.recording.discard();
+        info!("discarded a recording of {count} samples");
+        self.toast = Some(("Recording discarded".to_string(), false, Instant::now()));
     }
 
     /// Flip the recording state, remembering which meter the samples came
@@ -126,18 +173,17 @@ impl App {
         }
     }
 
-    /// Confirmation shown when starting a recording would discard samples
-    /// that have not been exported.
+    /// Confirmation shown when starting a recording, or discarding one,
+    /// would lose samples that have not been exported.
     pub(super) fn show_discard_confirmation(&mut self, ctx: &egui::Context) {
-        if !self.recording_panel.confirm_discard_open {
+        let Some(action) = self.recording_panel.pending_discard else {
             return;
-        }
+        };
         let unexported = self.recording.unexported_count();
         if unexported == 0 {
-            // The buffer emptied under us (Clear, or an export completing
-            // while the prompt was up) — nothing left to warn about.
-            self.recording_panel.confirm_discard_open = false;
-            self.apply_recording_toggle();
+            // An export completed while the prompt was up — nothing left to
+            // warn about.
+            self.apply_pending_discard(action);
             return;
         }
 
@@ -151,9 +197,14 @@ impl App {
             ui.heading("Discard unexported samples?");
             ui.add_space(4.0);
             let noun = if unexported == 1 { "sample" } else { "samples" };
-            ui.label(format!(
-                "Starting a new recording will discard {unexported} unexported {noun}."
-            ));
+            ui.label(match action {
+                DiscardFor::Record => {
+                    format!("Starting a new recording will discard {unexported} unexported {noun}.")
+                }
+                DiscardFor::Discard => {
+                    format!("Discarding the recording will lose {unexported} unexported {noun}.")
+                }
+            });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 // Cancel takes focus: Enter and Space then default to the
@@ -165,17 +216,20 @@ impl App {
                 if cancel_btn.clicked() {
                     cancel = true;
                 }
-                if ui.button("Discard and record").clicked() {
+                let confirm = match action {
+                    DiscardFor::Record => "Discard and record",
+                    DiscardFor::Discard => "Discard recording",
+                };
+                if ui.button(confirm).clicked() {
                     discard = true;
                 }
             });
         });
 
         if discard {
-            self.recording_panel.confirm_discard_open = false;
-            self.apply_recording_toggle();
+            self.apply_pending_discard(action);
         } else if cancel || modal.should_close() {
-            self.recording_panel.confirm_discard_open = false;
+            self.recording_panel.pending_discard = None;
         }
     }
 
@@ -196,9 +250,18 @@ impl App {
             self.show_export_button(ui);
             let count = self.recording.samples.len();
             let recorded = self.recording.role() == BufferRole::Recording;
+            if recorded && !self.recording.active && count > 0 {
+                let discard = ui.button("Discard").on_hover_text(
+                    "Discard the recording; Export then saves samples from the graph",
+                );
+                if discard.clicked() {
+                    self.discard_recording();
+                }
+            }
             if self.recording.active {
                 let status = format!(
-                    "{count} smp | {:.0}s",
+                    "{} | {:.0}s",
+                    sample_count(count),
                     self.recording.duration_secs(self.clock.now())
                 );
                 if self.recording.is_full() {
@@ -211,7 +274,7 @@ impl App {
                     ui.label(status);
                 }
             } else if recorded && count > 0 {
-                ui.label(format!("{count} smp"));
+                ui.label(sample_count(count));
             }
         });
 
@@ -543,6 +606,8 @@ mod tests {
                         app.show_recording_section(ui, false);
                         crate::a11y::scroll_to_focus(ui);
                     });
+                    let ctx = ui.ctx().clone();
+                    app.show_discard_confirmation(&ctx);
                 },
             );
             out.textures_delta.clear();
@@ -590,6 +655,11 @@ mod tests {
                 .and_then(|(_, n)| n.bounds())
                 .map(to_rect)
                 .unwrap_or_else(|| panic!("no {label:?} widget in the row"))
+        }
+
+        /// Whether a widget AccessKit labels `label` was drawn last frame.
+        fn shows_widget(&self, label: &str) -> bool {
+            self.tree.iter().any(|(_, n)| n.label() == Some(label))
         }
 
         /// Whether a label reading `text` was drawn last frame.
@@ -763,7 +833,7 @@ mod tests {
         run.frame(1.0, vec![]);
         assert!(run.shows_text(&history_hint(3)), "{:?}", history_hint(3));
         assert!(
-            !run.shows_text("3 smp"),
+            !run.shows_text("3 samples"),
             "the history has no counter of its own"
         );
 
@@ -773,7 +843,7 @@ mod tests {
         run.app.toggle_recording();
         run.frame(1.0, vec![]);
         assert!(!run.shows_text(&history_hint(1)));
-        assert!(run.shows_text("1 smp"));
+        assert!(run.shows_text("1 sample"));
     }
 
     #[test]
@@ -797,5 +867,88 @@ mod tests {
         assert!(label.contains("from the graph") && arrow.contains("from the graph"));
         let (label, arrow) = export_tooltips(BufferRole::Recording);
         assert!(label.contains("the recording") && arrow.contains("the recording"));
+    }
+
+    /// A stopped recording of `samples` readings, drawn once.
+    fn run_with_stopped_recording(samples: usize) -> MenuRun {
+        let mut run = MenuRun::new();
+        run.app.toggle_recording();
+        for _ in 0..samples {
+            let wall_clock = run.app.wall_clock;
+            run.app.recording.push(&reading(), &wall_clock, 0);
+        }
+        run.app.toggle_recording();
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        run
+    }
+
+    /// Discard is offered only for a recording that has stopped and holds
+    /// something: the history is the graph's, and a running recording is
+    /// stopped first.
+    #[test]
+    fn discard_shows_only_for_a_stopped_recording() {
+        let mut run = MenuRun::new();
+        let wall_clock = run.app.wall_clock;
+        run.app.recording.push(&reading(), &wall_clock, 0);
+        run.frame(1.0, vec![]);
+        assert!(!run.shows_widget("Discard"), "not for the history");
+
+        run.app.toggle_recording();
+        run.app.recording.push(&reading(), &wall_clock, 0);
+        run.frame(1.0, vec![]);
+        assert!(!run.shows_widget("Discard"), "not while recording");
+
+        run.app.toggle_recording();
+        run.frame(1.0, vec![]);
+        assert!(run.shows_widget("Discard"));
+    }
+
+    /// Discarding samples that reached no file asks first, as Record does;
+    /// Cancel keeps them, confirming hands the buffer back to the graph.
+    #[test]
+    fn discarding_an_unexported_recording_asks_first() {
+        let mut run = run_with_stopped_recording(2);
+        run.click(run.node_rect("Discard").center());
+        assert!(
+            run.shows_text("Discarding the recording will lose 2 unexported samples."),
+            "the prompt says what is lost"
+        );
+        run.click(run.node_rect("Cancel").center());
+        assert!(!run.shows_widget("Discard recording"), "the prompt closed");
+        assert_eq!(run.app.recording.samples.len(), 2, "Cancel keeps them");
+
+        run.click(run.node_rect("Discard").center());
+        run.click(run.node_rect("Discard recording").center());
+        assert_eq!(run.app.recording.role(), BufferRole::History);
+        assert!(run.app.recording.samples.is_empty());
+        assert_eq!(
+            run.app.toast.as_ref().map(|(text, _, _)| text.as_str()),
+            Some("Recording discarded")
+        );
+        assert!(!run.shows_widget("Discard"), "nothing left to discard");
+    }
+
+    /// A recording already saved goes without a prompt.
+    #[test]
+    fn discarding_an_exported_recording_does_not_ask() {
+        let mut run = run_with_stopped_recording(2);
+        let epoch = run.app.recording.epoch();
+        run.app.recording.mark_exported(epoch, 2);
+        run.click(run.node_rect("Discard").center());
+        assert!(!run.shows_widget("Discard recording"), "no prompt");
+        assert_eq!(run.app.recording.role(), BufferRole::History);
+        assert!(run.app.recording.samples.is_empty());
+    }
+
+    /// Record over an unexported recording still asks in its own words.
+    #[test]
+    fn recording_over_an_unexported_recording_still_asks() {
+        let mut run = run_with_stopped_recording(1);
+        run.click(run.node_rect("\u{25CF} Record").center());
+        assert!(run.shows_text("Starting a new recording will discard 1 unexported sample."));
+        run.click(run.node_rect("Discard and record").center());
+        assert!(run.app.recording.active);
+        assert!(run.app.recording.samples.is_empty());
     }
 }

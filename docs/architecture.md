@@ -172,7 +172,7 @@ methods to it, so no panel owns state of its own.
 | `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
 | `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |
 | `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
-| `app/recording_panel.rs` | Record/Export row, sample log or the line saying Export… saves the graph's samples, discard prompt, and the graph/recording split |
+| `app/recording_panel.rs` | Record/Export/Discard row, sample log or the line saying Export… saves the graph's samples, discard prompt, and the graph/recording split |
 | `app/export.rs` | Export: which format the menu picked, rendering the sample buffer, the save dialog and write off the UI thread, and the result toast |
 | `app/transform_ui.rs` | The **Scale** row and its editor for the software transform |
 | `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |

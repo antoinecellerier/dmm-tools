@@ -226,6 +226,7 @@ Three components stacked vertically:
 ### Recording Panel
 
 - Record/Stop toggle button
+- Discard button beside Export… once a recording has stopped: drops it and hands the buffer back to the graph. It shares Record's prompt for unexported samples, worded for what is being lost
 - Export… split button (file dialog on a separate thread — no UI freeze; the label saves a CSV, the arrow's menu picks CSV, JSON or replay: the format is settled before the dialog opens because rfd returns the path but not the file type picked, and the GTK chooser keeps the name's extension when its filter changes)
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand

@@ -277,6 +277,15 @@ impl Recording {
         }
     }
 
+    /// Drop the recording and go back to following the graph. The graph's
+    /// earlier samples are gone with it: the history starts at the next
+    /// reading.
+    pub fn discard(&mut self) {
+        self.active = false;
+        self.role = BufferRole::History;
+        self.empty();
+    }
+
     /// Drop the history, as the graph's Clear drops its points. A recording
     /// is left alone: Clear has never discarded a capture.
     pub fn clear_history(&mut self) {
@@ -572,6 +581,28 @@ mod tests {
         r.trim_before(base + Duration::from_millis(10));
         assert!(r.samples.is_empty());
         assert_eq!(r.max_aux_seen(), 0);
+    }
+
+    /// Discarding a recording hands the buffer back to the history, which
+    /// takes the next reading.
+    #[test]
+    fn discarding_a_recording_hands_the_buffer_back_to_the_history() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle(Instant::now());
+        r.push(&m, &wc, 0);
+        r.toggle(Instant::now()); // stop, one unexported sample kept
+        let epoch = r.epoch();
+
+        r.discard();
+        assert_eq!(r.role(), BufferRole::History);
+        assert!(!r.active);
+        assert!(r.samples.is_empty());
+        assert_eq!(r.unexported_count(), 0);
+        assert_ne!(r.epoch(), epoch, "an export of it marks nothing now");
+        r.push(&m, &wc, 0);
+        assert_eq!(r.samples.len(), 1);
     }
 
     /// A recording outlives the graph's resets and its Clear.
