@@ -1,16 +1,44 @@
-//! The recording buffer's UI: the Record / Export row and its sample log,
-//! the prompt shown before a new capture would discard unexported samples,
-//! and the drag-resizable split between the graph and the recording panel.
+//! The sample buffer's UI: the Record / Export row, the recording's sample
+//! log or the line saying Export… saves the graph's samples, the prompt shown
+//! before a new capture would discard unexported samples, and the
+//! drag-resizable split between the graph and the recording panel.
 
 use eframe::egui::{self, FocusDirection, Key, Modifiers, RichText, Ui};
 
 use super::export::{ExportFormat, NO_WIRE_FORMAT};
 use super::{App, ConnectionState, DEFAULT_RECORDING_HEIGHT};
 use crate::a11y::ResponseA11yExt;
+use crate::recording::BufferRole;
 
 /// The arrow segment of the Export… split button (U+23F7, in egui's icon
 /// font like the `⏵` its submenus use).
 const EXPORT_MENU_ARROW: &str = "\u{23F7}";
+
+/// The Export… segments' hover text, label first, then arrow: what they save
+/// for the buffer's role.
+fn export_tooltips(role: BufferRole) -> (&'static str, &'static str) {
+    match role {
+        BufferRole::Recording => (
+            "Save the recording as a CSV file (Ctrl+E)",
+            "Save the recording as a CSV, JSON or replay file",
+        ),
+        BufferRole::History => (
+            "Save the samples from the graph as a CSV file (Ctrl+E)",
+            "Save the samples from the graph as a CSV, JSON or replay file",
+        ),
+    }
+}
+
+/// The line under the Record / Export row while nothing is recorded: what
+/// Export saves, and what Record is for — the graph's samples go with its
+/// restarts, a recording does not.
+fn history_hint(samples: usize) -> String {
+    let noun = if samples == 1 { "sample" } else { "samples" };
+    format!(
+        "No recording. Export saves {samples} {noun} from the graph. \
+         Record to capture across mode changes."
+    )
+}
 
 /// Smallest height the graph + recording split is squeezed into; below it the
 /// column that holds the split scrolls instead of shrinking it further.
@@ -167,6 +195,7 @@ impl App {
             }
             self.show_export_button(ui);
             let count = self.recording.samples.len();
+            let recorded = self.recording.role() == BufferRole::Recording;
             if self.recording.active {
                 let status = format!(
                     "{count} smp | {:.0}s",
@@ -181,10 +210,24 @@ impl App {
                 } else {
                     ui.label(status);
                 }
-            } else if count > 0 {
+            } else if recorded && count > 0 {
                 ui.label(format!("{count} smp"));
             }
         });
+
+        if self.recording.role() == BufferRole::History {
+            if !self.recording.samples.is_empty() {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(history_hint(self.recording.samples.len()))
+                            .small()
+                            .color(ui.visuals().weak_text_color()),
+                    )
+                    .wrap(),
+                );
+            }
+            return;
+        }
 
         // Scrollable sample log
         if !self.recording.samples.is_empty() {
@@ -233,6 +276,7 @@ impl App {
     /// The format is settled here, before the save dialog opens — see
     /// `ExportFormat` for why the dialog cannot be the one to ask.
     fn show_export_button(&mut self, ui: &mut Ui) {
+        let (label_tooltip, arrow_tooltip) = export_tooltips(self.recording.role());
         ui.scope(|ui| {
             // The two segments touch, and only the outer corners are round,
             // so they read as one button.
@@ -246,7 +290,7 @@ impl App {
                         ..radius
                     }),
                 )
-                .on_hover_text("Save the recording as a CSV file (Ctrl+E)");
+                .on_hover_text(label_tooltip);
             if main.clicked() {
                 self.export_recording(ExportFormat::Csv);
             }
@@ -258,7 +302,7 @@ impl App {
                         ..radius
                     }),
                 )
-                .on_hover_text("Save the recording as a CSV, JSON or replay file")
+                .on_hover_text(arrow_tooltip)
                 .a11y_label("Export file type");
             self.show_export_menu(ui, &arrow);
         });
@@ -548,6 +592,11 @@ mod tests {
                 .unwrap_or_else(|| panic!("no {label:?} widget in the row"))
         }
 
+        /// Whether a label reading `text` was drawn last frame.
+        fn shows_text(&self, text: &str) -> bool {
+            self.tree.iter().any(|(_, n)| n.value() == Some(text))
+        }
+
         /// Where the widget holding the keyboard focus was drawn last frame.
         ///
         /// The tree's root carries no bounds, and that is what an unfocused
@@ -683,5 +732,70 @@ mod tests {
             );
         });
         out.textures_delta.clear();
+    }
+
+    /// A 1.234 V reading, as the drain hands the buffer one.
+    fn reading() -> dmm_lib::measurement::Measurement {
+        dmm_lib::measurement::Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            "V",
+            dmm_lib::flags::StatusFlags::default(),
+        )
+    }
+
+    /// The line naming what Export… saves shows only while the graph's
+    /// samples are what it would save; a recording shows its count and log.
+    #[test]
+    fn the_hint_shows_only_while_export_saves_the_graph() {
+        let mut run = MenuRun::new();
+        run.frame(1.0, vec![]);
+        assert!(
+            !run.tree
+                .iter()
+                .any(|(_, n)| n.value().is_some_and(|v| v.starts_with("No recording"))),
+            "nothing to save, nothing to say"
+        );
+
+        for _ in 0..3 {
+            let wall_clock = run.app.wall_clock;
+            run.app.recording.push(&reading(), &wall_clock, 0);
+        }
+        run.frame(1.0, vec![]);
+        assert!(run.shows_text(&history_hint(3)), "{:?}", history_hint(3));
+        assert!(
+            !run.shows_text("3 smp"),
+            "the history has no counter of its own"
+        );
+
+        run.app.toggle_recording();
+        let wall_clock = run.app.wall_clock;
+        run.app.recording.push(&reading(), &wall_clock, 0);
+        run.app.toggle_recording();
+        run.frame(1.0, vec![]);
+        assert!(!run.shows_text(&history_hint(1)));
+        assert!(run.shows_text("1 smp"));
+    }
+
+    #[test]
+    fn the_hint_counts_one_sample_as_one() {
+        assert_eq!(
+            history_hint(1),
+            "No recording. Export saves 1 sample from the graph. \
+             Record to capture across mode changes."
+        );
+        assert!(
+            history_hint(1234).starts_with("No recording. Export saves 1234 samples from"),
+            "{}",
+            history_hint(1234)
+        );
+    }
+
+    /// The hover text names what the buttons save.
+    #[test]
+    fn the_export_tooltips_follow_the_buffer() {
+        let (label, arrow) = export_tooltips(BufferRole::History);
+        assert!(label.contains("from the graph") && arrow.contains("from the graph"));
+        let (label, arrow) = export_tooltips(BufferRole::Recording);
+        assert!(label.contains("the recording") && arrow.contains("the recording"));
     }
 }

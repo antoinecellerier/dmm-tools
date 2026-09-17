@@ -67,7 +67,7 @@ The top bar contains:
   meter stops being polled entirely. Use the live-view toggle instead to
   freeze the view while data keeps arriving.
 - **Clear** button — resets graph history and statistics (does not affect
-  recording)
+  a recording)
 - **Connection status** — colored dot (green = connected, orange =
   reconnecting/paused, gray = disconnected) with device name
 - **Settings gear** (right side) — opens the settings panel
@@ -210,9 +210,10 @@ A thin strip below the main plot showing the full capture history.
 ## Recording
 
 - **Record (●) / Stop (■)** toggle button — starting clears the buffer, so
-  it asks first if the buffer holds samples you haven't exported
+  it asks first if a recording holds samples you haven't exported
 - **Export…** button — saves the recording as a CSV, named after the meter,
-  the mode it stayed in and the recording's start time; the arrow beside it
+  the mode it stayed in and the recording's start time; with nothing
+  recorded, it saves the readings the graph holds. The arrow beside it
   offers JSON instead, or a replay file that
   [`--replay`](#command-line-options) plays back — attach one to a bug report
   about the graph or timing; a parsing problem wants a
@@ -357,7 +358,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Auto-connect** | on | Connect to meter automatically on startup |
 | **Query device name** | on | Ask meter for its name on connect (causes a beep). Skipped when Auto-detect already has the name. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
-| **Buffer size** | 500K | Samples kept by the graph and a recording alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
+| **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |

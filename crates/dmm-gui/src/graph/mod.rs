@@ -637,6 +637,12 @@ impl Graph {
         self.pushed_total = 0;
     }
 
+    /// When the oldest point still in the history was sampled, or `None`
+    /// while there is none: where what the graph holds begins.
+    pub fn first_point_time(&self) -> Option<Instant> {
+        self.history.front().map(|p| p.time)
+    }
+
     /// Cut the minimap's level to `width`, keeping the one already cut when
     /// the strip's scale has not stepped past it.
     ///

@@ -155,15 +155,16 @@ struct AppliedChrome {
     min_size: Option<egui::Vec2>,
 }
 
-/// Provenance and column layout the buffered capture is exported with. Taken
-/// when recording starts and kept across disconnect, so a capture describes
-/// the meter its samples came from rather than whatever is selected at export
+/// Provenance and column layout the sample buffer is exported with. Taken
+/// when recording starts — or, for the history, from the connection its first
+/// reading arrived on — and kept across disconnect, so a file describes the
+/// meter its samples came from rather than whatever is selected at export
 /// time.
 #[derive(Default)]
 struct CaptureLayout {
-    /// Meter the buffered recording was captured from, taken when recording
-    /// started. Outlives disconnect so a capture can still be exported with
-    /// the right provenance after the meter is unplugged.
+    /// Meter the buffered samples came from. Outlives disconnect so a capture
+    /// can still be exported with the right provenance after the meter is
+    /// unplugged.
     device: Option<&'static str>,
     /// Registry id of that meter, for a replay file's `# device:` line, taken
     /// at the same moment and for the same reason as `device`.
@@ -185,9 +186,8 @@ struct CaptureLayout {
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.
     device_aux_slots: usize,
-    /// Sub-value slots the meter itself can fill in the buffered recording,
-    /// taken when recording started. Captured alongside `device` and for the
-    /// same reason: the CSV column layout has to describe the meter the
+    /// Sub-value slots the meter itself can fill in the buffered samples,
+    /// taken alongside `device` and for the same reason: the CSV column layout has to describe the meter the
     /// samples came from, not whatever is selected at export time.
     aux_slots: usize,
     /// Extra sub-value slots the export reserves *after* the meter's own, for

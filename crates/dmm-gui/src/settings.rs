@@ -4,8 +4,8 @@ use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// Samples the graph history and a recording each keep by default: ~14 hours
-/// at 10 Hz, which is as long as most bench sessions run.
+/// Samples the graph history and the sample buffer each keep by default: ~14
+/// hours at 10 Hz, which is as long as most bench sessions run.
 pub(crate) const DEFAULT_MAX_SAMPLES: usize = 500_000;
 
 /// Floor for [`Settings::max_samples`]. Below a few thousand points the graph
@@ -32,12 +32,12 @@ const GRAPH_BYTES_PER_POINT: usize = 48;
 /// Bytes one point costs per sub-value trace drawn beside the plotted one
 /// (`Option<f64>`, kept in lockstep with the history).
 const GRAPH_BYTES_PER_OVERLAY_POINT: usize = 16;
-/// Bytes one recorded sample costs for the meter's main reading: about 240
+/// Bytes one buffered sample costs for the meter's main reading: about 240
 /// inline, plus its `display_raw` heap string and the meter's own frame — 14
 /// to 57 bytes across the families, kept so a recording can be exported as a
 /// replay file.
 const RECORDING_BYTES_PER_SAMPLE: usize = 340;
-/// Bytes each sub-value adds to a recorded sample: an `AuxValue`'s two `Cow`
+/// Bytes each sub-value adds to a buffered sample: an `AuxValue`'s two `Cow`
 /// strings, its own `display_raw` and the value.
 const RECORDING_BYTES_PER_AUX: usize = 140;
 
@@ -57,9 +57,9 @@ pub(crate) fn format_sample_count(n: usize) -> String {
 /// What a bound of `n` samples costs in memory, for a meter currently sending
 /// `aux` sub-values with `overlays` of them drawn beside the plotted series.
 ///
-/// Both copies of the stream are counted: the graph's history, which is
-/// always kept, and a recording at its full length — the worst case the user
-/// opts into by pressing Record. The recording dominates, and it grows with
+/// Both copies of the stream are counted, and both are always kept: the
+/// graph's history, and the sample buffer Export… saves — the graph's samples
+/// in full, or a recording. The sample buffer dominates, and it grows with
 /// the meter: a UT181A's four sub-values roughly triple its per-sample cost.
 ///
 /// Decimal MB, matching the figures quoted in the docs.
@@ -276,7 +276,8 @@ pub struct Settings {
     pub zoom_pct: u32,
     /// Delay between measurement requests in milliseconds (0 = fastest possible).
     pub sample_interval_ms: u32,
-    /// Samples to keep, bounding the graph history and a recording alike —
+    /// Samples to keep, bounding the graph history and the sample buffer
+    /// (the samples Export… saves, or a recording) alike —
     /// they hold the same stream, so one number is what the user has to
     /// reason about. Applied live; see `MIN_MAX_SAMPLES` for the floor.
     #[serde(default = "default_max_samples")]

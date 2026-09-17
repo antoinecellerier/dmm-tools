@@ -13,6 +13,7 @@
 - **Switch the meter's function and range from the readout** — the mode and range labels are dropdowns on the UT61+/UT161, UT181A, VC-880 and VC-890.
 - **Scale button converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
 - **A recording exports as JSON or a replay file** — from the arrow beside Export…; `--replay` plays back either the GUI's file or `dmm-cli read --format replay`'s.
+- **Export… works without pressing Record** — with nothing recorded, it saves the readings the graph holds.
 - **An export is named after the meter, its mode and the recording's start** — every save opened on `measurements.csv`.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a **Buffer size** setting moves the bound.
 - **Ctrl + wheel zooms the graph, a plain wheel scrolls** — any wheel tick used to zoom the graph and leave live mode; a pinch zooms too.

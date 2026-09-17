@@ -163,11 +163,28 @@ impl Sample {
     }
 }
 
-/// In-memory recording buffer.
+/// What the sample buffer is holding samples for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BufferRole {
+    /// Nothing recorded: the buffer follows the graph, so Export… has the
+    /// readings the graph holds to save. Disposable, as the graph is.
+    History,
+    /// Record was pressed: the buffer is that recording, kept until the next
+    /// one starts.
+    Recording,
+}
+
+/// In-memory sample buffer: the graph's history until Record is pressed,
+/// then the recording.
+///
+/// One buffer rather than two, so a session pays for its samples once. The
+/// history is only ever exported while there is no recording, which is also
+/// the only time it is kept.
 #[derive(Debug)]
 pub struct Recording {
     pub active: bool,
     pub samples: VecDeque<Sample>,
+    role: BufferRole,
     /// Session time the current recording started at, from the caller's
     /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
     /// mock run on a bent clock shows a duration its samples agree with.
@@ -183,10 +200,11 @@ pub struct Recording {
     /// Most sub-values any buffered sample carries. The export sizes its aux
     /// columns from the device profile, but a profile is only known while
     /// connected — this is the floor that keeps a capture exportable in full
-    /// after the meter is unplugged.
+    /// after the meter is unplugged. Only grows until the buffer empties.
     max_aux_seen: usize,
-    /// Samples this recording stops at, from the Buffer size setting (which
-    /// bounds the graph history by the same number).
+    /// Samples the buffer holds, from the Buffer size setting (which bounds
+    /// the graph history by the same number): the history drops its oldest
+    /// past it, a recording stops at it.
     ///
     /// A sample carrying only the meter's main reading is roughly 340 bytes —
     /// about 240 inline, plus the `display_raw` heap string and the meter's
@@ -202,6 +220,7 @@ impl Recording {
         Self {
             active: false,
             samples: VecDeque::new(),
+            role: BufferRole::History,
             start_time: None,
             exported_count: 0,
             epoch: 0,
@@ -210,31 +229,88 @@ impl Recording {
         }
     }
 
+    pub fn role(&self) -> BufferRole {
+        self.role
+    }
+
     /// Change the sample bound. Returns `true` if an active recording was
     /// stopped because it already held at least `n` samples.
     ///
-    /// The buffered samples are left alone: a recording never throws away
-    /// what it has captured, so lowering the bound past a running capture
-    /// ends it rather than truncating it.
+    /// A recording never throws away what it has captured, so lowering the
+    /// bound past a running capture ends it rather than truncating it. The
+    /// history drops its oldest samples at once and gives the memory back,
+    /// as the graph does.
     pub fn set_max_samples(&mut self, n: usize) -> bool {
         self.max_samples = n;
-        let stopped = self.active && self.samples.len() >= n;
-        if stopped {
-            self.active = false;
+        match self.role {
+            BufferRole::History => {
+                if let Some(excess) = self.samples.len().checked_sub(n) {
+                    self.samples.drain(..excess);
+                    self.samples.shrink_to_fit();
+                }
+                false
+            }
+            BufferRole::Recording => {
+                let stopped = self.active && self.samples.len() >= n;
+                if stopped {
+                    self.active = false;
+                }
+                stopped
+            }
         }
-        stopped
     }
 
     /// Start or stop recording, `now` being the session time it happens at.
+    ///
+    /// Starting drops the history: it is the graph's, and the graph still
+    /// shows it. A recording stopped before it captured anything leaves
+    /// nothing to keep, so the buffer goes back to following the graph.
     pub fn toggle(&mut self, now: Instant) {
         self.active = !self.active;
         if self.active {
-            self.samples.clear();
-            self.exported_count = 0;
-            self.epoch += 1;
-            self.max_aux_seen = 0;
+            self.role = BufferRole::Recording;
+            self.empty();
             self.start_time = Some(now);
+        } else if self.samples.is_empty() {
+            self.role = BufferRole::History;
+            self.empty();
         }
+    }
+
+    /// Drop the history, as the graph's Clear drops its points. A recording
+    /// is left alone: Clear has never discarded a capture.
+    pub fn clear_history(&mut self) {
+        if self.role == BufferRole::History {
+            self.empty();
+        }
+    }
+
+    /// Drop history samples taken before `start`, the graph's oldest point,
+    /// so the history holds what the graph does. A recording spans the
+    /// graph's resets and is left alone.
+    ///
+    /// `start` itself is kept: it is the reading the graph restarted on.
+    pub fn trim_before(&mut self, start: Instant) {
+        if self.role != BufferRole::History {
+            return;
+        }
+        while self
+            .samples
+            .front()
+            .is_some_and(|s| s.measurement.timestamp < start)
+        {
+            self.samples.pop_front();
+        }
+        if self.samples.is_empty() {
+            self.max_aux_seen = 0;
+        }
+    }
+
+    fn empty(&mut self) {
+        self.samples.clear();
+        self.exported_count = 0;
+        self.epoch += 1;
+        self.max_aux_seen = 0;
     }
 
     /// The buffer's current filling — see `epoch`.
@@ -251,8 +327,13 @@ impl Recording {
     ///
     /// Non-zero means clearing the buffer would destroy data that exists
     /// nowhere else, which is what the Record confirmation prompt checks.
+    /// Always zero for the history, which the graph shows and which goes
+    /// with the graph's resets unasked.
     pub fn unexported_count(&self) -> usize {
-        self.samples.len().saturating_sub(self.exported_count)
+        match self.role {
+            BufferRole::History => 0,
+            BufferRole::Recording => self.samples.len().saturating_sub(self.exported_count),
+        }
     }
 
     /// Record that the first `count` samples of `epoch` reached a file.
@@ -270,17 +351,30 @@ impl Recording {
 
     /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
     ///
+    /// The history takes every sample and drops its oldest at the bound; a
+    /// recording takes samples only while it runs.
+    ///
     /// `extra_aux` is the caller's current [`Sample::extra_aux`]: how many of
     /// this reading's trailing sub-values software appended.
     pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> bool {
-        if self.active && self.samples.len() < self.max_samples {
-            self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
-            self.samples
-                .push_back(Sample::from_measurement(m, wall_clock, extra_aux));
-            if self.samples.len() >= self.max_samples {
-                self.active = false;
-                return true;
+        match self.role {
+            BufferRole::History => {
+                while !self.samples.is_empty() && self.samples.len() >= self.max_samples {
+                    self.samples.pop_front();
+                }
             }
+            BufferRole::Recording => {
+                if !self.active || self.samples.len() >= self.max_samples {
+                    return false;
+                }
+            }
+        }
+        self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
+        self.samples
+            .push_back(Sample::from_measurement(m, wall_clock, extra_aux));
+        if self.role == BufferRole::Recording && self.samples.len() >= self.max_samples {
+            self.active = false;
+            return true;
         }
         false
     }
@@ -366,17 +460,152 @@ mod tests {
         assert_eq!(r.duration_secs(start - Duration::from_secs(1)), 0.0);
     }
 
+    /// Before any Record the buffer is the graph's history, and takes every
+    /// sample; Record empties it for the recording.
     #[test]
-    fn recording_only_captures_when_active() {
+    fn the_history_takes_samples_until_record_empties_it() {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
+        assert_eq!(r.role(), BufferRole::History);
         r.push(&m, &wc, 0);
-        assert!(r.samples.is_empty());
+        r.push(&m, &wc, 0);
+        assert_eq!(r.samples.len(), 2);
+        assert_eq!(r.unexported_count(), 0, "the history never prompts");
 
         r.toggle(Instant::now()); // start
+        assert_eq!(r.role(), BufferRole::Recording);
+        assert!(r.samples.is_empty(), "the history is the graph's to keep");
         r.push(&m, &wc, 0);
         assert_eq!(r.samples.len(), 1);
+    }
+
+    /// A stopped recording is kept as it is: later readings go nowhere.
+    #[test]
+    fn a_stopped_recording_takes_no_samples() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle(Instant::now()); // start
+        r.push(&m, &wc, 0);
+        r.toggle(Instant::now()); // stop
+        assert_eq!(r.role(), BufferRole::Recording);
+        assert!(!r.push(&m, &wc, 0));
+        assert_eq!(r.samples.len(), 1);
+    }
+
+    /// A recording stopped before it captured anything has nothing to keep,
+    /// so the buffer follows the graph again.
+    #[test]
+    fn an_empty_recording_hands_the_buffer_back_to_the_history() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle(Instant::now()); // start
+        r.toggle(Instant::now()); // stop, nothing captured
+        assert_eq!(r.role(), BufferRole::History);
+        r.push(&m, &wc, 0);
+        assert_eq!(r.samples.len(), 1);
+    }
+
+    /// The history drops its oldest sample at the bound, as the graph does;
+    /// a recording would stop there instead.
+    #[test]
+    fn the_history_drops_its_oldest_sample_at_the_bound() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        r.set_max_samples(3);
+        let base = Instant::now();
+        for i in 0..5 {
+            let mut m = make_measurement(b"  1.234");
+            m.timestamp = base + Duration::from_millis(i);
+            assert!(!r.push(&m, &wc, 0), "the history never fills up");
+        }
+        let kept: Vec<Instant> = r.samples.iter().map(|s| s.measurement.timestamp).collect();
+        assert_eq!(
+            kept,
+            [2, 3, 4].map(|i| base + Duration::from_millis(i)),
+            "the newest three"
+        );
+    }
+
+    /// Lowering the bound under the history gives the samples up at once.
+    #[test]
+    fn lowering_the_bound_trims_the_history_now() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        for _ in 0..10 {
+            r.push(&m, &wc, 0);
+        }
+        assert!(!r.set_max_samples(4), "no recording to stop");
+        assert_eq!(r.samples.len(), 4);
+        assert!(!r.set_max_samples(100));
+        assert_eq!(r.samples.len(), 4, "raising it brings nothing back");
+    }
+
+    /// The history holds what the graph does: a graph restarted on a reading
+    /// takes the samples before that reading with it, and keeps that one.
+    #[test]
+    fn trimming_keeps_the_reading_the_graph_restarted_on() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let base = Instant::now();
+        let mut wide = make_measurement(b"  1.234");
+        wide.aux_values = vec![aux("Frequency", "50.01", "Hz")];
+        for i in 0..4 {
+            let mut m = if i == 0 {
+                wide.clone()
+            } else {
+                make_measurement(b"  1.234")
+            };
+            m.timestamp = base + Duration::from_millis(i);
+            r.push(&m, &wc, 0);
+        }
+        r.trim_before(base + Duration::from_millis(2));
+        assert_eq!(r.samples.len(), 2);
+        assert_eq!(
+            r.samples[0].measurement.timestamp,
+            base + Duration::from_millis(2)
+        );
+        assert_eq!(r.max_aux_seen(), 1, "a floor, until the buffer empties");
+        r.trim_before(base + Duration::from_millis(10));
+        assert!(r.samples.is_empty());
+        assert_eq!(r.max_aux_seen(), 0);
+    }
+
+    /// A recording outlives the graph's resets and its Clear.
+    #[test]
+    fn trimming_and_clearing_leave_a_recording_alone() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle(Instant::now());
+        r.push(&m, &wc, 0);
+        r.trim_before(m.timestamp + Duration::from_secs(1));
+        r.clear_history();
+        assert_eq!(r.samples.len(), 1);
+        let epoch = r.epoch();
+
+        r.toggle(Instant::now()); // stop, one sample kept
+        r.clear_history();
+        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.epoch(), epoch);
+    }
+
+    /// Clear drops the history, and with it the export's view of it.
+    #[test]
+    fn clearing_the_history_starts_a_new_epoch() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let mut wide = make_measurement(b"  1.234");
+        wide.aux_values = vec![aux("Frequency", "50.01", "Hz")];
+        r.push(&wide, &wc, 0);
+        let epoch = r.epoch();
+        r.clear_history();
+        assert!(r.samples.is_empty());
+        assert_eq!(r.max_aux_seen(), 0);
+        assert_ne!(r.epoch(), epoch);
     }
 
     #[test]

@@ -229,7 +229,8 @@ Three components stacked vertically:
 - Export… split button (file dialog on a separate thread — no UI freeze; the label saves a CSV, the arrow's menu picks CSV, JSON or replay: the format is settled before the dialog opens because rfd returns the path but not the file type picked, and the GTK chooser keeps the name's extension when its filter changes)
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand
-- Scrollable sample log showing recent samples (timestamp, value, unit, flags, and any sub-values) in monospace. Auto-scrolls to bottom, caps at last 500 entries.
+- With nothing recorded, Export… saves the samples the graph holds; a dimmed line under the row says so, with their count, and points to Record for capturing across mode changes. One buffer serves both roles — it follows the graph until Record empties it for the recording — so full samples are paid for once, and the graph's are kept only while no recording exists, the only time Export… saves them.
+- Scrollable sample log showing recent samples (timestamp, value, unit, flags, and any sub-values) in monospace. Auto-scrolls to bottom, caps at last 500 entries. Shown for a recording only.
 
 ### Accessibility
 

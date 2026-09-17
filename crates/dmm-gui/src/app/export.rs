@@ -1,4 +1,5 @@
-//! Export: rendering the recording buffer as a CSV, a JSON document or a
+//! Export: rendering the sample buffer — the recording, or with nothing
+//! recorded the samples the graph holds — as a CSV, a JSON document or a
 //! replay file, running the save dialog and the write off the UI thread, and
 //! folding the outcome back into a toast.
 
@@ -9,8 +10,8 @@ use std::collections::VecDeque;
 use std::path::Path;
 use std::time::Instant;
 
-use super::App;
-use crate::recording::{Sample, render_csv, render_json, render_replay};
+use super::{App, ConnectionState};
+use crate::recording::{BufferRole, Sample, render_csv, render_json, render_replay};
 
 /// What the CSV's `# device:` comment says when nothing ever identified the
 /// meter — a recording toggled on under Auto-detect before one answered.
@@ -20,10 +21,10 @@ const UNKNOWN_DEVICE: &str = "unknown";
 /// `--replay` reads the file's header, not its name.
 const REPLAY_EXTENSION: &str = "replay";
 
-/// Why a mock recording cannot be written as a replay file. The menu entry
+/// Why the mock's samples cannot be written as a replay file. The menu entry
 /// is disabled for the mock, so this only guards the call itself.
 pub(super) const NO_WIRE_FORMAT: &str =
-    "The mock has no wire format to export; record a real meter";
+    "The mock has no wire format to export; connect a real meter";
 
 /// Which file the export writes. Settled before the dialog opens — by the
 /// Export… label (a CSV) or the menu on its arrow — because the dialog hands
@@ -70,9 +71,9 @@ pub(super) struct ExportOutcome {
     /// Toast text.
     message: String,
     is_error: bool,
-    /// On success, the buffer epoch written from and the samples written.
-    /// Drives the recording's "saved" mark, so a buffer that reached a file
-    /// doesn't prompt before being discarded.
+    /// On a recording's success, the buffer epoch written from and the
+    /// samples written. Drives the recording's "saved" mark, so a buffer that
+    /// reached a file doesn't prompt before being discarded.
     exported: Option<(u64, usize)>,
 }
 
@@ -84,20 +85,26 @@ pub(super) struct PreparedExport {
     default_name: String,
     bytes: Vec<u8>,
     sample_count: usize,
-    /// The buffer epoch the samples were rendered from.
-    epoch: u64,
+    /// The buffer epoch to mark saved once the file is written; `None` for
+    /// the history, which nothing asks about before dropping.
+    mark: Option<u64>,
 }
 
 /// Write one export to the path the user chose and say how it went.
 ///
 /// Writes a sibling .tmp and renames it into place, so a crash mid-export
 /// can't leave a truncated file at the user-chosen path.
-fn write_export(path: &Path, bytes: &[u8], sample_count: usize, epoch: u64) -> ExportOutcome {
+fn write_export(
+    path: &Path,
+    bytes: &[u8],
+    sample_count: usize,
+    mark: Option<u64>,
+) -> ExportOutcome {
     export_outcome(
         path,
         dmm_shared::write_atomic(path, bytes),
         sample_count,
-        epoch,
+        mark,
     )
 }
 
@@ -107,7 +114,7 @@ fn export_outcome(
     path: &Path,
     result: std::io::Result<()>,
     sample_count: usize,
-    epoch: u64,
+    mark: Option<u64>,
 ) -> ExportOutcome {
     match result {
         Ok(()) => {
@@ -121,7 +128,7 @@ fn export_outcome(
             ExportOutcome {
                 message: format!("Exported {sample_count} samples to {file_name}"),
                 is_error: false,
-                exported: Some((epoch, sample_count)),
+                exported: mark.map(|epoch| (epoch, sample_count)),
             }
         }
         Err(e) => {
@@ -136,7 +143,7 @@ fn export_outcome(
 }
 
 impl App {
-    /// Columns the buffered recording is written with.
+    /// Columns the buffered samples are written with.
     ///
     /// The profile's slot count fixes the layout, with the widest sample
     /// actually buffered as a floor: a recording can outlive the connection
@@ -164,13 +171,12 @@ impl App {
     /// without opening one.
     pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<PreparedExport, String> {
         let samples = &self.recording.samples;
+        let role = self.recording.role();
         let Some(first) = samples.front() else {
             // Returning silently made the button and Ctrl+E look broken:
             // no file dialog, no message, nothing in the log. Say why.
-            info!("export skipped: recording buffer is empty");
-            return Err(
-                "Nothing to export \u{2014} press Record to capture samples first".to_string(),
-            );
+            info!("export skipped: sample buffer is empty");
+            return Err(self.nothing_to_export(role).to_string());
         };
         // The meter these samples came from, not whatever is selected now.
         // Nothing named it and nothing was ever identified — a recording
@@ -190,7 +196,7 @@ impl App {
         // it is cheaper than 500K allocations.
         //
         // The name is built here too, rather than in the dialog thread: the
-        // first sample is the recording's start.
+        // first sample is where the file starts.
         let default_name = format.default_name(device_model, single_mode(samples), first.wall_time);
         let bytes = match format {
             ExportFormat::Csv => {
@@ -216,8 +222,19 @@ impl App {
             default_name,
             bytes,
             sample_count: samples.len(),
-            epoch: self.recording.epoch(),
+            mark: (role == BufferRole::Recording).then(|| self.recording.epoch()),
         })
+    }
+
+    /// Why an empty buffer has nothing to save, as what to do about it.
+    fn nothing_to_export(&self, role: BufferRole) -> &'static str {
+        match role {
+            BufferRole::Recording => "Nothing to export \u{2014} the recording has no samples yet",
+            BufferRole::History if self.connection.state == ConnectionState::Disconnected => {
+                "Nothing to export \u{2014} connect a meter first"
+            }
+            BufferRole::History => "Nothing to export \u{2014} no readings yet",
+        }
     }
 
     pub(super) fn export_recording(&mut self, format: ExportFormat) {
@@ -235,7 +252,7 @@ impl App {
                 default_name,
                 bytes,
                 sample_count,
-                epoch,
+                mark,
             } = prepared;
             let (label, extension) = format.filter();
             let Some(path) = rfd::FileDialog::new()
@@ -245,7 +262,7 @@ impl App {
             else {
                 return;
             };
-            let _ = tx.send(write_export(&path, &bytes, sample_count, epoch));
+            let _ = tx.send(write_export(&path, &bytes, sample_count, mark));
         });
         self.export_result_rx = Some(rx);
     }
@@ -489,11 +506,59 @@ mod tests {
     /// Nothing buffered: no dialog, and a toast saying what to do instead.
     #[test]
     fn an_empty_buffer_prepares_no_export() {
-        let app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-        let Err(message) = app.prepare_export(ExportFormat::Csv) else {
-            panic!("an empty buffer has nothing to write");
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let message = |app: &App| match app.prepare_export(ExportFormat::Csv) {
+            Ok(_) => panic!("an empty buffer has nothing to write"),
+            Err(message) => message,
         };
-        assert!(message.starts_with("Nothing to export"), "{message}");
+        assert_eq!(
+            message(&app),
+            "Nothing to export \u{2014} connect a meter first"
+        );
+        app.connection.state = ConnectionState::Connected;
+        assert_eq!(message(&app), "Nothing to export \u{2014} no readings yet");
+        app.recording.toggle(Instant::now());
+        assert_eq!(
+            message(&app),
+            "Nothing to export \u{2014} the recording has no samples yet"
+        );
+    }
+
+    /// With nothing recorded, Export… saves the history the buffer holds —
+    /// and marks nothing, so a recording started while its dialog is open
+    /// still asks before it is discarded.
+    #[test]
+    fn a_history_export_saves_the_buffer_and_marks_nothing() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        for _ in 0..3 {
+            app.recording.push(&measurement(0), &app.wall_clock, 0);
+        }
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("the history");
+        assert_eq!(prepared.sample_count, 3);
+        assert_eq!(prepared.mark, None);
+        assert_eq!(
+            prepared.bytes,
+            render_csv(&app.recording.samples, UNKNOWN_DEVICE, app.csv_layout())
+                .expect("rendering the history")
+        );
+
+        app.recording.toggle(Instant::now());
+        for _ in 0..3 {
+            app.recording.push(&measurement(0), &app.wall_clock, 0);
+        }
+        let outcome = export_outcome(
+            Path::new("out.csv"),
+            Ok(()),
+            prepared.sample_count,
+            prepared.mark,
+        );
+        deliver_outcome(&mut app, outcome);
+        assert_eq!(app.recording.unexported_count(), 3);
+        assert_eq!(
+            app.toast.as_ref().map(|(text, _, _)| text.as_str()),
+            Some("Exported 3 samples to out.csv"),
+            "the user still hears the file was written"
+        );
     }
 
     /// The prepared file is the buffer as the renderer writes it, named after
@@ -505,7 +570,7 @@ mod tests {
             .prepare_export(ExportFormat::Csv)
             .expect("three samples to write");
         assert_eq!(prepared.sample_count, 3);
-        assert_eq!(prepared.epoch, app.recording.epoch());
+        assert_eq!(prepared.mark, Some(app.recording.epoch()));
         // Nothing named a meter, so the file says so.
         assert!(
             prepared
@@ -537,7 +602,7 @@ mod tests {
             Path::new("out.csv"),
             Ok(()),
             prepared.sample_count,
-            prepared.epoch,
+            prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.recording.unexported_count(), 0);
@@ -563,7 +628,7 @@ mod tests {
             Path::new("out.csv"),
             Ok(()),
             prepared.sample_count,
-            prepared.epoch,
+            prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.recording.unexported_count(), 1);
@@ -578,7 +643,7 @@ mod tests {
             Path::new("out.csv"),
             Err(std::io::Error::other("disk full")),
             prepared.sample_count,
-            prepared.epoch,
+            prepared.mark,
         );
         deliver_outcome(&mut app, outcome);
         assert_eq!(app.recording.unexported_count(), 2);

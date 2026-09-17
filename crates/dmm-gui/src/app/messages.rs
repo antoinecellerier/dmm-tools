@@ -3,6 +3,7 @@
 //! nothing to show into the help text the reading column renders.
 
 use dmm_lib::binary_help::{ConnectedAdapters, connected_adapters};
+use dmm_lib::measurement::Measurement;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use eframe::egui::{self, RichText, Ui};
@@ -18,6 +19,7 @@ use super::connection::{
 use super::plot_input::{PlotInput, resolve_plot_input};
 use super::{App, ConnectionState, named_device};
 use crate::graph::PlotSample;
+use crate::recording::BufferRole;
 use crate::settings::format_sample_count;
 
 /// Why the GUI currently has no readings to show.
@@ -477,17 +479,66 @@ impl App {
         self.connection.waiting_timeouts = 0;
     }
 
-    /// Drop everything derived from the sample stream: graph history,
-    /// session statistics, the integrator and the last reading.
+    /// Drop everything derived from the sample stream: graph history and
+    /// the samples Export… would save from it, session statistics, the
+    /// integrator and the last reading.
     ///
     /// Shared by `Ctrl+L`, the Clear button and a change of software scale,
     /// which all mean the same thing — the numbers accumulated so far no
-    /// longer describe what is being measured. The recording buffer is
-    /// deliberately not touched; Clear has never discarded a capture.
+    /// longer describe what is being measured. A recording is deliberately
+    /// not touched; Clear has never discarded a capture.
     pub(super) fn clear_session(&mut self) {
         self.graph.clear();
+        self.recording.clear_history();
         self.session.reset();
         self.last_measurement = None;
+    }
+
+    /// Keep a reading in the sample buffer: the recording's next sample, or
+    /// — with nothing recorded — the history Export… falls back to, cut to
+    /// what the graph holds.
+    ///
+    /// Runs after the graph has taken the reading, so a mode change the graph
+    /// restarted on already shows as its first point. An empty graph cuts
+    /// nothing: NCV and over-range readings add no point, and are still
+    /// readings to export.
+    fn keep_sample(&mut self, m: &Measurement, extra_aux: usize) {
+        if self.recording.role() == BufferRole::History {
+            // `detected`, not the selection: a device picked in Settings
+            // takes effect at the next connect, and this reading may still
+            // be the old meter's. A file names one meter, so another one
+            // starts another history.
+            let meter = self.connection.detected.map(|d| d.display_name);
+            if meter != self.capture_layout.device {
+                self.recording.clear_history();
+            }
+            if let Some(start) = self.graph.first_point_time() {
+                self.recording.trim_before(start);
+            }
+            if self.recording.samples.is_empty() {
+                self.latch_history_layout();
+            }
+        }
+        if self.recording.push(m, &self.wall_clock, extra_aux) {
+            self.buffer_full_toast();
+        }
+    }
+
+    /// Take the export's provenance and columns for a history about to start,
+    /// from the connection its first reading arrived on — the history's
+    /// counterpart of what Record latches.
+    fn latch_history_layout(&mut self) {
+        let meter = self.connection.detected;
+        self.capture_layout.device = meter.map(|d| d.display_name);
+        // Only a meter's frames can be replayed; the mock has none.
+        self.capture_layout.device_id = meter.filter(|d| d.requires_hardware).map(|d| d.id);
+        // A reading only arrives on a live connection, so this stability is
+        // the meter's rather than the default a disconnect leaves behind.
+        self.capture_layout.experimental = Some(!self.connection.stability.is_verified());
+        self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
+        // A scale change clears the history, so the transform in force now is
+        // the one every sample in it went through.
+        self.capture_layout.extra_slots = self.transform.extra_aux_count();
     }
 
     pub(super) fn drain_messages(&mut self) {
@@ -648,10 +699,7 @@ impl App {
 
                     // `m` has already been through the transform, so the
                     // count it appended is what this sample carries.
-                    let extra_aux = self.transform.extra_aux_count();
-                    if self.recording.push(&m, &self.wall_clock, extra_aux) {
-                        self.buffer_full_toast();
-                    }
+                    self.keep_sample(&m, self.transform.extra_aux_count());
 
                     // Specs are attached to each measurement by `Dmm::request_measurement`;
                     // last_measurement.spec / .mode_spec is what render code reads.
@@ -902,6 +950,10 @@ impl App {
 mod tests {
     use super::*;
     use crate::settings::Settings;
+    use dmm_lib::flags::StatusFlags;
+    use dmm_lib::measurement::MeasuredValue;
+    use dmm_lib::protocol::Stability;
+    use std::time::Duration;
 
     /// An app whose settings name `family`, with `overridden` saying whether
     /// that came from `--device` rather than the file.
@@ -1284,5 +1336,233 @@ mod tests {
             "meter reports adapter not found somewhere".to_string(),
         ));
         assert!(matches!(issue, ConnectionIssue::Other(_)));
+    }
+
+    /// A reading in `mode` stamped `at`, as the acquisition thread sends one.
+    fn reading(mode: &'static str, value: MeasuredValue, at: Instant) -> Measurement {
+        let mut m = Measurement::test_fixture(value, "V", StatusFlags::default());
+        m.mode = mode.into();
+        m.timestamp = at;
+        m
+    }
+
+    /// The thread's hello for `device_id`.
+    fn connected(
+        device_id: &'static str,
+        stability: Stability,
+        max_aux_values: usize,
+    ) -> DmmMessage {
+        DmmMessage::Connected {
+            name: String::new(),
+            model_name: String::new(),
+            device_id: Some(device_id),
+            stability,
+            feedback_url: String::new(),
+            supported_commands: Vec::new(),
+            max_aux_values,
+        }
+    }
+
+    /// Deliver one reading per entry of `modes`, each stamped as it is sent.
+    fn deliver_readings(app: &mut App, modes: &[(&'static str, MeasuredValue)]) {
+        for (mode, value) in modes {
+            let m = reading(mode, value.clone(), Instant::now());
+            deliver(app, DmmMessage::Measurement(m));
+        }
+    }
+
+    /// A UT61E+ connected and sending, with nothing recorded.
+    fn connected_app() -> App {
+        let mut app = app("ut61eplus", false);
+        deliver(&mut app, connected("ut61eplus", Stability::Verified, 0));
+        app
+    }
+
+    const DC: (&str, MeasuredValue) = ("DC V", MeasuredValue::Normal(1.0));
+    const AC: (&str, MeasuredValue) = ("AC V", MeasuredValue::Normal(1.0));
+
+    fn modes(app: &App) -> Vec<&str> {
+        app.recording
+            .samples
+            .iter()
+            .map(|s| s.measurement.mode.as_ref())
+            .collect()
+    }
+
+    /// With nothing recorded the buffer holds what the graph does: a turn of
+    /// the dial restarts both.
+    #[test]
+    fn the_history_restarts_with_the_graph() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC, DC, DC]);
+        assert_eq!(modes(&app), ["DC V"; 3]);
+        deliver_readings(&mut app, &[AC, AC]);
+        assert_eq!(modes(&app), ["AC V"; 2]);
+    }
+
+    /// An over-range reading adds no graph point but is still a reading.
+    #[test]
+    fn an_over_range_reading_stays_in_the_history() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC, ("DC V", MeasuredValue::Overload), DC]);
+        assert_eq!(app.recording.samples.len(), 3);
+        assert_eq!(
+            app.recording.samples[1].measurement.value_export_str(),
+            "OL"
+        );
+    }
+
+    /// NCV readings are never plotted: an empty graph cuts nothing.
+    #[test]
+    fn ncv_readings_are_kept_with_nothing_plotted() {
+        let mut app = connected_app();
+        let ncv = ("NCV", MeasuredValue::NcvLevel(2));
+        deliver_readings(&mut app, &[ncv.clone(), ncv.clone(), ncv]);
+        assert_eq!(app.graph.first_point_time(), None);
+        assert_eq!(modes(&app), ["NCV"; 3]);
+    }
+
+    /// Clear drops the history with the graph, and never a recording.
+    #[test]
+    fn clear_drops_the_history_but_not_a_recording() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC, DC]);
+        app.clear_session();
+        assert!(app.recording.samples.is_empty());
+
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC, DC]);
+        app.clear_session();
+        assert_eq!(app.recording.samples.len(), 2);
+    }
+
+    /// A recording spans the dial turns the graph restarts on.
+    #[test]
+    fn a_recording_keeps_every_mode() {
+        let mut app = connected_app();
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC, DC, AC, AC]);
+        assert_eq!(modes(&app), ["DC V", "DC V", "AC V", "AC V"]);
+    }
+
+    /// Pause halts acquisition: whatever was still queued is not kept.
+    #[test]
+    fn a_paused_session_keeps_nothing() {
+        let mut app = connected_app();
+        app.connection.paused = true;
+        deliver_readings(&mut app, &[DC]);
+        assert!(app.recording.samples.is_empty());
+    }
+
+    /// The history's file names the meter it came from, as a recording's
+    /// does, and keeps naming it once the cable is out.
+    #[test]
+    fn the_history_names_the_meter_it_came_from() {
+        let mut app = app("ut181a", false);
+        deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
+        deliver_readings(&mut app, &[DC]);
+
+        let ut181a = registry::find_device("ut181a").expect("a registry entry");
+        assert_eq!(app.capture_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.capture_layout.device_id, Some("ut181a"));
+        assert_eq!(app.capture_layout.experimental, Some(true));
+        assert_eq!(app.capture_layout.aux_slots, 4);
+
+        app.disconnect();
+        assert!(app.experimental(), "the samples are still that meter's");
+        assert_eq!(app.replay_device_id(), Some("ut181a"));
+    }
+
+    /// The mock sends no frames, so its history offers no replay file.
+    #[test]
+    fn a_mock_history_has_no_replay_file() {
+        let mut app = app("mock", false);
+        deliver(&mut app, connected("mock", Stability::Verified, 0));
+        deliver_readings(&mut app, &[DC]);
+        assert_eq!(app.capture_layout.device_id, None);
+        assert_eq!(app.replay_device_id(), None);
+    }
+
+    /// A file names one meter: another one answering starts another history,
+    /// while the same one coming back continues it.
+    #[test]
+    fn another_meter_starts_another_history() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC, DC]);
+
+        deliver(
+            &mut app,
+            DmmMessage::Disconnected(dmm_lib::error::Error::Timeout),
+        );
+        deliver(&mut app, connected("ut61eplus", Stability::Verified, 0));
+        deliver_readings(&mut app, &[DC]);
+        assert_eq!(app.recording.samples.len(), 3, "the same meter came back");
+
+        deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
+        deliver_readings(&mut app, &[DC]);
+        assert_eq!(app.recording.samples.len(), 1);
+        let ut181a = registry::find_device("ut181a").expect("a registry entry");
+        assert_eq!(app.capture_layout.device, Some(ut181a.display_name));
+    }
+
+    /// A device picked in Settings only takes effect at the next connect;
+    /// readings still queued are the old meter's and stay under its name.
+    #[test]
+    fn a_device_pick_does_not_relabel_queued_readings() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC]);
+        app.settings.shared.device_family = "ut181a".to_string();
+        deliver_readings(&mut app, &[DC]);
+
+        assert_eq!(app.recording.samples.len(), 2);
+        let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
+        assert_eq!(app.capture_layout.device, Some(ut61eplus.display_name));
+    }
+
+    /// With nothing recorded every reading is also kept for export — cut to
+    /// the graph and dropping its oldest at the bound — so a reading must not
+    /// cost more the longer the session has run. Measured over the whole
+    /// drain: stats, graph and sample buffer.
+    #[test]
+    #[ignore = "timing-sensitive; run with --release"]
+    fn a_reading_costs_the_same_however_long_the_history() {
+        fn measure(points: u64) -> Duration {
+            let mut app = connected_app();
+            // Bound at exactly what the run holds, so both sizes push into a
+            // full buffer, as the graph's own cost test does.
+            app.graph.set_max_points(points as usize);
+            app.recording.set_max_samples(points as usize);
+            let t0 = Instant::now();
+            let send = |app: &mut App, range: std::ops::Range<u64>| {
+                let (tx, rx) = mpsc::channel();
+                for i in range {
+                    let value = MeasuredValue::Normal((i as f64 * 0.017).sin() * 10.0);
+                    let at = t0 + Duration::from_millis(i * 10);
+                    tx.send(DmmMessage::Measurement(reading("DC V", value, at)))
+                        .expect("the channel is open");
+                }
+                app.connection.rx = Some(rx);
+                let start = Instant::now();
+                app.drain_messages();
+                let elapsed = start.elapsed();
+                drop(tx);
+                elapsed
+            };
+            send(&mut app, 0..points);
+            assert_eq!(app.recording.samples.len(), points as usize);
+            let elapsed = send(&mut app, points..points + 1_000);
+            assert_eq!(
+                app.recording.samples.len(),
+                points as usize,
+                "still bounded"
+            );
+            elapsed
+        }
+
+        let short = measure(50_000);
+        let long = measure(500_000);
+        let ratio = long.as_secs_f64() / short.as_secs_f64().max(1e-9);
+        println!("1K readings: 50K history {short:?}, 500K history {long:?}, ratio {ratio:.2}x");
+        assert!(ratio < 2.0, "a reading costs more in a longer session");
     }
 }

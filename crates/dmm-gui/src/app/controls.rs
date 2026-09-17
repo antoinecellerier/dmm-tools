@@ -54,8 +54,8 @@ fn chip_row<T>(ui: &mut Ui, caption: &str, chips: impl IntoIterator<Item = Chip<
 }
 
 /// What a bound of `n` samples costs, as the **Buffer size** row states it:
-/// the memory both copies of the stream take, and how long the bound lasts at
-/// the current sample interval.
+/// the memory the graph and the sample buffer take, and how long the bound
+/// lasts at the current sample interval.
 fn buffer_cost(n: usize, overlays: usize, aux: usize, interval_ms: u32) -> (String, String) {
     // The same wire-time floor `Graph::set_sample_interval_ms` assumes for a
     // 0 ms interval, so the row and the gap detector agree on the rate.
@@ -503,8 +503,8 @@ impl App {
 
         ui.horizontal_wrapped(|ui| {
             // The cost of a bound depends on what this meter is sending right
-            // now: a UT181A's four sub-values roughly triple the recording's
-            // per-sample size and add a trace to the graph's.
+            // now: a UT181A's four sub-values roughly triple a buffered
+            // sample's size and add a trace to the graph's.
             let overlays = self.graph.overlays_len();
             let aux = self
                 .last_measurement
@@ -520,7 +520,7 @@ impl App {
                         selected: self.settings.max_samples == n,
                         label: format_sample_count(n),
                         tooltip: format!(
-                            "Keep up to {} samples in the graph and a recording \u{2014} {memory}, \
+                            "Keep up to {} samples in the graph and for export \u{2014} {memory}, \
                              about {span} at the current sample interval",
                             format_sample_count(n)
                         ),
@@ -529,9 +529,9 @@ impl App {
             if let Some(n) = chip_row(ui, "Buffer size:", chips) {
                 self.settings.max_samples = n;
                 self.settings.save();
-                // Live: the graph evicts down to the new bound on the spot,
-                // and a recording already past it stops rather than losing
-                // the samples it has.
+                // Live: the graph and the history behind Export… evict down
+                // to the new bound on the spot, and a recording already past
+                // it stops rather than losing the samples it has.
                 self.graph.set_max_points(n);
                 if self.recording.set_max_samples(n) {
                     self.buffer_shrunk_toast();

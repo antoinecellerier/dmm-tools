@@ -2620,3 +2620,32 @@ fn c_clears_the_cursors_on_the_way_off() {
     assert_eq!((g.cursor_a, g.cursor_b), (None, None), "a cursor survived");
     assert!(!g.cursor_next_is_b, "the next-click side survived");
 }
+
+/// The export history is cut to this, so it has to move exactly when the
+/// graph's oldest point does: on a restart, on eviction and on Clear, and
+/// not on an over-range reading, which adds no point.
+#[test]
+fn first_point_time_follows_the_oldest_point() {
+    let mut g = Graph::new();
+    assert_eq!(g.first_point_time(), None);
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+
+    g.push(1.0, at(0), "DC V", "V", None);
+    g.push(1.0, at(1), "DC V", "V", None);
+    assert_eq!(g.first_point_time(), Some(at(0)));
+
+    g.push_break(at(2));
+    assert_eq!(g.first_point_time(), Some(at(0)), "no point, no move");
+
+    g.push(1.0, at(3), "AC V", "V", None);
+    assert_eq!(g.first_point_time(), Some(at(3)), "a mode change restarts");
+
+    g.push(1.0, at(4), "AC V", "V", None);
+    g.push(1.0, at(5), "AC V", "V", None);
+    g.set_max_points(2);
+    assert_eq!(g.first_point_time(), Some(at(4)), "evicted with its point");
+
+    g.clear();
+    assert_eq!(g.first_point_time(), None);
+}

@@ -153,7 +153,8 @@ continuous timeline across reconnects, pause/resume capture, graph overlays
 (mean line, reference lines, measurement cursors, min/max envelope, trigger markers),
 a series selector plus same-unit sub-value traces for multi-display meters,
 remote control buttons, UI zoom (Ctrl+/-), CSV recording/export with scrollable
-sample log, persistent settings.
+sample log (exporting the graph's samples when nothing was recorded),
+persistent settings.
 
 `App` is declared once in `app/mod.rs`; every module under `app/` adds `impl App`
 methods to it, so no panel owns state of its own.
@@ -171,15 +172,15 @@ methods to it, so no panel owns state of its own.
 | `app/layout.rs` | The reading column shared by the wide and narrow layouts, the specs sections, and the big meter toggle |
 | `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |
 | `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
-| `app/recording_panel.rs` | Record/Export row, sample log, discard prompt, and the graph/recording split |
-| `app/export.rs` | Export: which format the menu picked, the save dialog and write off the UI thread, and the result toast |
+| `app/recording_panel.rs` | Record/Export row, sample log or the line saying Export… saves the graph's samples, discard prompt, and the graph/recording split |
+| `app/export.rs` | Export: which format the menu picked, rendering the sample buffer, the save dialog and write off the UI thread, and the result toast |
 | `app/transform_ui.rs` | The **Scale** row and its editor for the software transform |
 | `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |
 | `app/shortcut_help.rs` | The keyboard and mouse help modal |
 | `app/whats_new.rs` | The "What's New" release-notes viewport |
 | `graph/` | Scrolling graph: history buffer, view navigation, toolbar, main plot, minimap, visible-slice analysis |
 | `display.rs` | The reading itself in its three sizes, with the mode and range dropdowns and the sub-value rows |
-| `recording.rs` | The bounded sample buffer and its CSV, JSON and replay rendering |
+| `recording.rs` | The bounded sample buffer — the graph's history until Record, then the recording — and its CSV, JSON and replay rendering |
 | `settings.rs` | Persisted settings and the colour presets |
 | `specs.rs` | Per-range specification rendering |
 | `theme.rs` | Theme colour tables (WCAG-checked in both modes) |
@@ -197,7 +198,7 @@ methods to it, so no panel owns state of its own.
 7. **No nom** — each family's payload is a fixed-size struct. Direct indexing is clearer.
 8. **Measurement fields use `&'static str`** — `unit` and `range_label` reference static table data, avoiding heap allocation per measurement.
 9. **Graph two-tier rendering** — the minimap needs the full history, so it keeps it as a min/max level (`graph/level.rs`): one bucket per fixed span of session time about a physical pixel wide (`bucket_secs`), holding that span's vertical extent. A sample folds into the last bucket, an evicted one out of the first, and the level is recut only when the strip's bucket width steps — never per frame, never per push. Each run of buckets between two interruptions is projected through `decimate_columns` and painted as a single polyline, and the auto Y range folds the bucket extremes instead of scanning the points, so the strip's cost follows its width rather than the history length. Buckets are cut in session time, not screen columns: the strip rescales on every sample, so column buckets changed members each frame and the trace flickered. The main graph reads none of it: it binary-searches the history for the visible time window (`visible_index_range`), then builds segments from that ~150-point slice each frame. All per-frame helpers (Y-bounds, statistics, envelope, crossings, nearest-point) also operate on the visible slice only, keeping frame cost independent of total history size. Sub-value overlay traces are stored as `VecDeque<Option<f64>>` running in lockstep with the history, so the same visible slice indexes them and the single-display case pays nothing; the minimap stays main-series-only so its level is not multiplied by the overlay count.
-10. **Bounded buffers** — the graph history and the recording share one bound (default 500K samples, settable in Settings), and the background channel is drained every frame, so memory cannot grow without limit during sustained use.
+10. **Bounded buffers** — the graph history and the sample buffer share one bound (default 500K samples, settable in Settings), and the background channel is drained every frame, so memory cannot grow without limit during sustained use. The sample buffer holds full readings in one of two roles: with nothing recorded it follows the graph — cut to the graph's oldest point after each push, dropping its own oldest at the bound — for Export… to save; Record empties it for the recording, which keeps every sample until full. One buffer, so full readings are paid for once.
 11. **Settings schema evolution** — `#[serde(default)]` on `Settings` allows adding new fields without breaking existing config files.
 12. **Device registry** — all device metadata (display names, aliases, activation instructions, protocol factories, manual URLs) lives in a single `DEVICES` slice in the library. CLI and GUI consume the registry without device-specific knowledge, so adding a new device family requires zero app code changes.
 13. **Static spec data** — per-range specifications (resolution, accuracy bands) and per-mode metadata (input impedance, notes) are `&'static` arrays in `tables/specs_*.rs` files, transcribed from device manuals. The GUI caches spec lookups keyed on `(mode_raw, range_raw)` and re-looks up only on mode/range changes — zero per-frame allocations. Use `cargo run -p dmm-lib --example dump_specs` to verify spec data against manuals.

@@ -266,6 +266,12 @@ mod tests {
 
     /// As [`run_layout`], with the panels the given settings show.
     fn run_layout_with(width: f32, height: f32, settings: Settings) -> Columns {
+        run_layout_as(width, height, settings, true)
+    }
+
+    /// As [`run_layout_with`]; `record` says whether the session's samples
+    /// are a recording or, with nothing recorded, the graph's history.
+    fn run_layout_as(width: f32, height: f32, settings: Settings, record: bool) -> Columns {
         let settings = Settings {
             // No acquisition thread: this is about layout only.
             auto_connect: false,
@@ -273,15 +279,18 @@ mod tests {
         };
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         // A session's worth of data: only then does the graph draw its traces
-        // and the recording its sample log, and only then does the split fill
-        // its allocation to the last pixel — the case where a stray fraction
-        // of content would raise a scrollbar on a window that fits.
+        // and the recording its sample log — or the line saying Export… saves
+        // the graph's samples — and only then does the split fill its
+        // allocation to the last pixel, the case where a stray fraction of
+        // content would raise a scrollbar on a window that fits.
         let m = dmm_lib::measurement::Measurement::test_fixture(
             dmm_lib::measurement::MeasuredValue::Normal(1.234),
             "V",
             dmm_lib::flags::StatusFlags::default(),
         );
-        app.recording.toggle(app.clock.now());
+        if record {
+            app.recording.toggle(app.clock.now());
+        }
         for _ in 0..50 {
             app.graph.push(
                 1.234,
@@ -399,6 +408,20 @@ mod tests {
         let columns = run_layout(700.0, 640.0);
         assert_no_scrollbar("the narrow column", &columns.reading);
         assert!(columns.graph.is_none(), "narrow has one column");
+    }
+
+    /// With nothing recorded the panel shows one wrapped line instead of the
+    /// sample log, and the columns still fit without a scrollbar.
+    #[test]
+    fn a_session_with_nothing_recorded_shows_no_scrollbar() {
+        let wide = run_layout_as(1000.0, 640.0, Settings::default(), false);
+        assert_no_scrollbar("the reading column", &wide.reading);
+        assert_no_scrollbar(
+            "the graph column",
+            wide.graph.as_ref().expect("wide has a graph column"),
+        );
+        let narrow = run_layout_as(700.0, 640.0, Settings::default(), false);
+        assert_no_scrollbar("the narrow column", &narrow.reading);
     }
 
     /// Too short for the stack: the graph keeps its floor and the column grows
