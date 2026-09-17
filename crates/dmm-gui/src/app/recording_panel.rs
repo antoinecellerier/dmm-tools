@@ -198,7 +198,7 @@ impl App {
                 .stick_to_bottom(true)
                 .show(ui, |ui| {
                     let start = self.recording.samples.len().saturating_sub(500);
-                    for s in &self.recording.samples[start..] {
+                    for s in self.recording.samples.range(start..) {
                         let time = s.wall_time.format("%H:%M:%S%.3f");
                         let flags_str = s.flags_str();
                         let flags = if flags_str.is_empty() {

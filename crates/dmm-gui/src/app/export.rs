@@ -5,6 +5,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::export::CsvLayout;
 use log::{error, info, warn};
+use std::collections::VecDeque;
 use std::path::Path;
 use std::time::Instant;
 
@@ -56,8 +57,8 @@ impl ExportFormat {
 ///
 /// `None` once a recording crossed a function switch: naming that file after
 /// the mode it started in would credit every later reading to it.
-fn single_mode(samples: &[Sample]) -> Option<&str> {
-    let first = samples.first()?.measurement.mode.as_ref();
+fn single_mode(samples: &VecDeque<Sample>) -> Option<&str> {
+    let first = samples.front()?.measurement.mode.as_ref();
     samples
         .iter()
         .all(|s| s.measurement.mode == first)

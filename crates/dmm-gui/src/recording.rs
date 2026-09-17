@@ -4,6 +4,7 @@ use dmm_lib::WallClock;
 use dmm_lib::export::{CsvLayout, device_comment};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::replay;
+use std::collections::VecDeque;
 use std::io::Write;
 use std::time::Instant;
 
@@ -19,7 +20,7 @@ use std::time::Instant;
 /// groups as its own [`Sample::extra_aux`] says it carries, because a scale
 /// switched on mid-recording leaves the earlier samples without one.
 pub fn render_csv(
-    samples: &[Sample],
+    samples: &VecDeque<Sample>,
     device_model: &str,
     layout: CsvLayout,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -49,7 +50,11 @@ pub fn render_csv(
 /// `dmm-cli read --format json` prints, so a script reading one binary's file
 /// works on the other's. `experimental` marks readings decoded by a protocol
 /// no report has confirmed, as the CLI's does.
-pub(crate) fn render_json(samples: &[Sample], device_model: &str, experimental: bool) -> String {
+pub(crate) fn render_json(
+    samples: &VecDeque<Sample>,
+    device_model: &str,
+    experimental: bool,
+) -> String {
     let mut out = dmm_shared::export::metadata_line(device_model);
     out.push('\n');
     // A reading with no sub-values runs to roughly 400 bytes; growing from
@@ -81,11 +86,11 @@ pub(crate) fn render_json(samples: &[Sample], device_model: &str, experimental: 
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
 pub(crate) fn render_replay(
-    samples: &[Sample],
+    samples: &VecDeque<Sample>,
     device_id: &str,
     model: Option<&str>,
 ) -> Option<String> {
-    let first = samples.first()?;
+    let first = samples.front()?;
     let recorded = first
         .wall_time
         .to_rfc3339_opts(SecondsFormat::Millis, false);
@@ -162,7 +167,7 @@ impl Sample {
 #[derive(Debug)]
 pub struct Recording {
     pub active: bool,
-    pub samples: Vec<Sample>,
+    pub samples: VecDeque<Sample>,
     /// Session time the current recording started at, from the caller's
     /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
     /// mock run on a bent clock shows a duration its samples agree with.
@@ -192,7 +197,7 @@ impl Recording {
     pub fn new() -> Self {
         Self {
             active: false,
-            samples: Vec::new(),
+            samples: VecDeque::new(),
             start_time: None,
             exported_count: 0,
             max_aux_seen: 0,
@@ -256,7 +261,7 @@ impl Recording {
         if self.active && self.samples.len() < self.max_samples {
             self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
             self.samples
-                .push(Sample::from_measurement(m, wall_clock, extra_aux));
+                .push_back(Sample::from_measurement(m, wall_clock, extra_aux));
             if self.samples.len() >= self.max_samples {
                 self.active = false;
                 return true;
@@ -567,7 +572,7 @@ mod tests {
     fn render_csv_has_header_and_one_row_per_sample() {
         let wc = WallClock::new();
         let m = make_measurement(b"  5.678");
-        let samples: Vec<Sample> = (0..3)
+        let samples: VecDeque<Sample> = (0..3)
             .map(|_| Sample::from_measurement(&m, &wc, 0))
             .collect();
 
@@ -584,7 +589,7 @@ mod tests {
 
     #[test]
     fn render_csv_of_an_empty_buffer_is_just_the_headers() {
-        let bytes = render_csv(&[], "mock", layout(0, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::new(), "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(text.lines().count(), 2);
     }
@@ -595,7 +600,7 @@ mod tests {
     /// exporter alone breaks a test.
     #[test]
     fn gui_and_cli_single_display_headers_agree() {
-        let bytes = render_csv(&[], "mock", layout(0, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::new(), "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(
             text.lines().nth(1).unwrap(),
@@ -627,7 +632,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "UNI-T UT181A", layout(4, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::from([s]), "UNI-T UT181A", layout(4, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -660,7 +665,7 @@ mod tests {
         m.aux_values = vec![max];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "UNI-T UT181A", layout(1, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::from([s]), "UNI-T UT181A", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let row = text.lines().nth(2).unwrap();
         assert!(row.ends_with(",Max,5.9010,V"), "got {row:?}");
@@ -677,7 +682,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&[s], "mock", layout(1, 0)).unwrap();
+        let bytes = render_csv(&VecDeque::from([s]), "mock", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert!(
@@ -717,7 +722,7 @@ mod tests {
             aux("Raw", "0.05678", ""),
         ];
 
-        let samples: Vec<Sample> = [(&before, 0), (&bare, 1), (&wide, 1)]
+        let samples: VecDeque<Sample> = [(&before, 0), (&bare, 1), (&wide, 1)]
             .into_iter()
             .map(|(m, extra)| Sample::from_measurement(m, &wc, extra))
             .collect();
@@ -806,7 +811,7 @@ mod tests {
     }
 
     /// Three frames 250 ms apart, as the buffer would hold them.
-    fn replay_samples() -> Vec<Sample> {
+    fn replay_samples() -> VecDeque<Sample> {
         let wc = WallClock::new();
         let base = Instant::now();
         (0..3)
@@ -867,7 +872,7 @@ mod tests {
         let mut samples = replay_samples();
         samples[1].measurement.raw_payload = Vec::new();
         assert!(render_replay(&samples, "ut61eplus", None).is_none());
-        assert!(render_replay(&[], "ut61eplus", None).is_none());
+        assert!(render_replay(&VecDeque::new(), "ut61eplus", None).is_none());
     }
 
     /// The export and `dmm-cli read --format json` cannot drift, because both
@@ -875,11 +880,12 @@ mod tests {
     /// document the GUI builds around them, not the objects themselves.
     #[test]
     fn render_json_is_the_metadata_line_and_one_object_per_sample() {
-        let samples = replay_samples();
-        let text = render_json(&samples[..2], "UNI-T UT61E+", true);
+        let mut samples = replay_samples();
+        samples.truncate(2);
+        let text = render_json(&samples, "UNI-T UT61E+", true);
 
         let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+");
-        for s in &samples[..2] {
+        for s in &samples {
             expected.push('\n');
             expected.push_str(
                 &dmm_shared::export::measurement_json(
