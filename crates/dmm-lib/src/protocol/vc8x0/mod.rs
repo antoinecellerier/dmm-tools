@@ -24,12 +24,13 @@ use crate::protocol::cycle::{
     self, CycleButton, CycleMeter, DialPosition, DialState, RANGE_BUTTON_NAME, Settle,
 };
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol,
     Setting, check_len, unknown_mode, unsupported_setting,
 };
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
@@ -335,9 +336,14 @@ pub(crate) fn common_flags(status: &[u8]) -> (StatusFlags, bool) {
 
 /// Turn the decoded main display into a `MeasuredValue`.
 ///
-/// `trimmed` is the whitespace-stripped display, `raw` the original (only
-/// used for the diagnostic).
-pub(crate) fn parse_value(family: &str, ol1: bool, trimmed: &str, raw: &str) -> MeasuredValue {
+/// `trimmed` is the whitespace-stripped display. `setup` says the meter is on
+/// its setup screen, whose words are not a reading and are not reported.
+pub(crate) fn parse_value(
+    family: &'static str,
+    ol1: bool,
+    trimmed: &str,
+    setup: bool,
+) -> MeasuredValue {
     if ol1 || trimmed.contains("OL") || trimmed.contains("---") {
         return MeasuredValue::Overload;
     }
@@ -345,10 +351,12 @@ pub(crate) fn parse_value(family: &str, ol1: bool, trimmed: &str, raw: &str) -> 
         // Sign is in the ASCII string itself (leading '-')
         Ok(v) => MeasuredValue::Normal(v),
         Err(_) => {
-            if trimmed.is_empty() {
-                warn!("{family}: empty display value");
-            } else {
-                warn!("{family}: could not parse display value: {raw:?}");
+            if !setup {
+                report_unknown(
+                    family,
+                    "display text",
+                    format_args!("{trimmed:?}, shown as OL"),
+                );
             }
             MeasuredValue::Overload
         }
@@ -437,6 +445,11 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     /// Set the flags [`common_flags`] does not: each meter puts a few of its
     /// own beyond the bits the two share.
     fn extra_flags(flags: &mut StatusFlags, status: &[u8]);
+
+    /// Whether the status bytes say the meter shows its setup screen.
+    fn setup_screen(_status: &[u8]) -> bool {
+        false
+    }
 
     /// Capture steps this meter needs on top of [`capture_steps`].
     fn extra_capture_steps() -> Vec<CaptureStep> {
@@ -661,7 +674,7 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
     let (mut flags, ol1) = common_flags(status_bytes);
     M::extra_flags(&mut flags, status_bytes);
 
-    let value = parse_value(M::LOG, ol1, &display_trimmed, &display_str);
+    let value = parse_value(M::LOG, ol1, &display_trimmed, M::setup_screen(status_bytes));
 
     Ok(Measurement {
         mode,

@@ -3,6 +3,7 @@ mod expect;
 pub(crate) mod framing;
 pub mod registry;
 pub(crate) mod steps;
+pub(crate) mod unrecognised;
 pub(crate) mod ut171;
 pub(crate) mod ut181a;
 pub(crate) mod ut80x;
@@ -14,6 +15,8 @@ pub(crate) mod ut8803;
 pub(crate) mod vc8x0;
 
 pub use expect::{Expect, RangeExpect, ValueExpect};
+#[doc(hidden)]
+pub use unrecognised::capture_reports;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;

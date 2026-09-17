@@ -16,12 +16,13 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
     unknown_mode,
 };
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 
 /// UT8802 position code table: (code, mode_name, unit, range_label).
@@ -344,7 +345,11 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         match trimmed.parse::<f64>() {
             Ok(v) => MeasuredValue::Normal(v),
             Err(_) => {
-                warn!("ut8802: could not parse display value: {display_str:?}");
+                report_unknown(
+                    "ut8802",
+                    "display text",
+                    format_args!("{trimmed:?}, shown as OL"),
+                );
                 MeasuredValue::Overload
             }
         }

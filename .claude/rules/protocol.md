@@ -21,7 +21,8 @@ paths:
 
 - `log` crate, structured levels: `TRACE` for raw HID bytes, `DEBUG` for protocol events (request/response/checksum), `INFO` for connection state, `WARN` for recoverable issues (timeouts, retries), `ERROR` for failures.
 - `RUST_LOG=dmm_lib=trace` should give complete wire-level debugging.
-- Never log at `INFO` or above inside the measurement loop.
+- Never log at `INFO` or above inside the measurement loop; per-frame trouble logs at `DEBUG`.
+- Data the spec doesn't cover (display text, a mode or range code, an undefined bit, a frame type) goes through `protocol::unrecognised::report_unknown`, not a bare `warn!` or `debug!`: it warns once per process with a report hint. Only report what is outside the spec and the captures — a documented value, benign or not, stays silent, or every user of that meter sees the warning each session.
 
 ## Dependencies
 

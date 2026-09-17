@@ -276,6 +276,11 @@ impl Vc8x0Model for Vc880Model {
         flags.low_battery = status[3] & 0x08 != 0;
     }
 
+    /// Status byte 6 (payload[33]) bit 1: Setup (spec §4.3).
+    fn setup_screen(status: &[u8]) -> bool {
+        status[6] & 0x02 != 0
+    }
+
     /// The meter streams: a frame is simply there to be read.
     fn read_live_frame(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>> {
         read_live(rx_buf, transport, Self::LOG)
@@ -467,6 +472,25 @@ mod tests {
         let payload = make_payload(0x00, 0x30, b"  1.234", status);
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.low_battery);
+    }
+
+    /// Words on the main display are reported, except on the setup screen,
+    /// where they are the menu rather than a reading.
+    #[test]
+    fn unrecognised_display_text_is_reported_outside_setup() {
+        let payload = make_payload(0x00, 0x30, b"  Err  ", zero_status());
+        let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
+        assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+        assert_eq!(
+            reports,
+            ["vc880: unrecognised display text: \"Err\", shown as OL"]
+        );
+
+        let mut status = zero_status();
+        status[6] = 0x02; // Setup bit
+        let payload = make_payload(0x00, 0x30, b"  Err  ", status);
+        let (_, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     #[test]

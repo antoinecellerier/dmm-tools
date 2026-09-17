@@ -13,12 +13,13 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
     unknown_mode,
 };
 use crate::transport::Transport;
-use log::{debug, warn};
+use log::debug;
 use std::borrow::Cow;
 
 /// UT8803 position coding → (mode_name, acdc, unit_type, unit_mag).
@@ -365,9 +366,10 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     } else if display_trimmed.contains("OL") {
         MeasuredValue::Overload
     } else {
-        warn!(
-            "ut8803: could not parse display value: {:?} (raw: {:02X?})",
-            display_trimmed, display_bytes
+        report_unknown(
+            "ut8803",
+            "display text",
+            format_args!("{display_trimmed:?}, shown as OL"),
         );
         MeasuredValue::Overload
     };

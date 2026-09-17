@@ -7,6 +7,7 @@ use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
 use crate::protocol::registry;
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
     Stability, check_len, cycle, unknown_mode, unknown_mode16, unsupported_setting,
@@ -844,6 +845,26 @@ fn is_overload(display_compact: &str) -> bool {
     display_compact.replace('.', "").contains("OL")
 }
 
+/// What the NCV display shows while no field is detected.
+const NCV_IDLE: &str = "EF";
+
+/// The NCV level on the display, `None` for text that is none of its forms.
+///
+/// The level is drawn as "-" segments, not a digit: "EF" while no field is
+/// detected, one more "-" per level as it grows (manual §13; "   EF  " and
+/// "     - " observed on 2026-09-07). A numeric display is still accepted in
+/// case some firmware sends one.
+fn ncv_level(display_compact: &str) -> Option<u8> {
+    let dashes = display_compact.chars().filter(|c| *c == '-').count() as u8;
+    if dashes > 0 {
+        Some(dashes)
+    } else if display_compact == NCV_IDLE {
+        Some(0)
+    } else {
+        display_compact.parse::<u8>().ok()
+    }
+}
+
 /// Decode the three UT61+ flag bytes (already masked with `& 0x0F`).
 ///
 /// - byte 11 (`flag1`): bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX
@@ -909,16 +930,14 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let display_trimmed = display_raw.trim();
     let display_compact: String = display_trimmed.chars().filter(|c| *c != ' ').collect();
     let value = if mode == Mode::Ncv {
-        // The NCV level is drawn as "-" segments, not a digit: "EF" while no
-        // field is detected, one more "-" per level as it grows (manual §13;
-        // "   EF  " and "     - " observed on 2026-09-07). A numeric display
-        // is still accepted in case some firmware sends one.
-        let dashes = display_compact.chars().filter(|c| *c == '-').count() as u8;
-        let level = if dashes > 0 {
-            dashes
-        } else {
-            display_compact.parse::<u8>().unwrap_or(0)
-        };
+        let level = ncv_level(&display_compact).unwrap_or_else(|| {
+            report_unknown(
+                "ut61eplus",
+                "NCV display text",
+                format_args!("{display_compact:?}, shown as level 0"),
+            );
+            0
+        });
         MeasuredValue::NcvLevel(level)
     } else if is_overload(&display_compact) {
         MeasuredValue::Overload
@@ -926,9 +945,10 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
         match display_compact.parse::<f64>() {
             Ok(v) => MeasuredValue::Normal(v),
             Err(_) => {
-                debug!(
-                    "could not parse display value: {:?} (compact: {:?})",
-                    display_trimmed, display_compact
+                report_unknown(
+                    "ut61eplus",
+                    "display text",
+                    format_args!("{display_compact:?}, shown as OL"),
                 );
                 MeasuredValue::Overload
             }
@@ -1864,6 +1884,44 @@ raw_payload=14"#
                 m.value
             );
         }
+    }
+
+    #[test]
+    fn ncv_level_reads_every_known_form() {
+        assert_eq!(ncv_level("EF"), Some(0));
+        assert_eq!(ncv_level("-"), Some(1));
+        assert_eq!(ncv_level("----"), Some(4));
+        assert_eq!(ncv_level("3"), Some(3));
+        assert_eq!(ncv_level("CUT"), None);
+        assert_eq!(ncv_level(""), None);
+    }
+
+    /// Text no form covers — e.g. the "CUT" the manual says an overheated
+    /// meter shows — still reads as OL, and is reported; the idle "EF" is not.
+    #[test]
+    fn unrecognised_display_text_is_reported() {
+        let table = Ut61ePlusTable::new();
+        let parse = |mode, display: &[u8; 7]| {
+            let payload = make_payload(mode, 0x00, display, (0x00, 0x00), (0x00, 0x00, 0x00));
+            crate::protocol::capture_reports(|| parse_measurement(&payload, &table).unwrap())
+        };
+
+        let (m, reports) = parse(0x06, b"  CUT  ");
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised display text: \"CUT\", shown as OL"]
+        );
+
+        let (m, reports) = parse(0x14, b"  ?!   ");
+        assert!(matches!(m.value, MeasuredValue::NcvLevel(0)));
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised NCV display text: \"?!\", shown as level 0"]
+        );
+
+        let (_, reports) = parse(0x14, b"   EF  ");
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     /// Frames from a UT61B+ capture reported 2026-09-09 (v0.6.0 report, steps

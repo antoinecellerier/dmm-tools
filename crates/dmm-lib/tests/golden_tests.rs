@@ -7,6 +7,8 @@
 //! - `raw_hex`: the sample's `raw_hex` — the payload the reading was parsed from
 //! - `mode`, `value`, `unit`, `range_label`, `flags`: expected parsed fields
 //!
+//! A fixture must also parse without anything reported as unrecognised.
+//!
 //! The `value` field is a string matching capture output:
 //! - Numeric: `"5.678"`, `"-12.345"`
 //! - Overload: `"OL"`
@@ -18,8 +20,8 @@
 //! test rather than being ignored, so a typo can't silently check nothing.
 
 use dmm_lib::flags::Flag;
-use dmm_lib::protocol::Protocol;
 use dmm_lib::protocol::registry::resolve_device;
+use dmm_lib::protocol::{Protocol, capture_reports};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -108,9 +110,14 @@ fn check_fixture(protocol: &dyn Protocol, stem: &str, path: &Path) {
         .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()));
 
     let payload = decode_hex(&case.raw_hex);
-    let measurement = protocol
-        .parse_payload(&payload)
-        .unwrap_or_else(|e| panic!("golden {stem}: parse failed: {e}"));
+    let (parsed, reports) = capture_reports(|| protocol.parse_payload(&payload));
+    let measurement = parsed.unwrap_or_else(|e| panic!("golden {stem}: parse failed: {e}"));
+    // A captured frame is known data by definition: a report here means a
+    // parser check is wrong, and would warn every user who sends this frame.
+    assert!(
+        reports.is_empty(),
+        "golden {stem}: reported as unrecognised: {reports:?}"
+    );
 
     assert_eq!(measurement.mode, case.mode, "golden {stem}: mode mismatch");
     assert_eq!(
