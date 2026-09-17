@@ -65,7 +65,7 @@ pub(crate) fn cmd_capture(
 
     let input = Input::start();
     let (mut report, output_path) =
-        match load_or_create_report(output_override, &device_name, plan_path.as_deref(), &input)? {
+        match load_or_create_report(output_override, device.id, plan_path.as_deref(), &input)? {
             Some(pair) => pair,
             None => return Ok(()),
         };

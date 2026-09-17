@@ -12,9 +12,30 @@ use super::step::{
 };
 use crate::recording::{self, SharedRecorder};
 use console::style;
-use dmm_lib::protocol::Need;
+use dmm_lib::protocol::{Need, Stability};
+
+/// What the status banner says about the model the run was started for: the
+/// headline, and the line under it for a family hardware has not fully
+/// confirmed.
+fn status_banner(stability: Stability) -> (&'static str, Option<&'static str>) {
+    match stability {
+        Stability::Verified => ("supported model", None),
+        Stability::PartlyVerified => (
+            "partly verified \u{2014} connection and main modes confirmed",
+            Some("The modes still unconfirmed are what this run is for."),
+        ),
+        Stability::Experimental => (
+            "experimental \u{2014} the protocol is reverse-engineered, not confirmed",
+            Some("Please complete as many steps as possible and share the report."),
+        ),
+    }
+}
 
 /// Verify that the meter is responding. Returns `(device_name, supported)` on success.
+///
+/// The name is what the meter calls itself, and "unknown" for the families
+/// that answer no name query — the report records it as such, while the file
+/// and the banner name the model the run was started for.
 ///
 /// `known_name` is the name the detection probe already got, when it ran:
 /// the meter has answered once, so it is neither asked again nor made to
@@ -29,12 +50,12 @@ pub(super) fn verify_meter(
         Some(name) => Ok(Some(name)),
         None => dmm.get_name(),
     };
-    let device_name = match name {
-        Ok(Some(name)) => name,
+    let reported = match name {
+        Ok(Some(name)) => Some(name),
         Ok(None) | Err(_) => {
             // get_name failed or unsupported — try a plain measurement as fallback
             match dmm.request_measurement() {
-                Ok(_) => "unknown".to_string(),
+                Ok(_) => None,
                 Err(_) => {
                     eprintln!();
                     eprintln!(
@@ -55,23 +76,31 @@ pub(super) fn verify_meter(
         }
     };
 
-    let supported = dmm.profile().stability == dmm_lib::protocol::Stability::Verified;
-    eprintln!("Device: {}", style(&device_name).bold());
-    if supported {
-        eprintln!("Status: {}", style("supported model").green());
+    match &reported {
+        Some(name) => eprintln!("Device: {}", style(name).bold()),
+        // The model the run was started for, said so it is not read as the
+        // meter's own answer.
+        None => eprintln!(
+            "Device: {} (the meter does not report a name)",
+            style(device.display_name).bold()
+        ),
+    }
+    let stability = dmm.profile().stability;
+    let (headline, detail) = status_banner(stability);
+    if stability.is_verified() {
+        eprintln!("Status: {}", style(headline).green());
     } else {
-        eprintln!(
-            "Status: {}",
-            style("UNKNOWN MODEL — captures are especially valuable!")
-                .yellow()
-                .bold()
-        );
-        eprintln!("        Protocol may differ from the UT61E+. Please complete");
-        eprintln!("        as many steps as possible and share the report.");
+        eprintln!("Status: {}", style(headline).yellow().bold());
+    }
+    if let Some(detail) = detail {
+        eprintln!("        {detail}");
     }
     eprintln!();
 
-    Ok((device_name, supported))
+    Ok((
+        reported.unwrap_or_else(|| "unknown".to_string()),
+        stability.is_verified(),
+    ))
 }
 
 /// What the protocol pass left behind: whether the operator asked to finish,
@@ -457,6 +486,25 @@ mod tests {
     use super::*;
     use crate::capture::report::ConfirmedBy;
     use crate::capture::step::cli_step;
+
+    /// Every model is picked from the registry, so the banner's job is to say
+    /// how far its protocol has been confirmed. It had two branches and told a
+    /// partly verified meter's owner they had an unknown model.
+    #[test]
+    fn the_banner_says_how_far_the_family_is_confirmed() {
+        assert_eq!(
+            status_banner(Stability::Verified),
+            ("supported model", None)
+        );
+
+        let (headline, detail) = status_banner(Stability::PartlyVerified);
+        assert!(headline.starts_with("partly verified"), "{headline}");
+        assert!(detail.unwrap().contains("still unconfirmed"));
+
+        let (headline, detail) = status_banner(Stability::Experimental);
+        assert!(headline.starts_with("experimental"), "{headline}");
+        assert!(detail.unwrap().contains("as many steps as possible"));
+    }
 
     #[test]
     fn review_indices_are_one_based_and_bounded() {

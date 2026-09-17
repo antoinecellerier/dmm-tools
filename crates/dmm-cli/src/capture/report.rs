@@ -618,25 +618,36 @@ fn plan_stem(path: &str) -> String {
         .unwrap_or_else(|| "plan".to_string())
 }
 
-/// Determine the output path and load an existing report (with resume/overwrite prompt)
-/// or create a fresh one. Returns `None` if the user chose to abort.
-pub(super) fn load_or_create_report(
+/// Where the run's report goes: named after the registry id the run was
+/// started for, as the no-response report already is. The meter's own name
+/// would be "unknown" for every family that answers no name query, so a
+/// UT804, a UT171 and a UT181A all wrote `capture-unknown.yaml`.
+pub(super) fn capture_path(
     output_override: Option<String>,
-    device_name: &str,
+    device_id: &str,
     plan_path: Option<&str>,
-    input: &Input,
-) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
-    let auto_path = match plan_path {
+) -> String {
+    output_override.unwrap_or_else(|| match plan_path {
         // A plan run covers a handful of steps nobody else asked for, so it
         // gets its own file rather than resuming into the full report.
         Some(plan) => format!(
             "capture-{}-{}.yaml",
-            slug(device_name),
+            slug(device_id),
             slug(&plan_stem(plan))
         ),
-        None => format!("capture-{}.yaml", slug(device_name)),
-    };
-    let output_path = output_override.unwrap_or(auto_path);
+        None => format!("capture-{}.yaml", slug(device_id)),
+    })
+}
+
+/// Determine the output path and load an existing report (with resume/overwrite prompt)
+/// or create a fresh one. Returns `None` if the user chose to abort.
+pub(super) fn load_or_create_report(
+    output_override: Option<String>,
+    device_id: &str,
+    plan_path: Option<&str>,
+    input: &Input,
+) -> Result<Option<(CaptureReport, String)>, Box<dyn std::error::Error>> {
+    let output_path = capture_path(output_override, device_id, plan_path);
 
     let report = match std::fs::read_to_string(&output_path) {
         Ok(contents) => match serde_yaml_ng::from_str::<CaptureReport>(&contents) {
@@ -1442,6 +1453,22 @@ mod tests {
         upsert_step(&mut report, StepResult::new("hz", "h", StepStatus::Skipped));
         let unverified: std::collections::HashSet<&str> = ["temp", "hz"].into_iter().collect();
         assert_eq!(captured_count(&report, &unverified), 1);
+    }
+
+    /// The families that answer no name query — UT803/UT804, UT171, UT181A —
+    /// all reported themselves as "unknown", so every one of their runs wrote
+    /// `capture-unknown.yaml` and resumed into the last meter's report.
+    #[test]
+    fn the_report_is_named_after_the_device_the_run_was_started_for() {
+        assert_eq!(capture_path(None, "ut804", None), "capture-ut804.yaml");
+        assert_eq!(
+            capture_path(None, "ut804", Some("plans/hz-walk.yaml")),
+            "capture-ut804-hz-walk.yaml"
+        );
+        assert_eq!(
+            capture_path(Some("runs/bench.yaml".to_string()), "ut804", None),
+            "runs/bench.yaml"
+        );
     }
 
     #[test]
