@@ -261,23 +261,89 @@ fn did_nothing(command: &str, last: Option<&Measurement>) -> String {
     }
 }
 
-/// What the operator typed at a step's inline confirmation prompt.
+/// The question asked about a reading the operator can see on the meter, used
+/// by the end-of-run review as well so there is one phrase for it.
+pub(super) const WHAT_SHOWN: &str = "What did the meter show?";
+
+/// What the operator answered at a confirmation prompt.
 #[derive(Debug, PartialEq, Eq)]
 enum Confirmation {
-    /// Empty means the reading matched; anything else is what the LCD showed.
-    Answer(String),
+    /// The reading matched the meter's screen.
+    Yes,
+    /// It did not, so what the meter showed is asked for next.
+    No,
     /// Do the step over: the attempt's samples are dropped.
     Retake,
 }
 
 impl Confirmation {
-    /// `r` on its own is the retake key — no meter shows a bare "r", and a
-    /// typed correction that starts with one still reads as a correction.
-    fn of(answer: String) -> Self {
-        if answer.eq_ignore_ascii_case("r") {
-            Confirmation::Retake
-        } else {
-            Confirmation::Answer(answer)
+    /// The answers this prompt takes, and nothing else: `None` re-asks.
+    ///
+    /// A closed set, because the prompt used to take a correction in the same
+    /// line — so a reporter answering "correct" had that filed as what the
+    /// meter showed, marking the gate step they had just confirmed as failed.
+    ///
+    /// `retake` is false where there is nothing to redo, and `r` is then not
+    /// one of the answers.
+    fn of(answer: &str, retake: bool) -> Option<Self> {
+        match answer.to_ascii_lowercase().as_str() {
+            "" => Some(Confirmation::Yes),
+            "n" | "no" => Some(Confirmation::No),
+            "r" | "retake" if retake => Some(Confirmation::Retake),
+            _ => None,
+        }
+    }
+}
+
+/// What a confirmation prompt settled on.
+pub(super) enum Confirmed {
+    /// What the meter showed when the operator said our reading was wrong —
+    /// blank when they did not say — and `None` when they confirmed it.
+    Reading(Option<String>),
+    /// Do the step over, offered only where the caller asked for it.
+    Retake,
+}
+
+/// Ask whether the reading matched the meter's screen, and what it showed when
+/// it did not.
+///
+/// The closed question comes first and re-asks anything it doesn't recognise,
+/// the way the end-of-run review re-asks a bad index: a word typed here is
+/// never filed as the meter's screen.
+pub(super) fn ask_confirmation(
+    input: &Input,
+    retake: bool,
+) -> Result<Confirmed, Box<dyn std::error::Error>> {
+    let (keys, again) = if retake {
+        (
+            "(Enter = yes, n = no, r = retake)",
+            "Answer n, r, or press Enter.",
+        )
+    } else {
+        ("(Enter = yes, n = no)", "Answer n, or press Enter.")
+    };
+    loop {
+        let answer = input.line(&format!(
+            "  {} ",
+            style(format!("Did the meter show this? {keys}")).dim()
+        ))?;
+        match Confirmation::of(&answer, retake) {
+            Some(Confirmation::Yes) => return Ok(Confirmed::Reading(None)),
+            Some(Confirmation::No) => {
+                let shown = input.line(&format!("  {} ", style(WHAT_SHOWN).dim()))?;
+                // Echoed because this is the answer that marks a gate step as
+                // failed; a plain Enter above records nothing and says nothing.
+                // Saying nothing here is still a mismatch, so it is echoed as
+                // one rather than as a meter showing an empty screen.
+                let recorded = match shown.as_str() {
+                    "" => "recorded: the reading did not match".to_string(),
+                    text => format!("recorded: the meter showed {text:?}"),
+                };
+                eprintln!("  {}", style(recorded).dim());
+                return Ok(Confirmed::Reading(Some(shown)));
+            }
+            Some(Confirmation::Retake) => return Ok(Confirmed::Retake),
+            None => eprintln!("  {}", style(again).yellow()),
         }
     }
 }
@@ -468,20 +534,16 @@ pub(crate) fn run_capture_step(
             //
             // `is_tty`, as the end-of-run review does: a piped run's stdin
             // answers every prompt with the empty line EOF gives, which reads
-            // as "the meter showed exactly this" — and a gate confirmed that
-            // way promotes the run and writes `core_semantics: confirmed`
+            // as "yes, that is what the meter showed" — and a gate confirmed
+            // that way promotes the run and writes `core_semantics: confirmed`
             // into the report without anyone having looked at the meter.
             if interactive && input.is_tty() && trust.confirm_inline(step) {
-                let answer = input.line(&format!(
-                    "  {} ",
-                    style("Enter=correct, r=retake, or type what the meter actually shows:").dim()
-                ))?;
-                match Confirmation::of(answer) {
-                    Confirmation::Retake => {
+                match ask_confirmation(input, true)? {
+                    Confirmed::Retake => {
                         eprintln!("  {}", style("retaking\u{2026}").dim());
                         continue;
                     }
-                    Confirmation::Answer(answer) => Some(answer),
+                    Confirmed::Reading(shown) => Some(shown),
                 }
             } else {
                 None
@@ -524,8 +586,8 @@ pub(crate) fn run_capture_step(
         diagnostics,
         ..StepResult::new(step.id, step.instruction, status)
     };
-    if let Some(answer) = confirmation {
-        result.set_inline_confirmation(answer);
+    if let Some(shown) = confirmation {
+        result.set_inline_confirmation(shown);
     }
 
     upsert_step(report, result);
@@ -732,19 +794,29 @@ mod tests {
         assert!(!needs_attention(&samples, samples.len(), &[]));
     }
 
-    /// The retake key has to be told from a reading typed at the same prompt:
-    /// only a bare `r` redoes the step.
+    /// The prompt takes its own answers and nothing else. It used to take a
+    /// correction on the same line, so a reporter's "correct" was filed as
+    /// what the meter showed — failing the gate step it had just confirmed.
     #[test]
-    fn r_alone_asks_for_a_retake() {
-        assert_eq!(Confirmation::of("r".to_string()), Confirmation::Retake);
-        assert_eq!(Confirmation::of("R".to_string()), Confirmation::Retake);
-        for typed in ["", "5.68 V", "rel", "R 0.5"] {
+    fn the_confirmation_prompt_takes_only_its_own_answers() {
+        assert_eq!(Confirmation::of("", true), Some(Confirmation::Yes));
+        for no in ["n", "N", "no", "No"] {
+            assert_eq!(Confirmation::of(no, true), Some(Confirmation::No), "{no:?}");
+        }
+        for retake in ["r", "R", "retake", "Retake"] {
             assert_eq!(
-                Confirmation::of(typed.to_string()),
-                Confirmation::Answer(typed.to_string()),
-                "{typed:?}"
+                Confirmation::of(retake, true),
+                Some(Confirmation::Retake),
+                "{retake:?}"
             );
         }
+        for typed in ["correct", "yes", "y", "5.68 V", "rel", "R 0.5", "OL"] {
+            assert_eq!(Confirmation::of(typed, true), None, "{typed:?}");
+        }
+        // Where nothing can be redone, `r` is not one of the answers either.
+        assert_eq!(Confirmation::of("r", false), None);
+        assert_eq!(Confirmation::of("", false), Some(Confirmation::Yes));
+        assert_eq!(Confirmation::of("n", false), Some(Confirmation::No));
     }
 
     /// Duplicate IDs would make resume and `--steps` ambiguous, and a step

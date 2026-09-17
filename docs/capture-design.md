@@ -103,9 +103,10 @@ open, DC V shorted, Ω open (OL), Ω across the operator's body, Ω shorted, and
 reading. Those six establish mode byte, digits, decimal point, OL and sign — the body
 reading is the only one that puts non-zero digits on screen, open leads showing OL and
 shorted ones zero. They are tagged `(gate)` in the step header as they
-run, and confirm inline with the existing prompt — Enter means the LCD shows exactly this
-line, otherwise type what it shows. The decision is Enter-or-type everywhere, so nothing
-compares typed digits; a typed correction on a gate step is a mismatch.
+run, and confirm inline: "Did the meter show this?" takes Enter, `n` or `r` and re-asks
+anything else, and only `n` leads to "What did the meter show?", which takes any text. The
+decision is yes-or-no everywhere, so nothing compares typed digits; a mismatch on a gate
+step is a failure whether or not the operator said what the screen held.
 
 `r` at that prompt retakes the step: the attempt's samples are dropped and the same wait
 runs again on the same previous state, so a step captured before the leads were where the
@@ -222,12 +223,15 @@ resolves it" pattern, so the step stays the right unit of verification.
 
 After the protocol steps and before the freeform pass, every reading captured without a
 confirmation is printed as a numbered table (index, step id, the sample's summary line) and
-the user gives the indices that were wrong; LCD text is typed only for those. A run with
-nobody to ask — stderr is not a terminal — skips the review and leaves those steps
-unconfirmed rather than recording agreement nobody gave.
+the user gives the indices that were wrong; LCD text is typed only for those. The inline
+prompt (C) and the freeform pass ask the same way, a closed question first and the text
+after it, so no answer to one is a valid answer to the other. A run with nobody to ask —
+stderr is not a terminal — skips the review and leaves those steps unconfirmed rather than
+recording agreement nobody gave.
 
 Structured fields replace the `screen: "confirmed: …"` string: `confirmed: Option<bool>`,
-`lcd: Option<String>` for the typed correction, and `confirmed_by: inline | batch`. Reports
+`lcd: Option<String>` for the typed correction, and `confirmed_by: inline | batch`. A step
+called wrong with no text typed is a mismatch with no `lcd`, from either prompt. Reports
 carrying the old `screen` string still load, so a resume across versions works.
 
 ## G. Preparation up front

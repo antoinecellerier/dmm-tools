@@ -8,7 +8,8 @@ use super::report::{
     baseline_from_report, needs_attention, save_report, upsert_step,
 };
 use super::step::{
-    CaptureStep, NO_RESPONSE, PrevState, capture_samples, frames_for_step, run_capture_step,
+    CaptureStep, Confirmed, NO_RESPONSE, PrevState, WHAT_SHOWN, ask_confirmation, capture_samples,
+    frames_for_step, run_capture_step,
 };
 use crate::recording::{self, SharedRecorder};
 use console::style;
@@ -376,7 +377,7 @@ pub(super) fn run_batch_review(
     let mut answers: Vec<(String, Option<String>)> = Vec::with_capacity(rows.len());
     for (i, (id, _)) in rows.iter().enumerate() {
         let lcd = if wrong.contains(&i) {
-            Some(input.line(&format!("[{id}] What did the meter show? "))?)
+            Some(input.line(&format!("[{id}] {WHAT_SHOWN} "))?)
         } else {
             None
         };
@@ -389,6 +390,13 @@ pub(super) fn run_batch_review(
 
 /// Samples taken per freeform capture.
 const FREEFORM_SAMPLES: usize = 3;
+
+/// Whether what was typed at the freeform prompt ends the pass rather than
+/// describing a capture. Any word starting with `q` used to end it, so
+/// "quick check on Ω" finished the run.
+fn ends_freeform(desc: &str) -> bool {
+    desc.is_empty() || desc.eq_ignore_ascii_case("q") || desc.eq_ignore_ascii_case("quit")
+}
 
 /// Part 1: Run measurement mode capture steps. Returns true if user wants to quit.
 /// Part 4: Freeform additional captures.
@@ -423,7 +431,7 @@ pub(super) fn run_freeform_captures(
         let desc = input.line(&format!(
             "[extra_{extra}] Describe what you set the meter to (or 'q' to finish): "
         ))?;
-        if desc.is_empty() || desc.to_lowercase().starts_with('q') {
+        if ends_freeform(&desc) {
             break;
         }
 
@@ -447,10 +455,14 @@ pub(super) fn run_freeform_captures(
         }
 
         let confirmation = if let Some(last) = sample_data.last() {
-            Some(input.line(&format!(
-                "  We read: {}\n  Enter=correct, or type correction: ",
-                last.summary()
-            ))?)
+            eprintln!("  We read: {}", style(last.summary()).green());
+            match ask_confirmation(input, false)? {
+                Confirmed::Reading(shown) => Some(shown),
+                // No retake is offered above, so this cannot come back; a step
+                // left unanswered is the one outcome that records nothing the
+                // operator did not say.
+                Confirmed::Retake => None,
+            }
         } else {
             eprintln!("  {NO_RESPONSE}");
             None
@@ -469,8 +481,8 @@ pub(super) fn run_freeform_captures(
             diagnostics,
             ..StepResult::new(&step_id, &desc, status)
         };
-        if let Some(answer) = confirmation {
-            result.set_inline_confirmation(answer);
+        if let Some(shown) = confirmation {
+            result.set_inline_confirmation(shown);
         }
         upsert_step(report, result);
         report.wire_events_dropped = recording::lock(recorder).dropped();
@@ -486,6 +498,19 @@ mod tests {
     use super::*;
     use crate::capture::report::ConfirmedBy;
     use crate::capture::step::cli_step;
+
+    /// The freeform prompt takes a description, so only `q` itself finishes
+    /// the run: any word starting with `q` used to, and "quick check on Ω"
+    /// ended the capture.
+    #[test]
+    fn only_q_itself_finishes_the_freeform_pass() {
+        for quit in ["", "q", "Q", "quit", "QUIT"] {
+            assert!(ends_freeform(quit), "{quit:?}");
+        }
+        for desc in ["quick check", "Q10 range", "qualifying Ω", "dcv"] {
+            assert!(!ends_freeform(desc), "{desc:?}");
+        }
+    }
 
     /// Every model is picked from the registry, so the banner's job is to say
     /// how far its protocol has been confirmed. It had two branches and told a

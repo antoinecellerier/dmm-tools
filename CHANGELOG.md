@@ -54,6 +54,7 @@
 - **Mock modes with sub-values and noise** — `--mock-mode acv-hz`, `temp2`, `temp-diff` and `temp-diff-rev` stand in for a UT181A; `noise` is a spiky DC signal for the graph.
 - **Meter and cable warnings print without setting `RUST_LOG`** — data the tool doesn't recognise now says so once, with where to report it.
 - **A capture report is named after the meter you chose** — every meter that reports no name of its own wrote `capture-unknown.yaml`.
+- **A capture asks whether the reading matched, then what the meter showed** — answering the old prompt "correct" filed that word as a mismatch.
 
 ### Bug fixes
 

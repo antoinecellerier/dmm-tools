@@ -215,21 +215,24 @@ impl StepResult {
         }
     }
 
-    /// Record the operator's answer to the confirmation prompt: empty input
-    /// means our reading matched, anything else is what the meter showed.
-    pub(super) fn set_inline_confirmation(&mut self, input: String) {
-        let confirmed = input.is_empty();
-        self.confirmed = Some(confirmed);
-        self.lcd = (!confirmed).then_some(input);
-        self.confirmed_by = Some(ConfirmedBy::Inline);
+    /// Record a verdict on a captured reading: `None` confirms it, `Some(text)`
+    /// is a mismatch and what the meter showed, which the operator may leave
+    /// blank.
+    fn set_confirmation(&mut self, lcd: Option<String>, by: ConfirmedBy) {
+        self.confirmed = Some(lcd.is_none());
+        self.lcd = lcd.filter(|text| !text.is_empty());
+        self.confirmed_by = Some(by);
+    }
+
+    /// Record the operator's answer to the prompt at the step itself.
+    pub(super) fn set_inline_confirmation(&mut self, lcd: Option<String>) {
+        self.set_confirmation(lcd, ConfirmedBy::Inline);
     }
 
     /// Record the end-of-run review's verdict: `lcd` is what the meter showed,
     /// given only for the readings the operator listed as wrong.
     pub(super) fn set_batch_confirmation(&mut self, lcd: Option<String>) {
-        self.confirmed = Some(lcd.is_none());
-        self.lcd = lcd.filter(|text| !text.is_empty());
-        self.confirmed_by = Some(ConfirmedBy::Batch);
+        self.set_confirmation(lcd, ConfirmedBy::Batch);
     }
 
     /// Fold an older report's free-text `screen` into the structured fields,
@@ -1194,7 +1197,7 @@ mod tests {
     #[test]
     fn pressing_enter_confirms_the_reading() {
         let mut step = StepResult::new("dcv", "test", StepStatus::Captured);
-        step.set_inline_confirmation(String::new());
+        step.set_inline_confirmation(None);
         assert_eq!(step.confirmed, Some(true));
         assert_eq!(step.lcd, None);
         assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
@@ -1205,10 +1208,17 @@ mod tests {
     #[test]
     fn a_typed_correction_records_what_the_meter_showed() {
         let mut step = StepResult::new("dcv", "test", StepStatus::Captured);
-        step.set_inline_confirmation("5.68 V".to_string());
+        step.set_inline_confirmation(Some("5.68 V".to_string()));
         assert_eq!(step.confirmed, Some(false));
         assert_eq!(step.lcd.as_deref(), Some("5.68 V"));
         assert_eq!(step.confirmed_by, Some(ConfirmedBy::Inline));
+
+        // Said to be wrong but typed nothing: still a mismatch, as it is in
+        // the end-of-run review.
+        let mut step = StepResult::new("dcv", "test", StepStatus::Captured);
+        step.set_inline_confirmation(Some(String::new()));
+        assert_eq!(step.confirmed, Some(false));
+        assert_eq!(step.lcd, None);
     }
 
     /// Reports written before the split store the confirmation as free text.
