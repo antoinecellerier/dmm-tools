@@ -16,6 +16,7 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
     unknown_mode,
@@ -23,6 +24,10 @@ use crate::protocol::{
 use crate::transport::Transport;
 use log::{debug, warn};
 use std::borrow::Cow;
+use std::ops::RangeInclusive;
+
+/// Family label for [`report_unknown`].
+const FAMILY: &str = "ut171";
 
 /// Look up the human-readable range label for a (mode, range) pair.
 ///
@@ -111,7 +116,8 @@ fn lookup_mode(byte: u8) -> (Cow<'static, str>, &'static str) {
         0x1D => (Cow::Borrowed("600A AC"), "A"),
         0x24 => (Cow::Borrowed("NCV"), ""),
         _ => {
-            debug!("ut171: unknown mode byte {:#04x}", byte);
+            // §6 lists no other byte. Only the parser calls this.
+            report_unknown(FAMILY, "mode byte", format_args!("{byte:#04x}"));
             (unknown_mode(byte), "")
         }
     }
@@ -140,6 +146,16 @@ const UT171_COMMANDS: &[&str] = &["connect", "pause"];
 /// measurement-sized payload as well
 /// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4).
 const RESPONSE_MEASUREMENT: u8 = 0x02;
+
+/// Payload of a standard measurement frame: length field `0x11` = 17 = 15
+/// payload bytes + the 2-byte checksum
+/// (`docs/research/ut171/reverse-engineered-protocol.md` §3.4, §5.1).
+const STANDARD_PAYLOAD: usize = 15;
+
+/// Payload lengths of the short replies [`RESPONSE_MEASUREMENT`] mentions.
+/// "Lengths 4-8" may count the payload or the length field (payload +
+/// checksum), so both readings are covered.
+const SHORT_REPLY_PAYLOAD: RangeInclusive<usize> = 2..=8;
 
 /// Longest measurement payload this meter can send: the extended frame, whose
 /// length field is `0x17` = 23 = 21 payload bytes + the 2-byte checksum
@@ -202,10 +218,7 @@ impl Protocol for Ut171Protocol {
             // command (AB CD 04 00 0A 01 0F 00: len 4, sum 04+00+0A+01 =
             // 0x000F LE) and gulux/Uni-T-CP2110's capture-driven parser.
             framing::extract_frame_abcd_2byte_le16,
-            // Accept only full measurement frames: type 0x02 at payload[0]
-            // AND a measurement-sized payload — short ack/response frames
-            // share the 0x02 type byte (gulux observes lengths 4-8).
-            |p| p.len() >= 15 && p[0] == RESPONSE_MEASUREMENT,
+            is_measurement_frame,
             FrameErrorRecovery::SkipAndRetry,
             "ut171",
             &framing::HEADER,
@@ -307,6 +320,106 @@ impl Protocol for Ut171Protocol {
     }
 }
 
+/// The stream filter: whether `payload` is a measurement frame, the one
+/// shape [`parse_measurement`] reads.
+///
+/// A measurement frame has type [`RESPONSE_MEASUREMENT`] and at least a
+/// standard frame's payload; the parser judges a longer one. The short
+/// replies that share the type are skipped quietly. Anything else — its
+/// checksum already held, so it is the meter's — is reported: §5 documents
+/// no other frame from the meter, and the driver sends nothing but connect
+/// and pause (`docs/research/ut171/reverse-engineered-protocol.md`).
+fn is_measurement_frame(payload: &[u8]) -> bool {
+    let len = payload.len();
+    match payload.first() {
+        Some(&RESPONSE_MEASUREMENT) if len >= STANDARD_PAYLOAD => return true,
+        Some(&RESPONSE_MEASUREMENT) if SHORT_REPLY_PAYLOAD.contains(&len) => {}
+        Some(kind) => report_unknown(
+            FAMILY,
+            "frame",
+            format_args!("type {kind:#04x}, {len} bytes"),
+        ),
+        None => report_unknown(FAMILY, "frame", format_args!("{len} bytes")),
+    }
+    false
+}
+
+/// Report what a measurement payload carries outside the spec. No UT171
+/// capture is in the repo, so every check rests on the spec alone; the
+/// reading is parsed the same either way.
+///
+/// Sections are `docs/research/ut171/reverse-engineered-protocol.md`.
+fn report_unrecognised_fields(payload: &[u8]) {
+    let len = payload.len();
+    let (flags, frame_type, mode_byte, range_byte) =
+        (payload[1], payload[2], payload[3], payload[4]);
+    // §3.4, §5.1-5.2: a standard frame (type 0x01) carries 15 payload bytes,
+    // an extended one (type 0x03) 21.
+    if !matches!(
+        (frame_type, len),
+        (0x01, STANDARD_PAYLOAD) | (0x03, MAX_MEASUREMENT_PAYLOAD)
+    ) {
+        report_unknown(
+            FAMILY,
+            "frame",
+            format_args!("frame type {frame_type:#04x}, {len} bytes"),
+        );
+    }
+    // §5.4: a mode with a range table sends its indices or 0 (auto). Every
+    // table starts at 1, so a label for 1 is what says the mode has one.
+    if range_byte != 0
+        && lookup_range(mode_byte, range_byte).is_none()
+        && lookup_range(mode_byte, 1).is_some()
+    {
+        report_unknown(
+            FAMILY,
+            "range byte",
+            format_args!("mode {mode_byte:#04x} range {range_byte}"),
+        );
+    }
+    // §5.3: the vendor app reads no bit 4 or 5, and the reading of bits 0
+    // and 3 lost its evidence (`docs/verification-backlog.md`, UT171).
+    if flags & (0x30 | 0x08 | 0x01) != 0 {
+        report_unknown(FAMILY, "flag bits", format_args!("{flags:#04x}"));
+    }
+    // §5.3: bit 1 marks an extended frame.
+    if (flags & 0x02 != 0) != (len == MAX_MEASUREMENT_PAYLOAD) {
+        report_unknown(
+            FAMILY,
+            "flag bits",
+            format_args!("{flags:#04x} on a {len}-byte payload"),
+        );
+    }
+    // §5.1: status2 (wire offset 13) holds 0x40 (DC) and 0x20 (AC); the
+    // byte after it has been seen as 0x00 and 0x01.
+    if payload[9] & !0x60 != 0 {
+        report_unknown(
+            FAMILY,
+            "status byte",
+            format_args!("payload[9] = {:#04x}", payload[9]),
+        );
+    }
+    if payload[10] > 1 {
+        report_unknown(
+            FAMILY,
+            "status byte",
+            format_args!("payload[10] = {:#04x}", payload[10]),
+        );
+    }
+}
+
+/// Report a float slot holding what the spec does not describe.
+fn report_float(what: &'static str, bytes: [u8; 4], mode_byte: u8) {
+    report_unknown(
+        FAMILY,
+        what,
+        format_args!(
+            "{bytes:02X?} = {} in mode {mode_byte:#04x}",
+            f32::from_le_bytes(bytes)
+        ),
+    );
+}
+
 /// Parse a UT171 measurement payload (pure function).
 ///
 /// Payload from the 2-byte-LE-length extractor (standard frame: 21 bytes
@@ -323,13 +436,14 @@ impl Protocol for Ut171Protocol {
 /// - bytes 11-14: aux value (float32 LE)
 /// - extended frames continue with a third float at bytes 17-20 (unparsed)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
-    check_len("ut171", payload, 15)?;
+    check_len("ut171", payload, STANDARD_PAYLOAD)?;
 
     let flags_byte = payload[1];
     let mode_byte = payload[3];
     let range_byte = payload[4];
 
     let (mode, base_unit) = lookup_mode(mode_byte);
+    report_unrecognised_fields(payload);
     let range_label = lookup_range(mode_byte, range_byte).unwrap_or("");
     let unit = display_unit(mode_byte, range_byte, base_unit);
 
@@ -350,8 +464,16 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
 
     let value = if main_float.is_nan() || main_float.is_infinite() {
+        // §5.1 gives the main value as a float and says nothing of how an
+        // overload is sent: a non-finite one is our guess.
+        report_float("float", main_bytes, mode_byte);
         MeasuredValue::Overload
     } else if mode == "NCV" {
+        // §6 names the NCV mode but not its value; a level is a whole number
+        // that fits the u8 it becomes.
+        if !(0.0..=255.0).contains(&main_float) || main_float.fract() != 0.0 {
+            report_float("float", main_bytes, mode_byte);
+        }
         MeasuredValue::NcvLevel(main_float as u8)
     } else {
         MeasuredValue::Normal(main_float as f64)
@@ -379,10 +501,16 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // aux slot don't emit a spurious "Aux: 0" entry.
     let aux_bytes: [u8; 4] = [payload[11], payload[12], payload[13], payload[14]];
     let aux_float = f32::from_le_bytes(aux_bytes);
+    // 0x03 = V AC, 0x06 = mV AC
+    let aux_is_frequency = matches!(mode_byte, 0x03 | 0x06);
+    // §5.1 describes the aux float only as the frequency on those two modes:
+    // a non-zero one elsewhere, or a non-finite one anywhere, is new.
+    if !aux_float.is_finite() || (aux_float != 0.0 && !aux_is_frequency) {
+        report_float("aux value", aux_bytes, mode_byte);
+    }
     let mut aux_values = Vec::new();
     if aux_float.is_finite() && aux_float != 0.0 {
-        // 0x03 = V AC, 0x06 = mV AC
-        let (aux_label, aux_unit) = if matches!(mode_byte, 0x03 | 0x06) {
+        let (aux_label, aux_unit) = if aux_is_frequency {
             ("Frequency", "kHz")
         } else {
             ("Aux", "")
@@ -895,5 +1023,339 @@ raw_payload=15"#
     fn a_frame_of_another_type_identifies_nothing() {
         let frame = framing::test_frame_le16(&[0x01, 0x00, 0x00, 0x00]);
         assert_eq!(recognised(&frame, &Probing::default()), None);
+    }
+
+    // --- Unrecognised data (protocol::unrecognised) -----------------------
+
+    use crate::protocol::capture_reports;
+    use crate::transport::mock::MockTransport;
+
+    /// Parse `payload`, keeping what it reported.
+    fn parse_reporting(payload: &[u8]) -> (Result<Measurement>, Vec<String>) {
+        capture_reports(|| parse_measurement(payload))
+    }
+
+    /// An extended frame (§5.2): flags bit 1, frame type 0x03, then the two
+    /// extra-flag bytes and the third float.
+    fn make_extended_payload(mode: u8, value: f32, flags: u8, third: f32) -> Vec<u8> {
+        let mut payload = make_payload(mode, 0x00, value, flags | 0x02);
+        payload[2] = 0x03;
+        payload.extend_from_slice(&[0x00, 0x00]);
+        payload.extend_from_slice(&third.to_le_bytes());
+        payload
+    }
+
+    /// The payloads the tests above parse cleanly, and the forms §5 documents:
+    /// every flag bit it reads, both status2 values, byte 10 at 1, the aux
+    /// frequency, an extended frame.
+    fn documented_payloads() -> Vec<Vec<u8>> {
+        let mut payloads = vec![
+            make_payload(0x02, 0x01, 12.345, 0x00),
+            make_payload(0x0A, 0x01, 470.5, 0x00),
+            make_payload(0x0A, 0x02, 4.705, 0x00),
+            make_payload(0x0A, 0x05, 5.99, 0x00),
+            make_payload(0x02, 0x01, 1.0, 0x80),
+            make_payload(0x02, 0x01, 1.0, 0x40),
+            make_payload(0x02, 0x01, 1.0, 0x04),
+            make_payload(0x02, 0x01, 1.0, 0xC4),
+            make_payload(0x24, 0x00, 3.0, 0x00),
+            make_payload(0x24, 0x00, 0.0, 0x00),
+            make_payload(0x24, 0x00, 255.0, 0x00),
+            make_payload(0x0F, 0x01, 50.0, 0x00),
+            make_payload(0x0F, 0x00, 50.0, 0x00),
+            make_payload(0x13, 0x01, 100.0, 0x00),
+            make_payload_with_aux(0x03, 0x00, 230.0, 0x00, 50.0),
+            make_payload_with_aux(0x06, 0x00, 12.5, 0x00, 1.25),
+            make_payload_with_aux(0x02, 0x00, 12.345, 0x00, 0.0),
+            make_extended_payload(0x03, 230.0, 0x00, 230.1),
+            make_extended_payload(0x04, 230.0, 0x80, 230.1),
+        ];
+        for (status2, byte10) in [(0x40, 0x00), (0x20, 0x01), (0x60, 0x00)] {
+            let mut payload = make_payload(0x02, 0x01, 1.5, 0x00);
+            payload[9] = status2;
+            payload[10] = byte10;
+            payloads.push(payload);
+        }
+        for (mode, ranges) in [
+            (0x08, 1),
+            (0x09, 8),
+            (0x0E, 1),
+            (0x0F, 7),
+            (0x11, 2),
+            (0x12, 2),
+            (0x14, 2),
+            (0x15, 2),
+            (0x17, 2),
+        ] {
+            for range in 1..=ranges {
+                payloads.push(make_payload(mode, range, 0.0, 0x00));
+            }
+        }
+        for mode in (0x01..=0x1D).chain([0x24]) {
+            payloads.push(make_payload(mode, 0x01, 1.0, 0x00));
+        }
+        payloads
+    }
+
+    #[test]
+    fn documented_payloads_report_nothing() {
+        for payload in documented_payloads() {
+            let (m, reports) = parse_reporting(&payload);
+            assert!(m.is_ok(), "{payload:02X?}: {m:?}");
+            assert!(reports.is_empty(), "{payload:02X?}: {reports:?}");
+        }
+    }
+
+    /// Short replies of the measurement type (the note on
+    /// [`RESPONSE_MEASUREMENT`]) are skipped on the way to a reading without
+    /// a word, whichever way their length is counted.
+    #[test]
+    fn short_replies_on_the_stream_report_nothing() {
+        let mut proto = Ut171Protocol::new();
+        let mut frames: Vec<Vec<u8>> = SHORT_REPLY_PAYLOAD
+            .map(|len| {
+                let mut reply = vec![0x00; len];
+                reply[0] = RESPONSE_MEASUREMENT;
+                framing::test_frame_le16(&reply)
+            })
+            .collect();
+        frames.push(framing::test_frame_le16(&make_payload(
+            0x02, 0x01, 12.345, 0x00,
+        )));
+        frames.push(framing::test_frame_le16(&make_extended_payload(
+            0x03, 230.0, 0x00, 230.1,
+        )));
+        let mock = MockTransport::new(frames);
+        let (first, reports) = capture_reports(|| {
+            proto.init(&mock).unwrap();
+            proto.request_measurement(&mock)
+        });
+        assert_eq!(first.unwrap().mode, "V DC");
+        assert!(reports.is_empty(), "{reports:?}");
+        let (second, reports) = capture_reports(|| proto.request_measurement(&mock));
+        assert_eq!(second.unwrap().mode, "V AC");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A frame of another type, or of the measurement type but neither a
+    /// short reply nor a reading, is skipped and reported.
+    #[test]
+    fn unknown_frames_on_the_stream_are_reported() {
+        let mut proto = Ut171Protocol::new();
+        let mut short = vec![0x00; 12];
+        short[0] = RESPONSE_MEASUREMENT;
+        let mock = MockTransport::new(vec![
+            framing::test_frame_le16(&[0x01, 0x4F, 0x4B, 0x00]),
+            framing::test_frame_le16(&short),
+            framing::test_frame_le16(&[RESPONSE_MEASUREMENT]),
+            framing::test_frame_le16(&[]),
+            framing::test_frame_le16(&make_payload(0x02, 0x01, 12.345, 0x00)),
+        ]);
+        let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
+        assert_eq!(m.unwrap().display_raw.as_deref(), Some("12.345"));
+        assert_eq!(
+            reports,
+            [
+                "ut171: unrecognised frame: type 0x01, 4 bytes",
+                "ut171: unrecognised frame: type 0x02, 12 bytes",
+                "ut171: unrecognised frame: type 0x02, 1 bytes",
+                "ut171: unrecognised frame: 0 bytes",
+            ]
+        );
+    }
+
+    /// §3.4 and §5.1-5.2 pair frame type 0x01 with 15 payload bytes and 0x03
+    /// with 21.
+    #[test]
+    fn a_payload_of_neither_frame_shape_is_reported() {
+        let mut long_standard = make_extended_payload(0x02, 1.5, 0x00, 0.0);
+        long_standard[2] = 0x01;
+        let mut short_extended = make_payload(0x02, 0x01, 1.5, 0x00);
+        short_extended[2] = 0x03;
+        let mut sixteen = make_payload(0x02, 0x01, 1.5, 0x00);
+        sixteen.push(0x00);
+        let mut type_two = make_payload(0x02, 0x01, 1.5, 0x00);
+        type_two[2] = 0x02;
+        for (payload, report) in [
+            (long_standard, "frame type 0x01, 21 bytes"),
+            (short_extended, "frame type 0x03, 15 bytes"),
+            (sixteen, "frame type 0x01, 16 bytes"),
+            (type_two, "frame type 0x02, 15 bytes"),
+        ] {
+            let (m, reports) = parse_reporting(&payload);
+            assert_eq!(m.unwrap().display_raw.as_deref(), Some("1.5"));
+            assert_eq!(reports, [format!("ut171: unrecognised frame: {report}")]);
+        }
+    }
+
+    #[test]
+    fn an_unknown_mode_byte_is_reported() {
+        for mode in [0x00u8, 0x1E, 0x23, 0x25, 0x30] {
+            let payload = make_payload(mode, 0x01, 1.0, 0x00);
+            let (m, reports) = parse_reporting(&payload);
+            assert_eq!(m.unwrap().mode, format!("Unknown({mode:#04x})"));
+            assert_eq!(
+                reports,
+                [format!("ut171: unrecognised mode byte: {mode:#04x}")]
+            );
+        }
+    }
+
+    /// The first index past each §5.4 table is reported; auto (0) and modes
+    /// without a table are not.
+    #[test]
+    fn a_range_past_the_mode_s_table_is_reported() {
+        for (mode, last) in [
+            (0x08u8, 1u8),
+            (0x09, 8),
+            (0x0E, 1),
+            (0x0F, 7),
+            (0x11, 2),
+            (0x12, 2),
+            (0x14, 2),
+            (0x15, 2),
+            (0x17, 2),
+        ] {
+            let (m, reports) = parse_reporting(&make_payload(mode, last + 1, 1.0, 0x00));
+            let m = m.unwrap();
+            assert_eq!(m.range_label, "", "mode {mode:#04x}");
+            assert_eq!(m.range_raw, last + 1);
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut171: unrecognised range byte: mode {mode:#04x} range {}",
+                    last + 1
+                )]
+            );
+            let (_, reports) = parse_reporting(&make_payload(mode, 0x00, 1.0, 0x00));
+            assert!(reports.is_empty(), "mode {mode:#04x}: {reports:?}");
+        }
+        for mode in [0x02, 0x0A, 0x13, 0x18] {
+            let (_, reports) = parse_reporting(&make_payload(mode, 9, 1.0, 0x00));
+            assert!(reports.is_empty(), "mode {mode:#04x}: {reports:?}");
+        }
+    }
+
+    /// §5.3 leaves bits 4-5 unread, and bits 0 and 3 have no evidence left.
+    #[test]
+    fn undefined_flag_bits_are_reported() {
+        for (flags, report) in [
+            (0x01, "0x01"),
+            (0x08, "0x08"),
+            (0x10, "0x10"),
+            (0x20, "0x20"),
+            (0x89, "0x89"),
+        ] {
+            let (m, reports) = parse_reporting(&make_payload(0x02, 0x01, 1.0, flags));
+            let m = m.unwrap();
+            assert_eq!(m.flags.hold, flags & 0x80 != 0);
+            assert!(m.flags.auto_range);
+            assert_eq!(
+                reports,
+                [format!("ut171: unrecognised flag bits: {report}")]
+            );
+        }
+    }
+
+    /// §5.3: bit 1 marks an extended frame.
+    #[test]
+    fn flag_bit_1_disagreeing_with_the_frame_size_is_reported() {
+        let (m, reports) = parse_reporting(&make_payload(0x02, 0x01, 1.0, 0x02));
+        assert!(m.unwrap().flags.auto_range);
+        assert_eq!(
+            reports,
+            ["ut171: unrecognised flag bits: 0x02 on a 15-byte payload"]
+        );
+
+        let mut payload = make_extended_payload(0x03, 230.0, 0x00, 230.1);
+        payload[1] = 0x00;
+        let (m, reports) = parse_reporting(&payload);
+        assert_eq!(m.unwrap().mode, "V AC");
+        assert_eq!(
+            reports,
+            ["ut171: unrecognised flag bits: 0x00 on a 21-byte payload"]
+        );
+    }
+
+    /// §5.1: status2 holds 0x40 and 0x20; the byte after it 0x00 or 0x01.
+    #[test]
+    fn undocumented_status_bytes_are_reported() {
+        for (offset, byte, report) in [
+            (9, 0x80, "payload[9] = 0x80"),
+            (9, 0x41, "payload[9] = 0x41"),
+            (10, 0x02, "payload[10] = 0x02"),
+            (10, 0xFF, "payload[10] = 0xff"),
+        ] {
+            let mut payload = make_payload(0x02, 0x01, 1.5, 0x00);
+            payload[offset] = byte;
+            let (m, reports) = parse_reporting(&payload);
+            assert_eq!(m.unwrap().display_raw.as_deref(), Some("1.5"));
+            assert_eq!(
+                reports,
+                [format!("ut171: unrecognised status byte: {report}")]
+            );
+        }
+    }
+
+    /// §5.1 says nothing of how an overload is sent: it still reads as OL.
+    #[test]
+    fn a_non_finite_main_value_is_reported_and_still_overload() {
+        for value in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let (m, reports) = parse_reporting(&make_payload(0x0A, 0x01, value, 0x00));
+            assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut171: unrecognised float: {:02X?} = {value} in mode 0x0a",
+                    value.to_le_bytes()
+                )]
+            );
+        }
+    }
+
+    #[test]
+    fn an_ncv_level_that_is_not_a_whole_byte_is_reported() {
+        for (value, level) in [(3.5f32, 3u8), (256.0, 255), (-1.0, 0)] {
+            let (m, reports) = parse_reporting(&make_payload(0x24, 0x00, value, 0x00));
+            assert!(
+                matches!(m.as_ref().unwrap().value, MeasuredValue::NcvLevel(l) if l == level),
+                "{m:?}"
+            );
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut171: unrecognised float: {:02X?} = {value} in mode 0x24",
+                    value.to_le_bytes()
+                )]
+            );
+        }
+    }
+
+    /// §5.1 has the aux float only as V AC / mV AC's frequency.
+    #[test]
+    fn an_aux_value_outside_the_ac_voltage_modes_is_reported() {
+        let (m, reports) = parse_reporting(&make_payload_with_aux(0x02, 0x01, 1.5, 0x00, 2.5));
+        let m = m.unwrap();
+        assert_eq!(m.aux_values.len(), 1);
+        assert_eq!(m.aux_values[0].label, "Aux");
+        assert_eq!(
+            reports,
+            [format!(
+                "ut171: unrecognised aux value: {:02X?} = 2.5 in mode 0x02",
+                2.5f32.to_le_bytes()
+            )]
+        );
+
+        for (mode, aux) in [(0x03, f32::NAN), (0x02, f32::INFINITY)] {
+            let (m, reports) = parse_reporting(&make_payload_with_aux(mode, 0x00, 1.5, 0x00, aux));
+            assert!(m.unwrap().aux_values.is_empty());
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut171: unrecognised aux value: {:02X?} = {aux} in mode {mode:#04x}",
+                    aux.to_le_bytes()
+                )]
+            );
+        }
     }
 }
