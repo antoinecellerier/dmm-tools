@@ -18,7 +18,7 @@ is probed with, and how well that probe is backed:
 | UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 16- or 22-byte payload | Deduced from the vendor traces, unverified |
 | UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
 | UT8803 | nothing — the meter streams | `AB CD` frame, byte 3 `0x02`, 21-byte checksum | Deduced from the vendor traces, unverified |
-| UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, taken as a UT804; a UT803 (19200 baud) is not detected | Packets seen from [issue #16](https://github.com/antoinecellerier/dmm-tools/issues/16)'s UT804; detection itself unverified |
+| UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, taken as a UT804; a UT803 (19200 baud) is not detected | ~~detection unverified~~ — **VERIFIED** 2026-09-17 by @clazie on a real UT804 (UT-D04 / CH9325): `detect: ut804 identified from 11 received bytes during ut80x stream`, then `connected to UNI-T UT804`. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The UT803 is still undetectable by design |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
 
@@ -736,13 +736,38 @@ plus what no step reaches.
   `remote control unreliable on this meter` line if it appears — those are
   the commands this meter refused
 
-**UT803 / UT804 (CH9325 HID, proprietary structured packets)** — IMPLEMENTED, NEEDS HARDWARE VERIFICATION:
+**UT803 / UT804 (CH9325 HID, proprietary structured packets)** — UT804 PARTLY
+VERIFIED (DC V and detection, 2026-09-17), UT803 IMPLEMENTED AND NEEDS
+HARDWARE VERIFICATION:
+- ~~**Readings on a real meter**~~ — **VERIFIED** 2026-09-17 by @clazie on a
+  real UT804 (UT-D04 / CH9325). `debug --count 5` and a `capture` `dcv` step
+  each returned five DC V readings with no errors, and the reporter confirmed
+  the last capture sample against the LCD. See
+  [#16](https://github.com/antoinecellerier/dmm-tools/issues/16).
+- **Nine dial positions read correctly on screen only, with no frames**: the
+  reporter turned a UT804 through DC V, AC V, DC mV, Ω, capacitance,
+  temperature, DC µA, DC mA and DC A in the GUI on Windows and reported
+  correct readings for all nine (2026-09-17, [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)).
+  Nothing was recorded, so this is an eyes-on-screen report and not
+  frame-level evidence: the mode, range and flag items below stay open until
+  a capture carries the packets.
+- ~~**CH9325 on Windows**~~ — **VERIFIED** 2026-09-17 by @clazie: the same
+  meter and cable ran under the Windows GUI as well as Linux Mint, with no
+  driver installed, which is what `docs/setup.md` tells users to expect of a
+  plain HID cable. Windows was verified before over CP2110 only
+  ([#1](https://github.com/antoinecellerier/dmm-tools/issues/1), UT61E+), so
+  this is the CH9325's first run on anything but Linux. macOS is still open
+  for every bridge but CP2110 ([#2](https://github.com/antoinecellerier/dmm-tools/issues/2)).
 - **Handler decompile (2026-09-16, spec §2)** — the form's event
   handlers, missed by the first decompile, change what the driver needs:
   - ~~**Wire format**~~ **Fixed 2026-09-17**: both apps' `USB Connect`
     and RS232 handlers take 11-byte packets (9 data bytes, CR, LF) and
     use only low nibbles; the 14-byte index-nibble check belongs to an
-    unused UT60A/B/C path. The driver now splits the stream on CR LF
+    unused UT60A/B/C path. The driver now splits the stream on CR LF.
+    **VERIFIED** 2026-09-17 by @clazie on a real UT804 (UT-D04 / CH9325):
+    every packet in the `debug` and `capture` runs was 11 bytes ending
+    `0D 8A` and decoded. See
+    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
   - **UT803 rate**: the UT803 app sets 19200 on the CH9325 and on its
     serial port, and the UT803 manual gives 19200 7O1.
     `transport/ch9325.rs` tries 2400 first and takes any report as an
@@ -781,7 +806,11 @@ plus what no step reaches.
   - ~~**Wire format**~~ **Fixed 2026-09-17**: both give UT71x — 11
     bytes, 2400 7O1, `0x30`-`0x3F` characters, CR LF — and #16's UT804
     sends exactly that (`3x`/`Bx` bytes, then `0D 8A`). The driver
-    splits on CR LF with bit 7 masked. The UT803 was not cross-checked
+    splits on CR LF with bit 7 masked. **VERIFIED** 2026-09-17 by @clazie
+    on a real UT804 (UT-D04 / CH9325): that framing carried readings end
+    to end at 2400 baud. See
+    [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The
+    UT803 was not cross-checked
   - **Overload**: `UT804.LOG` reads `::0<:` (nibbles A A 0 C A) as
     overload and the 4-20 mA underflow `:<0::` as "L0", as the vendor
     does and, since the fix above, our parser

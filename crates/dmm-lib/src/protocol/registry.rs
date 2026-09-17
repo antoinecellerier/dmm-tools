@@ -572,12 +572,14 @@ mod tests {
     /// The models real hardware has answered for: our UT61E+, and the UT61B+
     /// from two captures reported in issue #19 (2026-09-09 and 2026-09-10).
     /// The UT181A has run for its main modes only, so it is PartlyVerified
-    /// (see its profile); everything else must stay flagged so the GUI shows
-    /// the EXPERIMENTAL badge and links to the verification issue.
+    /// (see its profile); so is the UT804, from one reporter's meter on
+    /// 2026-09-17 (issue #16), where DC V and auto-detection answered and the
+    /// other dial positions did not. Everything else must stay flagged so the
+    /// GUI shows the EXPERIMENTAL badge and links to the verification issue.
     #[test]
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+"];
-        const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        const PARTLY_VERIFIED: &[&str] = &["ut181a", "ut804"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

@@ -612,7 +612,7 @@ impl Ut80xProtocol {
             profile: DeviceProfile {
                 family_name: "UT803/UT804",
                 model_name: "UNI-T UT804",
-                stability: Stability::Experimental,
+                stability: Stability::PartlyVerified,
                 supported_commands: COMMANDS,
                 max_aux_values: 0,
                 verification_issue: Some(16),
@@ -693,7 +693,9 @@ impl Protocol for Ut80xProtocol {
         );
 
         vec![
-            dcv,
+            // A UT804 walked this step on 2026-09-17 (issue #16); the UT803
+            // shares the list but has never answered.
+            dcv.verified_if(!ut803),
             dcv_short,
             dcv_negative,
             CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
