@@ -4,7 +4,7 @@ publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settings schema, durable writes, export shapes and names"
+description = "What dmm-cli and dmm-gui share and dmm-lib must not carry: settings schema, durable writes, export shapes and names, log setup"
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }
@@ -14,6 +14,8 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["preserve_order"] }
 directories.workspace = true
 chrono.workspace = true
+env_logger.workspace = true
+log.workspace = true
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }

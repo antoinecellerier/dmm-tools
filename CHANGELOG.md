@@ -34,6 +34,7 @@
 - **The status line, hints and toolbar captions are larger**
 - **Always on top says it is unavailable on Wayland** — the checkbox and `Ctrl+T` toggled a setting that did nothing there.
 - **Cable-not-found help suggests another USB port** — on Windows the steps stopped at the driver download.
+- **Meter and cable warnings print to the terminal without setting `RUST_LOG`** — data the app doesn't recognise now says so once, with where to report it.
 
 ### CLI
 
@@ -50,6 +51,7 @@
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values and noise** — `--mock-mode acv-hz`, `temp2`, `temp-diff` and `temp-diff-rev` stand in for a UT181A; `noise` is a spiky DC signal for the graph.
+- **Meter and cable warnings print without setting `RUST_LOG`** — data the tool doesn't recognise now says so once, with where to report it.
 
 ### Bug fixes
 

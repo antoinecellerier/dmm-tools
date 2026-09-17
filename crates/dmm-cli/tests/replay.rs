@@ -572,3 +572,69 @@ fn naming_a_device_alongside_a_replay_is_refused() {
     assert!(!ok, "expected a refusal");
     assert!(stderr.contains("names its own meter"), "got {stderr}");
 }
+
+/// Every recording the repo ships is real meter data: played with the default
+/// log level, none of it may be reported as unrecognised — or warn at all.
+#[test]
+fn the_bundled_recordings_play_without_a_warning() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/replays");
+    let mut played = 0;
+    for entry in std::fs::read_dir(&dir).expect("assets/replays") {
+        let path = entry.expect("dir entry").path();
+        if path.extension().is_none_or(|e| e != "replay") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).expect("read recording");
+        let frames = text.lines().filter(|l| !l.starts_with('#')).count();
+        let (_, stderr, ok) = run(&[
+            "read",
+            "--replay",
+            path.to_str().expect("utf-8 path"),
+            "--count",
+            &frames.to_string(),
+            "--format",
+            "csv",
+            "--mock-clock-preseed",
+            "3600",
+        ]);
+        assert!(ok, "{}: {stderr}", path.display());
+        assert!(!stderr.contains("WARN"), "{}: {stderr}", path.display());
+        played += 1;
+    }
+    assert!(played > 0, "no recordings in {}", dir.display());
+}
+
+/// A display the parser can't read warns once, by default, with where to
+/// report it — not once per frame.
+#[test]
+fn unrecognised_data_warns_once_by_default() {
+    let path = recording_of(
+        &dir_for("unrecognised"),
+        "\
+# dmm-replay 1
+# device: ut61eplus
+# recorded: 2026-09-02T10:00:00Z
+# model: UT61E+
+0 02 30 20 20 43 55 54 20 20 00 00 30 30 30
+100 02 30 20 20 43 55 54 20 20 00 00 30 30 30
+200 02 30 20 20 43 55 54 20 20 00 00 30 30 30
+",
+    );
+    let (stdout, stderr, ok) = read_csv(&path, &[]);
+    assert!(ok, "replay failed: {stderr}");
+    assert_eq!(stdout.matches(",OL,").count(), 3, "got {stdout}");
+    assert_eq!(
+        stderr
+            .matches("unrecognised display text: \"CUT\", shown as OL")
+            .count(),
+        1,
+        "got {stderr}"
+    );
+    assert_eq!(
+        stderr
+            .matches("https://github.com/antoinecellerier/dmm-tools/issues")
+            .count(),
+        1,
+        "got {stderr}"
+    );
+}

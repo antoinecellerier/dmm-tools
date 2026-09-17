@@ -346,7 +346,7 @@ pub(crate) enum StepListFormat {
 }
 
 fn main() {
-    env_logger::init();
+    dmm_shared::logging::init();
 
     // Build CLI with registry-generated --device long_help and a dynamic
     // after_long_help that resolves the actual per-platform settings path.
@@ -593,7 +593,8 @@ fn build_after_long_help() -> String {
          \x20   3. auto \u{2014} detect the meter over the USB cable\n\
          \n\
          ENVIRONMENT:\n\
-         \x20 RUST_LOG    Log filter. Use `dmm_lib=trace` for wire-level debugging.\n\
+         \x20 RUST_LOG    Log filter. Unset, dmm_lib warnings and all errors are shown.\n\
+         \x20             Use `dmm_lib=trace` for wire-level debugging.\n\
          \x20 NO_COLOR    Set to 1 to disable colored terminal output.\n\
          \n\
          Help / GitHub: https://github.com/antoinecellerier/dmm-tools",

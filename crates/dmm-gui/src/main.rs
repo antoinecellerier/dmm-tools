@@ -404,7 +404,7 @@ fn write_if_changed(path: &std::path::Path, content: &[u8]) -> bool {
 }
 
 fn main() -> eframe::Result<()> {
-    env_logger::init();
+    dmm_shared::logging::init();
 
     #[cfg(target_os = "linux")]
     install_desktop_integration();

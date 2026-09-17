@@ -11,9 +11,9 @@
 //! [`config_path`], and [`resolve_device_family`] — the precedence both apply
 //! to the file); durable writes ([`write_atomic`], since settings, capture
 //! reports and exports are all user data that must survive a crash
-//! mid-write); and [`export`], the shape and file name of what the two write
+//! mid-write); [`export`], the shape and file name of what the two write
 //! out, so a reading saved from the GUI and one written by the CLI read the
-//! same. The canonical settings location is
+//! same; and [`logging`], the log levels both start with. The canonical settings location is
 //! `<XDG_CONFIG_HOME>/dmm-tools/settings.json` on Linux and the equivalent
 //! platform path on macOS and Windows (computed via `directories`).
 //!
@@ -23,6 +23,7 @@
 //! into the same flat JSON on disk via `#[serde(flatten)]`.
 
 pub mod export;
+pub mod logging;
 
 use serde::{Deserialize, Serialize};
 use std::fs;

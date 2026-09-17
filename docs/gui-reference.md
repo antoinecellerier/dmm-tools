@@ -469,6 +469,8 @@ do not modify the persisted `settings.json`.
 | `-V`, `--version` | Print version and exit. |
 | `-h`, `--help` | Print help and exit. |
 
+When started from a terminal, dmm-gui logs there as [dmm-cli](cli-reference.md#environment-variables) does, with `RUST_LOG` setting the filter.
+
 ## Accessibility
 
 ### Visual

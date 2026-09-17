@@ -567,7 +567,7 @@ dmm-cli completions powershell >> $PROFILE
 
 | Variable | Description |
 |---|---|
-| `RUST_LOG` | Controls log verbosity. Use `dmm_lib=trace` for wire-level debugging. |
+| `RUST_LOG` | Log filter. Unset, warnings from the meter library and errors from everything else are shown. Use `dmm_lib=trace` for wire-level debugging. |
 | `NO_COLOR` | Set to `1` to disable colored terminal output. |
 
 ## Appendix
