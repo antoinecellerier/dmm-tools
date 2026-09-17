@@ -176,6 +176,10 @@ pub struct Recording {
     /// format. Compared against `samples.len()` to tell whether discarding the
     /// buffer would lose anything the user hasn't saved.
     exported_count: usize,
+    /// Which filling of the buffer the samples belong to, bumped whenever it
+    /// is emptied for a new one. An export names the epoch it rendered, so a
+    /// save dialog that outlives its buffer cannot mark the next one saved.
+    epoch: u64,
     /// Most sub-values any buffered sample carries. The export sizes its aux
     /// columns from the device profile, but a profile is only known while
     /// connected — this is the floor that keeps a capture exportable in full
@@ -200,6 +204,7 @@ impl Recording {
             samples: VecDeque::new(),
             start_time: None,
             exported_count: 0,
+            epoch: 0,
             max_aux_seen: 0,
             max_samples: DEFAULT_MAX_SAMPLES,
         }
@@ -226,9 +231,15 @@ impl Recording {
         if self.active {
             self.samples.clear();
             self.exported_count = 0;
+            self.epoch += 1;
             self.max_aux_seen = 0;
             self.start_time = Some(now);
         }
+    }
+
+    /// The buffer's current filling — see `epoch`.
+    pub fn epoch(&self) -> u64 {
+        self.epoch
     }
 
     /// Most sub-values any buffered sample carries — see `max_aux_seen`.
@@ -244,13 +255,17 @@ impl Recording {
         self.samples.len().saturating_sub(self.exported_count)
     }
 
-    /// Record that the first `count` samples reached a file.
+    /// Record that the first `count` samples of `epoch` reached a file.
     ///
     /// Takes the count that was actually written rather than the current
     /// length: samples arriving while the export ran are not in that file and
-    /// must still count as unexported.
-    pub fn mark_exported(&mut self, count: usize) {
-        self.exported_count = count.min(self.samples.len());
+    /// must still count as unexported. An export of an earlier epoch marks
+    /// nothing — the samples it wrote are gone, and the ones in their place
+    /// are in no file.
+    pub fn mark_exported(&mut self, epoch: u64, count: usize) {
+        if epoch == self.epoch {
+            self.exported_count = count.min(self.samples.len());
+        }
     }
 
     /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
@@ -395,7 +410,7 @@ mod tests {
         }
         assert_eq!(r.unexported_count(), 3);
 
-        r.mark_exported(3);
+        r.mark_exported(r.epoch(), 3);
         assert_eq!(r.unexported_count(), 0);
 
         r.push(&m, &wc, 0);
@@ -416,7 +431,7 @@ mod tests {
         // Export snapshots 5, two more arrive before it completes.
         r.push(&m, &wc, 0);
         r.push(&m, &wc, 0);
-        r.mark_exported(5);
+        r.mark_exported(r.epoch(), 5);
         assert_eq!(r.unexported_count(), 2);
     }
 
@@ -427,12 +442,35 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         r.push(&m, &wc, 0);
-        r.mark_exported(1);
+        r.mark_exported(r.epoch(), 1);
         r.toggle(Instant::now()); // stop
         r.toggle(Instant::now()); // start again — buffer cleared
         assert_eq!(r.unexported_count(), 0);
         r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1, "new samples are unexported again");
+    }
+
+    /// An export still open when the next recording started wrote the old
+    /// samples, not the new ones — marking them saved would let Record
+    /// discard them without asking.
+    #[test]
+    fn an_export_of_an_earlier_recording_marks_nothing() {
+        let mut r = Recording::new();
+        let wc = WallClock::new();
+        let m = make_measurement(b"  1.234");
+        r.toggle(Instant::now());
+        for _ in 0..3 {
+            r.push(&m, &wc, 0);
+        }
+        let exporting = r.epoch();
+        r.toggle(Instant::now()); // stop
+        r.toggle(Instant::now()); // start again while the dialog is open
+        assert_ne!(r.epoch(), exporting, "a new recording is a new epoch");
+        for _ in 0..2 {
+            r.push(&m, &wc, 0);
+        }
+        r.mark_exported(exporting, 3);
+        assert_eq!(r.unexported_count(), 2);
     }
 
     /// A stale count from a bigger previous buffer must not mask real data.
@@ -443,7 +481,7 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.toggle(Instant::now());
         r.push(&m, &wc, 0);
-        r.mark_exported(99);
+        r.mark_exported(r.epoch(), 99);
         assert_eq!(r.unexported_count(), 0);
         r.push(&m, &wc, 0);
         assert_eq!(r.unexported_count(), 1);

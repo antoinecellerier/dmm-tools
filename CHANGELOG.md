@@ -58,6 +58,7 @@
 - **UT8802 negative readings show their sign**
 - **VC-880 and VC-890 report the AVG flag**
 - **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked two cells, shifting the sub-value columns.
+- **Record asks before discarding a recording started during an export** — started while a save dialog was open, the next Record discarded it without asking.
 - **Capture reports' confirmation line names every flag** — HV, LOW BAT, LEAD ERR, COMP and REC were left out.
 - **The graph's time axis keeps its seconds past the first hour** — a zoomed-in window then labelled every grid mark alike.
 - **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, diode, capacitance, Hz, duty, NCV and AC+DC V offered controls that did nothing.

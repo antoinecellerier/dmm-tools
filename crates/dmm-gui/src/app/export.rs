@@ -70,17 +70,46 @@ pub(super) struct ExportOutcome {
     /// Toast text.
     message: String,
     is_error: bool,
-    /// Samples written, on success. Drives the recording's "saved" mark, so
-    /// a buffer that reached a file doesn't prompt before being discarded.
-    exported: Option<usize>,
+    /// On success, the buffer epoch written from and the samples written.
+    /// Drives the recording's "saved" mark, so a buffer that reached a file
+    /// doesn't prompt before being discarded.
+    exported: Option<(u64, usize)>,
+}
+
+/// An export rendered and waiting for its save dialog: everything the writer
+/// thread needs, none of it borrowed from the buffer.
+pub(super) struct PreparedExport {
+    format: ExportFormat,
+    /// The name the dialog opens on.
+    default_name: String,
+    bytes: Vec<u8>,
+    sample_count: usize,
+    /// The buffer epoch the samples were rendered from.
+    epoch: u64,
 }
 
 /// Write one export to the path the user chose and say how it went.
 ///
 /// Writes a sibling .tmp and renames it into place, so a crash mid-export
 /// can't leave a truncated file at the user-chosen path.
-fn write_export(path: &Path, bytes: &[u8], sample_count: usize) -> ExportOutcome {
-    match dmm_shared::write_atomic(path, bytes) {
+fn write_export(path: &Path, bytes: &[u8], sample_count: usize, epoch: u64) -> ExportOutcome {
+    export_outcome(
+        path,
+        dmm_shared::write_atomic(path, bytes),
+        sample_count,
+        epoch,
+    )
+}
+
+/// What the toast says, and what the recording marks saved, once the write
+/// to `path` finished with `result`.
+fn export_outcome(
+    path: &Path,
+    result: std::io::Result<()>,
+    sample_count: usize,
+    epoch: u64,
+) -> ExportOutcome {
+    match result {
         Ok(()) => {
             info!("exported {sample_count} samples to {}", path.display());
             // The file name, not the whole path: its extension names the
@@ -92,7 +121,7 @@ fn write_export(path: &Path, bytes: &[u8], sample_count: usize) -> ExportOutcome
             ExportOutcome {
                 message: format!("Exported {sample_count} samples to {file_name}"),
                 is_error: false,
-                exported: Some(sample_count),
+                exported: Some((epoch, sample_count)),
             }
         }
         Err(e) => {
@@ -128,18 +157,21 @@ impl App {
         }
     }
 
-    pub(super) fn export_recording(&mut self, format: ExportFormat) {
-        if self.recording.samples.is_empty() {
+    /// Render the buffer as `format` for the save dialog, or the toast that
+    /// says why there is nothing to save.
+    ///
+    /// Kept apart from the dialog so what an export writes can be checked
+    /// without opening one.
+    pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<PreparedExport, String> {
+        let samples = &self.recording.samples;
+        let Some(first) = samples.front() else {
             // Returning silently made the button and Ctrl+E look broken:
             // no file dialog, no message, nothing in the log. Say why.
             info!("export skipped: recording buffer is empty");
-            self.toast = Some((
+            return Err(
                 "Nothing to export \u{2014} press Record to capture samples first".to_string(),
-                true,
-                Instant::now(),
-            ));
-            return;
-        }
+            );
+        };
         // The meter these samples came from, not whatever is selected now.
         // Nothing named it and nothing was ever identified — a recording
         // toggled on before a meter answered — so the file says so rather
@@ -156,46 +188,55 @@ impl App {
         // each with its own heap string, roughly doubling peak memory at the
         // 500K cap. The rendered file is a fraction of that size, and building
         // it is cheaper than 500K allocations.
-        let sample_count = self.recording.samples.len();
-        // Built here rather than in the dialog thread, which holds only the
-        // rendered bytes: the first sample is the recording's start, and the
-        // buffer is known non-empty above.
-        let default_name = format.default_name(
-            device_model,
-            single_mode(&self.recording.samples),
-            self.recording.samples[0].wall_time,
-        );
+        //
+        // The name is built here too, rather than in the dialog thread: the
+        // first sample is the recording's start.
+        let default_name = format.default_name(device_model, single_mode(samples), first.wall_time);
         let bytes = match format {
             ExportFormat::Csv => {
-                match render_csv(&self.recording.samples, device_model, self.csv_layout()) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        error!("CSV export failed: {e}");
-                        self.toast = Some((format!("Export failed: {e}"), true, Instant::now()));
-                        return;
-                    }
-                }
+                render_csv(samples, device_model, self.csv_layout()).map_err(|e| {
+                    error!("CSV export failed: {e}");
+                    format!("Export failed: {e}")
+                })?
             }
             ExportFormat::Json => {
-                render_json(&self.recording.samples, device_model, self.experimental()).into_bytes()
+                render_json(samples, device_model, self.experimental()).into_bytes()
             }
-            ExportFormat::Replay => {
-                let text = self
-                    .replay_device_id()
-                    .and_then(|id| render_replay(&self.recording.samples, id, Some(device_model)));
-                match text {
-                    Some(text) => text.into_bytes(),
-                    None => {
-                        warn!("replay export refused: the buffered samples carry no meter frames");
-                        self.toast = Some((NO_WIRE_FORMAT.to_string(), true, Instant::now()));
-                        return;
-                    }
-                }
+            ExportFormat::Replay => self
+                .replay_device_id()
+                .and_then(|id| render_replay(samples, id, Some(device_model)))
+                .ok_or_else(|| {
+                    warn!("replay export refused: the buffered samples carry no meter frames");
+                    NO_WIRE_FORMAT.to_string()
+                })?
+                .into_bytes(),
+        };
+        Ok(PreparedExport {
+            format,
+            default_name,
+            bytes,
+            sample_count: samples.len(),
+            epoch: self.recording.epoch(),
+        })
+    }
+
+    pub(super) fn export_recording(&mut self, format: ExportFormat) {
+        let prepared = match self.prepare_export(format) {
+            Ok(prepared) => prepared,
+            Err(message) => {
+                self.toast = Some((message, true, Instant::now()));
+                return;
             }
         };
-
         let (tx, rx) = std::sync::mpsc::channel::<ExportOutcome>();
         std::thread::spawn(move || {
+            let PreparedExport {
+                format,
+                default_name,
+                bytes,
+                sample_count,
+                epoch,
+            } = prepared;
             let (label, extension) = format.filter();
             let Some(path) = rfd::FileDialog::new()
                 .set_file_name(default_name)
@@ -204,7 +245,7 @@ impl App {
             else {
                 return;
             };
-            let _ = tx.send(write_export(&path, &bytes, sample_count));
+            let _ = tx.send(write_export(&path, &bytes, sample_count, epoch));
         });
         self.export_result_rx = Some(rx);
     }
@@ -233,10 +274,11 @@ impl App {
         if let Some(rx) = &self.export_result_rx
             && let Ok(outcome) = rx.try_recv()
         {
-            if let Some(count) = outcome.exported {
+            if let Some((epoch, count)) = outcome.exported {
                 // Samples that arrived while the export ran are not in that
-                // file, so mark only what was actually written.
-                self.recording.mark_exported(count);
+                // file, so mark only what was actually written — and only if
+                // the buffer still holds the recording it was written from.
+                self.recording.mark_exported(epoch, count);
             }
             self.toast = Some((outcome.message, outcome.is_error, Instant::now()));
             self.export_result_rx = None;
@@ -442,6 +484,110 @@ mod tests {
         // And it survives the cable coming out, which is why it is latched.
         app.disconnect();
         assert!(app.experimental(), "the samples are still that meter's");
+    }
+
+    /// Nothing buffered: no dialog, and a toast saying what to do instead.
+    #[test]
+    fn an_empty_buffer_prepares_no_export() {
+        let app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let Err(message) = app.prepare_export(ExportFormat::Csv) else {
+            panic!("an empty buffer has nothing to write");
+        };
+        assert!(message.starts_with("Nothing to export"), "{message}");
+    }
+
+    /// The prepared file is the buffer as the renderer writes it, named after
+    /// its first sample.
+    #[test]
+    fn a_prepared_export_holds_the_rendered_buffer() {
+        let app = app_holding(0, 0, &[0, 0, 0]);
+        let prepared = app
+            .prepare_export(ExportFormat::Csv)
+            .expect("three samples to write");
+        assert_eq!(prepared.sample_count, 3);
+        assert_eq!(prepared.epoch, app.recording.epoch());
+        // Nothing named a meter, so the file says so.
+        assert!(
+            prepared
+                .default_name
+                .starts_with("measurements-unknown-DC-V-"),
+            "{}",
+            prepared.default_name
+        );
+        assert!(prepared.default_name.ends_with(".csv"));
+        let rendered = render_csv(&app.recording.samples, UNKNOWN_DEVICE, app.csv_layout())
+            .expect("rendering the fixture buffer");
+        assert_eq!(prepared.bytes, rendered);
+    }
+
+    /// Hand `outcome` to the app the way the writer thread does.
+    fn deliver_outcome(app: &mut App, outcome: ExportOutcome) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(outcome).expect("the channel is open");
+        app.export_result_rx = Some(rx);
+        app.poll_export_result();
+    }
+
+    /// A written file marks what it holds, so Record doesn't ask about it.
+    #[test]
+    fn a_finished_export_marks_its_samples_saved() {
+        let mut app = app_holding(0, 0, &[0, 0, 0]);
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
+        let outcome = export_outcome(
+            Path::new("out.csv"),
+            Ok(()),
+            prepared.sample_count,
+            prepared.epoch,
+        );
+        deliver_outcome(&mut app, outcome);
+        assert_eq!(app.recording.unexported_count(), 0);
+        assert_eq!(
+            app.toast
+                .as_ref()
+                .map(|(text, is_error, _)| (text.as_str(), *is_error)),
+            Some(("Exported 3 samples to out.csv", false))
+        );
+    }
+
+    /// The save dialog leaves the window live, so a new recording can start
+    /// before the file is written. That file holds the old samples: the new
+    /// ones must still count as unexported, or Record discards them unasked.
+    #[test]
+    fn a_finished_export_does_not_mark_a_recording_started_after_it() {
+        let mut app = app_holding(0, 0, &[0, 0, 0]);
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
+        app.recording.toggle(Instant::now()); // stop
+        app.recording.toggle(Instant::now()); // a new recording
+        app.recording.push(&measurement(0), &app.wall_clock, 0);
+        let outcome = export_outcome(
+            Path::new("out.csv"),
+            Ok(()),
+            prepared.sample_count,
+            prepared.epoch,
+        );
+        deliver_outcome(&mut app, outcome);
+        assert_eq!(app.recording.unexported_count(), 1);
+    }
+
+    /// A failed write marks nothing and says why.
+    #[test]
+    fn a_failed_export_marks_nothing() {
+        let mut app = app_holding(0, 0, &[0, 0]);
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
+        let outcome = export_outcome(
+            Path::new("out.csv"),
+            Err(std::io::Error::other("disk full")),
+            prepared.sample_count,
+            prepared.epoch,
+        );
+        deliver_outcome(&mut app, outcome);
+        assert_eq!(app.recording.unexported_count(), 2);
+        assert_eq!(
+            app.toast
+                .as_ref()
+                .map(|(text, is_error, _)| (text.as_str(), *is_error)),
+            Some(("Export failed: disk full", true))
+        );
     }
 
     /// A transform's appended sub-value gets the trailing group, and comes
