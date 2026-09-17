@@ -179,6 +179,7 @@ impl Ut61PlusProtocol {
                 payload.len(),
                 payload
             );
+            report_unknown_frame(&payload);
         }
         Err(Error::Timeout)
     }
@@ -276,11 +277,17 @@ impl Protocol for Ut61PlusProtocol {
         debug!("sending get_name request");
         transport.write(&cmd)?;
 
-        // Read two frames: ack + name
-        for _ in 0..2 {
+        // The reply is two frames, ack then name (§2.3). The third read is
+        // for a bridge that had a reading buffered before the request: only
+        // a frame that fails to be the name costs one, so a meter that
+        // answers straight away never waits for it.
+        for _ in 0..3 {
             let payload = self.read_raw_payload(transport)?;
-            if payload.first() != Some(&0xFF) {
-                let name = String::from_utf8_lossy(&payload).to_string();
+            report_unknown_frame(&payload);
+            // Anything else is another frame on this wire, not a name: the
+            // ack, or a reading the bridge held. Returning one as the name
+            // would put it in the GUI header and `dmm-cli info`.
+            if let Some(name) = name_from_reply(&payload) {
                 debug!("device name: {name}");
                 return Ok(Some(name));
             }
@@ -577,6 +584,27 @@ pub(crate) fn name_from_reply(payload: &[u8]) -> Option<String> {
     None
 }
 
+/// Report a frame that is none of the three this family sends: a measurement
+/// (`docs/research/ut61eplus/reverse-engineered-protocol.md` §2.4), the
+/// `FF 00` ack or a Get Name reply (§2.3). Our UT61E+ and UT61B+ captures hold
+/// no other shape.
+///
+/// A measurement-sized frame is never reported here. [`Protocol::get_name`]
+/// can read a stale one ahead of the reply on a CH9329, which does not purge
+/// its RX buffer on open, and the reading path parses them instead.
+fn report_unknown_frame(payload: &[u8]) {
+    if payload.len() != UT61EPLUS_MEASUREMENT_PAYLOAD_LEN
+        && !is_ack(payload)
+        && name_from_reply(payload).is_none()
+    {
+        report_unknown(
+            "ut61eplus",
+            "frame",
+            format_args!("{} bytes: {:02X?}", payload.len(), payload),
+        );
+    }
+}
+
 /// Detection for the UT61+/UT161 family.
 ///
 /// Get Name is the only reply on any bridge that pins the exact model, which
@@ -621,9 +649,10 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
                     }
                 }
                 None => {
-                    warn!(
-                        "detect: the meter reports an unknown model {name:?}; using the UT61E+ \
-                         tables. Please report the name so the registry can carry it."
+                    report_unknown(
+                        "ut61eplus",
+                        "model name",
+                        format_args!("{name:?}, using the UT61E+ tables"),
                     );
                     Evidence::Model {
                         id: FALLBACK_ID,
@@ -888,6 +917,83 @@ fn parse_flags(flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
     }
 }
 
+/// Report what a measurement payload carries outside the spec and our UT61E+
+/// and UT61B+ captures. The reading is parsed the same either way.
+///
+/// Sections are `docs/research/ut61eplus/reverse-engineered-protocol.md`;
+/// "family" is `docs/research/ut61-family/reverse-engineered-protocol.md`.
+fn report_unrecognised_fields(
+    payload: &[u8],
+    mode: Mode,
+    has_range: bool,
+    table: &dyn DeviceTable,
+) {
+    const FAMILY: &str = "ut61eplus";
+    let mode_byte = payload[0];
+    // Family §3.1: the model's dial lists every mode it reaches, and every
+    // mode the captures show is on it. A decodable byte off it is another
+    // model's mode or one of §2.5's speculative ones. An empty dial is a
+    // table that does not describe one.
+    let dial = table.dial_positions();
+    if !dial.is_empty() && !dial.iter().any(|p| p.contains(u16::from(mode_byte))) {
+        report_unknown(
+            FAMILY,
+            "mode byte",
+            format_args!(
+                "{mode_byte:#04x} ({mode}), not on the {} dial",
+                table.model_name()
+            ),
+        );
+    } else if !has_range && mode != Mode::Ncv {
+        // Family §5 and §6.2: NCV is the one mode without a range table;
+        // every other has at least one rung, and the captures stay inside
+        // them. A mode off the dial was reported above.
+        report_unknown(
+            FAMILY,
+            "range byte",
+            format_args!("mode {mode_byte:#04x} range {}", payload[1] & 0x0F),
+        );
+    }
+    let flags = &payload[11..14];
+    // §2.7: flag2 bit 3 is reserved; no capture sets it.
+    if payload[12] & 0x08 != 0 {
+        report_unknown(
+            FAMILY,
+            "flag bits",
+            format_args!("{flags:02X?}, flag2 bit 3"),
+        );
+    }
+    // Family §4: a model without Peak never sets P-MIN or P-MAX (flag3
+    // bits 1-2).
+    if payload[13] & 0x06 != 0 && table.peak_modes().is_empty() {
+        report_unknown(
+            FAMILY,
+            "flag bits",
+            format_args!("{flags:02X?}, Peak on a model without it"),
+        );
+    }
+    // §2.6 (range byte) and §2.7 (flag bytes): a 0x30 high nibble.
+    for i in [1, 11, 12, 13] {
+        if payload[i] & 0xF0 != 0x30 {
+            report_unknown(
+                FAMILY,
+                "byte prefix",
+                format_args!("payload[{i}] = {:#04x}", payload[i]),
+            );
+        }
+    }
+    // §2.6: two decimal digits counting lit bar segments, of 46 at most
+    // (family §2.1). The captures top out at 44.
+    let (tens, ones) = (payload[9], payload[10]);
+    if ones > 9 || u16::from(tens) * 10 + u16::from(ones) > 46 {
+        report_unknown(
+            FAMILY,
+            "bar graph",
+            format_args!("{:02X?}", &payload[9..11]),
+        );
+    }
+}
+
 /// Parse a UT61E+/UT61B+/UT61D+/UT161 measurement payload (pure function).
 ///
 /// Layout (verified against real device captures):
@@ -901,6 +1007,14 @@ fn parse_flags(flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
 /// - byte 13:   flag3  (& 0x0F — has 0x30 prefix)
 pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Measurement> {
     check_len("ut61eplus", payload, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN)?;
+    // §2.4: the measurement payload is 14 bytes; the rest is ignored.
+    if payload.len() > UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
+        report_unknown(
+            "ut61eplus",
+            "frame",
+            format_args!("{} bytes: {:02X?}", payload.len(), payload),
+        );
+    }
 
     // Mode byte is raw (no 0x30 prefix), range byte has 0x30 prefix
     let mode_byte = payload[0];
@@ -916,13 +1030,17 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let flag2 = payload[12] & 0x0F;
     let flag3 = payload[13] & 0x0F;
 
-    let mode = Mode::from_byte(mode_byte)?;
+    // §2.5 lists no mode byte past 0x1E.
+    let mode = Mode::from_byte(mode_byte).inspect_err(|_| {
+        report_unknown("ut61eplus", "mode byte", format_args!("{mode_byte:#04x}"));
+    })?;
     let display_raw = String::from_utf8_lossy(display_bytes).to_string();
     let progress = bar_hi * 10 + bar_lo;
     let flags = parse_flags(flag1, flag2, flag3);
 
     // Look up range info from device table
     let range_info = table.range_info(mode, range_byte);
+    report_unrecognised_fields(payload, mode, range_info.is_some(), table);
     let unit = range_info.map(|r| r.unit).unwrap_or("");
     let range_label = range_info.map(|r| r.label).unwrap_or("");
 
@@ -2053,5 +2171,407 @@ raw_payload=14"#
     fn the_ack_identifies_nothing() {
         assert!(is_ack(&[0xFF, 0x00]));
         assert_eq!(recognised(&ACK), None);
+    }
+
+    // --- Unrecognised data (protocol::unrecognised) -----------------------
+
+    use crate::protocol::capture_reports;
+    use tables::RangeInfo;
+    use tables::ut61b_plus::Ut61bPlusTable;
+    use tables::ut61d_plus::Ut61dPlusTable;
+
+    /// Parse `payload` with `table`, keeping what it reported.
+    fn parse_reporting(
+        payload: &[u8],
+        table: &dyn DeviceTable,
+    ) -> (Result<Measurement>, Vec<String>) {
+        capture_reports(|| parse_measurement(payload, table))
+    }
+
+    /// Frames our UT61E+ sent (captures 2026-09-07): a reading in every mode
+    /// it reached, and the flags, bar and overload forms those runs saw.
+    const E_PLUS_FRAMES: &[[u8; 14]] = &[
+        [
+            0x00, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x32, 0x38, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x01, 0x30, 0x20, 0x20, 0x20, 0x34, 0x2E, 0x39, 0x39, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x33, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x03, 0x30, 0x2D, 0x20, 0x32, 0x37, 0x2E, 0x30, 0x32, 0x00, 0x04, 0x30, 0x34, 0x31,
+        ],
+        [
+            0x04, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x05, 0x30, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x06, 0x30, 0x20, 0x20, 0x4F, 0x4C, 0x2E, 0x20, 0x20, 0x04, 0x04, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x07, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x34, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x08, 0x30, 0x20, 0x31, 0x2E, 0x39, 0x30, 0x30, 0x33, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x09, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x34, 0x32, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0C, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0D, 0x30, 0x20, 0x20, 0x20, 0x33, 0x2E, 0x33, 0x34, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0E, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0F, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x33, 0x31, 0x34, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x10, 0x31, 0x20, 0x20, 0x30, 0x2E, 0x31, 0x34, 0x32, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x11, 0x31, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x14, 0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x2D, 0x20, 0x04, 0x02, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x14, 0x30, 0x20, 0x20, 0x20, 0x45, 0x46, 0x20, 0x20, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        // LPF V with the HV warning lit.
+        [
+            0x18, 0x33, 0x20, 0x20, 0x31, 0x36, 0x35, 0x2E, 0x30, 0x00, 0x00, 0x30, 0x35, 0x30,
+        ],
+        [
+            0x19, 0x30, 0x2D, 0x30, 0x2E, 0x30, 0x31, 0x33, 0x33, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        // AC+DC V with the DC bit, AC V with P-MAX, DC V under MAX, REL and HOLD.
+        [
+            0x19, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x33, 0x36, 0x37, 0x00, 0x00, 0x30, 0x30, 0x38,
+        ],
+        [
+            0x00, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x31, 0x33, 0x36, 0x00, 0x00, 0x30, 0x34, 0x34,
+        ],
+        [
+            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x38, 0x34, 0x31,
+        ],
+        [
+            0x02, 0x30, 0x2D, 0x30, 0x2E, 0x30, 0x30, 0x34, 0x36, 0x00, 0x01, 0x31, 0x34, 0x30,
+        ],
+        [
+            0x02, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x32, 0x30, 0x31,
+        ],
+    ];
+
+    /// Frames a UT61B+ sent (issue #19 and #20 captures): a reading in every
+    /// mode it reached, and the flags, bar and overload forms seen there.
+    const B_PLUS_FRAMES: &[[u8; 14]] = &[
+        [
+            0x00, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x34, 0x32, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x01, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x02, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x03, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x04, 0x30, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x05, 0x30, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x06, 0x31, 0x20, 0x20, 0x2E, 0x4F, 0x4C, 0x20, 0x20, 0x03, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x07, 0x30, 0x20, 0x20, 0x20, 0x4F, 0x4C, 0x2E, 0x20, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x08, 0x30, 0x20, 0x20, 0x2E, 0x4F, 0x4C, 0x20, 0x20, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        [
+            0x09, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0C, 0x30, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0D, 0x30, 0x20, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0E, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x0F, 0x30, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x10, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x11, 0x30, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x14, 0x30, 0x20, 0x20, 0x20, 0x20, 0x20, 0x2D, 0x20, 0x00, 0x00, 0x30, 0x34, 0x30,
+        ],
+        // AC mV overloaded, bar 30; AC V on mains, HV lit; DC V negative;
+        // AC V under MAX.
+        [
+            0x01, 0x31, 0x20, 0x20, 0x20, 0x4F, 0x4C, 0x2E, 0x20, 0x03, 0x00, 0x30, 0x30, 0x30,
+        ],
+        [
+            0x00, 0x32, 0x20, 0x20, 0x32, 0x33, 0x36, 0x2E, 0x36, 0x01, 0x01, 0x30, 0x31, 0x30,
+        ],
+        [
+            0x02, 0x30, 0x20, 0x2D, 0x30, 0x2E, 0x30, 0x30, 0x31, 0x00, 0x00, 0x30, 0x30, 0x31,
+        ],
+        [
+            0x00, 0x31, 0x20, 0x20, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x00, 0x00, 0x38, 0x34, 0x30,
+        ],
+    ];
+
+    #[test]
+    fn captured_frames_report_nothing() {
+        for (model, table, frames) in [
+            (
+                "UT61E+",
+                &Ut61ePlusTable::new() as &dyn DeviceTable,
+                E_PLUS_FRAMES,
+            ),
+            ("UT61B+", &Ut61bPlusTable::new(), B_PLUS_FRAMES),
+        ] {
+            for frame in frames {
+                let (m, reports) = parse_reporting(frame, table);
+                assert!(m.is_ok(), "{model} {frame:02X?}: {m:?}");
+                assert!(reports.is_empty(), "{model} {frame:02X?}: {reports:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_mode_byte_is_reported_and_still_rejected() {
+        let payload = make_payload(0x1F, 0x00, b"  0.000", (0, 0), (0, 0, 0));
+        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        assert!(matches!(m, Err(Error::UnknownMode(0x1F))), "{m:?}");
+        assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x1f"]);
+    }
+
+    /// Temperature is a UT61D+ position (family spec §3.1), not a UT61E+ one.
+    #[test]
+    fn a_mode_off_the_model_s_dial_is_reported() {
+        let payload = make_payload(0x0A, 0x00, b"   23.4", (0, 0), (0, 0, 0));
+        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        assert_eq!(m.unwrap().mode, "°C");
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised mode byte: 0x0a (°C), not on the UNI-T UT61E+ dial"]
+        );
+
+        let (_, reports) = parse_reporting(&payload, &Ut61dPlusTable::new());
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A table that describes no dial, with a rung for every mode.
+    struct NoDial;
+
+    static ANY_RUNG: RangeInfo = tables::r("any", "V");
+
+    impl DeviceTable for NoDial {
+        fn range_info(&self, _mode: Mode, _range: u8) -> Option<&RangeInfo> {
+            Some(&ANY_RUNG)
+        }
+
+        fn model_name(&self) -> &'static str {
+            "no dial"
+        }
+    }
+
+    #[test]
+    fn a_table_without_a_dial_takes_any_mode() {
+        let payload = make_payload(0x13, 0x00, b"  0.000", (0, 0), (0, 0, 0));
+        let (m, reports) = parse_reporting(&payload, &NoDial);
+        assert_eq!(m.unwrap().mode, "Live");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// DC V has four rungs on the UT61E+; NCV has no table at all and says
+    /// nothing about it.
+    #[test]
+    fn a_range_byte_past_the_table_is_reported() {
+        let table = Ut61ePlusTable::new();
+        let payload = make_payload(0x02, 0x04, b" 12.345", (0, 0), (0, 0, 0));
+        let (m, reports) = parse_reporting(&payload, &table);
+        assert_eq!(m.unwrap().range_label, "");
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised range byte: mode 0x02 range 4"]
+        );
+
+        let payload = make_payload(0x14, 0x00, b"   EF  ", (0, 0), (0, 0, 0));
+        let (_, reports) = parse_reporting(&payload, &table);
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    #[test]
+    fn the_reserved_flag_bit_is_reported() {
+        let payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0x08, 0));
+        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        assert!(m.unwrap().flags.auto_range);
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised flag bits: [30, 38, 30], flag2 bit 3"]
+        );
+    }
+
+    #[test]
+    fn a_byte_without_its_prefix_is_reported() {
+        let mut payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
+        payload[1] = 0x01;
+        payload[12] = 0x00;
+        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        assert_eq!(m.unwrap().range_label, "22V");
+        assert_eq!(
+            reports,
+            [
+                "ut61eplus: unrecognised byte prefix: payload[1] = 0x01",
+                "ut61eplus: unrecognised byte prefix: payload[12] = 0x00",
+            ]
+        );
+    }
+
+    /// The UT61B+ has no Peak (family spec §4); the UT61E+ does.
+    #[test]
+    fn peak_bits_on_a_model_without_peak_are_reported() {
+        let payload = make_payload(0x00, 0x00, b"  0.037", (0, 0), (0, 0, F_PEAK_MAX));
+        let (m, reports) = parse_reporting(&payload, &Ut61bPlusTable::new());
+        assert!(m.unwrap().flags.peak_max);
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised flag bits: [30, 30, 34], Peak on a model without it"]
+        );
+
+        let (_, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    #[test]
+    fn a_bar_graph_past_46_segments_is_reported() {
+        let table = Ut61ePlusTable::new();
+        for (bar, progress, report) in [
+            ((4, 7), 47, Some("[04, 07]")),
+            ((0, 10), 10, Some("[00, 0A]")),
+            ((4, 6), 46, None),
+        ] {
+            let payload = make_payload(0x02, 0x01, b" 12.345", bar, (0, 0, 0));
+            let (m, reports) = parse_reporting(&payload, &table);
+            assert_eq!(m.unwrap().progress, Some(progress));
+            let want: Vec<String> = report
+                .map(|r| format!("ut61eplus: unrecognised bar graph: {r}"))
+                .into_iter()
+                .collect();
+            assert_eq!(reports, want, "bar {bar:?}");
+        }
+    }
+
+    #[test]
+    fn a_payload_past_14_bytes_is_reported() {
+        let mut payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0, 0));
+        payload.push(0x00);
+        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        let value = m.unwrap().value;
+        assert!(
+            matches!(value, MeasuredValue::Normal(v) if (v - 12.345).abs() < 1e-9),
+            "{value:?}"
+        );
+        assert_eq!(
+            reports,
+            [format!(
+                "ut61eplus: unrecognised frame: 15 bytes: {:02X?}",
+                payload
+            )]
+        );
+    }
+
+    /// The ack and a name reply are skipped quietly on the way to a reading;
+    /// anything else is reported.
+    #[test]
+    fn an_unknown_frame_before_a_reading_is_reported() {
+        let mut proto = Ut61PlusProtocol::new();
+        let mock = MockTransport::new(vec![
+            ACK.to_vec(),
+            NAME_UT61EPLUS.to_vec(),
+            test_frame_be16(&[0xFF, 0x01]),
+            frame_in(0x02),
+        ]);
+        let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
+        assert_eq!(m.unwrap().mode, "DC V");
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised frame: 2 bytes: [FF, 01]"]
+        );
+    }
+
+    #[test]
+    fn get_name_returns_only_a_real_reply() {
+        let mut proto = Ut61PlusProtocol::new();
+        let mut name = |frames: Vec<Vec<u8>>| {
+            let mock = MockTransport::new(frames);
+            capture_reports(|| proto.get_name(&mock).unwrap())
+        };
+
+        let (got, reports) = name(vec![ACK.to_vec(), NAME_UT61EPLUS.to_vec()]);
+        assert_eq!(got.as_deref(), Some("UT61E+"));
+        assert!(reports.is_empty(), "{reports:?}");
+
+        // A stale reading from an earlier session on a CH9329, ahead of the
+        // reply: skipped without a report, and the name still arrives.
+        let (got, reports) = name(vec![frame_in(0x02), ACK.to_vec(), NAME_UT61EPLUS.to_vec()]);
+        assert_eq!(got.as_deref(), Some("UT61E+"));
+        assert!(reports.is_empty(), "{reports:?}");
+
+        // A frame that is no reply is reported — and never taken for a name,
+        // which would put its bytes in the GUI header and `dmm-cli info`.
+        let (got, reports) = name(vec![
+            test_frame_be16(&[0x01, 0x02, 0x03]),
+            ACK.to_vec(),
+            ACK.to_vec(),
+        ]);
+        assert_eq!(got, None);
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised frame: 3 bytes: [01, 02, 03]"]
+        );
+    }
+
+    #[test]
+    fn an_unknown_model_name_is_reported() {
+        let (evidence, reports) = capture_reports(|| recognised(&test_frame_be16(b"UT60BT")));
+        assert!(
+            matches!(
+                evidence,
+                Some(Evidence::Model {
+                    id: "ut61eplus",
+                    ..
+                })
+            ),
+            "{evidence:?}"
+        );
+        assert_eq!(
+            reports,
+            ["ut61eplus: unrecognised model name: \"UT60BT\", using the UT61E+ tables"]
+        );
+
+        let (_, reports) = capture_reports(|| recognised(&NAME_UT61BPLUS));
+        assert!(reports.is_empty(), "{reports:?}");
     }
 }
