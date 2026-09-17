@@ -792,10 +792,18 @@ plus what no step reaches.
     decimal tables in one pass)
   - A negative reading (sign bits) and an overload (OL patterns)
   - MIN/MAX/REL/low-battery toggles — candidates: UT803 nibble 9
-    bits 2-1, UT804 nibble 9 bits 3/1
+    bits 2-1, UT804 nibble 9 bit 3. The UT803 pair lights indicators of
+    its own (§7.4 item 2), so the parser leaves it silent; the UT804 bit
+    is in neither vendor parser, and `UT804.LOG` says HOLD stops
+    transmission rather than setting a bit, so it is reported as
+    unrecognised to draw a trace (noted 2026-09-17)
   - UT804 modes 0xE (unknown glyph; hFE?) and 0xF ("mA%") dial
     positions; which of modes 1/2 each V dial sends
   - UT803 frequency range 0 decimal position; tachometer (RPM) frames
+  - A blank digit (A) inside a reading: `assemble_value` renders a blank
+    right after the decimal-point digit with the point twice ("12..45"),
+    an unparseable value. No spec'd packet has one; the parser reports
+    it as unrecognised (noted 2026-09-17)
   - Whether 0x5A trigger byte helps/hurts; the UT803's streaming rate
   - CH9325 feature-report layout: the UT803/UT804 apps send
     `60 09 00 00 03` (`0x03` in byte 5), the SDK DLL `60 09 03 00 00`

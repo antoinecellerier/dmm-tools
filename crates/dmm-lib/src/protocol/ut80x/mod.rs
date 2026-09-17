@@ -41,6 +41,7 @@ use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
     unknown_mode,
@@ -48,6 +49,7 @@ use crate::protocol::{
 use crate::transport::Transport;
 use log::debug;
 use std::borrow::Cow;
+use std::fmt;
 
 /// Which meter model the packets come from — the two share framing but
 /// not payload layout.
@@ -223,11 +225,48 @@ fn ut803_mode_info(mode: u8, range: u8, alt: bool) -> Option<(&'static str, &'st
     })
 }
 
+/// The packet being parsed, for reporting what in it no spec section
+/// covers. Displays as the low nibbles of data bytes 1-9 in hex, the same
+/// wire order for both models.
+#[derive(Clone, Copy)]
+struct Unrecognised<'a> {
+    model: &'static str,
+    nibbles: &'a [u8],
+}
+
+impl Unrecognised<'_> {
+    fn report(self, what: &'static str) {
+        report_unknown(self.model, what, format_args!("nibbles {self}"));
+    }
+}
+
+impl fmt::Display for Unrecognised<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.nibbles.iter().try_for_each(|n| write!(f, "{n:X}"))
+    }
+}
+
 /// Build the display string and numeric value from MSD-first digit
 /// nibbles and a decimal position from the left (point after digit
 /// `dp_pos+1`). Digit nibble 0xA renders as a blank (trailing blank =
 /// 4-digit reading on the UT804's 5-digit field, its 4000-count setting).
-fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, f64)> {
+/// `blank` is the digit the spec documents as blank, if any; a blank
+/// anywhere else still renders as one, and is reported.
+fn assemble_value(
+    unrecognised: Unrecognised,
+    digits: &[u8],
+    blank: Option<usize>,
+    dp_pos: u8,
+    negative: bool,
+) -> Result<(String, f64)> {
+    // Digits are 0-9 (spec §3.2), blank only where `blank` says (§3.1).
+    if digits
+        .iter()
+        .enumerate()
+        .any(|(i, &d)| d > 0xA || (d == 0xA && blank != Some(i)))
+    {
+        unrecognised.report("digit nibble");
+    }
     let mut s = String::with_capacity(digits.len() + 2);
     if negative {
         s.push('-');
@@ -255,6 +294,7 @@ fn assemble_value(digits: &[u8], dp_pos: u8, negative: bool) -> Result<(String, 
     }
     let trimmed = s.trim_end_matches('.').to_string();
     let value: f64 = trimmed.parse().map_err(|_| {
+        unrecognised.report("value");
         Error::invalid_response(format!("ut80x unparseable value {trimmed:?}"), digits)
     })?;
     Ok((trimmed, value))
@@ -314,13 +354,12 @@ fn low_nibbles(packet: &[u8]) -> Result<[u8; PACKET_LEN]> {
 /// Mode name, unit and decimal point position, falling back to an unnamed
 /// mode when the (mode, range) pair is absent from the per-model table.
 fn mode_info_or_unknown(
-    model: &str,
+    unrecognised: Unrecognised,
     info: Option<(&'static str, &'static str, u8)>,
-    mode_code: u8,
-    range: u8,
 ) -> (&'static str, &'static str, u8) {
     info.unwrap_or_else(|| {
-        debug!("{model}: unknown mode/range {mode_code:#04x}/{range}");
+        // The tables hold every pair the spec gives (§7.4 items 4 and 7).
+        unrecognised.report("mode/range pair");
         ("?", "", 3)
     })
 }
@@ -338,6 +377,10 @@ fn overload_display(negative: bool) -> Option<String> {
 /// `nibbles[k-1]` is position k.
 pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
     let nibbles = low_nibbles(packet)?;
+    let unrecognised = Unrecognised {
+        model: "ut804",
+        nibbles: &nibbles[..9],
+    };
 
     let range = nibbles[5];
     let mode_code = nibbles[6];
@@ -348,9 +391,19 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
     // bit 3 stripped (unknown), bit 2 = sign, remaining value == 1 → AUTO.
     let sign_bit = status & 0x4 != 0;
     let auto_range = status & 0x3 == 0x1;
+    // Bit 3 has no known meaning (§3.6); bits 1 and 0 are MAN and AUTO,
+    // never both (§8).
+    if status & 0x8 != 0 || status & 0x3 == 0x3 {
+        unrecognised.report("status bits");
+    }
+    // Coupling takes values 0-3, and only V, mV, µA, mA and A have one
+    // (§3.5).
+    if acdc > 3 || (acdc != 0 && !ut804_default_dc(mode_code)) {
+        unrecognised.report("ac/dc nibble");
+    }
 
     let (mode_name, unit, dp_pos) =
-        mode_info_or_unknown("ut804", ut804_mode_info(mode_code, range), mode_code, range);
+        mode_info_or_unknown(unrecognised, ut804_mode_info(mode_code, range));
 
     // In frequency mode the sign bit selects the duty-cycle display
     // (spec §7.4 item 7) — a negative frequency is impossible, so the
@@ -405,6 +458,11 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
     // negative) otherwise; digits 3-5 are ignored (spec §7.4 item 6). An
     // idle frame (digit 4 == 0xB) shows all zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
+        // Digit 2 is A (overload), C ("L0") or F ("HI") in the known
+        // overload patterns (§8).
+        if !matches!(nibbles[1], 0xA | 0xC | 0xF) {
+            unrecognised.report("overload pattern");
+        }
         if nibbles[1] == 0xC {
             (MeasuredValue::Normal(0.0), Some("L0".to_string()))
         } else {
@@ -413,7 +471,8 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
     } else if nibbles[3] == 0xB {
         (MeasuredValue::Normal(0.0), Some("0".to_string()))
     } else {
-        let (display, v) = assemble_value(&nibbles[0..5], dp_pos, negative)?;
+        // Digit 5 is blank on the 4000-count display (§3.1, §5).
+        let (display, v) = assemble_value(unrecognised, &nibbles[0..5], Some(4), dp_pos, negative)?;
         (MeasuredValue::Normal(v), Some(display))
     };
 
@@ -444,6 +503,10 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     nibbles[0] = 0xA;
     nibbles[1..PACKET_LEN - 1].copy_from_slice(&wire[..PACKET_LEN - 2]);
     nibbles[PACKET_LEN - 1] = 0xD;
+    let unrecognised = Unrecognised {
+        model: "ut803",
+        nibbles: &wire[..9],
+    };
 
     let range = nibbles[1];
     let mode_code = nibbles[6];
@@ -459,17 +522,25 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     let hold = nib9 & 0x8 != 0;
     let dc = nib10 & 0x8 != 0;
     let auto_range = nib10 & 0x2 != 0;
+    // Nibble 8 bit 1 and nibble 9 bit 0 have no known meaning, and the alt
+    // bit only picks RPM or °C (§5, §7.4 items 2 and 4; bit map in the
+    // module doc). Nibble 9 bits 2-1 are left out: the vendor lights
+    // indicators from them, so the meter sets them in ordinary use.
+    if nib8 & 0x2 != 0 || nib9 & 0x1 != 0 || (alt && !matches!(mode_code, 0x2 | 0x4)) {
+        unrecognised.report("status bits");
+    }
 
-    let (mode_name, unit, dp_pos) = mode_info_or_unknown(
-        "ut803",
-        ut803_mode_info(mode_code, range, alt),
-        mode_code,
-        range,
-    );
+    let (mode_name, unit, dp_pos) =
+        mode_info_or_unknown(unrecognised, ut803_mode_info(mode_code, range, alt));
 
     let mode: Cow<'static, str> = if mode_name == "?" {
         unknown_mode(mode_code)
     } else if mode_name == "V" || mode_name == "mV" {
+        // Volts are DC or AC: both bits is AC+DC, open on the UT803 (§5),
+        // and neither is undocumented.
+        if dc == (nib10 & 0x4 != 0) {
+            unrecognised.report("ac/dc bits");
+        }
         Cow::Borrowed(match (mode_name, dc) {
             ("V", true) => "DC V",
             ("V", false) => "AC V",
@@ -483,7 +554,8 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     let (value, display_raw) = if overload {
         (MeasuredValue::Overload, overload_display(negative))
     } else {
-        let (display, v) = assemble_value(&nibbles[2..6], dp_pos, negative)?;
+        // The spec documents no UT803 blank digit (§7.4 item 4).
+        let (display, v) = assemble_value(unrecognised, &nibbles[2..6], None, dp_pos, negative)?;
         (MeasuredValue::Normal(v), Some(display))
     };
 
@@ -1809,6 +1881,315 @@ raw_payload=11"#
             err.to_string(),
             "invalid response: ut80x invalid digit nibble 0x0f"
         );
+    }
+
+    // --- Unrecognised data -----------------------------------------------
+
+    /// Parse `packet` with `parse` and return what was reported with it.
+    fn parse_reported(
+        parse: fn(&[u8]) -> Result<Measurement>,
+        packet: &[u8],
+    ) -> (Result<Measurement>, Vec<String>) {
+        crate::protocol::capture_reports(|| parse(packet))
+    }
+
+    /// The packets the tests above take from issue #16 or build from the
+    /// spec, and the overload patterns of spec §8, report nothing: a report
+    /// there would warn every user of the meter.
+    #[test]
+    fn documented_packets_report_nothing() {
+        let mut ut804 = vec![
+            ISSUE16_OPEN_LEADS.to_vec(),
+            ISSUE16_MINUS_0_0013.to_vec(),
+            ISSUE16_SIGNED_ZERO.to_vec(),
+            ISSUE16_MINUS_0_0008.to_vec(),
+            ut804_payload(&[3, 9, 9, 9, 0xA], 1, 0x1, 2, 0x0),
+            ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0x1, 2, 0x4),
+            ut804_payload(&[1, 0, 0, 0, 0xA], 1, 0x1, 2, 0x1),
+            ut804_payload(&[1, 0, 0, 0, 0xA], 1, 0x1, 2, 0x5),
+            ut804_payload(&[3, 9, 9, 9, 0xA], 2, 0x4, 0, 0x0),
+            ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0xC, 0, 0x0),
+            ut804_payload(&[5, 0, 0, 0, 0xA], 2, 0xC, 0, 0x4),
+            ut804_payload(&[0, 0, 2, 5, 0xA], 0, 0x6, 0, 0x0),
+            ut804_payload(&[0, 0, 7, 7, 0xA], 0, 0xD, 0, 0x0),
+            ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x2, 1, 0x0),
+            ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x2, 3, 0x0),
+            ut804_payload(&[3, 9, 9, 9, 0xA], 0, 0x7, 0, 0x0),
+            ut804_payload(&[1, 0, 0, 0, 0xA], 0, 0x9, 0, 0x0),
+            ut804_payload(&[0, 0, 0, 0xB, 0], 1, 0x1, 2, 0x0),
+            ut804_payload(&[1, 2, 3, 4, 5], 2, 0x1, 2, 0x0),
+            ut804_payload(&[0xA, 0xC, 2, 3, 4], 1, 0x1, 2, 0x0),
+            // Overload, "L0" and "HI" (spec §8).
+            ut804_payload(&[0xA, 0xA, 0, 0xC, 0xA], 3, 0x4, 0, 0x1),
+            ut804_payload(&[0xA, 0xC, 0, 0xA, 0xA], 0, 0xF, 0, 0x0),
+            ut804_payload(&[0xA, 0xF, 1, 0xA, 0xA], 0, 0xF, 0, 0x0),
+        ];
+        for acdc in 0..=3 {
+            ut804.push(ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, acdc, 0x0));
+        }
+        let ut803 = [
+            wire([0x1, 5, 6, 7, 8, 0xB, 0x4, 0x8, 0xA]),
+            ut803_payload(&[5, 9, 9, 9], 0, 0xB, 0x0, 0x0, 0x8),
+            ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x4, 0x0, 0x8),
+            ut803_payload(&[0, 0, 0, 0], 0, 0x3, 0x1, 0x0, 0x0),
+            ut803_payload(&[0, 0, 0, 0], 0, 0x3, 0x5, 0x0, 0x0),
+            ut803_payload(&[1, 0, 0, 0], 0, 0xB, 0x0, 0x8, 0x8),
+            ut803_payload(&[2, 3, 0, 0], 1, 0xB, 0x0, 0x0, 0x6),
+            ut803_payload(&[5, 9, 9, 9], 4, 0xB, 0x0, 0x0, 0x8),
+            ut803_payload(&[5, 9, 9, 9], 4, 0x3, 0x0, 0x0, 0x0),
+            ut803_payload(&[0, 0, 2, 5], 0, 0x4, 0x8, 0x0, 0x0),
+            ut803_payload(&[0, 0, 7, 7], 0, 0x4, 0x0, 0x0, 0x0),
+            ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0),
+            ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0),
+            ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x0, 0x8, 0xA),
+        ];
+        let cases = ut804
+            .iter()
+            .map(|p| (parse_measurement_ut804 as fn(&[u8]) -> _, p))
+            .chain(
+                ut803
+                    .iter()
+                    .map(|p| (parse_measurement_ut803 as fn(&[u8]) -> _, p)),
+            );
+        for (parse, packet) in cases {
+            let (m, reports) = parse_reported(parse, packet);
+            assert!(m.is_ok(), "{packet:02X?}: {m:?}");
+            assert!(reports.is_empty(), "{packet:02X?}: {reports:?}");
+        }
+    }
+
+    /// A pair outside the model's table still reads as an unknown mode.
+    #[test]
+    fn a_mode_range_pair_outside_the_table_is_reported() {
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 0, 0x0, 0, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+        assert_eq!(m.unwrap().mode, "Unknown(0x00)");
+        assert_eq!(
+            reports,
+            ["ut804: unrecognised mode/range pair: nibbles 1234A0000"]
+        );
+
+        let p = ut804_payload(&[1, 2, 3, 4, 0xA], 9, 0x1, 2, 0x0);
+        let (_, reports) = parse_reported(parse_measurement_ut804, &p);
+        assert_eq!(
+            reports,
+            ["ut804: unrecognised mode/range pair: nibbles 1234A9120"]
+        );
+
+        let p = ut803_payload(&[1, 0, 0, 0], 0, 0x7, 0x0, 0x0, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+        assert_eq!(m.unwrap().mode, "Unknown(0x07)");
+        assert_eq!(
+            reports,
+            ["ut803: unrecognised mode/range pair: nibbles 010007000"]
+        );
+    }
+
+    /// A digit nibble past 0xA, or digits that make no number, still fail
+    /// the parse, and are reported first.
+    #[test]
+    fn a_bad_digit_or_value_is_reported_with_its_error() {
+        let p = ut804_payload(&[1, 0xF, 0, 0, 0xA], 1, 0x1, 2, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+        assert!(m.is_err());
+        assert_eq!(
+            reports,
+            ["ut804: unrecognised digit nibble: nibbles 1F00A1120"]
+        );
+
+        let p = ut803_payload(&[1, 0xF, 0, 0], 0, 0xB, 0x0, 0x0, 0x8);
+        let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+        assert!(m.is_err());
+        assert_eq!(
+            reports,
+            ["ut803: unrecognised digit nibble: nibbles 01F00B008"]
+        );
+
+        // Four blanks leave no number: only the UT803 can get there, as a
+        // UT804 packet with digit 1 blank is an overload.
+        let p = ut803_payload(&[0xA; 4], 0, 0xB, 0x0, 0x0, 0x8);
+        let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+        assert_eq!(
+            m.unwrap_err().to_string(),
+            "invalid response: ut80x unparseable value \"\""
+        );
+        assert_eq!(
+            reports,
+            [
+                "ut803: unrecognised digit nibble: nibbles 0AAAAB008",
+                "ut803: unrecognised value: nibbles 0AAAAB008",
+            ]
+        );
+    }
+
+    #[test]
+    fn ut804_coupling_outside_its_modes_or_values_is_reported() {
+        // Value 4 on V: no label, as before.
+        let p = ut804_payload(&[2, 3, 0, 0, 0xA], 3, 0x1, 4, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+        let m = m.unwrap();
+        assert_eq!(m.mode, "V");
+        assert!(!m.flags.dc);
+        assert_eq!(
+            reports,
+            ["ut804: unrecognised ac/dc nibble: nibbles 2300A3140"]
+        );
+
+        // AC on resistance: the label stays plain.
+        let p = ut804_payload(&[3, 9, 9, 9, 0xA], 2, 0x4, 1, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+        assert_eq!(m.unwrap().mode, "Ω");
+        assert_eq!(
+            reports,
+            ["ut804: unrecognised ac/dc nibble: nibbles 3999A2410"]
+        );
+
+        // AC+DC on the current modes is known.
+        for mode in [0x7, 0x8, 0x9] {
+            let p = ut804_payload(&[1, 0, 0, 0, 0xA], 1, mode, 3, 0x0);
+            let (_, reports) = parse_reported(parse_measurement_ut804, &p);
+            assert!(reports.is_empty(), "mode {mode:#x}: {reports:?}");
+        }
+    }
+
+    #[test]
+    fn ut804_undefined_status_bits_are_reported() {
+        for status in [0x8, 0x3, 0x7, 0x9] {
+            let p = ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0x1, 2, status);
+            let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+            assert!(m.is_ok());
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut804: unrecognised status bits: nibbles 1234A212{status:X}"
+                )]
+            );
+        }
+        // Bit 1 alone is MAN, with or without the sign (spec §8).
+        for status in [0x2, 0x6] {
+            let p = ut804_payload(&[1, 2, 3, 4, 0xA], 2, 0x1, 2, status);
+            let (_, reports) = parse_reported(parse_measurement_ut804, &p);
+            assert!(reports.is_empty(), "status {status:#x}: {reports:?}");
+        }
+    }
+
+    /// Digit 1 blank with digit 2 other than A, C or F still reads as an
+    /// overload.
+    #[test]
+    fn ut804_undocumented_overload_pattern_is_reported() {
+        let p = ut804_payload(&[0xA, 0x1, 0, 0, 0], 1, 0x4, 0, 0x0);
+        let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+        let m = m.unwrap();
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.display_raw.as_deref(), Some("0L"));
+        assert_eq!(
+            reports,
+            ["ut804: unrecognised overload pattern: nibbles A10001400"]
+        );
+    }
+
+    /// A blank inside a UT804 reading still renders as a gap; digit 5 blank
+    /// is the 4000-count display and the idle frame is known.
+    ///
+    /// Range 4 puts the decimal point after digit 4, past the blanks: a
+    /// blank just after the point's digit repeats the point ("12..45"), and
+    /// the value fails to parse.
+    #[test]
+    fn ut804_blank_inside_a_reading_is_reported() {
+        for (digits, nibbles, display) in [
+            ([1, 0xA, 3, 4, 5], "1A3454120", "1345"),
+            ([1, 2, 0xA, 4, 5], "12A454120", "1245"),
+            ([1, 2, 3, 0xA, 5], "123A54120", "1235"),
+        ] {
+            let p = ut804_payload(&digits, 4, 0x1, 2, 0x0);
+            let (m, reports) = parse_reported(parse_measurement_ut804, &p);
+            assert_eq!(m.unwrap().display_raw.as_deref(), Some(display));
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut804: unrecognised digit nibble: nibbles {nibbles}"
+                )]
+            );
+        }
+
+        for digits in [[1, 2, 3, 4, 0xA], [0, 0, 0, 0xB, 0xA]] {
+            let p = ut804_payload(&digits, 2, 0x1, 2, 0x0);
+            let (_, reports) = parse_reported(parse_measurement_ut804, &p);
+            assert!(reports.is_empty(), "{digits:X?}: {reports:?}");
+        }
+    }
+
+    #[test]
+    fn ut803_blank_digit_is_reported() {
+        for (digits, nibbles) in [([0xA, 2, 3, 4], "1A234B008"), ([1, 2, 3, 0xA], "1123AB008")] {
+            let p = ut803_payload(&digits, 1, 0xB, 0x0, 0x0, 0x8);
+            let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+            assert!(m.is_ok());
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut803: unrecognised digit nibble: nibbles {nibbles}"
+                )]
+            );
+        }
+        // An overload's digits are not read.
+        let p = ut803_payload(&[0xA; 4], 0, 0x3, 0x1, 0x0, 0x0);
+        let (_, reports) = parse_reported(parse_measurement_ut803, &p);
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    #[test]
+    fn ut803_undefined_status_bits_are_reported() {
+        // Nibble 8 bit 1, nibble 9 bit 0, and the alt bit on volts.
+        for (nib8, nib9, nibbles) in [
+            (0x2, 0x0, "11234B208"),
+            (0x0, 0x1, "11234B018"),
+            (0x8, 0x0, "11234B808"),
+        ] {
+            let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, nib8, nib9, 0x8);
+            let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+            assert_eq!(m.unwrap().mode, "DC V");
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut803: unrecognised status bits: nibbles {nibbles}"
+                )]
+            );
+        }
+    }
+
+    /// Nibble 9 bits 2-1 light indicators of their own (§7.4 item 2), so the
+    /// meter sets them in ordinary use and they are no cause to ask for a
+    /// report.
+    #[test]
+    fn ut803_indicator_bits_stay_silent() {
+        for nib9 in [0x2, 0x4, 0x6] {
+            let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x0, nib9, 0x8);
+            let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+            assert_eq!(m.unwrap().mode, "DC V");
+            assert!(reports.is_empty(), "nibble 9 = {nib9:#x}: {reports:?}");
+        }
+    }
+
+    #[test]
+    fn ut803_volts_with_both_or_neither_coupling_bit_are_reported() {
+        for (nib10, mode, nibbles) in [
+            (0xC, "DC V", "11234B00C"),
+            (0x0, "AC V", "11234B000"),
+            (0x2, "AC V", "11234B002"),
+        ] {
+            let p = ut803_payload(&[1, 2, 3, 4], 1, 0xB, 0x0, 0x0, nib10);
+            let (m, reports) = parse_reported(parse_measurement_ut803, &p);
+            assert_eq!(m.unwrap().mode, mode);
+            assert_eq!(
+                reports,
+                [format!("ut803: unrecognised ac/dc bits: nibbles {nibbles}")]
+            );
+        }
+        // Neither bit on resistance is not about coupling.
+        let p = ut803_payload(&[1, 2, 3, 4], 1, 0x3, 0x0, 0x0, 0x0);
+        let (_, reports) = parse_reported(parse_measurement_ut803, &p);
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     // --- Detection (crate::detect) ---------------------------------------
