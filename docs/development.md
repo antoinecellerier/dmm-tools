@@ -142,6 +142,20 @@ first. The block shows the command as a user would type it, without either
 flag. A plain `cargo test -p dmm-cli` fails with a diff;
 `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites it.
 
+`assets/replays/` holds the recordings. `dcma-boot-refresh.replay` is 185 s of
+a low-power e-paper thermometer on a fixed 220 mA range — boot at 2.5–30 s
+peaking at 108.5 mA, refreshes at 89 s and 149–170 s, a 0.02 mA idle floor —
+and backs the README's text `read` block; `dcv-steps.replay` is 61 s of a bench
+supply stepped and ramped 2.9–9.3 V, behind the JSON one. `ohm.replay` is 23 s
+of a flat 4.649 kΩ on AUTO and `dcmv-hold-rel.replay` 39 s of DC mV with HOLD
+from 10.4 s and REL from 26 s; both are for GUI pictures rather than snippets,
+the settings and colour screens and the reading controls.
+`dcma-boot-refresh-autorange.replay` is the same thermometer cycle with AUTO
+ranging — 22 ↔ 220 mA hops and an OL blip at each boot and refresh — kept for
+future use. `ut181a-vac-hz.replay` and `ut181a-temp-t1-t2.replay` are single
+frames rebuilt from the UT181A golden fixtures, the first behind the CSV block
+in `docs/cli-reference.md`, the second carrying two temperature sub-values.
+
 ## Shell Completions
 
 Generate completions for your shell:

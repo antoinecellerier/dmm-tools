@@ -29,24 +29,34 @@ Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 - Software scaling (`--scale`, `--offset`, `--unit`) for clamps, shunts and sensors
 - Guided protocol capture wizard for bug reports and verifying new meters
 
+<!-- snippet via=dcma-boot-refresh.replay
+dmm-cli read --interval-ms 2500 --count 5
+-->
 ```
-$ dmm-cli read --count 5
-9.090 MΩ [AUTO]
-8.902 MΩ [AUTO]
-10.182 MΩ [AUTO]
-9.399 MΩ [AUTO]
-9.176 MΩ [AUTO]
+$ dmm-cli read --interval-ms 2500 --count 5
+0.00 mA
+32.54 mA
+100.96 mA
+107.95 mA
+4.01 mA
 
---- 5 samples | Min: 8.9020 | Max: 10.1820 | Avg: 9.3498
+--- 5 samples | Min: 0.0000 mA | Max: 107.9500 mA | Avg: 49.0920 mA
 ```
+<!-- /snippet -->
 
 Output as JSON for scripting:
 
+<!-- snippet via=dcv-steps.replay
+dmm-cli read --format json --count 1
+-->
 ```
 $ dmm-cli read --format json --count 1
 {"_metadata":{"device":"UNI-T UT61E+"}}
-{"display_raw":"  3.369","flags":{"auto_range":true,"dc":false,"hold":false,...},"mode":"DC V","range":"22V","unit":"V","value":3.369}
+{"timestamp":"2026-09-17T10:42:50.783+00:00","mode":"DC V","value":4.0,"unit":"V","range":"22V","display_raw":"  4.000","progress":8,"experimental":false,"flags":{"hold":false,"rel":false,"auto_range":true,"min":false,"max":false,"avg":false,"low_battery":false,"hv_warning":false,"peak_max":false,"peak_min":false,"lead_error":false,"comp":false,"record":false,"loz":false,"void":false,"dc":false}}
+
+--- 1 samples | Min: 4.0000 V | Max: 4.0000 V | Avg: 4.0000 V
 ```
+<!-- /snippet -->
 
 Send remote commands, or switch the meter's mode, range, HOLD, REL, MIN/MAX and
 Peak without touching it:
