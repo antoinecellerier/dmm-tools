@@ -406,10 +406,11 @@ pattern (using `param_2` as `short *`):
   checked (`!= '\x02'`). Byte 2 is not independently consumed.
 - Byte 6: No parser code accesses byte offset 6. It is included in
   the alternating-byte checksum but otherwise ignored.
-- Bytes 12-13: Accessed as `param_2[6]` (a 16-bit word). Bits are
-  extracted for inductance test frequency and other measurement flags.
-  Byte 13 specifically is accessed at `*(byte*)((int)param_2 + 0x11)`
-  and combined with byte 16 to form a 9-bit field.
+- Bytes 12-13: No parser code accesses them. **Corrected 2026-09-17:**
+  this was read as `param_2[6]` supplying the inductance flags, but the
+  access is `*(byte*)((int)param_2 + 0x11)`, which is byte 17; it is
+  combined with byte 16 bit 0 into a 9-bit value. The per-byte bit map
+  of bytes 14-18 is in the protocol spec §2.3.
 
 **LoZ mode bytes**: Searched for 0x15 and 0x16 near mode comparisons.
 The only relevant hit was at line 29130 in `FUN_10023530`, which
@@ -476,7 +477,7 @@ defines the programming interface:
 | Streaming model: continuous after 0x5A trigger | **[VENDOR]** | `FUN_1001f170`: read loop with no write ops |
 | Display bytes: raw passthrough (no 0x30 mask) | **[VENDOR]** | `FUN_1001fce0`: buffer append function, not transform |
 | Byte 6: not accessed by parser (reserved) | **[VENDOR]** | Parser: no reference to byte offset 6 |
-| Bytes 12-13: flag source for inductance/cap flags | **[VENDOR]** | Parser: `param_2[6]` bit extraction |
+| Bytes 12-13: not read; inductance flags come from byte 17 | **[VENDOR]** | Parser: `*(byte*)((int)param_2 + 0x11)` bit extraction |
 | High-byte flags: D4-D7 from mode equality checks | **[VENDOR]** | Parser: `bVar1==0x0C/0x0D/0x0F/0x10` |
 | `:DISPlay:DATA?` is oscilloscope path, not DMM | **[VENDOR]** | Ghidra: only in `PLAIN-TEXT` handler |
 
@@ -520,9 +521,10 @@ defines the programming interface:
    byte offset 6. It is included in the checksum but otherwise
    reserved/padding. [VENDOR]
 
-10. ~~**Bytes 12-13**~~: **Confirmed as flag source** — `param_2[6]`
-    (bytes 12-13) provides bits for inductance test frequency and
-    other measurement-specific flags. [VENDOR]
+10. ~~**Bytes 12-13**~~: **Confirmed unused** (corrected 2026-09-17;
+    first recorded as the inductance flag source) — the parser does not
+    access them. The inductance test frequency and serial/parallel bits
+    are in byte 17. [VENDOR]
 
 ## USB Bridge Whitelist (from UCI SDK)
 

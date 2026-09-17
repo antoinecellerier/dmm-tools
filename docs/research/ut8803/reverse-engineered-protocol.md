@@ -254,11 +254,16 @@ From the parser at `0x1001e5f0` (decompiled UT8803 parser):
 | 5 | Range | `*(byte*)((int)param_2 + 5)` → has 0x30 prefix (mask: `- 0x30`, max 6) |
 | 6 | (included in checksum) | Not directly accessed by the parser. Included in the alternating-byte checksum sum but no field extraction. Likely reserved or padding. |
 | 7-11 | Display | 5 raw bytes, appended to string buffer via `FUN_1001fce0` (buffer append, no transformation) |
-| 12-13 | Flags0 | Part of `param_2[6]` (bytes 12-13 as a 16-bit word). Byte 12 low bits: unknown purpose. Byte 13 (`*(byte*)((int)param_2 + 0x11)`): combined with byte 16 to form a 9-bit field for inductance test frequency and other flags |
-| 14-15 | Flags1 | `param_2[7]` (bytes 14-15): bit 0 = flag_27 (HOLD), bit 1 = Over-range → status D18 (uci_dll_decompiled.txt:24994-24996, 25029 — previously misread as unused), bit 2 = flag_1e (OL), bit 3 = flag_1d (Sign); high byte provides additional flag bits |
-| 16-17 | Flags2 | `param_2[8]` (bytes 16-17): bit 2+ = flag_23 (2-bit field), bit 1 = flag_29, bit 0 combined with byte 13 for 9-bit inductance field |
-| 18 | Flags3 | `(char)param_2[9]`: bit 0 = flag_28, bit 1 = flag_15; high part provides flag_25 |
+| 12-13 | (included in checksum) | Not accessed by the parser. An earlier reading put the `*(byte*)((int)param_2 + 0x11)` access here, but offset 0x11 is byte 17 |
+| 14 | Flags | Low byte of `param_2[7]`: bit 0 = HOLD (D31), bit 1 = Over-range (D18; previously misread as unused), bit 2 = OL (D7), bit 3 = Sign (D19). Bits 4-7 are not read |
+| 15 | Flags | High byte of `param_2[7]`: bit 0 = REL (D30), bit 1 = AUTO, inverted (D6), bit 2 = Error (high D0). Bits 3-7 are not read |
+| 16 | Flags | `*(byte*)(param_2 + 8)`: bit 0 = MIN (D29), bit 1 = MAX (D28), bits 2-3 = ScalePos (D24-D27). Bits 4-7 are not read |
+| 17 | Flags | `*(byte*)((int)param_2 + 0x11)`: bits 0-1 = inductance test frequency (below), bit 2 = TestMode, serial/parallel (high D1). Bits 3-7 are not read |
+| 18 | Flags | `(char)param_2[9]`: bit 0 = DiodeLR (high D3), bit 1 = DiodeRL (high D2). Bits 2-7 are not read |
 | 19-20 | Checksum | 16-bit BE, alternating-byte sum |
+
+The flag-byte bits are extracted at uci_dll_decompiled.txt:24985-25013;
+the "D" numbers are the status-word bits they feed (§3.2).
 
 **Mode byte values**: `0x00` through `0x16` (max 22 values), checked
 at line 25014: `if (0x16 < bVar1)` → reject. This corresponds to the
@@ -331,12 +336,16 @@ This encodes mode-specific flags by checking if the mode byte equals
 specific inductance/capacitance sub-measurement modes (0x0C=IndQ,
 0x0D=IndR, 0x0F=CapD, 0x10=CapR), corresponding to the high 32-bit
 flags D4-D7 (IndQ, IndR, CapD, CapR) documented in the programming
-manual. [VENDOR]
+manual. The four locals fill D3-D0 from the flag bytes: `local_15` =
+DiodeLR (byte 18 bit 0), `local_25` = DiodeRL (byte 18 bit 1),
+`local_20` = TestMode (byte 17 bit 2), `local_26` = Error (byte 15
+bit 2) (lines 25018-25021). [VENDOR]
 
 #### Inductance Test Frequency
 
 The parser checks for inductance modes (0x0B through 0x10) and
-extracts a 2-bit field determining the test frequency:
+extracts a 2-bit field (frame byte 17 bits 0-1) determining the test
+frequency:
 - `0` → "100Hz"
 - `1` → "1kHz"
 
@@ -807,7 +816,7 @@ D24-D27 = 0x2 = Scaling position 2
 | Display bytes: raw passthrough (no 0x30 prefix) | **[VENDOR]** | Ghidra: `FUN_1001fce0` is buffer append |
 | Flag byte-to-status-word mapping | **[VENDOR]** | Ghidra: bit shifts + format string verification |
 | Byte 6: unused by parser (reserved/padding) | **[VENDOR]** | Ghidra: no access to byte offset 6 |
-| Bytes 12-13: flag/inductance field source | **[VENDOR]** | Ghidra: `param_2[6]` combined with byte 17 |
+| Flag bytes 14-18: bits read per byte (§2.3); bytes 12-13 not read | **[VENDOR]** | Ghidra: bit extraction in `FUN_1001e5f0` |
 | `:DISPlay:DATA?` is for oscilloscopes, not DMMs | **[VENDOR]** | Ghidra: only in PLAIN-TEXT handler path |
 | Maximum sampling rate | **[UNVERIFIED]** | Manual says 2-3 Hz refresh |
 
@@ -868,11 +877,9 @@ The rest specifies 8N1 with no flow control. [VENDOR]
 - Byte 6: not accessed by parser (reserved/padding, included in checksum)
 - Display bytes at offsets 7-11 (raw values, appended directly to
   string buffer — no 0x30 prefix stripping)
-- Bytes 12-13: flag source combined with byte 17 for inductance
-  test frequency (2-bit field) and other flags
-- Bytes 14-15: primary flag byte pair (AC/DC, auto, hold, etc.)
-- Bytes 16-17: secondary flags (overload indicators)
-- Byte 18: tertiary flags
+- Bytes 12-13: not accessed by parser (included in checksum)
+- Bytes 14-18: status flags (hold, OL, sign, auto, min/max, inductance
+  test frequency, diode direction; bit map in §2.3)
 - Alternating-byte checksum at offsets 19-20
 
 The UCI library parses these raw 21-byte frames and constructs the
