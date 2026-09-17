@@ -1,6 +1,7 @@
 //! Shared frame extraction and read-loop functions for protocols using ABCD headers.
 
 use crate::error::{Error, Result};
+use crate::protocol::unrecognised::report_unknown;
 use crate::transport::Transport;
 use log::{debug, trace};
 use std::time::{Duration, Instant};
@@ -320,12 +321,29 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
         return Ok(None);
     };
 
+    // Checksum: sum of bytes 0..19, stored BE at bytes 19-20.
+    // The RE spec describes this as an "alternating-byte sum" (even/odd
+    // accumulators), but that's equivalent to a straight sequential sum.
+    let computed = sum16(&remaining[..19]);
+    let received = u16::from_be_bytes([remaining[19], remaining[20]]);
+
     // Byte 3 must be 0x02 (measurement response type). Error out rather
     // than returning Ok(None): Ok(None) means "need more data" and never
     // consumes, so one non-measurement frame at the buffer head would
     // block extraction until the buffer cap clears everything. The
     // family's SkipAndRetry recovery drains past this header instead.
     if remaining[3] != 0x02 {
+        // The spec documents no other type
+        // (docs/research/ut8803/reverse-engineered-protocol.md §2.3). Only a
+        // frame whose checksum holds is the meter's: a false AB CD while
+        // syncing stays silent.
+        if computed == received {
+            report_unknown(
+                "ut8803",
+                "frame type",
+                format_args!("{:#04x}", remaining[3]),
+            );
+        }
         trace!("framing: ut8803 byte3={:#04x}, expected 0x02", remaining[3]);
         return Err(Error::invalid_response(
             format!("ut8803 frame type {:#04x}, expected 0x02", remaining[3]),
@@ -335,12 +353,6 @@ pub fn extract_frame_ut8803(buf: &[u8]) -> Result<Option<(Vec<u8>, usize)>> {
 
     let frame = &remaining[..FRAME_LEN];
     trace!("framing: ut8803 raw frame: {:02X?}", frame);
-
-    // Checksum: sum of bytes 0..19, stored BE at bytes 19-20.
-    // The RE spec describes this as an "alternating-byte sum" (even/odd
-    // accumulators), but that's equivalent to a straight sequential sum.
-    let computed = sum16(&frame[..19]);
-    let received = u16::from_be_bytes([frame[19], frame[20]]);
     checksum_ok("ut8803", computed, received, frame)?;
 
     // Payload = bytes 2..19 (everything between header and checksum)
@@ -660,6 +672,32 @@ mod tests {
         let mut buf = vec![0xAB, 0xCD, 0x00, 0x05];
         buf.resize(21, 0x00);
         assert!(extract_frame_ut8803(&buf).is_err());
+    }
+
+    /// A checksummed frame of an undocumented type is reported and still
+    /// errors; with a bad checksum (a false AB CD) it errors silently.
+    #[test]
+    fn ut8803_unknown_frame_type_is_reported_only_when_checksummed() {
+        let mut body = test_ut8803_body();
+        body[1] = 0x05;
+        let mut frame = test_frame_ut8803(&body);
+        let (result, reports) = crate::protocol::capture_reports(|| extract_frame_ut8803(&frame));
+        assert!(result.is_err());
+        assert_eq!(reports, ["ut8803: unrecognised frame type: 0x05"]);
+
+        frame[20] ^= 0xFF;
+        let (result, reports) = crate::protocol::capture_reports(|| extract_frame_ut8803(&frame));
+        assert!(result.is_err());
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A measurement frame passes the extractor without a report.
+    #[test]
+    fn ut8803_measurement_frame_reports_nothing() {
+        let frame = test_frame_ut8803(&test_ut8803_body());
+        let (result, reports) = crate::protocol::capture_reports(|| extract_frame_ut8803(&frame));
+        assert!(matches!(result, Ok(Some((_, 21)))));
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     #[test]

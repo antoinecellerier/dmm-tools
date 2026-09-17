@@ -875,6 +875,8 @@ plus what no step reaches.
   REL swap with bit-range 4-5 vs 0-3. Real-hardware confirmation is
   still pending. See `docs/research/uci-bench-family/reverse-engineered-protocol.md` §3.5.
 - Byte 6 purpose: bargraph or secondary status? [UNVERIFIED]
+- Byte 4 high nibble and byte 5 bits 6-7: the vendor never reads them,
+  and the parser reports them as unrecognised when set (noted 2026-09-17)
 - Overload detection (BCD nibble 0x0C)
 - Streaming rate
 
@@ -910,6 +912,10 @@ plus what no step reaches.
   bits 0/1. Still needs real-hardware confirmation but no longer a
   speculative guess. See `docs/research/ut8803/reverse-engineered-protocol.md`
   §2.3 for the derivation.
+- Flag bytes 14-18: do they carry a 0x30 prefix like the range byte (and
+  the UT61E+'s flag bytes)? The parser reports any bit the vendor does not
+  read (bit map in spec §2.3) except bits 4-5, which it leaves out until a
+  capture settles this (noted 2026-09-17)
 - Display value parsing (5 bytes → float)
 - Streaming rate (~2-3 Hz per manual)
 

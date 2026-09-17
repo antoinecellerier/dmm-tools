@@ -237,10 +237,11 @@ fn bcd_to_char(nibble: u8) -> char {
 /// - bytes 1-3: 5 display nibbles, most significant digit in byte 3's low
 ///   nibble: d1=b3 lo, d2=b2 hi, d3=b2 lo, d4=b1 hi, d5(LSD)=b1 lo
 ///   (vendor stack slots at uci_dll_decompiled.txt:24714-24719; byte 3's
-///   high nibble is never read)
+///   high nibble is never read, and is reported if set)
 /// - byte 4: decimal point position (low nibble, 0-4) + diode/SCR probe
 ///   direction (bits 4-5, consumed only for positions 0x23/0x2A,
-///   uci_dll_decompiled.txt:24727, 24777-24800 — NOT AC/DC coupling)
+///   uci_dll_decompiled.txt:24727, 24777-24800 — NOT AC/DC coupling);
+///   bits 6-7 are never read, and are reported if set
 /// - byte 5: status/bargraph byte [UNVERIFIED purpose]
 /// - byte 6: sign (bit 7) + status flags (bits 0-6)
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
@@ -258,6 +259,25 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         ));
     }
     let sign_byte = payload[6];
+
+    // Frame byte 4 carries only the MSD in its low nibble, and frame byte 5
+    // only the decimal point and bits 4-5; the vendor never reads the rest
+    // (docs/research/uci-bench-family/reverse-engineered-protocol.md §3.1,
+    // §3.2, §3.4), so a bit set there is undocumented.
+    if payload[3] & 0xF0 != 0 {
+        report_unknown(
+            "ut8802",
+            "status bits",
+            format_args!("frame byte 4 = {:#04x}", payload[3]),
+        );
+    }
+    if payload[4] & 0xC0 != 0 {
+        report_unknown(
+            "ut8802",
+            "status bits",
+            format_args!("frame byte 5 = {:#04x}", payload[4]),
+        );
+    }
 
     // Look up position code
     let (mode, unit, range_label): (Cow<'static, str>, &'static str, &'static str) =
@@ -866,6 +886,64 @@ raw_payload=7"#
         let payload = make_payload(0x01, [0x0A, 0, 1, 2, 3], 0, 0x00, 0x00, 0x00);
         let m = parse_measurement(&payload).unwrap();
         assert_eq!(m.display_raw.as_deref(), Some("  123"));
+    }
+
+    /// Parse `payload` and `clean`, check both read the same, and return what
+    /// parsing `payload` reported.
+    fn reports_leaving_reading_unchanged(payload: &[u8], clean: &[u8]) -> Vec<String> {
+        let (m, reports) = crate::protocol::capture_reports(|| parse_measurement(payload).unwrap());
+        assert_eq!(snapshot(&m), snapshot(&parse_measurement(clean).unwrap()));
+        reports
+    }
+
+    /// Frame byte 4's high nibble is never read (spec §3.2).
+    #[test]
+    fn frame_byte_4_high_nibble_is_reported() {
+        let clean = make_payload(0x05, [1, 2, 3, 4, 5], 1, 0x02, 0x00, 0x00);
+        let mut payload = clean.clone();
+        payload[3] |= 0x80;
+        assert_eq!(
+            reports_leaving_reading_unchanged(&payload, &clean),
+            ["ut8802: unrecognised status bits: frame byte 4 = 0x81"]
+        );
+    }
+
+    /// Frame byte 5 bits 6-7 are never read (spec §3.1); bits 4-5 are the
+    /// probe direction and stay silent (`documented_frames_report_nothing`).
+    #[test]
+    fn frame_byte_5_high_bits_are_reported() {
+        let clean = make_payload(0x23, [0, 0, 5, 1, 2], 3, 0x01, 0x00, 0x00);
+        let mut payload = clean.clone();
+        payload[4] |= 0x40;
+        assert_eq!(
+            reports_leaving_reading_unchanged(&payload, &clean),
+            ["ut8802: unrecognised status bits: frame byte 5 = 0x53"]
+        );
+    }
+
+    /// Every documented value — each position, digit nibble, decimal point,
+    /// probe direction, byte 6 value and byte 7 flag — parses silently.
+    #[test]
+    fn documented_frames_report_nothing() {
+        let ((), reports) = crate::protocol::capture_reports(|| {
+            for &(position, _, _, _) in POSITION_TABLE {
+                for direction in 0..=3 {
+                    for dp_pos in 0..=4 {
+                        let payload =
+                            make_payload(position, [1, 2, 3, 4, 5], dp_pos, direction, 0, 0);
+                        parse_measurement(&payload).unwrap();
+                    }
+                }
+            }
+            for nibble in [0x0A, 0x0C] {
+                let payload = make_payload(0x05, [nibble, 1, 2, 3, 4], 0, 0, 0, 0);
+                parse_measurement(&payload).unwrap();
+            }
+            for byte in 0..=0xFF {
+                parse_measurement(&make_payload(0x05, [0; 5], 1, 0, byte, byte)).unwrap();
+            }
+        });
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     #[test]

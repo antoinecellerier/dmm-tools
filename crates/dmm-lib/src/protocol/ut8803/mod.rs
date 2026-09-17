@@ -109,6 +109,21 @@ fn display_unit(mode_byte: u8, range_idx: u8) -> &'static str {
     }
 }
 
+/// The bits the vendor reads in frame bytes 14-18 (payload[12..=16]), per
+/// docs/research/ut8803/reverse-engineered-protocol.md §2.3:
+/// - 14: HOLD, over-range, OL, sign (bits 0-3)
+/// - 15: REL, AUTO, error (bits 0-2)
+/// - 16: MIN, MAX, decimal position (bits 0-3)
+/// - 17: inductance test frequency, serial/parallel (bits 0-2)
+/// - 18: diode direction left-to-right, right-to-left (bits 0-1)
+const FLAG_BYTE_MASKS: [u8; 5] = [0x0F, 0x07, 0x0F, 0x07, 0x03];
+
+/// Bits of a flag byte that are not reported even though the vendor never
+/// reads them: the range byte carries a 0x30 ASCII prefix, and so do the
+/// UT61E+'s flag bytes, so these may too. Until a capture settles it, a
+/// prefix must not make every session report.
+const POSSIBLE_ASCII_PREFIX: u8 = 0x30;
+
 /// Whether a mode measures a DC quantity, per `FUN_1001ca90`
 /// (uci_dll_decompiled.txt:23449-23466: AC = modes 0x00/0x02-0x04,
 /// DC = 0x01/0x05-0x07).
@@ -254,15 +269,22 @@ impl Protocol for Ut8803Protocol {
 /// - byte 3:    range byte (has 0x30 prefix, mask with -0x30, max 6)
 /// - byte 4:    (included in checksum, not parsed — reserved/padding)
 /// - bytes 5-9: display (5 raw bytes)
-/// - bytes 10-11: flags0 (2 bytes)
-/// - bytes 12-13: flags1 (2 bytes)
-/// - bytes 14-15: flags2 (2 bytes)
-/// - byte 16:   flags3 (1 byte)
+/// - bytes 10-11: (included in checksum, not read by the vendor)
+/// - bytes 12-16: status flags, bits per [`FLAG_BYTE_MASKS`]
+///
+/// Data outside the spec — mode, range, display or flag bits — is reported
+/// through `report_unknown`.
 pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     check_len("ut8803", payload, 17)?;
 
     let mode_byte = payload[2];
     let range_raw = payload[3];
+    // The vendor rejects a range byte outside 0x30-0x36: it subtracts 0x30
+    // with wrap-around and requires at most 6
+    // (docs/research/ut8803/reverse-engineered-protocol.md §2.3).
+    if !(0x30..=0x36).contains(&range_raw) {
+        report_unknown("ut8803", "range byte", format_args!("{range_raw:#04x}"));
+    }
     let range_idx = if range_raw >= 0x30 {
         range_raw - 0x30
     } else {
@@ -270,11 +292,12 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     };
     let display_bytes = &payload[5..10];
 
-    // Parse mode
+    // Parse mode. The vendor rejects a mode byte above 0x16, the last
+    // position code (spec §2.3, §4.2).
     let mode: Cow<'static, str> = if (mode_byte as usize) < POSITION_TABLE.len() {
         Cow::Borrowed(POSITION_TABLE[mode_byte as usize].1)
     } else {
-        debug!("ut8803: unknown mode byte {:#04x}", mode_byte);
+        report_unknown("ut8803", "mode byte", format_args!("{mode_byte:#04x}"));
         unknown_mode(mode_byte)
     };
 
@@ -285,7 +308,7 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // the frame is malformed and should be surfaced as a parse error rather
     // than silently smuggled past `String::from_utf8_lossy` as U+FFFD,
     // which would mask real corruption during HW verification.
-    for &b in display_bytes {
+    for (i, &b) in display_bytes.iter().enumerate() {
         let allowed = b == 0x00
             || b == b' '
             || b == b'+'
@@ -295,6 +318,12 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             || b == b'O'
             || b == b'L';
         if !allowed {
+            // Display bytes are frame bytes 7-11 (spec §2.3).
+            report_unknown(
+                "ut8803",
+                "display byte",
+                format_args!("frame byte {} = {b:#04x}", 7 + i),
+            );
             return Err(Error::invalid_response(
                 format!("ut8803 invalid display byte {b:#04x} in {display_bytes:02X?}"),
                 payload,
@@ -327,11 +356,24 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     //   MAX  (D28) ← frame byte 16 bit 1 = payload[14] & 0x02
     //
     // See docs/research/ut8803/reverse-engineered-protocol.md §2.3 for the
-    // full derivation. `flags3 = payload[16]` is no longer used for any
-    // documented status bit.
+    // full derivation. The other bits the vendor reads (over-range, error,
+    // decimal position, inductance test frequency, serial/parallel, diode
+    // direction) are not surfaced.
     let flags1_lo = payload[12];
     let flags1_hi = payload[13];
     let flags2_lo = payload[14];
+
+    // Any other bit in frame bytes 14-18 is one the vendor never reads
+    // (spec §2.3, payload layout), bar a possible ASCII prefix.
+    for (i, (&b, mask)) in payload[12..=16].iter().zip(FLAG_BYTE_MASKS).enumerate() {
+        if b & !(mask | POSSIBLE_ASCII_PREFIX) != 0 {
+            report_unknown(
+                "ut8803",
+                "status bits",
+                format_args!("frame byte {} = {b:#04x}", 14 + i),
+            );
+        }
+    }
 
     let hold = flags1_lo & 0x01 != 0;
     let overload = flags1_lo & 0x04 != 0;
@@ -405,6 +447,12 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     for start in framing::abcd_header_offsets(buf) {
+        // Only a measurement frame identifies the meter. Checking the type
+        // first also keeps another AB CD meter's bytes, which can pass the
+        // checksum by chance, from being reported as a UT8803 frame type.
+        if buf.get(start + 3) != Some(&0x02) {
+            continue;
+        }
         if matches!(framing::extract_frame_ut8803(&buf[start..]), Ok(Some(_))) {
             return Some(Evidence::Model {
                 id: "ut8803",
@@ -692,6 +740,109 @@ raw_payload=17"#
             format!("{err}").contains("invalid display byte"),
             "expected display-byte error, got: {err}"
         );
+    }
+
+    fn parse_capturing(payload: &[u8]) -> (Result<Measurement>, Vec<String>) {
+        crate::protocol::capture_reports(|| parse_measurement(payload))
+    }
+
+    /// A mode byte past 0x16 is reported and still labelled Unknown.
+    #[test]
+    fn unknown_mode_byte_is_reported() {
+        let (m, reports) = parse_capturing(&make_payload(0x17, 0x00, b" 1.23", 0, 0, 0));
+        assert_eq!(m.unwrap().mode, "Unknown(0x17)");
+        assert_eq!(reports, ["ut8803: unrecognised mode byte: 0x17"]);
+    }
+
+    /// A range byte outside 0x30-0x36 is reported and parsed as before.
+    #[test]
+    fn range_byte_outside_the_prefixed_range_is_reported() {
+        for (range, index) in [(0x37, 7), (0x2F, 0x2F), (0x05, 5)] {
+            let mut payload = make_payload(0x0E, 0x00, b" 1.23", 0, 0, 0);
+            payload[3] = range;
+            let (m, reports) = parse_capturing(&payload);
+            let m = m.unwrap();
+            assert_eq!(m.range_raw, range);
+            assert_eq!(m.unit, display_unit(0x0E, index));
+            assert_eq!(
+                reports,
+                [format!("ut8803: unrecognised range byte: {range:#04x}")]
+            );
+        }
+    }
+
+    /// A display byte outside the allowed set is reported and still errors.
+    #[test]
+    fn invalid_display_byte_is_reported() {
+        let (m, reports) = parse_capturing(&make_payload(0x01, 0x00, b"1\xff234", 0, 0, 0));
+        assert!(m.is_err());
+        assert_eq!(
+            reports,
+            ["ut8803: unrecognised display byte: frame byte 8 = 0xff"]
+        );
+    }
+
+    /// The lowest bit the vendor never reads in each of frame bytes 14-18,
+    /// past the possible ASCII prefix, is reported, and the reading stays
+    /// the same.
+    #[test]
+    fn undefined_status_bits_are_reported() {
+        let clean = make_payload(0x01, 0x01, b"12.34", 0, 0, 0);
+        for (i, bit) in [0x40, 0x08, 0x40, 0x08, 0x04].into_iter().enumerate() {
+            let mut payload = clean.clone();
+            payload[12 + i] = bit;
+            let (m, reports) = parse_capturing(&payload);
+            assert_eq!(
+                snapshot(&m.unwrap()),
+                snapshot(&parse_measurement(&clean).unwrap())
+            );
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut8803: unrecognised status bits: frame byte {} = {bit:#04x}",
+                    14 + i
+                )]
+            );
+        }
+    }
+
+    /// Every documented value — each mode and range, the display forms the
+    /// tests use, and every combination of the bits the vendor reads in
+    /// each flag byte, with and without a 0x30 prefix — parses silently.
+    #[test]
+    fn documented_frames_report_nothing() {
+        let ((), reports) = crate::protocol::capture_reports(|| {
+            for mode in 0x00..=0x16 {
+                for range in 0..=6 {
+                    for display in [b"12.34", b"   OL", b"1.2\0\0", b"-1.23"] {
+                        parse_measurement(&make_payload(mode, range, display, 0, 0, 0)).unwrap();
+                    }
+                }
+            }
+            for (i, mask) in FLAG_BYTE_MASKS.into_iter().enumerate() {
+                for value in 0..=mask {
+                    for prefix in [0, POSSIBLE_ASCII_PREFIX] {
+                        let mut payload = make_payload(0x0B, 0x02, b"1.234", 0, 0, 0);
+                        payload[12 + i] = value | prefix;
+                        parse_measurement(&payload).unwrap();
+                    }
+                }
+            }
+        });
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// Detection listens to every meter: a checksummed AB CD window of
+    /// another type identifies nothing and reports nothing.
+    #[test]
+    fn detection_does_not_report_other_frame_types() {
+        let mut body = framing::test_ut8803_body();
+        body[1] = 0x05;
+        let frame = framing::test_frame_ut8803(&body);
+        let (evidence, reports) =
+            crate::protocol::capture_reports(|| recognise(&frame, &Probing::default()));
+        assert_eq!(evidence, None);
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     #[test]
