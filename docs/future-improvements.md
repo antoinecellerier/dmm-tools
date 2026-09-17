@@ -292,6 +292,14 @@ so it means hand-painting stripes with screen-space spacing via
 Use cases: telling "the meter said something unusual" apart from "the meter
 said nothing", without having to cross-check the recording.
 
+### Overlay labels that avoid each other
+
+**Complexity:** Low
+
+The mean line, the reference line and the cursor readouts each place their label at a fixed spot (right edge for the lines, beside the marker for a cursor), so with several overlays on a busy graph the texts pile up — a mean near the reference value puts "Mean: 3.4379 mA" on top of "1.0000 mA", and a cursor near the right edge lands under both. Labels should be laid out against each other: nudge a colliding label up or down, or to the other side of its line, so every overlay stays readable at once.
+
+Use cases: the documentation's overlays picture had to be composed to keep the labels apart; a user reading a power-cycle graph with mean, reference, triggers and cursors on wants all four numbers at a glance.
+
 ### Measurement rate display
 
 **Complexity:** Low

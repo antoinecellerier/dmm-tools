@@ -130,7 +130,12 @@ hand, or the test fails with a diff. The one in `README.md` is hand-written on
 purpose — the test only checks that every protocol family and every
 verification issue still appears in it.
 
-## Doc snippets
+## Doc screenshots and snippets
+
+Both come from the same recorded meter sessions, so a reader sees one bench
+run rather than a simulation. Record a session once with
+`dmm-cli read --format replay -o <name>.replay`, commit it under
+`assets/replays/`, and point a snippet or a scene at it.
 
 The command-output blocks in `README.md` and `docs/cli-reference.md` sit
 between `<!-- snippet via=… -->` and `<!-- /snippet -->`, with the commands
@@ -142,19 +147,37 @@ first. The block shows the command as a user would type it, without either
 flag. A plain `cargo test -p dmm-cli` fails with a diff;
 `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites it.
 
+The GUI pictures come from `scripts/doc-screenshots.sh all`, which stages one
+scene per picture on the verify-gui skill's private display — a recording, the
+settings the picture needs, and the keys, clicks and window size it is taken
+at. `list` prints the pictures and naming one takes only its scene. A scene
+hands out its recording's first seconds in one burst and then runs session
+time at a thousandth of real time, so the window, the trace and the click
+coordinates stay put however long its keys and clicks take, and a rerun stages
+the same frame. Every capture prints how many pixels it differs from the
+committed file; X rendering is not identical across driver versions, so look
+at each PNG before committing it rather than trusting a zero. Three scenes
+need the USB cable out and skip themselves with a message while one is plugged
+in: the two settings pictures, so the panel shows its defaults, and the
+connection-help one, which is the failed connection.
+
+`cargo test -p dmm-gui --test doc_screenshots` fails when a doc shows a
+picture no scene writes, or a scene writes one no doc shows.
+
 `assets/replays/` holds the recordings. `dcma-boot-refresh.replay` is 185 s of
 a low-power e-paper thermometer on a fixed 220 mA range — boot at 2.5–30 s
 peaking at 108.5 mA, refreshes at 89 s and 149–170 s, a 0.02 mA idle floor —
-and backs the README's text `read` block; `dcv-steps.replay` is 61 s of a bench
-supply stepped and ramped 2.9–9.3 V, behind the JSON one. `ohm.replay` is 23 s
-of a flat 4.649 kΩ on AUTO and `dcmv-hold-rel.replay` 39 s of DC mV with HOLD
-from 10.4 s and REL from 26 s; both are for GUI pictures rather than snippets,
-the settings and colour screens and the reading controls.
-`dcma-boot-refresh-autorange.replay` is the same thermometer cycle with AUTO
-ranging — 22 ↔ 220 mA hops and an OL blip at each boot and refresh — kept for
-future use. `ut181a-vac-hz.replay` and `ut181a-temp-t1-t2.replay` are single
-frames rebuilt from the UT181A golden fixtures, the first behind the CSV block
-in `docs/cli-reference.md`, the second carrying two temperature sub-values.
+and backs the README's text `read` block and the wide, narrow, graph, minimal
+meter and palette pictures; `ohm.replay` is 23 s of a flat 4.649 kΩ on AUTO,
+behind the README's JSON block. `dcmv-hold-rel.replay` is 39 s of DC mV with
+HOLD from 10.4 s and REL from 26 s, for the reading controls.
+`ut181a-vac-hz.replay` is a single frame rebuilt from a UT181A golden fixture,
+behind the CSV block in `docs/cli-reference.md` and the big meter picture.
+`dcv-steps.replay` (61 s of a bench supply stepped and ramped 2.9–9.3 V),
+`dcma-boot-refresh-autorange.replay` (the same thermometer cycle with AUTO
+ranging — 22 ↔ 220 mA hops and an OL blip at each boot and refresh) and
+`ut181a-temp-t1-t2.replay` (a UT181A frame carrying two temperature
+sub-values) are kept for future use.
 
 ## Shell Completions
 
@@ -172,7 +195,7 @@ dmm-cli completions powershell >> $PROFILE
 1. Write the release entry in `CHANGELOG.md` (see existing entries for format). If the release has a theme, put a short tagline in the heading — `## v0.2.0 — Multi-Device Protocol Support` — stating what it changes in scope or intent, and open the section with a one- or two-sentence summary of the intent and main areas touched
 2. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
 3. Update `Cargo.lock`: `cargo update --workspace`
-4. Update the README screenshot if the GUI has changed
+4. Regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the PNGs, and commit the ones whose changelog entry changed what they show
 5. Commit: `git commit -am "Release v0.3.0"`
 6. Tag and push — **confirm with the maintainer first**, this publishes the release: `git tag v0.3.0 && git push && git push origin v0.3.0`
 7. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails before it builds anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading
@@ -320,4 +343,6 @@ readings. Pin a mock mode as above: the auto-cycling mock changes scenario on
 its own schedule and the graph re-anchors on each change, so an unpinned
 preseed leaves only the last scenario's history on screen. The burst is spent
 once per process, so a reconnect does not replay it. `dmm-cli read` takes the
-same two flags, with `--device mock` spelled out.
+same two flags, with `--device mock` spelled out, and `run --replay <FILE>`
+takes them in place of `--mock-mode`, opening a recorded session at the instant
+the preseed names.

@@ -93,6 +93,9 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 ### "USB cable not found"
 
+The GUI puts the steps for your platform on screen as its [connection
+help](../assets/gui-connection-help.png); the full list is:
+
 - Verify the USB cable is plugged in
 - **Linux:** `lsusb | grep -iE '10c4:ea80|1a86:e429|1a86:e008'` — one of the three cable chips should be listed. If missing, try another port; if listed but still not found, check the udev rule (see above)
 - **Linux, cable listed by `lsusb` but still not found:** `ls -l /dev/hidraw*` — the cable's node should show a trailing `+`, marking the ACL. For the detail, `getfacl /dev/hidrawN` (from the `acl` package) should list your user as `user:<you>:rw-`. If it doesn't, the udev rule isn't installed under a name that sorts before `73-seat-late.rules`, or you're on a headless machine (see above)

@@ -19,7 +19,7 @@ dmm-gui [OPTIONS]
 A desktop GUI for live measurement display, time-series graphing, recording,
 and remote control of UNI-T and Voltcraft multimeters.
 
-![Wide layout — live measurement with graph, statistics, recording, and minimap](../assets/gui-wide-layout.png)
+![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where two cursors span a sensor's boot sequence and read its duration and charge](../assets/gui-wide-layout.png)
 
 ## Connecting
 
@@ -39,6 +39,8 @@ meter is verified, and clicking it opens the device's verification issue on
 GitHub, where you can report feedback.
 
 Help is shown automatically when connection fails:
+
+![Connection help in the left column: "USB cable not found" above the steps for this platform](../assets/gui-connection-help.png)
 
 - **USB cable not found:** platform-specific instructions (Linux: udev rule
   install; Windows: Device Manager guidance to check if a driver is needed).
@@ -78,7 +80,7 @@ top-right corner in every layout and expire on their own.
 
 ## Reading Display
 
-![Reading display with HOLD and REL flags active, and remote control buttons](../assets/gui-reading-controls.png)
+![Reading display with the HOLD flag lit beside the mode and range, and the remote-control buttons under it](../assets/gui-reading-controls.png)
 
 - Primary value in large monospace font, as the meter displays it
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
@@ -123,7 +125,7 @@ dropdown, moves to the next scenario.
 
 ## Graph
 
-![Graph with mean line, min/max envelope, reference lines, trigger markers, and cursors](../assets/gui-graph-overlays.png)
+![Graph over one refresh cycle of a battery-powered sensor: the mean of the window, and cursors A and B reading the cycle's length, current spread and charge](../assets/gui-graph-overlays.png)
 
 Three components stacked vertically: toolbar, main plot, and minimap.
 
@@ -142,6 +144,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **Ref** | Horizontal reference lines at user-specified values (comma/semicolon/space separated) |
 | **Triggers** | (requires Ref) Diamond markers where data crosses a reference line |
 | **Cursors** | Click to place cursor A, click again for cursor B. Shows ΔT, ΔV, and ∫ (integral, for current/voltage modes only). |
+
+![The same session with the boot sequence picked off the minimap instead of the live end: a diamond at each crossing of the 1 mA reference line, and a 60 s Min/Max envelope holding the boot's 108 mA peak](../assets/gui-graph-triggers.png)
 
 ### Main Plot
 
@@ -321,12 +325,14 @@ Two-column layout with a resizable left sidebar (180–400px):
 
 ### Narrow Layout (< 900px)
 
+![Narrow layout — reading, controls, compact specifications, statistics, graph and recording stacked in one column](../assets/gui-narrow-layout.png)
+
 Single-column stack: reading, controls, help, specifications (compact),
 statistics, graph, recording.
 
 ### Big Meter Mode
 
-![Big meter mode — reading and statistics scaled to fill the window](../assets/gui-big-meter.png)
+![Big meter mode — a UT181A reading scaled to fill the window, with its frequency and period, the mode line and the remote-control buttons](../assets/gui-big-meter.png)
 
 Activated when both graph and recording panels are hidden (via settings
 or the toggle). The reading display scales to fill the available space —
@@ -340,7 +346,12 @@ top bar and command buttons, leaving only the reading and mode line.
 Press **Ctrl+B** a third time to return to your normal layout. In a window
 too small to show the **⊞** button, **Ctrl+B** is the way out.
 
-![Minimal meter mode — reading only, no chrome](../assets/gui-minimal-meter.png)
+![Minimal mode in a wide, short window: the mode and range selectors beside the reading](../assets/gui-minimal-meter-wide.png)
+
+![Minimal mode in a narrow window: the mode and range selectors under the reading](../assets/gui-minimal-meter-narrow.png)
+
+The reading and its mode line follow the window's shape, side by side or
+stacked.
 
 If all panels are already hidden via settings, **⊞** restores all panels
 to their defaults.
@@ -348,6 +359,8 @@ to their defaults.
 ## Settings
 
 Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Linux (XDG config dir under the `dmm-tools` project name; macOS and Windows use the equivalent platform-specific location).
+
+![The settings panel open above the reading and graph, with the theme, colour, panel, interval, buffer, device and zoom rows](../assets/gui-settings.png)
 
 | Setting | Default | Description |
 |---|---|---|
@@ -369,15 +382,30 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 
 ### Color Customization
 
-Three color presets are available:
+**Theme.** Dark, Light or System, from the **Theme** row above or
+[`--theme`](#command-line-options). Each mode keeps its own colors.
 
-- **Default** — warm palette (red/pink graph line, green mean, orange cursor)
-- **High Contrast** — bolder, higher-saturation colors for maximum visibility
-- **Colorblind** — deuteranopia/protanopia safe palette (blue/orange/purple, avoids red-green)
+**Presets.** The **Colors** row picks the palette. Switching presets resets
+any per-color overrides.
 
-Select a preset from the "Colors" row in the settings panel. Switching presets resets any per-color overrides.
+| Preset | Palette |
+|---|---|
+| **Default** | warm — red/pink graph line, green mean, orange cursors |
+| **High Contrast** | bolder, higher-saturation colors |
+| **Colorblind** | deuteranopia/protanopia safe — blue/orange/purple, avoids red-green |
 
-**Per-color editing:** Expand "Customize colors" in the settings panel to see color swatches for all 23 base colors, grouped by category (UI, Graph, Status, Minimap). Click any swatch to open a color picker. Colors are edited for the current theme mode (dark or light) independently. The same colors can be set in `settings.json`; see [Color fields](#color-fields) in the appendix.
+| | |
+|---|---|
+| ![The graph in the Default preset, dark theme](../assets/gui-theme-dark.png) | ![The graph in the Default preset, light theme](../assets/gui-theme-light.png) |
+| ![The graph in the High Contrast preset](../assets/gui-theme-high-contrast.png) | ![The graph in the Colorblind preset](../assets/gui-theme-colorblind.png) |
+
+**Per-color editing.** Expand **Customize colors** for a swatch per color,
+grouped UI, Graph, Status and Minimap; click one to open a picker. The
+swatches edit the theme mode you are in, so dark and light are set
+separately. The same colors can be set in `settings.json` — see [Color
+fields](#color-fields) in the appendix.
+
+![The Customize colors swatch rows with one swatch's picker open, showing its RGB values, saturation square and hue strip](../assets/gui-color-customization.png)
 
 ## Keyboard Shortcuts
 

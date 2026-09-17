@@ -10,7 +10,7 @@ Read, record and remote-control a digital multimeter over its USB cable. Support
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
-![GUI screenshot — live DC mA measurement with graph, statistics, reference line triggers, and recording](assets/gui-screenshot.png)
+![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where two cursors span a sensor's boot sequence and read its duration and charge](assets/gui-wide-layout.png)
 
 ## [GUI](docs/gui-reference.md)
 
@@ -46,15 +46,15 @@ $ dmm-cli read --interval-ms 2500 --count 5
 
 Output as JSON for scripting:
 
-<!-- snippet via=dcv-steps.replay
+<!-- snippet via=ohm.replay
 dmm-cli read --format json --count 1
 -->
 ```
 $ dmm-cli read --format json --count 1
 {"_metadata":{"device":"UNI-T UT61E+"}}
-{"timestamp":"2026-09-17T10:42:50.783+00:00","mode":"DC V","value":4.0,"unit":"V","range":"22V","display_raw":"  4.000","progress":8,"experimental":false,"flags":{"hold":false,"rel":false,"auto_range":true,"min":false,"max":false,"avg":false,"low_battery":false,"hv_warning":false,"peak_max":false,"peak_min":false,"lead_error":false,"comp":false,"record":false,"loz":false,"void":false,"dc":false}}
+{"timestamp":"2026-09-17T10:47:27.597+00:00","mode":"Ω","value":4.649,"unit":"kΩ","range":"22kΩ","display_raw":"  4.649","progress":9,"experimental":false,"flags":{"hold":false,"rel":false,"auto_range":true,"min":false,"max":false,"avg":false,"low_battery":false,"hv_warning":false,"peak_max":false,"peak_min":false,"lead_error":false,"comp":false,"record":false,"loz":false,"void":false,"dc":false}}
 
---- 1 samples | Min: 4.0000 V | Max: 4.0000 V | Avg: 4.0000 V
+--- 1 samples | Min: 4.6490 kΩ | Max: 4.6490 kΩ | Avg: 4.6490 kΩ
 ```
 <!-- /snippet -->
 

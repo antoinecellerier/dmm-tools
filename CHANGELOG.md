@@ -72,6 +72,10 @@
 - **Colour swatches wrap in a narrow settings panel** — the Graph row ran off the right edge with **Customize colors** open.
 - **Clicking a theme chip keeps keyboard focus on it** — the focus ring landed on the next chip.
 
+### Documentation
+
+- **Screenshots and command output come from recorded meter sessions** — the README and reference blocks were typed by hand and the pictures taken on the mock.
+
 ### Internal
 
 - **Nightly dev builds for all six platforms** — try unreleased changes without installing a Rust toolchain and building from source.
