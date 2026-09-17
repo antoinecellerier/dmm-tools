@@ -36,6 +36,7 @@ use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::protocol::cycle::FlagSetting;
 use crate::protocol::framing::{self, FrameErrorRecovery};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
     Stability, unsupported_setting,
@@ -131,7 +132,10 @@ impl Protocol for Ut181aProtocol {
             transport,
             framing::extract_frame_abcd_2byte_le16,
             // Only accept measurement frames (type 0x02)
-            |p| p.first() == Some(&parse::RESPONSE_MEASUREMENT),
+            |p| {
+                report_unknown_frame_type(p);
+                p.first() == Some(&parse::RESPONSE_MEASUREMENT)
+            },
             FrameErrorRecovery::SkipAndRetry,
             "ut181a",
             &framing::HEADER,
@@ -460,6 +464,21 @@ impl Protocol for Ut181aProtocol {
             .samples(3)
             .expect(Expect::new().range(RangeExpect::Manual)),
         ]
+    }
+}
+
+/// Report a checksummed frame whose type research spec §4.1 does not list.
+///
+/// For the host's own reads only: detection scans bytes other meters sent.
+fn report_unknown_frame_type(payload: &[u8]) {
+    match payload.first() {
+        Some(0x01..=0x05 | 0x72) => {}
+        Some(kind) => report_unknown(
+            "ut181a",
+            "frame type",
+            format_args!("{kind:#04x}, {} bytes", payload.len()),
+        ),
+        None => report_unknown("ut181a", "frame type", format_args!("none, 0 bytes")),
     }
 }
 
@@ -1140,5 +1159,50 @@ mod tests {
     fn a_command_reply_identifies_nothing() {
         let reply = framing::test_frame_le16(&[0x01, 0x4F, 0x4B]);
         assert_eq!(recognised(&reply, &after(DeviceFamily::Ut181a)), None);
+    }
+
+    // --- Unrecognised data (protocol::unrecognised) -----------------------
+
+    use crate::protocol::capture_reports;
+
+    /// The stream skips every frame that is not a reading; the documented
+    /// types (§4.1) go by silently, any other is reported.
+    #[test]
+    fn a_frame_of_an_undocumented_type_is_reported_and_skipped() {
+        let reading = make_payload(0x3111, 1.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
+        let frames: [&[u8]; 9] = [
+            &[0x01, b'O', b'K'],
+            &[0x03, 0x00],
+            &[0x04, 0x00],
+            &[0x05, 0x00],
+            &[0x72, 0x00, 0x00],
+            &[0x06, 0x01, 0x02],
+            &[0x00, 0x00],
+            &[],
+            &reading,
+        ];
+        let mock = MockTransport::new(frames.iter().map(|p| build_command(p)).collect());
+        let mut proto = Ut181aProtocol::new();
+        let (m, reports) = capture_reports(|| proto.request_measurement(&mock));
+        assert_eq!(m.unwrap().mode_raw, 0x3111);
+        assert_eq!(
+            reports,
+            [
+                "ut181a: unrecognised frame type: 0x06, 3 bytes",
+                "ut181a: unrecognised frame type: 0x00, 2 bytes",
+                "ut181a: unrecognised frame type: none, 0 bytes",
+            ]
+        );
+    }
+
+    /// Detection reads bytes other meters sent, so it reports nothing.
+    #[test]
+    fn detection_reports_no_frame_type() {
+        let mut buf = framing::test_frame_le16(&[0x06, 0x01, 0x02]);
+        buf.extend(framing::test_frame_le16(&[0x00; 40]));
+        let (evidence, reports) =
+            capture_reports(|| recognised(&buf, &after(DeviceFamily::Ut181a)));
+        assert_eq!(evidence, None);
+        assert!(reports.is_empty(), "{reports:?}");
     }
 }

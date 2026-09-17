@@ -1129,6 +1129,13 @@ own software sends, not hardware confirmation.
   four times with `read --count 1` after each, noting the LCD's range
   annunciator and the `"range"` field; then `command auto`. The labels the
   LCD shows are what the table needs
+- Range bytes and sub-values the parser reports as unrecognised (noted
+  2026-09-17): on a fixed-range mode anything above 1 (the temperature
+  frame sends 1; A DC/AC, continuity, nS and diode frames would confirm
+  it), on duty cycle and pulse width only bytes past 8 until the item
+  above settles their ladder, and a sub-value on any mode but the T1/T2
+  temperature arrangements and the Hz variants — the T1-T2 difference
+  included
 - SET_MIN_MAX (0x04) payload width — the vendor app sends **one** byte,
   not the uint32 antage and sigrok describe (spec §4.2). The code sends
   one byte; a meter needs to confirm MIN/MAX actually engages: on V DC,

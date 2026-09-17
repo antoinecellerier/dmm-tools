@@ -1,9 +1,11 @@
 //! UT181A measurement payloads: mode words, range labels and the normal,
 //! REL, MIN/MAX, Peak and COMP layouts, decoded into a `Measurement`.
 
+use super::mode;
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{check_len, unknown_mode16};
 use log::debug;
 use std::borrow::Cow;
@@ -174,9 +176,9 @@ fn aux_labels(mode: u16) -> (&'static str, &'static str) {
     // the aux slot — those stay positional.
     if n3 == 0x4 && (n2 == 0x2 || n2 == 0x3) {
         return match n1 {
-            0x1 => ("T2", "Aux2"),
-            0x2 => ("T1", "Aux2"),
-            _ => ("Aux1", "Aux2"),
+            0x1 => ("T2", POSITIONAL_AUX.1),
+            0x2 => ("T1", POSITIONAL_AUX.1),
+            _ => POSITIONAL_AUX,
         };
     }
 
@@ -186,7 +188,47 @@ fn aux_labels(mode: u16) -> (&'static str, &'static str) {
         return ("Frequency", "Period");
     }
 
-    ("Aux1", "Aux2")
+    POSITIONAL_AUX
+}
+
+/// The labels [`aux_labels`] gives a slot nothing describes.
+const POSITIONAL_AUX: (&str, &str) = ("Aux1", "Aux2");
+
+/// Report a sub-value that went into a slot [`aux_labels`] has no name for.
+///
+/// Research spec §6 says what the aux slots hold only for the T1/T2
+/// temperature arrangements and the Hz variants, and those are what the
+/// captures carry; a sub-value anywhere else is undocumented.
+fn report_positional_aux(label: &str, mode_word: u16) {
+    if label == POSITIONAL_AUX.0 || label == POSITIONAL_AUX.1 {
+        report_unknown(
+            "ut181a",
+            "aux value",
+            format_args!("{label} in mode {mode_word:#06x}"),
+        );
+    }
+}
+
+/// Report a float and precision byte outside research spec §5.2. The value
+/// is read the same either way.
+fn report_unrecognised_value(float: f32, precision: u8) {
+    // Bits 0 and 1 are +OL and -OL and bits 4-7 the decimals: bits 2-3 are
+    // undefined, and nothing says both overloads can be set at once.
+    if precision & 0x0C != 0 || precision & 0x03 == 0x03 {
+        report_unknown("ut181a", "precision byte", format_args!("{precision:#04x}"));
+    }
+    // An overload is signalled by those bits; NaN and infinity are never
+    // mentioned.
+    if !float.is_finite() && precision & 0x03 == 0 {
+        report_unknown(
+            "ut181a",
+            "float",
+            format_args!(
+                "{float} ({:#010x}) without an overload bit, shown as OL",
+                float.to_bits()
+            ),
+        );
+    }
 }
 
 /// Look up range label from mode word and range byte.
@@ -293,6 +335,7 @@ fn parse_full_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>, Strin
     let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     let precision = data[4];
     let unit = parse_unit_string(&data[5..13]);
+    report_unrecognised_value(float, precision);
     let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
     let dp = ((precision >> 4) & 0x0F) as usize;
 
@@ -314,6 +357,7 @@ fn parse_short_value(data: &[u8]) -> Result<(MeasuredValue, Option<String>)> {
     }
     let float = f32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     let precision = data[4];
+    report_unrecognised_value(float, precision);
     let is_overload = precision & 0x01 != 0 || precision & 0x02 != 0;
     let dp = ((precision >> 4) & 0x0F) as usize;
 
@@ -376,6 +420,31 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     let record = misc2 & 0x20 != 0;
 
     let mode = decode_mode_word(mode_word);
+    // Research spec §6 lists 79 mode words; any other decodes to a label the
+    // nibble rule guesses, or to Unknown.
+    if !mode::is_known_word(mode_word) {
+        report_unknown(
+            "ut181a",
+            "mode word",
+            format_args!("{mode_word:#06x}, shown as {mode}"),
+        );
+    }
+    // §7 and §7.1: the dial family's range ladder.
+    if !mode::is_known_range(mode_word, range) {
+        report_unknown(
+            "ut181a",
+            "range byte",
+            format_args!("mode {mode_word:#06x} range {range:#04x}"),
+        );
+    }
+    // §5.1 defines neither misc bit 0 nor misc2 bits 2, 6 and 7.
+    if misc & 0x01 != 0 || misc2 & 0xC4 != 0 {
+        report_unknown(
+            "ut181a",
+            "misc bits",
+            format_args!("misc {misc:#04x} misc2 {misc2:#04x}"),
+        );
+    }
     let data = &payload[6..]; // format-dependent value section
 
     let (value, display_raw, unit, aux_values) = match format_type {
@@ -395,12 +464,14 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
             // Aux1 (optional, misc bit 1)
             if misc & 0x02 != 0 && data.len() >= offset + 13 {
                 let (av, ad, au) = parse_full_value(&data[offset..])?;
+                report_positional_aux(aux1_label, mode_word);
                 aux.push(make_aux(aux1_label, av, &au, ad, None));
                 offset += 13;
             }
             // Aux2 (optional, misc bit 2)
             if misc & 0x04 != 0 && data.len() >= offset + 13 {
                 let (av, ad, au) = parse_full_value(&data[offset..])?;
+                report_positional_aux(aux2_label, mode_word);
                 aux.push(make_aux(aux2_label, av, &au, ad, None));
                 offset += 13;
             }
@@ -420,6 +491,31 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                     data[offset + 5],
                     data[offset + 6],
                 ]);
+                // Low limit present for INNER/OUTER modes
+                let low_float = ((comp_mode == 0 || comp_mode == 1) && data.len() >= offset + 11)
+                    .then(|| {
+                        f32::from_le_bytes([
+                            data[offset + 7],
+                            data[offset + 8],
+                            data[offset + 9],
+                            data[offset + 10],
+                        ])
+                    });
+                // §5.4: modes 0-3, results 0-1, digits in the low nibble and
+                // two float32 limits.
+                if comp_mode > 3
+                    || comp_result > 1
+                    || comp_prec > 0x0F
+                    || !high_float.is_finite()
+                    || low_float.is_some_and(|f| !f.is_finite())
+                {
+                    let end = offset + if low_float.is_some() { 11 } else { 7 };
+                    report_unknown(
+                        "ut181a",
+                        "comp field",
+                        format_args!("{:02X?}", &data[offset..end]),
+                    );
+                }
                 // COMP digits live in the LOW nibble, unshifted — unlike
                 // the other precision fields (sigrok protocol.c:112
                 // "1 byte digits, not shifted as in other precision
@@ -442,14 +538,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
                     None,
                 ));
 
-                // Low limit present for INNER/OUTER modes
-                if (comp_mode == 0 || comp_mode == 1) && data.len() >= offset + 11 {
-                    let low_float = f32::from_le_bytes([
-                        data[offset + 7],
-                        data[offset + 8],
-                        data[offset + 9],
-                        data[offset + 10],
-                    ]);
+                if let Some(low_float) = low_float {
                     let low_v = low_float as f64;
                     aux.push(make_aux(
                         "COMP Low",
@@ -544,7 +633,12 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
 
         // Unknown format — try to parse as normal
         _ => {
-            debug!("ut181a: unknown format_type {format_type:#x}, treating as normal");
+            // §5.1 lists formats 0x00, 0x10, 0x20 and 0x40 only.
+            report_unknown(
+                "ut181a",
+                "format type",
+                format_args!("{:#04x}, read as normal", misc & 0x70),
+            );
             if data.len() < 13 {
                 return Err(Error::invalid_response(
                     format!("ut181a unknown format too short: {} bytes", payload.len()),
@@ -1240,5 +1334,376 @@ raw_payload=30"#
         assert!(
             matches!(m.aux_values[0].value, MeasuredValue::Normal(v) if (v - 21.0).abs() < 0.01)
         );
+    }
+
+    // --- Unrecognised data (protocol::unrecognised) -----------------------
+
+    use crate::protocol::capture_reports;
+
+    const VDC: &[u8; 8] = b"VDC\0\0\0\0\0";
+    const CELSIUS: &[u8; 8] = b"\xB0C\0\0\0\0\0\0";
+
+    /// Parse `payload`, keeping what it reported.
+    fn parse_reporting(payload: &[u8]) -> (Result<Measurement>, Vec<String>) {
+        capture_reports(|| parse_measurement(payload))
+    }
+
+    /// A measurement payload: the six header bytes, then `body`.
+    fn frame(misc: u8, misc2: u8, mode: u16, range: u8, body: &[&[u8]]) -> Vec<u8> {
+        let [lo, hi] = mode.to_le_bytes();
+        let mut p = vec![0x02, misc, misc2, lo, hi, range];
+        for part in body {
+            p.extend_from_slice(part);
+        }
+        p
+    }
+
+    /// A normal-format V DC frame with the COMP extension (misc2 bit 4).
+    fn comp_payload(
+        comp_mode: u8,
+        result: u8,
+        precision: u8,
+        high: f32,
+        low: Option<f32>,
+    ) -> Vec<u8> {
+        let mut comp = vec![comp_mode, result, precision];
+        comp.extend_from_slice(&high.to_le_bytes());
+        if let Some(low) = low {
+            comp.extend_from_slice(&low.to_le_bytes());
+        }
+        frame(0x00, 0x11, 0x3111, 0, &[&full_value(5.0, 0x30, VDC), &comp])
+    }
+
+    /// The highest manual rung research spec §7 and §7.1 give each dial
+    /// family. A fixed range reports 1, as the real temperature frame does.
+    fn top_rung(word: u16) -> u8 {
+        match word >> 8 {
+            0x11 | 0x31 | 0x72 | 0x73 => 4,
+            0x21 | 0x41 | 0x81 | 0x82 | 0x91 | 0x92 => 2,
+            0x51 => 6,
+            0x62 => 8,
+            0x71 => 7,
+            _ => 1,
+        }
+    }
+
+    /// The captured payloads and frames shaped as the spec documents them
+    /// report nothing: a report there would warn every user of the meter.
+    #[test]
+    fn documented_frames_report_nothing() {
+        let mut payloads = vec![
+            real_frame_temp_dual_probe(),
+            real_frame_vac_hz(),
+            // V DC, leads open, bargraph only (PR #8; golden
+            // `vdc_open_leads.yaml`).
+            hex(
+                "02 08 01 11 31 01 AF 73 D1 38 40 56 44 43 00 00 00 00 00 60 A2 23 BC \
+                 56 44 43 00 00 00 00 00",
+            ),
+        ];
+        // Every spec §6 word, on every rung of its family's ladder.
+        for word in mode::known_words() {
+            for range in 0..=top_rung(word) {
+                let mut p = make_payload(word, 1.5, 0x10, VDC, 0x00, 0x01);
+                p[5] = range;
+                payloads.push(p);
+            }
+        }
+        // The sub-values §6 names: the other probe on the T1/T2
+        // arrangements, frequency and period on the Hz variants.
+        for word in [0x4211, 0x4212, 0x4221, 0x4222, 0x4311, 0x4321] {
+            let t = full_value(21.5, 0x10, CELSIUS);
+            payloads.push(frame(0x02, 0x01, word, 1, &[&t, &t]));
+        }
+        let bargraph = [&230.0f32.to_le_bytes()[..], b"VAC\0\0\0\0\0".as_slice()].concat();
+        for word in [0x1121, 0x2121, 0x8221, 0x9221, 0xA221] {
+            let main = full_value(230.0, 0x20, b"VAC\0\0\0\0\0");
+            let hz = full_value(50.0, 0x20, b"Hz\0\0\0\0\0\0");
+            let period = full_value(20.0, 0x20, b"ms\0\0\0\0\0\0");
+            payloads.push(frame(
+                0x0E,
+                0x03,
+                word,
+                1,
+                &[&main, &hz, &period, &bargraph],
+            ));
+        }
+        // The other formats, every documented status bit, and overloads.
+        payloads.push(make_relative_payload(0x3112, 2.345, 10.0, 12.345));
+        payloads.push(minmax_payload(0x3111));
+        let peak = [full_value(15.0, 0x30, VDC), full_value(-3.0, 0x30, VDC)];
+        payloads.push(frame(0x40, 0x01, 0x3131, 0, &[&peak[0], &peak[1]]));
+        payloads.push(make_payload(0x3111, 1.5, 0x10, VDC, 0x80, 0x2B));
+        for (value, precision) in [
+            (0.0, 0x01),
+            (0.0, 0x02),
+            (9.9, 0x41),
+            (f32::NAN, 0x01),
+            (f32::INFINITY, 0x01),
+            (f32::NEG_INFINITY, 0x02),
+        ] {
+            payloads.push(make_payload(
+                0x5111,
+                value,
+                precision,
+                b"~\0\0\0\0\0\0\0",
+                0,
+                1,
+            ));
+        }
+        for (comp_mode, result) in [(0, 0), (1, 1), (2, 0), (3, 1)] {
+            let low = (comp_mode < 2).then_some(1.0);
+            payloads.push(comp_payload(comp_mode, result, 0x0F, 10.0, low));
+        }
+
+        for payload in &payloads {
+            let (m, reports) = parse_reporting(payload);
+            assert!(m.is_ok(), "{payload:02X?}: {m:?}");
+            assert!(reports.is_empty(), "{payload:02X?}: {reports:?}");
+        }
+    }
+
+    /// A word outside §6 keeps the label it always had.
+    #[test]
+    fn a_mode_word_off_the_spec_table_is_reported() {
+        for (word, shown) in [
+            (0x4131, "mV DC Peak"),  // the alternative mV DC Peak code
+            (0x1122, "V AC Hz REL"), // no REL on a Hz variant
+            (0x1113, "V AC"),        // no n0 = 3
+            (0x3141, "V DC"),        // no n1 = 4 on V DC
+            (0x5121, "Ω"),           // one variant only
+            (0x4251, "°C"),          // no fifth probe arrangement
+            (0xB111, "Unknown(0xb111)"),
+            (0x6311, "Unknown(0x6311)"),
+        ] {
+            let (m, reports) = parse_reporting(&make_payload(word, 1.5, 0x10, VDC, 0, 1));
+            assert_eq!(m.unwrap().mode, shown);
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised mode word: {word:#06x}, shown as {shown}"
+                )]
+            );
+        }
+    }
+
+    /// One rung past each family's ladder is reported, except on duty cycle
+    /// and pulse width, whose range bytes nothing names: there only §7's
+    /// cap of 8 applies.
+    #[test]
+    fn a_range_byte_past_the_ladder_is_reported() {
+        for word in mode::known_words() {
+            let range = top_rung(word) + 1;
+            let mut p = make_payload(word, 1.5, 0x10, VDC, 0, 1);
+            p[5] = range;
+            let (m, reports) = parse_reporting(&p);
+            assert_eq!(m.unwrap().range_raw, range);
+            if matches!(word >> 8, 0x72 | 0x73) {
+                assert!(reports.is_empty(), "{word:#06x}: {reports:?}");
+            } else {
+                assert_eq!(
+                    reports,
+                    [format!(
+                        "ut181a: unrecognised range byte: mode {word:#06x} range {range:#04x}"
+                    )]
+                );
+            }
+        }
+
+        for (word, range) in [(0x7211, 9), (0x7312, 0xFF)] {
+            let mut p = make_payload(word, 1.5, 0x10, b"%\0\0\0\0\0\0\0", 0, 0);
+            p[5] = range;
+            let (_, reports) = parse_reporting(&p);
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised range byte: mode {word:#06x} range {range:#04x}"
+                )]
+            );
+        }
+
+        // A word from no family: the word, and the byte past the cap.
+        let mut p = make_payload(0xB111, 1.5, 0x10, VDC, 0, 0);
+        p[5] = 9;
+        let (_, reports) = parse_reporting(&p);
+        assert_eq!(
+            reports,
+            [
+                "ut181a: unrecognised mode word: 0xb111, shown as Unknown(0xb111)",
+                "ut181a: unrecognised range byte: mode 0xb111 range 0x09",
+            ]
+        );
+    }
+
+    /// NaN or infinity with neither overload bit still reads as OL.
+    #[test]
+    fn a_non_finite_value_without_an_overload_bit_is_reported() {
+        for bits in [0x7FC0_0000u32, 0x7F80_0000, 0xFF80_0000] {
+            let value = f32::from_bits(bits);
+            let p = make_payload(0x5111, value, 0x20, b"~\0\0\0\0\0\0\0", 0, 1);
+            let (m, reports) = parse_reporting(&p);
+            let m = m.unwrap();
+            assert!(matches!(m.value, MeasuredValue::Overload), "{m:?}");
+            assert_eq!(m.display_raw, None);
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised float: {value} ({bits:#010x}) without an overload bit, \
+                     shown as OL"
+                )]
+            );
+        }
+
+        // A MIN/MAX short value too.
+        let mut p = minmax_payload(0x3111);
+        p[6..10].copy_from_slice(&0x7FC0_0000u32.to_le_bytes());
+        let (m, reports) = parse_reporting(&p);
+        assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+        assert_eq!(
+            reports,
+            ["ut181a: unrecognised float: NaN (0x7fc00000) without an overload bit, shown as OL"]
+        );
+    }
+
+    /// Precision bits 2-3, or both overload bits, are outside §5.2; the
+    /// value is read as before.
+    #[test]
+    fn undefined_precision_bits_are_reported() {
+        for (precision, display) in [
+            (0x04, Some("1")),
+            (0x28, Some("1.25")),
+            (0x03, None),
+            (0x43, None),
+        ] {
+            let p = make_payload(0x3111, 1.25, precision, VDC, 0, 1);
+            let (m, reports) = parse_reporting(&p);
+            assert_eq!(m.unwrap().display_raw.as_deref(), display);
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised precision byte: {precision:#04x}"
+                )]
+            );
+        }
+
+        // A MIN/MAX short value too.
+        let mut p = minmax_payload(0x3111);
+        p[10] = 0x3C;
+        let (m, reports) = parse_reporting(&p);
+        assert_eq!(m.unwrap().display_raw.as_deref(), Some("5.000"));
+        assert_eq!(reports, ["ut181a: unrecognised precision byte: 0x3c"]);
+    }
+
+    /// misc bit 0 and misc2 bits 2, 6 and 7 are undefined (§5.1); the flags
+    /// read the same.
+    #[test]
+    fn undefined_misc_bits_are_reported() {
+        for (misc, misc2) in [(0x01, 0x01), (0x00, 0x05), (0x80, 0x41), (0x00, 0x81)] {
+            let p = make_payload(0x3111, 1.5, 0x10, VDC, misc, misc2);
+            let (m, reports) = parse_reporting(&p);
+            let m = m.unwrap();
+            assert_eq!(m.flags.hold, misc & 0x80 != 0);
+            assert_eq!(m.flags.auto_range, misc2 & 0x01 != 0);
+            assert!(m.aux_values.is_empty());
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised misc bits: misc {misc:#04x} misc2 {misc2:#04x}"
+                )]
+            );
+        }
+    }
+
+    /// Formats 0x30, 0x50, 0x60 and 0x70 are read as normal, as before, and
+    /// one too short for that still fails.
+    #[test]
+    fn an_undocumented_format_type_is_reported() {
+        for misc in [0x30, 0x50, 0x60, 0x70] {
+            let p = make_payload(0x3111, 1.5, 0x10, VDC, misc, 0x01);
+            let (m, reports) = parse_reporting(&p);
+            let m = m.unwrap();
+            assert_eq!(m.display_raw.as_deref(), Some("1.5"));
+            assert!(!(m.flags.rel || m.flags.min || m.flags.max || m.flags.peak_max));
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised format type: {misc:#04x}, read as normal"
+                )]
+            );
+        }
+
+        let p = make_payload(0x3111, 1.5, 0x10, VDC, 0x30, 0x01);
+        let (m, reports) = parse_reporting(&p[..10]);
+        assert!(m.is_err());
+        assert_eq!(
+            reports,
+            ["ut181a: unrecognised format type: 0x30, read as normal"]
+        );
+    }
+
+    /// A COMP mode past ABOVE, a result past FAIL, digits past the low
+    /// nibble or a non-finite limit (§5.4); the limits parse as before.
+    #[test]
+    fn undocumented_comp_fields_are_reported() {
+        for (p, limits) in [
+            (comp_payload(4, 0, 0x03, 10.0, None), 1),
+            (comp_payload(2, 2, 0x03, 10.0, None), 1),
+            (comp_payload(3, 0, 0x13, 10.0, None), 1),
+            (comp_payload(2, 0, 0x03, f32::INFINITY, None), 1),
+            (comp_payload(0, 1, 0x03, 10.0, Some(f32::NAN)), 2),
+        ] {
+            let (m, reports) = parse_reporting(&p);
+            assert_eq!(m.unwrap().aux_values.len(), limits, "{p:02X?}");
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut181a: unrecognised comp field: {:02X?}",
+                    &p[19..]
+                )]
+            );
+        }
+    }
+
+    /// A sub-value where §6 names none keeps its positional label.
+    #[test]
+    fn a_sub_value_in_an_unnamed_slot_is_reported() {
+        let v = full_value(1.5, 0x10, VDC);
+        let t = full_value(21.5, 0x10, CELSIUS);
+        for (p, labels, expected) in [
+            (
+                frame(0x02, 0x01, 0x3111, 0, &[&v, &v]),
+                &["Aux1"][..],
+                &["Aux1 in mode 0x3111"][..],
+            ),
+            (
+                frame(0x06, 0x01, 0x3111, 0, &[&v, &v, &v]),
+                &["Aux1", "Aux2"][..],
+                &["Aux1 in mode 0x3111", "Aux2 in mode 0x3111"][..],
+            ),
+            (
+                frame(0x02, 0x01, 0x4231, 1, &[&t, &t]),
+                &["Aux1"][..],
+                &["Aux1 in mode 0x4231"][..],
+            ),
+            (
+                frame(0x06, 0x01, 0x4211, 1, &[&t, &t, &t]),
+                &["T2", "Aux2"][..],
+                &["Aux2 in mode 0x4211"][..],
+            ),
+        ] {
+            let (m, reports) = parse_reporting(&p);
+            let got: Vec<String> = m
+                .unwrap()
+                .aux_values
+                .iter()
+                .map(|a| a.label.to_string())
+                .collect();
+            assert_eq!(got, labels);
+            let expected: Vec<String> = expected
+                .iter()
+                .map(|e| format!("ut181a: unrecognised aux value: {e}"))
+                .collect();
+            assert_eq!(reports, expected);
+        }
     }
 }

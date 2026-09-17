@@ -211,6 +211,62 @@ impl Family {
     }
 }
 
+/// Whether `word` is one of the 79 mode words of research spec §6: a
+/// family's variant, or the REL companion of a variant that offers REL
+/// (§6.1, "REL for n1").
+pub(crate) fn is_known_word(word: u16) -> bool {
+    let Some(f) = lookup(word) else {
+        return false;
+    };
+    f.variants.contains(&word)
+        || (word & 0xF == N0_REL && f.rel_capable(word) && f.variants.contains(&rel_partner(word)))
+}
+
+/// The longest range ladder of research spec §7 (capacitance).
+const MAX_RANGE: u8 = 8;
+
+/// Whether a measurement in `word` can carry range byte `range`.
+///
+/// Research spec §5.1 and §7: 0 is auto and 1-8 index the family's manual
+/// ladder, whose length §7.1 gives per dial family.
+pub(crate) fn is_known_range(word: u16, range: u8) -> bool {
+    if range == 0 {
+        return true;
+    }
+    if range > MAX_RANGE {
+        return false;
+    }
+    let Some(f) = lookup(word) else {
+        // No ladder to hold the byte against: the word is what is unknown.
+        return true;
+    };
+    if f.manual_ranges == 0 {
+        // §7.1 "Families with no manual range". A real temperature frame
+        // carries range 1, so that is what a fixed range reports.
+        range == 1
+    } else if lookup_range_label(word, 1).is_empty() {
+        // Duty and pulse width: §7.1 lists four unnamed items, and nothing
+        // says which bytes the meter reports for them.
+        true
+    } else {
+        range <= f.manual_ranges
+    }
+}
+
+/// Every word [`is_known_word`] accepts, variants first, for the tests that
+/// walk them all.
+#[cfg(test)]
+pub(crate) fn known_words() -> Vec<u16> {
+    let variants = FAMILIES.iter().flat_map(|f| f.variants.iter().copied());
+    let rel = FAMILIES.iter().flat_map(|f| {
+        f.variants
+            .iter()
+            .filter(|&&w| f.rel_capable(w))
+            .map(|&w| rel_partner(w))
+    });
+    variants.chain(rel).collect()
+}
+
 /// Modes reachable from `current_mode_raw` without moving the dial.
 ///
 /// Empty for a mode word from no known family. REL words are not listed as
@@ -359,6 +415,27 @@ mod tests {
                     f.base
                 );
             }
+        }
+    }
+
+    /// Research spec §6 counts 79 mode words; `is_known_word` accepts those
+    /// and nothing else.
+    #[test]
+    fn exactly_the_79_spec_words_are_known() {
+        let mut words = known_words();
+        words.sort_unstable();
+        words.dedup();
+        assert_eq!(words.len(), 79);
+        let accepted: Vec<u16> = (0..=u16::MAX).filter(|&w| is_known_word(w)).collect();
+        assert_eq!(accepted, words);
+        // The vendor UI's mV AC+DC is in (§6.1 "Caveats"); the alternative
+        // mV DC Peak code is not (§6.1, "Agreement with the community table").
+        assert!(is_known_word(0x2141));
+        assert!(is_known_word(0x2142));
+        assert!(!is_known_word(0x4131));
+        // No REL on a Hz variant, no n0 = 3, no REL on continuity.
+        for word in [0x1122, 0x1113, 0x5213, 0x6113] {
+            assert!(!is_known_word(word), "{word:#06x}");
         }
     }
 

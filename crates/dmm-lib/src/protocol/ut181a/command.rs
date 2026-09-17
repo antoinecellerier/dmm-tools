@@ -8,6 +8,7 @@ use super::parse::decode_mode_word;
 use crate::error::{Error, Result};
 use crate::protocol::cycle::{self, FlagSetting};
 use crate::protocol::framing;
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{Protocol, unsupported_setting};
 use crate::transport::Transport;
 use log::{debug, warn};
@@ -111,6 +112,7 @@ impl Ut181aProtocol {
                     if payload.first() == Some(&0x01) {
                         return reply_result(&payload, what);
                     }
+                    super::report_unknown_frame_type(&payload);
                     debug!(
                         "ut181a: dropping a {} byte frame while waiting for the {what} reply",
                         payload.len()
@@ -270,7 +272,7 @@ impl Ut181aProtocol {
 /// Turn a type-0x01 reply packet into a result.
 ///
 /// Payload is `[0x01, 'O', 'K']` or `[0x01, 'E', 'R']` (spec §4.1). Anything
-/// else is logged and treated as acceptance: the reply format is
+/// else is reported and treated as acceptance: the reply format is
 /// hardware-unverified, so an unrecognised answer is more likely our gap than
 /// a refusal.
 fn reply_result(payload: &[u8], what: &str) -> Result<()> {
@@ -283,7 +285,11 @@ fn reply_result(payload: &[u8], what: &str) -> Result<()> {
             "{what} rejected by the meter — check the dial position"
         ))),
         other => {
-            debug!("ut181a: unrecognised reply to {what}: {other:02X?}");
+            report_unknown(
+                "ut181a",
+                "command reply",
+                format_args!("{other:02X?} to {what}, taken as accepted"),
+            );
             Ok(())
         }
     }
@@ -392,5 +398,45 @@ mod tests {
         // the bytes that arrived with the reply.
         let m = proto.request_measurement(&mock).unwrap();
         assert_eq!(m.display_raw.as_deref(), Some("7.50"));
+    }
+
+    // --- Unrecognised data (protocol::unrecognised) -----------------------
+
+    use crate::protocol::capture_reports;
+
+    /// A reply code other than OK or ER is still taken as acceptance; bytes
+    /// after OK or ER are not a different reply.
+    #[test]
+    fn an_unknown_reply_code_is_reported_and_accepted() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        mock.push_response(build_command(&[0x01, b'N', b'O']));
+        let (result, reports) = capture_reports(|| proto.send_command(&mock, "auto"));
+        result.unwrap();
+        assert_eq!(
+            reports,
+            ["ut181a: unrecognised command reply: [4E, 4F] to auto, taken as accepted"]
+        );
+
+        for reply in [&[0x01, b'O', b'K', 0x00][..], &[0x01, b'E', b'R', 0x00]] {
+            let (mut proto, mock) = proto_in(0x3111, 0);
+            mock.push_response(build_command(reply));
+            let (_, reports) = capture_reports(|| proto.send_command(&mock, "auto"));
+            assert!(reports.is_empty(), "{reply:02X?}: {reports:?}");
+        }
+    }
+
+    /// While waiting for the reply, the measurement stream and the other
+    /// documented types (§4.1) are dropped silently; any other is reported.
+    #[test]
+    fn a_frame_of_an_undocumented_type_before_the_reply_is_reported() {
+        let (mut proto, mock) = proto_in(0x3111, 0);
+        let reading = make_payload(0x3111, 2.0, 0x20, b"VDC\0\0\0\0\0", 0x00, 0x01);
+        for payload in [&reading[..], &[0x72, 0x00], &[0x10, 0x00, 0x00, 0x00]] {
+            mock.push_response(build_command(payload));
+        }
+        mock.push_response(build_command(&[0x01, b'O', b'K']));
+        let (result, reports) = capture_reports(|| proto.send_command(&mock, "auto"));
+        result.unwrap();
+        assert_eq!(reports, ["ut181a: unrecognised frame type: 0x10, 4 bytes"]);
     }
 }
