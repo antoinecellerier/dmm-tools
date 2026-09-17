@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use crate::transport::Transport;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use std::time::{Duration, Instant};
 
 /// How to handle frame extraction errors (checksum mismatches).
@@ -71,7 +71,11 @@ where
             }
             Ok(None) => {
                 if rx_buf.len() >= MAX_RX_BUF {
-                    warn!("{label}: rx_buf hit {MAX_RX_BUF} bytes without a valid frame, clearing");
+                    // Per buffer while nothing frames (a wrong device, a
+                    // wrong baud rate); the timeout it returns is reported.
+                    debug!(
+                        "{label}: rx_buf hit {MAX_RX_BUF} bytes without a valid frame, clearing"
+                    );
                     rx_buf.clear();
                     return Err(Error::Timeout);
                 }
@@ -93,7 +97,9 @@ where
                     return Err(e);
                 }
                 FrameErrorRecovery::SkipAndRetry => {
-                    warn!("{label}: frame error: {e}, skipping");
+                    // Per bad frame, e.g. joining a stream mid-frame; a
+                    // stream of nothing else ends in a reported timeout.
+                    debug!("{label}: frame error: {e}, skipping");
                     if let Some(pos) = rx_buf
                         .windows(skip_header.len())
                         .position(|w| w == skip_header)

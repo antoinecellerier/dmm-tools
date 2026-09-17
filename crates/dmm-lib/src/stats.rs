@@ -1,5 +1,5 @@
 use crate::measurement::{MeasuredValue, Measurement};
-use log::warn;
+use log::debug;
 use std::time::Instant;
 
 /// Tracks min/max/avg statistics for a series of measurements.
@@ -114,13 +114,11 @@ impl Integrator {
             if dt_secs <= self.max_dt_secs {
                 self.integral += (prev_val + value) / 2.0 * dt_secs;
             } else {
-                if self.skipped_intervals == 0 {
-                    warn!(
-                        "integrator: skipping {dt_secs:.2}s interval (max {:.2}s); \
-                         further skips will be counted in skipped_intervals",
-                        self.max_dt_secs
-                    );
-                }
+                // The binaries show the skip count; this only says which gap.
+                debug!(
+                    "integrator: skipping {dt_secs:.2}s interval (max {:.2}s)",
+                    self.max_dt_secs
+                );
                 self.skipped_intervals += 1;
             }
         }
