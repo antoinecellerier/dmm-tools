@@ -18,12 +18,15 @@
 //! See docs/research/vc890/reverse-engineered-protocol.md
 
 use super::{
-    COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re, read_live, resolve_range,
+    CMD_EXIT_MAX_MIN_AVG, CMD_HOLD, CMD_LIGHT, CMD_MAX_MIN_AVG, CMD_RANGE_AUTO, CMD_RANGE_MANUAL,
+    CMD_REL, CMD_SELECT, COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re,
+    read_live, resolve_range,
 };
 use crate::error::Result;
 use crate::flags::StatusFlags;
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring, Settle};
 use crate::protocol::framing;
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{CaptureStep, DeviceProfile, Stability};
 use crate::transport::Transport;
 use std::thread;
@@ -77,6 +80,24 @@ pub(crate) fn request_live(transport: &dyn Transport) -> Result<()> {
 ///   value3(10) + value4(8) + value5(8) + freq_unit(3) + value6(4) +
 ///   bar(2) + status(8) = 61 bytes.
 const LIVE_DATA_PAYLOAD_LEN: usize = 61;
+
+/// The last misplug warning value the spec gives (byte 63: 3 = V input).
+const MISPLUG_V_ERROR: u8 = 3;
+
+/// Every command byte this driver sends besides the ack and GetDeviceID,
+/// whose types the spec's message list already has: the bytes of
+/// [`COMMANDS`], and the poll.
+const ECHOED_COMMANDS: [u8; 9] = [
+    CMD_EXIT_MAX_MIN_AVG,
+    CMD_RANGE_MANUAL,
+    CMD_RANGE_AUTO,
+    CMD_REL,
+    CMD_MAX_MIN_AVG,
+    CMD_HOLD,
+    CMD_LIGHT,
+    CMD_SELECT,
+    CMD_GET_MEASUREMENT,
+];
 
 /// VC-890 function code table: (code, mode_name, base_unit).
 ///
@@ -291,6 +312,17 @@ impl Vc8x0Model for Vc890Model {
     const DIAL: &'static [DialPosition] = DIAL;
     const SETTLE: Settle = SETTLE;
     const FUNCTION_TABLE: &'static [(u8, &'static str, &'static str)] = FUNCTION_TABLE;
+    // Spec "Range Tables": the vendor fixes ACV LPF at 1000 V without
+    // reading the range byte.
+    const LOW_PASS: u8 = 0x01;
+    // Spec "Live Data Frame": bits 0-3 of frame bytes 56-61. Bytes 62 and 63
+    // hold the battery and misplug nibbles.
+    const NAMED_STATUS_BITS: &'static [u8] = &[0x0F; 6];
+    // Spec "Communication Model": the vendor waits for a frame of the
+    // command's own type after a button command. The poll is sent the same
+    // way, and its answer is read as a live frame, which leaves open whether
+    // an echo comes first.
+    const ECHOED_COMMANDS: &'static [u8] = &ECHOED_COMMANDS;
 
     fn profile() -> DeviceProfile {
         DeviceProfile {
@@ -336,6 +368,18 @@ impl Vc8x0Model for Vc890Model {
         flags.low_battery = battery_level == 0;
     }
 
+    fn report_unrecognised_status(status: &[u8]) {
+        // Spec byte 63: the misplug warning is the low nibble, 0 (none) to
+        // 3 (V input). The high nibble is not described.
+        if status[7] & 0x0F > MISPLUG_V_ERROR {
+            report_unknown(
+                Self::LOG,
+                "misplug nibble",
+                format_args!("frame byte 63 = {:#04x}", status[7]),
+            );
+        }
+    }
+
     fn extra_capture_steps() -> Vec<CaptureStep> {
         // The battery nibble (payload byte 59) is in raw_hex on every
         // sample already, but nothing records what the meter itself was
@@ -373,7 +417,7 @@ impl Vc8x0Model for Vc890Model {
         // The ack burst and the 0x5E request — the same command as UT61E+.
         request_live(transport)?;
 
-        let payload = read_live(rx_buf, transport, Self::LOG)?;
+        let payload = read_live::<Self>(rx_buf, transport)?;
 
         // Post-confirm ack after a valid frame is reassembled.
         Self::ack(transport)?;
@@ -577,6 +621,112 @@ mod tests {
         let m = parse_measurement(&payload).unwrap();
         assert!(m.flags.loz);
         assert!(m.flags.void);
+    }
+
+    #[test]
+    fn an_unknown_function_code_is_reported() {
+        shared::assert_unknown_function_reported::<Vc890Model>();
+    }
+
+    #[test]
+    fn a_range_byte_past_the_table_is_reported() {
+        shared::assert_range_past_the_table_reported::<Vc890Model>(0x02);
+    }
+
+    /// Duty cycle, continuity and diode have no range table, and ACV LPF's
+    /// range byte is never read.
+    #[test]
+    fn unread_range_bytes_are_not_reported() {
+        shared::assert_unread_range_bytes_are_silent::<Vc890Model>(&[0x01, 0x06, 0x08, 0x09]);
+    }
+
+    #[test]
+    fn a_sign_bit_without_a_minus_is_reported() {
+        shared::assert_sign_bit_without_minus_reported::<Vc890Model>(56);
+    }
+
+    /// Bits 6-7 of frame bytes 56-61; bits 4-5 are left out as a possible
+    /// ASCII prefix.
+    #[test]
+    fn undefined_status_bits_are_reported() {
+        shared::assert_undefined_status_bits_reported::<Vc890Model>(56, &[0xC0; 6]);
+    }
+
+    #[test]
+    fn a_live_frame_of_another_length_is_reported() {
+        shared::assert_frame_length_reported::<Vc890Model>();
+    }
+
+    /// A misplug nibble past 3 is reported whatever the high nibble holds,
+    /// and changes nothing in the reading.
+    #[test]
+    fn a_misplug_value_past_3_is_reported() {
+        for value in [0x04, 0x0F, 0x34] {
+            let mut status = zero_status();
+            status[7] = value;
+            let (m, reports) = shared::parse_capturing::<Vc890Model>(&make_payload(
+                0x02, 0x30, b"  1.234", status,
+            ));
+            assert_eq!(
+                snapshot(&m.unwrap()),
+                snap(0x02, 0x30, b"  1.234", zero_status())
+            );
+            assert_eq!(
+                reports,
+                [format!(
+                    "vc890: unrecognised misplug nibble: frame byte 63 = {value:#04x}"
+                )]
+            );
+        }
+    }
+
+    #[test]
+    fn an_unlisted_frame_type_is_reported() {
+        assert_eq!(
+            shared::frame_type_reports::<Vc890Model>(&[0x05]),
+            ["vc890: unrecognised frame type: 0x05, 2 payload bytes"]
+        );
+    }
+
+    /// The echo set is every command byte the driver sends that the spec's
+    /// message list does not already have.
+    #[test]
+    fn the_echoed_commands_are_the_ones_the_driver_sends() {
+        let mut sent: Vec<u8> = COMMANDS
+            .iter()
+            .map(|c| super::super::command_byte(c).unwrap())
+            .chain([CMD_GET_MEASUREMENT])
+            .collect();
+        sent.sort_unstable();
+        let mut echoed = ECHOED_COMMANDS.to_vec();
+        echoed.sort_unstable();
+        assert_eq!(echoed, sent);
+    }
+
+    /// Every function code with each of its ranges, the display forms, the
+    /// named status bits, the battery and misplug nibbles, the listed frame
+    /// types and the command echoes.
+    #[test]
+    fn documented_frames_report_nothing() {
+        let reports = shared::documented_frame_reports::<Vc890Model>();
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let ((), reports) = crate::protocol::capture_reports(|| {
+            for nibble in 0x00..=0x0F {
+                for high in [0x00, 0x30, 0xF0] {
+                    let mut status = zero_status();
+                    status[6] = nibble | high;
+                    status[7] = (nibble & 0x03) | high;
+                    parse_measurement(&make_payload(0x02, 0x30, b"  1.234", status)).unwrap();
+                }
+            }
+        });
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let mut types = vec![0x00, 0x02, 0x03, 0x04, 0xFF];
+        types.extend(ECHOED_COMMANDS);
+        let reports = shared::frame_type_reports::<Vc890Model>(&types);
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     #[test]

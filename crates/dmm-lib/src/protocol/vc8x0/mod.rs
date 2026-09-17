@@ -65,6 +65,9 @@ pub(crate) const CMD_REL: u8 = 0x48;
 pub(crate) const CMD_MAX_MIN_AVG: u8 = 0x49;
 pub(crate) const CMD_EXIT_MAX_MIN_AVG: u8 = 0x43;
 
+/// The backlight toggle (spec §5).
+pub(crate) const CMD_LIGHT: u8 = 0x4B;
+
 /// What the front panels call the buttons the flag-backed settings press.
 pub(crate) const HOLD_BUTTON_NAME: &str = "HOLD";
 pub(crate) const REL_BUTTON_NAME: &str = "REL";
@@ -122,7 +125,7 @@ pub(crate) fn command_byte(command: &str) -> Result<u8> {
         "exit_max_min_avg" => Ok(CMD_EXIT_MAX_MIN_AVG),
         "range_auto" => Ok(CMD_RANGE_AUTO),
         "range_manual" => Ok(CMD_RANGE_MANUAL),
-        "light" => Ok(0x4B),
+        "light" => Ok(CMD_LIGHT),
         "select" => Ok(CMD_SELECT),
         _ => Err(Error::UnsupportedCommand(command.to_string())),
     }
@@ -334,6 +337,12 @@ pub(crate) fn common_flags(status: &[u8]) -> (StatusFlags, bool) {
     (flags, ol1)
 }
 
+/// Whether the main display carries no reading: the overload bit, or the
+/// text the meter puts there instead (vc880 spec §4, "Display values").
+pub(crate) fn overloaded(ol1: bool, trimmed: &str) -> bool {
+    ol1 || trimmed.contains("OL") || trimmed.contains("---")
+}
+
 /// Turn the decoded main display into a `MeasuredValue`.
 ///
 /// `trimmed` is the whitespace-stripped display. `setup` says the meter is on
@@ -344,7 +353,7 @@ pub(crate) fn parse_value(
     trimmed: &str,
     setup: bool,
 ) -> MeasuredValue {
-    if ol1 || trimmed.contains("OL") || trimmed.contains("---") {
+    if overloaded(ol1, trimmed) {
         return MeasuredValue::Overload;
     }
     match trimmed.parse::<f64>() {
@@ -366,25 +375,69 @@ pub(crate) fn parse_value(
 /// Live-data message type byte: what both meters mark a reading frame with.
 pub(crate) const MSG_TYPE_LIVE_DATA: u8 = 0x01;
 
+/// The last function code either meter sends: both tables run 0x00-0x12
+/// (`docs/research/vc880/reverse-engineered-protocol.md` §4.1, and "Function
+/// Codes" in `docs/research/vc890/reverse-engineered-protocol.md`).
+const LAST_FUNCTION: u8 = 0x12;
+
+/// Primary display sign, status byte 0 bit 2 on both meters (vc880 spec
+/// §4.3, frame byte 30; vc890 spec, frame byte 56).
+const STATUS0_SIGN1: u8 = 0x04;
+
+/// Status bits never reported, named or not. The range byte carries a 0x30
+/// ASCII prefix (vc880 spec §4.2), and so do the UT61E+'s flag bytes, so the
+/// status bytes may too. Until a capture settles it, a prefix must not make
+/// every session report.
+const POSSIBLE_ASCII_PREFIX: u8 = 0x30;
+
+/// Where payload byte 0 sits in the frame, after the header and the length
+/// byte: the specs number bytes by frame offset.
+const PAYLOAD_AT: usize = 3;
+
 /// Read one live-data frame off the wire.
 ///
 /// The accept filter is what makes the meters' other frames — the 0xFF
 /// command result, the DeviceID answer — cost nothing: they are skipped
-/// here rather than drained by the caller.
-pub(crate) fn read_live(
+/// here rather than drained by the caller. A frame of a type nobody
+/// accounts for is reported on the way.
+pub(crate) fn read_live<M: Vc8x0Model>(
     rx_buf: &mut Vec<u8>,
     transport: &dyn Transport,
-    label: &str,
 ) -> Result<Vec<u8>> {
     framing::read_frame(
         rx_buf,
         transport,
         framing::extract_frame_abcd_be16,
-        |p| !p.is_empty() && p[0] == MSG_TYPE_LIVE_DATA,
+        |p| match p.first() {
+            Some(&MSG_TYPE_LIVE_DATA) => true,
+            Some(&frame_type) => {
+                report_frame_type::<M>(frame_type, p.len());
+                false
+            }
+            None => false,
+        },
         FrameErrorRecovery::SkipAndRetry,
-        label,
+        M::LOG,
         &framing::HEADER,
     )
+}
+
+/// Report a checksummed frame whose type neither the spec's message list
+/// nor this meter's command echoes explain.
+///
+/// Only the read path calls this: detection scans every meter's bytes, and
+/// another family's frame is not this meter's unknown one.
+fn report_frame_type<M: Vc8x0Model>(frame_type: u8, len: usize) {
+    // vc880 spec §3: DeviceID 0x00, LiveData 0x01, CompData 0x02, the two
+    // log transfers 0x03/0x04 and Result 0xFF.
+    let listed = matches!(frame_type, 0x00..=0x04 | 0xFF);
+    if !listed && !M::ECHOED_COMMANDS.contains(&frame_type) {
+        report_unknown(
+            M::LOG,
+            "frame type",
+            format_args!("{frame_type:#04x}, {len} payload bytes"),
+        );
+    }
 }
 
 /// What one Voltcraft meter's driver has to say for itself.
@@ -424,6 +477,20 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     /// Function code table: (code, mode name, base unit).
     const FUNCTION_TABLE: &'static [(u8, &'static str, &'static str)];
 
+    /// ACV LPF's function code. The vendor never reads its range byte, so
+    /// no value there is unrecognised.
+    const LOW_PASS: u8;
+
+    /// The bits the spec names in each status byte, from the first one on.
+    /// A status byte past the end holds a value rather than flags and is
+    /// left to [`Vc8x0Model::report_unrecognised_status`].
+    const NAMED_STATUS_BITS: &'static [u8];
+
+    /// Frame types this meter answers the driver's commands with, beyond the
+    /// spec's message list: none on a meter that answers with a Result
+    /// frame.
+    const ECHOED_COMMANDS: &'static [u8] = &[];
+
     /// The profile a driver for this meter reports.
     fn profile() -> DeviceProfile;
 
@@ -450,6 +517,10 @@ pub(crate) trait Vc8x0Model: Send + 'static {
     fn setup_screen(_status: &[u8]) -> bool {
         false
     }
+
+    /// Report the values in this meter's own status bytes that its spec
+    /// does not document. Nothing to check by default.
+    fn report_unrecognised_status(_status: &[u8]) {}
 
     /// Capture steps this meter needs on top of [`capture_steps`].
     fn extra_capture_steps() -> Vec<CaptureStep> {
@@ -651,7 +722,23 @@ impl<M: Vc8x0Model> CycleMeter for Vc8x0Protocol<M> {
 /// bytes of the main display. What differs is where the status bytes start
 /// and which extra flags they carry, both of which the model states; each
 /// family module maps its own payload byte for byte.
+///
+/// Data outside the spec is reported through `report_unknown`.
 pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measurement> {
+    // vc880 spec §3/§4 (39-byte frame) and the vc890 spec's live data frame
+    // (66 bytes): nothing else carries type 0x01. A longer payload parses
+    // from its first bytes, a shorter one is refused.
+    if payload.len() != M::PAYLOAD_LEN {
+        report_unknown(
+            M::LOG,
+            "frame length",
+            format_args!(
+                "{} payload bytes, expected {}",
+                payload.len(),
+                M::PAYLOAD_LEN
+            ),
+        );
+    }
     check_len(M::LOG, payload, M::PAYLOAD_LEN)?;
 
     let function_code = payload[1];
@@ -674,7 +761,18 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
     let (mut flags, ol1) = common_flags(status_bytes);
     M::extra_flags(&mut flags, status_bytes);
 
-    let value = parse_value(M::LOG, ol1, &display_trimmed, M::setup_screen(status_bytes));
+    let setup = M::setup_screen(status_bytes);
+    report_unrecognised_fields::<M>(
+        function_code,
+        range_idx,
+        range_raw,
+        &display_trimmed,
+        status_bytes,
+        setup,
+        overloaded(ol1, &display_trimmed),
+    );
+
+    let value = parse_value(M::LOG, ol1, &display_trimmed, setup);
 
     Ok(Measurement {
         mode,
@@ -687,6 +785,67 @@ pub(crate) fn parse_measurement<M: Vc8x0Model>(payload: &[u8]) -> Result<Measure
         flags,
         ..Measurement::from_payload(payload)
     })
+}
+
+/// Report what in a live-data payload the spec does not document: the
+/// function code, the range byte, the sign bit against the display, and the
+/// status bits. Nothing here changes the reading.
+///
+/// `display` is the whitespace-stripped main display; `setup` says the meter
+/// shows its setup screen, whose words are not a reading, and `overload` that
+/// it shows no reading at all.
+fn report_unrecognised_fields<M: Vc8x0Model>(
+    function: u8,
+    range_idx: u8,
+    range_raw: u8,
+    display: &str,
+    status: &[u8],
+    setup: bool,
+    overload: bool,
+) {
+    // vc880 spec §4.1, vc890 spec "Function Codes".
+    if function > LAST_FUNCTION {
+        report_unknown(M::LOG, "function code", format_args!("{function:#04x}"));
+    }
+    // vc880 spec §4.2, vc890 spec "Range Tables": the range byte is 0x30
+    // plus an index into the function's table. The specs describe no range
+    // byte for a single-range function (an empty table), and the vendor
+    // never reads LPF's.
+    let table = M::range_table(function);
+    if function != M::LOW_PASS && !table.is_empty() && usize::from(range_idx) >= table.len() {
+        report_unknown(
+            M::LOG,
+            "range byte",
+            format_args!("{range_raw:#04x} for function {function:#04x}"),
+        );
+    }
+    // vc880 spec §4.3, vc890 spec byte 56: Sign1 is the main display's sign.
+    // The reading is the display text as sent (vc880 spec §4, "Display
+    // values"), so a negative one carries its '-'. An overload has no digits
+    // to sign, and neither spec says what the bit does there.
+    if status[0] & STATUS0_SIGN1 != 0 && !setup && !overload && !display.contains('-') {
+        report_unknown(
+            M::LOG,
+            "sign bit",
+            format_args!(
+                "frame byte {} = {:#04x}, display {display:?}",
+                M::STATUS_AT + PAYLOAD_AT,
+                status[0]
+            ),
+        );
+    }
+    // vc880 spec §4.3, vc890 spec bytes 56-61: any bit the spec leaves
+    // unnamed, bar a possible ASCII prefix.
+    for (i, (&byte, &named)) in status.iter().zip(M::NAMED_STATUS_BITS).enumerate() {
+        if byte & !(named | POSSIBLE_ASCII_PREFIX) != 0 {
+            report_unknown(
+                M::LOG,
+                "status bits",
+                format_args!("frame byte {} = {byte:#04x}", M::STATUS_AT + PAYLOAD_AT + i),
+            );
+        }
+    }
+    M::report_unrecognised_status(status);
 }
 
 /// Detection for the VC-880: the meter streams live frames unprompted once
@@ -783,6 +942,17 @@ mod tests {
         }
     }
 
+    /// Detection listens to every meter: checksummed frames of another type
+    /// or length identify nothing and report nothing.
+    #[test]
+    fn detection_does_not_report_other_frames() {
+        let mut buf = framing::test_frame_be16(&[0x05, 0x00]);
+        buf.extend(framing::test_frame_be16(&live_payload(35)));
+        let (evidence, reports) = crate::protocol::capture_reports(|| recognise(&buf));
+        assert_eq!(evidence, None);
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
     #[test]
     fn build_command_checksum() {
         let frame = build_command(0x4A);
@@ -834,6 +1004,8 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
+    use crate::protocol::capture_reports;
+    use crate::protocol::test_support::snapshot;
     use crate::transport::mock::MockTransport;
 
     /// Build a live-data payload for `M`: the header, the 7-byte main
@@ -1206,6 +1378,235 @@ pub(crate) mod test_support {
             proto.press(&transport, button).expect("written");
             assert_eq!(command_frame(&transport), build_command(byte), "{button:?}");
         }
+    }
+
+    // --- Unrecognised data --------------------------------------------------
+
+    /// Parse `payload` for `M` and return what the parse reported.
+    pub(crate) fn parse_capturing<M: Vc8x0Model>(
+        payload: &[u8],
+    ) -> (Result<Measurement>, Vec<String>) {
+        capture_reports(|| parse_measurement::<M>(payload))
+    }
+
+    /// The line `M` reports `value` of kind `what` with.
+    fn report<M: Vc8x0Model>(what: &str, value: &str) -> String {
+        format!("{}: unrecognised {what}: {value}", M::LOG)
+    }
+
+    /// A reading's snapshot without the payload length, for comparing a
+    /// frame with a longer copy of itself.
+    fn snapshot_without_length(m: &Measurement) -> String {
+        snapshot(m)
+            .lines()
+            .filter(|l| !l.starts_with("raw_payload="))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// A function code past 0x12 is reported and still labelled Unknown;
+    /// naming one for a label is not a reading and reports nothing.
+    pub(crate) fn assert_unknown_function_reported<M: Vc8x0Model>() {
+        let payload = make_payload::<M>(0x13, 0x30, b"  1.234", &zero_status::<M>());
+        let (m, reports) = parse_capturing::<M>(&payload);
+        assert_eq!(m.unwrap().mode, "Unknown(0x13)");
+        assert_eq!(reports, [report::<M>("function code", "0x13")]);
+
+        let proto = Vc8x0Protocol::<M>::new();
+        let (label, reports) = capture_reports(|| proto.mode_label(0x13));
+        assert_eq!(label, "Unknown(0x13)");
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// A range byte past `volts`' four-rung table, or below 0x30, is
+    /// reported, and the reading still falls back to the base unit.
+    pub(crate) fn assert_range_past_the_table_reported<M: Vc8x0Model>(volts: u8) {
+        for range in [0x34, 0x2F] {
+            let payload = make_payload::<M>(volts, range, b"  1.234", &zero_status::<M>());
+            let (m, reports) = parse_capturing::<M>(&payload);
+            let m = m.unwrap();
+            assert_eq!((m.unit.as_ref(), m.range_label.as_ref()), ("V", ""));
+            assert_eq!(
+                reports,
+                [report::<M>(
+                    "range byte",
+                    &format!("{range:#04x} for function {volts:#04x}")
+                )]
+            );
+        }
+    }
+
+    /// Nothing is reported for the range byte of `functions`, which have no
+    /// range table or whose range byte the vendor never reads.
+    pub(crate) fn assert_unread_range_bytes_are_silent<M: Vc8x0Model>(functions: &[u8]) {
+        for &function in functions {
+            for range in [0x2F, 0x31, 0x39, 0xFF] {
+                let payload = make_payload::<M>(function, range, b"  1.234", &zero_status::<M>());
+                let (m, reports) = parse_capturing::<M>(&payload);
+                m.unwrap();
+                assert!(
+                    reports.is_empty(),
+                    "function {function:#04x} range {range:#04x}: {reports:?}"
+                );
+            }
+        }
+    }
+
+    /// Sign1 on a display without a '-' is reported and the value kept as
+    /// sent; with the '-' it is a negative reading. `frame_byte` is status
+    /// byte 0's offset in the frame.
+    pub(crate) fn assert_sign_bit_without_minus_reported<M: Vc8x0Model>(frame_byte: usize) {
+        let mut status = zero_status::<M>();
+        status[0] = 0x04;
+        let payload = make_payload::<M>(0x00, 0x30, b"  1.234", &status);
+        let (m, reports) = parse_capturing::<M>(&payload);
+        assert!(matches!(m.unwrap().value, MeasuredValue::Normal(v) if (v - 1.234).abs() < 1e-9));
+        assert_eq!(
+            reports,
+            [report::<M>(
+                "sign bit",
+                &format!("frame byte {frame_byte} = 0x04, display \"1.234\"")
+            )]
+        );
+
+        let payload = make_payload::<M>(0x00, 0x30, b" -1.234", &status);
+        let (_, reports) = parse_capturing::<M>(&payload);
+        assert!(reports.is_empty(), "{reports:?}");
+
+        // An overload has no digits to sign, however it is marked.
+        for display in [b"     OL", b"  -----"] {
+            let payload = make_payload::<M>(0x00, 0x30, display, &status);
+            let (m, reports) = parse_capturing::<M>(&payload);
+            assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+            assert!(reports.is_empty(), "{display:?}: {reports:?}");
+        }
+        let mut ol_status = status;
+        ol_status[2] = 0x04;
+        let payload = make_payload::<M>(0x00, 0x30, b"  1.234", &ol_status);
+        let (m, reports) = parse_capturing::<M>(&payload);
+        assert!(matches!(m.unwrap().value, MeasuredValue::Overload));
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// Each bit of `unnamed[i]` set alone in status byte `i` is reported,
+    /// and the reading stays what it was. `frame_byte` is status byte 0's
+    /// offset in the frame.
+    pub(crate) fn assert_undefined_status_bits_reported<M: Vc8x0Model>(
+        frame_byte: usize,
+        unnamed: &[u8],
+    ) {
+        let clean = parse_measurement::<M>(&make_payload::<M>(
+            0x00,
+            0x30,
+            b"  1.234",
+            &zero_status::<M>(),
+        ))
+        .unwrap();
+        for (i, &bits) in unnamed.iter().enumerate() {
+            for bit in (0..8).map(|b| 1u8 << b).filter(|b| bits & b != 0) {
+                let mut status = zero_status::<M>();
+                status[i] = bit;
+                let payload = make_payload::<M>(0x00, 0x30, b"  1.234", &status);
+                let (m, reports) = parse_capturing::<M>(&payload);
+                assert_eq!(snapshot(&m.unwrap()), snapshot(&clean));
+                assert_eq!(
+                    reports,
+                    [report::<M>(
+                        "status bits",
+                        &format!("frame byte {} = {bit:#04x}", frame_byte + i)
+                    )]
+                );
+            }
+        }
+    }
+
+    /// A longer live payload is reported and parsed from its first bytes; a
+    /// shorter one is reported and refused.
+    pub(crate) fn assert_frame_length_reported<M: Vc8x0Model>() {
+        let payload = make_payload::<M>(0x00, 0x31, b"  1.234", &zero_status::<M>());
+        let expected = parse_measurement::<M>(&payload).unwrap();
+        let len = M::PAYLOAD_LEN;
+
+        let mut longer = payload.clone();
+        longer.push(b' ');
+        let (m, reports) = parse_capturing::<M>(&longer);
+        assert_eq!(
+            snapshot_without_length(&m.unwrap()),
+            snapshot_without_length(&expected)
+        );
+        assert_eq!(
+            reports,
+            [report::<M>(
+                "frame length",
+                &format!("{} payload bytes, expected {len}", len + 1)
+            )]
+        );
+
+        let (m, reports) = parse_capturing::<M>(&payload[..len - 1]);
+        assert!(m.is_err());
+        assert_eq!(
+            reports,
+            [report::<M>(
+                "frame length",
+                &format!("{} payload bytes, expected {len}", len - 1)
+            )]
+        );
+    }
+
+    /// Read one live frame for `M` queued behind a frame of each of `types`,
+    /// and return what the read reported.
+    pub(crate) fn frame_type_reports<M: Vc8x0Model>(types: &[u8]) -> Vec<String> {
+        let mut stream: Vec<u8> = types
+            .iter()
+            .flat_map(|&t| framing::test_frame_be16(&[t, 0x00]))
+            .collect();
+        stream.extend(framing::test_frame_be16(&make_payload::<M>(
+            0x00,
+            0x30,
+            b"  1.234",
+            &zero_status::<M>(),
+        )));
+        // `read_frame` reads at most 64 bytes at a time.
+        let transport = MockTransport::new(stream.chunks(32).map(<[u8]>::to_vec).collect());
+        let mut rx_buf = Vec::new();
+        let (payload, reports) = capture_reports(|| read_live::<M>(&mut rx_buf, &transport));
+        assert_eq!(payload.unwrap().len(), M::PAYLOAD_LEN);
+        reports
+    }
+
+    /// Parse the documented frames of `M` and return what they reported:
+    /// every function code with each of its ranges, four display forms, and
+    /// each status byte's named bits one at a time and all together, with
+    /// and without a 0x30 prefix.
+    pub(crate) fn documented_frame_reports<M: Vc8x0Model>() -> Vec<String> {
+        let codes: Vec<u8> = M::FUNCTION_TABLE.iter().map(|e| e.0).collect();
+        assert_eq!(codes, (0..=LAST_FUNCTION).collect::<Vec<_>>());
+        capture_reports(|| {
+            for &function in &codes {
+                let rungs = M::range_table(function).len().max(1) as u8;
+                for range in 0x30..0x30 + rungs {
+                    for display in [b"  1.234", b" -1.234", b"     OL", b"    ---"] {
+                        let status = zero_status::<M>();
+                        parse_measurement::<M>(&make_payload::<M>(
+                            function, range, display, &status,
+                        ))
+                        .unwrap();
+                    }
+                }
+            }
+            for (i, &named) in M::NAMED_STATUS_BITS.iter().enumerate() {
+                let bits = (0..8).map(|b| 1u8 << b).filter(|b| named & b != 0);
+                for value in bits.chain([named]) {
+                    for prefix in [0, POSSIBLE_ASCII_PREFIX] {
+                        let mut status = zero_status::<M>();
+                        status[i] = value | prefix;
+                        let payload = make_payload::<M>(0x00, 0x30, b" -1.234", &status);
+                        parse_measurement::<M>(&payload).unwrap();
+                    }
+                }
+            }
+        })
+        .1
     }
 
     /// Leaving MAX/MIN/AVG writes the exit command, not another press.

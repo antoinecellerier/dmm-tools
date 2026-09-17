@@ -546,6 +546,11 @@ plus what no step reaches.
 - 60,000 count range values (6/60/600 vs 4/40/400)
 - 7 display value fields (main + 6 sub-displays) — format and content
 - Status flag bytes (8 bytes at msg[56..63]) — all bit positions correct?
+  Do bytes 56-61 carry a 0x30 prefix like the range byte? The parser
+  reports their bits 6-7 as unrecognised and leaves bits 4-5 out until a
+  capture settles this (noted 2026-09-17)
+- Sign1 (msg[56] bit 2) — the value's sign is taken from the display text;
+  the parser reports Sign1 set on a display without a `-` (noted 2026-09-17)
 - AVG flag (byte 57 bit 1) — parsed since 2026-09-07 and reported wherever
   flags are shown; unverified on hardware. Put the meter in MAX/MIN/AVG and
   confirm AVG lights only on the AVG step of the cycle.
@@ -649,6 +654,11 @@ plus what no step reaches.
 - Main display (7 ASCII bytes) — values match LCD?
 - Sub-displays (sub1, sub2, bar) — format and content
 - Status flag bytes (7 bytes, 28 named flags) — all bit positions correct?
+  Do bytes 30-35 carry a 0x30 prefix like the range byte? The parser
+  reports bits 6-7 of bytes 30-36 as unrecognised and leaves bits 4-5 of
+  bytes 30-35 out until a capture settles this (noted 2026-09-17)
+- Sign1 (msg[30] bit 2) — the value's sign is taken from the display text;
+  the parser reports Sign1 set on a display without a `-` (noted 2026-09-17)
 - AVG flag (byte 31 bit 1) — parsed since 2026-09-07 and reported wherever
   flags are shown; unverified on hardware. Press MAX/MIN/AVG (0x49) through
   the cycle and confirm AVG lights only on the AVG step.

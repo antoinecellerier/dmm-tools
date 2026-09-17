@@ -20,6 +20,8 @@ use super::{COMMANDS, RangeEntry, Vc8x0Model, Vc8x0Protocol, build_command, re, 
 use crate::error::Result;
 use crate::flags::StatusFlags;
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring, Settle};
+use crate::protocol::framing;
+use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{DeviceProfile, Stability};
 use crate::transport::Transport;
 use log::debug;
@@ -231,6 +233,29 @@ const SETTLE: Settle = Settle {
 const PRESS_DRAIN_TIMEOUT_MS: i32 = 50;
 const PRESS_DRAIN_READS: usize = 8;
 
+/// The Result frame's type byte (spec §3); its first data byte is the status.
+const MSG_TYPE_RESULT: u8 = 0xFF;
+
+/// The last Result status spec §5/§6 give: 0 success, 1 resend, 2 error.
+const LAST_RESULT_STATUS: u8 = 2;
+
+/// Report a Result frame among the bytes drained after `cmd` whose status
+/// the spec does not list. A frame cut off by the drain is not looked at.
+fn report_unrecognised_results(cmd: u8, drained: &[u8]) {
+    for start in framing::abcd_header_offsets(drained) {
+        if let Ok(Some((payload, _))) = framing::extract_frame_abcd_be16(&drained[start..])
+            && let [MSG_TYPE_RESULT, status, ..] = payload[..]
+            && status > LAST_RESULT_STATUS
+        {
+            report_unknown(
+                Vc880Model::LOG,
+                "button result",
+                format_args!("{status:#04x} for command {cmd:#04x}"),
+            );
+        }
+    }
+}
+
 /// What the shared Voltcraft driver needs to speak VC-880.
 ///
 /// Live data payload — everything between the length byte and the checksum:
@@ -255,6 +280,11 @@ impl Vc8x0Model for Vc880Model {
     const DIAL: &'static [DialPosition] = DIAL;
     const SETTLE: Settle = SETTLE;
     const FUNCTION_TABLE: &'static [(u8, &'static str, &'static str)] = FUNCTION_TABLE;
+    // Spec §4.2: the vendor fixes ACV LPF at 1000 V without reading the
+    // range byte. The voltage table still labels it.
+    const LOW_PASS: u8 = 0x12;
+    // Spec §4.3: bits 0-3 of frame bytes 30-35, bits 0-5 of byte 36.
+    const NAMED_STATUS_BITS: &'static [u8] = &[0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x3F];
 
     fn profile() -> DeviceProfile {
         DeviceProfile {
@@ -283,7 +313,7 @@ impl Vc8x0Model for Vc880Model {
 
     /// The meter streams: a frame is simply there to be read.
     fn read_live_frame(rx_buf: &mut Vec<u8>, transport: &dyn Transport) -> Result<Vec<u8>> {
-        read_live(rx_buf, transport, Self::LOG)
+        read_live::<Self>(rx_buf, transport)
     }
 
     /// Write the frame and drop what the stream had already queued.
@@ -291,19 +321,24 @@ impl Vc8x0Model for Vc880Model {
     /// The meter streams, so whatever was buffered when the command landed
     /// still describes the old state — and `read_frame` hands frames out
     /// oldest first. Drop it here rather than spend the settle budget on it.
-    /// The 0xFF Result frame the meter answers with goes the same way; the
-    /// live-frame accept filter (type byte 0x01) skips it anyway.
+    /// The 0xFF Result frame the meter answers with goes the same way, once
+    /// its status has been checked; one that arrives later is skipped by
+    /// the live-frame accept filter (type byte 0x01).
     fn write_button(rx_buf: &mut Vec<u8>, transport: &dyn Transport, cmd: u8) -> Result<()> {
         transport.write(&build_command(cmd))?;
         rx_buf.clear();
         let mut tmp = [0u8; 64];
+        // At most PRESS_DRAIN_READS × 64 bytes.
+        let mut drained = Vec::new();
         for _ in 0..PRESS_DRAIN_READS {
             let n = transport.read_timeout(&mut tmp, PRESS_DRAIN_TIMEOUT_MS)?;
             if n == 0 {
                 break;
             }
             debug!("vc880: drained {n} bytes after the command");
+            drained.extend_from_slice(&tmp[..n]);
         }
+        report_unrecognised_results(cmd, &drained);
         Ok(())
     }
 }
@@ -491,6 +526,104 @@ mod tests {
         let payload = make_payload(0x00, 0x30, b"  Err  ", status);
         let (_, reports) = crate::protocol::capture_reports(|| parse_measurement(&payload));
         assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    #[test]
+    fn an_unknown_function_code_is_reported() {
+        shared::assert_unknown_function_reported::<Vc880Model>();
+    }
+
+    #[test]
+    fn a_range_byte_past_the_table_is_reported() {
+        shared::assert_range_past_the_table_reported::<Vc880Model>(0x00);
+    }
+
+    /// Duty cycle and diode have no range table, and the vendor never reads
+    /// ACV LPF's range byte although the voltage table labels it.
+    #[test]
+    fn unread_range_bytes_are_not_reported() {
+        shared::assert_unread_range_bytes_are_silent::<Vc880Model>(&[0x04, 0x07, 0x12]);
+    }
+
+    #[test]
+    fn a_sign_bit_without_a_minus_is_reported() {
+        shared::assert_sign_bit_without_minus_reported::<Vc880Model>(30);
+    }
+
+    /// The setup screen shows words, not a reading, so its sign bit is not
+    /// checked against them.
+    #[test]
+    fn the_sign_bit_is_not_checked_on_the_setup_screen() {
+        let mut status = zero_status();
+        status[0] = 0x04; // Sign1
+        status[6] = 0x02; // Setup
+        let payload = make_payload(0x00, 0x30, b"  1.234", status);
+        let (m, reports) = shared::parse_capturing::<Vc880Model>(&payload);
+        m.unwrap();
+        assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    /// Bits 6-7 of frame bytes 30-36; bits 4-5 of bytes 30-35 are left out
+    /// as a possible ASCII prefix, and byte 36 names them.
+    #[test]
+    fn undefined_status_bits_are_reported() {
+        shared::assert_undefined_status_bits_reported::<Vc880Model>(30, &[0xC0; 7]);
+    }
+
+    #[test]
+    fn a_live_frame_of_another_length_is_reported() {
+        shared::assert_frame_length_reported::<Vc880Model>();
+    }
+
+    /// A frame type spec §3 does not list is reported and skipped. The
+    /// VC-880 answers a command with a Result frame, so a frame typed as a
+    /// command byte is unknown here.
+    #[test]
+    fn an_unlisted_frame_type_is_reported() {
+        assert_eq!(
+            shared::frame_type_reports::<Vc880Model>(&[0x05, super::super::CMD_SELECT]),
+            [
+                "vc880: unrecognised frame type: 0x05, 2 payload bytes",
+                "vc880: unrecognised frame type: 0x4c, 2 payload bytes",
+            ]
+        );
+    }
+
+    /// The drain after a press, with the Result frame split across reads.
+    fn press_with_result(status: u8) -> Vec<String> {
+        let mut stream =
+            framing::test_frame_be16(&make_payload(0x00, 0x30, b"  1.234", zero_status()));
+        stream.extend(framing::test_frame_be16(&[MSG_TYPE_RESULT, status]));
+        let transport = MockTransport::new(stream.chunks(20).map(<[u8]>::to_vec).collect());
+        let mut proto = Vc880Protocol::new();
+        let (pressed, reports) =
+            crate::protocol::capture_reports(|| proto.press(&transport, CycleButton::Select));
+        pressed.expect("the frame is written");
+        reports
+    }
+
+    #[test]
+    fn an_unlisted_button_result_is_reported() {
+        assert_eq!(
+            press_with_result(0x03),
+            ["vc880: unrecognised button result: 0x03 for command 0x4c"]
+        );
+    }
+
+    /// Every function code with each of its ranges, the display forms, the
+    /// named status bits, the listed frame types and result statuses.
+    #[test]
+    fn documented_frames_report_nothing() {
+        let reports = shared::documented_frame_reports::<Vc880Model>();
+        assert!(reports.is_empty(), "{reports:?}");
+
+        let reports = shared::frame_type_reports::<Vc880Model>(&[0x00, 0x02, 0x03, 0x04, 0xFF]);
+        assert!(reports.is_empty(), "{reports:?}");
+
+        for status in 0..=2 {
+            let reports = press_with_result(status);
+            assert!(reports.is_empty(), "result {status}: {reports:?}");
+        }
     }
 
     #[test]

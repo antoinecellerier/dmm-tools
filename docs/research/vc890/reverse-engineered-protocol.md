@@ -43,6 +43,12 @@ WriteCommand(94);  // 0x5E
 byte[] array = ReceiveOneMessage(1);  // type 0x01
 ```
 
+**Command confirmation**: `SendCommand(cmd)` (line 4056) writes the
+command and waits for a frame whose type byte is the command byte itself,
+retrying up to 5 times, so the meter answers a button command with a frame
+of that type. `ReceiveOneMessage` skips frames of any other type, which
+leaves open whether the 0x5E poll is echoed ahead of its live frame.
+
 **Ack protocol**: The Voltsoft vendor software wraps every VC-890
 request/response pair in an ack sequence. `AckMessage(clear: true)` at
 `DMSShare_decompiled.cs:3861` sends `command = 0xFF` with `data = [0x00]`
