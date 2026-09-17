@@ -148,15 +148,13 @@ pub(crate) fn cmd_capture(
     eprintln!();
     eprintln!("{}", style("=== Capture complete! ===").bold().green());
     eprintln!("Report saved to: {}", style(&output_path).bold());
-    if let Some(plan) = &plan_path {
+    let (covered, total) = if let Some(plan) = &plan_path {
         // The plan's steps are not in the device's unverified list, so its
         // coverage line would read zero for a run that captured everything.
         let ids: std::collections::HashSet<&str> = cli_steps.iter().map(|s| s.id).collect();
-        eprintln!(
-            "Plan {plan}: {} of {} steps captured",
-            captured_count(&report, &ids),
-            ids.len()
-        );
+        let covered = captured_count(&report, &ids);
+        eprintln!("Plan {plan}: {covered} of {} steps captured", ids.len());
+        (covered, ids.len())
     } else {
         let covered = captured_count(&report, &unverified_ids);
         if unverified_only && covered == 0 {
@@ -168,9 +166,29 @@ pub(crate) fn cmd_capture(
                 device.display_name
             );
         }
+        (covered, unverified_ids.len())
+    };
+    if let Some(hint) = resume_hint(covered, total, plan_path.is_some()) {
+        eprintln!("{hint}");
     }
     eprintln!("Attach the report to {}", dmm.profile().feedback_url());
     Ok(())
+}
+
+/// The way back into a run that left steps undone. A capture that ended on the
+/// first `q` signs off with the same "Capture complete!" as one that walked
+/// every step, and said nothing about the report being resumable.
+fn resume_hint(covered: usize, total: usize, plan: bool) -> Option<String> {
+    if covered >= total {
+        return None;
+    }
+    let mut hint =
+        "Not finished \u{2014} run the same command again and answer r to resume.".to_string();
+    // `--steps` conflicts with `--plan`, so it is not on offer for a plan run.
+    if !plan {
+        hint.push_str("\n--steps <ids> runs named steps on their own.");
+    }
+    Some(hint)
 }
 
 /// Keep what the cable delivered when the meter never answered: on a meter
@@ -286,6 +304,23 @@ mod tests {
         assert_eq!(hex, ["55 AA 01 02"]);
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A run that stopped early has to say it can be picked up; one that
+    /// covered everything has nothing to add.
+    #[test]
+    fn an_unfinished_run_says_how_to_resume() {
+        let hint = resume_hint(1, 27, false).expect("26 steps left");
+        assert!(hint.contains("run the same command again"), "{hint}");
+        assert!(hint.contains("--steps"), "{hint}");
+
+        // `--steps` conflicts with `--plan`, so a plan run is not sent to it.
+        let hint = resume_hint(1, 2, true).expect("1 step left");
+        assert!(hint.contains("run the same command again"), "{hint}");
+        assert!(!hint.contains("--steps"), "{hint}");
+
+        assert_eq!(resume_hint(27, 27, false), None);
+        assert_eq!(resume_hint(0, 0, false), None);
     }
 
     #[test]

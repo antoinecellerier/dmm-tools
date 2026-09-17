@@ -503,7 +503,8 @@ confirmation, asked the same way. `q` on its own finishes the pass.
 `--steps extra` runs just this pass.
 
 The run ends with how many unverified steps the report covers and the issue
-to attach it to.
+to attach it to. A run that stopped short is picked up by starting it again
+and answering `r`; `--steps <ids>` runs named steps on their own.
 
 **Examples:**
 
