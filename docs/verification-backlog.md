@@ -744,6 +744,8 @@ HARDWARE VERIFICATION:
   each returned five DC V readings with no errors, and the reporter confirmed
   the last capture sample against the LCD. See
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16).
+- **Golden fixtures**: 3 in `crates/dmm-lib/tests/golden/ut804/` from that
+  run — open leads, the confirmed 1.4 mV reading and a negative one.
 - **Nine dial positions read correctly on screen only, with no frames**: the
   reporter turned a UT804 through DC V, AC V, DC mV, Ω, capacitance,
   temperature, DC µA, DC mA and DC A in the GUI on Windows and reported

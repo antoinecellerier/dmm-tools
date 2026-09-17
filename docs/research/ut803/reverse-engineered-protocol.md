@@ -367,6 +367,12 @@ This is because the UT804.exe uses custom TrueType fonts (unit_a2.ttf,
 unit_a3.ttf, unit.ttf) where ASCII characters map to measurement symbols.
 The raw ASCII values don't correspond to their visual appearance.
 
+A real UT804 sent nine packets with mode nibble 7 = `0x9` and the AUTO bit
+clear in nibble 9 (issue #16, 2026-09-17), ahead of a run of mode `0x1`
+packets. The dial position those nine were taken at was not reported, so
+no code→mode row above is confirmed by them. Mode `0x1` is the only code
+a real meter has been seen sending from a known dial position (DC V).
+
 #### UT803 — Modes [DEDUCED]
 
 The UT803 uses the same nibble 7 mode code scheme. Unit strings found in
@@ -461,7 +467,9 @@ from UT804.exe, 19200 baud from UT803.exe, both as
 
 After init, the meter streams measurement packets continuously. The
 UT803/UT804 manuals give 2-3 display updates per second. Observed on a
-UT804 (issue #16, 2026-09-16): a packet about every 656 ms.
+UT804 (issue #16, 2026-09-16): a packet about every 656 ms. A 2026-09-17
+run on the same meter measured 16 consecutive packets 652-684 ms apart,
+with one 1236 ms gap while the dial was being turned.
 
 The feature report is the only thing either app sends: its
 `HidD_SetFeature` call is the only HID output in either binary, and no
