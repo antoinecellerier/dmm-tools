@@ -1395,6 +1395,34 @@ routing non-plottable samples through something that carries mode/unit, and
 establishing the time origin without any plottable points. That is also the
 prerequisite for banding NCV — see `docs/future-improvements.md`.
 
+### A meter power cycle surfaces a checksum error
+
+Seen on our UT61E+ (2026-09-17, `dmm-gui`, CP2110): powering the meter off
+and back on at a different dial position showed `checksum mismatch: expected
+0x3534, got 0x055a` as a UI error. The received value is ASCII `"54"` —
+display digits where the checksum should be — while the computed one is a
+plausible sum for a whole frame, so the frame boundary was lost rather than
+the data corrupted.
+
+`read_frame` leaves `rx_buf` untouched when a read times out
+(`crates/dmm-lib/src/protocol/framing.rs`, the `n == 0` arm). A meter that
+stops mid-frame leaves a partial frame there; when it comes back, the new
+stream is appended to it, so `locate` finds the old `AB CD`, the length byte
+points into fresh data, and the bytes at the checksum position are payload.
+
+Recovery already works — the UT61+ propagates the error and clears the buffer
+on the way out (the vendor parser's discard-and-clear, ut61eplus spec §2.1),
+so the next read is clean. What it costs is one user-visible error for an
+ordinary action.
+
+Two candidate fixes: clear `rx_buf` when a read times out, which removes the
+cause and also covers UT803/UT804 (the other family that propagates), or
+retry once after the clear. A timeout means 2 s without a single byte
+(`read_uart_bytes` returns 0 only at the deadline), and no frame we handle
+takes that long to arrive, so keeping a partial frame across one buys
+nothing. Reproducible without hardware: feed `read_frame` a partial frame, a
+transport that returns no bytes once, then a fresh stream.
+
 ### GUI accessibility — screen reader walk-through
 
 The GUI accessibility pass wired up AccessKit labels, toggle-state
