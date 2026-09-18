@@ -129,8 +129,10 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
         0xD => ("Temperature", "°F", 3),
         // Unknown glyph in the vendor font ("W"); possibly hFE/ADP.
         0xE => ("ADP", "", 3),
-        // Unit string "mA%" — most plausibly 4-20 mA loop percentage.
-        0xF => ("mA%", "mA%", 2),
+        // The 4-20 mA loop current as a % reading, on the mA position (UT804
+        // manual Table 2-1). The mode keeps the vendor's unit string "mA%"
+        // as its name; the LCD shows the unit as "%" (#16).
+        0xF => ("mA%", "%", 2),
         _ => return None,
     })
 }
@@ -364,13 +366,45 @@ fn mode_info_or_unknown(
     })
 }
 
-/// The vendor's overload LCD text, signed when the sign bit is set.
+/// The vendor app's overload text, signed when the sign bit is set.
 fn overload_display(negative: bool) -> Option<String> {
     Some(if negative {
         "-0L".to_string()
     } else {
         "0L".to_string()
     })
+}
+
+/// What a UT804's LCD shows for a packet whose digit 1 is blank — an
+/// overload, or LO on the 4-20 mA % reading: the digit nibbles as drawn, A
+/// a blank and C an `L`, with the range's decimal point after digit
+/// `dp_pos + 1` and the sign in front (spec §3.3). `None` where a nibble is
+/// one the LCD has not been seen to draw.
+///
+/// Issue #16's LCD confirmed three frames: `A A 0 C A` on Ω range 6 shows
+/// `.OL`, on continuity `0.L`, and `A C 0 A A` on mode F with the sign bit
+/// `- LO.`. The 7-segment O is the digit 0, so the text keeps `0`. Diode's
+/// `A A 0 C A` was twice accepted as `0L`, where this gives `.0L`: that one
+/// is unconfirmed.
+fn ut804_lcd_text(digits: &[u8], dp_pos: u8, negative: bool) -> Option<String> {
+    let mut s = String::with_capacity(digits.len() + 2);
+    if negative {
+        s.push('-');
+    }
+    for (i, &d) in digits.iter().enumerate() {
+        match d {
+            0x0..=0x9 => s.push((b'0' + d) as char),
+            0xA => {}
+            0xC => s.push('L'),
+            _ => return None,
+        }
+        // The point follows a digit position, drawn or blank: Ω range 6
+        // has two blanks before it. None past the last digit.
+        if i == dp_pos as usize && i + 1 < digits.len() {
+            s.push('.');
+        }
+    }
+    Some(s)
 }
 
 /// Parse a UT804 packet. Position k is byte k (spec §2.1), so
@@ -453,20 +487,31 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
 
     let dc = matches!(acdc, 2 | 3) || (acdc == 0 && ut804_default_dc(mode_code));
 
-    // Overload frames: digit 1 = 0xA. Vendor forces the displays to
-    // "L0" → value 0.0 when digit 2 == 0xC, or "0L" (overload, possibly
-    // negative) otherwise; digits 3-5 are ignored (spec §7.4 item 6). An
-    // idle frame (digit 4 == 0xB) shows all zeros.
+    // Overload frames: digit 1 = 0xA. The vendor reads 0.0 ("L0") when
+    // digit 2 == 0xC, and an overload (possibly negative) otherwise;
+    // digits 3-5 are ignored (spec §7.4 item 6). An idle frame (digit 4 ==
+    // 0xB) shows all zeros.
     let (value, display_raw) = if nibbles[0] == 0xA {
         // Digit 2 is A (overload), C ("L0") or F ("HI") in the known
         // overload patterns (§8).
         if !matches!(nibbles[1], 0xA | 0xC | 0xF) {
             unrecognised.report("overload pattern");
         }
+        // The LCD's own text for the patterns it has been seen to draw,
+        // the vendor's fixed "L0" / "0L" for the rest.
+        let lcd = matches!(nibbles[1], 0xA | 0xC)
+            .then(|| ut804_lcd_text(&nibbles[0..5], dp_pos, negative))
+            .flatten();
         if nibbles[1] == 0xC {
-            (MeasuredValue::Normal(0.0), Some("L0".to_string()))
+            (
+                MeasuredValue::Normal(0.0),
+                lcd.or_else(|| Some("L0".to_string())),
+            )
         } else {
-            (MeasuredValue::Overload, overload_display(negative))
+            (
+                MeasuredValue::Overload,
+                lcd.or_else(|| overload_display(negative)),
+            )
         }
     } else if nibbles[3] == 0xB {
         (MeasuredValue::Normal(0.0), Some("0".to_string()))
@@ -790,8 +835,9 @@ impl Protocol for Ut80xProtocol {
                 CaptureStep::basic("aca", "Set meter to AC A"),
                 for_model(Some("AC A"), Some("A")),
             )),
-            // Two modes whose names come from the vendor binaries alone
-            // (spec §3.4): mode 14 "ADP / Logic" and mode 15, unit "mA%".
+            // Mode 14 "ADP / Logic" is named by the vendor binaries alone
+            // (spec §3.4). Mode 15 is the mA position's 4-20 mA loop reading
+            // in %, whose mode keeps the vendor's name "mA%".
             ut803_only(
                 CaptureStep::basic("adp", "Set meter to ADP / logic").expect(Expect::mode("ADP")),
             ),
@@ -1533,26 +1579,70 @@ raw_payload=11"#
         );
     }
 
-    /// Digit 1 = 0xA with digit 2 = 0xC: the vendor's "L0" display, which
-    /// we report as a zero reading rather than an overload. Digits 3-5 are
-    /// ignored.
+    /// Digit 1 = 0xA with digit 2 = 0xC: LO, which the vendor reads as zero
+    /// rather than an overload. Issue #16's 4-20 mA % reading below its
+    /// range, as run 1 sent it.
     #[test]
     fn ut804_snapshot_l0() {
-        let p = ut804_payload(&[0xA, 0xC, 2, 3, 4], 1, 0x1, 2, 0x0);
+        let p = [
+            0xBA, 0xBC, 0xB0, 0xBA, 0xBA, 0xB0, 0xBF, 0xB0, 0xB0, 0x0D, 0x8A,
+        ];
         let m = parse_measurement_ut804(&p).unwrap();
         assert_eq!(
             snapshot(&m),
-            r#"mode=DC V
-mode_raw=0x01
-range_raw=0x01
+            r#"mode=mA%
+mode_raw=0x0f
+range_raw=0x00
 value=Normal(0.0)
-unit=V
+unit=%
 range_label=
-display_raw=Some("L0")
-flags=dc
+display_raw=Some("L0.")
+flags=
 aux=0
 raw_payload=11"#
         );
+    }
+
+    /// Three frames whose LCD issue #16's reporter read back: the text is
+    /// the digit nibbles as drawn, with the range's point and the sign.
+    #[test]
+    fn ut804_overload_and_lo_text_is_the_lcds() {
+        for (packet, mode, unit, lcd) in [
+            // Ω range 6, open leads: ".OL MΩ".
+            (
+                [
+                    0xBA, 0xBA, 0xB0, 0xBC, 0xBA, 0xB6, 0x34, 0xB0, 0x31, 0x0D, 0x8A,
+                ],
+                "Ω",
+                "MΩ",
+                ".0L",
+            ),
+            // Continuity, open leads: "0.L Ω".
+            (
+                [
+                    0xBA, 0xBA, 0xB0, 0xBC, 0xBA, 0xB0, 0xBA, 0xB0, 0xB0, 0x0D, 0x8A,
+                ],
+                "Continuity",
+                "Ω",
+                "0.L",
+            ),
+            // The 4-20 mA % reading with the sign bit: "- LO. %".
+            (
+                [
+                    0xBA, 0xBC, 0xB0, 0xBA, 0xBA, 0xB0, 0xBF, 0xB0, 0x34, 0x0D, 0x8A,
+                ],
+                "mA%",
+                "%",
+                "-L0.",
+            ),
+        ] {
+            let m = parse_measurement_ut804(&packet).unwrap();
+            assert_eq!(
+                (m.mode.as_ref(), m.unit.as_ref(), m.display_raw.as_deref()),
+                (mode, unit, Some(lcd)),
+                "{packet:02X?}"
+            );
+        }
     }
 
     /// Digit 4 = 0xB is the idle frame: all displays zero.

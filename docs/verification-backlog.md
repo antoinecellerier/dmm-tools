@@ -863,9 +863,10 @@ HARDWARE VERIFICATION:
   - Three parser behaviours surfaced by the 2026-09 snapshot tests, to
     settle against real frames rather than change blind: `range_label`
     is never set for either model although the per-mode tables know the
-    range; a UT804 "L0" frame (digit 1 = 0xA, digit 2 = 0xC) is reported
-    as `Normal(0.0)` with the display text "L0", which CSV/JSON export as
-    the string `L0`; and UT804 `acdc == 3` (AC+DC) sets the DC flag.
+    range; a UT804 LO frame (digit 1 = 0xA, digit 2 = 0xC) is reported
+    as `Normal(0.0)` with the LCD's text "L0." ("-L0." with the sign
+    bit), which CSV/JSON export as that string; and UT804 `acdc == 3`
+    (AC+DC) sets the DC flag.
   - Signed zero: a UT804 packet with zero digits and the sign bit
     (issue #16) reads `-0.0000`, value `-0.0`. What does the LCD show?
   - After a long pause in reading, the kernel's HID report queue can
