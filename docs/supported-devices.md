@@ -64,10 +64,10 @@ shows it; the UT804's EXIT turns SEND off.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT803 | 6000 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) | |
-| UT804 | 40000 | 🟡 Partly verified ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) | |
+| UT804 | 40000 | ✅ Verified | from community captures ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 
-One reporter has run a UT804 over the cable: auto-detection and the DC V
-readings are confirmed. The other dial positions are still to confirm
+A reporter's UT804 has confirmed every dial position and auto-detection;
+what MAX MIN and REL send is still to confirm
 ([backlog](verification-backlog.md)). The UT803 has not been run on a meter
 yet, and auto-detection does not find it: select UT803 as the device.
 

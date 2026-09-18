@@ -59,7 +59,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut8802` | `ut8802n` | UT8802 (experimental) |
 | `ut8803` | `ut8803e` | UT8803 (experimental) |
 | `ut803` |  | UT803 (experimental) |
-| `ut804` |  | UT804 (partly verified) |
+| `ut804` |  | UT804 (verified) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (partly verified) |
 | `vc880` | `vc-880` | Voltcraft VC-880 (experimental) |

@@ -673,7 +673,7 @@ impl Ut80xProtocol {
             profile: DeviceProfile {
                 family_name: "UT803/UT804",
                 model_name: "UNI-T UT804",
-                stability: Stability::PartlyVerified,
+                stability: Stability::Verified,
                 supported_commands: COMMANDS,
                 max_aux_values: 0,
                 verification_issue: Some(16),
@@ -757,14 +757,15 @@ impl Protocol for Ut80xProtocol {
         // and a step one model lacks is tagged where it is declared. The
         // UT804 has no AC mV, tachometer or ADP position (its manual's
         // Table 2-1, #16); MAX MIN and REL are asked of the UT804 alone.
-        let shared = Some;
+        // Issue #16's reporter walked every step the two share on a UT804
+        // on 2026-09-18; MAX MIN and REL are what a further run is for, and
+        // the UT803 has never answered.
+        let shared = |step: CaptureStep| Some(step.verified_if(!ut803));
         let ut803_only = |step: CaptureStep| ut803.then_some(step);
         let ut804_only = |step: CaptureStep| (!ut803).then_some(step);
 
         [
-            // A UT804 walked this step on 2026-09-17 (issue #16); the UT803
-            // shares the list but has never answered.
-            shared(dcv.verified_if(!ut803)),
+            shared(dcv),
             shared(dcv_short),
             shared(dcv_negative),
             shared(CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V"))),
@@ -815,6 +816,9 @@ impl Protocol for Ut80xProtocol {
                     .expect(Expect::mode("Tachometer")),
             ),
             shared(CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode"))),
+            // #16's second run verifies this one on the UT804: in the first,
+            // the reporter pressed SELECT on to Diode and Ω before the
+            // samples were in.
             shared(
                 CaptureStep::basic("cont", "Set meter to Continuity")
                     .expect(Expect::mode("Continuity")),
@@ -880,7 +884,8 @@ impl Protocol for Ut80xProtocol {
             // only after its sampling reads time out, so its instruction says
             // that is a valid result, that it can take up to a minute, and
             // how to leave HOLD for the rest of the run: EXIT turns the data
-            // output off as well, and SEND turns it back on.
+            // output off as well, and SEND turns it back on. That line is the
+            // result the reporter confirmed on the UT804.
             shared(CaptureStep::basic(
                 "hold",
                 if ut803 {
@@ -1139,6 +1144,18 @@ mod tests {
             let at = ut804.iter().position(|&s| s == id);
             assert!(at.is_some() && at < hold, "{id} before hold: {ut804:?}");
         }
+
+        // #16's reporter walked every UT804 step but these two; nobody has
+        // run a UT803.
+        let unverified = |proto: Ut80xProtocol| -> Vec<&'static str> {
+            let steps = proto.capture_steps();
+            steps.iter().filter(|s| !s.verified).map(|s| s.id).collect()
+        };
+        assert_eq!(unverified(Ut80xProtocol::new_ut804()), ["max_min", "rel"]);
+        assert_eq!(
+            unverified(Ut80xProtocol::new_ut803()),
+            ids(Ut80xProtocol::new_ut803())
+        );
 
         assert_eq!(
             ids(Ut80xProtocol::new_ut803()),

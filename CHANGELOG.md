@@ -4,7 +4,7 @@
 
 ### Devices
 
-- **The UT804 reads over its UT-D04 cable** — every read timed out before; thanks to [@clazie](https://github.com/clazie) for the traces that found it and for testing on a real meter.
+- **The UT804 is a verified model** — every read timed out before; thanks to [@clazie](https://github.com/clazie) for the traces that found it and for testing on a real meter.
 - **The UT61B+ is a verified model** — thanks to [@ChrisTheExpie](https://github.com/ChrisTheExpie) for the captures.
 - **The UT181A is listed as partly verified** — thanks to [@alexander-magon](https://github.com/alexander-magon) and [@diego351](https://github.com/diego351) for running it on real meters.
 
