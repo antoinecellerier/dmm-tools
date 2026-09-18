@@ -58,7 +58,8 @@ Neither has been run on a meter yet.
 ## UT803 / UT804
 
 Bench. Cable: UT-D04 (CH9325), receive-only, so there are no remote
-commands. Switch on: connect the cable and turn the meter on.
+commands. Switch on: press SEND (UT804) or RS232 (UT803) so the display
+shows it; the UT804's EXIT turns SEND off.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|

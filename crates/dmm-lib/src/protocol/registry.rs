@@ -90,9 +90,20 @@ const ACTIVATION_UT181A: &str = "\
 3. Go to SETUP -> Communication -> ON
 Note: this setting resets on power cycle.";
 
+/// The UT803 manual's RS232 button starts and stops the data output.
 const ACTIVATION_UT803: &str = "\
 1. Connect the USB cable to the meter
-2. Turn the meter on";
+2. Turn the meter on
+3. Press RS232; the display shows RS232";
+
+/// The UT804 sends nothing until SEND is pressed, off at power-on, and
+/// nothing while HOLD is on; EXIT turns SEND off (#16, UT804 manual
+/// Table 2-2).
+const ACTIVATION_UT804: &str = "\
+1. Connect the USB cable to the meter
+2. Turn the meter on
+3. Press SEND; the display shows SEND
+Note: HOLD pauses the data, and EXIT turns SEND off.";
 
 const ACTIVATION_VC880: &str = "\
 1. Connect the USB cable to the meter
@@ -209,7 +220,7 @@ pub static DEVICES: &[SelectableDevice] = &[
         display_name: "UT804",
         aliases: &[],
         requires_hardware: true,
-        activation_instructions: ACTIVATION_UT803,
+        activation_instructions: ACTIVATION_UT804,
         family: DeviceFamily::Ut80x,
         new_protocol: || Box::new(Ut80xProtocol::new_ut804()),
         fingerprint: Some(&ut80x::FINGERPRINT),
