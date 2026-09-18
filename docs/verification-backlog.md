@@ -917,7 +917,17 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
     `-00.000 A`. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
   - After a long pause in reading, the kernel's HID report queue can
     drop reports, and the bytes left could splice two packets into one
-    that passes the packet check (not seen yet)
+    that passes the packet check (not seen yet). To investigate: #16's
+    2026-09-18 captures (Windows) show the queue dropping reports. A
+    step's first wire event is often a packet's tail plus a whole packet,
+    read in one burst after the prompts, and the next live packet follows
+    620-720 ms later. So Windows kept the newest reports (hidapi asks for
+    64, and the bridge's empty reports fill them), and the kept bytes are
+    contiguous and fresh. Linux's hidraw is expected to keep the oldest
+    instead, which makes the first read after a pause stale and opens
+    the splice where old and live reports meet. Its 2026-09-17 run fits:
+    `dcv`'s first frame is followed 148 ms later. Draining the input at
+    each capture step's start would close both
   - A UT803 is not auto-detected: the CH9325 starts at 2400 and the
     UT803 talks at 19200, so it has to be named. Its packets are
     unconfirmed on hardware
