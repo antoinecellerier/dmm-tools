@@ -4,7 +4,7 @@ raw_hex: "B0 B0 B0 B0 31 31 31 B0 B5 0D 8A"
 mode: "DC V"
 value: "-0.0001"
 unit: "V"
-range_label: ""
+range_label: "4V"
 flags:
   auto_range: true
   dc: true

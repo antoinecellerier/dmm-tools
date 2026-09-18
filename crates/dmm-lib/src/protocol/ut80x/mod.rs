@@ -59,80 +59,87 @@ pub(crate) enum Model {
     Ut804,
 }
 
-/// UT804 per-(mode, range) display info: mode name, unit, and decimal
-/// point position from the left (point after digit `pos+1`; a position
-/// past the last digit means an integer display).
+/// UT804 per-(mode, range) display info: mode name, unit, decimal point
+/// position from the left (point after digit `pos+1`; a position past the
+/// last digit means an integer display), and range label. `ac` is the AC/DC
+/// nibble reading AC or AC+DC, whose top volts range is lower.
 ///
 /// From the UT804.exe parse function `FUN_00558a7c` unit-string appends
 /// and range switches (spec §7.4 item 7), with unit glyphs resolved from
 /// the vendor LCD fonts (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω).
-fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u8)> {
+/// The labels are the full ranges of the UT804 manual's Table 2-3 (spec
+/// §3.7), which match the decimal points; that table gives AC mA the µA
+/// ranges, a typo, as the meter's `00.000 mA` on AC mA range 0 shows (#16).
+/// Temperature has no label, as on the other families, nor do duty and the
+/// 4-20 mA %, which the table gives no range.
+fn ut804_mode_info(
+    mode: u8,
+    range: u8,
+    ac: bool,
+) -> Option<(&'static str, &'static str, u8, &'static str)> {
     Some(match mode {
         // Modes 1 and 2 have byte-identical handlers; the AC/DC label
-        // comes solely from position 8. Which dial sends 1 vs 2 is unknown.
-        0x1 | 0x2 => (
-            "V",
-            "V",
-            match range {
-                1 => 0, // 3.9999
-                2 => 1, // 39.999
-                3 => 2, // 399.99
-                4 => 3, // 1000.0
-                _ => return None,
-            },
-        ),
-        0x3 => ("mV", "mV", 2), // 399.99 fixed
+        // comes solely from position 8. DC V sends 1, AC V 2 (#16).
+        0x1 | 0x2 => match range {
+            1 => ("V", "V", 0, "4V"),   // 3.9999
+            2 => ("V", "V", 1, "40V"),  // 39.999
+            3 => ("V", "V", 2, "400V"), // 399.99
+            4 if ac => ("V", "V", 3, "750V"),
+            4 => ("V", "V", 3, "1000V"), // 1000.0
+            _ => return None,
+        },
+        0x3 => ("mV", "mV", 2, "400mV"), // 399.99 fixed
         0x4 => match range {
-            1 => ("Ω", "Ω", 2), // 399.99 Ω
-            2 => ("Ω", "kΩ", 0),
-            3 => ("Ω", "kΩ", 1),
-            4 => ("Ω", "kΩ", 2),
-            5 => ("Ω", "MΩ", 0),
-            6 => ("Ω", "MΩ", 1),
+            1 => ("Ω", "Ω", 2, "400Ω"), // 399.99 Ω
+            2 => ("Ω", "kΩ", 0, "4kΩ"),
+            3 => ("Ω", "kΩ", 1, "40kΩ"),
+            4 => ("Ω", "kΩ", 2, "400kΩ"),
+            5 => ("Ω", "MΩ", 0, "4MΩ"),
+            6 => ("Ω", "MΩ", 1, "40MΩ"),
             _ => return None,
         },
         0x5 => match range {
-            1 => ("Capacitance", "nF", 1),
-            2 => ("Capacitance", "nF", 2),
-            3 => ("Capacitance", "µF", 0),
-            4 => ("Capacitance", "µF", 1),
-            5 => ("Capacitance", "µF", 2),
-            6 => ("Capacitance", "mF", 0),
-            7 => ("Capacitance", "mF", 1),
+            1 => ("Capacitance", "nF", 1, "40nF"),
+            2 => ("Capacitance", "nF", 2, "400nF"),
+            3 => ("Capacitance", "µF", 0, "4µF"),
+            4 => ("Capacitance", "µF", 1, "40µF"),
+            5 => ("Capacitance", "µF", 2, "400µF"),
+            6 => ("Capacitance", "mF", 0, "4mF"),
+            7 => ("Capacitance", "mF", 1, "40mF"),
             _ => return None,
         },
-        0x6 => ("Temperature", "°C", 3),
+        0x6 => ("Temperature", "°C", 3, ""),
         0x7 => match range {
-            0 => ("µA", "µA", 2), // 399.99
-            1 => ("µA", "µA", 3), // 3999.9
+            0 => ("µA", "µA", 2, "400µA"),  // 399.99
+            1 => ("µA", "µA", 3, "4000µA"), // 3999.9
             _ => return None,
         },
         0x8 => match range {
-            0 => ("mA", "mA", 1), // 39.999
-            1 => ("mA", "mA", 2), // 399.99
+            0 => ("mA", "mA", 1, "40mA"),  // 39.999
+            1 => ("mA", "mA", 2, "400mA"), // 399.99
             _ => return None,
         },
-        0x9 => ("A", "A", 1), // 10.000
-        0xA => ("Continuity", "Ω", 2),
-        0xB => ("Diode", "V", 0),
+        0x9 => ("A", "A", 1, "10A"), // 10.000
+        0xA => ("Continuity", "Ω", 2, "400Ω"),
+        0xB => ("Diode", "V", 0, "4V"),
         0xC => match range {
-            0 => ("Frequency", "Hz", 1),
-            1 => ("Frequency", "Hz", 2),
-            2 => ("Frequency", "kHz", 0),
-            3 => ("Frequency", "kHz", 1),
-            4 => ("Frequency", "kHz", 2),
-            5 => ("Frequency", "MHz", 0),
-            6 => ("Frequency", "MHz", 1),
-            7 => ("Frequency", "MHz", 2),
+            0 => ("Frequency", "Hz", 1, "40Hz"),
+            1 => ("Frequency", "Hz", 2, "400Hz"),
+            2 => ("Frequency", "kHz", 0, "4kHz"),
+            3 => ("Frequency", "kHz", 1, "40kHz"),
+            4 => ("Frequency", "kHz", 2, "400kHz"),
+            5 => ("Frequency", "MHz", 0, "4MHz"),
+            6 => ("Frequency", "MHz", 1, "40MHz"),
+            7 => ("Frequency", "MHz", 2, "400MHz"),
             _ => return None,
         },
-        0xD => ("Temperature", "°F", 3),
+        0xD => ("Temperature", "°F", 3, ""),
         // Unknown glyph in the vendor font ("W"); possibly hFE/ADP.
-        0xE => ("ADP", "", 3),
+        0xE => ("ADP", "", 3, ""),
         // The 4-20 mA loop current as a % reading, on the mA position (UT804
         // manual Table 2-1). The mode keeps the vendor's unit string "mA%"
         // as its name; the LCD shows the unit as "%" (#16).
-        0xF => ("mA%", "%", 2),
+        0xF => ("mA%", "%", 2, ""),
         _ => return None,
     })
 }
@@ -436,8 +443,11 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
         unrecognised.report("ac/dc nibble");
     }
 
-    let (mode_name, unit, dp_pos) =
-        mode_info_or_unknown(unrecognised, ut804_mode_info(mode_code, range));
+    let info = ut804_mode_info(mode_code, range, matches!(acdc, 1 | 3));
+    let (mode_name, unit, dp_pos) = mode_info_or_unknown(
+        unrecognised,
+        info.map(|(name, unit, dp_pos, _)| (name, unit, dp_pos)),
+    );
 
     // In frequency mode the sign bit selects the duty-cycle display
     // (spec §7.4 item 7) — a negative frequency is impossible, so the
@@ -484,6 +494,11 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
                 unit,
             )
         };
+    // Duty has no range of its own (spec §3.7).
+    let range_label = match info {
+        Some((.., label)) if !(mode_code == 0xC && sign_bit) => label,
+        _ => "",
+    };
 
     let dc = matches!(acdc, 2 | 3) || (acdc == 0 && ut804_default_dc(mode_code));
 
@@ -533,6 +548,7 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
         range_raw: range,
         value,
         unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(range_label),
         display_raw,
         flags,
         ..Measurement::from_payload(packet)
@@ -1297,6 +1313,31 @@ mod tests {
         assert_eq!(m.unit, "A");
     }
 
+    /// The labels are the manual's full ranges: the top volts range is 750V
+    /// on AC and AC+DC, AC mA has DC mA's ranges, and temperature, duty and
+    /// the 4-20 mA % have none.
+    #[test]
+    fn ut804_range_labels_follow_the_manual() {
+        for (range, mode, acdc, status, label) in [
+            (4, 0x1, 0, 0x0, "1000V"),
+            (4, 0x1, 2, 0x0, "1000V"),
+            (4, 0x2, 1, 0x0, "750V"),
+            (4, 0x2, 3, 0x0, "750V"),
+            (0, 0x8, 1, 0x1, "40mA"),
+            (1, 0x8, 1, 0x1, "400mA"),
+            (0, 0xA, 0, 0x0, "400Ω"),
+            (0, 0xB, 0, 0x0, "4V"),
+            (7, 0xC, 0, 0x1, "400MHz"),
+            (0, 0x6, 0, 0x0, ""),
+            (0, 0xC, 0, 0x5, ""),
+            (0, 0xF, 0, 0x0, ""),
+        ] {
+            let p = ut804_payload(&[0, 1, 2, 3, 0xA], range, mode, acdc, status);
+            let m = parse_measurement_ut804(&p).unwrap();
+            assert_eq!(m.range_label, label, "mode {mode:#x} range {range}");
+        }
+    }
+
     #[test]
     fn ut804_idle_frame() {
         // Digit 4 == 0xB → idle, all displays zero.
@@ -1331,7 +1372,7 @@ mode_raw=0x01
 range_raw=0x01
 value=Normal(0.0)
 unit=V
-range_label=
+range_label=4V
 display_raw=Some("0.0000")
 flags=auto_range,dc
 aux=0
@@ -1350,7 +1391,7 @@ mode_raw=0x01
 range_raw=0x01
 value=Normal(-0.0013)
 unit=V
-range_label=
+range_label=4V
 display_raw=Some("-0.0013")
 flags=auto_range,dc
 aux=0
@@ -1370,7 +1411,7 @@ mode_raw=0x01
 range_raw=0x01
 value=Normal(-0.0)
 unit=V
-range_label=
+range_label=4V
 display_raw=Some("-0.0000")
 flags=auto_range,dc
 aux=0
@@ -1511,7 +1552,7 @@ mode_raw=0x01
 range_raw=0x02
 value=Normal(12.34)
 unit=V
-range_label=
+range_label=40V
 display_raw=Some("12.34")
 flags=dc
 aux=0
@@ -1531,7 +1572,7 @@ mode_raw=0x01
 range_raw=0x02
 value=Normal(-12.34)
 unit=V
-range_label=
+range_label=40V
 display_raw=Some("-12.34")
 flags=dc
 aux=0
@@ -1551,7 +1592,7 @@ mode_raw=0x04
 range_raw=0x01
 value=Overload
 unit=Ω
-range_label=
+range_label=400Ω
 display_raw=Some("0L")
 flags=
 aux=0
@@ -1571,7 +1612,7 @@ mode_raw=0x01
 range_raw=0x01
 value=Overload
 unit=V
-range_label=
+range_label=4V
 display_raw=Some("-0L")
 flags=dc
 aux=0
@@ -1657,7 +1698,7 @@ mode_raw=0x01
 range_raw=0x01
 value=Normal(0.0)
 unit=V
-range_label=
+range_label=4V
 display_raw=Some("0")
 flags=dc
 aux=0
@@ -1740,7 +1781,7 @@ mode_raw=0x01
 range_raw=0x03
 value=Normal(230.0)
 unit=V
-range_label=
+range_label=400V
 display_raw=Some("230.0")
 flags=dc
 aux=0
@@ -1760,7 +1801,7 @@ mode_raw=0x01
 range_raw=0x03
 value=Normal(230.0)
 unit=V
-range_label=
+range_label=400V
 display_raw=Some("230.0")
 flags=
 aux=0
@@ -1780,7 +1821,7 @@ mode_raw=0x01
 range_raw=0x03
 value=Normal(230.0)
 unit=V
-range_label=
+range_label=400V
 display_raw=Some("230.0")
 flags=dc
 aux=0
@@ -1800,7 +1841,7 @@ mode_raw=0x01
 range_raw=0x03
 value=Normal(230.0)
 unit=V
-range_label=
+range_label=400V
 display_raw=Some("230.0")
 flags=dc
 aux=0
