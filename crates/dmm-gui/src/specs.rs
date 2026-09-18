@@ -14,6 +14,16 @@ fn manual_link(ui: &mut Ui, url: &str, font_size: f32, color: Color32) {
     .on_hover_text(MANUAL_TOOLTIP);
 }
 
+/// An accuracy as the manual prints it: a figure as `±(0.1%+5)`, a word
+/// accuracy ("Not Specified", "Only for reference") as it stands.
+fn accuracy_text(accuracy: &str) -> String {
+    if accuracy.starts_with(|c: char| c.is_ascii_digit()) {
+        format!("\u{00B1}({accuracy})")
+    } else {
+        accuracy.to_string()
+    }
+}
+
 /// Build a compact single-line accuracy string from the spec's accuracy bands.
 /// For a single band: `±(0.1%+5)`. For multiple bands: first band only with its
 /// frequency range appended, e.g. `±(0.1%+5) 45Hz~1kHz`.
@@ -24,10 +34,10 @@ fn manual_link(ui: &mut Ui, url: &str, font_size: f32, color: Color32) {
 fn compact_accuracy_str(spec: &SpecInfo) -> Option<String> {
     let (first, rest) = spec.accuracy.split_first()?;
     if rest.is_empty() {
-        Some(format!("\u{00B1}({})", first.accuracy))
+        Some(accuracy_text(first.accuracy))
     } else {
         let freq = first.freq_range.unwrap_or("");
-        Some(format!("\u{00B1}({}) {freq}", first.accuracy))
+        Some(format!("{} {freq}", accuracy_text(first.accuracy)))
     }
 }
 
@@ -89,7 +99,7 @@ pub fn show_specs(
             [] => {}
             [single] => {
                 ui.label(
-                    RichText::new(format!("Accuracy  \u{00B1}({})", single.accuracy))
+                    RichText::new(format!("Accuracy  {}", accuracy_text(single.accuracy)))
                         .font(egui::FontId::proportional(main_font)),
                 );
             }
@@ -98,7 +108,7 @@ pub fn show_specs(
                 for band in bands {
                     let freq = band.freq_range.unwrap_or(crate::NO_DATA);
                     ui.label(
-                        RichText::new(format!("  {freq}  \u{00B1}({})", band.accuracy))
+                        RichText::new(format!("  {freq}  {}", accuracy_text(band.accuracy)))
                             .font(egui::FontId::proportional(sub_font))
                             .color(weak),
                     );
@@ -291,6 +301,35 @@ mod tests {
         assert_eq!(
             compact_accuracy_str(&spec(AC_BANDS)).as_deref(),
             Some("\u{00B1}(0.5%+30) 45Hz~1kHz")
+        );
+    }
+
+    #[test]
+    fn a_figure_is_wrapped_in_plus_minus() {
+        assert_eq!(accuracy_text("0.4%+30"), "\u{00B1}(0.4%+30)");
+        assert_eq!(accuracy_text("2.5%"), "\u{00B1}(2.5%)");
+    }
+
+    /// "Not Specified", "Only for reference" and "reference only" are words
+    /// the manual prints in the accuracy column, not a tolerance.
+    #[test]
+    fn a_word_accuracy_stands_as_printed() {
+        for word in ["Not Specified", "Only for reference", "reference only"] {
+            assert_eq!(accuracy_text(word), word);
+        }
+        const WORD_FIRST: &[AccuracyBand] = &[
+            AccuracyBand {
+                freq_range: Some("10k~100kHz"),
+                accuracy: "Only for reference",
+            },
+            AccuracyBand {
+                freq_range: Some("45~1kHz"),
+                accuracy: "0.6%+30",
+            },
+        ];
+        assert_eq!(
+            compact_accuracy_str(&spec(WORD_FIRST)).as_deref(),
+            Some("Only for reference 10k~100kHz")
         );
     }
 }
