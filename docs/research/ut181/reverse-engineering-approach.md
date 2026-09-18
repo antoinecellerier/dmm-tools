@@ -21,7 +21,12 @@ implementations that agree on the protocol details.
 4. **antage/cp211x_uart** (Rust crate) --
    https://github.com/antage/cp211x_uart -- CP2110/CP2114 UART
    control, used by antage/ut181a
-5. **UNI-T UT181A user manual** -- from UNI-T website
+5. **UNI-T UT181A user manual** -- local as
+   `references/ut181/ut181-user-manual.pdf`, downloaded 2026-09-18 from
+   uni-trendus.com (UNI-T's US site). The spec data comes from its
+   specification section (PDF pp. 12-19), cross-checked against the UT181
+   series flyer (`references/ut181/ut181a-data-sheet.pdf` p. 4) and the
+   product pages on meters.uni-trend.com and uni-trendus.com
 6. **sigrok wiki** -- https://sigrok.org/wiki/UNI-T_UT181A -- hardware
    details, chipset identification
 

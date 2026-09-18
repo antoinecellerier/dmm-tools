@@ -14,6 +14,9 @@
 //! - Overload: `"OL"`
 //! - NCV: `"NCV:3"`
 //!
+//! `resolution`, when present, is the resolution of the manual row
+//! [`Protocol::spec_info`] finds for the reading.
+//!
 //! `flags` is a map of snake_case flag name (the names [`Flag::name`] returns)
 //! to the expected bool. A fixture may list only the flags it cares about:
 //! every name it omits is expected to be false. An unknown name fails the
@@ -38,6 +41,9 @@ struct GoldenTestCase {
     range_label: String,
     /// Expected flags by snake_case name; omitted names expect false.
     flags: BTreeMap<String, bool>,
+    /// Resolution of the reading's spec row, checked when given.
+    #[serde(default)]
+    resolution: Option<String>,
 }
 
 fn golden_root() -> PathBuf {
@@ -142,6 +148,14 @@ fn check_fixture(protocol: &dyn Protocol, stem: &str, path: &Path) {
         );
     }
     assert_known_flag_names(stem, &case.flags);
+
+    if let Some(resolution) = &case.resolution {
+        assert_eq!(
+            protocol.spec_info(&measurement).map(|s| s.resolution),
+            Some(resolution.as_str()),
+            "golden {stem}: resolution mismatch"
+        );
+    }
 }
 
 #[test]

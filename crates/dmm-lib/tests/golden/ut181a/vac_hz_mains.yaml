@@ -4,6 +4,7 @@ mode: V AC Hz
 value: "239.22000122070313"
 unit: VAC
 range_label: 600V
+resolution: 0.01V
 flags:
   auto_range: true
   hv_warning: true

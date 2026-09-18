@@ -4,5 +4,6 @@ mode: V DC
 value: "0.00009987444354919717"
 unit: VDC
 range_label: 6V
+resolution: 0.0001V
 flags:
   auto_range: true

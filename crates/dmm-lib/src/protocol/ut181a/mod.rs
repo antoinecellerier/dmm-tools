@@ -31,6 +31,7 @@ pub(crate) mod mode;
 // frames pinned in this module's own tests; every item inside it stays
 // `pub(super)`.
 pub(crate) mod parse;
+mod specs;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
@@ -41,6 +42,7 @@ use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
     Stability, unsupported_setting,
 };
+use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 pub(crate) use command::set_monitor_frame;
 use command::{UT181A_COMMANDS, build_command, build_set_mode};
@@ -199,6 +201,25 @@ impl Protocol for Ut181aProtocol {
 
     fn profile(&self) -> &DeviceProfile {
         &self.profile
+    }
+
+    /// A REL reading takes its function's spec. Range 0 is auto with no
+    /// range reported: a table keyed by range byte has no row for it, though
+    /// the mode's spec still shows, while a table of one range answers it.
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        if !mode::is_known_range(m.mode_raw, m.range_raw) {
+            return None;
+        }
+        let table = specs::table(mode::plain_word(m.mode_raw))?;
+        table.row(m.range_raw).map(|row| &row.spec)
+    }
+
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        specs::table(mode::plain_word(m.mode_raw)).map(|table| &table.mode)
+    }
+
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        specs::ALL.iter().map(|t| t.sheet_table()).collect()
     }
 
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {

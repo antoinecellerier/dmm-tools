@@ -4,5 +4,6 @@ mode: °C
 value: "25.366180419921875"
 unit: °C
 range_label: ""
+resolution: 0.1°C
 flags:
   auto_range: true

@@ -204,6 +204,18 @@ fn rel_partner(word: u16) -> u16 {
     word ^ 0x3
 }
 
+/// `word` with REL taken off: the variant a REL word is relative to, or
+/// `word` itself. Only a REL companion is mapped, so the continuity
+/// open-circuit beeper (0x5212) and the diode alarm (0x6112), whose nibble 0
+/// = 2 is a function of its own, stay what they are.
+pub(crate) fn plain_word(word: u16) -> u16 {
+    if word & 0xF == N0_REL && rel_supported(word) {
+        rel_partner(word)
+    } else {
+        word
+    }
+}
+
 impl Family {
     /// Whether this variant of the family can be put into REL.
     fn rel_capable(&self, word: u16) -> bool {
@@ -523,6 +535,20 @@ mod tests {
             0xFFFF, // unknown family
         ] {
             assert!(!rel_supported(word), "{word:#06x} should not offer REL");
+        }
+    }
+
+    #[test]
+    fn plain_word_takes_rel_off_and_nothing_else() {
+        for (word, plain) in [
+            (0x1112, 0x1111), // V AC REL
+            (0x1142, 0x1141), // V AC LPF REL
+            (0x4222, 0x4221), // °C T2 REL
+            (0x1111, 0x1111),
+            (0x5212, 0x5212), // continuity open, not a REL
+            (0x6112, 0x6112), // diode alarm, not a REL
+        ] {
+            assert_eq!(plain_word(word), plain, "{word:#06x}");
         }
     }
 
