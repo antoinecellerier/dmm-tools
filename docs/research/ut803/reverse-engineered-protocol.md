@@ -8,15 +8,19 @@ Based on:
 - Ghidra decompilation of both apps' form event handlers, their disassembly
   and their form resources (2026-09-16)
 - Binary constant extraction from both executables
-- The UT803 operating manual's serial port settings
-- The UT804 operating manual's display counts
+- The UT803 operating manual's serial port settings and RS232 button
+- The UT804 operating manual's display counts, rotary switch, buttons and
+  ranges (Tables 2-1 to 2-3)
 - Bytes a UT804 sent over its CH9325 cable (issue #16, 2026-09-16)
+- Two capture reports from a UT804 walked through every dial position, its
+  LCD read back beside each (issue #16, 2026-09-18)
 - CH9325 HID transport analysis (see `../uci-bench-family/reverse-engineered-protocol.md`)
 
 Confidence levels:
 - **[VENDOR]** — confirmed by analyzing UNI-T's official software binaries
 - **[DEDUCED]** — logical inferences from available evidence
 - **[UNVERIFIED]** — requires real device testing to confirm
+- **[HARDWARE]** — seen on a real meter (the UT804 of issue #16)
 
 ---
 
@@ -262,8 +266,8 @@ had one too.*
 
 | Nibble | Content | Values | Notes |
 |--------|---------|--------|-------|
-| 1 | Flag or digit | `0`-`9` = digit, `A` = AC/DC flag indicator | See §3.3 |
-| 2 | Flag or digit | `0`-`9` = digit, `C` = AC (when nib1=`A`) | See §3.3 |
+| 1 | Digit | `0`-`9` = digit, `A` = blank: an overload or LO packet | See §3.3 |
+| 2 | Digit | `0`-`9` = digit, `A` = blank, `C` = `L` | See §3.3 |
 | 3 | Digit | `0`-`9` | |
 | 4 | Digit | `0`-`9` | |
 | 5 | Digit or blank | `0`-`9` = digit, `A` = blank/not displayed | |
@@ -280,59 +284,43 @@ The packet ends after nibble 11; there are no nibbles 12-14 (§2.1).
 
 Digit nibbles (1-5) carry BCD-like values:
 - `0`-`9`: digit character '0'-'9'
-- `A` (0x0A): blank/flag indicator (context-dependent)
-- `B`-`F`: may encode sign or other flags — [UNVERIFIED]
+- `A` (0x0A): blank
+- `C` (0x0C): drawn as `L` in overload and LO packets (§3.3) [HARDWARE]
+- `B`, `D`-`F`: the vendor shows zeros for `B` in nibble 4 (§7.3), and
+  `F` appears in the 4-20 mA "HI" pattern (§8); what the LCD draws for
+  either is unknown
 
-The display value is constructed from nibbles 1-5 (or 2-5 when nibble 1
-is a flag indicator). The decimal point position is determined by the
-range code (nibble 6) within each mode.
+The decimal point position is determined by the range code (nibble 6)
+within each mode (§3.7).
 
-**Negative values:** Sign encoding is [UNVERIFIED]. Two Ghidra passes
-over `ut803-decompiled.txt` and `ut804-decompiled.txt` (226K / 227K
-lines each) together establish:
+**Negative values:** nibble 9 bit 2 is the sign (§3.6, §7.4 item 2)
+[HARDWARE]: a UT804 sent it with -12.041 V and -24.196 V DC that its LCD
+showed (issue #16, 2026-09-18), and on zero readings, where the LCD shows
+the minus too (`-000.00 µA`, `-00.000 mA`, `-00.000 A`). The history of
+the search is in §7.4.1.
 
-- The display formatter (`FUN_00490730` in UT803.exe / `FUN_0049091c`
-  in UT804.exe) switches on a single 0–15 value and prepends `-` in
-  exactly four of the sixteen cases: **1, 5, 8, 9** (cases 2/3/6/7/13
-  place the minus in the middle of the formatted string, and
-  0/4/14/15 use a parenthesised format). UT803 and UT804 are
-  byte-identical here.
-- That 0–15 value is read from a **global pointer** at display time —
-  UT803 `*PTR_DAT_005659c4` (line 101186), UT804 `*PTR_DAT_005699c4`
-  (line 101276). A full cross-reference grep for those addresses
-  returns **exactly one hit each**: the read above. No writer appears
-  anywhere in the decompile, including near the HID / USB plumbing.
-- The `*-gap-decompiled.txt` files contain only Ghidra build logs, no
-  additional code.
-- The visible frame-parsing path (around `FUN_00558a7c` in UT804)
-  never accesses nibbles 12, 13, or 14.
+### 3.3 Overload and LO Packets — [VENDOR]
 
-The write to the sign global therefore lives outside what Ghidra
-reconstructed — most likely in an HID-receive callback Ghidra marked as
-non-returning, or in an inline-assembly stub. Progressing from here
-requires either a raw disassembler pass (not a decompiler) over the
-binary in that region, or a real-device capture of a known negative
-reading.
+Nibble 1 = `A` marks an overload or LO packet (§7.4 item 6): the vendor
+reads nibble 2 = `C` as 0.0 (LO) and anything else as an overload,
+negative with the sign bit. *Corrected 2026-06: earlier revisions read
+nibble 2 as an AC/DC flag.*
 
-Possibilities still open, none of which have decompile evidence picking
-between them:
+The UT804's LCD draws nibbles 1-5 as they are — `A` blank, `C` as `L`, a
+digit as itself — with the range's decimal point after digit position
+`pos+1`, blank positions counted (§3.7), and the sign in front
+[HARDWARE]. Issue #16's reporter read three such packets off the LCD
+(2026-09-18); the 7-segment O is the digit 0:
 
-- A specific nibble value in the digit slots (e.g. `0x0B` = minus sign)
-- A bit in nibble 9 or another status nibble
-- A bit in one of nibbles 12-14 (never read in the visible path)
+| Nibbles 1-9 | Mode, range | LCD |
+|---|---|---|
+| `A A 0 C A 6 4 0 1` | Ω, range 6 (40 MΩ) | `.OL MΩ` |
+| `A A 0 C A 0 A 0 0` | Continuity | `0.L Ω` |
+| `A C 0 A A 0 F 0 4` | 4-20 mA %, sign bit set | `- LO. %` |
 
-Until a real-device trace of a known negative reading arrives, the Rust
-parser treats every reading as positive; implementing a speculative
-decode risks negating valid positive readings, which would be worse
-than the current "display magnitude only" behaviour.
-
-### 3.3 Nibble 1-2 Flag Mode — [VENDOR]
-
-When nibble 1 = `A` (0x0A), the frame uses flag mode for nibbles 1-2:
-- Nibble 2 = `C` (0x0C): AC measurement (AC indicator shown)
-- Nibble 2 ≠ `C`: DC measurement (DC indicator shown)
-
-When nibble 1 ≠ `A`, nibbles 1-5 are all digit values (5 digits total).
+Diode's open-lead packet (`A A 0 C A 0 B 0 0`) was twice accepted as
+`0L`, where the rule gives `.0L`; which is right is [UNVERIFIED]. The
+vendor app forces the text to `0L` or `L0` instead (§7.4 item 6).
 
 `LcdDisplay71A` checks nibble 10 = `D` and nibble 11 = `A` before
 parsing. Its callers guarantee both: the USB handler checks them, and
@@ -344,34 +332,31 @@ handlers make it.
 
 #### UT804 — 15 Modes
 
-| Code | Mode | UT804 unit string | Confirmed |
-|------|------|-------------------|-----------|
-| 1 | DC V | `V` | [VENDOR] |
-| 2 | AC V | `V` | [VENDOR] |
-| 3 | DC mV | `mV` | [VENDOR] |
-| 4 | Resistance (Ω) | `*` (Ω in custom font) | [VENDOR] |
-| 5 | Capacitance | (nF/µF/mF from range) | [VENDOR] |
-| 6 | Diode | `#` (diode in custom font) | [VENDOR] |
-| 7 | Frequency (Hz) | `Hz` | [VENDOR] |
-| 8 | Duty Cycle (%) | `%` | [VENDOR] |
-| 9 | hFE | | [VENDOR] |
-| A (10) | Temperature | | [VENDOR] |
-| B (11) | DC µA | | [VENDOR] |
-| C (12) | Current (A) | `Hz` (likely bug in font table) | [VENDOR] |
-| D (13) | Continuity | `?` (beep in custom font) | [VENDOR] |
-| E (14) | ADP / Logic | `W` | [VENDOR] |
-| F (15) | AC mA | `mA%` | [VENDOR] |
+Codes from the vendor parser (§7.4 item 7); dial positions from the UT804
+manual's Table 2-1 (p.14), where SELECT reaches a position's alternates.
+Every code but D and E has been sent by a real UT804 from the position
+given (issue #16, 2026-09-18):
 
-Note: Some unit strings appear incorrect (e.g., mode 12 = "Hz" for current).
-This is because the UT804.exe uses custom TrueType fonts (unit_a2.ttf,
-unit_a3.ttf, unit.ttf) where ASCII characters map to measurement symbols.
-The raw ASCII values don't correspond to their visual appearance.
+| Code | Mode | Unit | Dial position | Confirmed |
+|------|------|------|---------------|-----------|
+| 1 | DC V | V | V⎓ | [HARDWARE] |
+| 2 | AC V; AC+DC V with coupling 3 (§3.5) | V | V~ | [HARDWARE] |
+| 3 | DC mV | mV | mV⎓ / Hz Duty | [HARDWARE] |
+| 4 | Resistance | Ω, kΩ, MΩ | Ω | [HARDWARE] |
+| 5 | Capacitance | nF, µF, mF | capacitance | [HARDWARE] |
+| 6 | Temperature | °C | °C °F | [HARDWARE] |
+| 7 | Current | µA | µA | [HARDWARE] |
+| 8 | Current | mA | mA % | [HARDWARE] |
+| 9 | Current | A | A | [HARDWARE] |
+| A (10) | Continuity | Ω | Ω, SELECT | [HARDWARE] |
+| B (11) | Diode | V | Ω, SELECT | [HARDWARE] |
+| C (12) | Frequency; duty cycle with the sign bit (§3.6) | Hz, kHz, MHz; % | mV⎓ / Hz Duty, SELECT | [HARDWARE] |
+| D (13) | Temperature | °F | °C °F, SELECT | [VENDOR] |
+| E (14) | Unknown glyph, possibly hFE | — | none | [VENDOR] |
+| F (15) | 4-20 mA loop current as % | % (vendor string `mA%`) | mA %, SELECT | [HARDWARE] |
 
-A real UT804 sent nine packets with mode nibble 7 = `0x9` and the AUTO bit
-clear in nibble 9 (issue #16, 2026-09-17), ahead of a run of mode `0x1`
-packets. The dial position those nine were taken at was not reported, so
-no code→mode row above is confirmed by them. Mode `0x1` is the only code
-a real meter has been seen sending from a known dial position (DC V).
+The UT804 has no ADP, logic, AC mV or tachometer position (Table 2-1),
+and its reporter found none: code E is in the vendor app only.
 
 #### UT803 — Modes [DEDUCED]
 
@@ -391,16 +376,17 @@ Temperature mode). Exact mode list [UNVERIFIED] without hardware.
 
 ### 3.5 AC/DC Indicator (Nibble 8) — [VENDOR]
 
-| Value | Meaning | Display string (UT804) |
-|-------|---------|------------------------|
-| 0 | Default (mode-dependent) | "DC" for V, mV, µA, mA and A; blank for others |
-| 1 | AC | "AC" |
-| 2 | DC (explicit) | "DC" |
-| 3 | AC+DC | "AC+DC" |
+| Value | Meaning | Display string (UT804) | Seen on a UT804 (#16) |
+|-------|---------|------------------------|-----------------------|
+| 0 | Default (mode-dependent) | "DC" for V, mV, µA, mA and A; blank for others | DC V, mV, µA, mA and A, and every mode without coupling |
+| 1 | AC | "AC" | AC V, µA, mA and A |
+| 2 | DC (explicit) | "DC" | never |
+| 3 | AC+DC | "AC+DC" | V and µA |
 
 The "AC+DC" string at value 3 was found as a literal in UT804.exe
 (line 224240 in decompilation). The modes that value 0 labels "DC" come
-from ut804-decompiled.txt:224195-224215.
+from ut804-decompiled.txt:224195-224215. On the meter, value 3 comes from
+the AC/AC+DC button, pressed in an AC mode (UT804 manual Table 2-2, p.17).
 
 ### 3.6 Status Flags (Nibble 9) — [VENDOR]
 
@@ -410,48 +396,55 @@ Nibble 9 is decomposed as individual bits in the UT804 parser
 | Bit | Mask | Flag | Confirmed |
 |-----|------|------|-----------|
 | bit 3 | 0x8 | Unknown (stripped first, no visible effect) | [UNVERIFIED] |
-| bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4) | [VENDOR] |
+| bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4). Set on zero readings too, which the LCD shows with a minus | [HARDWARE] |
 | bit 1 | 0x2 | Unknown | [UNVERIFIED] |
-| bit 0 | 0x1 | AUTO | [VENDOR] — shows "AUTO" text |
+| bit 0 | 0x1 | AUTO | [HARDWARE] — shows "AUTO" text |
+
+On a UT804 (issue #16, 2026-09-18), AUTO is set on V, Ω, capacitance,
+frequency, µA and mA, and clear on mV, A, diode, continuity, temperature
+and the 4-20 mA %, the positions with a single range. Bits 1 and 3 were
+never set.
 
 The bit decomposition logic:
 ```
 value = parseInt(nibble9)  // 0-15
 if value >= 8: value -= 8  // strip bit 3
 if value >= 4:
-    value -= 4             // strip bit 2 → HOLD active
+    value -= 4             // strip bit 2 → sign
 if value == 1:             // bit 0 → AUTO active
 ```
 
-Additional flags (MIN, MAX, REL, Low Battery) may be in nibbles 12-14
-— [UNVERIFIED].
+Where MIN, MAX, REL and low battery show, if at all, is [UNVERIFIED];
+the packet has no nibbles 12-14 (§2.1). HOLD sends nothing (§4.2).
 
 ### 3.7 Range Code (Nibble 6) — [VENDOR]
 
-The range code (0-7) selects the sub-range within each mode and determines
-the decimal point position. From the UT804 mode switch statement
-(lines 223961-224185):
+The range code selects the sub-range within each mode and so the decimal
+point: the UT804.exe mode switch (§7.4 item 7) puts the point after digit
+position `pos+1`, where the full range less one count reads, and the UT804
+manual's Table 2-3 (p.18-19) gives the same full ranges. The last column is
+the codes a UT804 sent (issue #16, 2026-09-18), autoranging included.
 
-#### DC V / AC V (modes 1-2):
-| Range | Decimal position | Full-scale | Confirmed |
-|-------|------------------|------------|-----------|
-| 1 | 0 | | [VENDOR] |
-| 2 | 1 | | [VENDOR] |
-| 3 | 2 | | [VENDOR] |
-| 4 | 3 | | [VENDOR] |
+| Mode | Range code: full range | Seen |
+|------|------------------------|------|
+| DC V (1) | 1: 4 V, 2: 40 V, 3: 400 V, 4: 1000 V | 1-2 |
+| AC V, AC+DC V (2) | 1: 4 V, 2: 40 V, 3: 400 V, 4: 750 V | 1-4 (AC), 1-3 (AC+DC) |
+| DC mV (3) | 400 mV, any code | 0 |
+| Resistance (4) | 1: 400 Ω, 2: 4 kΩ, 3: 40 kΩ, 4: 400 kΩ, 5: 4 MΩ, 6: 40 MΩ | 1-6 |
+| Capacitance (5) | 1: 40 nF, 2: 400 nF, 3: 4 µF, 4: 40 µF, 5: 400 µF, 6: 4 mF, 7: 40 mF | 1-2 |
+| µA (7) | 0: 400 µA, 1: 4000 µA | 0-1 |
+| mA (8) | 0: 40 mA, 1: 400 mA | 0-1 |
+| A (9) | 10 A, any code | 1 |
+| Continuity (A) | 400 Ω | 0 |
+| Diode (B) | 4 V | 0 |
+| Frequency (C) | 0: 40 Hz, 1: 400 Hz, 2: 4 kHz, 3: 40 kHz, 4: 400 kHz, 5: 4 MHz, 6: 40 MHz, 7: 400 MHz | 0 |
+| Temperature (6, D) | 1000 °C, 1832 °F; the point sits after digit 4 | 0 (°C) |
+| Duty cycle (C, sign bit), 4-20 mA % (F) | no range given; the point sits after digit 3 | 0 |
 
-#### Resistance (mode 4):
-Range values 1-6 select Ω, kΩ, MΩ sub-ranges with varying decimal
-positions. Exact mapping [UNVERIFIED] without hardware.
-
-#### Capacitance (mode 5):
-Range values 1-7 select nF, µF, mF with varying decimal positions.
-
-#### Current modes:
-Range values select µA, mA, A sub-ranges.
-
-Detailed range-to-unit/decimal tables require hardware verification for
-each mode.
+For example, 40 V reads `39.999` and 400 µA `399.99`. Table 2-3 gives AC
+mA as 400 and 4000, the µA row's figures. Table 2-1 gives the mA position
+40 mA and 400 mA, and the meter shows `00.000 mA` on AC mA range 0, so AC
+mA has DC mA's ranges.
 
 ---
 
@@ -465,11 +458,17 @@ from UT804.exe, 19200 baud from UT803.exe, both as
 
 ### 4.2 Data Streaming
 
-After init, the meter streams measurement packets continuously. The
-UT803/UT804 manuals give 2-3 display updates per second. Observed on a
-UT804 (issue #16, 2026-09-16): a packet about every 656 ms. A 2026-09-17
-run on the same meter measured 16 consecutive packets 652-684 ms apart,
-with one 1236 ms gap while the dial was being turned.
+Once its data output is on, the meter streams measurement packets
+continuously. The UT803/UT804 manuals give 2-3 display updates per
+second. Observed on a UT804 (issue #16, 2026-09-16): a packet about every
+656 ms. A 2026-09-17 run on the same meter measured 16 consecutive packets
+652-684 ms apart, with one 1236 ms gap while the dial was being turned.
+
+On the UT804 the SEND button turns the output on and the LCD shows SEND
+(manual Table 2-2, p.16) [HARDWARE]: SEND is off at power-on, and nothing
+arrives until it is pressed. With HOLD on, the meter sends nothing, SEND
+still lit, and EXIT, which leaves HOLD, turns SEND off as well (issue #16,
+2026-09-18).
 
 The feature report is the only thing either app sends: its
 `HidD_SetFeature` call is the only HID output in either binary, and no
@@ -486,11 +485,12 @@ manual has the user press the meter's RS232 button to start data output
 | Feature | UT803 | UT804 |
 |---------|-------|-------|
 | Display count | 6000 (3¾ digit, max 5999) | 40000 (4¾ digit), 4000 when RANGE is held at power-on [KNOWN] (UT804 manual) |
-| Mode count | Fewer (exact list TBD) | 15 modes |
-| RPM mode | Yes (`kRPM` unit string) | Not seen |
-| ADP/Logic mode | Not seen | Yes (mode 14) |
-| Temperature | TBD | Yes (mode 10) |
-| AC+DC mode | TBD | Yes (nibble 8 = 3) |
+| Mode count | Fewer (exact list TBD) | 15 codes, 14 on the dial (§3.4) |
+| RPM mode | Yes (`kRPM` unit string) | No (manual Table 2-1) [HARDWARE] |
+| ADP/Logic mode | Not seen | No dial position; code 14 in the app only (§3.4) [HARDWARE] |
+| Temperature | TBD | Yes (modes 6 and D) |
+| AC+DC mode | TBD | Yes (nibble 8 = 3) [HARDWARE] |
+| Data output on | RS232 button (UT803 manual p.36) | SEND button (§4.2) [HARDWARE] |
 | CH9325 and RS232 rate | 19200 (§1.2) | 2400 (§1.2) |
 | Parser position k | byte k-1 (§2.1) | byte k (§2.1) |
 | 7-segment decoder in the app | None | Unused UT60A/B/C path (§2.4) |
@@ -543,16 +543,19 @@ Parse the proprietary data nibbles, NOT LCD segments:
 
 ### 7.3 What Needs Hardware Verification
 
-- Negative value encoding (sign bit location) — see §3.2
-- Exact mode list for UT803
-- Range-to-decimal-point tables for all modes
+The UT804's sign, mode codes, coupling, AUTO bit and the ranges it sent
+are confirmed (§3). Still open:
+
+- The UT803's sign, mode list and range tables
 - Status flag bits (MIN, MAX, REL, Low Battery) — see §7.4
 - Whether the meter needs anything sent (the apps send nothing, §4.2)
 - Streaming rate: a packet about every 656 ms on a UT804 (§4.2); the
   UT803's is open
 - Line format on the wire (§1.2): 7O1 on a UT804; the UT803's is open
-- Digit encoding for values > 9 (0xA = blank confirmed, others unknown)
+- Digit nibbles `B`, `D`-`F` (§3.2), and the UT804's LCD for the diode
+  overload (§3.3)
 - Whether nibble 4 = 'B' guard condition has meaning
+- The UT804's °F packets (code D), and whether code E is ever sent
 
 ### 7.4 RESOLVED (2026-06): Sign, Nibbles 12-14, and the Two-Model Split
 
@@ -761,8 +764,10 @@ Reference implementations:
 - Both executables, 2026-09-16 — Ghidra 12.1.3 decompilation of the form's
   published methods and the handlers they install, seeded from the Delphi
   RTTI; disassembly of the conditions; the form resources
-- UT803 operating manual — RS232 settings and RS232 button
-- UT804 operating manual — display counts
+- UT803 operating manual — RS232 settings and RS232 button (p.36)
+- UT804 operating manual — display counts; Table 2-1 rotary switch (p.14),
+  Table 2-2 buttons (p.15-17), Table 2-3 ranges (p.18-19), MAX MIN (p.24)
 - Issue #16 — a UT804's CH9325 reports under dmm-tools 0.6.0 and 0.7.0-dev
-  (2026-09-16)
+  (2026-09-16), and two capture reports under 0.7.0-dev (3806742) with the
+  LCD read back beside each step (2026-09-18)
 - CH9325 transport analysis — see `../uci-bench-family/reverse-engineered-protocol.md`
