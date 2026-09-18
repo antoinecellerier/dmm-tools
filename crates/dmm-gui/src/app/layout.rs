@@ -86,8 +86,7 @@ impl App {
                 let has_spec = self
                     .last_measurement
                     .as_ref()
-                    .map(|m| m.spec.is_some())
-                    .unwrap_or(false);
+                    .is_some_and(|m| m.spec.is_some() || m.mode_spec.is_some());
                 if has_spec || self.manual_url().is_some() {
                     ui.separator();
                     self.show_specs_section(ui, 1.0);
@@ -198,15 +197,16 @@ impl App {
         }
     }
 
-    /// Render a specs section, calling `render_fn` when spec data is available,
-    /// or showing a manual-only link as fallback.
+    /// Render a specs section, calling `render_fn` when spec data is available
+    /// — a range row, or the mode's data alone — or showing a manual-only link
+    /// as fallback.
     fn show_specs_with(
         &self,
         ui: &mut Ui,
         scale: f32,
         render_fn: fn(
             &mut Ui,
-            &'static SpecInfo,
+            Option<&'static SpecInfo>,
             Option<&'static ModeSpecInfo>,
             Option<&'static str>,
             f32,
@@ -218,7 +218,7 @@ impl App {
         let manual_url = self.manual_url();
         let spec = self.last_measurement.as_ref().and_then(|m| m.spec);
         let mode_spec = self.last_measurement.as_ref().and_then(|m| m.mode_spec);
-        if let Some(spec) = spec {
+        if spec.is_some() || mode_spec.is_some() {
             render_fn(ui, spec, mode_spec, manual_url, scale);
         } else if let Some(url) = manual_url {
             specs::show_manual_only(ui, url, scale);
