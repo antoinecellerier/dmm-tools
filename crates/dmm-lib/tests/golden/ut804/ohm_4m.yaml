@@ -1,0 +1,10 @@
+# Resistance, 1.6176 MΩ on the 4MΩ range.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step ohm).
+raw_hex: "31 B6 31 37 B6 B5 34 B0 31 0D 8A"
+mode: "Ω"
+value: "1.6176"
+unit: "MΩ"
+range_label: "4MΩ"
+flags:
+  auto_range: true
+  dc: false

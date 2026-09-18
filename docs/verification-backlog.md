@@ -761,8 +761,10 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
   each returned five DC V readings with no errors, and the reporter confirmed
   the last capture sample against the LCD. See
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16).
-- **Golden fixtures**: 3 in `crates/dmm-lib/tests/golden/ut804/` from that
-  run — open leads, the confirmed 1.4 mV reading and a negative one.
+- **Golden fixtures**: 26 in `crates/dmm-lib/tests/golden/ut804/`. Three are
+  from the 2026-09-17 run — open leads, the confirmed 1.4 mV reading and a
+  negative one — and the rest are a confirmed sample from each dial position
+  and SELECT alternate in the 2026-09-18 captures.
 - ~~**CH9325 on Windows**~~ — **VERIFIED** 2026-09-17 by @clazie: the same
   meter and cable ran under the Windows GUI as well as Linux Mint, with no
   driver installed, which is what `docs/setup.md` tells users to expect of a

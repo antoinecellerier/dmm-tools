@@ -1,0 +1,10 @@
+# Temperature, 24.7 °C from a K-type thermocouple.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step temp).
+raw_hex: "B0 B0 32 34 37 B0 B6 B0 B0 0D 8A"
+mode: "Temperature"
+value: "24.7"
+unit: "°C"
+range_label: ""
+flags:
+  auto_range: false
+  dc: false

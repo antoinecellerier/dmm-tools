@@ -1,0 +1,10 @@
+# AC V, 1.4061 V on the 4V range - the reporter was on AC V when the step asked for AC mV, which the UT804 lacks.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 2 report, step acmv).
+raw_hex: "31 34 B0 B6 31 31 32 31 31 0D 8A"
+mode: "AC V"
+value: "1.4061"
+unit: "V"
+range_label: "4V"
+flags:
+  auto_range: true
+  dc: false

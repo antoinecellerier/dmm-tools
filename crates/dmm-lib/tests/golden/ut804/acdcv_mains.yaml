@@ -1,0 +1,10 @@
+# AC+DC V, 228.76 V of mains - the AC/AC+DC button sets coupling 3.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 2 report, step acdcv).
+raw_hex: "32 32 38 37 B6 B3 32 B3 31 0D 8A"
+mode: "AC+DC V"
+value: "228.76"
+unit: "V"
+range_label: "400V"
+flags:
+  auto_range: true
+  dc: true

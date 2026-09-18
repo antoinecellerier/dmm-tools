@@ -1,0 +1,10 @@
+# Resistance across the reporter's body, 4.061 MΩ on the 40MΩ range.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step ohm_body).
+raw_hex: "B0 34 B0 B6 31 B6 34 B0 31 0D 8A"
+mode: "Ω"
+value: "4.061"
+unit: "MΩ"
+range_label: "40MΩ"
+flags:
+  auto_range: true
+  dc: false

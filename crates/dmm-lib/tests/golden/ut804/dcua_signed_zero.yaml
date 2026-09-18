@@ -1,0 +1,10 @@
+# DC µA with nothing connected - the LCD shows the minus of -000.00 µA.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 2 report, step dcua).
+raw_hex: "B0 B0 B0 B0 B0 B0 37 B0 B5 0D 8A"
+mode: "DC µA"
+value: "-0"
+unit: "µA"
+range_label: "400µA"
+flags:
+  auto_range: true
+  dc: true

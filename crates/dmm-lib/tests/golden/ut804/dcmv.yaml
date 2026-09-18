@@ -1,0 +1,10 @@
+# DC mV, 111.37 mV - a single range, so no AUTO.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step dcmv).
+raw_hex: "31 31 31 B3 37 B0 B3 B0 B0 0D 8A"
+mode: "DC mV"
+value: "111.37"
+unit: "mV"
+range_label: "400mV"
+flags:
+  auto_range: false
+  dc: true

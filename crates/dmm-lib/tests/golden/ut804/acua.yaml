@@ -1,0 +1,10 @@
+# AC µA with nothing connected, on the 400µA range.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step acua).
+raw_hex: "B0 B0 B0 B0 B0 B0 37 31 31 0D 8A"
+mode: "AC µA"
+value: "0"
+unit: "µA"
+range_label: "400µA"
+flags:
+  auto_range: true
+  dc: false

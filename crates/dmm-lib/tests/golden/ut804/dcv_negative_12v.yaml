@@ -1,0 +1,10 @@
+# DC V, the same source with the leads reversed: -12.041 V, the sign bit set.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step dcv_negative).
+raw_hex: "31 32 B0 34 31 32 31 B0 B5 0D 8A"
+mode: "DC V"
+value: "-12.041"
+unit: "V"
+range_label: "40V"
+flags:
+  auto_range: true
+  dc: true

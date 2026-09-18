@@ -1,0 +1,10 @@
+# AC V, 227.20 V of mains on the 400V range - mode 2, coupling 1.
+# Captured 2026-09-18 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 3806742 run 1 report, step acv).
+raw_hex: "32 32 37 32 B0 B3 32 31 31 0D 8A"
+mode: "AC V"
+value: "227.2"
+unit: "V"
+range_label: "400V"
+flags:
+  auto_range: true
+  dc: false
