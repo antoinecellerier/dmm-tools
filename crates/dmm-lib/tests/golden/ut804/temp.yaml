@@ -5,6 +5,7 @@ mode: "Temperature"
 value: "24.7"
 unit: "°C"
 range_label: ""
+resolution: "0.1°C"
 flags:
   auto_range: false
   dc: false

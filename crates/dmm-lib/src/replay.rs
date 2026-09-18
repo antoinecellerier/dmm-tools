@@ -621,6 +621,24 @@ mod tests {
         assert!(rejects(&text).contains("no payload"));
     }
 
+    /// The replay hands its readings to `Dmm::request_measurement`, which
+    /// attaches the specs from the payload the reading carries: a UT804
+    /// picks its table from bits that are only in the payload.
+    #[test]
+    fn a_replayed_reading_carries_its_specs() {
+        // AC V on the 400V range, from `tests/golden/ut804/acv_mains.yaml`.
+        const UT804_ACV_MAINS: &str = "32 32 37 32 B0 B3 32 31 31 0D 8A";
+        let mut text = header("ut804", RECORDED, Some("UT804"));
+        text.push_str(&sample_line(Duration::ZERO, &payload(UT804_ACV_MAINS)));
+        let mut dmm = parsed(&text)
+            .open(Clock::manual())
+            .expect("the replay opens");
+        let m = dmm.request_measurement().expect("the first frame is due");
+        assert_eq!(m.mode, "AC V");
+        assert_eq!(m.spec.map(|s| s.resolution), Some("0.01V"));
+        assert!(m.mode_spec.is_some_and(|ms| ms.input_impedance.is_some()));
+    }
+
     #[test]
     fn the_first_sample_is_ready_at_session_zero() {
         let (mut dmm, _clock, start) = open_manual();

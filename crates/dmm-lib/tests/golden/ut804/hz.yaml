@@ -5,6 +5,7 @@ mode: "Frequency"
 value: "0"
 unit: "Hz"
 range_label: "40Hz"
+resolution: "0.001Hz"
 flags:
   auto_range: true
   dc: false

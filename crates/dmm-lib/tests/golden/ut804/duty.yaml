@@ -5,6 +5,7 @@ mode: "Duty %"
 value: "0"
 unit: "%"
 range_label: ""
+resolution: "0.01%"
 flags:
   auto_range: true
   dc: false

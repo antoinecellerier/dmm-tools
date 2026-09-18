@@ -5,6 +5,7 @@ mode: "AC V"
 value: "227.2"
 unit: "V"
 range_label: "400V"
+resolution: "0.01V"
 flags:
   auto_range: true
   dc: false

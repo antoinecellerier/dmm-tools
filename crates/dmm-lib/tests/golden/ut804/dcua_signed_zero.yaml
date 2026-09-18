@@ -5,6 +5,7 @@ mode: "DC µA"
 value: "-0"
 unit: "µA"
 range_label: "400µA"
+resolution: "0.01µA"
 flags:
   auto_range: true
   dc: true

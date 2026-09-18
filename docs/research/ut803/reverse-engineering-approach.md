@@ -22,7 +22,10 @@
    pp. 39-48), cross-checked against the UT803 datasheet (identical to the
    one the UT800 series page links).
 
-5. **UT804 operating manual** — display counts.
+5. **UT804 operating manual** — display counts; the spec data, from
+   "Detailed Accuracy Specifications" (P/N:110401108661X Jul.2019 REV.1,
+   PDF pp. 59-67), cross-checked against its basic specifications (PDF
+   p. 58), the UT804 datasheet and the UT800 series page.
 
 ### Avoided (clean-room boundary)
 - No external open-source implementations were consulted during RE
