@@ -1,0 +1,33 @@
+[
+  {
+    "skills": ["spec-data"],
+    "query": "The UT171 shows only the Manual link in the Specifications panel. Add its spec data from references/ut171/uni-t_ut171_manual.pdf.",
+    "files": ["references/ut171/uni-t_ut171_manual.pdf"],
+    "expected_behavior": [
+      "Locates the spec pages and renders them with pdftoppm into references/specs-review/pages/ut171/ before transcribing anything",
+      "Runs the spec-transcription workflow with two blind transcribers (Opus and Sonnet) and an Opus adjudicator, and checks both transcriber summaries report tables",
+      "Brings any UNKNOWN cell to the user with file, page, table/row/column and a crop path instead of guessing",
+      "Verifies with specs_tool.py compare against verified.json and hands the user the dump_specs --format html review sheet path"
+    ]
+  },
+  {
+    "skills": ["spec-data"],
+    "query": "Re-check the UT61E+ spec tables against its manual; I'm not sure the AC current bands are right.",
+    "files": ["references/ut61eplus/ut61e_manual.pdf"],
+    "expected_behavior": [
+      "Transcribes the manual's tables from rendered pages rather than editing the Rust tables from memory or pdftotext output",
+      "Compares the existing code (dump_specs --format json ut61eplus) against the verified transcription and reports every mismatch before changing anything",
+      "Renders a review sheet with --pages-dir so the user can see each table beside its page"
+    ]
+  },
+  {
+    "skills": ["spec-data"],
+    "query": "The adjudicator returned two UNKNOWN cells for the UT803 capacitance table and the product page lists a different best DCV accuracy than the manual. Finish the UT803 spec data.",
+    "files": ["references/ut800/ut803/specs-work/verified.json"],
+    "expected_behavior": [
+      "Asks the user to read the two UNKNOWN cells, naming the PDF, page, table, row and column and giving a zoomed crop path",
+      "Keeps the manual's DCV accuracy and records the product-page difference as a one-line code comment, never replacing the manual value",
+      "Does not compute or infer a value for a cell nobody could read"
+    ]
+  }
+]

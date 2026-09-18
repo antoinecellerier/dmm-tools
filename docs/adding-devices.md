@@ -173,7 +173,7 @@ If the device manual includes accuracy/resolution tables per mode and range:
    - **LPF modes** — separate accuracy specs when Low Pass Filter is enabled
    - **Footnotes** — temperature coefficients, overrange conditions
    - **Model variants** — same manual covering multiple models with small spec differences (e.g., AC current frequency response differs between UT61B+ and UT61D+)
-4. Transcribe from the rendered pages (`pdftoppm`), not extracted text: two blind transcriptions, a field-by-field diff, and an adjudication of each disagreement against the zoomed page. Then diff `dump_specs --format json <device>` against the verified transcription (`references/specs-review/tools/specs_tool.py compare` is a local helper), and read the `--format html` review sheet beside the manual — see `docs/development.md`
+4. Transcribe from the rendered pages (`pdftoppm`), not extracted text: two blind transcriptions, a field-by-field diff, and an adjudication of each disagreement against the zoomed page. Then diff `dump_specs --format json <device>` against the verified transcription, and read the `--format html` review sheet beside the manual. The `/spec-data` skill (`.claude/skills/spec-data/SKILL.md`) runs this end to end; `docs/development.md` has the `dump_specs` flags
 5. Test that every reading the parser accepts resolves a spec or sits on an explicit list, with its reason, of readings that take only their table's mode data or have no spec at all, and that every table row is reached (`ut804_every_reading_has_a_spec_or_is_listed`)
 
 ## Phase 5: Testing Without Hardware

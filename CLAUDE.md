@@ -88,6 +88,7 @@ Documentation is part of the deliverable — update affected docs in the same co
 - `docs/research/<family>/` — per-family RE methodology and wire-protocol spec.
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns surface. Critical for preserving state across sessions.
 - For new device support, use the `/add-device` skill (`.claude/skills/add-device/SKILL.md`) — it carries the full checklist of gates, doc touchpoints, and the verification-issue pattern.
+- For spec data (resolution, accuracy, notes from a manual), use the `/spec-data` skill (`.claude/skills/spec-data/SKILL.md`) — it carries the transcription workflow, the user checkpoints and the verification steps.
 - For issue and PR replies, use the `/issue-replies` skill (`.claude/skills/issue-replies/SKILL.md`) — it carries the reply structure, the assertion bar, the standard device-report asks, and the backlog write-back rule.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 - Anything GitHub renders (release bodies, issue/PR comments) is GFM, not plain text: bare `@name` mentions a real account, and a single newline becomes `<br>`, so keep each paragraph on one line. Check the render, not the source: `jq -n --rawfile t F.md '{text:$t,mode:"gfm"}' | gh api /markdown --input -`.

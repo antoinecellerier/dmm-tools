@@ -20,7 +20,8 @@ The authoritative methodology is `docs/adding-devices.md` — **read it in full 
 1. Discovery and candidate assessment (`docs/adding-devices.md` Phase 1): identify transport (VID:PID), gather vendor software + manual into `references/<device>/` (gitignored, never committed).
 2. Clean-room reverse engineering (Phase 2): write up findings in `docs/research/<family>/reverse-engineered-protocol.md` and the RE methodology alongside it.
 3. Implementation: transport (if new) + protocol family in `crates/dmm-lib/` — the path-scoped rules in `.claude/rules/protocol.md` apply. Tests use known-good byte sequences from real traces.
-4. Track open unknowns in `docs/verification-backlog.md` as you go. When one is struck through as verified, flip that capture step's `.verified()` in the same commit and regenerate the issue checklist with `dmm-cli --device <id> capture --list-steps --format md`.
+4. Spec data from the manual (resolution, accuracy, notes for the Specifications panel): follow the `/spec-data` skill.
+5. Track open unknowns in `docs/verification-backlog.md` as you go. When one is struck through as verified, flip that capture step's `.verified()` in the same commit and regenerate the issue checklist with `dmm-cli --device <id> capture --list-steps --format md`.
 
 ## Documentation deliverables (same commits as the change)
 
