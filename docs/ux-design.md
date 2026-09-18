@@ -166,7 +166,8 @@ Shows per-range electrical specifications from the device manual:
 - Resolution, accuracy (with multiple frequency bands for AC), input impedance, notes
 - "Manual" hyperlink to manufacturer's product page when `manual_url` is configured
 - Adapts to each layout: full panel (wide), inline summary (big meter), compact line (narrow)
-- A reading with no range row keeps its mode's data: impedance and notes in the full panel, impedance alone in the one-line layouts
+- The one-line layouts show resolution and accuracy only; impedance and notes stay in the full panel
+- A reading with no range row keeps its mode's impedance and notes in the full panel; the one-line layouts show only the Manual link
 - Coverage: UT61E+, UT61B+, UT61D+, UT161 family, UT181A, UT803, UT804, Mock. Other devices show manual link only.
 
 ### Connection Help

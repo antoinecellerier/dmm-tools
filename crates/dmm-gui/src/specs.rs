@@ -41,30 +41,39 @@ fn compact_accuracy_str(spec: &SpecInfo) -> Option<String> {
     }
 }
 
-/// Build the summary parts vector used by compact and inline layouts.
+/// Build the summary parts vector used by compact and inline layouts: the
+/// resolution and accuracy only, as an unlabelled impedance reads as noise
+/// on one line; the side panel carries the rest.
 ///
 /// `res_label` / `acc_label` control the prefix for each field so callers can
 /// choose between short (`"Res:"`) and long (`"Resolution"`) labels. A
-/// reading with no range row (`spec` is `None`) keeps only the impedance.
-fn build_spec_parts(
-    spec: Option<&SpecInfo>,
-    mode_spec: Option<&ModeSpecInfo>,
-    res_label: &str,
-    acc_label: &str,
-) -> Vec<String> {
-    let mut parts = Vec::new();
-    if let Some(spec) = spec {
-        parts.push(format!("{res_label} {}", spec.resolution));
-        if let Some(acc_str) = compact_accuracy_str(spec) {
-            parts.push(format!("{acc_label} {acc_str}"));
-        }
-    }
-    if let Some(ms) = mode_spec
-        && let Some(z) = ms.input_impedance
-    {
-        parts.push(z.to_string());
+/// reading with no range row (`spec` is `None`) has no parts.
+fn build_spec_parts(spec: Option<&SpecInfo>, res_label: &str, acc_label: &str) -> Vec<String> {
+    let Some(spec) = spec else {
+        return Vec::new();
+    };
+    let mut parts = vec![format!("{res_label} {}", spec.resolution)];
+    if let Some(acc_str) = compact_accuracy_str(spec) {
+        parts.push(format!("{acc_label} {acc_str}"));
     }
     parts
+}
+
+/// Separates the summary from the "Manual ↗" link in both one-line layouts.
+const LINK_SEPARATOR: &str = "  |  ";
+
+/// The one-line summary: `parts` joined by `joiner`, then a separator when
+/// the Manual link follows. `None` when there are no parts, so the link
+/// stands alone.
+fn summary_line(parts: &[String], joiner: &str, link_follows: bool) -> Option<String> {
+    if parts.is_empty() {
+        return None;
+    }
+    let mut line = parts.join(joiner);
+    if link_follows {
+        line.push_str(LINK_SEPARATOR);
+    }
+    Some(line)
 }
 
 /// Full specs panel for the wide (side panel) layout. A reading with no
@@ -140,22 +149,19 @@ pub fn show_specs(
 }
 
 /// Compact single-line specs for the narrow layout.
-pub fn show_specs_compact(
-    ui: &mut Ui,
-    spec: Option<&SpecInfo>,
-    mode_spec: Option<&ModeSpecInfo>,
-    manual_url: Option<&str>,
-) {
+pub fn show_specs_compact(ui: &mut Ui, spec: Option<&SpecInfo>, manual_url: Option<&str>) {
     let weak = ui.visuals().weak_text_color();
     let sub_font = 11.0;
 
-    // Build a compact string: "Res: 0.01mV  Acc: ±(0.1%+5)  ~10MΩ"
-    let parts = build_spec_parts(spec, mode_spec, "Res:", "Acc:");
+    // Build a compact string: "Res: 0.01mV  Acc: ±(0.1%+5)"
+    let parts = build_spec_parts(spec, "Res:", "Acc:");
 
     ui.horizontal_wrapped(|ui| {
-        if !parts.is_empty() {
+        // The separator's own spaces set the gap before the link.
+        ui.spacing_mut().item_spacing.x = 0.0;
+        if let Some(line) = summary_line(&parts, "  ", manual_url.is_some()) {
             ui.label(
-                RichText::new(parts.join("  "))
+                RichText::new(line)
                     .font(egui::FontId::proportional(sub_font))
                     .color(weak),
             );
@@ -166,34 +172,38 @@ pub fn show_specs_compact(
     });
 }
 
-/// Compact specs with a scale parameter (ignored) for uniform callback signature.
+/// Compact specs with the mode data and a scale parameter (both ignored) for
+/// uniform callback signature.
 pub fn show_specs_compact_scaled(
     ui: &mut Ui,
     spec: Option<&SpecInfo>,
-    mode_spec: Option<&ModeSpecInfo>,
+    _mode_spec: Option<&ModeSpecInfo>,
     manual_url: Option<&str>,
     _scale: f32,
 ) {
-    show_specs_compact(ui, spec, mode_spec, manual_url);
+    show_specs_compact(ui, spec, manual_url);
 }
 
-/// Inline pipe-separated specs for big meter mode.
+/// Inline pipe-separated specs for big meter mode. The mode data is not shown
+/// here; the parameter keeps the callback signature uniform.
 pub fn show_specs_inline(
     ui: &mut Ui,
     spec: Option<&SpecInfo>,
-    mode_spec: Option<&ModeSpecInfo>,
+    _mode_spec: Option<&ModeSpecInfo>,
     manual_url: Option<&str>,
     scale: f32,
 ) {
     let font_size = 12.0 * scale;
     let weak = ui.visuals().weak_text_color();
 
-    let parts = build_spec_parts(spec, mode_spec, "Resolution", "Accuracy");
+    let parts = build_spec_parts(spec, "Resolution", "Accuracy");
 
     ui.horizontal_wrapped(|ui| {
-        if !parts.is_empty() {
+        // The separator's own spaces set the gap before the link.
+        ui.spacing_mut().item_spacing.x = 0.0;
+        if let Some(line) = summary_line(&parts, LINK_SEPARATOR, manual_url.is_some()) {
             ui.label(
-                RichText::new(parts.join("  |  "))
+                RichText::new(line)
                     .font(egui::FontId::proportional(font_size))
                     .color(weak),
             );
@@ -247,43 +257,42 @@ mod tests {
 
     #[test]
     fn empty_accuracy_omits_the_accuracy_part() {
-        let parts = build_spec_parts(Some(&spec(&[])), None, "Res:", "Acc:");
+        let parts = build_spec_parts(Some(&spec(&[])), "Res:", "Acc:");
         assert_eq!(parts, vec!["Res: 0.01mV".to_string()]);
     }
 
-    const MODE: ModeSpecInfo = ModeSpecInfo {
-        input_impedance: Some("Approx 10M\u{2126}"),
-        overload_protection: Some("1000V"),
-        notes: &["True RMS"],
-    };
-
-    /// A reading with no range row keeps its mode's impedance, and nothing
-    /// else, in the one-line layouts.
+    /// A reading with no range row has no parts, so the one-line layouts
+    /// show the Manual link alone.
     #[test]
-    fn no_row_keeps_only_the_impedance() {
-        let parts = build_spec_parts(None, Some(&MODE), "Res:", "Acc:");
-        assert_eq!(parts, vec!["Approx 10M\u{2126}".to_string()]);
+    fn no_row_leaves_only_the_manual_link() {
+        assert!(build_spec_parts(None, "Res:", "Acc:").is_empty());
     }
 
+    /// The Manual link is set off from the summary, and stands alone when
+    /// there is none.
     #[test]
-    fn no_row_and_no_impedance_yields_no_parts() {
-        let bare = ModeSpecInfo {
-            input_impedance: None,
-            ..MODE
-        };
-        assert!(build_spec_parts(None, Some(&bare), "Res:", "Acc:").is_empty());
-        assert!(build_spec_parts(None, None, "Res:", "Acc:").is_empty());
+    fn the_summary_is_separated_from_the_manual_link() {
+        let parts = build_spec_parts(Some(&spec(DC_BAND)), "Res:", "Acc:");
+        assert_eq!(
+            summary_line(&parts, "  ", true).as_deref(),
+            Some("Res: 0.01mV  Acc: \u{00B1}(0.1%+5)  |  ")
+        );
+        assert_eq!(
+            summary_line(&parts, "  ", false).as_deref(),
+            Some("Res: 0.01mV  Acc: \u{00B1}(0.1%+5)")
+        );
+        assert_eq!(summary_line(&[], "  ", true), None);
     }
 
+    /// The one-line layouts carry the row's resolution and accuracy only.
     #[test]
-    fn a_row_comes_before_the_impedance() {
-        let parts = build_spec_parts(Some(&spec(DC_BAND)), Some(&MODE), "Res:", "Acc:");
+    fn a_row_gives_resolution_and_accuracy_only() {
+        let parts = build_spec_parts(Some(&spec(DC_BAND)), "Res:", "Acc:");
         assert_eq!(
             parts,
             vec![
                 "Res: 0.01mV".to_string(),
                 "Acc: \u{00B1}(0.1%+5)".to_string(),
-                "Approx 10M\u{2126}".to_string(),
             ]
         );
     }

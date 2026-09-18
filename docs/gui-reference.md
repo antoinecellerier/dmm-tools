@@ -270,9 +270,10 @@ Default: on.
 | Big meter | Pipe-separated inline summary, scaled with the reading |
 | Narrow (< 900px) | Compact single line below the reading |
 
-A reading the manual gives no range row for (a UT804 AC+DC reading, say) skips
-Resolution and Accuracy: the full panel shows its Input Z and notes, the one-line
-layouts its Input Z alone. When no spec data is available (unsupported device or
+The one-line layouts (big meter, narrow) show Resolution and Accuracy only; Input
+Z and the notes are in the full panel. A reading the manual gives no range row
+for (a UT804 AC+DC reading, say) skips Resolution and Accuracy: the full panel
+shows its Input Z and notes, the one-line layouts only the Manual link. When no spec data is available (unsupported device or
 unrecognized mode), only the Manual link is shown (if configured). If neither
 specs nor manual URL exist, nothing renders.
 
