@@ -18,7 +18,9 @@
    (documented in `../uci-bench-family/`).
 
 4. **UT803 operating manual** — RS232 port settings and data output
-   button.
+   button; the spec data, from "Accuracy Specifications" (REV.3, PDF
+   pp. 39-48), cross-checked against the UT803 datasheet (identical to the
+   one the UT800 series page links).
 
 5. **UT804 operating manual** — display counts.
 

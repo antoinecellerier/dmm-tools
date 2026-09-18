@@ -57,6 +57,16 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
 pub(crate) mod test_support {
     use crate::measurement::Measurement;
 
+    /// `unit` without its SI prefix: "kHz" is "Hz", "°C" stays "°C". The
+    /// spec tests compare a row's resolution with the reading's unit by it.
+    pub(crate) fn unit_family(unit: &str) -> &str {
+        let mut chars = unit.chars();
+        match chars.next() {
+            Some('n' | 'µ' | 'm' | 'k' | 'M') if !chars.as_str().is_empty() => chars.as_str(),
+            _ => unit,
+        }
+    }
+
     /// Render a parsed [`Measurement`] as deterministic `key=value` lines.
     ///
     /// Every field a parser decides is printed, so a test that pins this

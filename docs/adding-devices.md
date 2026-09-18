@@ -165,15 +165,16 @@ Follow the code-level steps in `docs/development.md`:
 ### Specification data
 
 If the device manual includes accuracy/resolution tables per mode and range:
-1. Add spec data in `protocol/<family>/tables/specs_<model>.rs`
-2. **Never fabricate values.** If a cell in the manual is ambiguous or you can't read it, use `Accuracy::NONE` or omit the entry. Wrong specs are worse than missing specs.
+1. Add spec data in `protocol/<family>/specs_<model>.rs`, as `ut80x/specs_ut803.rs` does: each manual table is a `ModeSpecs` of `RangeSpec` rows keyed by range byte and labelled as printed, listed in manual order in `ALL`, and one `table()` match picks a reading's table. Rows that need a different impedance or overload, or belong to another mode, go in a part of the same name. (The UT61+ family keeps positional arrays in `tables/specs_<model>.rs`.)
+2. **Never fabricate values.** If a cell in the manual is ambiguous or you can't read it, give the row an empty accuracy list or omit the entry. Wrong specs are worse than missing specs.
 3. Watch for common manual pitfalls:
    - **Merged cells** — one accuracy value spanning multiple ranges
    - **Frequency-dependent bands** — AC modes often have different accuracy for different frequency ranges (e.g., 40Hz-1kHz vs 1kHz-10kHz)
    - **LPF modes** — separate accuracy specs when Low Pass Filter is enabled
    - **Footnotes** — temperature coefficients, overrange conditions
    - **Model variants** — same manual covering multiple models with small spec differences (e.g., AC current frequency response differs between UT61B+ and UT61D+)
-4. Verify with `cargo run -p dmm-lib --example dump_specs -- <device>` and compare side-by-side with the PDF manual
+4. Transcribe from the rendered pages (`pdftoppm`), not extracted text: two blind transcriptions, a field-by-field diff, and an adjudication of each disagreement against the zoomed page. Then diff `dump_specs --format json <device>` against the verified transcription (`references/specs-review/tools/specs_tool.py compare` is a local helper), and read the `--format html` review sheet beside the manual — see `docs/development.md`
+5. Test that every reading the parser accepts resolves a spec or sits on an explicit no-spec list, and that every table row is reached (`ut803_every_reading_has_a_spec_or_is_listed`)
 
 ## Phase 5: Testing Without Hardware
 

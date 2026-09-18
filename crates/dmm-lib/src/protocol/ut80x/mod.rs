@@ -46,10 +46,13 @@ use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
     unknown_mode,
 };
+use crate::specs::{ModeSpecInfo, ModeSpecs, SpecInfo, SpecSheetTable};
 use crate::transport::{Transport, ch9325};
 use log::debug;
 use std::borrow::Cow;
 use std::fmt;
+
+mod specs_ut803;
 
 /// Which meter model the packets come from — the two share framing but
 /// not payload layout.
@@ -790,6 +793,23 @@ impl Ut80xProtocol {
             },
         }
     }
+
+    /// The manual table for reading `m` and its range byte, decoded again
+    /// from the payload: the coupling and alt bits that pick the table are
+    /// not in the reading's fields. `None` for a payload that is not a
+    /// packet, and for the UT804, which has no tables yet.
+    fn spec_table(&self, m: &Measurement) -> Option<(&'static ModeSpecs, u8)> {
+        match self.model {
+            Model::Ut803 => {
+                let f = Ut803Fields::decode(&m.raw_payload).ok()?;
+                // A pair the parser does not know has no spec either.
+                ut803_mode_info(f.mode, f.range, f.alt())?;
+                let table = specs_ut803::table(f.mode, f.range, f.alt(), f.coupling())?;
+                Some((table, f.range))
+            }
+            Model::Ut804 => None,
+        }
+    }
 }
 
 impl Protocol for Ut80xProtocol {
@@ -841,6 +861,22 @@ impl Protocol for Ut80xProtocol {
 
     fn profile(&self) -> &DeviceProfile {
         &self.profile
+    }
+
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        let (table, range) = self.spec_table(m)?;
+        table.row(range).map(|row| &row.spec)
+    }
+
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        self.spec_table(m).map(|(table, _)| &table.mode)
+    }
+
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        match self.model {
+            Model::Ut803 => specs_ut803::ALL.iter().map(|t| t.sheet_table()).collect(),
+            Model::Ut804 => Vec::new(),
+        }
     }
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
@@ -2579,6 +2615,285 @@ raw_payload=11"#
         let p = ut803_payload(&[1, 2, 3, 4], 1, 0x3, 0x0, 0x0, 0x0);
         let (_, reports) = parse_reported(parse_measurement_ut803, &p);
         assert!(reports.is_empty(), "{reports:?}");
+    }
+
+    // --- UT803 specs ------------------------------------------------------
+
+    /// Why a reading has no spec, and which readings that is.
+    type NoSpec = (&'static str, fn(&Ut803Fields) -> bool);
+
+    /// UT803 readings the parser accepts that have no spec in the manual.
+    const UT803_NO_SPEC: &[NoSpec] = &[
+        ("the tachometer: the manual gives RPM no spec", |f| {
+            f.mode == 0x2 && f.alt()
+        }),
+        (
+            "frequency range 5 (600MHz): the manual stops at 60MHz",
+            |f| f.mode == 0x2 && !f.alt() && f.range == 5,
+        ),
+        ("capacitance range 7 (60mF): the manual stops at 6mF", |f| {
+            f.mode == 0x6 && f.range == 7
+        }),
+        ("ADP: that it is hFE is only a guess", |f| f.mode == 0xE),
+        ("current with both or neither coupling bit", |f| {
+            matches!(f.mode, 0x9 | 0xD | 0xF)
+                && !matches!(f.coupling(), Some(Coupling::Dc | Coupling::Ac))
+        }),
+    ];
+
+    /// Every mode, range, coupling and alt bit the parser accepts without a
+    /// report, as a packet and its reading.
+    fn ut803_accepted_readings() -> Vec<(Vec<u8>, Measurement)> {
+        let mut readings = Vec::new();
+        for mode in 0..=0xF {
+            for range in 0..=0xF {
+                for nib10 in [0x0, 0x4, 0x8, 0xC] {
+                    for nib8 in [0x0, 0x8] {
+                        let p = ut803_payload(&[1, 2, 3, 4], range, mode, nib8, 0x0, nib10);
+                        if let (Ok(m), reports) = parse_reported(parse_measurement_ut803, &p)
+                            && reports.is_empty()
+                        {
+                            readings.push((p, m));
+                        }
+                    }
+                }
+            }
+        }
+        readings
+    }
+
+    /// Each reading resolves a spec or is listed as having none, and every
+    /// row of every table is some reading's, apart from the transistor
+    /// table, which no reading reaches (its comment says why).
+    #[test]
+    fn ut803_every_reading_has_a_spec_or_is_listed() {
+        let proto = Ut80xProtocol::new_ut803();
+        let mut rows_reached = std::collections::HashSet::new();
+        let mut listed_reached = [false; UT803_NO_SPEC.len()];
+        for (p, m) in ut803_accepted_readings() {
+            let f = Ut803Fields::decode(&p).unwrap();
+            let listed: Vec<usize> = (0..UT803_NO_SPEC.len())
+                .filter(|&i| (UT803_NO_SPEC[i].1)(&f))
+                .collect();
+            let row = proto
+                .spec_table(&m)
+                .and_then(|(table, range)| table.row(range));
+            match (row, listed.as_slice()) {
+                (Some(row), []) => {
+                    assert!(std::ptr::eq(proto.spec_info(&m).unwrap(), &row.spec));
+                    assert!(proto.mode_spec_info(&m).is_some());
+                    rows_reached.insert(std::ptr::from_ref(row));
+                }
+                (None, [i]) => {
+                    assert!(proto.spec_info(&m).is_none());
+                    listed_reached[*i] = true;
+                }
+                (Some(_), _) => panic!("{} {p:02X?}: has a spec, yet is listed", m.mode),
+                (None, _) => panic!("{} {p:02X?}: no spec, and not listed once", m.mode),
+            }
+        }
+        for (i, (why, _)) in UT803_NO_SPEC.iter().enumerate() {
+            assert!(listed_reached[i], "no reading is {why}");
+        }
+        for table in specs_ut803::ALL {
+            for row in table.ranges {
+                assert_eq!(
+                    rows_reached.contains(&std::ptr::from_ref(row)),
+                    table.name != "K. Transistor",
+                    "{} / {}",
+                    table.name,
+                    row.label
+                );
+            }
+        }
+    }
+
+    /// `label` as a value in its base unit, and that unit: "6kHz" is
+    /// (6000.0, "Hz"). `None` for a label that is not a number, an SI
+    /// prefix and a unit.
+    fn si_quantity(label: &str) -> Option<(f64, &str)> {
+        let digits = label
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(label.len());
+        let value: f64 = label[..digits].parse().ok()?;
+        let unit = &label[digits..];
+        let base = ["Hz", "Ω", "V", "A", "F"]
+            .into_iter()
+            .find(|base| unit.ends_with(base))?;
+        let factor = match &unit[..unit.len() - base.len()] {
+            "" => 1.0,
+            "n" => 1e-9,
+            "µ" => 1e-6,
+            "m" => 1e-3,
+            "k" => 1e3,
+            "M" => 1e6,
+            _ => return None,
+        };
+        Some((value * factor, base))
+    }
+
+    /// UT803 ranges whose full scale is not the 6000 counts the decimal
+    /// point gives, as (mode, range byte, full scale in the reading's unit).
+    const UT803_FULL_SCALE_EXCEPTIONS: &[(u8, u8, f64)] = &[
+        // The 1000V range is an integer display that stops at 1000, not 5999.
+        (0xB, 3, 1000.0),
+    ];
+
+    /// A row answers the reading's range: its label's full scale is the one
+    /// the reading's decimal point gives, 6000 counts. A row mapped to the
+    /// wrong range byte names another decade, or another quantity. The rows
+    /// with no range byte (10A, continuity, diode, temperature) are one
+    /// fixed range each, and are left out.
+    #[test]
+    fn ut803_rows_match_the_readings_full_scale() {
+        let proto = Ut80xProtocol::new_ut803();
+        for (p, m) in ut803_accepted_readings() {
+            let Some((table, range)) = proto.spec_table(&m) else {
+                continue;
+            };
+            let Some(row) = table.row(range) else {
+                continue;
+            };
+            if row.range.is_none() {
+                continue;
+            }
+            let f = Ut803Fields::decode(&p).unwrap();
+            let (_, unit, dp) = ut803_mode_info(f.mode, f.range, f.alt()).unwrap();
+            let scale = UT803_FULL_SCALE_EXCEPTIONS
+                .iter()
+                .find(|&&(mode, range, _)| (mode, range) == (f.mode, f.range))
+                .map_or(6000.0 / 10f64.powi(3 - i32::from(dp)), |&(.., scale)| scale);
+            let full_scale = format!("{scale}{unit}");
+            let reading = si_quantity(&full_scale).unwrap();
+            let label =
+                si_quantity(row.label).unwrap_or_else(|| panic!("{} is not a quantity", row.label));
+            assert!(
+                label.1 == reading.1 && (label.0 - reading.0).abs() <= 1e-9 * reading.0,
+                "{} {p:02X?}: row {} for a {full_scale} range",
+                m.mode,
+                row.label
+            );
+        }
+    }
+
+    /// A DC table answers only DC readings and an AC one only AC readings,
+    /// by the coupling bits; the other tables have no coupling.
+    #[test]
+    fn ut803_tables_match_the_readings_coupling() {
+        let proto = Ut80xProtocol::new_ut803();
+        for (p, m) in ut803_accepted_readings() {
+            let Some((table, _)) = proto.spec_table(&m) else {
+                continue;
+            };
+            let expected = match table.name {
+                "A. DC Voltage" | "C. DC Current" => Coupling::Dc,
+                "B. AC Voltage" | "D. AC Current" => Coupling::Ac,
+                _ => continue,
+            };
+            let coupling = Ut803Fields::decode(&p).unwrap().coupling();
+            assert_eq!(
+                coupling,
+                Some(expected),
+                "{} {p:02X?}: {}",
+                m.mode,
+                table.name
+            );
+        }
+    }
+
+    /// A row's resolution is in the reading's unit, prefix aside: a row of
+    /// another quantity (continuity for diode, °F for °C) resolves in
+    /// another unit.
+    #[test]
+    fn ut803_rows_resolve_in_the_readings_unit() {
+        use crate::protocol::test_support::unit_family;
+        let proto = Ut80xProtocol::new_ut803();
+        for (p, m) in ut803_accepted_readings() {
+            let Some((table, range)) = proto.spec_table(&m) else {
+                continue;
+            };
+            let Some(row) = table.row(range) else {
+                continue;
+            };
+            let unit = row
+                .spec
+                .resolution
+                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
+            assert_eq!(
+                unit_family(unit),
+                unit_family(&m.unit),
+                "{} {p:02X?}: row {} resolves in {}",
+                m.mode,
+                row.label,
+                row.spec.resolution
+            );
+        }
+    }
+
+    fn ut803_table_name(p: &[u8]) -> Option<&'static str> {
+        let m = parse_measurement_ut803(p).unwrap();
+        let (table, _) = Ut80xProtocol::new_ut803().spec_table(&m)?;
+        Some(table.name)
+    }
+
+    fn ut803_spec(p: &[u8]) -> Option<&'static SpecInfo> {
+        let m = parse_measurement_ut803(p).unwrap();
+        Ut80xProtocol::new_ut803().spec_info(&m)
+    }
+
+    /// DC and AC current share their mode codes; the coupling bits pick the
+    /// table.
+    #[test]
+    fn ut803_ac_and_dc_ma_pick_their_own_tables() {
+        let dc = ut803_payload(&[1, 2, 3, 4], 0, 0xF, 0x0, 0x0, 0x8);
+        let ac = ut803_payload(&[1, 2, 3, 4], 0, 0xF, 0x0, 0x0, 0x4);
+        assert_eq!(ut803_table_name(&dc), Some("C. DC Current"));
+        assert_eq!(ut803_table_name(&ac), Some("D. AC Current"));
+        assert_eq!(ut803_spec(&dc).unwrap().accuracy[0].accuracy, "0.5%+3");
+        assert_eq!(ut803_spec(&ac).unwrap().accuracy[0].accuracy, "1.0%+5");
+    }
+
+    #[test]
+    fn ut803_rpm_has_no_spec_and_hz_has() {
+        let hz = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x0, 0x0, 0x0);
+        let rpm = ut803_payload(&[1, 2, 3, 4], 1, 0x2, 0x8, 0x0, 0x0);
+        assert_eq!(ut803_spec(&hz).unwrap().resolution, "0.01kHz");
+        assert_eq!(ut803_table_name(&rpm), None);
+    }
+
+    #[test]
+    fn ut803_alt_bit_picks_the_temperature_row() {
+        let c = ut803_payload(&[0, 0, 2, 5], 0, 0x4, 0x8, 0x0, 0x0);
+        let f = ut803_payload(&[0, 0, 7, 7], 0, 0x4, 0x0, 0x0, 0x0);
+        assert_eq!(ut803_spec(&c).unwrap().resolution, "1°C");
+        assert_eq!(ut803_spec(&f).unwrap().resolution, "1°F");
+    }
+
+    /// The 600mV range is range 4 of the volts mode, with an input impedance
+    /// of its own.
+    #[test]
+    fn ut803_600mv_has_its_own_input_impedance() {
+        let proto = Ut80xProtocol::new_ut803();
+        let impedance = |range| {
+            let p = ut803_payload(&[1, 2, 3, 4], range, 0xB, 0x0, 0x0, 0x8);
+            let m = parse_measurement_ut803(&p).unwrap();
+            proto.mode_spec_info(&m).unwrap().input_impedance
+        };
+        assert_eq!(impedance(4), Some("Around > 3000MΩ"));
+        assert_eq!(impedance(0), Some("Around 10MΩ"));
+    }
+
+    #[test]
+    fn ut803_malformed_payload_has_no_spec() {
+        let proto = Ut80xProtocol::new_ut803();
+        let p = ut803_payload(&[1, 2, 3, 4], 0, 0xB, 0x0, 0x0, 0x8);
+        let mut m = parse_measurement_ut803(&p).unwrap();
+        assert!(proto.spec_info(&m).is_some());
+        for payload in [vec![], p[..10].to_vec(), vec![0xFF; PACKET_LEN]] {
+            m.raw_payload = payload;
+            assert!(proto.spec_info(&m).is_none());
+            assert!(proto.mode_spec_info(&m).is_none());
+        }
     }
 
     // --- Detection (crate::detect) ---------------------------------------

@@ -60,3 +60,55 @@ pub struct SpecSheetRow {
     pub range_raw: Option<u8>,
     pub spec: &'static SpecInfo,
 }
+
+/// One row of a manual spec table, keyed by the range byte it answers.
+#[derive(Debug)]
+pub(crate) struct RangeSpec {
+    /// The range byte, `None` for a mode with one range whose byte varies
+    /// on the wire (or that has no reading at all).
+    pub(crate) range: Option<u8>,
+    /// The range as the manual labels it.
+    pub(crate) label: &'static str,
+    pub(crate) spec: SpecInfo,
+}
+
+/// A manual spec table, or the part of one that a set of readings shares:
+/// a table whose rows differ in input impedance or overload protection, or
+/// that spans several modes, is split into parts of the same name.
+#[derive(Debug)]
+pub(crate) struct ModeSpecs {
+    /// The manual's table title.
+    pub(crate) name: &'static str,
+    /// The manual's PDF page (not the printed page number).
+    pub(crate) page: u16,
+    pub(crate) ranges: &'static [RangeSpec],
+    pub(crate) mode: ModeSpecInfo,
+}
+
+impl ModeSpecs {
+    /// The row for range byte `range`.
+    pub(crate) fn row(&self, range: u8) -> Option<&RangeSpec> {
+        self.ranges
+            .iter()
+            .find(|r| r.range.is_none_or(|b| b == range))
+    }
+
+    /// This table as `Protocol::spec_sheet` lists it.
+    pub(crate) fn sheet_table(&'static self) -> SpecSheetTable {
+        SpecSheetTable {
+            name: self.name,
+            mode_raw: None,
+            page: Some(self.page),
+            mode: &self.mode,
+            rows: self
+                .ranges
+                .iter()
+                .map(|r| SpecSheetRow {
+                    label: r.label,
+                    range_raw: r.range,
+                    spec: &r.spec,
+                })
+                .collect(),
+        }
+    }
+}

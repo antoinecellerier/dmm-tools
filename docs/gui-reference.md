@@ -274,8 +274,8 @@ When no spec data is available (unsupported device or unrecognized mode), only
 the Manual link is shown (if configured). If neither specs nor manual URL exist,
 nothing renders.
 
-**Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, and Mock (delegates to
-UT61E+). Other devices show only the Manual link.
+**Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT803, and Mock (delegates
+to UT61E+). Other devices show only the Manual link.
 
 ## Scale
 

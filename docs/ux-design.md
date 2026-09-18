@@ -166,7 +166,7 @@ Shows per-range electrical specifications from the device manual:
 - Resolution, accuracy (with multiple frequency bands for AC), input impedance, notes
 - "Manual" hyperlink to manufacturer's product page when `manual_url` is configured
 - Adapts to each layout: full panel (wide), inline summary (big meter), compact line (narrow)
-- Coverage: UT61E+, UT61B+, UT61D+, UT161 family, Mock. Other devices show manual link only.
+- Coverage: UT61E+, UT61B+, UT61D+, UT161 family, UT803, Mock. Other devices show manual link only.
 
 ### Connection Help
 
