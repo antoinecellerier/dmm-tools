@@ -783,10 +783,14 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
     every packet in the `debug` and `capture` runs was 11 bytes ending
     `0D 8A` and decoded. See
     [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
-  - **UT803 rate**: the UT803 app sets 19200 on the CH9325 and on its
-    serial port, and the UT803 manual gives 19200 7O1.
-    `transport/ch9325.rs` tries 2400 first and takes any report as an
-    answer, so a UT803 stays at 2400
+  - ~~**UT803 rate**~~ **Fixed 2026-09-18, unverified**: the UT803 app
+    sets 19200 on the CH9325 and on its serial port, and the UT803 manual
+    gives 19200 7O1. `transport/ch9325.rs` tries 2400 first and takes any
+    report as an answer, so a UT803 stayed at 2400. The UT803's protocol
+    `init` now sends the 19200 report after start-up, and `transport_info`
+    names the rate the bridge was left at; the UT804's start-up is
+    unchanged. Unit tests only: no CH9325 meter here, and no UT803 has
+    answered
   - ~~**UT803 positions**~~ **Fixed 2026-09-17**: the vendor parser's
     position k is packet byte k-1; `parse_measurement_ut803` is fed `A`,
     bytes 1-9 and `D`, as the vendor's is

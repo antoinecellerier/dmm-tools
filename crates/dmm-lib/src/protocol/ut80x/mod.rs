@@ -46,7 +46,7 @@ use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
     unknown_mode,
 };
-use crate::transport::Transport;
+use crate::transport::{Transport, ch9325};
 use log::debug;
 use std::borrow::Cow;
 use std::fmt;
@@ -643,6 +643,10 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
 
 const COMMANDS: &[&str] = &[];
 
+/// How long the UT803's init leaves the CH9325 after changing its rate,
+/// as the transport's own start-up does after its first report.
+const UT803_RATE_SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
+
 /// Protocol implementation for UT803/UT804 bench multimeters.
 pub(crate) struct Ut80xProtocol {
     rx_buf: Vec<u8>,
@@ -683,11 +687,25 @@ impl Ut80xProtocol {
 }
 
 impl Protocol for Ut80xProtocol {
-    fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
-        // The CH9325 transport handles baud rate configuration (2400 baud).
-        // The meter streams continuously once the CH9325 is configured —
-        // no trigger byte needed. [UNVERIFIED] whether 0x5A helps.
-        debug!("ut80x: init (no trigger needed, meter streams on CH9325 connect)");
+    fn init(&mut self, transport: &dyn Transport) -> Result<()> {
+        // The meter streams once its SEND or RS232 button is on (spec
+        // §4.2); nothing is sent to it. [UNVERIFIED] whether the CH9325
+        // transport's 0x5A trigger helps.
+        match self.model {
+            // The CH9325 transport starts at 2400 baud, the UT804's rate,
+            // and a UT804 streams there (#16).
+            Model::Ut804 => {
+                debug!("ut80x: init (UT804, the transport's 2400 baud)");
+            }
+            // The UT803 talks at 19200 (spec §1.2), which the transport's
+            // start-up only reaches when nothing answers at 2400 — and the
+            // bridge reports even while the meter is silent (spec §2.2).
+            Model::Ut803 => {
+                debug!("ut80x: init (UT803, setting the CH9325 to 19200 baud)");
+                transport.send_feature_report(&ch9325::FALLBACK_FEATURE_REPORT)?;
+                std::thread::sleep(UT803_RATE_SETTLE);
+            }
+        }
         Ok(())
     }
 
@@ -1093,6 +1111,24 @@ mod tests {
             proto.request_measurement(&mock),
             Err(Error::Timeout)
         ));
+    }
+
+    /// The UT803 talks at 19200, which the CH9325's start-up at 2400 never
+    /// leaves while the bridge keeps reporting; the UT804 stays at 2400, its
+    /// start-up untouched.
+    #[test]
+    fn only_the_ut803_init_changes_the_bridge_rate() {
+        let mock = MockTransport::new(Vec::new());
+        Ut80xProtocol::new_ut804().init(&mock).unwrap();
+        assert!(mock.feature_reports.borrow().is_empty());
+        assert!(mock.written.borrow().is_empty());
+
+        Ut80xProtocol::new_ut803().init(&mock).unwrap();
+        assert_eq!(
+            *mock.feature_reports.borrow(),
+            [ch9325::FALLBACK_FEATURE_REPORT.to_vec()]
+        );
+        assert!(mock.written.borrow().is_empty());
     }
 
     /// A step may only ask for a label its own model's parser can report:

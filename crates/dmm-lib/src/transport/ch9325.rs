@@ -17,6 +17,7 @@ use crate::error::{Error, Result};
 use crate::transport::Transport;
 use hidapi::HidDevice;
 use log::{debug, trace, warn};
+use std::cell::Cell;
 
 /// WCH VID (shared with CH9329).
 pub const VID: u16 = 0x1A86;
@@ -40,16 +41,28 @@ const MAX_UART_PAYLOAD: usize = 7;
 const PRIMARY_FEATURE_REPORT: [u8; 10] =
     [0x00, 0x60, 0x09, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00];
 
-/// Fallback init feature report: 19200 baud, the primary's layout (UT803.exe
-/// sends this one too).
+/// Fallback init feature report: 19200 baud, the primary's layout. UT803.exe
+/// sends this one too, and so does the UT803's protocol init.
 ///
 /// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
-const FALLBACK_FEATURE_REPORT: [u8; 10] =
+pub(crate) const FALLBACK_FEATURE_REPORT: [u8; 10] =
     [0x00, 0x00, 0x4B, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00];
+
+/// The baud rate a feature report sets: little-endian in bytes 1-2, where
+/// both the apps' layout and the SDK DLL's put it. `None` for a report too
+/// short to carry one, or a zero rate.
+///
+/// Reference: docs/research/ut803/reverse-engineered-protocol.md §1.2
+fn report_baud(report: &[u8]) -> Option<u32> {
+    match report {
+        [_, lo, hi, ..] => Some(u32::from(u16::from_le_bytes([*lo, *hi]))).filter(|&b| b != 0),
+        _ => None,
+    }
+}
 
 const BRIDGE: &str = "CH9325 HID-to-UART bridge (WCH)";
 
-/// What start-up settled on: the rate the bridge was left at, and what the
+/// What start-up settled on: the rate it left the bridge at, and what the
 /// probe read there. Start-up takes any report as an answer, so the meter
 /// bytes it carried are what say whether the meter was heard at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,13 +73,17 @@ struct Startup {
 }
 
 impl Startup {
-    fn describe(self) -> String {
-        match self.probe_bytes {
-            Some(n) => format!(
-                "{} baud, start-up report carried {n} meter bytes",
-                self.baud
-            ),
-            None => format!("{} baud, no start-up report", self.baud),
+    /// The bridge's rate now, `baud`, and what start-up heard, with the rate
+    /// it heard it at where a later report changed it.
+    fn describe(self, baud: u32) -> String {
+        let heard = match self.probe_bytes {
+            Some(n) => format!("start-up report carried {n} meter bytes"),
+            None => "no start-up report".to_string(),
+        };
+        if baud == self.baud {
+            format!("{baud} baud, {heard}")
+        } else {
+            format!("{baud} baud, {heard} at {}", self.baud)
         }
     }
 }
@@ -75,6 +92,9 @@ impl Startup {
 pub struct Ch9325 {
     device: HidDevice,
     startup: Option<Startup>,
+    /// The rate the last feature report set, which the bridge is left at: a
+    /// protocol's `init` may change the one start-up chose (the UT803's).
+    baud: Cell<Option<u32>>,
 }
 
 impl Ch9325 {
@@ -83,7 +103,20 @@ impl Ch9325 {
         Self {
             device,
             startup: None,
+            baud: Cell::new(None),
         }
+    }
+
+    /// Send a feature report and record the rate it sets.
+    fn set_feature(&self, report: &[u8]) -> Result<()> {
+        trace!("CH9325 feature report: {:02X?}", report);
+        self.device
+            .send_feature_report(report)
+            .map_err(Error::Hid)?;
+        if let Some(baud) = report_baud(report) {
+            self.baud.set(Some(baud));
+        }
+        Ok(())
     }
 
     /// Wait for one raw report and return how many meter bytes it carried,
@@ -110,10 +143,7 @@ impl Ch9325 {
 
         // Primary init: 2400 baud + 0x5A trigger (§4.3)
         debug!("CH9325: trying primary init (2400 baud + trigger)");
-        trace!("CH9325 feature report: {:02X?}", PRIMARY_FEATURE_REPORT);
-        self.device
-            .send_feature_report(&PRIMARY_FEATURE_REPORT)
-            .map_err(Error::Hid)?;
+        self.set_feature(&PRIMARY_FEATURE_REPORT)?;
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // Send 0x5A trigger byte (§4.3 step 2)
@@ -139,10 +169,7 @@ impl Ch9325 {
 
         // Fallback init: 19200 baud, no trigger (§4.4)
         debug!("CH9325: primary init failed, trying fallback (19200 baud)");
-        trace!("CH9325 feature report: {:02X?}", FALLBACK_FEATURE_REPORT);
-        self.device
-            .send_feature_report(&FALLBACK_FEATURE_REPORT)
-            .map_err(Error::Hid)?;
+        self.set_feature(&FALLBACK_FEATURE_REPORT)?;
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         // Probe again
@@ -240,14 +267,15 @@ impl Transport for Ch9325 {
     }
 
     fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        trace!("CH9325 feature report: {:02X?}", data);
-        self.device.send_feature_report(data).map_err(Error::Hid)?;
-        Ok(())
+        self.set_feature(data)
     }
 
     fn transport_info(&self) -> Result<String> {
         Ok(match self.startup {
-            Some(startup) => format!("{BRIDGE}, {}", startup.describe()),
+            Some(startup) => {
+                let baud = self.baud.get().unwrap_or(startup.baud);
+                format!("{BRIDGE}, {}", startup.describe(baud))
+            }
             None => BRIDGE.to_string(),
         })
     }
@@ -418,14 +446,42 @@ mod tests {
             probe_bytes: Some(7),
         };
         assert_eq!(
-            heard.describe(),
+            heard.describe(2400),
             "2400 baud, start-up report carried 7 meter bytes"
         );
         let silent = Startup {
             baud: 19200,
             probe_bytes: None,
         };
-        assert_eq!(silent.describe(), "19200 baud, no start-up report");
+        assert_eq!(silent.describe(19200), "19200 baud, no start-up report");
+    }
+
+    /// A UT803's init moves the bridge to 19200 after start-up heard it at
+    /// 2400: the rate named is the one the bridge was left at.
+    #[test]
+    fn a_rate_set_after_start_up_is_the_one_named() {
+        let startup = Startup {
+            baud: 2400,
+            probe_bytes: Some(1),
+        };
+        assert_eq!(
+            startup.describe(19200),
+            "19200 baud, start-up report carried 1 meter bytes at 2400"
+        );
+    }
+
+    /// Both init reports decode to their rate, and so does the SDK DLL's
+    /// layout, which carries `0x03` in byte 3.
+    #[test]
+    fn a_feature_report_decodes_to_the_rate_it_sets() {
+        assert_eq!(report_baud(&PRIMARY_FEATURE_REPORT), Some(2400));
+        assert_eq!(report_baud(&FALLBACK_FEATURE_REPORT), Some(19200));
+        assert_eq!(
+            report_baud(&[0x00, 0x60, 0x09, 0x03, 0x00, 0x00]),
+            Some(2400)
+        );
+        assert_eq!(report_baud(&[0x00, 0x60]), None);
+        assert_eq!(report_baud(&[0x00, 0x00, 0x00, 0x00]), None);
     }
 
     #[test]
