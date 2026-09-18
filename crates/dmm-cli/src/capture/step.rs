@@ -672,8 +672,10 @@ mod tests {
         .unwrap()
     }
 
-    /// A UT804 may send nothing while HOLD is on, and its step says the line
-    /// that follows is an answer: the quote has to be what the step prints.
+    /// A UT804 sends nothing while HOLD is on (#16), and its step says the
+    /// line that follows is an answer: the quote has to be what the step
+    /// prints. EXIT, which leaves HOLD, turns the meter's output off too, so
+    /// every step that has the operator press it asks for SEND after it.
     #[test]
     fn the_ut804_hold_step_quotes_the_no_response_line() {
         let device = dmm_lib::protocol::registry::find_device("ut804").unwrap();
@@ -684,6 +686,14 @@ mod tests {
             "{:?}",
             hold.instruction
         );
+        for step in steps.iter().filter(|s| s.instruction.contains("EXIT")) {
+            assert!(
+                step.instruction.contains("EXIT, then SEND"),
+                "{}: {:?}",
+                step.id,
+                step.instruction
+            );
+        }
     }
 
     /// A rejected frame used to end the step, so the report carried neither a

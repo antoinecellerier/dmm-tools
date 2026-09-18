@@ -666,8 +666,8 @@ impl Protocol for Ut80xProtocol {
         // label this model cannot report leaves the step waiting for a state
         // that never arrives. Only the UT803's V and mV carry an AC/DC
         // prefix — its current modes are named by unit alone — and it has
-        // neither the duty-cycle display nor the "mA%" mode, while the
-        // tachometer and AC+DC are one model's each.
+        // neither the duty-cycle display nor the "mA%" mode, while AC+DC is
+        // the UT804's.
         let ut803 = self.model == Model::Ut803;
         let for_model = |ut804: Option<&'static str>, ut803_label: Option<&'static str>| {
             if ut803 { ut803_label } else { ut804 }
@@ -692,102 +692,147 @@ impl Protocol for Ut80xProtocol {
             ),
         );
 
-        vec![
+        // Where each model's dial or buttons reach a step: most are on both,
+        // and a step one model lacks is tagged where it is declared. The
+        // UT804 has no AC mV, tachometer or ADP position (its manual's
+        // Table 2-1, #16); MAX MIN and REL are asked of the UT804 alone.
+        let shared = Some;
+        let ut803_only = |step: CaptureStep| ut803.then_some(step);
+        let ut804_only = |step: CaptureStep| (!ut803).then_some(step);
+
+        [
             // A UT804 walked this step on 2026-09-17 (issue #16); the UT803
             // shares the list but has never answered.
-            dcv.verified_if(!ut803),
-            dcv_short,
-            dcv_negative,
-            CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V")),
+            shared(dcv.verified_if(!ut803)),
+            shared(dcv_short),
+            shared(dcv_negative),
+            shared(CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V"))),
             // AC+DC is the AC/DC nibble's fourth value; the spec (§5) has it
-            // on the UT804 and leaves the UT803 open.
-            named(
-                CaptureStep::basic("acdcv", "Set meter to AC+DC V (if the meter has it)"),
+            // on the UT804, behind a button of its own on the AC V position,
+            // and leaves the UT803 open.
+            shared(named(
+                CaptureStep::basic(
+                    "acdcv",
+                    if ut803 {
+                        "Set meter to AC+DC V (if the meter has it)"
+                    } else {
+                        "AC V: press the AC/AC+DC button so the display shows AC+DC"
+                    },
+                ),
                 for_model(Some("AC+DC V"), None),
+            )),
+            shared(CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV"))),
+            ut803_only(
+                CaptureStep::basic("acmv", "Set meter to AC mV (if the meter has it)")
+                    .expect(Expect::mode("AC mV")),
             ),
-            CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV")),
-            CaptureStep::basic("acmv", "Set meter to AC mV (if the meter has it)")
-                .expect(Expect::mode("AC mV")),
-            CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
-            ohm_ol,
-            ohm_body,
-            ohm_short,
-            CaptureStep::basic("cap", "Set meter to Capacitance")
-                .expect(Expect::mode("Capacitance")),
+            shared(
+                CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
+            ),
+            shared(ohm_ol),
+            shared(ohm_body),
+            shared(ohm_short),
+            shared(
+                CaptureStep::basic("cap", "Set meter to Capacitance")
+                    .expect(Expect::mode("Capacitance")),
+            ),
             // Both models name the frequency mode "Frequency", not "Hz".
-            CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
-                .expect(Expect::mode("Frequency")),
-            named(
+            shared(
+                CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
+                    .expect(Expect::mode("Frequency")),
+            ),
+            shared(named(
                 CaptureStep::basic(
                     "duty",
                     "Frequency mode: switch the display to Duty Cycle (%)",
                 ),
                 for_model(Some("Duty %"), None),
+            )),
+            // Frequency with the alt bit set (spec §5).
+            ut803_only(
+                CaptureStep::basic("rpm", "Set meter to Tachometer / RPM")
+                    .expect(Expect::mode("Tachometer")),
             ),
-            // Frequency with the alt bit set; the spec (§5) gives RPM to the
-            // UT803 alone.
-            named(
-                CaptureStep::basic("rpm", "Set meter to Tachometer / RPM (UT803 only)"),
-                for_model(None, Some("Tachometer")),
+            shared(CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode"))),
+            shared(
+                CaptureStep::basic("cont", "Set meter to Continuity")
+                    .expect(Expect::mode("Continuity")),
             ),
-            CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
-            CaptureStep::basic("cont", "Set meter to Continuity")
-                .expect(Expect::mode("Continuity")),
-            CaptureStep::basic(
-                "temp",
-                "Set meter to temperature (K-type thermocouple, if available)",
-            )
-            .needs(&[Need::Thermocouple])
-            .expect(Expect::mode("Temperature")),
-            named(
+            shared(
+                CaptureStep::basic(
+                    "temp",
+                    "Set meter to temperature (K-type thermocouple, if available)",
+                )
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("Temperature")),
+            ),
+            shared(named(
                 CaptureStep::basic("dcua", "Set meter to DC µA"),
                 for_model(Some("DC µA"), Some("µA")),
-            ),
-            named(
+            )),
+            shared(named(
                 CaptureStep::basic("acua", "Set meter to AC µA"),
                 for_model(Some("AC µA"), Some("µA")),
-            ),
-            named(
+            )),
+            shared(named(
                 CaptureStep::basic("dcma", "Set meter to DC mA"),
                 for_model(Some("DC mA"), Some("mA")),
-            ),
-            named(
+            )),
+            shared(named(
                 CaptureStep::basic("acma", "Set meter to AC mA"),
                 for_model(Some("AC mA"), Some("mA")),
-            ),
-            named(
+            )),
+            shared(named(
                 CaptureStep::basic("dca", "Set meter to DC A"),
                 for_model(Some("DC A"), Some("A")),
-            ),
-            named(
+            )),
+            shared(named(
                 CaptureStep::basic("aca", "Set meter to AC A"),
                 for_model(Some("AC A"), Some("A")),
-            ),
+            )),
             // Two modes whose names come from the vendor binaries alone
             // (spec §3.4): mode 14 "ADP / Logic" and mode 15, unit "mA%".
-            CaptureStep::basic("adp", "Set meter to ADP / logic (UT804 only)")
-                .expect(Expect::mode("ADP")),
-            named(
+            ut803_only(
+                CaptureStep::basic("adp", "Set meter to ADP / logic").expect(Expect::mode("ADP")),
+            ),
+            shared(named(
                 CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
                 for_model(Some("mA%"), None),
-            ),
+            )),
+            // What MAX MIN and REL put on the wire — a status bit, or no
+            // packets at all — is open (spec §7.3), so neither step asserts
+            // anything. MAX MIN works on a manual range only (UT804 manual,
+            // "Using MAX MIN"), and EXIT, which leaves both, also turns the
+            // meter's data output off (#16).
+            ut804_only(CaptureStep::basic(
+                "max_min",
+                "DC V: press RANGE, then MAX MIN, then Enter. Press EXIT, then SEND, afterwards.",
+            )),
+            ut804_only(CaptureStep::basic(
+                "rel",
+                "DC V: press REL, then Enter. Press EXIT, then SEND, afterwards.",
+            )),
             // The HOLD wire encoding is what this step is for, so it asserts
-            // nothing about the flag. The UT804 may send nothing while HOLD
-            // is on (spec §8), which the step reports as "No response from
-            // meter." only after its sampling reads time out, so its
-            // instruction says that is a valid result, that it can take up to
-            // a minute, and how to leave HOLD for the rest of the run.
-            CaptureStep::basic(
+            // nothing about the flag. The UT804 sends nothing while HOLD is
+            // on (#16), which the step reports as "No response from meter."
+            // only after its sampling reads time out, so its instruction says
+            // that is a valid result, that it can take up to a minute, and
+            // how to leave HOLD for the rest of the run: EXIT turns the data
+            // output off as well, and SEND turns it back on.
+            shared(CaptureStep::basic(
                 "hold",
                 if ut803 {
                     "Press HOLD (wire encoding unknown — capture needed)"
                 } else {
                     "Press HOLD on the meter, then Enter. If the meter stops sending, \
                      \"No response from meter.\" shows within a minute: that is a valid result. \
-                     Press EXIT on the meter afterwards."
+                     Press EXIT, then SEND, on the meter afterwards."
                 },
-            ),
+            )),
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 }
 
@@ -1012,7 +1057,59 @@ mod tests {
         assert_eq!(expected(&ut804, "dcua"), Some("DC µA"));
         assert_eq!(expected(&ut804, "duty"), Some("Duty %"));
         assert_eq!(expected(&ut804, "acdcv"), Some("AC+DC V"));
-        assert_eq!(expected(&ut804, "rpm"), None, "the UT804 has no tachometer");
+    }
+
+    /// The UT804 has no tachometer, AC mV or ADP position (its manual's
+    /// Table 2-1), and the reporter walking it in #16 found none: its list
+    /// asks for none of them, and adds MAX MIN and REL before HOLD.
+    #[test]
+    fn each_model_is_asked_only_for_what_it_has() {
+        let ids = |proto: Ut80xProtocol| -> Vec<&'static str> {
+            proto.capture_steps().iter().map(|s| s.id).collect()
+        };
+
+        let ut804 = ids(Ut80xProtocol::new_ut804());
+        for id in ["rpm", "acmv", "adp"] {
+            assert!(!ut804.contains(&id), "the UT804 is asked for {id}");
+        }
+        let hold = ut804.iter().position(|&id| id == "hold");
+        for id in ["max_min", "rel"] {
+            let at = ut804.iter().position(|&s| s == id);
+            assert!(at.is_some() && at < hold, "{id} before hold: {ut804:?}");
+        }
+
+        assert_eq!(
+            ids(Ut80xProtocol::new_ut803()),
+            [
+                "dcv",
+                "dcv_short",
+                "dcv_negative",
+                "acv",
+                "acdcv",
+                "dcmv",
+                "acmv",
+                "ohm",
+                "ohm_ol",
+                "ohm_body",
+                "ohm_short",
+                "cap",
+                "hz",
+                "duty",
+                "rpm",
+                "diode",
+                "cont",
+                "temp",
+                "dcua",
+                "acua",
+                "dcma",
+                "acma",
+                "dca",
+                "aca",
+                "adp",
+                "ma_percent",
+                "hold",
+            ]
+        );
     }
 
     /// Build a UT804 packet.
