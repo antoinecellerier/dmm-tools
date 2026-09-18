@@ -300,13 +300,13 @@ impl Protocol for Ut61PlusProtocol {
         &self.profile
     }
 
-    fn spec_info(&self, mode_raw: u16, range_raw: u8) -> Option<&'static crate::specs::SpecInfo> {
-        let mode = Mode::from_byte(mode_raw as u8).ok()?;
-        self.table.spec_info(mode, range_raw)
+    fn spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::SpecInfo> {
+        let mode = Mode::from_byte(m.mode_raw as u8).ok()?;
+        self.table.spec_info(mode, m.range_raw)
     }
 
-    fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static crate::specs::ModeSpecInfo> {
-        let mode = Mode::from_byte(mode_raw as u8).ok()?;
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::ModeSpecInfo> {
+        let mode = Mode::from_byte(m.mode_raw as u8).ok()?;
         self.table.mode_spec_info(mode)
     }
 

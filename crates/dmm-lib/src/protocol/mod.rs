@@ -591,15 +591,18 @@ pub trait Protocol: Send {
         vec![]
     }
 
-    /// Per-range resolution/accuracy specs for the current measurement.
+    /// Per-range resolution/accuracy specs for reading `m`. It takes the
+    /// whole reading because the mode and range bytes alone may not pick the
+    /// table (coupling, for one, can live elsewhere in the payload).
     /// Default `None` — families without a spec table can leave this unimplemented.
-    fn spec_info(&self, _mode_raw: u16, _range_raw: u8) -> Option<&'static SpecInfo> {
+    fn spec_info(&self, _m: &Measurement) -> Option<&'static SpecInfo> {
         None
     }
 
-    /// Per-mode specs (input impedance, overload protection, notes).
+    /// Per-mode specs (input impedance, overload protection, notes) for
+    /// reading `m`.
     /// Default `None` — families without a spec table can leave this unimplemented.
-    fn mode_spec_info(&self, _mode_raw: u16) -> Option<&'static ModeSpecInfo> {
+    fn mode_spec_info(&self, _m: &Measurement) -> Option<&'static ModeSpecInfo> {
         None
     }
 

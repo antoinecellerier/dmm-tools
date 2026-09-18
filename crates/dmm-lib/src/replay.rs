@@ -445,12 +445,12 @@ impl Protocol for ReplayProtocol {
         self.inner.capture_steps()
     }
 
-    fn spec_info(&self, mode_raw: u16, range_raw: u8) -> Option<&'static SpecInfo> {
-        self.inner.spec_info(mode_raw, range_raw)
+    fn spec_info(&self, m: &Measurement) -> Option<&'static SpecInfo> {
+        self.inner.spec_info(m)
     }
 
-    fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static ModeSpecInfo> {
-        self.inner.mode_spec_info(mode_raw)
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static ModeSpecInfo> {
+        self.inner.mode_spec_info(m)
     }
 
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {

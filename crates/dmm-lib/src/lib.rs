@@ -98,8 +98,8 @@ impl<T: Transport> Dmm<T> {
     /// they're talking to.
     pub fn request_measurement(&mut self) -> Result<measurement::Measurement> {
         let mut m = self.protocol.request_measurement(&self.transport)?;
-        m.spec = self.protocol.spec_info(m.mode_raw, m.range_raw);
-        m.mode_spec = self.protocol.mode_spec_info(m.mode_raw);
+        m.spec = self.protocol.spec_info(&m);
+        m.mode_spec = self.protocol.mode_spec_info(&m);
         // Session time is stamped here and nowhere else: the parsers set
         // `Instant::now()` when they build the measurement, which is the same
         // thing on a real clock and wrong on any other. The exception is a

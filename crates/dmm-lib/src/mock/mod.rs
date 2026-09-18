@@ -646,14 +646,14 @@ impl Protocol for MockProtocol {
     // so `Measurement::spec` was never populated and the GUI's Specifications
     // panel stayed empty for the whole mock session — the path used for demos,
     // screenshots and UI development.
-    fn spec_info(&self, mode_raw: u16, range_raw: u8) -> Option<&'static crate::specs::SpecInfo> {
-        Mode::from_byte(mode_raw as u8)
+    fn spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::SpecInfo> {
+        Mode::from_byte(m.mode_raw as u8)
             .ok()
-            .and_then(|mode| self.table.spec_info(mode, range_raw))
+            .and_then(|mode| self.table.spec_info(mode, m.range_raw))
     }
 
-    fn mode_spec_info(&self, mode_raw: u16) -> Option<&'static crate::specs::ModeSpecInfo> {
-        Mode::from_byte(mode_raw as u8)
+    fn mode_spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::ModeSpecInfo> {
+        Mode::from_byte(m.mode_raw as u8)
             .ok()
             .and_then(|mode| self.table.mode_spec_info(mode))
     }
