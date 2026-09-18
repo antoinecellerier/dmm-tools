@@ -55,6 +55,7 @@
 - **Meter and cable warnings print without setting `RUST_LOG`** — data the tool doesn't recognise now says so once, with where to report it.
 - **A capture report is named after the meter you chose** — every meter that reports no name of its own wrote `capture-unknown.yaml`.
 - **A capture asks whether the reading matched, then what the meter showed** — answering the old prompt "correct" filed that word as a mismatch.
+- **A capture retakes a step the meter left while sampling** — it filed readings from whatever mode you had moved on to.
 - **A capture that ends with steps left says how to resume it** — it signed off as complete whether it had covered every step or one.
 
 ### Bug fixes

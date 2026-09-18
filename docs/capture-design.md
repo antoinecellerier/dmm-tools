@@ -60,6 +60,14 @@ finish on leads with nothing stable across them, and `r` is the operator's guard
 asked for a delay. Evidence: a UT61E+'s top two Ω rungs read 50x high 200 ms after a RANGE
 press and come down over several seconds (2026-09-10).
 
+A step whose first sample is in its expected mode and a later one is not is retaken:
+`the meter left <mode> for <other> while sampling — retaking…`, and the wait runs
+again. Only the mode is compared, so a wandering value such as body resistance never retakes,
+and an Enter capture that was never in the mode is filed as it stands. A piped run doesn't
+retake, since nothing there could stop a meter that keeps leaving. Evidence: a UT804 run filed
+Diode and Ω samples under `cont` when the operator pressed SELECT on before sampling was done
+(#16, 2026-09-18).
+
 ## B. Full wire trace and parse diagnostics
 
 A recording layer wraps the transport and logs every read and write with a timestamp and the

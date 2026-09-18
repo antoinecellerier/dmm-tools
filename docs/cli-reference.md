@@ -483,9 +483,10 @@ have; those steps are skipped and stay runnable later with `--steps`.
 Steps advance on the meter, not on a keypress: the tool captures once the
 meter settles into the state the instruction asks for. Enter captures now,
 `s` skips, `q` finishes and saves. A meter settled in something else is
-reported once and the step keeps waiting. Each sample is then read back for
-you to check against the screen: Enter accepts it, `n` asks what the meter
-showed instead, `r` retakes the step.
+reported once and the step keeps waiting. Leave the meter in the step's mode
+until the samples are printed: leaving it retakes the step. Each sample is
+then read back for you to check against the screen: Enter accepts it, `n`
+asks what the meter showed instead, `r` retakes the step.
 
 The steps marked `gate` (DC V and Ω open and shorted, a negative reading)
 check the decoder's digits, decimal point, OL and sign. Once all of them are

@@ -50,6 +50,16 @@ impl Input {
         Input { keys: None }
     }
 
+    /// A terminal nobody types at, for tests: keys are polled and none come,
+    /// so every wait ends on what the meter sends. The sender is leaked so
+    /// the channel never reads as a keyboard that has gone away.
+    #[cfg(test)]
+    pub(crate) fn untouched() -> Self {
+        let (tx, rx) = mpsc::channel();
+        std::mem::forget(tx);
+        Input { keys: Some(rx) }
+    }
+
     /// Whether keys can be polled without blocking — false for a piped run,
     /// which has to be asked rather than watched.
     pub(crate) fn is_tty(&self) -> bool {

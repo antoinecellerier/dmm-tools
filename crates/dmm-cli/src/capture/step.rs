@@ -363,6 +363,28 @@ fn finish_failed_step(
     upsert_step(report, result);
 }
 
+/// The mode a step's samples left, and the first one they showed instead.
+///
+/// Only when the first sample is in the step's expected mode: the operator
+/// moved on — pressed SELECT through Continuity to Diode — before sampling
+/// was done, and the samples mix two modes (issue #16). An Enter capture
+/// that was never in the mode is filed as it stands, and only the mode is
+/// compared, so a value that wanders, such as body resistance, is no reason
+/// to retake.
+fn left_mode<'a>(
+    expect: Option<&dmm_lib::protocol::Expect>,
+    samples: &'a [Measurement],
+) -> Option<(&'static str, &'a str)> {
+    let want = expect?.mode?;
+    let (first, rest) = samples.split_first()?;
+    if first.mode != want {
+        return None;
+    }
+    rest.iter()
+        .find(|m| m.mode != want)
+        .map(|m| (want, m.mode.as_ref()))
+}
+
 /// File the step as skipped, and say whether the run stops here.
 fn skipped(report: &mut CaptureReport, step: &CaptureStep, quit: bool) -> StepOutcome {
     upsert_step(report, step.empty_result(StepStatus::Skipped, None));
@@ -509,6 +531,23 @@ pub(crate) fn run_capture_step(
         let mut measurements: Vec<Measurement> = settled.into_iter().collect();
         let wanted = step.samples.saturating_sub(measurements.len());
         measurements.extend(capture_samples(dmm, wanted, &mut errors));
+
+        // Only where the wait offers s and q: a meter that keeps leaving
+        // would otherwise retake the step for ever.
+        if interactive
+            && input.is_tty()
+            && let Some((mode, other)) = left_mode(expect.as_ref(), &measurements)
+        {
+            eprintln!(
+                "  {}",
+                style(format!(
+                    "the meter left {mode} for {other} while sampling \u{2014} retaking\u{2026}"
+                ))
+                .yellow()
+            );
+            continue;
+        }
+
         let sample_data: Vec<SampleData> = measurements
             .iter()
             .map(SampleData::from_measurement)
@@ -1002,5 +1041,93 @@ mod tests {
             "the frame that ended the wait must not be filed: {settled:?}"
         );
         assert_eq!(settled.len(), step.samples, "got {settled:?}");
+    }
+
+    /// A UT61E+ frame in `mode` (0x07 continuity, 0x08 diode) reading 0.1.
+    fn mode_frame(mode: u8) -> Vec<u8> {
+        frame(&[
+            mode, 0x30, b' ', b' ', b' ', b' ', b'0', b'.', b'1', 0, 0, 0x30, 0x30, 0x30,
+        ])
+    }
+
+    /// Issue #16: the operator pressed SELECT on from Continuity to Diode
+    /// before the samples were in, and the step filed both modes. A step
+    /// whose samples leave its mode is retaken and files only its own.
+    #[test]
+    fn a_step_the_meter_left_while_sampling_is_retaken() {
+        use crate::capture::input::Input;
+        use crate::drive::Driver;
+
+        let (cont, diode) = (mode_frame(0x07), mode_frame(0x08));
+        // The wait settles on three frames, then the samples: away, and back.
+        let mut responses = vec![cont.clone(); 4];
+        responses.extend([diode.clone(), diode, cont.clone()]);
+        // The retake's wait and samples.
+        responses.extend(vec![cont; 3 + 4]);
+        let mut dmm = dmm_replaying(responses);
+        let (_unused, recorder) =
+            crate::recording::RecordingTransport::new(Box::new(dmm_lib::transport::NullTransport));
+        let step = CaptureStep {
+            expect: Some(dmm_lib::protocol::Expect::mode("Continuity")),
+            ..cli_step("cont", false, false)
+        };
+        // In DC V before, so the step waits for Continuity on its own.
+        let prev = PrevState {
+            baseline: None,
+            last: Some(make_test_measurement(
+                0x02,
+                0x01,
+                b"  5.678",
+                (0x00, 0x00),
+                (0x00, 0x00, 0x00),
+            )),
+        };
+        let mut report = CaptureReport::default();
+        run_capture_step(
+            &mut dmm,
+            &recorder,
+            &step,
+            &mut report,
+            true,
+            &Input::untouched(),
+            &prev,
+            &Trust::new(false, true, &[]),
+            &mut Driver::new(false),
+        )
+        .unwrap();
+
+        let modes: Vec<&str> = report.steps[0]
+            .samples
+            .iter()
+            .map(|s| s.mode.as_str())
+            .collect();
+        assert_eq!(modes, ["Continuity"; 5]);
+    }
+
+    /// Only the mode is compared, and only once the first sample is in it: a
+    /// wandering value is not a retake, and neither is an Enter capture that
+    /// was never in the step's mode.
+    #[test]
+    fn only_samples_that_leave_the_steps_mode_are_retaken() {
+        let reading = |mode: u8, digits: &[u8; 7]| {
+            make_test_measurement(mode, 0x01, digits, (0x00, 0x00), (0x00, 0x00, 0x00))
+        };
+        let ohm = |digits: &[u8; 7]| reading(0x06, digits);
+        let want = dmm_lib::protocol::Expect::mode("Ω");
+
+        let body = [ohm(b" 1.2345"), ohm(b" 0.9876"), ohm(b" 1.5000")];
+        assert_eq!(left_mode(Some(&want), &body), None);
+
+        let entered_elsewhere = [reading(0x07, b"   0.1 "), ohm(b" 1.2345")];
+        assert_eq!(left_mode(Some(&want), &entered_elsewhere), None);
+
+        let left = [ohm(b" 1.2345"), reading(0x07, b"   0.1 "), ohm(b" 1.2345")];
+        assert_eq!(left_mode(Some(&want), &left), Some(("Ω", "Continuity")));
+        // A step that names no mode has nothing to leave.
+        assert_eq!(
+            left_mode(Some(&dmm_lib::protocol::Expect::new()), &left),
+            None
+        );
+        assert_eq!(left_mode(None, &left), None);
     }
 }
