@@ -599,9 +599,8 @@ Notes:
 - Frequency has 8 ranges (40Hz to 400MHz)
 - Capacitance has 8 ranges (40nF to 40mF)
 - Not every code here is what a UT804 sends in its range nibble: it
-  sends 1-6 for 400 Ω to 40 MΩ and 1 for 10 A (issue #16), and the UT804
-  manual gives AC V's top range as 750 V. The wire table is
-  `../ut803/reverse-engineered-protocol.md` §3.7.
+  sends 1-6 for 400 Ω to 40 MΩ and 1 for 10 A (issue #16). The wire table
+  is `../ut803/reverse-engineered-protocol.md` §3.7.
 
 ### 6.3 UT805A/UT805N Range Coding -- [KNOWN]
 

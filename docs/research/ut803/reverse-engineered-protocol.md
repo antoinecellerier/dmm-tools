@@ -428,7 +428,7 @@ the codes a UT804 sent (issue #16, 2026-09-18), autoranging included.
 | Mode | Range code: full range | Seen |
 |------|------------------------|------|
 | DC V (1) | 1: 4 V, 2: 40 V, 3: 400 V, 4: 1000 V | 1-2 |
-| AC V, AC+DC V (2) | 1: 4 V, 2: 40 V, 3: 400 V, 4: 750 V | 1-4 (AC), 1-3 (AC+DC) |
+| AC V, AC+DC V (2) | 1: 4 V, 2: 40 V, 3: 400 V, 4: 1000 V | 1-4 (AC), 1-3 (AC+DC) |
 | DC mV (3) | 400 mV, any code | 0 |
 | Resistance (4) | 1: 400 Ω, 2: 4 kΩ, 3: 40 kΩ, 4: 400 kΩ, 5: 4 MΩ, 6: 40 MΩ | 1-6 |
 | Capacitance (5) | 1: 40 nF, 2: 400 nF, 3: 4 µF, 4: 40 µF, 5: 400 µF, 6: 4 mF, 7: 40 mF | 1-2 |
@@ -442,14 +442,16 @@ the codes a UT804 sent (issue #16, 2026-09-18), autoranging included.
 | Duty cycle (C, sign bit), 4-20 mA % (F) | no range given; the point sits after digit 3 | 0 |
 
 For example, 40 V reads `39.999` and 400 µA `399.99`. Table 2-3 gives AC
-mA as 400 and 4000, the µA row's figures. Table 2-1 gives the mA position
-40 mA and 400 mA, and the meter shows `00.000 mA` on AC mA range 0, so AC
-mA has DC mA's ranges.
+V's top range as 750 V, where the AC voltage spec table (p.59), the basic
+specifications (p.57), its remark b) (p.60) and the datasheet give 1000 V,
+as above. It gives AC mA as 400 and 4000, the µA row's figures. Table 2-1
+gives the mA position 40 mA and 400 mA, and the meter shows `00.000 mA` on
+AC mA range 0, so AC mA has DC mA's ranges.
 
 UNI-T's UCI SDK manual has a UT804 range table
 (`../uci-bench-family/reverse-engineered-protocol.md` §6.2). It differs
-from this one for resistance (codes 0-5 there), 10 A (code 0) and AC V's
-top range (1000 V); the meter sent the codes above.
+from this one for resistance (codes 0-5 there) and 10 A (code 0); the
+meter sent the codes above.
 
 ---
 

@@ -64,30 +64,26 @@ pub(crate) enum Model {
 
 /// UT804 per-(mode, range) display info: mode name, unit, decimal point
 /// position from the left (point after digit `pos+1`; a position past the
-/// last digit means an integer display), and range label. `ac` is the AC/DC
-/// nibble reading AC or AC+DC, whose top volts range is lower.
+/// last digit means an integer display), and range label.
 ///
 /// From the UT804.exe parse function `FUN_00558a7c` unit-string appends
 /// and range switches (spec §7.4 item 7), with unit glyphs resolved from
 /// the vendor LCD fonts (`#`=°C, `?`=°F, `)`=diode, `&`=beeper, `*`=Ω).
 /// The labels are the full ranges of the UT804 manual's Table 2-3 (spec
-/// §3.7), which match the decimal points; that table gives AC mA the µA
-/// ranges, a typo, as the meter's `00.000 mA` on AC mA range 0 shows (#16).
+/// §3.7), which match the decimal points, with two corrections. That table
+/// gives AC mA the µA ranges, a typo, as the meter's `00.000 mA` on AC mA
+/// range 0 shows (#16). It gives AC V's top range as 750V, where the
+/// manual's own spec tables and the datasheet give 1000V, as for DC.
 /// Temperature has no label, as on the other families, nor do duty and the
 /// 4-20 mA %, which the table gives no range.
-fn ut804_mode_info(
-    mode: u8,
-    range: u8,
-    ac: bool,
-) -> Option<(&'static str, &'static str, u8, &'static str)> {
+fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u8, &'static str)> {
     Some(match mode {
         // Modes 1 and 2 have byte-identical handlers; the AC/DC label
         // comes solely from position 8. DC V sends 1, AC V 2 (#16).
         0x1 | 0x2 => match range {
-            1 => ("V", "V", 0, "4V"),   // 3.9999
-            2 => ("V", "V", 1, "40V"),  // 39.999
-            3 => ("V", "V", 2, "400V"), // 399.99
-            4 if ac => ("V", "V", 3, "750V"),
+            1 => ("V", "V", 0, "4V"),    // 3.9999
+            2 => ("V", "V", 1, "40V"),   // 39.999
+            3 => ("V", "V", 2, "400V"),  // 399.99
             4 => ("V", "V", 3, "1000V"), // 1000.0
             _ => return None,
         },
@@ -561,11 +557,7 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
     }
 
     let coupling = f.coupling();
-    let info = ut804_mode_info(
-        f.mode,
-        f.range,
-        matches!(coupling, Some(Coupling::Ac | Coupling::AcDc)),
-    );
+    let info = ut804_mode_info(f.mode, f.range);
     let (mode_name, unit, dp_pos) = mode_info_or_unknown(
         unrecognised,
         info.map(|(name, unit, dp_pos, _)| (name, unit, dp_pos)),
@@ -1508,16 +1500,16 @@ mod tests {
         assert_eq!(m.unit, "A");
     }
 
-    /// The labels are the manual's full ranges: the top volts range is 750V
-    /// on AC and AC+DC, AC mA has DC mA's ranges, and temperature, duty and
-    /// the 4-20 mA % have none.
+    /// The labels are the manual's full ranges: the top volts range is 1000V
+    /// on AC and AC+DC too, AC mA has DC mA's ranges, and temperature, duty
+    /// and the 4-20 mA % have none.
     #[test]
     fn ut804_range_labels_follow_the_manual() {
         for (range, mode, acdc, status, label) in [
             (4, 0x1, 0, 0x0, "1000V"),
             (4, 0x1, 2, 0x0, "1000V"),
-            (4, 0x2, 1, 0x0, "750V"),
-            (4, 0x2, 3, 0x0, "750V"),
+            (4, 0x2, 1, 0x0, "1000V"),
+            (4, 0x2, 3, 0x0, "1000V"),
             (0, 0x8, 1, 0x1, "40mA"),
             (1, 0x8, 1, 0x1, "400mA"),
             (0, 0xA, 0, 0x0, "400Ω"),
