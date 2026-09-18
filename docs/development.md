@@ -81,7 +81,8 @@ The CLI and GUI automatically pick up new devices from the registry — no app c
 
 The `dump_specs` example prints all per-device specification data (resolution,
 accuracy, input impedance, notes) in formatted tables for side-by-side
-comparison with the PDF manuals in `references/`.
+comparison with the PDF manuals in `references/`. It reads each device's
+`Protocol::spec_sheet`, and skips devices that have none unless named.
 
 ```sh
 # Dump all devices
@@ -97,6 +98,31 @@ cargo run -p dmm-lib --example dump_specs -- ut61eplus ut61d+
 Pipe to `less` or redirect to a file for easier comparison. The output
 enumerates every mode and range for each device, showing exactly what the
 GUI specifications panel will display.
+
+`--format json <id>` prints one device's tables in the shape of a manual
+transcription (`{model, tables: [{table, page, input_impedance,
+overload_protection, notes, ranges: [{range, resolution, accuracy}]}]}`),
+which is what gets diffed against a verified transcription.
+
+`--format html <id>` prints a review sheet: each table laid out as the manual
+prints it, beside the render of its manual page. Render the pages first, then
+point `--pages-dir` at them; the page paths are written as given, so give
+them relative to where the sheet is saved:
+
+```sh
+# PDF pages FIRST to LAST become pages/p-NN.png
+pdftoppm -r 200 -png -f FIRST -l LAST manual.pdf pages/p
+cargo run -p dmm-lib --example dump_specs -- --format html \
+  --pages-dir pages --marks marks.json <id> > sheet.html
+```
+
+`--marks` is optional: a JSON object mapping `"<table> / <range> / <field>"`
+(or `"<table> / <field>"`) to a note, where the field is `resolution`,
+`accuracy`, `input_impedance`, `overload_protection`, `row` or `range`,
+`notes`, `page` or `table`. A note may also be a `{status, evidence}` object,
+the shape of a transcription's provenance file, which colours the cell by
+status. Marked cells are highlighted with the note on hover, and marks that
+match no cell are listed, collapsed, at the top of the sheet.
 
 ## Golden File Tests
 

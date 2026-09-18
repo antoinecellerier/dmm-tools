@@ -658,6 +658,10 @@ impl Protocol for MockProtocol {
             .and_then(|mode| self.table.mode_spec_info(mode))
     }
 
+    fn spec_sheet(&self) -> Vec<crate::specs::SpecSheetTable> {
+        tables::spec_sheet(&self.table)
+    }
+
     /// The `current` argument is ignored: the mock is its own source of
     /// truth for what it is measuring, and a caller could hand back a stale
     /// reading, so the driver is given [`Self::state_frame`] instead.

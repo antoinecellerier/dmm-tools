@@ -9,7 +9,7 @@ use super::mode::Mode;
 use crate::protocol::cycle::{self, DialPosition};
 use std::borrow::Cow;
 
-use crate::specs::{ModeSpecInfo, SpecInfo};
+use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetRow, SpecSheetTable};
 
 /// Information about a specific measurement range.
 #[derive(Debug, Clone)]
@@ -117,6 +117,48 @@ pub(crate) fn range_ladder(table: &dyn DeviceTable, mode: Mode) -> Vec<Cow<'stat
             .map(|r| Cow::Borrowed(r.label))
             .collect(),
     )
+}
+
+/// The spec sheet of a model's table: one table per mode that has specs,
+/// in [`Mode::ALL`] order, its rows in range-byte order. A range the table
+/// gives no label is left out; `specs_have_range_labels` asserts none has
+/// an accuracy.
+pub(crate) fn spec_sheet(table: &dyn DeviceTable) -> Vec<SpecSheetTable> {
+    Mode::ALL
+        .iter()
+        .filter_map(|&mode| {
+            let mode_spec = table.mode_spec_info(mode)?;
+            let rows = (0..=u8::MAX)
+                .map_while(|range| Some((range, table.spec_info(mode, range)?)))
+                .filter_map(|(range, spec)| {
+                    Some(SpecSheetRow {
+                        label: table.range_info(mode, range)?.label,
+                        range_raw: Some(range),
+                        spec,
+                    })
+                })
+                .collect();
+            Some(SpecSheetTable {
+                name: sheet_name(mode),
+                mode_raw: Some(m(mode)),
+                page: None,
+                mode: mode_spec,
+                rows,
+            })
+        })
+        .collect()
+}
+
+/// What to call `mode` in a spec sheet.
+///
+/// The enum's own label is what a reading says, and 0x15 and 0x16 both say
+/// "LoZ V" — fine on screen, but a sheet is read next to the manual, so the
+/// second one keeps the suffix that tells the two tables apart.
+fn sheet_name(mode: Mode) -> &'static str {
+    match mode {
+        Mode::LozV2 => "LoZ V2",
+        other => other.as_static_str(),
+    }
 }
 
 /// Everything a device table knows about one mode.
@@ -405,6 +447,43 @@ mod tests {
     fn ut61d_plus_temperature_specs() {
         let spec = Ut61dPlusTable::new().spec_info(Mode::TempC, 0).unwrap();
         assert!(spec.resolution.contains('°'));
+    }
+
+    /// `spec_sheet` leaves out a range with no label, so no range with an
+    /// accuracy may lack one: it would be missing from the sheet reviewed
+    /// against the manual.
+    #[test]
+    fn specs_have_range_labels() {
+        let tables: [&dyn DeviceTable; 3] = [
+            &Ut61ePlusTable::new(),
+            &Ut61bPlusTable::new(),
+            &Ut61dPlusTable::new(),
+        ];
+        for t in tables {
+            for &mode in Mode::ALL {
+                for range in 0..=u8::MAX {
+                    if let Some(spec) = t.spec_info(mode, range) {
+                        assert!(
+                            spec.accuracy.is_empty() || t.range_info(mode, range).is_some(),
+                            "{} {mode:?} range {range} has an accuracy but no label",
+                            t.model_name()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The UT61D+ has both LoZ V bytes, which read the same on screen; the
+    /// sheet must still tell their tables apart.
+    #[test]
+    fn spec_sheet_table_names_are_unique() {
+        let sheet = spec_sheet(&Ut61dPlusTable::new());
+        let mut names: Vec<_> = sheet.iter().map(|t| t.name).collect();
+        assert!(names.contains(&"LoZ V2"));
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), sheet.len());
     }
 
     #[test]

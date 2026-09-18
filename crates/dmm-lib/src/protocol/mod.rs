@@ -20,7 +20,7 @@ pub use unrecognised::capture_reports;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
-use crate::specs::{ModeSpecInfo, SpecInfo};
+use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetTable};
 use crate::transport::Transport;
 use std::borrow::Cow;
 
@@ -604,6 +604,13 @@ pub trait Protocol: Send {
     /// Default `None` — families without a spec table can leave this unimplemented.
     fn mode_spec_info(&self, _m: &Measurement) -> Option<&'static ModeSpecInfo> {
         None
+    }
+
+    /// Every spec table the model has, for checking the data against the
+    /// manual (the `dump_specs` example). Default empty — families without a
+    /// spec table can leave this unimplemented.
+    fn spec_sheet(&self) -> Vec<SpecSheetTable> {
+        Vec::new()
     }
 
     /// Values `setting` can be switched to without touching the dial, given

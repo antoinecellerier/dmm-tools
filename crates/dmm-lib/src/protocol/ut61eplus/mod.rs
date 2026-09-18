@@ -310,6 +310,10 @@ impl Protocol for Ut61PlusProtocol {
         self.table.mode_spec_info(mode)
     }
 
+    fn spec_sheet(&self) -> Vec<crate::specs::SpecSheetTable> {
+        tables::spec_sheet(self.table.as_ref())
+    }
+
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {
         cycle::choices(self, setting, current)
     }
