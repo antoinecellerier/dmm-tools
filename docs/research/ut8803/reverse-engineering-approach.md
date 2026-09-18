@@ -97,7 +97,7 @@ struct DMFRM {
 | D18 | 1 | Over status (0=no, 1=yes) |
 | D19 | 1 | Display minus symbol (0=no, 1=display) |
 | D20-D23 | 4 | Position coding (model-specific) |
-| D24-D27 | 4 | Scaling position (starts from 1) |
+| D24-D27 | 4 | Decimal point position (starts from 1) |
 | D28 | 1 | MAX (UT8802/UT8803 only) |
 | D29 | 1 | MIN (UT8802/UT8803 only) |
 | D30 | 1 | REL (UT8802/UT8803 only) |
@@ -108,7 +108,7 @@ struct DMFRM {
 | Bits | Width | Meaning |
 |------|-------|---------|
 | D0 | 1 | Error flag |
-| D1 | 1 | Test mode (1=serial/SEL, 0=parallel/PAL) |
+| D1 | 1 | Test mode (1=serial/SER, 0=parallel/PAL) |
 | D2 | 1 | Diode direction right-to-left (1=valid) |
 | D3 | 1 | Diode direction left-to-right (1=valid) |
 | D4 | 1 | Inductance quality element measurement |
@@ -116,7 +116,7 @@ struct DMFRM {
 | D6 | 1 | Capacitance loss element measurement |
 | D7 | 1 | Capacitance equivalent resistance measurement |
 | D8-D15 | 8 | Position (model-specific functional coding) |
-| D16-D31 | 16 | Hold |
+| D16-D31 | 16 | Reserved (保留; the English manual has "Hold") |
 
 **Functional coding table (common):**
 
@@ -175,7 +175,7 @@ struct DMFRM {
 | 3 | Frequency (Hz) |
 | 4 | Centigrade (C) |
 | 5 | Fahrenheit (F) |
-| 6 | RPM(rpm)hold |
+| 6 | RPM (reserved) |
 | 7 | Capacitance (F) |
 | 8 | Triode hFE |
 | 9 | Percentage (%) |

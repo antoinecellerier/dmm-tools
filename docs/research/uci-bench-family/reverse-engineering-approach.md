@@ -230,6 +230,7 @@ All source files were already present from the UT8803 RE:
 | Source | File | What it provides for this analysis |
 |--------|------|-----------------------------------|
 | UNI-T | `references/ut8803/UT8803E_Programming_Manual.pdf` | UT8802 position codes, UT804/UT805A range tables, model support table |
+| UNI-T | `references/ut8803/UCI_Programming_Manual_V1.1_zh.pdf` | The same manual's Chinese original (added 2026-09-18): field names the English translation gets wrong |
 | Analysis | `references/ut8803/vendor-software/uci_dll_decompiled.txt` | UT8802 parser, QinHeng init, serial transport, connection dispatch |
 | UNI-T | `references/ut8803/UT8803E_User_Manual.pdf` | UT8803 measurement ranges (reference) |
 | UNI-T | `references/ut8803/UNI-T_SDK_V2.3.zip` | UCI SDK headers, examples, uci.dll binary |

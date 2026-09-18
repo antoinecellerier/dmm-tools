@@ -446,6 +446,11 @@ mA as 400 and 4000, the µA row's figures. Table 2-1 gives the mA position
 40 mA and 400 mA, and the meter shows `00.000 mA` on AC mA range 0, so AC
 mA has DC mA's ranges.
 
+UNI-T's UCI SDK manual has a UT804 range table
+(`../uci-bench-family/reverse-engineered-protocol.md` §6.2). It differs
+from this one for resistance (codes 0-5 there), 10 A (code 0) and AC V's
+top range (1000 V); the meter sent the codes above.
+
 ---
 
 ## 4. Transport Initialization — [VENDOR]

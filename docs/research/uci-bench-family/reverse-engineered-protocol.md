@@ -4,7 +4,9 @@ Extension of the [UT8803 protocol specification](../ut8803/reverse-engineered-pr
 to cover the remaining UCI bench DMM models.
 
 Based on:
-- UT8803E Programming Manual V1.1 (UNI-T)
+- UT8803E Programming Manual V1.1 (UNI-T), and its Chinese original
+  (万用表、毫伏表编程手册 V1.1, which UNI-T's Chinese site files as "UT804编程手册
+  REV.2")
 - UNI-T SDK V2.3 (uci.dll)
 - Ghidra decompilation of uci.dll (451K lines)
 
@@ -375,7 +377,7 @@ the UT8803 protocol doc). The flag format string confirms:
 | D8-D11 | UnitType | From FUN_1001cf30 (position → unit lookup) |
 | D12-D14 | UnitMag | From FUN_1001cd30 (position → prefix lookup) |
 | D19 | Minus | From byte 7 bit 7 (sign/polarity) — see §3.5 |
-| D24-D27 | ScalePos | From byte 5 low nibble (decimal position) |
+| D24-D27 | DotPos | From byte 5 low nibble (decimal position) |
 | D28 | MAX | From byte 7 bit 1 — see §3.5 |
 | D29 | MIN | From byte 7 bit 0 — see §3.5 |
 | D30 | REL | From byte 7 bit 3 — see §3.5 |
@@ -596,6 +598,10 @@ Notes:
 - Diode is fixed range (no coding needed)
 - Frequency has 8 ranges (40Hz to 400MHz)
 - Capacitance has 8 ranges (40nF to 40mF)
+- Not every code here is what a UT804 sends in its range nibble: it
+  sends 1-6 for 400 Ω to 40 MΩ and 1 for 10 A (issue #16), and the UT804
+  manual gives AC V's top range as 750 V. The wire table is
+  `../ut803/reverse-engineered-protocol.md` §3.7.
 
 ### 6.3 UT805A/UT805N Range Coding -- [KNOWN]
 
@@ -761,7 +767,7 @@ speak; it is written up in
 | UT8802 byte 6 purpose | Bargraph? Secondary status? |
 | ~~UT8802 byte 7 exact bit assignments~~ | **RESOLVED**: MIN=bit 0, MAX=bit 1, AUTO=bit 2 (inverted), REL=bit 3, HOLD=bit 4, Sign=bit 7. See §3.5. |
 | UT8802 diode/SCR direction flags | Ghidra decompiler artifacts in comparison values |
-| UT803/UT804 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding — all need verification against real hardware. See `docs/research/ut803/reverse-engineered-protocol.md` |
+| UT803 proprietary nibble encoding | Mode codes, range codes, digit values, sign encoding — need verification on a UT803; the UT804's were confirmed on hardware (issue #16, 2026-09-18). See `docs/research/ut803/reverse-engineered-protocol.md` |
 | UT805A ASCII protocol | Fully documented in manual but not yet implemented (needs serial transport) |
 
 ---

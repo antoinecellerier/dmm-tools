@@ -1,7 +1,9 @@
 # UT8803/UT8803E Protocol: Reverse-Engineered Specification
 
 Based on:
-- UT8803E Programming Manual V1.1 (UNI-T)
+- UT8803E Programming Manual V1.1 (UNI-T), and its Chinese original
+  (万用表、毫伏表编程手册 V1.1), whose field names this spec follows where
+  the English translation differs
 - UT8803E User Manual (UNI-T)
 - UNI-T SDK V2.3 (headers, examples, uci.dll)
 - CP2110 Datasheet (Silicon Labs)
@@ -257,7 +259,7 @@ From the parser at `0x1001e5f0` (decompiled UT8803 parser):
 | 12-13 | (included in checksum) | Not accessed by the parser. An earlier reading put the `*(byte*)((int)param_2 + 0x11)` access here, but offset 0x11 is byte 17 |
 | 14 | Flags | Low byte of `param_2[7]`: bit 0 = HOLD (D31), bit 1 = Over-range (D18; previously misread as unused), bit 2 = OL (D7), bit 3 = Sign (D19). Bits 4-7 are not read |
 | 15 | Flags | High byte of `param_2[7]`: bit 0 = REL (D30), bit 1 = AUTO, inverted (D6), bit 2 = Error (high D0). Bits 3-7 are not read |
-| 16 | Flags | `*(byte*)(param_2 + 8)`: bit 0 = MIN (D29), bit 1 = MAX (D28), bits 2-3 = ScalePos (D24-D27). Bits 4-7 are not read |
+| 16 | Flags | `*(byte*)(param_2 + 8)`: bit 0 = MIN (D29), bit 1 = MAX (D28), bits 2-3 = DotPos (D24-D27). Bits 4-7 are not read |
 | 17 | Flags | `*(byte*)((int)param_2 + 0x11)`: bits 0-1 = inductance test frequency (below), bit 2 = TestMode, serial/parallel (high D1). Bits 3-7 are not read |
 | 18 | Flags | `(char)param_2[9]`: bit 0 = DiodeLR (high D3), bit 1 = DiodeRL (high D2). Bits 2-7 are not read |
 | 19-20 | Checksum | 16-bit BE, alternating-byte sum |
@@ -456,7 +458,7 @@ uses the macro:
 | D18 | 0x1 | Over | 1=Over range |
 | D19 | 0x1 | Minus | 1=Display shows minus sign |
 | D20-D23 | 0xF | Position | Position coding (model-specific) |
-| D24-D27 | 0xF | ScalePos | Scaling position (starts from 1) |
+| D24-D27 | 0xF | DotPos | Decimal point position (starts from 1) |
 | D28 | 0x1 | MAX | 1=MAX mode active (UT8802/UT8803) |
 | D29 | 0x1 | MIN | 1=MIN mode active (UT8802/UT8803) |
 | D30 | 0x1 | REL | 1=REL (relative) mode active (UT8802/UT8803) |
@@ -467,7 +469,7 @@ uses the macro:
 | Bits | Mask | Field | Description |
 |------|------|-------|-------------|
 | D0 | 0x1 | Error | 1=Current data error or display error |
-| D1 | 0x1 | TestMode | 1=Serial (SEL), 0=Parallel (PAL) |
+| D1 | 0x1 | TestMode | 1=Serial (SER), 0=Parallel (PAL) |
 | D2 | 0x1 | DiodeRL | 1=Diode/thyristor direction right-to-left valid |
 | D3 | 0x1 | DiodeLR | 1=Diode/thyristor direction left-to-right valid |
 | D4 | 0x1 | IndQ | 1=Inductance quality element (Q) measurement |
@@ -475,7 +477,7 @@ uses the macro:
 | D6 | 0x1 | CapD | 1=Capacitance loss element (D) measurement |
 | D7 | 0x1 | CapR | 1=Capacitance equivalent resistance measurement |
 | D8-D15 | 0xFF | FuncPos | Functional position coding (UT8803-specific) |
-| D16-D31 | 0xFFFF | Hold2 | Extended hold field |
+| D16-D31 | 0xFFFF | Reserved | Reserved (保留; the English manual has "Hold") |
 
 ---
 
@@ -596,7 +598,7 @@ function and range:
 | 3 | Frequency | Hz |
 | 4 | Centigrade | C |
 | 5 | Fahrenheit | F |
-| 6 | RPM(rpm)hold | rpm |
+| 6 | RPM (reserved) | rpm |
 | 7 | Capacitance | F |
 | 8 | Triode hFE | beta |
 | 9 | Percentage | % |
@@ -772,7 +774,7 @@ D17    = 0x0 = Not under
 D18    = 0x0 = Not over
 D19    = 0x0 = No minus sign
 D20-D23 = 0x0 = Position 0
-D24-D27 = 0x2 = Scaling position 2
+D24-D27 = 0x2 = Decimal point position 2
 ```
 
 ---
