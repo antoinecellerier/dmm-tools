@@ -89,6 +89,7 @@
 ### Documentation
 
 - **Screenshots and command output come from recorded meter sessions** — the README and reference blocks were typed by hand and the pictures taken on the mock.
+- **Downloads carry the user docs as web pages, with their screenshots** — open `README.html`; archives held Markdown only, without images, beside developer notes.
 
 ### Internal
 

@@ -278,6 +278,16 @@ cheaper three-target build, leaves `upload-artifacts` off, and is the only
 caller setting `cache: true`: the 10 GB repository cache is worth more to
 pull-request turnaround than to the unattended release and nightly builds.
 
+The archives carry only the user docs, as Markdown and as HTML, with LICENSE and
+the images they show. `scripts/package-docs.py` assembles them once per run for
+every archive. Relative links to any other doc become GitHub links at the built
+commit, and a link to a missing file fails the build. A new user doc goes into
+its `DOCS` list. To look at the result locally (needs `pandoc`):
+
+```sh
+scripts/package-docs.py /tmp/package-docs
+```
+
 ### Dev builds
 
 `dev-build.yml` publishes a prerelease from `main` every night, skipping the run

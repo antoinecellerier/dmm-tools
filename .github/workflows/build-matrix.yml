@@ -67,9 +67,27 @@ jobs:
           echo "Building: $(jq -r '[.[].name] | join(", ")' <<<"$INCLUDE")"
           echo "matrix={\"include\":$INCLUDE}" >> "$GITHUB_OUTPUT"
 
+  # The docs every archive carries, rendered once here rather than on each
+  # runner, which would need pandoc on all three OSes. Runs for CI too: a user
+  # doc linking a missing file fails the push rather than the next nightly.
+  docs:
+    name: Package docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+      - name: Assemble the user docs
+        run: python3 scripts/package-docs.py package-docs
+      - uses: actions/upload-artifact@v7
+        if: inputs.upload-artifacts
+        with:
+          name: package-docs
+          path: package-docs/
+
   build:
     name: Build (${{ matrix.name }})
-    needs: targets
+    needs: [targets, docs]
     runs-on: ${{ matrix.os }}
     env:
       ARCHIVE: ${{ inputs.archive-prefix }}-${{ matrix.slug }}
@@ -137,36 +155,34 @@ jobs:
             *) echo "Release version, no commit hash expected." ;;
           esac
 
+      # README, LICENSE, the user docs and their images, from the docs job.
+      - uses: actions/download-artifact@v8
+        if: inputs.upload-artifacts
+        with:
+          name: package-docs
+          path: ${{ env.ARCHIVE }}
+
       - name: Package (Linux)
         if: inputs.upload-artifacts && runner.os == 'Linux'
         run: |
-          mkdir -p "$ARCHIVE"
           cp target/${{ matrix.target }}/release/dmm-cli "$ARCHIVE/"
           cp target/${{ matrix.target }}/release/dmm-gui "$ARCHIVE/"
-          cp README.md LICENSE "$ARCHIVE/"
           cp -r udev "$ARCHIVE/"
-          cp -r docs "$ARCHIVE/"
           tar czf "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
 
       - name: Package (macOS)
         if: inputs.upload-artifacts && runner.os == 'macOS'
         run: |
-          mkdir -p "$ARCHIVE"
           cp target/${{ matrix.target }}/release/dmm-cli "$ARCHIVE/"
           cp target/${{ matrix.target }}/release/dmm-gui "$ARCHIVE/"
-          cp README.md LICENSE "$ARCHIVE/"
-          cp -r docs "$ARCHIVE/"
           tar czf "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
 
       - name: Package (Windows)
         if: inputs.upload-artifacts && runner.os == 'Windows'
         shell: bash
         run: |
-          mkdir -p "$ARCHIVE"
           cp target/${{ matrix.target }}/release/dmm-cli.exe "$ARCHIVE/"
           cp target/${{ matrix.target }}/release/dmm-gui.exe "$ARCHIVE/"
-          cp README.md LICENSE "$ARCHIVE/"
-          cp -r docs "$ARCHIVE/"
           7z a "$ARCHIVE.${{ matrix.ext }}" "$ARCHIVE/"
 
       - name: Upload artifact

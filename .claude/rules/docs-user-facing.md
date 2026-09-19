@@ -15,6 +15,10 @@ how to drive it. They are not a design note, a changelog or a verification
 report. Write the fewest sentences that answer the reader's question, then
 stop — a short section is never the defect.
 
+These files ship in the release archives, as Markdown and HTML, through `DOCS`
+in `scripts/package-docs.py`. A new user doc goes both in `paths:` above and
+in that list.
+
 ## Not in a reference
 
 - Rationale: "because", "so that", "since", "would otherwise", rejected
