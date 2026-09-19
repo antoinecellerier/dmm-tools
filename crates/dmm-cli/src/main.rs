@@ -58,7 +58,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// List connected CP2110 devices
+    /// List connected USB adapters
     List,
     /// Connect and print device info
     Info,
