@@ -1467,6 +1467,30 @@ of the range and give the UT61B+/UT61D+ frequency ±(0.1%+4) at 0.1Hz.
 Resolving it means inferring the dial position from the reading history,
 as `DialState` in `protocol/cycle.rs` does for mode selection.
 
+### UT61+ spec data leftovers
+
+Left over from the 2026-09-19 re-verification against the UT61+ manual:
+
+- **The UT61E+ mV range tables keep a 2.2V entry at byte 1.** The meter
+  never sends it (see "Range tables" above) and it gets no spec; the entry
+  could go.
+- **LPF V shares AC V's notes**, including "(1kHz–10kHz: 10%–100%)", which
+  cannot apply with the filter on. It would need notes of its own.
+- **Short notes kept close to unclear manual wording**, to confirm on a meter
+  or leave as printed:
+  - UT61E+ crest factor: "≤2.0 at 10000 counts, ≤1 at 22000 counts", yet the
+    add-ons that follow run to crest factor 3, as in the UT61B+/UT61D+ list.
+  - "Add 4% / 5% / 7%" for a non-sine wave does not say 4% of what.
+  - UT61E+ AC current "minimum 30µA at µA ranges" sits in the 1kHz~10kHz
+    clause, so it may bound that band only.
+  - UT61E+ AC+DC: "For AC voltage, … ≤200 digits", while the AC V table
+    gives ≤10; which reading it covers is unclear.
+  - UT61E+ capacitance: "add 10 digits when the accuracy is ≤3%".
+  - Duty: "Frequency ≤10kHz, duty ratio 10.0%~90.0%" may bound the accuracy
+    or the measurable span; the row says 0.1%~99.9%.
+  - UT61D+ temperature: "should be less than 230°C/446°F", while the table
+    runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
+
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
 were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
@@ -1498,6 +1522,15 @@ Reproducible without hardware via the mock's `ncv` scenario. Fixing it means
 routing non-plottable samples through something that carries mode/unit, and
 establishing the time origin without any plottable points. That is also the
 prerequisite for banding NCV — see `docs/future-improvements.md`.
+
+### A flat trace labels its y-axis with six decimals
+
+Seen 2026-09-19 on single-frame replays of UT61E+ golden frames: a constant
+118.3V trace labels two grid lines "118.300000 V" each, and a zero current
+trace reads "-0.000000 A". The auto Y range presumably collapses to a tiny
+span around the value and the label formatter takes its digits from that
+span. Reproducible without hardware by replaying one frame from
+`crates/dmm-lib/tests/golden/ut61eplus/lpfv.yaml`.
 
 ### A meter power cycle surfaces a checksum error
 

@@ -310,6 +310,18 @@ Use cases: verifying the meter is communicating at the expected rate, detecting 
 
 ---
 
+## Specifications Panel
+
+### Overload protection
+
+**Complexity:** Low
+
+Every family's spec data carries each mode's overload protection ("1000V", "Fuse 1A 240V"), but the panel shows only resolution, accuracy, input impedance and notes. Show it as a line of its own, with the fuse's full printed text (designator, size, type), kept in the spec tables' `// Printed` comments, as a tooltip or in `dump_specs`. Mock-ups first: the one-line layouts already leave out the impedance.
+
+Use cases: knowing what an input survives before probing, and which fuse to buy after one blows.
+
+---
+
 ## Device-Specific
 
 ### UT181A stored data retrieval
