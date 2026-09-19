@@ -1,10 +1,10 @@
 # Capture Design
 
-`dmm-cli capture` is the verification path for every protocol family except the UT61E+, the
-only `Stability::Verified` one. The design below reshapes it around three properties: a
-step advances on what the meter shows rather than on a keypress, every byte on the wire
-reaches the report even when the parser rejects it, and the tool's autonomy scales with how
-much of the family's protocol is already trusted.
+`dmm-cli capture` is the verification path for every model short of `Stability::Verified`.
+The design below reshapes it around three properties: a step advances on what the meter
+shows rather than on a keypress, every byte on the wire reaches the report even when the
+parser rejects it, and the tool's autonomy scales with how much of the family's protocol is
+already trusted.
 
 ## A. Auto-advance on observed state
 
@@ -33,7 +33,9 @@ that line immediately: only the leads move, and open probes wander enough to sat
 expectation on their own — a −0.0013 V wobble is not the battery being connected. The one
 exception is a previous reading of OL where the step expects a finite value: Ω open to Ω
 across the body is a change open leads cannot fake, so that step waits for it. An Enter-only
-step still reports a mismatch, so the wrong dial position is caught. A step with `needs`
+step still reports a mismatch, so the wrong dial position is caught. A step declared
+`wait_for_enter` is Enter-only wherever it runs: its instruction is a sequence of presses, and
+the watcher would capture the state the first of them leaves. A step with `needs`
 (something has to go on the probes) is gated instead: Enter is offered at once, and the
 watcher captures on its own only after a reading in the step's mode has failed the
 expectation first — the dial is usually turned before the leads are placed, and open leads
@@ -209,8 +211,8 @@ for a family that offered no choice at all, `disabled` when the budget ran out.
 
 ## E. Per-step verification status
 
-`CaptureStep` carries `verified: bool` (false for new steps), `gate: bool` (C) and
-`expect: Option<Expect>` (A). Around them:
+`CaptureStep` carries `verified: bool` (false for new steps), `gate: bool` (C),
+`expect: Option<Expect>` and `wait_for_enter: bool` (A). Around them:
 
 - `dmm-cli capture --unverified` runs only unverified steps plus the freeform pass. This is
   the one-line ask in every device verification issue. With `--steps` the two intersect.
@@ -265,10 +267,11 @@ sequence that does not belong in the family's shipped list is captured without w
 release. A plan step carries the `CaptureStep` fields a plan may set, in owned form: `id`,
 `instruction`, `command`, `samples` (default 5), `needs` (the `Need` variants in snake_case)
 and `expect` (`mode`, `flags` by their report names, `range` `auto`/`manual`, `value`
-`overload`/`negative`/`finite`/`ncv`). Unknown keys and names are errors naming the file and
-the step, as are a repeated id, the reserved id `extra`, and a plan with no steps. `--plan`
-conflicts with `--steps`, `--unverified` and `--list-steps`; the strings are leaked once at
-load, so the steps meet the run's `&'static` step type.
+`overload`/`negative`/`finite`/`ncv`, `at_least` a magnitude, in the mode's base unit, the
+reading must reach). Unknown keys and names are errors naming the file and the step, as are
+a repeated id, the reserved id `extra`, and a plan with no steps. `--plan` conflicts with
+`--steps`, `--unverified` and `--list-steps`; the strings are leaked once at load, so the
+steps meet the run's `&'static` step type.
 
 The plan replaces the device's list for that run and everything else stays: watcher, tiers,
 needs checklist, sweeps and the freeform pass. Plan steps are never `gate`, so a Verified

@@ -61,7 +61,7 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 **New device model (same protocol family):**
 
 1. Create `crates/dmm-lib/src/protocol/<family>/tables/new_model.rs`
-2. Implement `ModeTables`: one `entry` match returning the range table per mode (`DeviceTable` is derived); the model's spec tables go in the family's `specs/`, behind a `SpecModel` variant
+2. Implement `ModeTables`: one `entry` match returning the range table per mode (`DeviceTable` is derived), and give the model's spec tables a `SpecModel` variant. Spec tables sit in the family module: `ut61eplus/specs/`, `ut80x/specs_ut803.rs` and `specs_ut804.rs`, `ut181a/specs.rs`.
 3. Register in the family's `tables/mod.rs`
 4. Add `SelectableDevice` entry in `protocol/registry.rs`
 
@@ -73,7 +73,7 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 4. Name the family's USB cable in `preferred_transports()` in `lib.rs` (the transports themselves are in `KNOWN_TRANSPORTS`)
 5. Add `SelectableDevice` entry in `protocol/registry.rs`
 6. Create research docs in `docs/research/newfamily/`
-7. Mark as experimental until verified against real hardware (the CLI prints a warning for non-UT61E+ families)
+7. Mark as experimental until verified against real hardware (the CLI prints a warning for every model short of `Stability::Verified`)
 
 The CLI and GUI automatically pick up new devices from the registry — no app code changes needed.
 
@@ -218,14 +218,17 @@ dmm-cli completions powershell >> $PROFILE
 
 ## Release Process
 
-1. Write the release entry in `CHANGELOG.md` (see existing entries for format). If the release has a theme, put a short tagline in the heading — `## v0.2.0 — Multi-Device Protocol Support` — stating what it changes in scope or intent, and open the section with a one- or two-sentence summary of the intent and main areas touched
-2. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
-3. Update `Cargo.lock`: `cargo update --workspace`
-4. Regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the PNGs, and commit the ones whose changelog entry changed what they show
-5. Commit: `git commit -am "Release v0.3.0"`
-6. Tag and push — **confirm with the maintainer first**, this publishes the release: `git tag v0.3.0 && git push && git push origin v0.3.0`
-7. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails before it builds anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading
-8. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, commit, and push
+1. Reread `## Unreleased` in `CHANGELOG.md` against `.claude/rules/changelog.md` and reorder it: entries by importance, sections in the rule's order
+2. Rename the heading to the version. If the release has a theme, put a short tagline in it — `## v0.2.0 — Multi-Device Protocol Support` — stating what it changes in scope or intent; open the section with a one- or two-sentence summary of the intent and main areas touched, and close it with the `**Full Changelog**` compare link (see existing entries)
+3. Set the release version in root `Cargo.toml` (workspace inherits it), e.g. `version = "0.3.0"`
+4. Update `Cargo.lock`: `cargo update --workspace`
+5. With the USB cable unplugged — three scenes skip themselves otherwise — regenerate the GUI pictures with `scripts/doc-screenshots.sh all`, review the deltas and the PNGs, and commit the ones whose changelog entry changed what they show
+6. Run `scripts/package-docs.py <dir>` (needs `pandoc`): a dead relative link in a shipped doc fails the tagged build
+7. Commit: `git commit -am "Release v0.3.0"`
+8. Push the release commit — **confirm with the maintainer first** — and wait for CI to go green: `git push`
+9. Tag and push the tag — **confirm with the maintainer again**, this publishes the release: `git tag v0.3.0 && git push origin v0.3.0`
+10. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails before it builds anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading
+11. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, put an empty `## Unreleased` back above the released heading (the nightly notes append that section), commit, and push — with the maintainer's OK, as for every push
 
 ## GitHub Actions workflows
 
@@ -237,6 +240,8 @@ the crates:
   early.
 - `build-matrix.yml` — the six-target release build, called by the three others.
 - `release.yml` — runs on a `v*` tag, see [Release Process](#release-process).
+  Dispatched by hand against a branch it builds all six targets and publishes
+  nothing; against a tag it overwrites that release's assets and notes.
 - `dev-build.yml` — the nightly prerelease.
 
 ### Linting the workflows
@@ -334,11 +339,15 @@ that provide essential context for protocol work. The assistant should read
 the relevant `reverse-engineered-protocol.md` before modifying protocol code.
 
 Alongside `CLAUDE.md`, `.claude/rules/` holds path-scoped rules that load
-when their files are touched (`protocol.md` for `crates/dmm-lib/`, `gui.md`
-for `crates/dmm-gui/`, `changelog.md` for `CHANGELOG.md`), and
+when their files are touched: `protocol.md` (`crates/dmm-lib/`), `gui.md`
+(`crates/dmm-gui/`), `changelog.md` (`CHANGELOG.md`), `research-docs.md`
+(`docs/research/`, `docs/architecture.md`), and for the user docs
+`docs-user-facing.md`, `reference-docs.md` (the CLI and GUI references),
+`device-catalog.md` (`docs/supported-devices.md`) and `readme.md`.
 `.claude/skills/` holds on-demand checklists: `add-device` (new-meter
-onboarding), `issue-replies` (issue triage and GitHub reply drafting) and
-`verify-gui` (headless GUI checks, below).
+onboarding), `spec-data` (transcribing a manual's spec tables),
+`issue-replies` (issue triage and GitHub reply drafting) and `verify-gui`
+(headless GUI checks, below).
 
 ### Headless GUI checks
 

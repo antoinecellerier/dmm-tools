@@ -2,7 +2,7 @@
 
 Ideas for features that would add meaningful value to the tool. Organized by category with rough complexity estimates. None of these are committed — they're here to capture intent and help prioritize.
 
-Contributions and feedback welcome via [GitHub Issues](https://github.com/user/dmm-tools/issues).
+Contributions and feedback welcome via [GitHub Issues](https://github.com/antoinecellerier/dmm-tools/issues).
 
 ---
 
@@ -229,16 +229,16 @@ Use cases: Home Assistant, Node-RED, InfluxDB/Grafana pipelines, multi-meter agg
 
 ## Data Replay & Export
 
-### CSV replay / offline analysis
+### CSV import / offline analysis
 
 **Complexity:** Medium
 
-Load a previously recorded CSV file back into the GUI for analysis — graph, statistics, cursors, all working on historical data without a connected meter.
+A `.replay` file already opens as a device in both binaries (`--replay`), but it holds the meter's frames. Open: loading an exported CSV back into the GUI — graph, statistics, cursors on historical data — and summarising a file without a GUI.
 
-- GUI: `--replay capture.csv` flag
+- GUI: open a CSV export as a read-only session
 - CLI: `dmm-cli analyze capture.csv --stats`
 
-Use cases: post-hoc analysis, sharing captures with colleagues, comparing measurements from different sessions.
+Use cases: analysing a session that was only exported as CSV, sharing captures with colleagues, comparing measurements from different sessions.
 
 ### Graph image export
 

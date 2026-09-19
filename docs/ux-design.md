@@ -12,24 +12,27 @@
 
 ### Subcommands
 
+One subcommand per job; the flags are in [`cli-reference.md`](cli-reference.md#commands).
+
 - `dmm-cli list` — enumerate connected devices
 - `dmm-cli info` — connect and print device name (queried from meter)
-- `dmm-cli read` — continuous measurement reading with `--format` (text/csv/json), `--output`, `--interval-ms`, `--scale`, `--offset`, `--unit`
-- `dmm-cli command` — send button presses: hold, min-max, exit-min-max, rel, range, auto, select, select2, light, peak-min-max, exit-peak
-- `dmm-cli get` — list what the meter's mode, range, HOLD, REL, MIN/MAX and Peak can be switched to from where it sits, with `--format` (text/json)
+- `dmm-cli read` — continuous measurement reading, to the terminal or a file, as text, CSV, JSON or a replay file; optional software scaling; plays a replay file back in place of a meter
+- `dmm-cli command` — send one button press by name
+- `dmm-cli get` — list what the meter's mode, range, HOLD, REL, MIN/MAX and Peak can be switched to from where it sits
 - `dmm-cli set` — switch one of those settings by label
 - `dmm-cli debug` — raw hex dump mode for protocol development
-- `dmm-cli capture` — guided protocol capture wizard for bug reports. YAML output with raw bytes, structured flags, user screen confirmations. Supports `--steps` filter, auto-resume, and freeform captures.
+- `dmm-cli capture` — guided protocol capture wizard for bug reports and device verification. YAML output with raw bytes, structured flags, user screen confirmations; resumes an interrupted run and ends with freeform captures. Design in [`capture-design.md`](capture-design.md)
+- `dmm-cli completions` — shell completion scripts
 
 ### GUI Command-Line Options
 
-The GUI accepts `--device`, `--theme`, and `--mock-mode` flags (via `clap`,
-consistent with the CLI). These override saved settings for the current
+The GUI takes its device, theme and mock-mode selection on the command line
+too (via `clap`, consistent with the CLI). These override saved settings for the current
 session only — so `--device auto` detects the meter without saving it, where
 Auto-detect chosen in the panel saves the meter it finds. The settings panel
 shows which values are overridden (e.g., "Auto-detect (--device)"). Clicking a
 different value in the panel clears the override and persists the user's
-choice. See `docs/gui-reference.md` for the full options table.
+choice. See [`gui-reference.md`](gui-reference.md#command-line-options) for the full options table.
 
 ## GUI Layout
 
@@ -73,7 +76,7 @@ Toggled by the gear icon. Contains:
 
 The rows are height-capped and scroll when the window is too short to hold them all; the top bar row above them stays where it is.
 
-Settings persist to `~/.config/ut61eplus/settings.json`.
+Settings persist to `~/.config/dmm-tools/settings.json` on Linux, and to the platform's config directory elsewhere.
 
 ### Responsive Layout
 
