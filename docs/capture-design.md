@@ -205,7 +205,8 @@ UT61B+ timing out partway through a two-press Hz/% walk. A plan naming modes on 
 position reproduces such a bug without the GUI, keeping the dial history a fresh
 `dmm-cli set` lacks.
 
-`--no-drive` opts out, for receive-only cables (CH9325) or a cautious reporter.
+`--no-drive` opts out, for a cable that carries no commands or a cautious
+reporter.
 The report records `drive: on | off | disabled` — `off` for `--no-drive` and
 for a family that offered no choice at all, `disabled` when the budget ran out.
 

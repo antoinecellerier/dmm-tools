@@ -772,7 +772,7 @@ libsigrok's code unless it says "wiki".
 | Function codes | 1-F (§3.4); E and F uncertain | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
 | Range tables | §3.7 | — | Per function | ✓ (log) |
 | Coupling (nibble 8) | 0 = per mode, 1 AC, 2 DC, 3 AC+DC (§3.5) | Bit 0 AC, bit 1 DC | Same | ✓ |
-| Status (nibble 9) | Bit 0 AUTO, bit 2 sign, bits 1 and 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 new, seen after RANGE and MAX MIN (§3.6) |
+| Status (nibble 9) | Bit 0 AUTO, bit 1 manual range [VENDOR-DOC], bit 2 sign, bit 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 seen after RANGE and MAX MIN (§3.6) |
 | Duty cycle | Hz mode with the sign bit (§7.4) | Same | Same | ✓ |
 | Digit values A, C, F | A = blank or flag, B-F unknown (§3.2) | — | `:` blank, `<` 'L', `?` 'H' | ✓ A; C, F new |
 | Overload | Nibble 1 = A: overload unless nibble 2 = C, which gives 0.0 shown "L0." (§7.4) | `::0<:` overload, `:<0::` underload | `::0<:` overload; 4-20 mA `:<0::` "L0", `:?1::` "HI" | ✓³ |

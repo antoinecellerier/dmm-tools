@@ -474,7 +474,7 @@ dmm-cli capture [OPTIONS]
 | `--unverified` | | Only run the steps no hardware report has confirmed yet, plus the freeform pass. |
 | `--plan <FILE>` | | Run the steps in a [plan file](#capture-plan-files) instead of the device's own list. Conflicts with `--steps`, `--unverified` and `--list-steps`. |
 | `--sniff` | | Trust nothing the parser says: detect every step by raw byte changes and confirm each one by hand. |
-| `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step (for a receive-only cable). |
+| `--no-drive` | | Don't let the tool set ranges and flags itself after each mode step. |
 | `--settle <MS>` | `0` | Wait this long before every sample, for readings that settle slowly. Costs that much per step, so pair it with `--steps`. |
 | `--list-steps` | | List the selected device's step IDs and exit. `✓` marks a step confirmed on hardware, `gate` a step that checks the decoder. |
 | `--format <FORMAT>` | `text` | With `--list-steps`: `text` for the terminal, `md` for the checklist the verification issues use. |
