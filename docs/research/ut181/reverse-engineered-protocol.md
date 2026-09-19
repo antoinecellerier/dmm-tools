@@ -629,8 +629,8 @@ Downloaded in chunks via command 0x0D. Each response:
 | Count | 1 | Number of samples in this packet (max 250) |
 | Samples | 9 * N | Per sample: float32 LE (4) + precision (1) + timestamp (4) |
 
-Download loop: request samples starting at offset 1, increment by
-chunk size until all samples retrieved.
+Samples are requested by offset, starting at 1; each reply carries one
+chunk.
 
 ---
 

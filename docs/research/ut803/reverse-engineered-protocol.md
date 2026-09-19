@@ -543,11 +543,11 @@ command [VENDOR-DOC].
 | Feature | UT803 | UT804 |
 |---------|-------|-------|
 | Display count | 6000 (3¾ digit, max 5999) | 40000 (4¾ digit), 4000 when RANGE is held at power-on [KNOWN] (UT804 manual) |
-| Mode count | Fewer (exact list TBD) | 15 codes, 14 on the dial (§3.4) |
+| Mode count | V, mV, µA, mA and A (DC and AC), Ω, continuity, diode, capacitance, Hz, °C, °F, hFE, tachometer, ADP [KNOWN] (UT803 manual) | 15 codes, 14 on the dial (§3.4) |
 | RPM mode | Yes (`kRPM` unit string) | No (manual Table 2-1) [HARDWARE] |
 | ADP/Logic mode | Not seen | No dial position; code 14 in the app only (§3.4) [HARDWARE] |
-| Temperature | TBD | Yes (modes 6 and D) |
-| AC+DC mode | TBD | Yes (nibble 8 = 3) [HARDWARE] |
+| Temperature | Yes, °C and °F [KNOWN] (UT803 manual p.48) | Yes (modes 6 and D) |
+| AC+DC mode | On the meter, not on the wire: "+DC, hFE and β cannot output to the computer" [KNOWN] (UT803 manual p.37) | Yes (nibble 8 = 3) [HARDWARE] |
 | Data output on | RS232 button (UT803 manual p.36) | SEND button (§4.2) [HARDWARE] |
 | CH9325 and RS232 rate | 19200 (§1.2) | 2400 (§1.2) |
 | Parser position k | byte k-1 (§2.1) | byte k (§2.1) |

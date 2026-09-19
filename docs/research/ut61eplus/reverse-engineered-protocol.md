@@ -79,8 +79,8 @@ function pointers:
 4. `HidUart_FlushBuffers` — clear FIFOs
 5. `HidUart_SetTimeouts(100, 100)` — 100ms read/write timeout
 
-Our own implementation uses three raw HID feature reports (the same
-underlying operations, without the SLABHIDtoUART wrapper):
+The same operations as raw HID feature reports, without the
+SLABHIDtoUART wrapper:
 
 1. **Enable UART:** `[0x41, 0x01]`
 2. **Configure 9600/8N1:** `[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x00, 0x03, 0x00]`

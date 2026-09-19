@@ -154,9 +154,7 @@ Source: UT61+ Series User Manual §VII "Function Dial" (printed page 9), read
 from the PDF rendering; §11 for the UT61D+ temperature pair. The tables below
 say **which modes a dial position reaches with which button** — membership
 only. The order a button walks its ring in is *not* claimed: it differs
-between models and was never captured for most positions, so the driver in
-`crates/dmm-lib/src/protocol/cycle.rs` presses and reads the mode back until
-the target shows, which works whatever the real order is.
+between models and was never captured for most positions.
 
 The two buttons are the orange **SELECT** (command 0x4C) and **Hz/%**
 (0x49, `Select2`). A position with both rings joins them at exactly one mode:
@@ -440,8 +438,8 @@ model:
 
 All three UT61B+ reports agree with each other and all five of our UT61E+
 captures show the same pattern; the 2026-09-11 Ω walk showed all three shapes
-on one meter in one run, as the E+'s 82 kΩ run did. A parser must ignore the
-point rather than match a fixed string.
+on one meter in one run, as the E+'s 82 kΩ run did. The point's place in the
+OL string is not fixed.
 
 The point's position is also a second reading of the range byte: the B+'s
 `  O.L ` in Ω sits where a 60.00 MΩ rung puts its decimal, which is range

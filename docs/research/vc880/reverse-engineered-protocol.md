@@ -425,9 +425,8 @@ the read thread, the meter streams LiveData (type 0x01) frames
 continuously without any trigger command. The host simply reads from
 the HID endpoint.
 
-**No trigger needed**: Unlike the UT8803 (which requires a `0x5A` trigger
-byte), the VC-880 streams immediately after USB connection + PC button
-press. The `init()` method should be a no-op. [VENDOR + INFERRED]
+**No trigger needed**: the VC-880 streams immediately after USB connection
++ PC button press. [VENDOR + INFERRED]
 
 **Read loop**: `ContinuouslyReadDataLoop()` calls `ReadData()` in a
 loop. `ReadData()` reads up to 50 bytes, appends to a buffer, then
