@@ -14,7 +14,7 @@ paths:
 - After the dash, only when the bold doesn't already imply it: one before-state, or the one detail that places the change. "**X works** — X didn't work" is the bold again in past tense; end at the bold.
 - Not after the dash: "because", code mechanism, how it was fixed, verification, a tour of the new look, when something appears or where on screen it sits, or numbers the reader can't act on (contrast ratios, point sizes, code points). Mechanism goes in the commit body.
 - Placing the change is naming the meter, output or shortcut it concerns, and only when the reader needs it.
-- Backtick any literal containing `@`. The section is lifted verbatim into the GitHub release body, where a bare `@name` renders as a mention of a real, uninvolved account — `"@12s"` (a MIN/MAX timestamp) linked a stranger on a published release. Deliberate credit is the exception: link it, as `[@user](https://github.com/user)`.
+- Backtick any literal containing `@`. The section is lifted verbatim into the GitHub release body, where a bare `@name` renders as a mention of a real, uninvolved account — `"@12s"` (a MIN/MAX timestamp) linked a stranger on a published release. Credit someone as `[@user](https://github.com/user)`: a link mentions no one, so the nightly notes stay quiet, and `release.yml` turns it into a mention in the stable release.
 
 Before:
 > **"Waiting for meter…" no longer lingers after disconnecting** — the timeout counter behind that message was only cleared by an incoming reading, so if the meter went quiet before you clicked Disconnect the banner stayed up for the rest of the disconnected session.

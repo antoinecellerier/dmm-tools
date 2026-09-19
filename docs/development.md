@@ -228,7 +228,7 @@ dmm-cli completions powershell >> $PROFILE
 7. Commit: `git commit -am "Release v0.3.0"`
 8. Push the release commit — **confirm with the maintainer first** — and wait for CI to go green: `git push`
 9. Tag and push the tag — **confirm with the maintainer again**, this publishes the release: `git tag v0.3.0 && git push origin v0.3.0`
-10. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body, titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails before it builds anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading
+10. The `release.yml` GitHub Actions workflow builds binaries for all supported platforms (Linux x86_64/ARM, Windows x86_64/ARM, macOS ARM/Intel) and creates a GitHub Release with the changelog entry as the body (a `[@user](https://github.com/user)` credit becomes an `@user` mention there, and only there), titled `v0.3.0 — <tagline>` (or just `v0.3.0` without one). The workflow fails before it builds anything if the tag does not match the workspace `version` in `Cargo.toml`, and fails if `CHANGELOG.md` has no `## v0.3.0` heading
 11. Bump to the next dev version: set `version = "0.4.0-dev"` in `Cargo.toml`, run `cargo update --workspace`, put an empty `## Unreleased` back above the released heading (the nightly notes append that section), commit, and push — with the maintainer's OK, as for every push
 
 ## GitHub Actions workflows

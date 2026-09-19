@@ -86,7 +86,11 @@ jobs:
           TAGLINE="${HEADING#"## v${VERSION}"}"
           TAGLINE="${TAGLINE# — }"
           echo "name=v${VERSION}${TAGLINE:+ — ${TAGLINE}}" >> "$GITHUB_OUTPUT"
-          awk -v heading="$HEADING" '$0 == heading {found=1; next} /^## v/{if(found) exit} found' CHANGELOG.md > release_notes.md
+          # A credit is written [@user](https://github.com/user): a link, not a
+          # mention, so the nightly notes that carry Unreleased don't notify
+          # anyone. The stable release turns it into a mention.
+          awk -v heading="$HEADING" '$0 == heading {found=1; next} /^## v/{if(found) exit} found' CHANGELOG.md \
+            | sed -E 's/\[@([A-Za-z0-9-]+)\]\(https:\/\/github\.com\/\1\)/@\1/g' > release_notes.md
           cat release_notes.md
 
       - name: Create GitHub Release
