@@ -661,9 +661,8 @@ impl ThemeColors {
         }
     }
 
-    /// Emphasised text: `.strong()` (the device name, the "Statistics" and
-    /// "Specifications" headings, the help modal's section headings) and the
-    /// caption of a hovered or pressed widget
+    /// Emphasised text: `.strong()` (the device name, the help modal's
+    /// section headings) and the caption of a hovered or pressed widget
     /// (`widgets.hovered`/`active.fg_stroke`).
     ///
     /// A customised text colour drives it, pushed [`STRONG_TEXT_LIFT`] of the

@@ -32,6 +32,7 @@
 - **Big meter modes name the connection problem** — the help steps were pushed off screen below the reading; hover the line for them.
 - **The meter's toggle buttons fill in when their mode is on**
 - **Custom Accent and Text colours reach the toggles and headings** — toggles that are on kept a fixed blue; a saturated Text colour washed out in bold headings.
+- **Side-column headings are muted, so the readings stand out**
 - **Secondary text meets AA contrast** — the mode line, sub-value labels, hint captions and the gaps warning were too faint.
 - **The status line, hints and toolbar captions are larger**
 - **Always on top says it is unavailable on Wayland** — the checkbox and `Ctrl+T` toggled a setting that did nothing there.

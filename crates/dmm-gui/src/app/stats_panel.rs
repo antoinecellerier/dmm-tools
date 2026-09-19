@@ -176,8 +176,8 @@ impl App {
         } else {
             ui.label(
                 RichText::new("Statistics")
-                    .strong()
-                    .font(egui::FontId::proportional(sub_font)),
+                    .font(egui::FontId::proportional(sub_font))
+                    .color(ui.visuals().weak_text_color()),
             );
             show_stat_rows(ui, &formatted.session, main_font, None);
             if formatted.session.integral.is_some() {

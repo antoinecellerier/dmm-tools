@@ -91,8 +91,8 @@ pub fn show_specs(
 
     ui.label(
         RichText::new("Specifications")
-            .strong()
-            .font(egui::FontId::proportional(sub_font)),
+            .font(egui::FontId::proportional(sub_font))
+            .color(weak),
     );
 
     if let Some(spec) = spec {
