@@ -105,6 +105,9 @@ HERO_MINIMAP_X=648; HERO_MINIMAP_Y=925
 # the rise (2.376 s) and B on the first after the fall (29.995 s). A sample is
 # about 4 px wide in this window.
 HERO_CURSOR_A_X=649; HERO_CURSOR_B_X=1834; HERO_CURSOR_Y=700
+# The same click in the narrow window's minimap, which starts at x 20 and
+# packs the session into about 5.98 px/s.
+NARROW_MINIMAP_X=119; NARROW_MINIMAP_Y=925
 
 # asset written -> the function that stages it.
 SCENES=(
@@ -293,12 +296,17 @@ scene_wide() {
 	capture gui-wide-layout.png
 }
 
-# The same session in a window too narrow for two columns.
+# The hero's session and window in a window too narrow for two columns. The
+# mean stays but the cursors do not: the plot is too short for their readouts
+# to find a corner off the trace.
 scene_narrow() {
 	write_settings
-	launch dcma-boot-refresh 60
+	launch dcma-boot-refresh 160.5
 	"$GUI" resize 1000 1280
 	sleep 1
+	key bracketleft
+	click "$NARROW_MINIMAP_X" "$NARROW_MINIMAP_Y"
+	key m
 	park
 	capture gui-narrow-layout.png "1000x1280+0+0"
 }
