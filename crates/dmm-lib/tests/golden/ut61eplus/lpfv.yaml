@@ -4,6 +4,7 @@ mode: "LPF V"
 value: "118.3"
 unit: "V"
 range_label: "1000V"
+resolution: "0.1V"
 flags:
   hold: false
   rel: false

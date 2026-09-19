@@ -4,6 +4,7 @@ mode: "Duty %"
 value: "0"
 unit: "%"
 range_label: "Duty"
+resolution: "0.1%"
 flags:
   hold: false
   rel: false

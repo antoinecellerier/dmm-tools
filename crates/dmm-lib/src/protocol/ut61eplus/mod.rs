@@ -1,5 +1,6 @@
 pub mod command;
 pub mod mode;
+pub(crate) mod specs;
 pub mod tables;
 
 use crate::error::{Error, Result};
@@ -16,6 +17,7 @@ use crate::transport::Transport;
 use command::Command;
 use log::{debug, warn};
 use mode::Mode;
+use specs::SpecModel;
 use std::borrow::Cow;
 use std::time::{Duration, Instant};
 use tables::DeviceTable;
@@ -37,6 +39,9 @@ const UT61EPLUS_COMMANDS: &[&str] = &[
 /// Protocol implementation for the UT61E+/UT61B+/UT61D+/UT161 family.
 pub struct Ut61PlusProtocol {
     table: Box<dyn DeviceTable>,
+    /// The model's manual spec tables. `None` for the models whose specs
+    /// are still the range table's own.
+    specs: Option<SpecModel>,
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
     /// What the last reading said about where the dial sits, for
@@ -51,8 +56,14 @@ impl Default for Ut61PlusProtocol {
 }
 
 impl Ut61PlusProtocol {
+    /// A UT61E+.
     pub fn new() -> Self {
-        Self::with_table(Box::new(tables::ut61e_plus::Ut61ePlusTable::new()))
+        Self::with_profile(
+            Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
+            "UNI-T UT61E+",
+            true,
+            Some(SpecModel::Ut61ePlus),
+        )
     }
 
     /// Create a protocol instance for a specific model name.
@@ -69,18 +80,21 @@ impl Ut61PlusProtocol {
     ///
     /// Returns `None` if the model string is not recognized.
     pub fn for_model(model: &str) -> Option<Self> {
-        // (table, reported model name, verified against real hardware)
-        let (table, model_name, verified): (Box<dyn DeviceTable>, _, _) =
+        // (table, reported model name, verified against real hardware,
+        // manual spec tables)
+        let (table, model_name, verified, specs): (Box<dyn DeviceTable>, _, _, _) =
             match model.to_lowercase().as_str() {
                 "ut61e+" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT61E+",
                     true,
+                    Some(SpecModel::Ut61ePlus),
                 ),
                 "ut161e" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT161E",
                     false,
+                    Some(SpecModel::Ut61ePlus),
                 ),
                 // Verified by three captures reported in issue #19,
                 // 2026-09-09 to 2026-09-11: every mode its dial reaches
@@ -93,40 +107,37 @@ impl Ut61PlusProtocol {
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT61B+",
                     true,
+                    None,
                 ),
                 "ut161b" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT161B",
                     false,
+                    None,
                 ),
                 "ut61d+" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT61D+",
                     false,
+                    None,
                 ),
                 "ut161d" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT161D",
                     false,
+                    None,
                 ),
                 _ => return None,
             };
-        Some(Self::with_profile(table, model_name, verified))
+        Some(Self::with_profile(table, model_name, verified, specs))
     }
 
-    /// Build a protocol whose profile is derived from the wrapped table.
-    ///
-    /// Only correct when the table's model is the model actually connected;
-    /// prefer [`Ut61PlusProtocol::for_model`], which keeps the two separate.
-    pub fn with_table(table: Box<dyn DeviceTable>) -> Self {
-        let model_name = table.model_name();
-        // The models hardware has answered for. A UT161B shares the B+ table
-        // but not its evidence, which is why `for_model` is the way in.
-        let verified = matches!(model_name, "UNI-T UT61E+" | "UNI-T UT61B+");
-        Self::with_profile(table, model_name, verified)
-    }
-
-    fn with_profile(table: Box<dyn DeviceTable>, model_name: &'static str, verified: bool) -> Self {
+    fn with_profile(
+        table: Box<dyn DeviceTable>,
+        model_name: &'static str,
+        verified: bool,
+        specs: Option<SpecModel>,
+    ) -> Self {
         // A model no meter has answered for is RE of the vendor software plus
         // manual specs, so it reports as experimental.
         let stability = if verified {
@@ -141,6 +152,7 @@ impl Ut61PlusProtocol {
         let verification_issue = (model_name != "UNI-T UT61E+").then_some(7);
         Self {
             table,
+            specs,
             rx_buf: Vec::with_capacity(64),
             dial: cycle::DialState::default(),
             profile: DeviceProfile {
@@ -301,17 +313,26 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::SpecInfo> {
+        if let Some(specs) = self.specs {
+            return specs.row(m).map(|row| &row.spec);
+        }
         let mode = Mode::from_byte(m.mode_raw as u8).ok()?;
         self.table.spec_info(mode, m.range_raw)
     }
 
     fn mode_spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::ModeSpecInfo> {
+        if let Some(specs) = self.specs {
+            return specs.table(m).map(|table| &table.mode);
+        }
         let mode = Mode::from_byte(m.mode_raw as u8).ok()?;
         self.table.mode_spec_info(mode)
     }
 
     fn spec_sheet(&self) -> Vec<crate::specs::SpecSheetTable> {
-        tables::spec_sheet(self.table.as_ref())
+        match self.specs {
+            Some(specs) => specs.sheet(),
+            None => tables::spec_sheet(self.table.as_ref()),
+        }
     }
 
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {

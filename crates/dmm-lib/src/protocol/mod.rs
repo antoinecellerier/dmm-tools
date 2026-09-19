@@ -62,7 +62,9 @@ pub(crate) mod test_support {
     pub(crate) fn unit_family(unit: &str) -> &str {
         let mut chars = unit.chars();
         match chars.next() {
-            Some('n' | 'µ' | 'm' | 'k' | 'M') if !chars.as_str().is_empty() => chars.as_str(),
+            Some('p' | 'n' | 'µ' | 'm' | 'k' | 'M') if !chars.as_str().is_empty() => {
+                chars.as_str()
+            }
             _ => unit,
         }
     }

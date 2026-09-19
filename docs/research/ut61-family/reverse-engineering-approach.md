@@ -16,10 +16,14 @@ tables, and bar graph segment count.
 
 ## Sources Used
 
-1. **UT61+ Series User Manual** (UNI-T, P/N: 110401109614X) — single
-   manual covering UT61B+, UT61D+, and UT61E+
-2. **UT161 Series User Manual** (UNI-T) — single manual covering
-   UT161B, UT161D, and UT161E
+1. **UT61+ Series User Manual** (UNI-T, P/N: 110401109614X, no revision
+   printed) — single manual covering UT61B+, UT61D+, and UT61E+. The spec
+   data comes from its "IX. Specifications" (PDF pp. 14-18, printed
+   25-34), cross-checked against the UT61+/UT161 series datasheet (one
+   page for both series, no revision printed) and the UT61+ series product
+   page on meters.uni-trend.com (read 2026-09-19)
+2. **UT161 Series User Manual** (UNI-T, P/N: 110401109612X) — single
+   manual covering UT161B, UT161D, and UT161E
 3. **UNI-T UT61E+ Software V2.02** — previously decompiled for the
    UT61E+ analysis (see `docs/research/ut61eplus/`)
 4. **UT161E Software** — downloaded and binary-compared against V2.02
@@ -134,8 +138,9 @@ find references/ut161/extracted-nsis/ -type f \
 
 | Source | File | What it provides |
 |--------|------|-----------------|
-| UNI-T | `references/ut61b-plus/ut61b_manual.pdf` | UT61+ Series manual (all 3 models) |
-| UNI-T | `references/ut61d-plus/ut61d_manual.pdf` | Same UT61+ Series manual |
+| UNI-T | `references/ut61eplus/ut61e_manual.pdf` | UT61+ Series manual (all 3 models); the spec data's source |
+| UNI-T | `references/ut61b-plus/ut61b_manual.pdf`, `references/ut61d-plus/ut61d_manual.pdf` | The same file |
+| UNI-T | `references/ut61eplus/ut61plus-datasheet.pdf` | UT61+/UT161 series datasheet |
 | UNI-T | `references/ut161/UT161E-Software.zip` | UT161E installer (confirmed identical) |
 | UNI-T | `references/ut161/UT161-UserManual.pdf` | UT161 Series manual |
 | UNI-T | `references/ut61eplus/vendor-software/extracted/` | Software V2.02 (shared) |

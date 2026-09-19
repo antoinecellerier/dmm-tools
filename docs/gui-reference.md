@@ -253,8 +253,8 @@ as the meter changes mode/range.
 - **Accuracy** — rated accuracy as ±(% of reading + counts). AC modes show
   separate accuracy for each frequency band (e.g., 40Hz–1kHz and 1kHz–10kHz).
   Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
-  LPF mode shows its own accuracy (separate from AC V).
-- **Input Z** — input impedance (e.g., ~10 MΩ), when applicable
+  LPF V shows only its own 40Hz–100Hz band, AC V only the bands without LPF.
+- **Input Z** — input impedance (e.g., About 10MΩ), when applicable
 - **Notes** — additional info like "True RMS", thermocouple type, fuse ratings
 - **Manual** — hyperlink to the manufacturer's product page (shown whenever a
   URL is configured for the device, even without per-range spec data)
@@ -278,7 +278,8 @@ unrecognized mode), only the Manual link is shown (if configured). If neither
 specs nor manual URL exist, nothing renders.
 
 **Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804, and
-Mock (delegates to UT61E+). Other devices show only the Manual link.
+Mock (delegates to UT61E+, so its temperature modes show none). Other devices
+show only the Manual link.
 
 ## Scale
 

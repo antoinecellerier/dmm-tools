@@ -4,6 +4,7 @@ mode: "AC A"
 value: "0.024"
 unit: "A"
 range_label: "20A"
+resolution: "1mA"
 flags:
   hold: false
   rel: false

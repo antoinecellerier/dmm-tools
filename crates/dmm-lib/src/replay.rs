@@ -888,8 +888,13 @@ mod tests {
             "a replay shows the family's own capture steps"
         );
 
+        // DC V on the 2.2V range: the manual's 2.2000V row.
         let m = dmm.request_measurement().expect("a frame");
-        assert!(m.spec.is_some(), "the specs panel sees the family's table");
+        assert_eq!(m.spec.map(|s| s.resolution), Some("0.1mV"));
+        assert_eq!(
+            m.mode_spec.and_then(|ms| ms.input_impedance),
+            Some("About 10MΩ")
+        );
         assert!(!dmm.choices(Setting::Range, &m).is_empty());
     }
 }

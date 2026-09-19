@@ -697,8 +697,9 @@ Source: `ut61e_plus.rs` (50 ranges).
 
 On the UT61E+ the mV dial is fixed-range in **both** of its modes — DC mV
 [VERIFIED] 2026-03-21, AC mV [VERIFIED] 2026-09-07 (three RANGE presses moved
-neither the range byte nor the AUTO annunciator). Only index 0 (220mV) occurs
-on this model; the 2.2V rows of `dc_mv`/`ac_mv` belong to other models.
+neither the range byte nor the AUTO annunciator). Only index 0 (220mV) has
+ever been seen there, so the meter never sends the 2.2V rows of
+`dc_mv`/`ac_mv`.
 
 ### UT61B+ (6,000 counts)
 

@@ -4,6 +4,7 @@ mode: "AC µA"
 value: "0.28"
 unit: "µA"
 range_label: "220µA"
+resolution: "0.01µA"
 flags:
   hold: false
   rel: false

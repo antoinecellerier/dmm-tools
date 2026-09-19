@@ -4,6 +4,7 @@ mode: "AC mA"
 value: "0.027"
 unit: "mA"
 range_label: "22mA"
+resolution: "1µA"
 flags:
   hold: false
   rel: false

@@ -1395,7 +1395,7 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   the range byte and the AUTO annunciator unmoved), so the sweep offers
   nothing in mV on that model and a rerun cannot produce a mV rung. The
   reason it is dead there does not carry over either: the E+'s mV dial has
-  one usable rung, its table's second entry being another model's, so
+  one usable rung, only range byte 0 ever having been seen there, so
   "RANGE does nothing" needs no explanation beyond having nowhere to step.
   **The B+'s own evidence points the other way**: on 2026-09-10 RANGE drove
   all six of its two-rung ladders to both rungs — `dcua`, `acua`, `dcma`,
@@ -1442,14 +1442,15 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **DC mV mode (0x03) is a separate mode, not DC V range 4.** Auto-range
   stays in DC V mode (0x02) even at 100mV. DC mV (0x03) is only reached
   via the mV dial position. On UT61E+, DC mV has only 1 range (range 0 =
-  220mV); the RANGE button has no effect. The code's dc_mv range 1 (2.2V)
-  may be used by other models.
+  220mV); the RANGE button has no effect. The meter has never sent the
+  table's range 1 (2.2V).
 - **AC mV (0x01): RANGE is dead there too — verified 2026-09-07.** On the
   mV dial in AC mV, `set range 2.2V` pressed RANGE once and re-read three
   times; neither the range byte (220mV throughout) nor the AUTO annunciator
   moved, and the walk gave up with "RANGE did nothing in 220mV". Both mV
   modes are therefore fixed-range on the E+ and the choice list offers no
-  range in either. The table's 2.2V entry belongs to another model.
+  range in either. Only range byte 0 has been seen; the meter never sends
+  the table's 2.2V entry.
 
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)

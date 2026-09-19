@@ -1,4 +1,3 @@
-use super::specs_ut61e_plus as specs;
 use super::{AC_PEAK_MODES, ModeEntry, ModeTables, RangeInfo, m, r};
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
@@ -231,9 +230,10 @@ impl ModeTables for Ut61ePlusTable {
     /// button does nothing in either of its modes — DC mV verified
     /// 2026-03-21, AC mV 2026-09-07 (three presses, range byte and AUTO
     /// annunciator unmoved); see the "Range tables" section of
-    /// docs/verification-backlog.md. The table's second entry (2.2V) is
-    /// another model's, so the length alone would not say so. Capacitance and
-    /// Hz are dead on every model of the family and come from the shared list.
+    /// docs/verification-backlog.md. Only range byte 0 has been seen there;
+    /// the table's second entry (2.2V) has never come from the meter, and the
+    /// length alone would not say so. Capacitance and Hz are dead on every
+    /// model of the family and come from the shared list.
     fn range_is_fixed(&self, mode: Mode) -> bool {
         super::FAMILY_FIXED_RANGE_MODES.contains(&mode) || matches!(mode, Mode::DcMv | Mode::AcMv)
     }
@@ -243,48 +243,35 @@ impl ModeTables for Ut61ePlusTable {
     }
 
     fn entry(&self, mode: Mode) -> ModeEntry<'_> {
-        match mode {
-            Mode::DcV => ModeEntry::full(&self.dc_v, specs::DC_V_SPECS, &specs::DC_V_MODE),
-            Mode::AcV => ModeEntry::full(&self.ac_v, specs::AC_V_SPECS, &specs::AC_V_MODE),
-            Mode::DcMv => ModeEntry::full(&self.dc_mv, specs::DC_MV_SPECS, &specs::DC_MV_MODE),
-            Mode::AcMv => ModeEntry::full(&self.ac_mv, specs::AC_MV_SPECS, &specs::AC_MV_MODE),
-            Mode::Ohm => ModeEntry::full(&self.ohm, specs::OHM_SPECS, &specs::OHM_MODE),
-            Mode::Capacitance => {
-                ModeEntry::full(&self.capacitance, specs::CAP_SPECS, &specs::CAP_MODE)
-            }
-            Mode::Hz => ModeEntry::full(&self.hz, specs::HZ_SPECS, &specs::HZ_MODE),
-            Mode::DutyCycle => {
-                ModeEntry::full(&self.duty_cycle, specs::DUTY_SPECS, &specs::DUTY_MODE)
-            }
-            Mode::TempC => ModeEntry::full(&self.temp_c, specs::TEMP_C_SPECS, &specs::TEMP_MODE),
-            Mode::TempF => ModeEntry::full(&self.temp_f, specs::TEMP_F_SPECS, &specs::TEMP_MODE),
-            Mode::Diode => ModeEntry::full(&self.diode, specs::DIODE_SPECS, &specs::DIODE_MODE),
-            Mode::Continuity => ModeEntry::full(
-                &self.continuity,
-                specs::CONTINUITY_SPECS,
-                &specs::CONTINUITY_MODE,
-            ),
-            Mode::DcUa => ModeEntry::full(&self.dc_ua, specs::DC_UA_SPECS, &specs::DC_UA_MODE),
-            Mode::AcUa => ModeEntry::full(&self.ac_ua, specs::AC_UA_SPECS, &specs::AC_UA_MODE),
-            Mode::DcMa => ModeEntry::full(&self.dc_ma, specs::DC_MA_SPECS, &specs::DC_MA_MODE),
-            Mode::AcMa => ModeEntry::full(&self.ac_ma, specs::AC_MA_SPECS, &specs::AC_MA_MODE),
-            Mode::DcA => ModeEntry::full(&self.dc_a, specs::DC_A_SPECS, &specs::DC_A_MODE),
-            Mode::AcA => ModeEntry::full(&self.ac_a, specs::AC_A_SPECS, &specs::AC_A_MODE),
-            Mode::Hfe => ModeEntry::full(&self.hfe, specs::HFE_SPECS, &specs::HFE_MODE),
-            // Derived modes share their base mode's range table, and have specs
-            // of their own wherever the manual publishes them.
-            Mode::AcDcV => ModeEntry::full(&self.dc_v, specs::ACDC_V_SPECS, &specs::ACDC_V_MODE),
-            Mode::LpfV => ModeEntry::full(&self.dc_v, specs::LPF_V_SPECS, &specs::LPF_V_MODE),
-            Mode::LpfMv => ModeEntry::full(&self.dc_mv, specs::LPF_MV_SPECS, &specs::LPF_MV_MODE),
-            // Derived modes the manual gives no specs for.
-            Mode::LozV => ModeEntry::ranges_only(&self.dc_v),
-            Mode::AcDcMv => ModeEntry::ranges_only(&self.dc_mv),
-            Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => {
-                ModeEntry::ranges_only(&self.dc_a)
-            }
-            // Modes without range tables or specs.
-            Mode::Ncv | Mode::Live | Mode::Inrush => ModeEntry::none(),
-        }
+        // The specs are the manual's tables in `specs/ut61e_plus.rs`.
+        let ranges: &[RangeInfo] = match mode {
+            Mode::DcV => &self.dc_v,
+            Mode::AcV => &self.ac_v,
+            Mode::DcMv => &self.dc_mv,
+            Mode::AcMv => &self.ac_mv,
+            Mode::Ohm => &self.ohm,
+            Mode::Capacitance => &self.capacitance,
+            Mode::Hz => &self.hz,
+            Mode::DutyCycle => &self.duty_cycle,
+            Mode::TempC => &self.temp_c,
+            Mode::TempF => &self.temp_f,
+            Mode::Diode => &self.diode,
+            Mode::Continuity => &self.continuity,
+            Mode::DcUa => &self.dc_ua,
+            Mode::AcUa => &self.ac_ua,
+            Mode::DcMa => &self.dc_ma,
+            Mode::AcMa => &self.ac_ma,
+            Mode::DcA => &self.dc_a,
+            Mode::AcA => &self.ac_a,
+            Mode::Hfe => &self.hfe,
+            // Derived modes share their base mode's range table.
+            Mode::AcDcV | Mode::LpfV | Mode::LozV => &self.dc_v,
+            Mode::LpfMv | Mode::AcDcMv => &self.dc_mv,
+            Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => &self.dc_a,
+            // Modes without range tables.
+            Mode::Ncv | Mode::Live | Mode::Inrush => return ModeEntry::none(),
+        };
+        ModeEntry::ranges_only(ranges)
     }
 }
 

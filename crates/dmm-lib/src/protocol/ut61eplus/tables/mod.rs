@@ -1,6 +1,5 @@
 pub mod specs_ut61b_plus;
 pub mod specs_ut61d_plus;
-pub mod specs_ut61e_plus;
 pub mod ut61b_plus;
 pub mod ut61d_plus;
 pub mod ut61e_plus;
@@ -418,12 +417,6 @@ mod tests {
     }
 
     #[test]
-    fn spec_lookup_rejects_an_out_of_bounds_range() {
-        // DC V has 5 ranges on the UT61E+; range 99 is not one of them.
-        assert!(Ut61ePlusTable::new().spec_info(Mode::DcV, 99).is_none());
-    }
-
-    #[test]
     fn ut61b_plus_dcv_specs() {
         // Range 0 = 6V on the 6,000-count UT61B+; 60mV is the DC mV mode.
         let t = Ut61bPlusTable::new();
@@ -454,11 +447,7 @@ mod tests {
     /// against the manual.
     #[test]
     fn specs_have_range_labels() {
-        let tables: [&dyn DeviceTable; 3] = [
-            &Ut61ePlusTable::new(),
-            &Ut61bPlusTable::new(),
-            &Ut61dPlusTable::new(),
-        ];
+        let tables: [&dyn DeviceTable; 2] = [&Ut61bPlusTable::new(), &Ut61dPlusTable::new()];
         for t in tables {
             for &mode in Mode::ALL {
                 for range in 0..=u8::MAX {
@@ -484,15 +473,6 @@ mod tests {
         names.sort_unstable();
         names.dedup();
         assert_eq!(names.len(), sheet.len());
-    }
-
-    #[test]
-    fn acv_has_multiple_accuracy_bands() {
-        let spec = Ut61ePlusTable::new().spec_info(Mode::AcV, 0).unwrap();
-        assert!(
-            spec.accuracy.len() >= 2,
-            "AC V should have multiple frequency bands"
-        );
     }
 }
 
