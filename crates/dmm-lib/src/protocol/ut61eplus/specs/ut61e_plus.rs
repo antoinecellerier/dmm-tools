@@ -682,7 +682,8 @@ static DC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("F1 Fuse 1A 240V Φ6x25mm"),
+        // Printed "F1 Fuse 1A 240V ø6x25mm".
+        overload_protection: Some("Fuse 1A 240V"),
         notes: &[
             "Open circuit: residual ≤10 digits",
             "Accuracy valid 1%–100% of range",
@@ -721,7 +722,8 @@ static DC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("F1 Fuse 1A 240V Φ6x25mm"),
+        // Printed "F1 Fuse 1A 240V ø6x25mm".
+        overload_protection: Some("Fuse 1A 240V"),
         notes: &[
             "Open circuit: residual ≤10 digits",
             "Accuracy valid 1%–100% of range",
@@ -749,7 +751,8 @@ static DC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("F2 Fuse 10A 240V Φ6x25mm"),
+        // Printed "F2 Fuse 10A 240V ø6x25mm".
+        overload_protection: Some("Fuse 10A 240V"),
         notes: &[
             "Open circuit: residual ≤10 digits",
             "Accuracy valid 1%–100% of range",
@@ -803,7 +806,8 @@ static AC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("F1 Fuse 1A 240V Φ6x25mm"),
+        // Printed "F1 Fuse 1A 240V ø6x25mm".
+        overload_protection: Some("Fuse 1A 240V"),
         notes: &[
             "True RMS; crest factor ≤2.0 at 10000, ≤1 at 22000 counts",
             "Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)",
@@ -857,7 +861,8 @@ static AC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("F1 Fuse 1A 240V Φ6x25mm"),
+        // Printed "F1 Fuse 1A 240V ø6x25mm".
+        overload_protection: Some("Fuse 1A 240V"),
         notes: &[
             "True RMS; crest factor ≤2.0 at 10000, ≤1 at 22000 counts",
             "Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)",
@@ -892,7 +897,8 @@ static AC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("F2 Fuse 10A 240V Φ6x25mm"),
+        // Printed "F2 Fuse 10A 240V ø6x25mm".
+        overload_protection: Some("Fuse 10A 240V"),
         notes: &[
             "True RMS; crest factor ≤2.0 at 10000, ≤1 at 22000 counts",
             "Non-sine: add 4% (crest factor 1–2), 5% (2–2.5), 7% (2.5–3)",

@@ -565,8 +565,8 @@ static AC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "0. 8A H 1000V Fuse Type Φ 6x32 mm".
-        overload_protection: Some("0.8A H 1000V Fuse Type ø6x32mm"),
+        // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
+        overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
             "20A: 30s on, then 10min off; not specified above 10A",
@@ -618,8 +618,8 @@ static AC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "0. 8A H 1000V Fuse Type Φ 6x32 mm".
-        overload_protection: Some("0.8A H 1000V Fuse Type ø6x32mm"),
+        // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
+        overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
             "20A: 30s on, then 10min off; not specified above 10A",
@@ -652,8 +652,8 @@ static AC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "Φ10x38mm".
-        overload_protection: Some("10A H 1000V Fuse Type ø10x38mm"),
+        // Printed "10A H 1000V Fuse Type ø10x38mm".
+        overload_protection: Some("Fuse 10A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
             "20A: 30s on, then 10min off; not specified above 10A",
@@ -693,8 +693,8 @@ static DC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "0. 8A H 1000V Fuse Type Φ 6x32 mm".
-        overload_protection: Some("0.8A H 1000V Fuse Type ø6x32mm"),
+        // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
+        overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &["20A: 30s on, then 10min off; not specified above 10A"],
     },
 };
@@ -731,8 +731,8 @@ static DC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "0. 8A H 1000V Fuse Type Φ 6x32 mm".
-        overload_protection: Some("0.8A H 1000V Fuse Type ø6x32mm"),
+        // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
+        overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &["20A: 30s on, then 10min off; not specified above 10A"],
     },
 };
@@ -756,8 +756,8 @@ static DC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "Φ10x38mm".
-        overload_protection: Some("10A H 1000V Fuse Type ø10x38mm"),
+        // Printed "10A H 1000V Fuse Type ø10x38mm".
+        overload_protection: Some("Fuse 10A 1000V"),
         notes: &["20A: 30s on, then 10min off; not specified above 10A"],
     },
 };
@@ -806,8 +806,8 @@ static ACDC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "0. 8A H 1000V Fuse Type Φ 6x32 mm".
-        overload_protection: Some("0.8A H 1000V Fuse Type ø6x32mm"),
+        // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
+        overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
             "20A: 30s on, then 10min off; not specified above 10A",
@@ -859,8 +859,8 @@ static ACDC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "0. 8A H 1000V Fuse Type Φ 6x32 mm".
-        overload_protection: Some("0.8A H 1000V Fuse Type ø6x32mm"),
+        // Printed "0. 8A H 1000V Fuse Type ø 6x32 mm".
+        overload_protection: Some("Fuse 0.8A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
             "20A: 30s on, then 10min off; not specified above 10A",
@@ -893,8 +893,8 @@ static ACDC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "Φ10x38mm".
-        overload_protection: Some("10A H 1000V Fuse Type ø10x38mm"),
+        // Printed "10A H 1000V Fuse Type ø10x38mm".
+        overload_protection: Some("Fuse 10A 1000V"),
         notes: &[
             "True RMS valid 10%–100% of range",
             "20A: 30s on, then 10min off; not specified above 10A",

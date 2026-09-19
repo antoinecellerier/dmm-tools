@@ -307,7 +307,8 @@ static DC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("0.5A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 0.5A 250V"),
         notes: &["10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart"],
     },
 };
@@ -343,7 +344,8 @@ static DC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("0.5A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 0.5A 250V"),
         notes: &["10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart"],
     },
 };
@@ -366,7 +368,8 @@ static DC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("10A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "10A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 10A 250V"),
         notes: &["10A: ≤5A continuous; >5A–10A ≤10s at a time, >15min apart"],
     },
 };
@@ -423,7 +426,8 @@ static AC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("0.5A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
             "True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0",
             "Shorted leads: 80-digit residual, accuracy unaffected",
@@ -484,7 +488,8 @@ static AC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("0.5A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
             "True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0",
             "Shorted leads: 80-digit residual, accuracy unaffected",
@@ -523,7 +528,8 @@ static AC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("10A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "10A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 10A 250V"),
         notes: &[
             "True RMS and accuracy valid 10%–100% of range; crest factor up to 3.0",
             "Shorted leads: 80-digit residual, accuracy unaffected",
@@ -973,7 +979,8 @@ static LOOP_CURRENT: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        overload_protection: Some("0.5A, 250V, fast type fuse, ø5×20mm"),
+        // Printed "0.5A, 250V, fast type fuse, ø5×20mm".
+        overload_protection: Some("Fuse 0.5A 250V"),
         notes: &[
             "4mA shows 0%, 20mA shows 100%",
             "<4mA shows LO, >20mA shows HI",

@@ -89,11 +89,13 @@ fn ut161(table: &'static ModeSpecs) -> &'static ModeSpecs {
 }
 
 /// The UT161's mA/µA fuse ("9) DC Current", UT161 manual PDF p. 17), where
-/// the UT61+ has "F1 Fuse 1A 240V Φ6x25mm".
-const UT161_F1: &str = "F1 Fuse 600mA 1000V Φ6x32mm";
+/// the UT61+ has "Fuse 1A 240V".
+// Printed "F1 Fuse 600mA 1000V ø6x32mm".
+const UT161_F1: &str = "Fuse 600mA 1000V";
 
-/// The UT161's A fuse, where the UT61+ has "F2 Fuse 10A 240V Φ6x25mm".
-const UT161_F2: &str = "F2 Fuse 11A 1000V Φ10x38mm";
+/// The UT161's A fuse, where the UT61+ has "Fuse 10A 240V".
+// Printed "F2 Fuse 11A 1000V ø10x38mm".
+const UT161_F2: &str = "Fuse 11A 1000V";
 
 /// `base` with the UT161 manual's `fuse` for its overload protection.
 const fn ut161_fuse(base: &'static ModeSpecs, fuse: &'static str) -> ModeSpecs {

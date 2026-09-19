@@ -526,8 +526,8 @@ fn ut161_differs_only_in_current_fuses() {
                 a.name
             );
             let fuse = match b.mode.overload_protection {
-                Some(f) if f.starts_with("F1 ") => Some(UT161_F1),
-                Some(f) if f.starts_with("F2 ") => Some(UT161_F2),
+                Some("Fuse 1A 240V") => Some(UT161_F1),
+                Some("Fuse 10A 240V") => Some(UT161_F2),
                 other => other,
             };
             let current = matches!(a.name, "DC Current" | "AC Current");

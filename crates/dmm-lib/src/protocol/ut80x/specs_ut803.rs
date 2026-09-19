@@ -326,8 +326,8 @@ static DC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm".
-        overload_protection: Some("Fuse 500mA, 125V, fast type, ø5x20mm."),
+        // Printed "Fuse 500mA, 125V, fast type, ø5x20mm.".
+        overload_protection: Some("Fuse 500mA 125V"),
         notes: &["≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart"],
     },
 };
@@ -363,8 +363,8 @@ static DC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm".
-        overload_protection: Some("Fuse 500mA, 125V, fast type, ø5x20mm."),
+        // Printed "Fuse 500mA, 125V, fast type, ø5x20mm.".
+        overload_protection: Some("Fuse 500mA 125V"),
         notes: &["≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart"],
     },
 };
@@ -387,8 +387,8 @@ static DC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm".
-        overload_protection: Some("Fuse 10A, 250V, fast type, ø5x20mm."),
+        // Printed "Fuse 10A, 250V, fast type, ø5x20mm.".
+        overload_protection: Some("Fuse 10A 250V"),
         notes: &["≤5A range: continuous; >5A range: ≤10s at a time, ≥15min apart"],
     },
 };
@@ -437,8 +437,8 @@ static AC_UA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm".
-        overload_protection: Some("Fuse 500mA, 125V, fast type,ø5x20mm."),
+        // Printed "Fuse 500mA, 125V, fast type,ø5x20mm.".
+        overload_protection: Some("Fuse 500mA 125V"),
         notes: &[
             "True RMS valid 10%–95% of range; crest factor 3.0",
             "Shorted input: residual under ~30 digits, accuracy unaffected",
@@ -491,8 +491,8 @@ static AC_MA: ModeSpecs = ModeSpecs {
     ],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm".
-        overload_protection: Some("Fuse 500mA, 125V, fast type,ø5x20mm."),
+        // Printed "Fuse 500mA, 125V, fast type,ø5x20mm.".
+        overload_protection: Some("Fuse 500mA 125V"),
         notes: &[
             "True RMS valid 10%–95% of range; crest factor 3.0",
             "Shorted input: residual under ~30 digits, accuracy unaffected",
@@ -520,8 +520,8 @@ static AC_A: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm".
-        overload_protection: Some("Fuse 10A,250V, fast type, ø5x20mm."),
+        // Printed "Fuse 10A,250V, fast type, ø5x20mm.".
+        overload_protection: Some("Fuse 10A 250V"),
         notes: &[
             "True RMS valid 10%–95% of range; crest factor 3.0",
             "Shorted input: residual under ~30 digits, accuracy unaffected",
@@ -918,10 +918,8 @@ static TRANSISTOR: ModeSpecs = ModeSpecs {
     }],
     mode: ModeSpecInfo {
         input_impedance: None,
-        // Printed "φ5x20mm", twice.
-        overload_protection: Some(
-            "Fuse 200mA, 250V, fast type, ø5x20mm.; Fuse 500mA, 125V, fast type, ø5x20mm",
-        ),
+        // Printed "Fuse 200mA, 250V, fast type, ø5x20mm.; Fuse 500mA, 125V, fast type, ø5x20mm".
+        overload_protection: Some("Fuse 200mA 250V; Fuse 500mA 125V"),
         notes: &["Vce ≈2.2V, bo ≈10µA", "Max 1000β"],
     },
 };

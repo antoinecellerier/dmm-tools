@@ -255,7 +255,7 @@ as the meter changes mode/range.
   Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
   LPF V shows only its own 40Hz–100Hz band, AC V only the bands without LPF.
 - **Input Z** — input impedance (e.g., About 10MΩ), when applicable
-- **Notes** — additional info like "True RMS", thermocouple type, fuse ratings
+- **Notes** — additional info like "True RMS", accuracy conditions or thermocouple type
 - **Manual** — hyperlink to the manufacturer's product page (shown whenever a
   URL is configured for the device, even without per-range spec data)
 
