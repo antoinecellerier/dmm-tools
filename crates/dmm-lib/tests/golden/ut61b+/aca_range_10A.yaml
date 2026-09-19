@@ -5,6 +5,7 @@ mode: "AC A"
 value: "0"
 unit: "A"
 range_label: "10A"
+resolution: "10mA"
 flags:
   hold: false
   rel: false

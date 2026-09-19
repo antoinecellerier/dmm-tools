@@ -64,7 +64,7 @@
 - **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
 - **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V.
-- **The UT61E+ and UT161E Specifications panel matches the manual** — among other slips, resistance gave the diode test's 3V open-circuit voltage.
+- **The UT61+/UT161 Specifications panel matches the manual** — the UT61B+/UT61D+ 600mV DC accuracy and the UT61E+ resistance open-circuit voltage were wrong.
 - **UT61+/UT161 NCV shows the detected level**
 - **UT8802 negative readings show their sign**
 - **VC-880 and VC-890 report the AVG flag**

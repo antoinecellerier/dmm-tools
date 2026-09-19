@@ -5,6 +5,7 @@ mode: "DC mA"
 value: "0"
 unit: "mA"
 range_label: "60mA"
+resolution: "10µA"
 flags:
   hold: false
   rel: false

@@ -5,6 +5,7 @@ mode: "Diode"
 value: "0.516"
 unit: "V"
 range_label: "Diode"
+resolution: "0.001V"
 flags:
   hold: false
   rel: false

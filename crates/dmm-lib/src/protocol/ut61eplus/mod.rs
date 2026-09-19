@@ -39,9 +39,8 @@ const UT61EPLUS_COMMANDS: &[&str] = &[
 /// Protocol implementation for the UT61E+/UT61B+/UT61D+/UT161 family.
 pub struct Ut61PlusProtocol {
     table: Box<dyn DeviceTable>,
-    /// The model's manual spec tables. `None` for the models whose specs
-    /// are still the range table's own.
-    specs: Option<SpecModel>,
+    /// The model's manual spec tables.
+    specs: SpecModel,
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
     /// What the last reading said about where the dial sits, for
@@ -62,7 +61,7 @@ impl Ut61PlusProtocol {
             Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
             "UNI-T UT61E+",
             true,
-            Some(SpecModel::Ut61ePlus),
+            SpecModel::Ut61ePlus,
         )
     }
 
@@ -88,13 +87,13 @@ impl Ut61PlusProtocol {
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT61E+",
                     true,
-                    Some(SpecModel::Ut61ePlus),
+                    SpecModel::Ut61ePlus,
                 ),
                 "ut161e" => (
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT161E",
                     false,
-                    Some(SpecModel::Ut61ePlus),
+                    SpecModel::Ut61ePlus,
                 ),
                 // Verified by three captures reported in issue #19,
                 // 2026-09-09 to 2026-09-11: every mode its dial reaches
@@ -107,25 +106,25 @@ impl Ut61PlusProtocol {
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT61B+",
                     true,
-                    None,
+                    SpecModel::Ut61bPlus,
                 ),
                 "ut161b" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT161B",
                     false,
-                    None,
+                    SpecModel::Ut61bPlus,
                 ),
                 "ut61d+" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT61D+",
                     false,
-                    None,
+                    SpecModel::Ut61dPlus,
                 ),
                 "ut161d" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT161D",
                     false,
-                    None,
+                    SpecModel::Ut61dPlus,
                 ),
                 _ => return None,
             };
@@ -136,7 +135,7 @@ impl Ut61PlusProtocol {
         table: Box<dyn DeviceTable>,
         model_name: &'static str,
         verified: bool,
-        specs: Option<SpecModel>,
+        specs: SpecModel,
     ) -> Self {
         // A model no meter has answered for is RE of the vendor software plus
         // manual specs, so it reports as experimental.
@@ -313,26 +312,15 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::SpecInfo> {
-        if let Some(specs) = self.specs {
-            return specs.row(m).map(|row| &row.spec);
-        }
-        let mode = Mode::from_byte(m.mode_raw as u8).ok()?;
-        self.table.spec_info(mode, m.range_raw)
+        self.specs.row(m).map(|row| &row.spec)
     }
 
     fn mode_spec_info(&self, m: &Measurement) -> Option<&'static crate::specs::ModeSpecInfo> {
-        if let Some(specs) = self.specs {
-            return specs.table(m).map(|table| &table.mode);
-        }
-        let mode = Mode::from_byte(m.mode_raw as u8).ok()?;
-        self.table.mode_spec_info(mode)
+        self.specs.table(m).map(|table| &table.mode)
     }
 
     fn spec_sheet(&self) -> Vec<crate::specs::SpecSheetTable> {
-        match self.specs {
-            Some(specs) => specs.sheet(),
-            None => tables::spec_sheet(self.table.as_ref()),
-        }
+        self.specs.sheet()
     }
 
     fn choices(&self, setting: Setting, current: &Measurement) -> Vec<Choice> {

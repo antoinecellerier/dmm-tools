@@ -148,7 +148,7 @@ Document discrepancies. When our independent analysis disagrees with community w
 **Goal:** Working protocol support with tests.
 
 Follow the code-level steps in `docs/development.md`:
-- **Same protocol family:** Add a table in `tables/` implementing `ModeTables` (one `entry` match per mode; `DeviceTable` comes from the blanket impl)
+- **Same protocol family:** Add a table in `tables/` implementing `ModeTables` (one `entry` match per mode; `DeviceTable` comes from the blanket impl), and the model's spec tables in `specs/` behind a `SpecModel` variant
 - **New protocol family:** Implement the `Protocol` trait in `protocol/<family>/mod.rs`
 - **New transport:** Implement the `Transport` trait (only if the device doesn't use CP2110)
 
@@ -165,7 +165,7 @@ Follow the code-level steps in `docs/development.md`:
 ### Specification data
 
 If the device manual includes accuracy/resolution tables per mode and range:
-1. Add spec data in `protocol/<family>/specs_<model>.rs`, as `ut80x/specs_ut803.rs` does: each manual table is a `ModeSpecs` of `RangeSpec` rows keyed by range byte and labelled as printed, listed in manual order in `ALL`, and one `table()` match picks a reading's table. Rows that need a different impedance or overload, or belong to another mode, go in a part of the same name. (The UT61B+ and UT61D+ still keep positional arrays in `tables/specs_<model>.rs`.)
+1. Add spec data in `protocol/<family>/specs_<model>.rs`, as `ut80x/specs_ut803.rs` does: each manual table is a `ModeSpecs` of `RangeSpec` rows keyed by range byte and labelled as printed, listed in manual order in `ALL`, and one `table()` match picks a reading's table. Rows that need a different impedance or overload, or belong to another mode, go in a part of the same name.
 2. **Never fabricate values.** If a cell in the manual is ambiguous or you can't read it, give the row an empty accuracy list or omit the entry. Wrong specs are worse than missing specs.
 3. Watch for common manual pitfalls:
    - **Merged cells** — one accuracy value spanning multiple ranges
@@ -242,7 +242,7 @@ to this list):
 | RE methodology and findings | `docs/research/<family>/` |
 | Protocol implementation | `crates/dmm-lib/src/protocol/<family>/` |
 | Device tables (mode/range) | `crates/dmm-lib/src/protocol/<family>/tables/` |
-| Spec data (accuracy/resolution) | `crates/dmm-lib/src/protocol/<family>/tables/specs_*.rs` |
+| Spec data (accuracy/resolution) | `crates/dmm-lib/src/protocol/<family>/specs*.rs` (`ut61eplus/specs/`) |
 | Device registry entry | `crates/dmm-lib/src/protocol/registry.rs` |
 | Detection fingerprint | the family module, referenced from its registry entry |
 | Golden test files | `crates/dmm-lib/tests/golden/<device id>/` |

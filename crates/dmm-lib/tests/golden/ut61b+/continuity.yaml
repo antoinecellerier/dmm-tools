@@ -5,6 +5,7 @@ mode: "Continuity"
 value: "0.1"
 unit: "Ω"
 range_label: "Cont"
+resolution: "0.1Ω"
 flags:
   hold: false
   rel: false

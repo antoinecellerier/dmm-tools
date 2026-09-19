@@ -5,6 +5,7 @@ mode: "Hz"
 value: "0"
 unit: "Hz"
 range_label: "60Hz"
+resolution: "0.01Hz~0.01MHz"
 flags:
   hold: false
   rel: false

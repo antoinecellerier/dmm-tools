@@ -1,6 +1,4 @@
-use super::specs_ut61b_plus as specs_b;
-use super::specs_ut61d_plus as specs;
-use super::{AC_PEAK_MODES, ModeEntry, ModeTables, RangeInfo, m, r};
+use super::{AC_PEAK_MODES, ModeTables, RangeInfo, m, r};
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
@@ -242,39 +240,28 @@ impl ModeTables for Ut61dPlusTable {
         AC_PEAK_MODES
     }
 
-    fn entry(&self, mode: Mode) -> ModeEntry<'_> {
-        match mode {
-            Mode::DcV => ModeEntry::full(&self.dc_v, specs::DC_V_SPECS, &specs::DC_V_MODE),
-            Mode::AcV => ModeEntry::full(&self.ac_v, specs::AC_V_SPECS, &specs::AC_V_MODE),
-            Mode::DcMv => ModeEntry::full(&self.dc_mv, specs::DC_MV_SPECS, &specs::DC_MV_MODE),
-            Mode::AcMv => ModeEntry::full(&self.ac_mv, specs::AC_MV_SPECS, &specs::AC_MV_MODE),
-            Mode::Ohm => ModeEntry::full(&self.ohm, specs::OHM_SPECS, &specs::OHM_MODE),
-            Mode::Capacitance => {
-                ModeEntry::full(&self.capacitance, specs::CAP_SPECS, &specs::CAP_MODE)
-            }
-            Mode::Hz => ModeEntry::full(&self.hz, specs::HZ_SPECS, &specs::HZ_MODE),
-            Mode::DutyCycle => {
-                ModeEntry::full(&self.duty_cycle, specs::DUTY_SPECS, &specs::DUTY_MODE)
-            }
-            Mode::TempC => ModeEntry::full(&self.temp_c, specs::TEMP_C_SPECS, &specs::TEMP_MODE),
-            Mode::TempF => ModeEntry::full(&self.temp_f, specs::TEMP_F_SPECS, &specs::TEMP_MODE),
-            Mode::Diode => ModeEntry::full(&self.diode, specs::DIODE_SPECS, &specs::DIODE_MODE),
-            Mode::Continuity => ModeEntry::full(
-                &self.continuity,
-                specs::CONTINUITY_SPECS,
-                &specs::CONTINUITY_MODE,
-            ),
-            // DC µA/mA specs are shared with the UT61B+; the AC tables are not.
-            Mode::DcUa => ModeEntry::full(&self.dc_ua, specs_b::DC_UA_SPECS, &specs_b::DC_UA_MODE),
-            Mode::AcUa => ModeEntry::full(&self.ac_ua, specs::AC_UA_SPECS, &specs::AC_UA_MODE),
-            Mode::DcMa => ModeEntry::full(&self.dc_ma, specs_b::DC_MA_SPECS, &specs_b::DC_MA_MODE),
-            Mode::AcMa => ModeEntry::full(&self.ac_ma, specs::AC_MA_SPECS, &specs::AC_MA_MODE),
-            Mode::DcA => ModeEntry::full(&self.dc_a, specs::DC_A_SPECS, &specs::DC_A_MODE),
-            Mode::AcA => ModeEntry::full(&self.ac_a, specs::AC_A_SPECS, &specs::AC_A_MODE),
+    fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
+        Some(match mode {
+            Mode::DcV => &self.dc_v,
+            Mode::AcV => &self.ac_v,
+            Mode::DcMv => &self.dc_mv,
+            Mode::AcMv => &self.ac_mv,
+            Mode::Ohm => &self.ohm,
+            Mode::Capacitance => &self.capacitance,
+            Mode::Hz => &self.hz,
+            Mode::DutyCycle => &self.duty_cycle,
+            Mode::TempC => &self.temp_c,
+            Mode::TempF => &self.temp_f,
+            Mode::Diode => &self.diode,
+            Mode::Continuity => &self.continuity,
+            Mode::DcUa => &self.dc_ua,
+            Mode::AcUa => &self.ac_ua,
+            Mode::DcMa => &self.dc_ma,
+            Mode::AcMa => &self.ac_ma,
+            Mode::DcA => &self.dc_a,
+            Mode::AcA => &self.ac_a,
             // UT61D+ has LoZ V mode
-            Mode::LozV | Mode::LozV2 => {
-                ModeEntry::full(&self.loz_v, specs::LOZ_V_SPECS, &specs::LOZ_V_MODE)
-            }
+            Mode::LozV | Mode::LozV2 => &self.loz_v,
             // UT61D+ has no hFE, no LPF, no AC+DC, no Inrush
             Mode::Hfe
             | Mode::Live
@@ -286,8 +273,8 @@ impl ModeTables for Ut61dPlusTable {
             | Mode::AcDcMv
             | Mode::LpfA
             | Mode::AcDcA2
-            | Mode::Inrush => ModeEntry::none(),
-        }
+            | Mode::Inrush => return None,
+        })
     }
 }
 

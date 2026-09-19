@@ -5,6 +5,7 @@ mode: "DC mV"
 value: "1.43"
 unit: "mV"
 range_label: "60mV"
+resolution: "0.01mV"
 flags:
   hold: false
   rel: false

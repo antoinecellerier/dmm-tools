@@ -5,6 +5,7 @@ mode: "DC µA"
 value: "0.2"
 unit: "µA"
 range_label: "600µA"
+resolution: "0.1µA"
 flags:
   hold: false
   rel: false

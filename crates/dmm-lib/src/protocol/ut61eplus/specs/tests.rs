@@ -6,7 +6,11 @@ use crate::specs::SpecSheetRow;
 use std::collections::{HashMap, HashSet};
 
 /// Each model, with the id its protocol is built from.
-const MODELS: &[(SpecModel, &str)] = &[(SpecModel::Ut61ePlus, "ut61e+")];
+const MODELS: &[(SpecModel, &str)] = &[
+    (SpecModel::Ut61ePlus, "ut61e+"),
+    (SpecModel::Ut61bPlus, "ut61b+"),
+    (SpecModel::Ut61dPlus, "ut61d+"),
+];
 
 /// A reading of `mode` at range byte `range`, as the model's parser gives
 /// it, and whether the parser reported anything in it.
@@ -448,6 +452,10 @@ fn amps_follow_the_model() {
     let cases = [
         (SpecModel::Ut61ePlus, 0, "20.000A", "20A"),
         (SpecModel::Ut61ePlus, 1, "20.000A", "20A"),
+        (SpecModel::Ut61bPlus, 0, "6.000A", "6.000A"),
+        (SpecModel::Ut61bPlus, 1, "10.00A", "10.00A"),
+        (SpecModel::Ut61dPlus, 0, "6.000A", "6.000A"),
+        (SpecModel::Ut61dPlus, 1, "20.00A", "20.00A"),
     ];
     for (model, range, dc, ac) in cases {
         let id = MODELS.iter().find(|(m, _)| *m == model).unwrap().1;
@@ -457,14 +465,33 @@ fn amps_follow_the_model() {
     }
 }
 
-/// The manual gives temperature to the UT61D+ only ("8) Temperature").
+/// The manual gives temperature to the UT61D+ only ("8) Temperature"), one
+/// row per unit.
 #[test]
-fn the_ut61e_plus_has_no_temperature() {
-    for mode in [Mode::TempC, Mode::TempF] {
-        let m = Measurement {
-            mode_raw: mode as u16,
-            ..Measurement::from_payload(&[])
-        };
-        assert!(SpecModel::Ut61ePlus.table(&m).is_none(), "{mode:?}");
+fn temperature_is_the_ut61d_plus_only() {
+    for &(model, id) in MODELS {
+        for (mode, row) in [(Mode::TempC, "-40~1000°C"), (Mode::TempF, "-40~1832°F")] {
+            let m = Measurement {
+                mode_raw: mode as u16,
+                ..Measurement::from_payload(&[])
+            };
+            let label = model.row(&m).map(|r| r.label);
+            let want = (model == SpecModel::Ut61dPlus).then_some(row);
+            assert_eq!(label, want, "{id} {mode:?}");
+        }
+    }
+}
+
+/// The UT61D+'s two LoZ mode bytes read the one LoZ part, whose rows have
+/// no input impedance.
+#[test]
+fn loz_bytes_share_one_part() {
+    let model = SpecModel::Ut61dPlus;
+    for (range, label) in [(0, "LoZ ACV 600.0V"), (1, "LoZ ACV 1000V")] {
+        let a = model.table(&reading("ut61d+", Mode::LozV, range)).unwrap();
+        let b = model.table(&reading("ut61d+", Mode::LozV2, range)).unwrap();
+        assert!(std::ptr::eq(a, b), "range {range}");
+        assert_eq!(a.mode.input_impedance, None);
+        assert_eq!(a.row(range).unwrap().label, label);
     }
 }

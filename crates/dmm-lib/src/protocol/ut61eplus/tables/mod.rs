@@ -1,5 +1,3 @@
-pub mod specs_ut61b_plus;
-pub mod specs_ut61d_plus;
 pub mod ut61b_plus;
 pub mod ut61d_plus;
 pub mod ut61e_plus;
@@ -7,8 +5,6 @@ pub mod ut61e_plus;
 use super::mode::Mode;
 use crate::protocol::cycle::{self, DialPosition};
 use std::borrow::Cow;
-
-use crate::specs::{ModeSpecInfo, SpecInfo, SpecSheetRow, SpecSheetTable};
 
 /// Information about a specific measurement range.
 #[derive(Debug, Clone)]
@@ -37,16 +33,6 @@ fn lookup_range(table: &[RangeInfo], range: u8) -> Option<&RangeInfo> {
 pub trait DeviceTable: Send {
     fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo>;
     fn model_name(&self) -> &'static str;
-
-    /// Per-range specification data (resolution, accuracy).
-    fn spec_info(&self, _mode: Mode, _range: u8) -> Option<&'static SpecInfo> {
-        None
-    }
-
-    /// Per-mode specification data (input impedance, notes).
-    fn mode_spec_info(&self, _mode: Mode) -> Option<&'static ModeSpecInfo> {
-        None
-    }
 
     /// The model's dial positions, for the cycle-to-target mode driver in
     /// `protocol::cycle`.
@@ -118,92 +104,8 @@ pub(crate) fn range_ladder(table: &dyn DeviceTable, mode: Mode) -> Vec<Cow<'stat
     )
 }
 
-/// The spec sheet of a model's table: one table per mode that has specs,
-/// in [`Mode::ALL`] order, its rows in range-byte order. A range the table
-/// gives no label is left out; `specs_have_range_labels` asserts none has
-/// an accuracy.
-pub(crate) fn spec_sheet(table: &dyn DeviceTable) -> Vec<SpecSheetTable> {
-    Mode::ALL
-        .iter()
-        .filter_map(|&mode| {
-            let mode_spec = table.mode_spec_info(mode)?;
-            let rows = (0..=u8::MAX)
-                .map_while(|range| Some((range, table.spec_info(mode, range)?)))
-                .filter_map(|(range, spec)| {
-                    Some(SpecSheetRow {
-                        label: table.range_info(mode, range)?.label,
-                        range_raw: Some(range),
-                        spec,
-                    })
-                })
-                .collect();
-            Some(SpecSheetTable {
-                name: sheet_name(mode),
-                mode_raw: Some(m(mode)),
-                page: None,
-                mode: mode_spec,
-                rows,
-            })
-        })
-        .collect()
-}
-
-/// What to call `mode` in a spec sheet.
-///
-/// The enum's own label is what a reading says, and 0x15 and 0x16 both say
-/// "LoZ V" — fine on screen, but a sheet is read next to the manual, so the
-/// second one keeps the suffix that tells the two tables apart.
-fn sheet_name(mode: Mode) -> &'static str {
-    match mode {
-        Mode::LozV2 => "LoZ V2",
-        other => other.as_static_str(),
-    }
-}
-
-/// Everything a device table knows about one mode.
-pub(crate) struct ModeEntry<'a> {
-    pub(crate) ranges: Option<&'a [RangeInfo]>,
-    pub(crate) specs: Option<&'static [SpecInfo]>,
-    pub(crate) mode_spec: Option<&'static ModeSpecInfo>,
-}
-
-impl<'a> ModeEntry<'a> {
-    /// A mode with range labels, per-range specs and mode-level specs.
-    pub(crate) fn full(
-        ranges: &'a [RangeInfo],
-        specs: &'static [SpecInfo],
-        mode_spec: &'static ModeSpecInfo,
-    ) -> Self {
-        Self {
-            ranges: Some(ranges),
-            specs: Some(specs),
-            mode_spec: Some(mode_spec),
-        }
-    }
-
-    /// A mode with range labels but no published specification data.
-    pub(crate) fn ranges_only(ranges: &'a [RangeInfo]) -> Self {
-        Self {
-            ranges: Some(ranges),
-            specs: None,
-            mode_spec: None,
-        }
-    }
-
-    /// A mode this model does not have.
-    pub(crate) fn none() -> Self {
-        Self {
-            ranges: None,
-            specs: None,
-            mode_spec: None,
-        }
-    }
-}
-
-/// Per-model data behind `DeviceTable`: one match per mode instead of three.
-///
-/// Keeping ranges, per-range specs and the mode-level spec in a single match
-/// arm is what stops the three from drifting apart when a mode is added.
+/// Per-model data behind `DeviceTable`. The specs are the manual's tables in
+/// `ut61eplus/specs/`.
 pub(crate) trait ModeTables: Send {
     /// Model name reported by `DeviceTable::model_name`. An associated const
     /// rather than a method so it cannot collide with the trait method the
@@ -213,7 +115,9 @@ pub(crate) trait ModeTables: Send {
     /// Dial table returned by `DeviceTable::dial_positions`.
     const DIAL_POSITIONS: &'static [DialPosition];
 
-    fn entry(&self, mode: Mode) -> ModeEntry<'_>;
+    /// The range table for `mode`, in range-byte order; `None` for a mode
+    /// this model does not have, or that has no ranges (NCV).
+    fn entry(&self, mode: Mode) -> Option<&[RangeInfo]>;
 
     /// Modes this model's RANGE button cannot change. Default:
     /// [`FAMILY_FIXED_RANGE_MODES`]. A model that fixes more of them
@@ -231,7 +135,6 @@ pub(crate) trait ModeTables: Send {
 impl<T: ModeTables> DeviceTable for T {
     fn range_info(&self, mode: Mode, range: u8) -> Option<&RangeInfo> {
         self.entry(mode)
-            .ranges
             .and_then(|table| lookup_range(table, range))
     }
 
@@ -239,22 +142,12 @@ impl<T: ModeTables> DeviceTable for T {
         T::MODEL_NAME
     }
 
-    fn spec_info(&self, mode: Mode, range: u8) -> Option<&'static SpecInfo> {
-        self.entry(mode)
-            .specs
-            .and_then(|table| table.get(range as usize))
-    }
-
-    fn mode_spec_info(&self, mode: Mode) -> Option<&'static ModeSpecInfo> {
-        self.entry(mode).mode_spec
-    }
-
     fn dial_positions(&self) -> &'static [DialPosition] {
         T::DIAL_POSITIONS
     }
 
     fn ranges(&self, mode: Mode) -> &[RangeInfo] {
-        self.entry(mode).ranges.unwrap_or(&[])
+        self.entry(mode).unwrap_or(&[])
     }
 
     fn range_is_fixed(&self, mode: Mode) -> bool {
@@ -416,63 +309,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn ut61b_plus_dcv_specs() {
-        // Range 0 = 6V on the 6,000-count UT61B+; 60mV is the DC mV mode.
-        let t = Ut61bPlusTable::new();
-        assert_eq!(t.spec_info(Mode::DcV, 0).unwrap().resolution, "0.001V");
-        assert_eq!(t.spec_info(Mode::DcMv, 0).unwrap().resolution, "0.01mV");
-    }
-
     /// UT161B has no table of its own — `Ut61PlusProtocol::for_model` hands it
-    /// the UT61B+'s, so these are the specs a UT161B reports.
+    /// the UT61B+'s, so these are the ranges a UT161B reports.
     #[test]
     fn ut161b_uses_the_ut61b_plus_table() {
         let t = Ut61bPlusTable::new();
         assert_eq!(t.model_name(), "UNI-T UT61B+");
-        assert_eq!(
-            t.spec_info(Mode::DcV, 0).map(|s| s.resolution),
-            Some("0.001V")
-        );
-    }
-
-    #[test]
-    fn ut61d_plus_temperature_specs() {
-        let spec = Ut61dPlusTable::new().spec_info(Mode::TempC, 0).unwrap();
-        assert!(spec.resolution.contains('°'));
-    }
-
-    /// `spec_sheet` leaves out a range with no label, so no range with an
-    /// accuracy may lack one: it would be missing from the sheet reviewed
-    /// against the manual.
-    #[test]
-    fn specs_have_range_labels() {
-        let tables: [&dyn DeviceTable; 2] = [&Ut61bPlusTable::new(), &Ut61dPlusTable::new()];
-        for t in tables {
-            for &mode in Mode::ALL {
-                for range in 0..=u8::MAX {
-                    if let Some(spec) = t.spec_info(mode, range) {
-                        assert!(
-                            spec.accuracy.is_empty() || t.range_info(mode, range).is_some(),
-                            "{} {mode:?} range {range} has an accuracy but no label",
-                            t.model_name()
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    /// The UT61D+ has both LoZ V bytes, which read the same on screen; the
-    /// sheet must still tell their tables apart.
-    #[test]
-    fn spec_sheet_table_names_are_unique() {
-        let sheet = spec_sheet(&Ut61dPlusTable::new());
-        let mut names: Vec<_> = sheet.iter().map(|t| t.name).collect();
-        assert!(names.contains(&"LoZ V2"));
-        names.sort_unstable();
-        names.dedup();
-        assert_eq!(names.len(), sheet.len());
+        assert_eq!(t.range_info(Mode::DcV, 0).map(|r| r.label), Some("6V"));
     }
 }
 

@@ -620,9 +620,10 @@ possible from the vendor software.
 
 ## 9. Per-Range Full-Scale Limits
 
-**MANUAL** — transcribed from the UT61+ Series specification tables (see the
-`specs_*.rs` provenance headers: `references/ut61eplus/ut61e_manual.pdf`
-section IX.2 and the UT61B+/UT61D+ equivalents). These are the values the
+**MANUAL** — transcribed from the UT61+ Series specification tables
+(`references/ut61eplus/ut61e_manual.pdf`, "IX. Specifications", 2. Electrical
+Specifications, whose keyed transcription is in
+`crates/dmm-lib/src/protocol/ut61eplus/specs/`). These are the values the
 `RangeInfo.overload_pos`/`overload_neg` fields carried in
 `crates/dmm-lib/src/protocol/ut61eplus/tables/` from the first commit until
 they were removed from the code; no production code ever read them, only the

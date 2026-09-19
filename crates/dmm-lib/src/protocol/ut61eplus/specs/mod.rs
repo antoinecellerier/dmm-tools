@@ -4,9 +4,11 @@
 //! One manual covers the UT61B+, UT61D+ and UT61E+: the UT61+ Series User
 //! Manual, "IX. Specifications" (PDF pages 14-18, printed 25-34), prints a
 //! UT61E+ table and a UT61B+/UT61D+ table for most functions, with rows and
-//! notes tagged for one model. Each model's tables are in its file; the
-//! continuity and diode table, which the three models share, is here.
+//! notes tagged for one model. The UT61E+ tables are in `ut61e_plus`, the
+//! UT61B+/UT61D+ ones in `ut61bd_plus`; the continuity and diode table,
+//! which the three models share, is here.
 
+mod ut61bd_plus;
 mod ut61e_plus;
 
 #[cfg(test)]
@@ -18,8 +20,14 @@ use crate::specs::{ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo, SpecSheetTable}
 
 /// Which model's column of the manual a reading takes its specs from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "the UT161 models are still the UT61+ ones"
+)]
 pub(crate) enum SpecModel {
     Ut61ePlus,
+    Ut61bPlus,
+    Ut61dPlus,
 }
 
 impl SpecModel {
@@ -27,6 +35,8 @@ impl SpecModel {
     pub(crate) fn tables(self) -> impl Iterator<Item = &'static ModeSpecs> {
         let all = match self {
             SpecModel::Ut61ePlus => ut61e_plus::ALL,
+            SpecModel::Ut61bPlus => ut61bd_plus::UT61B_PLUS,
+            SpecModel::Ut61dPlus => ut61bd_plus::UT61D_PLUS,
         };
         all.iter().copied()
     }
@@ -37,6 +47,8 @@ impl SpecModel {
         let mode = Mode::from_byte(u8::try_from(m.mode_raw).ok()?).ok()?;
         match self {
             SpecModel::Ut61ePlus => ut61e_plus::table(mode),
+            SpecModel::Ut61bPlus => ut61bd_plus::ut61b_plus(mode),
+            SpecModel::Ut61dPlus => ut61bd_plus::ut61d_plus(mode),
         }
     }
 

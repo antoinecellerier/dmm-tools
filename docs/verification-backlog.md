@@ -1454,6 +1454,19 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   range in either. Only range byte 0 has been seen; the meter never sends
   the table's 2.2V entry.
 
+### UT61+ Hz and Duty % off the Hz/% position take its specs
+
+Known limitation, left as is on 2026-09-19. Hz (0x04) and Duty % (0x05)
+send the same mode byte from every dial position, so a reading taken with
+Hz/% on the V~, mV, µA, mA or A position shows the Hz/% position's
+Frequency/Duty Ratio row. The manual gives those readings terms of their
+own: the AC V remarks (PDF p. 15) take frequency over 40Hz~500Hz (UT61B+),
+40Hz~1kHz (UT61D+) or 40Hz~10kHz (UT61E+) at ≥10% of the range and call
+duty "for reference only"; the AC current remarks (PDF p. 18) ask for ≥50%
+of the range and give the UT61B+/UT61D+ frequency ±(0.1%+4) at 0.1Hz.
+Resolving it means inferring the dial position from the reading history,
+as `DialState` in `protocol/cycle.rs` does for mode selection.
+
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
 were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.

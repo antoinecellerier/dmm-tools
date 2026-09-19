@@ -5,6 +5,7 @@ mode: "Ω"
 value: "1.226"
 unit: "MΩ"
 range_label: "6MΩ"
+resolution: "1kΩ"
 flags:
   hold: false
   rel: false

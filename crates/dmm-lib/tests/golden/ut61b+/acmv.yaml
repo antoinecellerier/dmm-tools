@@ -5,6 +5,7 @@ mode: "AC mV"
 value: "11.72"
 unit: "mV"
 range_label: "60mV"
+resolution: "0.01mV"
 flags:
   hold: false
   rel: false

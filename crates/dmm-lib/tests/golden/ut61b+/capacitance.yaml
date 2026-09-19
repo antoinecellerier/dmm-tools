@@ -5,6 +5,7 @@ mode: "Capacitance"
 value: "0.03"
 unit: "nF"
 range_label: "60nF"
+resolution: "10pF"
 flags:
   hold: false
   rel: false

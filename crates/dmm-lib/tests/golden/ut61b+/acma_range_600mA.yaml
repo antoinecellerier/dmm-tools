@@ -5,6 +5,7 @@ mode: "AC mA"
 value: "0"
 unit: "mA"
 range_label: "600mA"
+resolution: "0.1mA"
 flags:
   hold: false
   rel: false

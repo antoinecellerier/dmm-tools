@@ -1,4 +1,4 @@
-use super::{AC_PEAK_MODES, ModeEntry, ModeTables, RangeInfo, m, r};
+use super::{AC_PEAK_MODES, ModeTables, RangeInfo, m, r};
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring};
 use crate::protocol::ut61eplus::mode::Mode;
 
@@ -242,9 +242,8 @@ impl ModeTables for Ut61ePlusTable {
         AC_PEAK_MODES
     }
 
-    fn entry(&self, mode: Mode) -> ModeEntry<'_> {
-        // The specs are the manual's tables in `specs/ut61e_plus.rs`.
-        let ranges: &[RangeInfo] = match mode {
+    fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
+        Some(match mode {
             Mode::DcV => &self.dc_v,
             Mode::AcV => &self.ac_v,
             Mode::DcMv => &self.dc_mv,
@@ -269,9 +268,8 @@ impl ModeTables for Ut61ePlusTable {
             Mode::LpfMv | Mode::AcDcMv => &self.dc_mv,
             Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => &self.dc_a,
             // Modes without range tables.
-            Mode::Ncv | Mode::Live | Mode::Inrush => return ModeEntry::none(),
-        };
-        ModeEntry::ranges_only(ranges)
+            Mode::Ncv | Mode::Live | Mode::Inrush => return None,
+        })
     }
 }
 

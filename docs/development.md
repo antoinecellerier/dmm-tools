@@ -61,7 +61,7 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 **New device model (same protocol family):**
 
 1. Create `crates/dmm-lib/src/protocol/<family>/tables/new_model.rs`
-2. Implement `ModeTables`: one `entry` match returning the ranges and specs per mode (`DeviceTable` is derived)
+2. Implement `ModeTables`: one `entry` match returning the range table per mode (`DeviceTable` is derived); the model's spec tables go in the family's `specs/`, behind a `SpecModel` variant
 3. Register in the family's `tables/mod.rs`
 4. Add `SelectableDevice` entry in `protocol/registry.rs`
 
