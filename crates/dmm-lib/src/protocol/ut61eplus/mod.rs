@@ -910,7 +910,8 @@ fn ncv_level(display_compact: &str) -> Option<u8> {
 /// Decode the three UT61+ flag bytes (already masked with `& 0x0F`).
 ///
 /// - byte 11 (`flag1`): bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX
-/// - byte 12 (`flag2`): bit0=HV warning, bit1=Low Battery, bit2=!AUTO (inverted)
+/// - byte 12 (`flag2`): bit0=HV warning, bit1=Low Battery, bit2=!AUTO (inverted),
+///   bit3=APO (§2.7; not carried)
 /// - byte 13 (`flag3`): bit0=bar polarity, bit1=Peak MIN, bit2=Peak MAX, bit3=DC
 fn parse_flags(flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
     StatusFlags {
@@ -968,14 +969,6 @@ fn report_unrecognised_fields(
         );
     }
     let flags = &payload[11..14];
-    // §2.7: flag2 bit 3 is reserved; no capture sets it.
-    if payload[12] & 0x08 != 0 {
-        report_unknown(
-            FAMILY,
-            "flag bits",
-            format_args!("{flags:02X?}, flag2 bit 3"),
-        );
-    }
     // Family §4: a model without Peak never sets P-MIN or P-MAX (flag3
     // bits 1-2).
     if payload[13] & 0x06 != 0 && table.peak_modes().is_empty() {
@@ -2435,15 +2428,14 @@ raw_payload=14"#
         assert!(reports.is_empty(), "{reports:?}");
     }
 
+    /// §2.7: flag2 bit 3 is the protocol deck's APO flag. No capture has
+    /// set it, but it is documented, so it passes without a report.
     #[test]
-    fn the_reserved_flag_bit_is_reported() {
+    fn the_apo_flag_bit_is_not_reported() {
         let payload = make_payload(0x02, 0x01, b" 12.345", (0, 0), (0, 0x08, 0));
         let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
         assert!(m.unwrap().flags.auto_range);
-        assert_eq!(
-            reports,
-            ["ut61eplus: unrecognised flag bits: [30, 38, 30], flag2 bit 3"]
-        );
+        assert!(reports.is_empty(), "{reports:?}");
     }
 
     #[test]

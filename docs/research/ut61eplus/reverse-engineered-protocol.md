@@ -517,7 +517,7 @@ the *stored* extremum, not the live reading. The AUTO flag is cleared
 | 0 | 0x01 | **HV warning** | **[VERIFIED]** | Set at 31V on DC V (manual: >30V). DmmData offset 0x3d — stored but not displayed by PC UI. |
 | 1 | 0x02 | **Low battery** | **[VERIFIED]** | Intermittent on real device. DmmData offset 0x3c — passed to a UI indicator widget. |
 | 2 | 0x04 | **!AUTO** (inverted) | **[VERIFIED]** | DmmData offset 0x3b. Bit CLEAR = auto-range ON. DMM.exe hides "AUTO" label when set. |
-| 3 | 0x08 | (reserved) | [UNVERIFIED] | Stored at DmmData offset 0x3a; never read by PC UI. |
+| 3 | 0x08 | **APO** (auto power-off) | **[VENDOR-DOC]** | The deck names it `APO_flag`. Stored at DmmData offset 0x3a; never read by PC UI. No capture has set it, although the manual has APO on by default; the meter may drop APO while it talks over USB. On 2026-09-19 the LCD showed no APO symbol while the bit was clear. |
 
 **AUTO flag confirmed inverted** (from DMM.exe UI code at line 2128-2131):
 ```c
@@ -662,8 +662,9 @@ Configuration is stored in `options.xml`:
 
 ### Must Verify Against Real Hardware
 
-1. **Flag byte 15 bit 3**: reserved/unused? Stored by PC software but
-   never read; no observed behavior yet.
+1. **Flag byte 15 bit 3**: APO per the deck, never seen set; clear with no
+   APO symbol on the LCD (2026-09-19). A frame taken with the symbol lit
+   would confirm it marks APO on.
 3. **Mode bytes 0x03, 0x0D, 0x0F**: not exercised with a signal (DC mV,
    AC µA, AC mA). 0x0A/0x0B (temperature) are UT61D+ only; 0x13 (Live) is
    on no UT61+ dial.
@@ -715,7 +716,7 @@ Configuration is stored in `options.xml`:
 | Bar graph bytes (12-13) not used by vendor | **VENDOR** | No reads in display function |
 | Byte15 bit0 = HV warning | **VERIFIED** | Set at 31V on DC V (real device) |
 | Byte15 bit1 = Low Battery | **VERIFIED** | Observed intermittently on real device |
-| Byte15 bit3 flag name | **UNVERIFIED** | Stored by PC software but never read |
+| Byte15 bit3 = APO | **VENDOR-DOC** | Protocol deck; never seen set |
 | Bar graph position encoding (bytes 12-13) | **VERIFIED** | `byte12*10 + byte13` decimal, real device |
 | Commands 0x41/0x42/0x47/0x48/0x49/0x4B/0x4C/0x4D/0x4E | **VERIFIED** | Exercised against real UT61E+ via CLI |
 | Command 0x5F (GetName) | **VERIFIED** | Not in vendor software V2.02; confirmed on real UT61E+ — two-frame response (FF 00 ack, then ASCII name) |

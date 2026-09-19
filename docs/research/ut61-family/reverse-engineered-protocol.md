@@ -289,6 +289,9 @@ simply never sets certain flag bits on models that lack the feature.
 | DC indicator | byte 16 bit 3 | Yes | Yes | Yes |
 | Bar polarity | byte 16 bit 0 | Yes | Yes | Yes |
 
+The protocol deck also names byte 15 bit 3 APO (auto power-off); no
+capture from either meter has set it.
+
 ---
 
 ## 5. Range Tables — [MANUAL]
