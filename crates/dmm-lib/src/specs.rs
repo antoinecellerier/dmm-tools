@@ -37,14 +37,10 @@ pub struct ModeSpecInfo {
 /// the manual (`Protocol::spec_sheet`).
 #[derive(Debug, Clone)]
 pub struct SpecSheetTable {
-    /// The table's name: the manual's section title, or the mode's name for
-    /// a family whose tables follow its mode bytes.
+    /// The manual's table title.
     pub name: &'static str,
-    /// The mode byte the table belongs to, for a family whose tables follow
-    /// its mode bytes.
-    pub mode_raw: Option<u16>,
-    /// The manual's PDF page (not the printed page number), when recorded.
-    pub page: Option<u16>,
+    /// The manual's PDF page (not the printed page number).
+    pub page: u16,
     /// Input impedance, overload protection and notes.
     pub mode: &'static ModeSpecInfo,
     /// The ranges, in the order the sheet lists them.
@@ -97,8 +93,7 @@ impl ModeSpecs {
     pub(crate) fn sheet_table(&'static self) -> SpecSheetTable {
         SpecSheetTable {
             name: self.name,
-            mode_raw: None,
-            page: Some(self.page),
+            page: self.page,
             mode: &self.mode,
             rows: self
                 .ranges

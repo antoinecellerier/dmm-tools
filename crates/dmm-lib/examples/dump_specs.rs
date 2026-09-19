@@ -202,13 +202,7 @@ fn dump_text(dev: &SelectableDevice, sheet: &[SpecSheetTable]) {
     for table in sheet {
         // Table header
         println!();
-        let mut header = match table.mode_raw {
-            Some(mode) => format!(" Mode 0x{:02X}: {} ", mode, table.name),
-            None => format!(" {} ", table.name),
-        };
-        if let Some(page) = table.page {
-            let _ = write!(header, "(PDF p. {page}) ");
-        }
+        let header = format!(" {} (PDF p. {}) ", table.name, table.page);
         let header_len = unicode_display_width(&header);
         let fill = W.saturating_sub(header_len + 1); // +1 for the `─` after `┌`
         println!("┌─{}{}┐", header, "─".repeat(fill));
@@ -284,21 +278,6 @@ fn format_accuracy(band: &AccuracyBand) -> String {
     }
 }
 
-// --- json and html: the manual's view ---
-
-/// The rows as the manual lists them: a range byte whose label and spec
-/// repeat an earlier row's is the same manual row (the UT61E+'s two 20A
-/// bytes), and is left out.
-fn manual_rows(t: &SpecSheetTable) -> Vec<&SpecSheetRow> {
-    let mut rows: Vec<&SpecSheetRow> = Vec::new();
-    for r in &t.rows {
-        if !rows.iter().any(|k| k.label == r.label && k.spec == r.spec) {
-            rows.push(r);
-        }
-    }
-    rows
-}
-
 // --- json ---
 
 /// The sheet in the shape of a manual transcription.
@@ -306,8 +285,9 @@ fn to_json(dev: &SelectableDevice, sheet: &[SpecSheetTable]) -> Value {
     let tables: Vec<Value> = sheet
         .iter()
         .map(|t| {
-            let ranges: Vec<Value> = manual_rows(t)
-                .into_iter()
+            let ranges: Vec<Value> = t
+                .rows
+                .iter()
                 .map(|r| {
                     let accuracy: Vec<Value> = r
                         .spec
@@ -598,9 +578,7 @@ fn to_html(
     let count = tables.len();
     for (i, parts) in tables.iter().enumerate() {
         // The next table's page bounds this one's continuation pages.
-        let next_page = tables[i + 1..]
-            .iter()
-            .find_map(|next| next.iter().find_map(|t| t.page));
+        let next_page = tables.get(i + 1).map(|next| next[0].page);
         html_section(&mut body, parts, next_page, pages_dir, marks);
     }
 
@@ -675,10 +653,9 @@ fn html_section(
 ) {
     let name = parts[0].name;
     let key = |field: &str| vec![format!("{name} / {field}")];
-    let mut pages: Vec<u16> = parts.iter().filter_map(|t| t.page).collect();
+    let mut pages: Vec<u16> = parts.iter().map(|t| t.page).collect();
     pages.dedup();
     let page = match pages.as_slice() {
-        [] => "no page recorded".to_string(),
         [p] => format!("PDF p. {p}"),
         many => format!(
             "PDF pp. {}",
@@ -761,7 +738,7 @@ fn html_part(out: &mut String, t: &SpecSheetTable, marks: &Marks) {
     let overload = t.mode.overload_protection.unwrap_or("—");
     let (impedance_mark, overload_mark) = (whole("input_impedance"), whole("overload_protection"));
 
-    let rows = manual_rows(t);
+    let rows: Vec<&SpecSheetRow> = t.rows.iter().collect();
     let rows = &rows[..];
     if rows.is_empty() {
         out.push_str("<tr><td colspan=4>no ranges</td>");
