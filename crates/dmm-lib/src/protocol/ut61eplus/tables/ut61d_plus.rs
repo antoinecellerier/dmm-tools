@@ -97,8 +97,9 @@ impl Ut61dPlusTable {
             // mA: 60mA, 600mA
             dc_ma: [r("60mA", "mA"), r("600mA", "mA")],
             ac_ma: [r("60mA", "mA"), r("600mA", "mA")],
-            // A: 6A and 20A, the manual's 6.000A and 20.00A rows. The order is
-            // [DEDUCED] from the UT61B+, whose 6A and 10A sit at 0 and 1
+            // A: 6A and 20A, the manual's 6.000A and 20.00A rows, kept over
+            // the protocol deck's 10A at byte 1 (family spec §5.5). The order
+            // is [DEDUCED] from the UT61B+, whose 6A and 10A sit at 0 and 1
             // (issue #19); unconfirmed on a UT61D+ — issue #7.
             dc_a: [r("6A", "A"), r("20A", "A")],
             ac_a: [r("6A", "A"), r("20A", "A")],

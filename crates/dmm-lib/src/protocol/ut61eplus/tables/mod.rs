@@ -14,7 +14,9 @@ pub struct RangeInfo {
 }
 
 /// One range table entry. The manuals' full-scale limits are recorded in
-/// `docs/research/ut61-family/reverse-engineered-protocol.md`, section 9.
+/// `docs/research/ut61-family/reverse-engineered-protocol.md`, section 9,
+/// and nowhere in the code: a software overload check or bar-graph scaling
+/// would take them from there.
 pub(crate) const fn r(label: &'static str, unit: &'static str) -> RangeInfo {
     RangeInfo { label, unit }
 }
