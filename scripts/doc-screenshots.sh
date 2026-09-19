@@ -96,11 +96,15 @@ MINIMAL_NARROW_W=420; MINIMAL_NARROW_H=240
 # over. A whole-window 60 s band shows the boot's peak and floor; the 1 s
 # default just shadows the trace.
 ENVELOPE_FIELD_X=732; ENVELOPE_FIELD_Y=123
-# The hero's cursors, spanning the boot: A on its first high reading (32.54 mA
-# at 2.475 s, the sample after a 0.00 at 2.376 s) and B one sample into the
-# floor it drops back to (30.09 s). Its 1m window packs twice as much time into
-# the plot as the graph-only scene's, so a sample is about 2 px wide here.
-HERO_CURSOR_A_X=670; HERO_CURSOR_B_X=1262; HERO_CURSOR_Y=700
+# The hero's view is picked off the minimap: a click at 16.5 s of the 160 s
+# session (the strip starts at x 505, about 8.66 px/s) centres the 30s window
+# on the boot, so it runs from 1.6 s to 31.6 s with the 30s chip still lit.
+HERO_MINIMAP_X=648; HERO_MINIMAP_Y=925
+# Its cursors sit on the idle floor either side of the boot, so both level
+# lines lie on 0 mA rather than across the plot: A on the last reading before
+# the rise (2.376 s) and B on the first after the fall (29.995 s). A sample is
+# about 4 px wide in this window.
+HERO_CURSOR_A_X=649; HERO_CURSOR_B_X=1834; HERO_CURSOR_Y=700
 
 # asset written -> the function that stages it.
 SCENES=(
@@ -271,13 +275,17 @@ report() {
 
 ## Scenes ####################################################################
 
-# The hero: wide layout over the thermometer's boot. The preseed stops the
-# session just after it, so the default 1m window holds the whole event —
-# the 2.5–30 s draw and the idle floor it settles to — with the cursors
-# spanning it. The view stays live.
+# The hero: wide layout over the thermometer's boot, looked back on from its
+# first refresh cycle. The preseed stops the session inside that cycle, so the
+# reading shows its draw (4.69 mA) and the minimap holds the whole session.
+# [ picks the 30s preset and the minimap click moves the window back onto the
+# boot; M adds the window's mean and C the cursors that span the boot.
 scene_wide() {
 	write_settings
-	launch dcma-boot-refresh 60
+	launch dcma-boot-refresh 160.5
+	key bracketleft
+	click "$HERO_MINIMAP_X" "$HERO_MINIMAP_Y"
+	key m
 	key c
 	click "$HERO_CURSOR_A_X" "$HERO_CURSOR_Y"
 	click "$HERO_CURSOR_B_X" "$HERO_CURSOR_Y"

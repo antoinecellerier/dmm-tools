@@ -19,7 +19,7 @@ dmm-gui [OPTIONS]
 A desktop GUI for live measurement display, time-series graphing, recording,
 and remote control of UNI-T and Voltcraft multimeters.
 
-![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where two cursors span a sensor's boot sequence and read its duration and charge](../assets/gui-wide-layout.png)
+![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](../assets/gui-wide-layout.png)
 
 ## Connecting
 

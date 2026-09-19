@@ -10,7 +10,7 @@ Read, record and remote-control a digital multimeter over its USB cable. Support
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
-![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where two cursors span a sensor's boot sequence and read its duration and charge](assets/gui-wide-layout.png)
+![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](assets/gui-wide-layout.png)
 
 ## [GUI](docs/gui-reference.md)
 
