@@ -29,6 +29,16 @@
    cross-checked against its basic specifications (PDF p. 58), the UT804
    datasheet (`ut804-datasheet.pdf` beside it) and the UT800 series page.
 
+6. **UNI-T's UT804 interface protocol, "UT804接口协议"** — a one-sheet
+   Excel file listed as V1.0, uploaded 2023-11-15, on the UT800 series page
+   of UNI-T's Chinese site (https://instruments.uni-trend.com.cn/cate/140.html).
+   The download centre (`/download?keyword=UT804`) carries its direct link.
+   Its metadata dates it 2005, last saved 2019. Read 2026-09-19 from the
+   rendered sheet and a dump of every cell: line format, frame layout,
+   function and range tables, coupling and status fields, for the UT804
+   only. Tagged [VENDOR-DOC] in the spec; stored as
+   `references/ut800/ut804/UT804接口协议.xls`.
+
 ### Avoided (clean-room boundary)
 - No external open-source implementations were consulted during RE
 - sigrok FS9721 driver was NOT referenced (to avoid contamination, since
@@ -118,9 +128,12 @@ chart. UT803.exe has no 7-segment decoder
   mode detection logic in both executables
 - **Mode codes 1-15:** HIGH for UT804, MEDIUM for UT803 (fewer modes, exact
   list not fully enumerated)
-- **Range/decimal point tables:** MEDIUM — logic identified but not all
-  range values could be decoded from decompilation alone
-- **Status flag bits:** MEDIUM — AUTO and sign confirmed, others unverified
+- **Range/decimal point tables:** HIGH for the UT804 — the meter, its
+  manual and the UNI-T sheet agree but for AC V's top range and the 10 A
+  code (spec §3.7); MEDIUM for the UT803
+- **Status flag bits:** MEDIUM — AUTO and sign confirmed; the UNI-T sheet
+  names bit 1 Manual and puts the sign in bit 3, which the meter never
+  sets; REL and low battery unverified
 - **Digit encoding:** MEDIUM — 0-9 confirmed as digits, 0xA as blank, sign
   encoding unknown
 - **Nibbles 12-14:** none; the packet is 11 bytes

@@ -873,8 +873,10 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
     transmission rather than setting a bit, so it is reported as
     unrecognised to draw a trace (noted 2026-09-17). UT804 nibble 9 bit 1
     came on, AUTO off, in a step that pressed RANGE and then MAX MIN
-    (@clazie, 2026-09-19, spec §3.6): sigrok's MAN, or MAX MIN. The
-    `manual_range` step, ahead of `max_min`, tells the two apart
+    (@clazie, 2026-09-19, spec §3.6). UNI-T's UT804 sheet names it Manual
+    (2026-09-19), as sigrok does; the `manual_range` step, ahead of
+    `max_min`, will confirm that RANGE sets it. The sheet puts the sign in bit 3,
+    which the meter never set: it sends the sign in bit 2
   - ~~UT804 mode 0xF ("mA%") dial position; which of modes 1/2 each V
     dial sends~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804
     (UT-D04 / CH9325): 0xF is the mA position's 4-20 mA %, shown with
@@ -1521,8 +1523,9 @@ Found by the 2026-09-19 survey (table in
 `docs/research/new-device-candidates.md`, "UNI-T Chinese sites"). Each is a
 separate task:
 
-- **UT804 interface protocol V1.0 (2023-11-15)**, on the UT800 series page.
-  Read before any UT804+ work; may also refine the UT804 spec.
+- ~~**UT804 interface protocol V1.0 (2023-11-15)**~~ — **DONE 2026-09-19**:
+  read into the UT803/UT804 spec as [VENDOR-DOC]. It covers the UT804 alone,
+  so it says nothing of the UT804+.
 - **UT8802N and UT8803N programming manuals V2.0**, newer than the UT8803E
   V1.0/V1.1 editions the UCI bench spec was built from.
 - **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+, the

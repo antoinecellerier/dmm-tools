@@ -15,9 +15,14 @@ Based on:
 - Two capture reports from a UT804 walked through every dial position, its
   LCD read back beside each (issue #16, 2026-09-18)
 - CH9325 HID transport analysis (see `../uci-bench-family/reverse-engineered-protocol.md`)
+- UNI-T's UT804 interface protocol sheet "UT804接口协议", published on the
+  UT800 series page of instruments.uni-trend.com.cn — see
+  `reverse-engineering-approach.md`
 
 Confidence levels:
 - **[VENDOR]** — confirmed by analyzing UNI-T's official software binaries
+- **[VENDOR-DOC]** — stated in UNI-T's UT804 interface protocol sheet (UT804
+  only)
 - **[DEDUCED]** — logical inferences from available evidence
 - **[UNVERIFIED]** — requires real device testing to confirm
 - **[HARDWARE]** — seen on a real meter (the UT804 of issue #16)
@@ -123,6 +128,9 @@ is 0 (§2). The UT804 manual gives no line format. Observed on a UT804
 bytes received is odd parity over the other seven, delivered by the
 bridge as an eighth bit.
 
+**[VENDOR-DOC]** The UT804 sheet gives the line as 2400 baud, 7 data bits,
+odd parity. It gives no stop-bit count.
+
 ---
 
 ## 2. Packet Format
@@ -142,6 +150,11 @@ byte; no high nibble is tested. **No checksum.**
 Observed on a UT804 (issue #16, 2026-09-16): the data bytes are
 `0x30`-`0x3F` plus the parity bit (§1.2); CR arrives as `0D`, LF as
 `8A`.
+
+**[VENDOR-DOC]** The UT804 sheet gives the same frame: 11 bytes, the high
+nibble of the 9 data bytes fixed at `0011`, the low nibble carrying the
+data, and a fixed `0D 0A` end marker. It lists no checksum. It numbers the
+bytes from 0, so its byte n is position n+1 below.
 
 The two parsers index the packet differently:
 
@@ -280,6 +293,12 @@ had one too.*
 
 The packet ends after nibble 11; there are no nibbles 12-14 (§2.1).
 
+**[VENDOR-DOC]** The UT804 sheet names positions 1-9 `LCD(1)`-`LCD(5)`,
+`Range`, `Function`, `State` and `State2`. It gives `LCD(1)` as 0-4 and the
+other four digits as 0-9, which fits a 40000-count display, and says nothing
+of the blank (`A`) and `L` (`C`) values, which come from the app and the
+meter (§3.2, §3.3).
+
 ### 3.2 Digit Encoding — [VENDOR]
 
 Digit nibbles (1-5) carry BCD-like values:
@@ -358,6 +377,11 @@ given (issue #16, 2026-09-18):
 The UT804 has no ADP, logic, AC mV or tachometer position (Table 2-1),
 and its reporter found none: code E is in the vendor app only.
 
+**[VENDOR-DOC]** The UT804 sheet's function table agrees on codes 1-D and
+F. It names code A `Fm` (likely 蜂鸣, buzzer: the meter sends it on
+continuity) and code F `%(4-20mA)`, and leaves code E blank. It adds code 0,
+`AC_mV`, which no UT804 dial position reaches.
+
 #### UT803 — Modes [DEDUCED]
 
 The UT803 uses the same nibble 7 mode code scheme. Unit strings found in
@@ -388,6 +412,10 @@ The "AC+DC" string at value 3 was found as a literal in UT804.exe
 from ut804-decompiled.txt:224195-224215. On the meter, value 3 comes from
 the AC/AC+DC button, pressed in an AC mode (UT804 manual Table 2-2, p.17).
 
+**[VENDOR-DOC]** The UT804 sheet gives the same four values and names 0
+`OFF`. The meter sends 0 on its DC readings and never 2, so the "DC" that
+value 0 gets on V, mV and the currents is the app's default.
+
 ### 3.6 Status Flags (Nibble 9) — [VENDOR]
 
 Nibble 9 is decomposed as individual bits in the UT804 parser
@@ -395,10 +423,10 @@ Nibble 9 is decomposed as individual bits in the UT804 parser
 
 | Bit | Mask | Flag | Confirmed |
 |-----|------|------|-----------|
-| bit 3 | 0x8 | Unknown (stripped first, no visible effect) | [UNVERIFIED] |
+| bit 3 | 0x8 | Unknown (stripped first, no visible effect). The UT804 sheet makes it the sign; the meter never sets it (below) | [UNVERIFIED] |
 | bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4). Set on zero readings too, which the LCD shows with a minus | [HARDWARE] |
-| bit 1 | 0x2 | Manual range per sigrok (§8), or MAX MIN: set after RANGE and MAX MIN (below) | [HARDWARE] set; meaning [UNVERIFIED] |
-| bit 0 | 0x1 | AUTO | [HARDWARE] — shows "AUTO" text |
+| bit 1 | 0x2 | Manual range [VENDOR-DOC], as sigrok has it (§8): set after RANGE and MAX MIN (below) | [HARDWARE] set; meaning [VENDOR-DOC] |
+| bit 0 | 0x1 | AUTO | [HARDWARE] + [VENDOR-DOC] — shows "AUTO" text |
 
 On a UT804 (issue #16, 2026-09-18), AUTO is set on V, Ω, capacitance,
 frequency, µA and mA, and clear on mV, A, diode, continuity, temperature
@@ -418,9 +446,19 @@ if value >= 4:
 if value == 1:             // bit 0 → AUTO active
 ```
 
-Which of RANGE and MAX MIN sets bit 1, and where REL and low battery
-show, if at all, is [UNVERIFIED]; the packet has no nibbles 12-14 (§2.1).
-HOLD sends nothing (§4.2).
+**[VENDOR-DOC]** The UT804 sheet reads bits 0-2 as one field, `000` OFF,
+`001` AUTO, `010` Manual, and bit 3 as the sign, `0` plus and `1` minus.
+The field fits the meter: the single-range positions send OFF, the others
+AUTO, and bit 1 came on in a step that pressed RANGE. The sign does not:
+every negative reading and signed zero from the #16 meter had bit 2 set and
+bit 3 clear (status `5`, or `4` without AUTO), which is also where the
+vendor app reads it (§7.4 item 2). The meter and the app win; the parser
+keeps bit 2.
+
+By the sheet, bit 1 is the manual range that RANGE selects, not MAX MIN;
+the `manual_range` capture step (#16) will confirm it on the meter. Where
+REL and low battery show, if at all, is [UNVERIFIED]; the packet has no
+nibbles 12-14 (§2.1). HOLD sends nothing (§4.2).
 
 ### 3.7 Range Code (Nibble 6) — [VENDOR]
 
@@ -458,6 +496,15 @@ UNI-T's UCI SDK manual has a UT804 range table
 from this one for resistance (codes 0-5 there) and 10 A (code 0); the
 meter sent the codes above.
 
+**[VENDOR-DOC]** The UT804 sheet's range table matches this one code for
+code, with two differences:
+- AC V's range 4 is 750 V, as in the manual's Table 2-3;
+- 10 A is range 0, as in the UCI SDK manual, where the meter sent 1.
+
+Neither moves a decimal point: a 750 V range keeps the point after the
+fourth digit, as 1000 V has it (`1000.0`), and the A position has one range. The sheet gives no full scale for continuity,
+diode or the 4-20 mA %, and 400 mV for code 0 (AC mV).
+
 ---
 
 ## 4. Transport Initialization — [VENDOR]
@@ -488,7 +535,8 @@ form code writes to the HID device or the serial port. `WriteFile`'s
 only callers are the runtime's file and console output; the apps'
 serial component never calls it. No trigger byte and no command reach the meter. The UT803
 manual has the user press the meter's RS232 button to start data output
-[KNOWN].
+[KNOWN]. The UT804 sheet describes only what the meter sends, and lists no
+command [VENDOR-DOC].
 
 ---
 
@@ -508,7 +556,8 @@ manual has the user press the meter's RS232 button to start data output
 | 7-segment decoder in the app | None | Unused UT60A/B/C path (§2.4) |
 
 Both send 11-byte packets ending CR LF (§2.1); the payload layouts
-differ (§7.4 item 4).
+differ (§7.4 item 4). UNI-T's interface protocol sheet covers the UT804
+alone: its rate and layout are the UT804's.
 
 ---
 
@@ -559,14 +608,16 @@ The UT804's sign, mode codes, coupling, AUTO bit and the ranges it sent
 are confirmed (§3). Still open:
 
 - The UT803's sign, mode list and range tables
-- Status flag bits: bit 1 (MAN or MAX MIN), REL, Low Battery (§3.6)
+- Status flag bits: whether RANGE alone sets bit 1 (the sheet's Manual),
+  bit 3 (the sheet's sign, never sent), REL, Low Battery (§3.6)
 - Whether the meter needs anything sent (the apps send nothing, §4.2)
 - Streaming rate: a packet about every 656 ms on a UT804 (§4.2); the
   UT803's is open
 - Line format on the wire (§1.2): 7O1 on a UT804; the UT803's is open
 - Digit nibbles `B`, `D`-`F` (§3.2)
 - Whether nibble 4 = 'B' guard condition has meaning
-- The UT804's °F packets (code D), and whether code E is ever sent
+- The UT804's °F packets (code D), and whether code E or 0 (AC mV, the
+  sheet only) is ever sent
 
 ### 7.4 RESOLVED (2026-06): Sign, Nibbles 12-14, and the Two-Model Split
 
@@ -783,3 +834,6 @@ Reference implementations:
   LCD read back beside each step (2026-09-18), and a MAX MIN capture under
   0.7.0-dev (720072d) with two LCD photos of diode mode (2026-09-19)
 - CH9325 transport analysis — see `../uci-bench-family/reverse-engineered-protocol.md`
+- UNI-T "UT804接口协议" (listed as V1.0, uploaded 2023-11-15; the file dates
+  from 2005, last saved 2019) — line format, frame layout, function and
+  range tables, coupling and status fields
