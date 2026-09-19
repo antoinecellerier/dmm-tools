@@ -61,9 +61,6 @@ The top bar contains:
 
 - **Device label** (left) — the model picked in Settings, or the one
   Auto-detect found; reads "Auto-detect" until a meter answers.
-- **App name and version** — click the version label to open the "What's
-  New" changelog popup. On release upgrades, this popup opens automatically
-  on first launch.
 - **Connect / Disconnect** button
 - **Pause / Resume** button — halts acquisition without disconnecting; the
   meter stops being polled entirely. Use the live-view toggle instead to
@@ -72,8 +69,11 @@ The top bar contains:
   a recording)
 - **Connection status** — colored dot (green = connected, orange =
   reconnecting/paused, gray = disconnected) with device name
-- **Settings gear** (right side) — opens the settings panel
-- **Help link** — opens the project page
+- **Version** (right side) — click it to open the "What's New" changelog
+  popup. On release upgrades, this popup opens automatically on first launch.
+- **Help / GitHub** link — opens the project page
+- **?** button — opens the [keyboard shortcuts](#keyboard-shortcuts) help
+- **Settings gear** — opens the settings panel
 
 Toast notifications (e.g. CSV export success/failure) appear in the
 top-right corner in every layout and expire on their own.
@@ -89,16 +89,22 @@ top-right corner in every layout and expire on their own.
   layout condenses them to one line.
 - Mode and range label below in smaller text
 - On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
-  VC-890, and the mock), the mode and range labels are dropdowns of what the
-  meter offers from the current dial position, with the live entry marked `●`.
-  Picking an entry switches the meter. Dial positions with a single mode,
-  modes with a fixed range, and other meters keep the plain label.
-- Active flags shown as colored badges:
-  - **AUTO** — auto-range active
+  VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
+  what the meter offers from the current dial position, with the live entry
+  marked `●`. Picking an entry switches the meter. Dial positions with a
+  single mode, modes with a fixed range, and other meters keep the plain label.
+- Active flags shown as colored badges, in this order:
+  - **HV!** — high voltage warning (red)
   - **HOLD** — display frozen on meter
   - **REL** — relative/delta mode
+  - **AUTO** — auto-range active
   - **MIN**, **MAX**, **AVG** — min/max/average recording active
   - **LOW BAT** — low battery warning (orange)
+  - **P-MAX**, **P-MIN** — peak max/min capture active
+  - **LEAD ERR** — lead error (orange)
+  - **COMP**, **REC**, **LoZ** — compare mode, the meter's own recording,
+    low-impedance voltage input
+  - **VOID** — reading marked invalid by the meter (orange)
   - **SCALE** — a software [scale](#scale) is applied to the reading
 - Overload ("OL") rendered in warning red
 
@@ -213,15 +219,13 @@ A thin strip below the main plot showing the full capture history.
 
 ## Recording
 
-- **Record (●) / Stop (■)** toggle button — starting clears the buffer, so
-  it asks first if a recording holds samples you haven't exported
+- **Record (●) / Stop (■)** toggle button — starting clears the buffer,
+  asking first if a recording holds samples you haven't exported
 - **Export…** button — saves the recording as a CSV, named after the meter,
   the mode it stayed in and the recording's start time; with nothing
   recorded, it saves the readings the graph holds. The arrow beside it
   offers JSON instead, or a replay file that
-  [`--replay`](#command-line-options) plays back — attach one to a bug report
-  about the graph or timing; a parsing problem wants a
-  [`dmm-cli capture`](cli-reference.md#dmm-cli-capture) report
+  [`--replay`](#command-line-options) plays back
 - **Discard** button — drops a stopped recording, asking first if it holds
   samples you haven't exported; Export… then saves the graph's readings again
 - Sample counter and duration shown while recording
@@ -253,18 +257,15 @@ as the meter changes mode/range.
 - **Accuracy** — rated accuracy as ±(% of reading + counts). AC modes show
   separate accuracy for each frequency band (e.g., 40Hz–1kHz and 1kHz–10kHz).
   Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
-  LPF V shows only its own 40Hz–100Hz band, AC V only the bands without LPF;
-  a lone band shows its range after the figure.
 - **Input Z** — input impedance (e.g., About 10MΩ), when applicable
 - **Notes** — additional info like "True RMS", accuracy conditions or thermocouple type
 - **Manual** — hyperlink to the manufacturer's product page (shown whenever a
   URL is configured for the device, even without per-range spec data)
 
-Panel visibility is controlled by the **Specifications:** checkbox in Settings,
-and the Resolution, Accuracy, Input Z and Notes checkboxes after it pick the
-fields it shows. Default: on, every field. Clicking the **Specifications** heading folds
-the wide panel to the narrow layout's line and back; the panel stays folded
-across restarts. Default: unfolded.
+The **Specifications** checkbox in [Settings](#settings) shows the panel,
+and the checkboxes after it pick its fields. Clicking the **Specifications**
+heading folds the wide panel to the narrow layout's line and back; the fold
+persists across restarts. Default: unfolded.
 
 **Layout behavior:**
 
@@ -274,15 +275,14 @@ across restarts. Default: unfolded.
 | Big meter | Pipe-separated inline summary, scaled with the reading |
 | Narrow (< 900px) | Compact single line below the reading |
 
-The one-line layouts (big meter, narrow, folded) show Resolution and Accuracy at most; Input
-Z and the notes are in the full panel. A reading the manual gives no range row
-for (a UT804 AC+DC reading, say) skips Resolution and Accuracy: the full panel
-shows its Input Z and notes, the one-line layouts only the Manual link. When no spec data is available (unsupported device or
-unrecognized mode), only the Manual link is shown (if configured). If neither
-specs nor manual URL exist, nothing renders.
+The one-line layouts (big meter, narrow, folded) show Resolution and
+Accuracy only. A reading the manual gives no range row for shows its mode's
+Input Z and notes in the full panel. When no spec data is available
+(unsupported device or unrecognized mode), only the Manual link is shown (if
+configured). If neither specs nor manual URL exist, nothing renders.
 
 **Coverage:** UT61E+, UT61B+, UT61D+, UT161B/D/E, UT181A, UT803, UT804, and
-Mock (delegates to UT61E+, so its temperature modes show none). Other devices
+Mock (the UT61E+'s figures; none in its temperature modes). Other devices
 show only the Manual link.
 
 ## Scale
@@ -358,9 +358,6 @@ too small to show the **⊞** button, **Ctrl+B** is the way out.
 
 ![Minimal mode in a narrow window: the mode and range selectors under the reading](../assets/gui-minimal-meter-narrow.png)
 
-The reading and its mode line follow the window's shape, side by side or
-stacked.
-
 If all panels are already hidden via settings, **⊞** restores all panels
 to their defaults.
 
@@ -374,13 +371,13 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 |---|---|---|
 | **Theme** | Dark | Dark, Light, or System (follows the desktop's light/dark setting, falling back to Dark if it reports none) |
 | **Colors** | Default | Color preset: Default, High Contrast, Colorblind. See [Color Customization](#color-customization) below. |
-| **Show Graph** | on | Toggle graph panel visibility |
-| **Show Statistics** | on | Toggle statistics panel visibility |
-| **Show Recording** | on | Toggle recording panel visibility |
-| **Show Specifications** | on | Toggle specifications panel visibility |
-| **Resolution, Accuracy, Input Z, Notes** | on | Follow **Specifications:** while it is on. Each shows or hides its field in the specifications; the one-line layouts carry Resolution and Accuracy only. |
-| **Auto-connect** | on | Connect to meter automatically on startup |
-| **Query device name** | on | Ask meter for its name on connect (causes a beep). Skipped when Auto-detect already has the name. |
+| **Graph** | on | Toggle graph panel visibility |
+| **Statistics** | on | Toggle statistics panel visibility |
+| **Recording** | on | Toggle recording panel visibility |
+| **Specifications** | on | Toggle [specifications](#specifications) panel visibility |
+| **Resolution**, **Accuracy**, **Input Z**, **Notes** | on | Shown while **Specifications** is on. Each shows or hides its field in the specifications. |
+| **Auto-connect on start** | on | Connect to meter automatically on startup |
+| **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
 | **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
@@ -390,9 +387,6 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Hide window decorations** | off | Remove the title bar and window borders (`Ctrl+D`). Use Alt+drag (Linux) or the keyboard shortcut to restore. |
 
 ### Color Customization
-
-**Theme.** Dark, Light or System, from the **Theme** row above or
-[`--theme`](#command-line-options). Each mode keeps its own colors.
 
 **Presets.** The **Colors** row picks the palette. Switching presets resets
 any per-color overrides.
@@ -410,8 +404,8 @@ any per-color overrides.
 
 **Per-color editing.** Expand **Customize colors** for a swatch per color,
 grouped UI, Graph, Status and Minimap; click one to open a picker. The
-swatches edit the theme mode you are in, so dark and light are set
-separately. The same colors can be set in `settings.json` — see [Color
+swatches edit the theme mode you are in; dark and light each keep their own
+colors. The same colors can be set in `settings.json` — see [Color
 fields](#color-fields) in the appendix.
 
 ![The Customize colors swatch rows with one swatch's picker open, showing its RGB values, saturation square and hue strip](../assets/gui-color-customization.png)
