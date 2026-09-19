@@ -261,7 +261,9 @@ as the meter changes mode/range.
   URL is configured for the device, even without per-range spec data)
 
 Panel visibility is controlled by the **Specifications** checkbox in Settings.
-Default: on.
+Default: on. Clicking the **Specifications** heading folds the wide panel to
+the narrow layout's line and back; the panel stays folded across restarts.
+Default: unfolded.
 
 **Layout behavior:**
 
@@ -271,7 +273,7 @@ Default: on.
 | Big meter | Pipe-separated inline summary, scaled with the reading |
 | Narrow (< 900px) | Compact single line below the reading |
 
-The one-line layouts (big meter, narrow) show Resolution and Accuracy only; Input
+The one-line layouts (big meter, narrow, folded) show Resolution and Accuracy only; Input
 Z and the notes are in the full panel. A reading the manual gives no range row
 for (a UT804 AC+DC reading, say) skips Resolution and Accuracy: the full panel
 shows its Input Z and notes, the one-line layouts only the Manual link. When no spec data is available (unsupported device or

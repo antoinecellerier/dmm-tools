@@ -26,6 +26,7 @@
 - **Graph plots sub-values** — **Plot:** picks the series; **Show:** overlays same-unit ones such as T2 or a REL reference, dashed.
 - **CSV export carries sub-values** — `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.
 - **The Specifications panel covers the UT181A, UT803 and UT804**
+- **The Specifications panel folds to one line from its heading**
 - **Border and Weak text colours in Customize colors** — separators, panel edges, hints and captions were fixed per preset.
 - **Every panel scrolls when the window is too short** — the shortcut help, the settings rows and the stats, graph and recording below the reading were cut off.
 - **Toasts show in every layout** — minimal mode never showed them and a narrow top bar cut them off; they now float over the window.

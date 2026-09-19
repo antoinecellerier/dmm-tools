@@ -76,9 +76,105 @@ fn summary_line(parts: &[String], joiner: &str, link_follows: bool) -> Option<St
     Some(line)
 }
 
-/// Full specs panel for the wide (side panel) layout. A reading with no
-/// range row (`spec` is `None`) shows its mode's impedance and notes only.
+const FOLD_TOOLTIP: &str = "Show only the resolution and accuracy, on one line";
+const UNFOLD_TOOLTIP: &str = "Show the full specifications";
+
+/// Specs panel for the wide (side panel) layout, under a heading that folds
+/// it to the narrow layout's one-line summary. A reading with no range row
+/// (`spec` is `None`) shows its mode's impedance and notes only.
+///
+/// The caller owns `expanded`, a saved setting: this returns `true` when the
+/// heading was clicked this frame, and the caller flips it.
 pub fn show_specs(
+    ui: &mut Ui,
+    spec: Option<&SpecInfo>,
+    mode_spec: Option<&ModeSpecInfo>,
+    manual_url: Option<&str>,
+    scale: f32,
+    expanded: bool,
+) -> bool {
+    // The title where it always sat, egui's fold triangle at the column's
+    // right edge, centred under the big-meter toggle, and the whole row one
+    // target.
+    let weak = ui.visuals().weak_text_color();
+    let title = egui::WidgetText::from(
+        RichText::new("Specifications")
+            .font(egui::FontId::proportional(11.0 * scale))
+            .color(weak),
+    )
+    .into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::FontSelection::Default,
+    );
+    // The title's own height, as the plain label it replaces: the row is
+    // already the column's width, and a button-height row left a gap above
+    // the first line.
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), title.size().y),
+        egui::Sense::click(),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(
+            egui::WidgetType::CollapsingHeader,
+            ui.is_enabled(),
+            "Specifications",
+        )
+    });
+    if ui.is_rect_visible(rect) {
+        let title_pos = egui::pos2(rect.left(), rect.center().y - title.size().y / 2.0);
+        ui.painter().galley(title_pos, title, weak);
+        // Customize colors' triangle, in the big-meter toggle's muted colour
+        // until the row is hovered or focused.
+        let size = ui.spacing().icon_width_inner;
+        let centre = egui::pos2(
+            rect.right() - crate::app::App::big_meter_toggle_width(ui) / 2.0,
+            rect.center().y,
+        );
+        let color = if response.hovered() || response.has_focus() {
+            ui.style().interact(&response).fg_stroke.color
+        } else {
+            weak
+        };
+        ui.painter().add(egui::Shape::convex_polygon(
+            fold_triangle(centre, size, expanded).to_vec(),
+            color,
+            egui::Stroke::NONE,
+        ));
+    }
+    // The same explicit focus ring as the Customize colors header.
+    crate::a11y::paint_focus_ring(ui, &response);
+    let tooltip = if expanded {
+        FOLD_TOOLTIP
+    } else {
+        UNFOLD_TOOLTIP
+    };
+    let toggled = response.on_hover_text(tooltip).clicked();
+    if expanded {
+        show_specs_body(ui, spec, mode_spec, manual_url, scale);
+    } else {
+        show_specs_compact(ui, spec, manual_url);
+    }
+    toggled
+}
+
+/// The triangle egui's `paint_default_icon` draws for a collapsing header
+/// in a `size` square: pointing down when `open`, right when not. Drawn here
+/// because that painter takes its colour from the widget's interaction state.
+fn fold_triangle(centre: egui::Pos2, size: f32, open: bool) -> [egui::Pos2; 3] {
+    let r = egui::Rect::from_center_size(centre, egui::Vec2::splat(size * 0.75));
+    let down = [r.left_top(), r.right_top(), r.center_bottom()];
+    if open {
+        down
+    } else {
+        let quarter = egui::emath::Rot2::from_angle(-std::f32::consts::FRAC_PI_2);
+        down.map(|p| centre + quarter * (p - centre))
+    }
+}
+
+/// Everything the unfolded panel shows under its heading.
+fn show_specs_body(
     ui: &mut Ui,
     spec: Option<&SpecInfo>,
     mode_spec: Option<&ModeSpecInfo>,
@@ -88,12 +184,6 @@ pub fn show_specs(
     let main_font = 12.0 * scale;
     let sub_font = 11.0 * scale;
     let weak = ui.visuals().weak_text_color();
-
-    ui.label(
-        RichText::new("Specifications")
-            .font(egui::FontId::proportional(sub_font))
-            .color(weak),
-    );
 
     if let Some(spec) = spec {
         // Resolution
@@ -166,7 +256,7 @@ pub fn show_specs(
     }
 }
 
-/// Compact single-line specs for the narrow layout.
+/// Compact single-line specs for the narrow layout and the folded panel.
 pub fn show_specs_compact(ui: &mut Ui, spec: Option<&SpecInfo>, manual_url: Option<&str>) {
     let weak = ui.visuals().weak_text_color();
     let sub_font = 11.0;
@@ -243,6 +333,7 @@ pub fn show_manual_only(ui: &mut Ui, url: &str, scale: f32) {
 mod tests {
     use super::*;
     use dmm_lib::specs::AccuracyBand;
+    use egui::{Pos2, vec2};
 
     const DC_BAND: &[AccuracyBand] = &[AccuracyBand {
         freq_range: None,
@@ -259,6 +350,12 @@ mod tests {
         },
     ];
 
+    const AC_MODE: ModeSpecInfo = ModeSpecInfo {
+        input_impedance: Some("About 10M\u{03A9}"),
+        overload_protection: Some("1000V"),
+        notes: &["Shorted leads: residual \u{2264}10 digits"],
+    };
+
     fn spec(accuracy: &'static [AccuracyBand]) -> SpecInfo {
         SpecInfo {
             resolution: "0.01mV",
@@ -266,25 +363,152 @@ mod tests {
         }
     }
 
-    /// The text the full panel draws for `spec`.
-    fn panel_texts(spec: &SpecInfo) -> Vec<String> {
-        fn collect(shape: &egui::Shape, out: &mut Vec<String>) {
+    const MANUAL: &str = "Manual \u{2197}";
+
+    /// The side column's width at the default window size.
+    const COLUMN_WIDTH: f32 = 240.0;
+
+    /// One frame of the full panel on `ctx`, with `AC_MODE`'s impedance and
+    /// note and a manual URL: the text it draws, each with where, and whether
+    /// the heading was clicked.
+    fn panel_frame(
+        ctx: &egui::Context,
+        spec: &SpecInfo,
+        expanded: bool,
+        events: Vec<egui::Event>,
+    ) -> (Vec<(String, Pos2)>, bool) {
+        fn collect(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
             match shape {
-                egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+                egui::Shape::Text(t) => out.push((t.galley.text().to_string(), t.pos)),
                 egui::Shape::Vec(v) => v.iter().for_each(|s| collect(s, out)),
                 _ => {}
             }
         }
-        let ctx = egui::Context::default();
-        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-            show_specs(ui, Some(spec), None, None, 1.0);
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                Pos2::ZERO,
+                vec2(COLUMN_WIDTH, 600.0),
+            )),
+            events,
+            ..Default::default()
+        };
+        let mut toggled = false;
+        let mut out = ctx.run_ui(input, |ui| {
+            toggled = show_specs(
+                ui,
+                Some(spec),
+                Some(&AC_MODE),
+                Some("https://example.com/manual"),
+                1.0,
+                expanded,
+            );
         });
         out.textures_delta.clear();
         let mut texts = Vec::new();
         for clipped in &out.shapes {
             collect(&clipped.shape, &mut texts);
         }
-        texts
+        (texts, toggled)
+    }
+
+    /// The text the full panel draws for `spec`, unfolded or folded.
+    fn panel_texts(spec: &SpecInfo, expanded: bool) -> Vec<String> {
+        let (texts, _) = panel_frame(&egui::Context::default(), spec, expanded, Vec::new());
+        texts.into_iter().map(|(text, _)| text).collect()
+    }
+
+    /// A press and release at `pos`, as the pointer would deliver them.
+    fn click_at(pos: Pos2) -> Vec<egui::Event> {
+        let button = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        vec![egui::Event::PointerMoved(pos), button(true), button(false)]
+    }
+
+    /// Unfolded, the panel shows every field under its heading.
+    #[test]
+    fn an_unfolded_panel_shows_every_field() {
+        let texts = panel_texts(&spec(AC_BANDS), true);
+        for shown in [
+            "Specifications",
+            "Resolution  0.01mV",
+            "Accuracy",
+            "  45Hz~1kHz  \u{00B1}(0.5%+30)",
+            "  1kHz~10kHz  \u{00B1}(1.5%+30)",
+            "Input Z  About 10M\u{03A9}",
+            AC_MODE.notes[0],
+            MANUAL,
+        ] {
+            assert!(
+                texts.iter().any(|t| t == shown),
+                "no {shown:?} in {texts:?}"
+            );
+        }
+    }
+
+    /// Folded, the heading stays and the narrow layout's one-line summary
+    /// replaces the fields.
+    #[test]
+    fn a_folded_panel_shows_the_one_line_summary() {
+        let texts = panel_texts(&spec(AC_BANDS), false);
+        for shown in [
+            "Specifications",
+            "Res: 0.01mV  Acc: \u{00B1}(0.5%+30) 45Hz~1kHz  |  ",
+            MANUAL,
+        ] {
+            assert!(
+                texts.iter().any(|t| t == shown),
+                "no {shown:?} in {texts:?}"
+            );
+        }
+        for gone in [
+            "Resolution  0.01mV",
+            "Accuracy",
+            "  1kHz~10kHz  \u{00B1}(1.5%+30)",
+            "Input Z  About 10M\u{03A9}",
+            AC_MODE.notes[0],
+        ] {
+            assert!(!texts.iter().any(|t| t == gone), "{gone:?} in {texts:?}");
+        }
+    }
+
+    /// The panel doesn't fold itself: a click anywhere on the heading row,
+    /// the title or the triangle at the far end, is reported, and the caller
+    /// flips the saved setting.
+    #[test]
+    fn a_click_on_the_heading_is_reported() {
+        let ctx = egui::Context::default();
+        let (texts, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, Vec::new());
+        assert!(!toggled);
+        let (_, heading) = texts
+            .iter()
+            .find(|(text, _)| text == "Specifications")
+            .unwrap();
+        for at in [
+            *heading + vec2(4.0, 4.0),
+            Pos2::new(COLUMN_WIDTH - 12.0, heading.y + 4.0),
+        ] {
+            let (_, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, click_at(at));
+            assert!(toggled, "a click at {at:?} was missed");
+        }
+    }
+
+    /// The title sits level with the fields under it, as the Statistics
+    /// heading does; the fold triangle is at the other end of the row.
+    #[test]
+    fn the_title_is_level_with_the_fields() {
+        let (texts, _) = panel_frame(&egui::Context::default(), &spec(DC_BAND), true, Vec::new());
+        let x = |line: &str| {
+            texts
+                .iter()
+                .find(|(text, _)| text == line)
+                .map(|(_, at)| at.x)
+                .unwrap_or_else(|| panic!("no {line:?} in {texts:?}"))
+        };
+        assert_eq!(x("Specifications"), x("Resolution  0.01mV"));
     }
 
     /// LPF V's one band holds only from 40Hz to 100Hz; the panel says so.
@@ -294,7 +518,7 @@ mod tests {
             freq_range: Some("40Hz~100Hz (LPF)"),
             accuracy: "3.0%+50",
         }];
-        let texts = panel_texts(&spec(LPF_BAND));
+        let texts = panel_texts(&spec(LPF_BAND), true);
         assert!(
             texts
                 .iter()
@@ -305,7 +529,7 @@ mod tests {
 
     #[test]
     fn a_dc_band_shows_the_figure_alone() {
-        let texts = panel_texts(&spec(DC_BAND));
+        let texts = panel_texts(&spec(DC_BAND), true);
         assert!(
             texts.iter().any(|t| t == "Accuracy  \u{00B1}(0.1%+5)"),
             "{texts:?}"

@@ -263,6 +263,9 @@ pub struct Settings {
     pub show_stats: bool,
     pub show_recording: bool,
     pub show_specs: bool,
+    /// Whether the wide layout's Specifications panel is unfolded; folded by
+    /// its heading, it shows the narrow layout's one-line summary.
+    pub specs_expanded: bool,
     /// Query device name on connect (causes a beep on the meter).
     pub query_device_name: bool,
     /// Automatically connect to the meter when the GUI starts.
@@ -313,6 +316,7 @@ impl Default for Settings {
             show_stats: true,
             show_recording: true,
             show_specs: true,
+            specs_expanded: true,
             query_device_name: true,
             auto_connect: true,
             always_on_top: false,
@@ -408,6 +412,7 @@ mod tests {
         assert!(s.show_stats);
         assert!(s.show_recording);
         assert!(s.show_specs);
+        assert!(s.specs_expanded);
         assert!(s.query_device_name);
         assert_eq!(s.theme, ThemeMode::Dark);
     }
@@ -477,6 +482,7 @@ mod tests {
             show_stats: true,
             show_recording: false,
             show_specs: false,
+            specs_expanded: false,
             query_device_name: false,
             auto_connect: false,
             always_on_top: true,
@@ -497,6 +503,7 @@ mod tests {
         assert!(deserialized.show_stats);
         assert!(!deserialized.show_recording);
         assert!(!deserialized.show_specs);
+        assert!(!deserialized.specs_expanded);
         assert!(deserialized.always_on_top);
         assert!(deserialized.hide_decorations);
         assert_eq!(deserialized.zoom_pct, 150);
@@ -515,6 +522,9 @@ mod tests {
         // All other fields should have default values
         assert!(s.show_graph);
         assert!(s.auto_connect);
+        // A config file written before the Specifications panel could fold
+        // opens it unfolded, as it always showed.
+        assert!(s.specs_expanded);
         assert_eq!(s.zoom_pct, 100);
         assert_eq!(s.sample_interval_ms, 0);
         // A config file written before the buffer became configurable must

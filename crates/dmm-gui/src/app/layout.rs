@@ -123,7 +123,7 @@ impl App {
     /// Width the toggle drawn by [`show_big_meter_toggle_at`]
     /// (Self::show_big_meter_toggle_at) covers at the right edge of the
     /// controls row, so that row can keep its last chip clear of it.
-    pub(super) fn big_meter_toggle_width(ui: &Ui) -> f32 {
+    pub(crate) fn big_meter_toggle_width(ui: &Ui) -> f32 {
         // Both icons are the same glyph width; measure the one shown when
         // the toggle sits on the controls row.
         let galley = egui::WidgetText::from(Self::big_meter_toggle_icon(BigMeterMode::Off).0)
@@ -204,7 +204,7 @@ impl App {
         &self,
         ui: &mut Ui,
         scale: f32,
-        render_fn: fn(
+        render_fn: impl FnOnce(
             &mut Ui,
             Option<&'static SpecInfo>,
             Option<&'static ModeSpecInfo>,
@@ -225,9 +225,18 @@ impl App {
         }
     }
 
-    /// Render specs for the wide (side panel) layout.
-    fn show_specs_section(&self, ui: &mut Ui, scale: f32) {
-        self.show_specs_with(ui, scale, specs::show_specs);
+    /// Render specs for the wide (side panel) layout, folded or not as the
+    /// user last left its heading.
+    fn show_specs_section(&mut self, ui: &mut Ui, scale: f32) {
+        let expanded = self.settings.specs_expanded;
+        let mut toggled = false;
+        self.show_specs_with(ui, scale, |ui, spec, mode_spec, manual_url, scale| {
+            toggled = specs::show_specs(ui, spec, mode_spec, manual_url, scale, expanded);
+        });
+        if toggled {
+            self.settings.specs_expanded = !expanded;
+            self.settings.save();
+        }
     }
 
     /// Render specs for big meter mode (pipe-separated inline).
