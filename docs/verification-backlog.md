@@ -508,10 +508,9 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **Temperature °C (0x0A):** Needs K-type thermocouple.
 - **Temperature °F (0x0B):** Needs K-type thermocouple.
 - **Duty Cycle % (0x05):** Mode byte verified via SELECT2 on AC mA. Needs PWM signal for value verification.
-- **LPF mV (0x1A), LPF A (0x1C):** Need appropriate signals and dial positions.
-- **AC+DC mV (0x1B), AC+DC A (0x1D):** Need appropriate signals and dial positions.
-- **Live (0x13):** A contact live/neutral wire check (UNI-T protocol deck); on no UT61+ dial.
-- **Inrush (0x1E):** Inrush current mode.
+- **Live (0x13), 0x16, 0x17, 0x1A-0x1E:** the protocol deck's live-wire
+  check, clamp functions and current variants. None is on a UT61+ dial, so
+  there is nothing to test until a meter that has them turns up.
 
 ### Modes not reachable on UT61E+
 
@@ -522,8 +521,8 @@ UT61E+ via any dial position + SELECT/SELECT2 combination. They are likely
 UT61D+-only or other-model features. Verified 2026-03-19 by exhaustively
 cycling SELECT and SELECT2 on V~, V=, mA, and A⎓ dial positions.
 - **LoZ V (0x15):** Low impedance ACV (UT61D+ feature).
-- **0x16 (LoZ V 2):** Vendor software names it "LozV". Not reachable on UT61E+.
-- **0x17 (LPF):** Vendor software names it "LPF". Not reachable on UT61E+.
+- **0x16, 0x17:** Vendor software names them "LozV" and "LPF"; the protocol
+  deck makes them a clamp's AC A and DC A. Not reachable on UT61E+.
 
 ### Experimental protocol families (no real hardware access)
 

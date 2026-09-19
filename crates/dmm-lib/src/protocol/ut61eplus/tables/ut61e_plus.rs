@@ -265,10 +265,18 @@ impl ModeTables for Ut61ePlusTable {
             Mode::Hfe => &self.hfe,
             // Derived modes share their base mode's range table.
             Mode::AcDcV | Mode::LpfV | Mode::LozV => &self.dc_v,
-            Mode::LpfMv | Mode::AcDcMv => &self.dc_mv,
-            Mode::LozV2 | Mode::Lpf | Mode::AcDcA2 | Mode::LpfA => &self.dc_a,
-            // Modes without range tables.
-            Mode::Ncv | Mode::Live | Mode::Inrush => return None,
+            // Modes without range tables: NCV, and the protocol deck's
+            // current and clamp variants, which no dial position reaches
+            // and whose ranges it does not give.
+            Mode::Ncv
+            | Mode::Live
+            | Mode::ClampAcA
+            | Mode::ClampDcA
+            | Mode::LpfA
+            | Mode::AcDcA
+            | Mode::ClampLpfA
+            | Mode::ClampAcDcA
+            | Mode::Inrush => return None,
         })
     }
 }
@@ -463,30 +471,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn derived_millivolt_modes_use_dcmv_table() {
-        let t = table();
-        for mode in [Mode::AcDcMv, Mode::LpfMv] {
-            let r = t.range_info(mode, 0).unwrap();
-            assert_eq!(r.label, "220mV", "{mode:?} should use DCmV table");
-        }
-    }
-
-    #[test]
-    fn derived_amp_modes_use_dca_table() {
-        let t = table();
-        for mode in [Mode::LozV2, Mode::Lpf, Mode::AcDcA2, Mode::LpfA] {
-            let r = t.range_info(mode, 0).unwrap();
-            assert_eq!(r.label, "20A", "{mode:?} should use DCA table");
-            assert_eq!(r.unit, "A");
-        }
-    }
-
     // --- Modes without range tables ---
     #[test]
     fn no_range_table_modes() {
         let t = table();
-        for mode in [Mode::Ncv, Mode::Live, Mode::Inrush] {
+        for mode in [
+            Mode::Ncv,
+            Mode::Live,
+            Mode::ClampAcA,
+            Mode::ClampDcA,
+            Mode::LpfA,
+            Mode::AcDcA,
+            Mode::ClampLpfA,
+            Mode::ClampAcDcA,
+            Mode::Inrush,
+        ] {
             assert!(
                 t.range_info(mode, 0).is_none(),
                 "{mode:?} should have no range table"

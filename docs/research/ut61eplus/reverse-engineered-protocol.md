@@ -376,9 +376,9 @@ confirmed by the mode-specific code paths in FUN_10007d50:
 | 0x12 | hFE | hFE | Multiplier check `cVar1 == '\x12'` | **[VERIFIED]** |
 | 0x13 | Live (contact live/neutral wire check, [VENDOR-DOC]) | Live | Bar graph "-" check `cVar1 == '\x13'` | — (not on UT61E+) |
 | 0x14 | NCV | NCV | Multiplier/"-" checks `cVar1 == '\x14'` | **[VERIFIED]** |
-| 0x15 | LoZ Voltage | LozV | String table position | — (not on UT61E+) |
-| 0x16 | LoZ Voltage 2 | LozV | Multiplier check `cVar1 == '\x16'` | — (not on UT61E+) |
-| 0x17 | LPF | LPF | Bar graph "-" check `cVar1 == '\x17'` | — (not on UT61E+) |
+| 0x15 | LoZ Voltage (low-impedance AC V, [VENDOR-DOC]) | LozV | String table position | — (not on UT61E+) |
+| 0x16 | Clamp AC A ([VENDOR-DOC]) | LozV | Multiplier check `cVar1 == '\x16'` | — (not on UT61E+) |
+| 0x17 | Clamp DC A ([VENDOR-DOC]) | LPF | Bar graph "-" check `cVar1 == '\x17'` | — (not on UT61E+) |
 | 0x18 | LPF V | | Gap in string table | **[VERIFIED]** (V~ + SELECT; no signal needed) |
 | 0x19 | AC+DC V | AC+DC | AC/DC flag check `cVar1 == '\x19'` | **[VERIFIED]** (V⎓ + SELECT; no signal needed) |
 
@@ -389,20 +389,27 @@ position — e.g. on DC V dial with auto-range, the meter reports 0x02 (DCV)
 even when showing mV-scale values. The range byte determines the actual
 scale.
 
-**Speculative mode bytes 0x1A-0x1E:** extrapolated from the 0x18/0x19
-pattern in earlier protocol notes (LPF and AC+DC variants on mV and A
-ranges, plus Inrush). These do not appear in the vendor software's mode
-string table (which ends at 0x19) and have not been observed from the
-UT61E+. They are kept here for cross-referencing against other family
-members that may use a superset of the UT61E+ mode table.
+**0x16 and 0x17 — the software and the deck disagree.** V2.02's display
+names make 0x16 a second "LozV" and 0x17 "LPF". The protocol deck, whose
+mode table spans the family's meters and clamps, makes them a clamp
+meter's AC A and DC A, and puts LPF at 0x18, where the E+ sends LPF V. We
+follow the deck. No UT61+ model reaches either byte (family spec §3.1).
 
-| Byte | Mode | Hardware Status |
-|------|------|-----------------|
-| 0x1A | LPF mV | [UNVERIFIED] |
-| 0x1B | AC+DC mV | [UNVERIFIED] |
-| 0x1C | LPF A | [UNVERIFIED] |
-| 0x1D | AC+DC A | [UNVERIFIED] |
-| 0x1E | Inrush | [UNVERIFIED] |
+**Mode bytes 0x1A-0x1E — [VENDOR-DOC]:** not in the vendor software's
+mode string table (which ends at 0x19) and never observed from a UT61+
+meter. The protocol deck names them; earlier notes here had guessed LPF
+and AC+DC variants of mV for 0x1A/0x1B.
+
+| Byte | Mode (deck) | Hardware Status |
+|------|-------------|-----------------|
+| 0x1A | LPF, meter AC current | — (on no UT61+ dial) |
+| 0x1B | AC+DC, meter current | — (on no UT61+ dial) |
+| 0x1C | LPF, clamp AC current | — (clamp) |
+| 0x1D | AC+DC, clamp current | — (clamp) |
+| 0x1E | Inrush, clamp current | — (clamp) |
+
+The deck gives no ranges for the current variants 0x1A/0x1B, so the code
+gives them no range table.
 
 ### 2.6 Unit Prefix Table — [VENDOR]
 
@@ -660,7 +667,8 @@ Configuration is stored in `options.xml`:
 3. **Mode bytes 0x03, 0x0D, 0x0F**: not exercised with a signal (DC mV,
    AC µA, AC mA). 0x0A/0x0B (temperature) are UT61D+ only; 0x13 (Live) is
    on no UT61+ dial.
-4. **Speculative mode bytes 0x1A-0x1E**: not yet observed from any device.
+4. **Mode bytes 0x16, 0x17, 0x1A-0x1E**: the deck's clamp and current
+   variants (§2.5), not yet observed from any device.
 5. **Edge cases**: NCV two-or-more `-` segments (§2.4: EF and one dash
    verified), hFE display format, temperature handling on UT61D+, OL in
    different modes.

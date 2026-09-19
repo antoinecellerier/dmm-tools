@@ -298,9 +298,10 @@ mod tests {
             assert!(!b_plus.contains(&m(absent)), "UT61B+ has no {absent:?}");
         }
         // 0x15/0x16/0x17 were unreachable from every UT61E+ dial position
-        // (backlog, "Modes not reachable on UT61E+").
+        // (backlog, "Modes not reachable on UT61E+"); the protocol deck makes
+        // them LoZ and two clamp functions.
         let e_plus = all_modes(Ut61ePlusTable::DIAL_POSITIONS);
-        for absent in [Mode::LozV, Mode::LozV2, Mode::Lpf] {
+        for absent in [Mode::LozV, Mode::ClampAcA, Mode::ClampDcA] {
             assert!(
                 !e_plus.contains(&m(absent)),
                 "UT61E+ cannot reach {absent:?} ({:#04x})",

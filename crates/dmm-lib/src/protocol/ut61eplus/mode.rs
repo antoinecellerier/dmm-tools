@@ -1,10 +1,11 @@
 use crate::error::Error;
 use std::fmt;
 
-/// Measurement modes reported by the UT61E+.
+/// Measurement modes reported by the UT61+/UT161 family.
 ///
-/// Values verified against real device captures and cross-checked with
-/// ljakob/unit_ut61eplus (Python) and mwuertinger/ut61ep (Go).
+/// Names follow UNI-T's protocol deck, whose mode table spans meters and
+/// clamps; the UT61E+ bytes are verified against real device captures. See
+/// `docs/research/ut61eplus/reverse-engineered-protocol.md` §2.5.
 ///
 /// The mode byte does NOT have a 0x30 high nibble — use the raw value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,14 +33,16 @@ pub enum Mode {
     Live = 0x13,
     Ncv = 0x14,
     LozV = 0x15,
-    LozV2 = 0x16,
-    Lpf = 0x17,
+    // 0x16-0x1E: clamp functions and current variants no UT61+ dial
+    // position reaches, named after the protocol deck.
+    ClampAcA = 0x16,
+    ClampDcA = 0x17,
     LpfV = 0x18,
     AcDcV = 0x19,
-    LpfMv = 0x1A,
-    AcDcMv = 0x1B,
-    LpfA = 0x1C,
-    AcDcA2 = 0x1D,
+    LpfA = 0x1A,
+    AcDcA = 0x1B,
+    ClampLpfA = 0x1C,
+    ClampAcDcA = 0x1D,
     Inrush = 0x1E,
 }
 
@@ -69,14 +72,14 @@ impl Mode {
         Mode::Live,
         Mode::Ncv,
         Mode::LozV,
-        Mode::LozV2,
-        Mode::Lpf,
+        Mode::ClampAcA,
+        Mode::ClampDcA,
         Mode::LpfV,
         Mode::AcDcV,
-        Mode::LpfMv,
-        Mode::AcDcMv,
         Mode::LpfA,
-        Mode::AcDcA2,
+        Mode::AcDcA,
+        Mode::ClampLpfA,
+        Mode::ClampAcDcA,
         Mode::Inrush,
     ];
 
@@ -104,14 +107,14 @@ impl Mode {
             0x13 => Ok(Mode::Live),
             0x14 => Ok(Mode::Ncv),
             0x15 => Ok(Mode::LozV),
-            0x16 => Ok(Mode::LozV2),
-            0x17 => Ok(Mode::Lpf),
+            0x16 => Ok(Mode::ClampAcA),
+            0x17 => Ok(Mode::ClampDcA),
             0x18 => Ok(Mode::LpfV),
             0x19 => Ok(Mode::AcDcV),
-            0x1A => Ok(Mode::LpfMv),
-            0x1B => Ok(Mode::AcDcMv),
-            0x1C => Ok(Mode::LpfA),
-            0x1D => Ok(Mode::AcDcA2),
+            0x1A => Ok(Mode::LpfA),
+            0x1B => Ok(Mode::AcDcA),
+            0x1C => Ok(Mode::ClampLpfA),
+            0x1D => Ok(Mode::ClampAcDcA),
             0x1E => Ok(Mode::Inrush),
             _ => Err(Error::UnknownMode(b)),
         }
@@ -147,14 +150,14 @@ impl Mode {
             Mode::Live => "Live",
             Mode::Ncv => "NCV",
             Mode::LozV => "LoZ V",
-            Mode::LozV2 => "LoZ V",
-            Mode::Lpf => "LPF",
+            Mode::ClampAcA => "Clamp AC A",
+            Mode::ClampDcA => "Clamp DC A",
             Mode::LpfV => "LPF V",
             Mode::AcDcV => "AC+DC V",
-            Mode::LpfMv => "LPF mV",
-            Mode::AcDcMv => "AC+DC mV",
             Mode::LpfA => "LPF A",
-            Mode::AcDcA2 => "AC+DC A",
+            Mode::AcDcA => "AC+DC A",
+            Mode::ClampLpfA => "Clamp LPF A",
+            Mode::ClampAcDcA => "Clamp AC+DC A",
             Mode::Inrush => "Inrush",
         }
     }
@@ -196,14 +199,14 @@ mod tests {
             (0x13, Mode::Live),
             (0x14, Mode::Ncv),
             (0x15, Mode::LozV),
-            (0x16, Mode::LozV2),
-            (0x17, Mode::Lpf),
+            (0x16, Mode::ClampAcA),
+            (0x17, Mode::ClampDcA),
             (0x18, Mode::LpfV),
             (0x19, Mode::AcDcV),
-            (0x1A, Mode::LpfMv),
-            (0x1B, Mode::AcDcMv),
-            (0x1C, Mode::LpfA),
-            (0x1D, Mode::AcDcA2),
+            (0x1A, Mode::LpfA),
+            (0x1B, Mode::AcDcA),
+            (0x1C, Mode::ClampLpfA),
+            (0x1D, Mode::ClampAcDcA),
             (0x1E, Mode::Inrush),
         ];
         for (byte, mode) in &expected {
@@ -273,6 +276,19 @@ mod tests {
         assert_eq!(Mode::Ncv.to_string(), "NCV");
         assert_eq!(Mode::LozV.to_string(), "LoZ V");
         assert_eq!(Mode::Inrush.to_string(), "Inrush");
+    }
+
+    /// A label names one mode: `set mode` and capture expectations match
+    /// on it.
+    #[test]
+    fn labels_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for mode in Mode::ALL {
+            assert!(
+                seen.insert(mode.as_static_str()),
+                "{mode:?} repeats a label"
+            );
+        }
     }
 
     #[test]

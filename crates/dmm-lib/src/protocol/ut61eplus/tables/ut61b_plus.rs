@@ -248,14 +248,14 @@ impl ModeTables for Ut61bPlusTable {
             | Mode::Live
             | Mode::Ncv
             | Mode::LozV
-            | Mode::LozV2
-            | Mode::Lpf
+            | Mode::ClampAcA
+            | Mode::ClampDcA
             | Mode::LpfV
             | Mode::AcDcV
-            | Mode::LpfMv
-            | Mode::AcDcMv
             | Mode::LpfA
-            | Mode::AcDcA2
+            | Mode::AcDcA
+            | Mode::ClampLpfA
+            | Mode::ClampAcDcA
             | Mode::Inrush => return None,
         })
     }
@@ -403,14 +403,14 @@ mod tests {
             Mode::Live,
             Mode::Ncv,
             Mode::LozV,
-            Mode::LozV2,
-            Mode::Lpf,
+            Mode::ClampAcA,
+            Mode::ClampDcA,
             Mode::LpfV,
             Mode::AcDcV,
-            Mode::LpfMv,
-            Mode::AcDcMv,
             Mode::LpfA,
-            Mode::AcDcA2,
+            Mode::AcDcA,
+            Mode::ClampLpfA,
+            Mode::ClampAcDcA,
             Mode::Inrush,
         ] {
             assert!(

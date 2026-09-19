@@ -75,6 +75,10 @@ for these unverified entries.
 **Action:** Mark 0x16-0x18 as uncertain in `docs/protocol.md`. Verify
 against real device when possible.
 
+**Update (2026-09-19):** UNI-T's protocol deck names 0x16 and 0x17 a clamp
+meter's AC A and DC A, and 0x18 LPF V (verified on the UT61E+); 0x1A-0x1E
+are LPF/AC+DC current variants and inrush. See the UT61E+ spec §2.5.
+
 ### 3. Modes 0x1A-0x1E — not in vendor software
 
 The repo lists 5 additional modes (LPF mV, AC+DC mV, LPF A, AC+DC A,

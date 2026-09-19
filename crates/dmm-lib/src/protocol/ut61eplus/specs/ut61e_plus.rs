@@ -43,8 +43,8 @@ pub(super) static ALL: &[&ModeSpecs] = &[
 ///
 /// `None` where the manual has no table: NCV, and temperature, which it
 /// gives the UT61D+ only ("8) Temperature", PDF p. 17). The modes off the
-/// UT61E+ dial (LoZ, and the LPF and AC+DC variants of mV and A) have none
-/// either.
+/// UT61E+ dial (LoZ, and the protocol deck's current and clamp variants)
+/// have none either.
 pub(super) fn table(mode: Mode) -> Option<&'static ModeSpecs> {
     Some(match mode {
         Mode::DcMv => &DC_MV,

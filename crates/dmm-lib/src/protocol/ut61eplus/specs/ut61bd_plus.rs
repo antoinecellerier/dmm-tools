@@ -104,9 +104,8 @@ pub(super) fn ut61d_plus(mode: Mode) -> Option<&'static ModeSpecs> {
         Mode::DcV => &DC_V,
         Mode::AcMv => &D_AC_MV,
         Mode::AcV => &D_AC_V,
-        // Which of the two LoZ bytes the UT61D+ sends is unresolved (family
-        // spec §3); both read the LoZ rows.
-        Mode::LozV | Mode::LozV2 => &LOZ_ACV,
+        // 0x15, the protocol deck's LoZ byte (family spec §3).
+        Mode::LozV => &LOZ_ACV,
         Mode::Ohm => &RESISTANCE,
         Mode::Continuity => &CONTINUITY,
         Mode::Diode => &DIODE,

@@ -124,6 +124,10 @@ differently:
 Which byte the UT61D+ sends for its single LoZ dial position requires
 device testing.
 
+**Settled by the protocol deck** — [VENDOR-DOC]: 0x15 is LoZ (low-impedance
+AC voltage) and 0x16 is a clamp meter's AC A, which fits the SI prefix
+the software applies to 0x16 alone.
+
 ### Mode 0x17 (LPF) behavior — [VENDOR]
 
 Mode 0x17 appears in the "bar graph = dash" group (line 1600:
@@ -131,6 +135,9 @@ Mode 0x17 appears in the "bar graph = dash" group (line 1600:
 mode displays "-" for bar graph and uses raw display values — consistent
 with a voltage measurement mode. Mode 0x18 has no special handling
 anywhere in the code.
+
+The protocol deck makes 0x17 a clamp meter's DC A and puts LPF at 0x18,
+the byte the UT61E+ sends for LPF V — see the UT61E+ spec §2.5.
 
 ## Commands Reference
 
@@ -180,11 +187,11 @@ Consulted after the vendor analysis above, for validation only.
 | UT60BT over Bluetooth | Not investigated | Yes (BT serial support) | N/A | — |
 | 6000-count range tables | From manual | Per-model tables in code | N/A | To verify |
 | Mode byte values 0x00-0x14 | Vendor software table | Same values | Same values | ✓ |
-| LoZ mode 0x15/0x16 | Vendor has both; code treats differently | Uses 0x15 only | N/A | Partial |
+| LoZ mode 0x15/0x16 | 0x15 (protocol deck; 0x16 is a clamp's AC A) | Uses 0x15 only | N/A | ✓ |
 
-**Key discrepancy**: ljakob's implementation uses only mode 0x15 for LoZ,
-while the vendor software has entries for both 0x15 and 0x16 with
-different display value handling. Requires UT61D+ device testing.
+**Former discrepancy**: ljakob's implementation uses only mode 0x15 for
+LoZ, while the vendor software has entries for both 0x15 and 0x16 with
+different display value handling. The protocol deck sides with 0x15.
 
 Reference implementations:
 

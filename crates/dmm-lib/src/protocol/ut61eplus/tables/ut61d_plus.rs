@@ -169,19 +169,11 @@ const DIAL: &[DialPosition] = &[
             modes: &[m(Mode::TempC), m(Mode::TempF)],
         }],
     },
-    // LoZ — two separate dial positions. Which byte this model sends is
-    // unresolved (spec §3) and nothing says SELECT cycles between them, so
-    // each stands alone instead of sharing a ring.
+    // LoZ — 0x15, the protocol deck's low-impedance AC voltage (spec §3).
     DialPosition {
         rings: &[Ring {
             button: CycleButton::Select,
             modes: &[m(Mode::LozV)],
-        }],
-    },
-    DialPosition {
-        rings: &[Ring {
-            button: CycleButton::Select,
-            modes: &[m(Mode::LozV2)],
         }],
     },
     // µA
@@ -261,18 +253,20 @@ impl ModeTables for Ut61dPlusTable {
             Mode::DcA => &self.dc_a,
             Mode::AcA => &self.ac_a,
             // UT61D+ has LoZ V mode
-            Mode::LozV | Mode::LozV2 => &self.loz_v,
-            // UT61D+ has no hFE, no LPF, no AC+DC, no Inrush
+            Mode::LozV => &self.loz_v,
+            // UT61D+ has no hFE, no LPF, no AC+DC, and none of the protocol
+            // deck's clamp functions
             Mode::Hfe
             | Mode::Live
             | Mode::Ncv
-            | Mode::Lpf
+            | Mode::ClampAcA
+            | Mode::ClampDcA
             | Mode::LpfV
             | Mode::AcDcV
-            | Mode::LpfMv
-            | Mode::AcDcMv
             | Mode::LpfA
-            | Mode::AcDcA2
+            | Mode::AcDcA
+            | Mode::ClampLpfA
+            | Mode::ClampAcDcA
             | Mode::Inrush => return None,
         })
     }
@@ -399,8 +393,8 @@ mod tests {
         let r1 = t.range_info(Mode::LozV, 1).unwrap();
         assert_eq!(r1.label, "1000V");
 
-        // LozV2 also maps to loz_v table
-        assert_eq!(t.range_info(Mode::LozV2, 0).unwrap().label, "600V");
+        // 0x16 is a clamp's AC A in the protocol deck, not a second LoZ.
+        assert!(t.range_info(Mode::ClampAcA, 0).is_none());
 
         assert!(t.range_info(Mode::LozV, 2).is_none());
     }
@@ -445,13 +439,13 @@ mod tests {
             Mode::Hfe,
             Mode::Live,
             Mode::Ncv,
-            Mode::Lpf,
+            Mode::ClampDcA,
             Mode::LpfV,
             Mode::AcDcV,
-            Mode::LpfMv,
-            Mode::AcDcMv,
             Mode::LpfA,
-            Mode::AcDcA2,
+            Mode::AcDcA,
+            Mode::ClampLpfA,
+            Mode::ClampAcDcA,
             Mode::Inrush,
         ] {
             assert!(

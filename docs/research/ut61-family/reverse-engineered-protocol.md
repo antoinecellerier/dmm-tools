@@ -100,11 +100,14 @@ Binary comparison of the UT161E installer vs UT61E+ Software V2.02:
 
 ---
 
-## 3. Available Modes Per Model — [MANUAL + VENDOR]
+## 3. Available Modes Per Model — [MANUAL + VENDOR + VENDOR-DOC]
 
 The mode/range table in the vendor software contains entries for ALL
 modes (0x00-0x19). The meter firmware determines which modes are
 accessible via the physical dial. The PC software accepts any mode byte.
+The protocol deck's mode table runs to 0x1E and names 0x16, 0x17 and
+0x1A-0x1E as clamp functions and current variants, none of them on a
+UT61+ dial (UT61E+ spec §2.5).
 
 | Byte | Mode | B+/161B | D+/161D | E+/161E |
 |------|------|:-------:|:-------:|:-------:|
@@ -127,18 +130,21 @@ accessible via the physical dial. The PC software accepts any mode byte.
 | 0x10 | DC A | Yes | Yes | Yes |
 | 0x11 | AC A | Yes | Yes | Yes |
 | 0x12 | hFE | — | — | **Yes** |
-| 0x13 | Live | [UNVERIFIED] | [UNVERIFIED] | [UNVERIFIED] |
+| 0x13 | Live | — | — | — |
 | 0x14 | NCV | Yes | Yes | Yes |
 | 0x15 | LoZ V | — | **Yes** | — |
-| 0x16 | LoZ V (2) | — | [UNVERIFIED] | — |
-| 0x17 | LPF | — | — | **Yes** |
-| 0x18 | (unknown) | — | — | [UNVERIFIED] |
+| 0x16 | Clamp AC A | — | — | — |
+| 0x17 | Clamp DC A | — | — | — |
+| 0x18 | LPF V | — | — | **Yes** |
 | 0x19 | AC+DC V | — | — | **Yes** |
 
-**LoZ modes 0x15 vs 0x16** — [VENDOR]: Both labeled "LozV" in the
-vendor software, but mode 0x16 has SI prefix multiplication applied
-to its display value while 0x15 does not. Which byte the UT61D+ sends
-requires device testing.
+"—" for Live (0x13) is the manual's dial, which lists no such function on
+any of the three models; no capture has shown the byte.
+
+**LoZ is 0x15** — [VENDOR-DOC]: V2.02 labels both 0x15 and 0x16 "LozV"
+(and applies an SI prefix to 0x16 only), which left open which byte the
+UT61D+ sends. The protocol deck settles it: 0x15 is low-impedance AC
+voltage, 0x16 a clamp meter's AC A. No UT61D+ has confirmed it.
 
 ---
 
@@ -210,8 +216,9 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
   on open leads reads high at first: on 2026-09-14 three entries opened at
   361.1 V, 164.8 V and 35.5 V with the HV warning lit, the last decaying
   through 5.1 V to 0.0 V over three reads 300 ms apart, with or without HOLD.
-- Modes 0x15 (LoZ V), 0x16 (LoZ V 2) and 0x17 (LPF) are reachable from no
-  position of this model, which is why the table above lists none of them.
+- Modes 0x15 (LoZ V), 0x16 and 0x17 (clamp AC A and DC A) are reachable
+  from no position of this model, which is why the table above lists none
+  of them.
 
 #### UT61D+ / UT161D
 
@@ -222,8 +229,7 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
 | mV | DC mV, AC mV | AC mV, Hz, Duty % |
 | Ω | Ω, Continuity, Diode, Capacitance | — |
 | °C/°F | °C, °F | — |
-| LoZ | LoZ V (0x15) | — |
-| LoZ | LoZ V (0x16) | — |
+| LoZ | LoZ V | — |
 | µA | DC µA, AC µA | AC µA, Hz, Duty % |
 | mA | DC mA, AC mA | AC mA, Hz, Duty % |
 | A | DC A, AC A | AC A, Hz, Duty % |
@@ -231,9 +237,8 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
 
 This model combines AC and DC volts on one position (§2.1) and has no hFE,
 no LPF and no AC+DC. Both ring contents and ring order are **[UNVERIFIED]** —
-no UT61D+ has been connected. The two LoZ positions are listed separately
-because which byte the meter sends is unresolved (§3) and nothing in the
-manual says SELECT cycles between them.
+no UT61D+ has been connected. The LoZ position sends 0x15 per the protocol
+deck (§3).
 
 #### UT61B+ / UT161B
 
@@ -585,8 +590,8 @@ possible from the vendor software.
    1 at 4% of range — consistent with 31 segments counted 0-30. Never
    walked against a moving input. [UNVERIFIED]
 
-3. **LoZ mode byte** — whether UT61D+ sends 0x15, 0x16, or both
-   for its single LoZ dial position. [UNVERIFIED]
+3. **LoZ mode byte** — 0x15 per the protocol deck (§3) [VENDOR-DOC];
+   no UT61D+ has sent it yet. [UNVERIFIED]
 
 4. **Temperature display format** — how °C/°F readings are encoded
    in the 7-byte ASCII display field. [UNVERIFIED]
@@ -628,7 +633,7 @@ possible from the vendor software.
 | Mode availability per model | **MANUAL** | Function dial tables |
 | Range tables per count type | **MANUAL** | Specifications pages |
 | LoZ modes 0x15 vs 0x16 behavior | **VENDOR** | SI multiplier code paths differ |
-| LoZ mode byte sent by UT61D+ | **UNVERIFIED** | Requires device |
+| LoZ mode byte sent by UT61D+ | **VENDOR-DOC** (0x15) | Protocol deck; no UT61D+ capture |
 | Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
 | Range index → full-scale mapping | **DEDUCED** (E+ DC V, B+ bottom rungs **VERIFIED**) | Ascending order assumed; E+ DC V walked on the device 2026-09-07, B+ bottom rungs from the 2026-09-09 capture |
 | Commands beyond 0x5E/0x4A/0x46 | **VENDOR-DOC** | Protocol deck; per-model effects in §6 |
@@ -674,8 +679,8 @@ Source: `ut61e_plus.rs` (50 ranges).
 | `ac_v` | AcV | 1 | 22V | V | 22 | -22 |
 | `ac_v` | AcV | 2 | 220V | V | 220 | -220 |
 | `ac_v` | AcV | 3 | 1000V | V | 1000 | -1000 |
-| `dc_mv` | DcMv, AcDcMv, LpfMv | 0 | 220mV | mV | 220 | -220 |
-| `dc_mv` | DcMv, AcDcMv, LpfMv | 1 | 2.2V | mV | 2200 | -2200 |
+| `dc_mv` | DcMv | 0 | 220mV | mV | 220 | -220 |
+| `dc_mv` | DcMv | 1 | 2.2V | mV | 2200 | -2200 |
 | `ac_mv` | AcMv | 0 | 220mV | mV | 220 | -220 |
 | `ac_mv` | AcMv | 1 | 2.2V | mV | 2200 | -2200 |
 | `ohm` | Ohm | 0 | 220Ω | Ω | 220 | — |
@@ -711,8 +716,8 @@ Source: `ut61e_plus.rs` (50 ranges).
 | `dc_ma` | DcMa | 1 | 220mA | mA | 220 | -220 |
 | `ac_ma` | AcMa | 0 | 22mA | mA | 22 | -22 |
 | `ac_ma` | AcMa | 1 | 220mA | mA | 220 | -220 |
-| `dc_a` | DcA, LozV2, Lpf, AcDcA2, LpfA | 0 | 20A | A | 20 | -20 |
-| `dc_a` | DcA, LozV2, Lpf, AcDcA2, LpfA | 1 | 20A | A | 20 | -20 |
+| `dc_a` | DcA | 0 | 20A | A | 20 | -20 |
+| `dc_a` | DcA | 1 | 20A | A | 20 | -20 |
 | `ac_a` | AcA | 0 | 20A | A | 20 | -20 |
 | `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
 | `hfe` | Hfe | 0 | 1000β | β | 1000 | 0 |
@@ -828,5 +833,5 @@ Source: `ut61d_plus.rs` (49 ranges).
 | `dc_a` | DcA | 1 | 20A | A | 20 | -20 |
 | `ac_a` | AcA | 0 | 6A | A | 6 | -6 |
 | `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
-| `loz_v` | LozV, LozV2 | 0 | 600V | V | 600 | -600 |
-| `loz_v` | LozV, LozV2 | 1 | 1000V | V | 1000 | -1000 |
+| `loz_v` | LozV | 0 | 600V | V | 600 | -600 |
+| `loz_v` | LozV | 1 | 1000V | V | 1000 | -1000 |

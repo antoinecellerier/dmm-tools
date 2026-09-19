@@ -222,18 +222,20 @@ enum Coupling {
 /// measure neither.
 fn mode_coupling(mode: Mode) -> Option<Coupling> {
     match mode {
-        Mode::DcV | Mode::DcMv | Mode::DcUa | Mode::DcMa | Mode::DcA => Some(Coupling::Dc),
+        Mode::DcV | Mode::DcMv | Mode::DcUa | Mode::DcMa | Mode::DcA | Mode::ClampDcA => {
+            Some(Coupling::Dc)
+        }
         Mode::AcV
         | Mode::AcMv
         | Mode::AcUa
         | Mode::AcMa
         | Mode::AcA
         | Mode::LpfV
-        | Mode::LpfMv
         | Mode::LpfA
+        | Mode::ClampLpfA
         | Mode::LozV
-        | Mode::LozV2 => Some(Coupling::Ac),
-        Mode::AcDcV | Mode::AcDcMv | Mode::AcDcA2 => Some(Coupling::AcDc),
+        | Mode::ClampAcA => Some(Coupling::Ac),
+        Mode::AcDcV | Mode::AcDcA | Mode::ClampAcDcA => Some(Coupling::AcDc),
         _ => None,
     }
 }
@@ -494,17 +496,18 @@ fn temperature_is_the_ut61d_plus_only() {
     }
 }
 
-/// The UT61D+'s two LoZ mode bytes read the one LoZ part, whose rows have
-/// no input impedance.
+/// The UT61D+'s LoZ byte (0x15) reads the LoZ part, whose rows have no
+/// input impedance. 0x16 is a clamp's AC A in the protocol deck and reads
+/// nothing.
 #[test]
-fn loz_bytes_share_one_part() {
+fn loz_reads_the_loz_part() {
     let model = SpecModel::Ut61dPlus;
     for (range, label) in [(0, "LoZ ACV 600.0V"), (1, "LoZ ACV 1000V")] {
         let a = model.table(&reading("ut61d+", Mode::LozV, range)).unwrap();
-        let b = model.table(&reading("ut61d+", Mode::LozV2, range)).unwrap();
-        assert!(std::ptr::eq(a, b), "range {range}");
         assert_eq!(a.mode.input_impedance, None);
         assert_eq!(a.row(range).unwrap().label, label);
+        let clamp = reading("ut61d+", Mode::ClampAcA, range);
+        assert!(model.table(&clamp).is_none(), "range {range}");
     }
 }
 
