@@ -2,7 +2,7 @@
 
 Items that need real components or specific setups to verify.
 
-## Contents
+## Table of contents
 
 - [Device auto-detection](#device-auto-detection)
 - [Pending Verification](#pending-verification)
@@ -14,10 +14,8 @@ Items that need real components or specific setups to verify.
   - [Capture: gate steps placed after other steps](#capture-gate-steps-placed-after-other-steps)
   - [Modes not yet tested with real signals](#modes-not-yet-tested-with-real-signals)
   - [Modes not reachable on UT61E+](#modes-not-reachable-on-ut61e)
-  - [Experimental protocol families (no real hardware access)](#experimental-protocol-families-no-real-hardware-access)
+  - [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)
   - [UT181A — confirmed on hardware, formats still open](#ut181a--confirmed-on-hardware-formats-still-open)
-  - [CP2110 feature reports (AN434)](#cp2110-feature-reports-an434)
-  - [Commands not fully verified](#commands-not-fully-verified)
   - [Range tables](#range-tables)
   - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
   - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
@@ -106,7 +104,9 @@ driver does not guess between dial positions that do not nest, so from Hz it
 will not walk back to the position's AC mode. `set mode "%"` still works (one
 press), and from Duty % a raw `dmm-cli --device ut61eplus command select2`
 press returns the meter to AC V — the next frame reflects it about a second
-later.
+later. A process that watched the meter enter Hz keeps the dial position, so
+the GUI can ask for the walk: Hz → Duty % → AC V went through from the GUI
+on our E+ on 2026-09-13, two presses in a row (ut61-family spec §3.1).
 
 UT61B+/UT61D+/UT161x owners — [issue #7](https://github.com/antoinecellerier/dmm-tools/issues/7).
 Their dial tables come from the manual alone and no press has been observed,
@@ -535,9 +535,10 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **Temperature °C (0x0A):** Needs K-type thermocouple.
 - **Temperature °F (0x0B):** Needs K-type thermocouple.
 - **Duty Cycle % (0x05):** Mode byte verified via SELECT2 on AC mA. Needs PWM signal for value verification.
-- **Live (0x13), 0x16, 0x17, 0x1A-0x1E:** the protocol deck's live-wire
-  check, clamp functions and current variants. None is on a UT61+ dial, so
-  there is nothing to test until a meter that has them turns up.
+- **Live (0x13), 0x1A-0x1E:** the protocol deck's live-wire check, clamp
+  and current variants. None is on a UT61+ dial, so there is nothing to test
+  until a meter that has them turns up. The same goes for 0x16 and 0x17,
+  under [Modes not reachable on UT61E+](#modes-not-reachable-on-ut61e).
 
 ### Modes not reachable on UT61E+
 
@@ -548,14 +549,24 @@ UT61E+ via any dial position + SELECT/SELECT2 combination. They are likely
 UT61D+-only or other-model features. Verified 2026-03-19 by exhaustively
 cycling SELECT and SELECT2 on V~, V=, mA, and A⎓ dial positions.
 - **LoZ V (0x15):** Low impedance ACV (UT61D+ feature).
-- **0x16, 0x17:** Vendor software names them "LozV" and "LPF"; the protocol
-  deck makes them a clamp's AC A and DC A. Not reachable on UT61E+.
+- **0x16, 0x17:** a clamp meter's AC A and DC A, by UNI-T's protocol deck,
+  which is what the code names them. The vendor software's mode table labels
+  them "LozV" and "LPF", the older reading: it scales 0x16 by SI prefix as
+  it does no voltage mode, and the deck puts LoZ at 0x15 and LPF at 0x18,
+  the byte our UT61E+ sends for LPF V (ut61-family approach doc, "LoZ mode
+  disambiguation" and "Mode 0x17 (LPF) behavior"). Not reachable on UT61E+
+  and on no UT61+ dial; still open is a frame from any meter that sends
+  either byte.
 
-### Experimental protocol families (no real hardware access)
+### Protocol families we have no meter for
 
-These protocols are implemented based on reverse engineering (vendor software
-decompilation, community implementations) but have **never been tested against
-real hardware**. Every aspect needs end-to-end verification.
+These protocols are implemented from reverse engineering (vendor software
+decompilation, community implementations), and anything known on hardware
+comes from a reporter's meter. One has been: the UT804 is `Verified`
+(issue #16, its block below). The VC-880, VC650BT, VC-890, UT803, UT8802,
+UT8803 and UT171 are `Experimental` and have **never been tested against real
+hardware** — every aspect needs end-to-end verification. The UT181A, partly
+verified, has [its own section](#ut181a--confirmed-on-hardware-formats-still-open).
 
 The ask in every family's issue (#3, #4, #5, #7, #12, #13, #14, #15, #16) is
 the same: `dmm-cli --device <id> capture --unverified`, attach the report.
@@ -765,7 +776,11 @@ plus what no step reaches.
   `remote control unreliable on this meter` line if it appears — those are
   the commands this meter refused
 
-#### UT803 / UT804 (CH9325 HID, proprietary structured packets) — UT804 VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION
+#### UT803 / UT804 (issues [#15](https://github.com/antoinecellerier/dmm-tools/issues/15), [#16](https://github.com/antoinecellerier/dmm-tools/issues/16))
+
+CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
+2026-09-18 (#16); the UT803 is implemented and needs hardware verification
+(#15).
 
 - **UT804 hardware reports** — four runs by @clazie in
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16), all over
@@ -1306,12 +1321,6 @@ own software sends, not hardware confirmation.
   retrieval (0x07-0x09), SET_REFERENCE command, timestamp decoding,
   response types 0x03/0x04/0x05/0x72
 
-### CP2110 feature reports (AN434)
-- (none pending)
-
-### Commands not fully verified
-- **Get Name (0x5F):** Verified — returns two frames: ack (FF 00) then ASCII name (e.g. "UT61E+").
-
 ### Range tables
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
@@ -1341,14 +1350,23 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   copied from the E+. Since 2026-09-19 `ut61d_plus.rs` has [6A, 20A],
   ordered as the UT61B+'s [6A, 10A], which issue #19 verified; the
   protocol deck's joint B+/D+ table also has 6A at byte 0 (it gives byte 1
-  as 10A for both, where the manual gives the D+ 20.00A). One D+ frame in
-  each A range settles it (issue #7).
+  as 10A for both, where the manual gives the D+ 20.00A; the table follows
+  the manual). One D+ frame in each A range settles it (issue #7).
+- **UT61E+ amps: range byte 0 never seen.** The manual prints one A range,
+  every capture shows byte 1, and that is the only byte the protocol deck's
+  UT61E+ table gives; `ut61e_plus.rs` fills index 0 with a second `20A` as a
+  placeholder (family spec §5.5).
 - ~~**Frequency ranges in code are invented structure**~~ — **RESOLVED
   2026-09-19** from the protocol deck (family spec §5.9): the E+ ladder runs
   22 Hz … 220 MHz over bytes 0–7 (it stopped at 220 kHz, so a faster
   signal came out with no unit and an unrecognised-range warning), the
   B+/D+ one 99.99 Hz … 9.999 MHz over 0–5. Only rung 0 is seen on a meter;
   the V~-path question is under the UT61B+'s open items. Issue #7.
+- **Hz MHz rungs: from the protocol deck only, unconfirmed on a meter.** The
+  UT61E+'s 2.2/22/220 MHz rungs (range bytes 5–7) and the UT61B+/UT61D+
+  ladder's sixth rung, 9.999 MHz (byte 5), came in with the item above
+  (4318d27, 2026-09-19) and no meter has sent them. One frame from a signal
+  that reaches each rung settles it; no signal generator here.
 - **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
   not part of the V ladder** — settled for the B+: index 0 is each
   ladder's bottom rung; the 2026-09-10 capture pinned DC V 0–1, AC V 0,
@@ -1410,7 +1428,8 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **DC V ranges verified (2026-03-21):** 4 ranges (0=2.2V, 1=22V, 2=220V, 3=1000V).
   The RANGE button cycles 0→1→2→3→0, skipping ranges that would overflow
   the current reading; one rung per press and the 1000V→2.2V wrap were
-  re-confirmed 2026-09-07 (see the resolved 0x46 item above). The code
+  re-confirmed 2026-09-07 (see
+  [UT61E+ RANGE command (0x46)](#ut61e-range-command-0x46--resolved)). The code
   carried a 5th entry (range 4=220mV) from vendor RE, never observed on the
   UT61E+; it was dropped on 2026-09-07 along with its rows in the family
   spec tables.
@@ -1692,7 +1711,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Mode and range switches under HOLD | 0x49 + 0x4A | Verified 2026-09-14 on UT61E+: from held AC V, `set mode Hz` pressed Hz/%, saw nothing change over three reads, pressed HOLD off and Hz/% again, and landed in Hz; `set mode "LPF V"`, `set range 22V` and `set range auto` under HOLD took their own presses with no release; `set rel on` under HOLD was refused and HOLD left lit |
 | Modes with no range choice (UT61E+) | — | Verified 2026-09-07: `get` prints no range row in DC mV, AC mV, DC A or AC A |
 | Capture steps `dcv_negative`, `ohm_body`, `acdcv`, `lpfv`, `acmv`, `acua`, `acma`, `aca` | — | Verified 2026-09-07 on UT61E+ (captures 4 and 5): sign on a AAA battery, body resistance, and each SELECT sub-mode read back by the tool with open leads |
-| Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name) |
+| Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name, e.g. "UT61E+") |
 | MIN/MAX flag cycling | byte11 bits 2-3 | Verified: MAX only (bit 3) → MIN only (bit 2), 2-state cycle, never both set |
 | MIN/MAX value reporting | — | Verified: meter sends stored min/max value, not live reading |
 | Peak flag cycling | byte13 bits 1-2 | Verified: P-MAX only (bit 2) → P-MIN only (bit 1), 2-state cycle |
@@ -1779,7 +1798,7 @@ sweeping.
 2026-09-07 in DC mV (fixed range, and `get range` / `set range` answer
 `Note: UNI-T UT61E+ has no switchable ranges in DC mV — use the dial.`),
 in DC A and in AC A (both table entries read `20A`). AC mV joined them the
-same day — see "Range tables" below.
+same day — see [Range tables](#range-tables).
 
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
