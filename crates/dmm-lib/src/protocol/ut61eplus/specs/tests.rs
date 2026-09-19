@@ -10,6 +10,16 @@ const MODELS: &[(SpecModel, &str)] = &[
     (SpecModel::Ut61ePlus, "ut61e+"),
     (SpecModel::Ut61bPlus, "ut61b+"),
     (SpecModel::Ut61dPlus, "ut61d+"),
+    (SpecModel::Ut161e, "ut161e"),
+    (SpecModel::Ut161b, "ut161b"),
+    (SpecModel::Ut161d, "ut161d"),
+];
+
+/// Each UT161 model and the UT61+ one whose manual pages it shares.
+const UT161: &[(SpecModel, SpecModel)] = &[
+    (SpecModel::Ut161e, SpecModel::Ut61ePlus),
+    (SpecModel::Ut161b, SpecModel::Ut61bPlus),
+    (SpecModel::Ut161d, SpecModel::Ut61dPlus),
 ];
 
 /// A reading of `mode` at range byte `range`, as the model's parser gives
@@ -48,9 +58,11 @@ type Listed = (&'static str, fn(SpecModel, Mode, u8) -> bool);
 
 /// Readings that take their table's mode data but no row.
 const MODE_SPEC_ONLY: &[Listed] = &[(
-    "UT61E+ mV range 1: the mV position is fixed at 220mV in DC and AC (RANGE does nothing, only range byte 0 has been seen), so the meter never sends byte 1",
+    "UT61E+ and UT161E mV range 1: the mV position is fixed at 220mV in DC and AC (on a UT61E+, RANGE does nothing and only range byte 0 has been seen), so the meter never sends byte 1",
     |model, mode, range| {
-        model == SpecModel::Ut61ePlus && matches!(mode, Mode::DcMv | Mode::AcMv) && range == 1
+        matches!(model, SpecModel::Ut61ePlus | SpecModel::Ut161e)
+            && matches!(mode, Mode::DcMv | Mode::AcMv)
+            && range == 1
     },
 )];
 
@@ -465,8 +477,8 @@ fn amps_follow_the_model() {
     }
 }
 
-/// The manual gives temperature to the UT61D+ only ("8) Temperature"), one
-/// row per unit.
+/// The manual gives temperature to the UT61D+ (and UT161D) only ("8)
+/// Temperature"), one row per unit.
 #[test]
 fn temperature_is_the_ut61d_plus_only() {
     for &(model, id) in MODELS {
@@ -476,7 +488,7 @@ fn temperature_is_the_ut61d_plus_only() {
                 ..Measurement::from_payload(&[])
             };
             let label = model.row(&m).map(|r| r.label);
-            let want = (model == SpecModel::Ut61dPlus).then_some(row);
+            let want = matches!(model, SpecModel::Ut61dPlus | SpecModel::Ut161d).then_some(row);
             assert_eq!(label, want, "{id} {mode:?}");
         }
     }
@@ -493,5 +505,46 @@ fn loz_bytes_share_one_part() {
         assert!(std::ptr::eq(a, b), "range {range}");
         assert_eq!(a.mode.input_impedance, None);
         assert_eq!(a.row(range).unwrap().label, label);
+    }
+}
+
+/// A UT161 reads its UT61+ counterpart's tables, rows and notes; only the
+/// current tables differ, in their fuses ("9) DC Current", PDF p. 17).
+#[test]
+fn ut161_differs_only_in_current_fuses() {
+    for &(ut161, ut61) in UT161 {
+        let pairs: Vec<_> = ut161.tables().zip(ut61.tables()).collect();
+        assert_eq!(pairs.len(), ut61.tables().count(), "{ut161:?}");
+        for (a, b) in pairs {
+            assert_eq!(a.name, b.name, "{ut161:?}");
+            assert_eq!(a.page, b.page, "{ut161:?} {}", a.name);
+            assert!(std::ptr::eq(a.ranges, b.ranges), "{ut161:?} {}", a.name);
+            assert_eq!(a.mode.input_impedance, b.mode.input_impedance);
+            assert!(
+                std::ptr::eq(a.mode.notes, b.mode.notes),
+                "{ut161:?} {}",
+                a.name
+            );
+            let fuse = match b.mode.overload_protection {
+                Some(f) if f.starts_with("F1 ") => Some(UT161_F1),
+                Some(f) if f.starts_with("F2 ") => Some(UT161_F2),
+                other => other,
+            };
+            let current = matches!(a.name, "DC Current" | "AC Current");
+            assert_eq!(
+                fuse != b.mode.overload_protection,
+                current,
+                "{ut161:?} {}",
+                a.name
+            );
+            assert_eq!(a.mode.overload_protection, fuse, "{ut161:?} {}", a.name);
+        }
+        let id = MODELS.iter().find(|(m, _)| *m == ut161).unwrap().1;
+        for m in accepted_readings(id) {
+            let (a, b) = (ut161.row(&m), ut61.row(&m));
+            assert_eq!(a.map(std::ptr::from_ref), b.map(std::ptr::from_ref), "{id}");
+            let (a, b) = (ut161.table(&m), ut61.table(&m));
+            assert_eq!(a.map(|t| t.name), b.map(|t| t.name), "{id}");
+        }
     }
 }

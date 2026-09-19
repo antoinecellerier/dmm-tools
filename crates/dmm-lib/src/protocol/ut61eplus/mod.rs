@@ -93,7 +93,7 @@ impl Ut61PlusProtocol {
                     Box::new(tables::ut61e_plus::Ut61ePlusTable::new()),
                     "UNI-T UT161E",
                     false,
-                    SpecModel::Ut61ePlus,
+                    SpecModel::Ut161e,
                 ),
                 // Verified by three captures reported in issue #19,
                 // 2026-09-09 to 2026-09-11: every mode its dial reaches
@@ -112,7 +112,7 @@ impl Ut61PlusProtocol {
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT161B",
                     false,
-                    SpecModel::Ut61bPlus,
+                    SpecModel::Ut161b,
                 ),
                 "ut61d+" => (
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
@@ -124,7 +124,7 @@ impl Ut61PlusProtocol {
                     Box::new(tables::ut61d_plus::Ut61dPlusTable::new()),
                     "UNI-T UT161D",
                     false,
-                    SpecModel::Ut61dPlus,
+                    SpecModel::Ut161d,
                 ),
                 _ => return None,
             };

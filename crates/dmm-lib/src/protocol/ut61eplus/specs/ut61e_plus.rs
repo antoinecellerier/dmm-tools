@@ -13,7 +13,7 @@
 //! different mode-level data or belong to different modes. Range bytes index
 //! the UT61E+ range table (`tables/ut61e_plus.rs`).
 
-use super::{CONTINUITY, DIODE};
+use super::{CONTINUITY, DIODE, UT161_F1, UT161_F2, ut161_fuse};
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::specs::{AccuracyBand, ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo};
 
@@ -956,3 +956,23 @@ static DUTY: ModeSpecs = ModeSpecs {
         notes: &["Duty: square waves only, 1Vpp–20Vpp, ≤10kHz, 10.0%–90.0%"],
     },
 };
+
+// ── UT161E current ranges (UT161 manual PDF page 17) ─────────────────────
+
+// The UT161E's current parts: the UT61E+'s with the UT161 manual's fuses.
+static UT161_DC_UA: ModeSpecs = ut161_fuse(&DC_UA, UT161_F1);
+static UT161_DC_MA: ModeSpecs = ut161_fuse(&DC_MA, UT161_F1);
+static UT161_DC_A: ModeSpecs = ut161_fuse(&DC_A, UT161_F2);
+static UT161_AC_UA: ModeSpecs = ut161_fuse(&AC_UA, UT161_F1);
+static UT161_AC_MA: ModeSpecs = ut161_fuse(&AC_MA, UT161_F1);
+static UT161_AC_A: ModeSpecs = ut161_fuse(&AC_A, UT161_F2);
+
+/// Each UT61E+ current part and its UT161E twin.
+pub(super) static UT161_FUSES: &[(&ModeSpecs, &ModeSpecs)] = &[
+    (&DC_UA, &UT161_DC_UA),
+    (&DC_MA, &UT161_DC_MA),
+    (&DC_A, &UT161_DC_A),
+    (&AC_UA, &UT161_AC_UA),
+    (&AC_MA, &UT161_AC_MA),
+    (&AC_A, &UT161_AC_A),
+];

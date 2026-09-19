@@ -23,7 +23,9 @@ tables, and bar graph segment count.
    page for both series, no revision printed) and the UT61+ series product
    page on meters.uni-trend.com (read 2026-09-19)
 2. **UT161 Series User Manual** (UNI-T, P/N: 110401109612X) — single
-   manual covering UT161B, UT161D, and UT161E
+   manual covering UT161B, UT161D, and UT161E. Compared page by page with
+   the UT61+ manual: its spec pages differ only in the fuses of the
+   current ranges (PDF p. 17)
 3. **UNI-T UT61E+ Software V2.02** — previously decompiled for the
    UT61E+ analysis (see `docs/research/ut61eplus/`)
 4. **UT161E Software** — downloaded and binary-compared against V2.02

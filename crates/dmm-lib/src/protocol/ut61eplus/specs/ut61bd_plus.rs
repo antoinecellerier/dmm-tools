@@ -18,7 +18,7 @@
 //! different mode-level data or belong to different modes. Range bytes index
 //! the range tables in `tables/ut61b_plus.rs` and `tables/ut61d_plus.rs`.
 
-use super::{CONTINUITY, DIODE};
+use super::{CONTINUITY, DIODE, UT161_F1, UT161_F2, ut161_fuse};
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::specs::{AccuracyBand, ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo};
 
@@ -1047,6 +1047,8 @@ static FREQUENCY: ModeSpecs = ModeSpecs {
 
 // ── 11) Frequency/Duty Ratio, duty (manual PDF page 18) ──────────────────
 
+// The UT161 manual prints this accuracy "± (2%+5)", the same value;
+// the UT161B and UT161D share the row.
 static DUTY: ModeSpecs = ModeSpecs {
     name: "Frequency/Duty Ratio",
     page: 18,
@@ -1067,3 +1069,32 @@ static DUTY: ModeSpecs = ModeSpecs {
         notes: &["Duty: square waves only, 1Vpp–20Vpp, ≤10kHz, 10.0%–90.0%"],
     },
 };
+
+// ── UT161B and UT161D current ranges (UT161 manual PDF page 17) ──────────
+
+// Their current parts: the UT61B+'s and UT61D+'s with the UT161 manual's
+// fuses.
+static UT161_DC_UA: ModeSpecs = ut161_fuse(&DC_UA, UT161_F1);
+static UT161_DC_MA: ModeSpecs = ut161_fuse(&DC_MA, UT161_F1);
+static UT161B_DC_A: ModeSpecs = ut161_fuse(&B_DC_A, UT161_F2);
+static UT161D_DC_A: ModeSpecs = ut161_fuse(&D_DC_A, UT161_F2);
+static UT161B_AC_UA: ModeSpecs = ut161_fuse(&B_AC_UA, UT161_F1);
+static UT161B_AC_MA: ModeSpecs = ut161_fuse(&B_AC_MA, UT161_F1);
+static UT161B_AC_A: ModeSpecs = ut161_fuse(&B_AC_A, UT161_F2);
+static UT161D_AC_UA: ModeSpecs = ut161_fuse(&D_AC_UA, UT161_F1);
+static UT161D_AC_MA: ModeSpecs = ut161_fuse(&D_AC_MA, UT161_F1);
+static UT161D_AC_A: ModeSpecs = ut161_fuse(&D_AC_A, UT161_F2);
+
+/// Each UT61B+ or UT61D+ current part and its UT161 twin.
+pub(super) static UT161_FUSES: &[(&ModeSpecs, &ModeSpecs)] = &[
+    (&DC_UA, &UT161_DC_UA),
+    (&DC_MA, &UT161_DC_MA),
+    (&B_DC_A, &UT161B_DC_A),
+    (&D_DC_A, &UT161D_DC_A),
+    (&B_AC_UA, &UT161B_AC_UA),
+    (&B_AC_MA, &UT161B_AC_MA),
+    (&B_AC_A, &UT161B_AC_A),
+    (&D_AC_UA, &UT161D_AC_UA),
+    (&D_AC_MA, &UT161D_AC_MA),
+    (&D_AC_A, &UT161D_AC_A),
+];

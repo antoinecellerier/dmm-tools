@@ -73,7 +73,9 @@ All transport, framing, command, and response formats are shared. See
 
 The UT161 series mirrors the UT61+ series exactly in capability:
 UT161B = UT61B+, UT161D = UT61D+, UT161E = UT61E+ (confirmed by
-identical binaries in vendor software).
+identical binaries in vendor software). Their manuals' specifications
+differ only in the input fuses: 600mA 1000V Φ6x32mm and 11A 1000V
+Φ10x38mm on the UT161, 1A 240V and 10A 240V, both Φ6x25mm, on the UT61+.
 
 ### 2.2 UT61+ vs UT161 — [VENDOR]
 
