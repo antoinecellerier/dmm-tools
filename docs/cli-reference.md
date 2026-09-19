@@ -362,9 +362,9 @@ flag value by name instead of stepping to it with button presses, use
 [`dmm-cli set`](#dmm-cli-set).
 
 ```
-dmm-cli command              # list commands for the connected device
-dmm-cli --device ut181a command  # list commands for UT181A
-dmm-cli command <ACTION>     # send a command
+dmm-cli command                   # list commands for the connected device
+dmm-cli --device ut181a command   # list commands for UT181A
+dmm-cli command <ACTION>          # send a command
 ```
 
 #### UT61E+ commands
