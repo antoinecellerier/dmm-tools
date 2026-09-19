@@ -36,7 +36,6 @@ Confidence levels:
 Both meters use the WCH CH9325 USB-to-UART HID bridge:
 - VID: 0x1A86, PID: 0xE008
 - 8-byte HID reports with 0xF0+length RX framing
-- Already implemented in `transport/ch9325.rs`
 
 Neither app filters on VID or PID: both list every HID device and
 preselect the last one whose product string is `USB to Serial` and
@@ -253,9 +252,8 @@ decoder.
 > nibble 1 = 0xA is an **overload frame** (not an AC flag mode); the
 > decimal position counts **from the left**; the UT804 mode table was
 > wrong for codes 6/7/8/9/A/B/C/D/F; and the UT803 uses an entirely
-> different layout (§5). The Rust parser follows the corrected
-> derivation; the tables below retain their original [VENDOR] markers
-> where still accurate.
+> different layout (§5). The tables below retain their original
+> [VENDOR] markers where still accurate.
 
 **Critical finding:** the data nibbles do NOT contain raw LCD segment
 data. The firmware sends **structured measurement
@@ -384,19 +382,20 @@ continuity) and code F `%(4-20mA)`, and leaves code E blank. It adds code 0,
 
 #### UT803 — Modes [DEDUCED]
 
-The UT803 uses the same nibble 7 mode code scheme. Unit strings found in
-UT803.exe binary:
+The UT803's mode code is its parser's position 7, with meanings of its
+own (§7.4 item 4; *corrected 2026-06: earlier revisions gave it the
+UT804's scheme*). Unit strings found in UT803.exe binary:
 - `V`, `mV` — voltage
 - `uA`, `mA` — current (µA, mA)
 - `*`, `k*`, `M*` — resistance (Ω, kΩ, MΩ in custom font)
 - `Hz`, `kHz`, `MHz` — frequency
 - `nF`, `uF`, `mF` — capacitance
 - `kRPM` — tachometer/RPM (unique to UT803)
-- `#` — diode (custom font)
-- `?` — continuity (custom font)
+- `#`, `?` — °C and °F by the 2026-06 font rendering (§6); earlier
+  revisions read them as diode and continuity
 
-The UT803 likely has fewer than 15 modes (no ADP/Logic mode, possibly no
-Temperature mode). Exact mode list [UNVERIFIED] without hardware.
+The UT803 likely has fewer than 15 modes (no ADP/Logic mode). Exact mode
+list [UNVERIFIED] without hardware.
 
 ### 3.5 AC/DC Indicator (Nibble 8) — [VENDOR]
 
@@ -452,13 +451,12 @@ The field fits the meter: the single-range positions send OFF, the others
 AUTO, and bit 1 came on in a step that pressed RANGE. The sign does not:
 every negative reading and signed zero from the #16 meter had bit 2 set and
 bit 3 clear (status `5`, or `4` without AUTO), which is also where the
-vendor app reads it (§7.4 item 2). The meter and the app win; the parser
-keeps bit 2.
+vendor app reads it (§7.4 item 2). The meter sends the sign in bit 2.
 
 By the sheet, bit 1 is the manual range that RANGE selects, not MAX MIN;
-the `manual_range` capture step (#16) will confirm it on the meter. Where
-REL and low battery show, if at all, is [UNVERIFIED]; the packet has no
-nibbles 12-14 (§2.1). HOLD sends nothing (§4.2).
+whether RANGE alone sets it on the meter is [UNVERIFIED]. Where REL and
+low battery show, if at all, is [UNVERIFIED]; the packet has no nibbles
+12-14 (§2.1). HOLD sends nothing (§4.2).
 
 ### 3.7 Range Code (Nibble 6) — [VENDOR]
 
@@ -569,15 +567,18 @@ unit_372.ttf) where ASCII characters map to measurement symbols:
 | ASCII | Visual symbol |
 |-------|---------------|
 | `*` | Ω (Ohm) |
-| `#` | Diode symbol |
-| `?` | Continuity/beep symbol |
-| `&` | Unknown symbol |
-| `@` | AC indicator |
-| `$` | Unknown (flag-related) |
+| `#` | °C |
+| `?` | °F |
+| `)` | Diode symbol |
+| `&` | Beeper symbol |
+| `@` | `L` (overload text, §7.4 item 6) |
+| `$` | Battery symbol |
 | `W` | Unknown (ADP mode unit) |
 
-These mappings were determined from binary string extraction and
-cross-referencing with mode detection logic.
+*Corrected 2026-06 from the rendered fonts (§7.4 item 7). Earlier
+revisions, from string extraction and the mode detection logic alone,
+gave `#` as diode, `?` as continuity, `@` as the AC indicator and `&` and
+`$` as unknown. The `W` row is theirs; §7.4 item 7 does not cover it.*
 
 ---
 
@@ -707,12 +708,12 @@ re-derived independently by an adversarial second pass:
    (not LCD segments) and the 1-based-`Copy` indexing are both
    vendor-confirmed, not assumed.
 
-The Rust `ut80x` module now implements separate UT803/UT804 parsers
-with these corrections. Clean-room note: approval was given to consult
-the sigrok FS9721 decoder and the FS9721-LP3 datasheet for this family,
-but the resolution above required neither — it is derived entirely
-from the vendor binaries, their fonts, and the existing decompiles, so
-the clean-room boundary for UT803/UT804 remains unopened.
+Clean-room note: approval was given to consult the sigrok FS9721 decoder
+and the FS9721-LP3 datasheet for this family, but the 2026-06 resolution
+above required neither — it is derived entirely from the vendor
+binaries, their fonts, and the existing decompiles. The clean-room
+boundary was opened later, on 2026-09-16, with approval: §8 records what
+was consulted.
 
 The section below is kept for the historical record of the gap.
 
@@ -751,9 +752,9 @@ future investigation should either:
    turn) — four of those captures would nail down exactly which
    nibble/bit carries each flag.
 
-Until one of those happens, this spec leaves nibbles 12-14 as
-`[UNVERIFIED]` and the Rust `ut80x` parser reports every reading as
-positive.
+At that date the spec left nibbles 12-14 as `[UNVERIFIED]` and the sign
+unlocated. Both are superseded: the sign is nibble 9 bit 2 (§3.2,
+§7.4 item 2) and the packet has no nibbles 12-14 (§2.1).
 
 ---
 

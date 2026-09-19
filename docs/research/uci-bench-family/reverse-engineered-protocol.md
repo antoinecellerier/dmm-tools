@@ -9,6 +9,14 @@ Based on:
   REV.2")
 - UNI-T SDK V2.3 (uci.dll)
 - Ghidra decompilation of uci.dll (451K lines)
+- Ghidra decompilation of UNI-T's standalone UT803.exe and UT804.exe
+  (2026-04-10; USB and RS232 handlers 2026-09-16) — CH9325 report layout
+  and receive framing (§2.3, §4); analysis in
+  `../ut803/reverse-engineered-protocol.md`
+- Issue #16 — a UT804's CH9325 reports and range nibbles (§4.2, §6.2;
+  dated in `../ut803/reverse-engineered-protocol.md` §9)
+
+Community sources appear only in §9.
 
 Confidence levels:
 - **[KNOWN]** -- documented in official UNI-T programming manual

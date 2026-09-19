@@ -56,12 +56,18 @@ see [verification-backlog.md](verification-backlog.md).
 
 ## External reference implementations
 
-These third-party implementations are useful cross-references when
-extending the UT61E+ family support, but are **not** consumed by the
-clean-room research docs under `research/` — cite them in review
-discussion, not in the spec files.
+Community implementations are consulted only after a family's
+vendor-source analysis, with the maintainer's approval, for validation.
+Each family's docs under `research/` cite them in a labelled
+Cross-Reference section, with the date the boundary was opened; the
+findings above that section come from vendor sources.
 
 - [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Python implementation (UT61E+, most complete)
 - [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Go implementation (UT61E+)
 - [pylablib](https://github.com/AlexShkarin/pyLabLib) — Python implementation (VC-880)
+- [sigrok libsigrok](https://github.com/sigrokproject/libsigrok) — C; UT71x parser and CH9325 set-up (UT803/UT804 spec §8, UCI bench spec §9)
+- [sigrok wiki, WCH CH9325](https://sigrok.org/wiki/WCH_CH9325) — CH9325 configuration bytes and report framing (same sections)
+- [tmatejuk/ut804_linux_logger](https://github.com/tmatejuk/ut804_linux_logger) — C, RS232 logger; its `UT804.LOG` lists real UT804 packets (UT803/UT804 spec §8)
+- [Lukas Schwarz, UT61B analysis](https://lukasschwarz.de/ut61b) — HE2325U/CH9325 set-up and report format (same sections as sigrok)
+- [thomasf/uni-trend-ut61d](https://github.com/thomasf/uni-trend-ut61d) — C++, `he2325u/he2325u.cpp` HE2325U/CH9325 reader (same sections)
 - [Silicon Labs AN434](https://www.silabs.com/documents/public/application-notes/an434-cp2110-4-interface-specification.pdf) — CP2110/4 HID-to-UART interface specification

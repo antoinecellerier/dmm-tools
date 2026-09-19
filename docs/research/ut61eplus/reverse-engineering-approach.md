@@ -11,7 +11,8 @@ publicly available sources:
 4. **UNI-T official Windows software** (from meters.uni-trend.com)
 
 No community implementations, forum posts, or third-party reverse
-engineering work.
+engineering work during the primary RE. The comparison made afterwards is in
+the [family approach doc](../ut61-family/reverse-engineering-approach.md#cross-reference-with-community-sources).
 
 ## What Each Source Provides
 

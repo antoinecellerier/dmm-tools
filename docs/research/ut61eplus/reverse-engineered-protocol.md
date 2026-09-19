@@ -272,7 +272,7 @@ command tools; effects observed on the meter LCD and subsequent response
 frames.
 
 **Clamp-meter commands — [VENDOR-DOC]**, in the same table and for
-features no UT61+ model has, so never sent by us:
+features no UT61+ model has:
 
 | Byte | Deck name |
 |------|-----------|
@@ -392,13 +392,13 @@ scale.
 **0x16 and 0x17 — the software and the deck disagree.** V2.02's display
 names make 0x16 a second "LozV" and 0x17 "LPF". The protocol deck, whose
 mode table spans the family's meters and clamps, makes them a clamp
-meter's AC A and DC A, and puts LPF at 0x18, where the E+ sends LPF V. We
-follow the deck. No UT61+ model reaches either byte (family spec §3.1).
+meter's AC A and DC A, and puts LPF at 0x18, where the E+ sends LPF V
+**[VERIFIED]**. No UT61+ model reaches either byte (family spec §3.1), so
+no meter has confirmed either reading of 0x16/0x17.
 
 **Mode bytes 0x1A-0x1E — [VENDOR-DOC]:** not in the vendor software's
 mode string table (which ends at 0x19) and never observed from a UT61+
-meter. The protocol deck names them; earlier notes here had guessed LPF
-and AC+DC variants of mV for 0x1A/0x1B.
+meter. The protocol deck names them:
 
 | Byte | Mode (deck) | Hardware Status |
 |------|-------------|-----------------|
@@ -408,8 +408,7 @@ and AC+DC variants of mV for 0x1A/0x1B.
 | 0x1D | AC+DC, clamp current | — (clamp) |
 | 0x1E | Inrush, clamp current | — (clamp) |
 
-The deck gives no ranges for the current variants 0x1A/0x1B, so the code
-gives them no range table.
+The deck gives no ranges for the current variants 0x1A/0x1B.
 
 ### 2.6 Unit Prefix Table — [VENDOR]
 
@@ -517,7 +516,7 @@ the *stored* extremum, not the live reading. The AUTO flag is cleared
 | 0 | 0x01 | **HV warning** | **[VERIFIED]** | Set at 31V on DC V (manual: >30V). DmmData offset 0x3d — stored but not displayed by PC UI. |
 | 1 | 0x02 | **Low battery** | **[VERIFIED]** | Intermittent on real device. DmmData offset 0x3c — passed to a UI indicator widget. |
 | 2 | 0x04 | **!AUTO** (inverted) | **[VERIFIED]** | DmmData offset 0x3b. Bit CLEAR = auto-range ON. DMM.exe hides "AUTO" label when set. |
-| 3 | 0x08 | **APO** (auto power-off) | **[VENDOR-DOC]** | The deck names it `APO_flag`. Stored at DmmData offset 0x3a; never read by PC UI. No capture has set it, although the manual has APO on by default; the meter may drop APO while it talks over USB. On 2026-09-19 the LCD showed no APO symbol while the bit was clear. |
+| 3 | 0x08 | **APO** (auto power-off) | **[VENDOR-DOC]** | The deck names it `APO_flag`. Stored at DmmData offset 0x3a; never read by PC UI. No capture has set it, although the manual has APO on by default; the meter may drop APO while it talks over USB [UNVERIFIED]. On 2026-09-19 the LCD showed no APO symbol while the bit was clear. |
 
 **AUTO flag confirmed inverted** (from DMM.exe UI code at line 2128-2131):
 ```c
@@ -700,7 +699,7 @@ Configuration is stored in `options.xml`:
 | Display: strip spaces, parse float | **VENDOR** | `replace(" ","")` then `toDouble` |
 | OL detection: "O"+"L" in display | **VENDOR** | `FUN_100026a0` |
 | Flags1 at byte[14]: REL/HOLD/MIN/MAX | **VENDOR** | `FUN_10007d50` bit operations |
-| Flags3 at byte[16]: P-MIN/P-MAX/DC | **VENDOR** | `FUN_10007d50` bit operations |
+| Flags3 at byte[16]: P-MIN, P-MAX, AC/DC | **VENDOR** | `FUN_10007d50` bit operations |
 | Byte16 bit3 set = AC component in AC+DC V | **VERIFIED** | 1.6 V cell, 2026-09-19; the deck's AC_DC flag |
 | Mode values 0x00-0x19 | **VENDOR** | String table + code path checks |
 | SI prefix table (T/G/M/k/m/µ/n/p) | **VENDOR** | `FUN_10001000` initializer |

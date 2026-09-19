@@ -43,7 +43,10 @@ tables, and bar graph segment count.
    installer is Software V2.02 unchanged (below)
 
 No community implementations, forum posts, or third-party reverse
-engineering work.
+engineering work during the primary RE. Two community implementations were
+compared afterwards, for validation (table first committed 2026-03-19;
+approval not recorded) — see
+[Cross-Reference with Community Sources](#cross-reference-with-community-sources).
 
 ## Evidence: Single Shared Protocol
 

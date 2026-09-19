@@ -40,11 +40,15 @@
    `references/ut800/ut804/UT804接口协议.xls`.
 
 ### Avoided (clean-room boundary)
-- No external open-source implementations were consulted during RE
-- sigrok FS9721 driver was NOT referenced (to avoid contamination, since
-  the protocol turned out to be non-standard FS9721)
-- Opened 2026-09-16, with approval, after the analysis below — see
-  [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
+- **Avoided until 2026-09-16:** every external open-source implementation,
+  the sigrok FS9721 driver included. The primary RE (2026-04-19 Ghidra
+  passes, 2026-06 protocol-correctness review) consulted none.
+- **Opened 2026-09-16, with approval,** after issue #16's first UT804
+  report, for validation only. Consulted: sigrok libsigrok and its CH9325
+  wiki page, `UT804.LOG` (tmatejuk/ut804_linux_logger), Lukas Schwarz's
+  UT61B analysis, and `he2325u.cpp` (thomasf/uni-trend-ut61d).
+- **Recorded in** [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
+  below and, finding by finding, in `reverse-engineered-protocol.md` §8.
 
 ## Key Findings
 
@@ -100,7 +104,8 @@ chart. UT803.exe has no 7-segment decoder
 
 4. **Cross-referencing** — verified that both UT803 and UT804 use identical
    data format by comparing function structures, constant patterns, and
-   mode detection logic.
+   mode detection logic. *Corrected 2026-06: the two payload layouts
+   differ (spec §7.4 item 4).*
 
 5. **RTTI-seeded handler decompile (2026-09-16).** The full auto-analysis
    had missed most of the form's event handlers, because only the RTTI
@@ -134,8 +139,8 @@ chart. UT803.exe has no 7-segment decoder
 - **Status flag bits:** MEDIUM — AUTO and sign confirmed; the UNI-T sheet
   names bit 1 Manual and puts the sign in bit 3, which the meter never
   sets; REL and low battery unverified
-- **Digit encoding:** MEDIUM — 0-9 confirmed as digits, 0xA as blank, sign
-  encoding unknown
+- **Digit encoding:** MEDIUM — 0-9 confirmed as digits, 0xA as blank and
+  0xC as `L` on the UT804; `B`, `D`-`F` unknown (spec §3.2)
 - **Nibbles 12-14:** none; the packet is 11 bytes
 
 ## Cross-Reference with Community Sources

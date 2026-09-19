@@ -11,7 +11,7 @@ measurement capabilities.
 
 ## Sources
 
-All findings derive from sources already obtained during the UT8803 RE:
+Sources 1-3 were already obtained during the UT8803 RE:
 
 1. **UT8803E Programming Manual V1.0/V1.1** (UNI-T) -- official
    document specifying the UCI API, DMFRM struct, all coding tables, and
@@ -21,9 +21,26 @@ All findings derive from sources already obtained during the UT8803 RE:
    `references/ut8803/vendor-software/uci_dll_decompiled.txt`) -- the
    primary source for wire-level protocol details
 
-No additional downloads or vendor software were required. The UT8803
-RE already captured all the binary analysis needed for the full UCI
-family.
+Added since:
+
+4. **UT803.exe V1.01 and UT804.exe V2.00** (UNI-T standalone PC
+   software) -- Ghidra decompilation 2026-04-10, USB and RS232 handlers
+   2026-09-16: the CH9325 feature report layout and receive framing.
+   Analysis in `../ut803/reverse-engineering-approach.md`
+5. **万用表、毫伏表编程手册 V1.1** (UNI-T,
+   `UCI_Programming_Manual_V1.1_zh.pdf`, added 2026-09-18) -- the
+   programming manual's Chinese original: field names the English
+   translation gets wrong
+6. **Issue #16** -- a UT804's CH9325 reports and range nibbles (dated in
+   `../ut803/reverse-engineered-protocol.md` §9)
+
+### Avoided (clean-room boundary)
+
+- No community implementations were consulted during the uci.dll
+  analysis
+- Opened for the CH9325 only, after that analysis: 2026-04-09 (approval
+  not recorded) and 2026-09-16 (with approval) -- see
+  [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
 
 ## What Each Source Provides for New Models
 
@@ -225,7 +242,8 @@ Reference implementations:
 
 ## File Inventory
 
-All source files were already present from the UT8803 RE:
+From the UT8803 RE unless dated. The UT803/UT804 binaries are
+listed in `../ut803/reverse-engineering-approach.md`, Sources Used.
 
 | Source | File | What it provides for this analysis |
 |--------|------|-----------------------------------|
@@ -236,6 +254,6 @@ All source files were already present from the UT8803 RE:
 | UNI-T | `references/ut8803/UNI-T_SDK_V2.3.zip` | UCI SDK headers, examples, uci.dll binary |
 | Silicon Labs | (same as UT61E+/UT8803 analysis) | CP2110 datasheet, AN434 |
 
-No new downloads were required. Per-model user manuals for UT8802,
-UT632, UT803, UT804, and UT805A would provide measurement ranges and
-specifications but are not needed for protocol understanding.
+Per-model user manuals for UT8802, UT632, UT803, UT804, and UT805A
+would provide measurement ranges and specifications but are not needed
+for protocol understanding.

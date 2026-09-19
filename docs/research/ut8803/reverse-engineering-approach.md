@@ -6,7 +6,10 @@ Reconstruct the UT8803/UT8803E USB communication protocol using only
 official, publicly available sources:
 
 1. **UT8803E User Manual** (from UNI-T, `UT8803E_User_Manual.pdf`)
-2. **UT8803E Programming Manual** (from UNI-T, `UT8803E_Programming_Manual.pdf`)
+2. **UT8803E Programming Manual** (from UNI-T, `UT8803E_Programming_Manual.pdf`),
+   and its Chinese original, 万用表、毫伏表编程手册 V1.1 (from UNI-T,
+   `UCI_Programming_Manual_V1.1_zh.pdf`, added 2026-09-18), whose field
+   names the spec follows where the English translation differs
 3. **UT8803E Data Sheet** (from UNI-T, `UT8803E_DataSheet.pdf`)
 4. **UNI-T SDK V2.3** (from UNI-T, `UNI-T_SDK_V2.3.zip`)
 5. **UT8803E Software V1.1** (from UNI-T, `UT8803E_Software_V1.1.rar`)
@@ -14,7 +17,10 @@ official, publicly available sources:
 7. **AN434: CP2110/4 Interface Specification** (from Silicon Labs)
 
 No community implementations, forum posts, or third-party reverse
-engineering work.
+engineering work were used during the primary RE. Two community
+implementations were compared afterwards, for validation only (table
+first committed 2026-03-19; approval not recorded) -- see
+[Cross-Reference with Community Sources](#cross-reference-with-community-sources).
 
 ## What Each Source Provides
 
@@ -571,6 +577,7 @@ without the UCI SDK.
 |--------|------|-----------------|
 | UNI-T | `references/ut8803/UT8803E_User_Manual.pdf` | Measurement modes, ranges, display specs |
 | UNI-T | `references/ut8803/UT8803E_Programming_Manual.pdf` | UCI API, DMFRM struct, flags, coding tables |
+| UNI-T | `references/ut8803/UCI_Programming_Manual_V1.1_zh.pdf` | The programming manual's Chinese original (added 2026-09-18): field names the English translation gets wrong |
 | UNI-T | `references/ut8803/UT8803E_DataSheet.pdf` | Specifications summary |
 | UNI-T | `references/ut8803/UT8803E_Software_V1.1.rar` | Vendor software installer |
 | UNI-T | `references/ut8803/UNI-T_SDK_V2.3.zip` | UCI SDK with headers, libs, examples |

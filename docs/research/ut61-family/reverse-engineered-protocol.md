@@ -40,7 +40,7 @@ All transport, framing, command, and response formats are shared. See
 The protocol deck says the same outright: it is one "Bluetooth
 communication protocol" for the UT161 series, the UT61+ series and the
 UT202S, with one mode table spanning meters and clamps (§3) and a range
-table per model (§5). The same bytes reach us over the USB cable.
+table per model (§5). The same bytes travel over the USB cable.
 
 | Aspect | Value | All 6 models |
 |--------|-------|:------------:|
@@ -197,17 +197,15 @@ Every row of this table, ring orders included, was walked on a real UT61E+ on
   anything on hFE or NCV.
 - Every leg needed one press. The meter reported the new mode on the first
   read ~300 ms after the press in all but one case (one extra ~100 ms read on
-  the Ω ring), which is what the driver's 150 ms delay / 3 reads settle covers.
-- One walk takes two presses in a row: Hz → Duty % → AC V, which only the GUI
-  can ask for (a CLI process that starts in Hz can't tell the dial position).
-  It went through from the GUI on 2026-09-13 **[VERIFIED]**, the new mode
-  showing ~0.3 s after the press into Duty % and ~0.6 s after the press into
-  AC V. A UT61B+ fails this walk (issue #20).
+  the Ω ring).
+- One walk takes two presses in a row: Hz → Duty % → AC V. It went through on
+  2026-09-13 **[VERIFIED]**, the new mode showing ~0.3 s after the press into
+  Duty % and ~0.6 s after the press into AC V. A UT61B+ fails this walk
+  (issue #20).
 - Pressing SELECT while the meter is in Hz or Duty % leaves the Hz/% ring for
   the *other* member of the position's SELECT ring — LPF V on V~, DC mV, DC µA,
   DC mA, DC A — not the junction mode. On the Hz/% position SELECT toggles
-  Hz ↔ Duty % like Hz/% does. The driver does not rely on either: it only
-  ever presses SELECT from a SELECT-ring mode.
+  Hz ↔ Duty % like Hz/% does.
 - A switch goes through under MIN/MAX. Under HOLD a SELECT switch goes
   through and the press clears HOLD, but a Hz/% press does nothing
   (section 6.3). AUTO is back once the target mode shows. LPF V always
@@ -390,16 +388,16 @@ that leaves 1-4 and 6 [DEDUCED].
 
 | Range | UT61B+ | UT61D+ | UT61E+ |
 |-------|--------|--------|--------|
-| 0 | 6.000 A (1 mA) | 6.000 A (1 mA) | 20.000 A (1 mA) |
-| 1 | 10.00 A (10 mA) | 20.00 A (10 mA) | 20.000 A (1 mA) |
+| 0 | 6.000 A (1 mA) | 6.000 A (1 mA) [VENDOR-DOC] | [UNVERIFIED] |
+| 1 | 10.00 A (10 mA) | 20.00 A (10 mA) [UNVERIFIED] | 20.000 A (1 mA) |
 
-The UT61E+ manual prints one A range; its range table labels both bytes
-20A, and the captures show range 1 — the only byte the protocol deck's
-UT61E+ table gives (as "10A"). The UT61D+ order follows the UT61B+'s, which
-issue #19 verified, and the deck's joint UT61B+/UT61D+ table puts 6A at
-byte 0 [VENDOR-DOC]. It gives byte 1 as 10A for both models, where the
-manual gives the UT61D+ 20.00 A; we follow the manual. No UT61D+ has
-confirmed either — issue #7.
+The UT61E+ manual prints one A range, and the captures show range 1 — the
+only byte the protocol deck's UT61E+ table gives (as "10A"); byte 0 has not
+been seen. The UT61D+ order follows the UT61B+'s, which issue #19 verified,
+and the deck's joint UT61B+/UT61D+ table puts 6A at byte 0 [VENDOR-DOC]. The
+two sources conflict on byte 1: the deck gives 10A for both models, the
+manual gives the UT61D+ 20.00 A (the table's value). No UT61D+ has confirmed
+either — issue #7.
 
 ### 5.6 Temperature (UT61D+ / UT161D only) — [MANUAL]
 
@@ -677,26 +675,15 @@ possible from the vendor software.
 
 **MANUAL** — transcribed from the UT61+ Series specification tables
 (`references/ut61eplus/ut61e_manual.pdf`, "IX. Specifications", 2. Electrical
-Specifications, whose keyed transcription is in
-`crates/dmm-lib/src/protocol/ut61eplus/specs/`). These are the values the
-`RangeInfo.overload_pos`/`overload_neg` fields carried in
-`crates/dmm-lib/src/protocol/ut61eplus/tables/` from the first commit until
-they were removed from the code; no production code ever read them, only the
-table files' own tests. They are kept
-here so the numbers stay findable if a software overload check or bar-graph
-scaling is built later. Which range *index* maps to which row is [DEDUCED]
-except where section 5 says otherwise (section 7, item 1).
-
-The label, unit and index of every row are held to the source tables by
-`spec_section_9_matches_the_range_tables` in
-`crates/dmm-lib/src/protocol/ut61eplus/tables/mod.rs`, in both directions.
-The full-scale columns are not: nothing in the code carries them any more.
+Specifications). The Hz rungs and the UT61D+ temperature split are the
+protocol deck's (§5.9, §5.6) [VENDOR-DOC]. Which range *index* maps to which
+row is [DEDUCED] except where section 5 says otherwise (section 7, item 1).
 
 Columns: `Table` is the range table name in the source file; `Modes` lists
 the `Mode` variants that share it (derived modes reuse their base mode's
 table); `Idx` is the range byte (`payload[1] & 0x0F`); `Full scale (−)` of
 `—` means the quantity has no negative range, `0` means the lower limit is
-zero (duty cycle, diode, hFE). Generated from the source tables, not retyped.
+zero (duty cycle, diode, hFE).
 
 ### UT61E+ (22,000 counts)
 
@@ -750,9 +737,9 @@ Source: `ut61e_plus.rs` (51 ranges).
 | `dc_ma` | DcMa | 1 | 220mA | mA | 220 | -220 |
 | `ac_ma` | AcMa | 0 | 22mA | mA | 22 | -22 |
 | `ac_ma` | AcMa | 1 | 220mA | mA | 220 | -220 |
-| `dc_a` | DcA | 0 | 20A | A | 20 | -20 |
+| `dc_a` | DcA | 0 | 20A | A | [UNVERIFIED] | [UNVERIFIED] |
 | `dc_a` | DcA | 1 | 20A | A | 20 | -20 |
-| `ac_a` | AcA | 0 | 20A | A | 20 | -20 |
+| `ac_a` | AcA | 0 | 20A | A | [UNVERIFIED] | [UNVERIFIED] |
 | `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
 | `hfe` | Hfe | 0 | 1000β | β | 1000 | 0 |
 
@@ -761,6 +748,8 @@ On the UT61E+ the mV dial is fixed-range in **both** of its modes — DC mV
 neither the range byte nor the AUTO annunciator). Only index 0 (220mV) has
 ever been seen there, and the protocol deck's UT61E+ table has that rung
 alone.
+
+Index 0 of `dc_a`/`ac_a` has not been seen on the UT61E+ (§5.5).
 
 ### UT61B+ (6,000 counts)
 
@@ -867,9 +856,12 @@ Source: `ut61d_plus.rs` (52 ranges).
 | `dc_ma` | DcMa | 1 | 600mA | mA | 600 | -600 |
 | `ac_ma` | AcMa | 0 | 60mA | mA | 60 | -60 |
 | `ac_ma` | AcMa | 1 | 600mA | mA | 600 | -600 |
-| `dc_a` | DcA | 0 | 6A | A | 6 | -6 |
-| `dc_a` | DcA | 1 | 20A | A | 20 | -20 |
-| `ac_a` | AcA | 0 | 6A | A | 6 | -6 |
-| `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
+| `dc_a` | DcA | 0 | 6A | A | 6 [UNVERIFIED] | -6 [UNVERIFIED] |
+| `dc_a` | DcA | 1 | 20A | A | 20 [UNVERIFIED] | -20 [UNVERIFIED] |
+| `ac_a` | AcA | 0 | 6A | A | 6 [UNVERIFIED] | -6 [UNVERIFIED] |
+| `ac_a` | AcA | 1 | 20A | A | 20 [UNVERIFIED] | -20 [UNVERIFIED] |
 | `loz_v` | LozV | 0 | 600V | V | 600 | -600 |
 | `loz_v` | LozV | 1 | 1000V | V | 1000 | -1000 |
+
+The `dc_a`/`ac_a` rows are the manual's values in the UT61B+'s order; the
+deck gives 10A at index 1, and no UT61D+ has confirmed either (§5.5).
