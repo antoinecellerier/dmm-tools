@@ -25,6 +25,7 @@ point, not a fourth reference. The general rules are in
 - Acknowledgements are credit, kept compact: one bullet per project, what it
   contributed, no methodology.
 - The device table is hand-written and guarded by a test; keep its status
-  words those of `Stability::label()`.
+  words those of `Stability::label()`, capitalised, with the emoji
+  `device-catalog.md` gives them.
 - The screenshot is refreshed at a release whose changelog changes what the
   picture shows.

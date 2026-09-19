@@ -113,7 +113,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 
 - Reporter-verified item → strike and credit in `docs/verification-backlog.md`: `~~item~~ — **VERIFIED** YYYY-MM-DD by @user on real <meter> (<cable>). <evidence>. See PR #N.` Community-sourced but unrun → `per <source>`, no VERIFIED.
 - Verification issue body → updated in the same round as the reply: regenerate the checklist (`dmm-cli --device <id> capture --list-steps --format md`, never hand-edited — a verified item flips the step's `.verified()` in the code), and update the summary and the dev-build line. Show it, then `gh issue edit` on a go-ahead.
-- A device fix no meter has confirmed stays out of `CHANGELOG.md`; the entry, with credit, lands in the commit that records the reporter's confirmation.
+- A `CHANGELOG.md` entry saying a model works or is verified, with credit, lands in the commit that records the reporter's confirmation, not before; a targeted fix with credible evidence gets its entry with the fix (`.claude/rules/changelog.md`).
 - Family fully verified → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
 - New unknown from the thread → backlog. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
 - Two to three weeks of silence on an ask → one polite nudge.

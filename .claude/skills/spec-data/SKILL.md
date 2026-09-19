@@ -113,7 +113,7 @@ Delegate to an Opus agent, one meter per commit (`lib: <model> readings carry th
   - the resolution unit (`protocol::test_support::unit_family`);
   - golden `resolution` fields;
   - one replay through `Dmm::request_measurement`.
-- **Docs:** the coverage lines in `docs/gui-reference.md` and `docs/ux-design.md`, the sources in the research approach doc, and a CHANGELOG GUI entry ("The Specifications panel covers the …"). Manual spec data doesn't wait for hardware confirmation: that rule is for device-behaviour fixes.
+- **Docs:** the coverage lines in `docs/gui-reference.md` and `docs/ux-design.md`, the sources in the research approach doc, and a CHANGELOG GUI entry ("The Specifications panel covers the …"). Manual spec data doesn't wait for hardware confirmation: `.claude/rules/protocol.md` exempts it.
 
 ## 7. Verify
 
@@ -136,12 +136,12 @@ Delegate to an Opus agent, one meter per commit (`lib: <model> readings carry th
 
 ## Scripts
 
-- **`scripts/specs_tool.py`** — run it:
+- **`.claude/skills/spec-data/scripts/specs_tool.py`** — run it:
   - `check T.json`: shape check;
   - `diff A.json B.json --count N`: the disagreement list, as JSON;
   - `merge A.json resolutions.json DIR`: writes `verified.json` and `provenance.json`;
   - `compare verified.json dump.json [--notes app-notes.json]`: `match`, or the mismatches, with exit status 1.
 
   The transcription shape is in its docstring.
-- **`scripts/spec-transcription.js`** — the workflow for step 3; run it through the Workflow tool, don't read it into context.
+- **`.claude/skills/spec-data/scripts/spec-transcription.js`** — the workflow for step 3; run it through the Workflow tool, don't read it into context.
 - **`evals.json`** — three scenarios to re-test the skill after editing it.

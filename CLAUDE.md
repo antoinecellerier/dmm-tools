@@ -4,7 +4,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 
 ## Project structure
 
-- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut80x` (UT803/UT804), `ut171`, `ut181a`, `vc880`, `vc890`. Protocol internals (framing, per-family parsers) are `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction; only `protocol::registry` and `protocol::ut61eplus` (tables, commands) are `pub` for the CLI/GUI.
+- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut80x` (UT803/UT804), `ut171`, `ut181a`, `vc8x0` (VC-880/VC-890). Protocol internals (framing, per-family parsers) are `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction; only `protocol::registry` and `protocol::ut61eplus` (tables, commands) are `pub` for the CLI/GUI.
 - `crates/dmm-shared/` — app-only things the CLI and GUI must agree on that `dmm-lib` has no business carrying, compile-enforced: the settings schema (`SharedSettings { device_family }`), `write_atomic`, `logging` (the default log levels), and `export` (the JSON reading shape and the `measurements-<meter>-<mode>-<start>.<ext>` file name both binaries write). GUI-only settings fields (colors, panel visibility, theme) live in `dmm-gui` and merge via `#[serde(flatten)]`. Export formats stay identical in both binaries: a new format or field lands in both in one change.
 - `crates/dmm-cli/` — CLI binary `dmm-cli`.
 - `crates/dmm-gui/` — GUI binary `dmm-gui` (eframe/egui).
@@ -40,7 +40,7 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 
 ## Engineering standards
 
-Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`), `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`), `.claude/rules/changelog.md` (entry format, sectioning — `CHANGELOG.md`) and the user-facing doc rules: `.claude/rules/docs-user-facing.md` (what user docs carry and what goes to design docs — `README.md`, the references, the device catalog, `docs/setup.md`, `CONTRIBUTING.md`), `.claude/rules/reference-docs.md` (section shape — the CLI and GUI references), `.claude/rules/device-catalog.md` (`docs/supported-devices.md`) and `.claude/rules/readme.md` (`README.md`).
+Subsystem-specific rules live in path-scoped rule files that load when their files are touched: `.claude/rules/protocol.md` (protocol correctness, logging — `crates/dmm-lib/`), `.claude/rules/gui.md` (GUI correctness, egui pitfalls — `crates/dmm-gui/`), `.claude/rules/changelog.md` (entry format, sectioning — `CHANGELOG.md`), `.claude/rules/research-docs.md` (what a family spec and the architecture doc carry — `docs/research/`, `docs/architecture.md`) and the user-facing doc rules: `.claude/rules/docs-user-facing.md` (what user docs carry and what goes to design docs — `README.md`, the references, the device catalog, `docs/setup.md`, `CONTRIBUTING.md`), `.claude/rules/reference-docs.md` (section shape — the CLI and GUI references), `.claude/rules/device-catalog.md` (`docs/supported-devices.md`) and `.claude/rules/readme.md` (`README.md`).
 
 ### Code quality
 - All code must pass `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check`.
@@ -90,6 +90,7 @@ Documentation is part of the deliverable — update affected docs in the same co
 - For new device support, use the `/add-device` skill (`.claude/skills/add-device/SKILL.md`) — it carries the full checklist of gates, doc touchpoints, and the verification-issue pattern.
 - For spec data (resolution, accuracy, notes from a manual), use the `/spec-data` skill (`.claude/skills/spec-data/SKILL.md`) — it carries the transcription workflow, the user checkpoints and the verification steps.
 - For issue and PR replies, use the `/issue-replies` skill (`.claude/skills/issue-replies/SKILL.md`) — it carries the reply structure, the assertion bar, the standard device-report asks, and the backlog write-back rule.
+- For GUI screenshots and visual or interaction checks, use the `/verify-gui` skill (`.claude/skills/verify-gui/SKILL.md`) — it carries the private-display script, the input commands and the scenario flags.
 - Escape angle brackets in markdown (`\<foo\>` or `` `<foo>` ``) — bare `<tags>` render as invisible HTML on GitHub.
 - Anything GitHub renders (release bodies, issue/PR comments) is GFM, not plain text: bare `@name` mentions a real account, and a single newline becomes `<br>`, so keep each paragraph on one line. Check the render, not the source: `jq -n --rawfile t F.md '{text:$t,mode:"gfm"}' | gh api /markdown --input -`.
 

@@ -64,7 +64,8 @@ in that list.
 
 - Numbered steps and the commands to run, a one-line reason only where the
   reader must choose between steps. The same exclusions and ownership apply;
-  a troubleshooting heading is the message the tool prints, verbatim.
+  a troubleshooting heading is the message the tool prints, verbatim, or,
+  where it prints nothing, the symptom as the user sees it.
 
 ## Before commit
 

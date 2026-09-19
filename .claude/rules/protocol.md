@@ -9,7 +9,7 @@ paths:
 
 - Protocol code is byte-level. Always validate checksums. Document byte offsets and masks with comments referencing `docs/research/<family>/reverse-engineered-protocol.md`.
 - Test parsing with known-good byte sequences captured from real device traces.
-- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=dmm_lib=trace cargo run --bin dmm-cli -- --device <id> debug` to capture raw bytes. Three major bugs (frame length, mode enum, flag bits) only surfaced against real hardware.
+- **Any protocol change MUST be verified against a real device before being considered done.** Use `RUST_LOG=dmm_lib=trace cargo run --bin dmm-cli -- --device <id> debug` to capture raw bytes. Three major bugs (frame length, mode enum, flag bits) only surfaced against real hardware. Exempt: static data transcribed from a manual (spec tables); anything the meter does on the wire is not.
 - For unsafe or HID parsing code: confirm a malformed response cannot panic (check buffer sizes, bounds).
 - Our protocol understanding comes from reverse engineering, not official documentation. See `docs/verification-backlog.md` for what's been verified and what's pending.
 - Per-family protocol specs live in `docs/research/<family>/reverse-engineered-protocol.md`. `docs/protocol.md` is only an index.

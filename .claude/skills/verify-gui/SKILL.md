@@ -40,7 +40,7 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh start
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --device mock
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --mock-mode ohms
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --mock-mode dcv --mock-clock-preseed 90
-${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --replay assets/replays/<file>.replay --mock-clock-preseed 120
+${CLAUDE_SKILL_DIR}/scripts/gui-display.sh run --replay <repo>/assets/replays/<file>.replay --mock-clock-preseed 120
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh key ctrl+o
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh click 125 12
 ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh wheel 400 300 down
