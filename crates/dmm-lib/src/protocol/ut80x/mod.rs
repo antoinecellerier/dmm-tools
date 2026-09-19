@@ -921,10 +921,10 @@ impl Protocol for Ut80xProtocol {
         // Where each model's dial or buttons reach a step: most are on both,
         // and a step one model lacks is tagged where it is declared. The
         // UT804 has no AC mV, tachometer or ADP position (its manual's
-        // Table 2-1, #16); MAX MIN and REL are asked of the UT804 alone.
-        // Issue #16's reporter walked every step the two share on a UT804
-        // on 2026-09-18; MAX MIN and REL are what a further run is for, and
-        // the UT803 has never answered.
+        // Table 2-1, #16); RANGE, MAX MIN and REL are asked of the UT804
+        // alone. Issue #16's reporter walked every step the two share on a
+        // UT804 on 2026-09-18; RANGE, MAX MIN and REL are what a further run
+        // is for, and the UT803 has never answered.
         let shared = |step: CaptureStep| Some(step.verified_if(!ut803));
         let ut803_only = |step: CaptureStep| ut803.then_some(step);
         let ut804_only = |step: CaptureStep| (!ut803).then_some(step);
@@ -1030,19 +1030,34 @@ impl Protocol for Ut80xProtocol {
                 CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
                 for_model(Some("mA%"), None),
             )),
-            // What MAX MIN and REL put on the wire — a status bit, or no
-            // packets at all — is open (spec §7.3), so neither step asserts
-            // anything. MAX MIN works on a manual range only (UT804 manual,
-            // "Using MAX MIN"), and EXIT, which leaves both, also turns the
-            // meter's data output off (#16).
-            ut804_only(CaptureStep::basic(
-                "max_min",
-                "DC V: press RANGE, then MAX MIN, then Enter. Press EXIT, then SEND, afterwards.",
-            )),
-            ut804_only(CaptureStep::basic(
-                "rel",
-                "DC V: press REL, then Enter. Press EXIT, then SEND, afterwards.",
-            )),
+            // What RANGE, MAX MIN and REL put on the wire is open (spec
+            // §3.6), so none of these steps asserts anything. MAX MIN works
+            // on a manual range only (UT804 manual, "Using MAX MIN"); pressed
+            // together with RANGE it left status bit 1 set and AUTO clear
+            // (#16), so RANGE has a step of its own to tell which press set
+            // it. EXIT leaves all three, and turns the meter's data output off
+            // (#16). Each step waits for Enter: every press, and the previous
+            // step's EXIT and SEND, leaves a state the meter reports, and the
+            // watcher would capture the first of them.
+            ut804_only(
+                CaptureStep::basic("manual_range", "DC V: press RANGE, then Enter.")
+                    .wait_for_enter(),
+            ),
+            ut804_only(
+                CaptureStep::basic(
+                    "max_min",
+                    "DC V with AUTO off: press MAX MIN, then Enter. \
+                     Press EXIT, then SEND, afterwards.",
+                )
+                .wait_for_enter(),
+            ),
+            ut804_only(
+                CaptureStep::basic(
+                    "rel",
+                    "DC V: press REL, then Enter. Press EXIT, then SEND, afterwards.",
+                )
+                .wait_for_enter(),
+            ),
             // The HOLD wire encoding is what this step is for, so it asserts
             // nothing about the flag. The UT804 sends nothing while HOLD is
             // on (#16), which the step reports as "No response from meter."
@@ -1050,17 +1065,22 @@ impl Protocol for Ut80xProtocol {
             // that is a valid result, that it can take up to a minute, and
             // how to leave HOLD for the rest of the run: EXIT turns the data
             // output off as well, and SEND turns it back on. That line is the
-            // result the reporter confirmed on the UT804.
-            shared(CaptureStep::basic(
-                "hold",
-                if ut803 {
-                    "Press HOLD (wire encoding unknown — capture needed)"
-                } else {
+            // result the reporter confirmed on the UT804. There the step waits
+            // for Enter, as REL's clean-up before it leaves a state of its own.
+            shared(if ut803 {
+                CaptureStep::basic(
+                    "hold",
+                    "Press HOLD (wire encoding unknown — capture needed)",
+                )
+            } else {
+                CaptureStep::basic(
+                    "hold",
                     "Press HOLD on the meter, then Enter. If the meter stops sending, \
                      \"No response from meter.\" shows within a minute: that is a valid result. \
-                     Press EXIT, then SEND, on the meter afterwards."
-                },
-            )),
+                     Press EXIT, then SEND, on the meter afterwards.",
+                )
+                .wait_for_enter()
+            }),
         ]
         .into_iter()
         .flatten()
@@ -1311,7 +1331,7 @@ mod tests {
 
     /// The UT804 has no tachometer, AC mV or ADP position (its manual's
     /// Table 2-1), and the reporter walking it in #16 found none: its list
-    /// asks for none of them, and adds MAX MIN and REL before HOLD.
+    /// asks for none of them, and adds RANGE, MAX MIN and REL before HOLD.
     #[test]
     fn each_model_is_asked_only_for_what_it_has() {
         let ids = |proto: Ut80xProtocol| -> Vec<&'static str> {
@@ -1323,18 +1343,38 @@ mod tests {
             assert!(!ut804.contains(&id), "the UT804 is asked for {id}");
         }
         let hold = ut804.iter().position(|&id| id == "hold");
-        for id in ["max_min", "rel"] {
+        for id in ["manual_range", "max_min", "rel"] {
             let at = ut804.iter().position(|&s| s == id);
             assert!(at.is_some() && at < hold, "{id} before hold: {ut804:?}");
         }
 
-        // #16's reporter walked every UT804 step but these two; nobody has
+        // Button sequences on the UT804 capture on Enter alone (#16: REL
+        // captured the state MAX MIN's clean-up left). Everything else still
+        // captures on its own.
+        let waits = |proto: Ut80xProtocol| -> Vec<&'static str> {
+            let steps = proto.capture_steps();
+            steps
+                .iter()
+                .filter(|s| s.wait_for_enter)
+                .map(|s| s.id)
+                .collect()
+        };
+        assert_eq!(
+            waits(Ut80xProtocol::new_ut804()),
+            ["manual_range", "max_min", "rel", "hold"]
+        );
+        assert!(waits(Ut80xProtocol::new_ut803()).is_empty());
+
+        // #16's reporter walked every UT804 step but these three; nobody has
         // run a UT803.
         let unverified = |proto: Ut80xProtocol| -> Vec<&'static str> {
             let steps = proto.capture_steps();
             steps.iter().filter(|s| !s.verified).map(|s| s.id).collect()
         };
-        assert_eq!(unverified(Ut80xProtocol::new_ut804()), ["max_min", "rel"]);
+        assert_eq!(
+            unverified(Ut80xProtocol::new_ut804()),
+            ["manual_range", "max_min", "rel"]
+        );
         assert_eq!(
             unverified(Ut80xProtocol::new_ut803()),
             ids(Ut80xProtocol::new_ut803())
