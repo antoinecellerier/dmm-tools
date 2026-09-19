@@ -167,6 +167,7 @@ Shows per-range electrical specifications from the device manual:
 - "Manual" hyperlink to manufacturer's product page when `manual_url` is configured
 - Adapts to each layout: full panel (wide), inline summary (big meter), compact line (narrow)
 - The wide panel's heading folds it to the compact line: the title stays left, the fold triangle sits at the right under the big-meter toggle, and the fold is saved, unfolded by default
+- In Settings the fields the panel shows follow the Specifications checkbox, the group wrapping as one; the one-line layouts honour Resolution and Accuracy
 - The one-line layouts show resolution and accuracy only; impedance and notes stay in the full panel
 - A reading with no range row keeps its mode's impedance and notes in the full panel; the one-line layouts show only the Manual link
 - Coverage: UT61E+, UT61B+, UT61D+, UT161 family, UT181A, UT803, UT804, Mock. Other devices show manual link only.

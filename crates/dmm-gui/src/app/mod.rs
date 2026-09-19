@@ -640,6 +640,7 @@ impl App {
                 range_offered: self.connection.choices.range_offered(),
                 show_stats: self.settings.show_stats,
                 show_specs: self.settings.show_specs,
+                spec_fields: self.settings.spec_fields,
                 big_meter_mode: self.big_meter_mode,
                 transform_editor_open: self.transform_editor.open,
                 transform_is_identity: self.transform.is_identity(),

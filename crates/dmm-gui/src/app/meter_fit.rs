@@ -130,6 +130,8 @@ pub(super) struct FitInputs {
     pub(super) range_offered: bool,
     pub(super) show_stats: bool,
     pub(super) show_specs: bool,
+    /// The meter-only view's spec line leaves out the fields turned off.
+    pub(super) spec_fields: crate::settings::SpecFields,
     pub(super) big_meter_mode: BigMeterMode,
     /// Opening the Scale editor adds a row under the buttons, and an active
     /// scale adds the `Raw` sub-value — both change how much room is left
@@ -183,6 +185,7 @@ mod tests {
             range_offered: false,
             show_stats: false,
             show_specs: false,
+            spec_fields: crate::settings::SpecFields::default(),
             big_meter_mode: BigMeterMode::Off,
             transform_editor_open: false,
             transform_is_identity: true,
@@ -371,6 +374,13 @@ mod tests {
         });
         mutations.push(FitInputs {
             show_specs: true,
+            ..inputs()
+        });
+        mutations.push(FitInputs {
+            spec_fields: crate::settings::SpecFields {
+                accuracy: false,
+                ..Default::default()
+            },
             ..inputs()
         });
         mutations.push(FitInputs {

@@ -4,7 +4,8 @@ use eframe::egui::{self, RichText, Ui};
 
 use crate::a11y::ResponseA11yExt;
 use crate::settings::{
-    ColorOverrides, ColorPreset, HexColor, ThemeMode, buffer_memory_estimate, format_sample_count,
+    ColorOverrides, ColorPreset, HexColor, SpecFields, ThemeMode, buffer_memory_estimate,
+    format_sample_count,
 };
 use crate::theme::{PaletteField, PaletteGroup, ThemeColors};
 
@@ -14,6 +15,89 @@ use super::{App, BigMeterMode};
 /// Show a settings checkbox with a hover tooltip; returns `true` if the value changed.
 fn setting_checkbox(ui: &mut Ui, value: &mut bool, label: &str, tooltip: &str) -> bool {
     ui.checkbox(value, label).on_hover_text(tooltip).changed()
+}
+
+/// The **Specifications** checkbox and, while it is on, the fields the
+/// panel shows after it. The group is one unit, sized before it is
+/// placed so the wrapped row moves it to the next line whole, and it wraps
+/// within itself only when a whole line is too narrow for it (`color_edit`
+/// says why a `ui.horizontal` can't do this). Returns whether the panel
+/// checkbox changed, and whether a field did.
+fn specs_checkboxes(ui: &mut Ui, show: &mut bool, fields: &mut SpecFields) -> (bool, bool) {
+    // Read before a click can flip it, so the frame draws what it measured.
+    let on = *show;
+    let panel_label = if on {
+        "Specifications:"
+    } else {
+        "Specifications"
+    };
+    let SpecFields {
+        resolution,
+        accuracy,
+        input_impedance,
+        notes,
+    } = fields;
+    let mut field_boxes = [
+        (
+            resolution,
+            "Resolution",
+            "Show the resolution in the specifications",
+        ),
+        (
+            accuracy,
+            "Accuracy",
+            "Show the accuracy in the specifications",
+        ),
+        (
+            input_impedance,
+            "Input Z",
+            "Show the input impedance in the full Specifications panel",
+        ),
+        (
+            notes,
+            "Notes",
+            "Show the manual's notes in the full Specifications panel",
+        ),
+    ];
+    let shown = if on { field_boxes.len() } else { 0 };
+
+    // A checkbox as egui lays it out: the box, the icon gap, the label.
+    let checkbox_width = |label: &str| {
+        let galley = egui::WidgetText::from(label).into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::FontSelection::Default,
+        );
+        ui.spacing().icon_width + ui.spacing().icon_spacing + galley.size().x
+    };
+    let width = std::iter::once(panel_label)
+        .chain(field_boxes[..shown].iter().map(|(_, label, _)| *label))
+        .map(checkbox_width)
+        .sum::<f32>()
+        + ui.spacing().item_spacing.x * shown as f32;
+    let size = egui::vec2(
+        width.min(ui.max_rect().width()),
+        ui.spacing().interact_size.y,
+    );
+    ui.allocate_ui_with_layout(
+        size,
+        egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true),
+        |ui| {
+            let panel_changed = setting_checkbox(
+                ui,
+                show,
+                panel_label,
+                "Show accuracy and resolution for the current mode",
+            );
+            let mut fields_changed = false;
+            for (value, label, tooltip) in &mut field_boxes[..shown] {
+                fields_changed |= setting_checkbox(ui, value, label, tooltip);
+            }
+            (panel_changed, fields_changed)
+        },
+    )
+    .inner
 }
 
 /// Show a selectable_label with a hover tooltip; returns `true` if clicked.
@@ -446,15 +530,17 @@ impl App {
                 &mut self.settings.show_recording,
                 "Recording",
                 "Show the recording controls and sample log",
-            ) | setting_checkbox(
+            );
+            let (specs_changed, fields_changed) = specs_checkboxes(
                 ui,
                 &mut self.settings.show_specs,
-                "Specifications",
-                "Show accuracy and resolution for the current mode",
+                &mut self.settings.spec_fields,
             );
-            if changed {
+            if changed || specs_changed {
                 // Manual settings change exits big meter toggle.
                 self.big_meter_mode = BigMeterMode::Off;
+            }
+            if changed || specs_changed || fields_changed {
                 self.settings.save();
             }
         });
@@ -1332,6 +1418,64 @@ mod tests {
         assert!(
             last.y0 > first.y1,
             "the Device chips did not reflow: UT61E+ at {first:?}, VC-890 at {last:?}"
+        );
+    }
+
+    /// The Specifications fields follow the panel checkbox on its row, the
+    /// word said once; and the group moves to the next line whole, wrapping
+    /// within itself only when a line is too narrow for it.
+    #[test]
+    fn the_specifications_fields_wrap_as_one_group() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let wide = run.frame(vec![]);
+        let graph = node_bounds(&wide, "Graph");
+        let specs = node_bounds(&wide, "Specifications:");
+        let notes = node_bounds(&wide, "Notes");
+        assert_eq!(notes.y0, graph.y0, "the fields left the panel row");
+        assert!(
+            !wide
+                .nodes
+                .iter()
+                .any(|(_, n)| n.label() == Some("Specifications")),
+            "\"Specifications\" is said twice"
+        );
+        // A window that just fits the row keeps it whole, so the group's
+        // measure isn't over; one a little narrower moves the group down
+        // whole; one narrower than the group splits it.
+        let right_gap = 1200.0 - wide.scrolled.inner_rect.right();
+        let group = (notes.x1 - specs.x0) as f32;
+        for (width, same_row, split) in [
+            ((notes.x1 as f32 + right_gap + 1.0).ceil(), true, false),
+            (notes.x1 as f32 + right_gap - 20.0, false, false),
+            (graph.x0 as f32 + group * 0.6 + right_gap, false, true),
+        ] {
+            run.screen = Rect::from_min_size(Pos2::ZERO, vec2(width, 900.0));
+            run.frame(vec![]);
+            let frame = run.frame(vec![]);
+            let graph = node_bounds(&frame, "Graph");
+            let specs = node_bounds(&frame, "Specifications:");
+            let notes = node_bounds(&frame, "Notes");
+            assert_eq!(specs.y0 == graph.y0, same_row, "at {width}: {specs:?}");
+            assert_eq!(notes.y0 > specs.y0, split, "at {width}: {notes:?}");
+            assert!(notes.x1 <= f64::from(width), "at {width}: {notes:?}");
+        }
+    }
+
+    /// With the panel off, its fields are hidden and the checkbox loses the
+    /// colon that led into them.
+    #[test]
+    fn the_specifications_fields_hide_with_the_panel() {
+        let mut run = SettingsRun::new(1200.0, 900.0);
+        run.app.settings.show_specs = false;
+        run.ctx.enable_accesskit();
+        run.frame(vec![]);
+        let frame = run.frame(vec![]);
+        node_bounds(&frame, "Specifications");
+        assert!(
+            !frame.nodes.iter().any(|(_, n)| n.label() == Some("Notes")),
+            "the fields show with the panel off"
         );
     }
 

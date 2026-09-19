@@ -1,6 +1,8 @@
 use dmm_lib::specs::{ModeSpecInfo, SpecInfo};
 use eframe::egui::{self, Color32, RichText, Ui};
 
+use crate::settings::SpecFields;
+
 const MANUAL_TOOLTIP: &str = "Open the manufacturer's manual in your browser";
 
 /// Render a "Manual ↗" hyperlink with a consistent hover tooltip.
@@ -43,17 +45,28 @@ fn compact_accuracy_str(spec: &SpecInfo) -> Option<String> {
 
 /// Build the summary parts vector used by compact and inline layouts: the
 /// resolution and accuracy only, as an unlabelled impedance reads as noise
-/// on one line; the side panel carries the rest.
+/// on one line; the side panel carries the rest. A field turned off in
+/// Settings is left out here too.
 ///
 /// `res_label` / `acc_label` control the prefix for each field so callers can
 /// choose between short (`"Res:"`) and long (`"Resolution"`) labels. A
 /// reading with no range row (`spec` is `None`) has no parts.
-fn build_spec_parts(spec: Option<&SpecInfo>, res_label: &str, acc_label: &str) -> Vec<String> {
+fn build_spec_parts(
+    spec: Option<&SpecInfo>,
+    fields: SpecFields,
+    res_label: &str,
+    acc_label: &str,
+) -> Vec<String> {
     let Some(spec) = spec else {
         return Vec::new();
     };
-    let mut parts = vec![format!("{res_label} {}", spec.resolution)];
-    if let Some(acc_str) = compact_accuracy_str(spec) {
+    let mut parts = Vec::new();
+    if fields.resolution {
+        parts.push(format!("{res_label} {}", spec.resolution));
+    }
+    if fields.accuracy
+        && let Some(acc_str) = compact_accuracy_str(spec)
+    {
         parts.push(format!("{acc_label} {acc_str}"));
     }
     parts
@@ -80,8 +93,9 @@ const FOLD_TOOLTIP: &str = "Show only the resolution and accuracy, on one line";
 const UNFOLD_TOOLTIP: &str = "Show the full specifications";
 
 /// Specs panel for the wide (side panel) layout, under a heading that folds
-/// it to the narrow layout's one-line summary. A reading with no range row
-/// (`spec` is `None`) shows its mode's impedance and notes only.
+/// it to the narrow layout's one-line summary. Unfolded, it shows the
+/// `fields` the user picked in Settings; a reading with no range row (`spec`
+/// is `None`) has its mode's impedance and notes only.
 ///
 /// The caller owns `expanded`, a saved setting: this returns `true` when the
 /// heading was clicked this frame, and the caller flips it.
@@ -92,6 +106,7 @@ pub fn show_specs(
     manual_url: Option<&str>,
     scale: f32,
     expanded: bool,
+    fields: SpecFields,
 ) -> bool {
     // The title where it always sat, egui's fold triangle at the column's
     // right edge, centred under the big-meter toggle, and the whole row one
@@ -152,9 +167,9 @@ pub fn show_specs(
     };
     let toggled = response.on_hover_text(tooltip).clicked();
     if expanded {
-        show_specs_body(ui, spec, mode_spec, manual_url, scale);
+        show_specs_body(ui, spec, mode_spec, manual_url, scale, fields);
     } else {
-        show_specs_compact(ui, spec, manual_url);
+        show_specs_compact(ui, spec, manual_url, fields);
     }
     toggled
 }
@@ -173,28 +188,33 @@ fn fold_triangle(centre: egui::Pos2, size: f32, open: bool) -> [egui::Pos2; 3] {
     }
 }
 
-/// Everything the unfolded panel shows under its heading.
+/// The picked `fields` the unfolded panel shows under its heading, then the
+/// Manual link.
 fn show_specs_body(
     ui: &mut Ui,
     spec: Option<&SpecInfo>,
     mode_spec: Option<&ModeSpecInfo>,
     manual_url: Option<&str>,
     scale: f32,
+    fields: SpecFields,
 ) {
     let main_font = 12.0 * scale;
     let sub_font = 11.0 * scale;
     let weak = ui.visuals().weak_text_color();
 
     if let Some(spec) = spec {
-        // Resolution
-        ui.label(
-            RichText::new(format!("Resolution  {}", spec.resolution))
-                .font(egui::FontId::proportional(main_font)),
-        );
+        if fields.resolution {
+            ui.label(
+                RichText::new(format!("Resolution  {}", spec.resolution))
+                    .font(egui::FontId::proportional(main_font)),
+            );
+        }
 
-        // Accuracy — omitted entirely for modes that have no accuracy figure
-        // (continuity, diode), which ship an empty band slice.
+        // Accuracy — omitted when turned off in Settings, and for modes that
+        // have no accuracy figure (continuity, diode), which ship an empty
+        // band slice.
         match spec.accuracy {
+            _ if !fields.accuracy => {}
             [] => {}
             [single] => {
                 let figure = RichText::new(format!("Accuracy  {}", accuracy_text(single.accuracy)))
@@ -236,17 +256,21 @@ fn show_specs_body(
 
     // Input impedance and notes
     if let Some(ms) = mode_spec {
-        if let Some(z) = ms.input_impedance {
+        if fields.input_impedance
+            && let Some(z) = ms.input_impedance
+        {
             ui.label(
                 RichText::new(format!("Input Z  {z}")).font(egui::FontId::proportional(main_font)),
             );
         }
-        for note in ms.notes {
-            ui.label(
-                RichText::new(*note)
-                    .font(egui::FontId::proportional(sub_font))
-                    .color(weak),
-            );
+        if fields.notes {
+            for note in ms.notes {
+                ui.label(
+                    RichText::new(*note)
+                        .font(egui::FontId::proportional(sub_font))
+                        .color(weak),
+                );
+            }
         }
     }
 
@@ -257,12 +281,17 @@ fn show_specs_body(
 }
 
 /// Compact single-line specs for the narrow layout and the folded panel.
-pub fn show_specs_compact(ui: &mut Ui, spec: Option<&SpecInfo>, manual_url: Option<&str>) {
+pub fn show_specs_compact(
+    ui: &mut Ui,
+    spec: Option<&SpecInfo>,
+    manual_url: Option<&str>,
+    fields: SpecFields,
+) {
     let weak = ui.visuals().weak_text_color();
     let sub_font = 11.0;
 
     // Build a compact string: "Res: 0.01mV  Acc: ±(0.1%+5)"
-    let parts = build_spec_parts(spec, "Res:", "Acc:");
+    let parts = build_spec_parts(spec, fields, "Res:", "Acc:");
 
     ui.horizontal_wrapped(|ui| {
         // The separator's own spaces set the gap before the link.
@@ -280,31 +309,18 @@ pub fn show_specs_compact(ui: &mut Ui, spec: Option<&SpecInfo>, manual_url: Opti
     });
 }
 
-/// Compact specs with the mode data and a scale parameter (both ignored) for
-/// uniform callback signature.
-pub fn show_specs_compact_scaled(
-    ui: &mut Ui,
-    spec: Option<&SpecInfo>,
-    _mode_spec: Option<&ModeSpecInfo>,
-    manual_url: Option<&str>,
-    _scale: f32,
-) {
-    show_specs_compact(ui, spec, manual_url);
-}
-
-/// Inline pipe-separated specs for big meter mode. The mode data is not shown
-/// here; the parameter keeps the callback signature uniform.
+/// Inline pipe-separated specs for big meter mode.
 pub fn show_specs_inline(
     ui: &mut Ui,
     spec: Option<&SpecInfo>,
-    _mode_spec: Option<&ModeSpecInfo>,
     manual_url: Option<&str>,
     scale: f32,
+    fields: SpecFields,
 ) {
     let font_size = 12.0 * scale;
     let weak = ui.visuals().weak_text_color();
 
-    let parts = build_spec_parts(spec, "Resolution", "Accuracy");
+    let parts = build_spec_parts(spec, fields, "Resolution", "Accuracy");
 
     ui.horizontal_wrapped(|ui| {
         // The separator's own spaces set the gap before the link.
@@ -375,6 +391,7 @@ mod tests {
         ctx: &egui::Context,
         spec: &SpecInfo,
         expanded: bool,
+        fields: SpecFields,
         events: Vec<egui::Event>,
     ) -> (Vec<(String, Pos2)>, bool) {
         fn collect(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
@@ -401,6 +418,7 @@ mod tests {
                 Some("https://example.com/manual"),
                 1.0,
                 expanded,
+                fields,
             );
         });
         out.textures_delta.clear();
@@ -411,9 +429,16 @@ mod tests {
         (texts, toggled)
     }
 
-    /// The text the full panel draws for `spec`, unfolded or folded.
-    fn panel_texts(spec: &SpecInfo, expanded: bool) -> Vec<String> {
-        let (texts, _) = panel_frame(&egui::Context::default(), spec, expanded, Vec::new());
+    /// The text the full panel draws for `spec`, unfolded or folded, with
+    /// `fields` picked.
+    fn panel_texts(spec: &SpecInfo, expanded: bool, fields: SpecFields) -> Vec<String> {
+        let (texts, _) = panel_frame(
+            &egui::Context::default(),
+            spec,
+            expanded,
+            fields,
+            Vec::new(),
+        );
         texts.into_iter().map(|(text, _)| text).collect()
     }
 
@@ -431,7 +456,7 @@ mod tests {
     /// Unfolded, the panel shows every field under its heading.
     #[test]
     fn an_unfolded_panel_shows_every_field() {
-        let texts = panel_texts(&spec(AC_BANDS), true);
+        let texts = panel_texts(&spec(AC_BANDS), true, SpecFields::default());
         for shown in [
             "Specifications",
             "Resolution  0.01mV",
@@ -453,7 +478,7 @@ mod tests {
     /// replaces the fields.
     #[test]
     fn a_folded_panel_shows_the_one_line_summary() {
-        let texts = panel_texts(&spec(AC_BANDS), false);
+        let texts = panel_texts(&spec(AC_BANDS), false, SpecFields::default());
         for shown in [
             "Specifications",
             "Res: 0.01mV  Acc: \u{00B1}(0.5%+30) 45Hz~1kHz  |  ",
@@ -475,13 +500,103 @@ mod tests {
         }
     }
 
+    /// The one-line summary leaves out a field turned off in Settings, and
+    /// with neither left the Manual link stands alone.
+    #[test]
+    fn the_summary_leaves_out_fields_turned_off() {
+        let all = SpecFields::default();
+        let no_accuracy = SpecFields {
+            accuracy: false,
+            ..all
+        };
+        let no_resolution = SpecFields {
+            resolution: false,
+            ..all
+        };
+        let neither = SpecFields {
+            resolution: false,
+            accuracy: false,
+            ..all
+        };
+        let row = spec(AC_BANDS);
+        assert_eq!(
+            build_spec_parts(Some(&row), no_accuracy, "Res:", "Acc:"),
+            ["Res: 0.01mV"]
+        );
+        assert_eq!(
+            build_spec_parts(Some(&row), no_resolution, "Res:", "Acc:"),
+            ["Acc: \u{00B1}(0.5%+30) 45Hz~1kHz"]
+        );
+        assert!(build_spec_parts(Some(&row), neither, "Res:", "Acc:").is_empty());
+        let texts = panel_texts(&row, false, neither);
+        assert!(texts.iter().any(|t| t == MANUAL), "{texts:?}");
+        assert!(!texts.iter().any(|t| t.starts_with("Res:")), "{texts:?}");
+    }
+
+    /// A field turned off in Settings takes its own lines out of the unfolded
+    /// panel, and nothing else; the Manual link stays.
+    #[test]
+    fn a_field_turned_off_hides_only_its_lines() {
+        let lines = [
+            "Resolution  0.01mV",
+            "Accuracy",
+            "  45Hz~1kHz  \u{00B1}(0.5%+30)",
+            "  1kHz~10kHz  \u{00B1}(1.5%+30)",
+            "Input Z  About 10M\u{03A9}",
+            AC_MODE.notes[0],
+        ];
+        let all = SpecFields::default();
+        let cases: [(SpecFields, &[&str]); 4] = [
+            (
+                SpecFields {
+                    resolution: false,
+                    ..all
+                },
+                &lines[0..1],
+            ),
+            (
+                SpecFields {
+                    accuracy: false,
+                    ..all
+                },
+                &lines[1..4],
+            ),
+            (
+                SpecFields {
+                    input_impedance: false,
+                    ..all
+                },
+                &lines[4..5],
+            ),
+            (
+                SpecFields {
+                    notes: false,
+                    ..all
+                },
+                &lines[5..6],
+            ),
+        ];
+        for (fields, hidden) in cases {
+            let texts = panel_texts(&spec(AC_BANDS), true, fields);
+            for line in lines {
+                assert_eq!(
+                    texts.iter().any(|t| t == line),
+                    !hidden.contains(&line),
+                    "{line:?} with {fields:?}: {texts:?}"
+                );
+            }
+            assert!(texts.iter().any(|t| t == MANUAL), "{texts:?}");
+        }
+    }
+
     /// The panel doesn't fold itself: a click anywhere on the heading row,
     /// the title or the triangle at the far end, is reported, and the caller
     /// flips the saved setting.
     #[test]
     fn a_click_on_the_heading_is_reported() {
         let ctx = egui::Context::default();
-        let (texts, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, Vec::new());
+        let fields = SpecFields::default();
+        let (texts, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, fields, Vec::new());
         assert!(!toggled);
         let (_, heading) = texts
             .iter()
@@ -491,7 +606,7 @@ mod tests {
             *heading + vec2(4.0, 4.0),
             Pos2::new(COLUMN_WIDTH - 12.0, heading.y + 4.0),
         ] {
-            let (_, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, click_at(at));
+            let (_, toggled) = panel_frame(&ctx, &spec(DC_BAND), true, fields, click_at(at));
             assert!(toggled, "a click at {at:?} was missed");
         }
     }
@@ -500,7 +615,13 @@ mod tests {
     /// heading does; the fold triangle is at the other end of the row.
     #[test]
     fn the_title_is_level_with_the_fields() {
-        let (texts, _) = panel_frame(&egui::Context::default(), &spec(DC_BAND), true, Vec::new());
+        let (texts, _) = panel_frame(
+            &egui::Context::default(),
+            &spec(DC_BAND),
+            true,
+            SpecFields::default(),
+            Vec::new(),
+        );
         let x = |line: &str| {
             texts
                 .iter()
@@ -518,7 +639,7 @@ mod tests {
             freq_range: Some("40Hz~100Hz (LPF)"),
             accuracy: "3.0%+50",
         }];
-        let texts = panel_texts(&spec(LPF_BAND), true);
+        let texts = panel_texts(&spec(LPF_BAND), true, SpecFields::default());
         assert!(
             texts
                 .iter()
@@ -529,7 +650,7 @@ mod tests {
 
     #[test]
     fn a_dc_band_shows_the_figure_alone() {
-        let texts = panel_texts(&spec(DC_BAND), true);
+        let texts = panel_texts(&spec(DC_BAND), true, SpecFields::default());
         assert!(
             texts.iter().any(|t| t == "Accuracy  \u{00B1}(0.1%+5)"),
             "{texts:?}"
@@ -545,7 +666,7 @@ mod tests {
 
     #[test]
     fn empty_accuracy_omits_the_accuracy_part() {
-        let parts = build_spec_parts(Some(&spec(&[])), "Res:", "Acc:");
+        let parts = build_spec_parts(Some(&spec(&[])), SpecFields::default(), "Res:", "Acc:");
         assert_eq!(parts, vec!["Res: 0.01mV".to_string()]);
     }
 
@@ -553,14 +674,14 @@ mod tests {
     /// show the Manual link alone.
     #[test]
     fn no_row_leaves_only_the_manual_link() {
-        assert!(build_spec_parts(None, "Res:", "Acc:").is_empty());
+        assert!(build_spec_parts(None, SpecFields::default(), "Res:", "Acc:").is_empty());
     }
 
     /// The Manual link is set off from the summary, and stands alone when
     /// there is none.
     #[test]
     fn the_summary_is_separated_from_the_manual_link() {
-        let parts = build_spec_parts(Some(&spec(DC_BAND)), "Res:", "Acc:");
+        let parts = build_spec_parts(Some(&spec(DC_BAND)), SpecFields::default(), "Res:", "Acc:");
         assert_eq!(
             summary_line(&parts, "  ", true).as_deref(),
             Some("Res: 0.01mV  Acc: \u{00B1}(0.1%+5)  |  ")
@@ -575,7 +696,7 @@ mod tests {
     /// The one-line layouts carry the row's resolution and accuracy only.
     #[test]
     fn a_row_gives_resolution_and_accuracy_only() {
-        let parts = build_spec_parts(Some(&spec(DC_BAND)), "Res:", "Acc:");
+        let parts = build_spec_parts(Some(&spec(DC_BAND)), SpecFields::default(), "Res:", "Acc:");
         assert_eq!(
             parts,
             vec![

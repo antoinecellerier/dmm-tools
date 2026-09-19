@@ -221,6 +221,28 @@ impl ColorOverrides {
     }
 }
 
+/// The fields the Specifications panel shows. The one-line layouts carry
+/// the resolution and accuracy at most.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpecFields {
+    pub resolution: bool,
+    pub accuracy: bool,
+    pub input_impedance: bool,
+    pub notes: bool,
+}
+
+impl Default for SpecFields {
+    fn default() -> Self {
+        Self {
+            resolution: true,
+            accuracy: true,
+            input_impedance: true,
+            notes: true,
+        }
+    }
+}
+
 /// Tracks which settings fields are overridden by CLI arguments.
 /// Overridden fields are session-only and not persisted to disk.
 #[derive(Debug, Clone, Default)]
@@ -266,6 +288,9 @@ pub struct Settings {
     /// Whether the wide layout's Specifications panel is unfolded; folded by
     /// its heading, it shows the narrow layout's one-line summary.
     pub specs_expanded: bool,
+    /// What the unfolded Specifications panel shows.
+    #[serde(default)]
+    pub spec_fields: SpecFields,
     /// Query device name on connect (causes a beep on the meter).
     pub query_device_name: bool,
     /// Automatically connect to the meter when the GUI starts.
@@ -317,6 +342,7 @@ impl Default for Settings {
             show_recording: true,
             show_specs: true,
             specs_expanded: true,
+            spec_fields: SpecFields::default(),
             query_device_name: true,
             auto_connect: true,
             always_on_top: false,
@@ -405,6 +431,20 @@ impl Settings {
 mod tests {
     use super::*;
 
+    /// Every field is on unless the user turned it off, including one a
+    /// later release adds to the panel.
+    #[test]
+    fn a_missing_spec_field_is_shown() {
+        let s: Settings = serde_json::from_str(r#"{"spec_fields":{"notes":false}}"#).unwrap();
+        assert_eq!(
+            s.spec_fields,
+            SpecFields {
+                notes: false,
+                ..SpecFields::default()
+            }
+        );
+    }
+
     #[test]
     fn default_settings() {
         let s = Settings::default();
@@ -483,6 +523,10 @@ mod tests {
             show_recording: false,
             show_specs: false,
             specs_expanded: false,
+            spec_fields: SpecFields {
+                notes: false,
+                ..SpecFields::default()
+            },
             query_device_name: false,
             auto_connect: false,
             always_on_top: true,
@@ -504,6 +548,8 @@ mod tests {
         assert!(!deserialized.show_recording);
         assert!(!deserialized.show_specs);
         assert!(!deserialized.specs_expanded);
+        assert!(!deserialized.spec_fields.notes);
+        assert!(deserialized.spec_fields.input_impedance);
         assert!(deserialized.always_on_top);
         assert!(deserialized.hide_decorations);
         assert_eq!(deserialized.zoom_pct, 150);
@@ -525,6 +571,7 @@ mod tests {
         // A config file written before the Specifications panel could fold
         // opens it unfolded, as it always showed.
         assert!(s.specs_expanded);
+        assert_eq!(s.spec_fields, SpecFields::default());
         assert_eq!(s.zoom_pct, 100);
         assert_eq!(s.sample_interval_ms, 0);
         // A config file written before the buffer became configurable must

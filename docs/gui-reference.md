@@ -260,10 +260,11 @@ as the meter changes mode/range.
 - **Manual** — hyperlink to the manufacturer's product page (shown whenever a
   URL is configured for the device, even without per-range spec data)
 
-Panel visibility is controlled by the **Specifications** checkbox in Settings.
-Default: on. Clicking the **Specifications** heading folds the wide panel to
-the narrow layout's line and back; the panel stays folded across restarts.
-Default: unfolded.
+Panel visibility is controlled by the **Specifications:** checkbox in Settings,
+and the Resolution, Accuracy, Input Z and Notes checkboxes after it pick the
+fields it shows. Default: on, every field. Clicking the **Specifications** heading folds
+the wide panel to the narrow layout's line and back; the panel stays folded
+across restarts. Default: unfolded.
 
 **Layout behavior:**
 
@@ -273,7 +274,7 @@ Default: unfolded.
 | Big meter | Pipe-separated inline summary, scaled with the reading |
 | Narrow (< 900px) | Compact single line below the reading |
 
-The one-line layouts (big meter, narrow, folded) show Resolution and Accuracy only; Input
+The one-line layouts (big meter, narrow, folded) show Resolution and Accuracy at most; Input
 Z and the notes are in the full panel. A reading the manual gives no range row
 for (a UT804 AC+DC reading, say) skips Resolution and Accuracy: the full panel
 shows its Input Z and notes, the one-line layouts only the Manual link. When no spec data is available (unsupported device or
@@ -377,6 +378,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Show Statistics** | on | Toggle statistics panel visibility |
 | **Show Recording** | on | Toggle recording panel visibility |
 | **Show Specifications** | on | Toggle specifications panel visibility |
+| **Resolution, Accuracy, Input Z, Notes** | on | Follow **Specifications:** while it is on. Each shows or hides its field in the specifications; the one-line layouts carry Resolution and Accuracy only. |
 | **Auto-connect** | on | Connect to meter automatically on startup |
 | **Query device name** | on | Ask meter for its name on connect (causes a beep). Skipped when Auto-detect already has the name. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (fastest, ~10 Hz), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |

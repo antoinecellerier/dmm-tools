@@ -226,12 +226,13 @@ impl App {
     }
 
     /// Render specs for the wide (side panel) layout, folded or not as the
-    /// user last left its heading.
+    /// user last left its heading, with the fields picked in Settings.
     fn show_specs_section(&mut self, ui: &mut Ui, scale: f32) {
         let expanded = self.settings.specs_expanded;
+        let fields = self.settings.spec_fields;
         let mut toggled = false;
         self.show_specs_with(ui, scale, |ui, spec, mode_spec, manual_url, scale| {
-            toggled = specs::show_specs(ui, spec, mode_spec, manual_url, scale, expanded);
+            toggled = specs::show_specs(ui, spec, mode_spec, manual_url, scale, expanded, fields);
         });
         if toggled {
             self.settings.specs_expanded = !expanded;
@@ -241,12 +242,18 @@ impl App {
 
     /// Render specs for big meter mode (pipe-separated inline).
     pub(super) fn show_specs_section_inline(&self, ui: &mut Ui, scale: f32) {
-        self.show_specs_with(ui, scale, specs::show_specs_inline);
+        let fields = self.settings.spec_fields;
+        self.show_specs_with(ui, scale, |ui, spec, _, manual_url, scale| {
+            specs::show_specs_inline(ui, spec, manual_url, scale, fields);
+        });
     }
 
     /// Render specs for the narrow (compact single-line) layout.
     fn show_specs_section_compact(&self, ui: &mut Ui) {
-        self.show_specs_with(ui, 1.0, specs::show_specs_compact_scaled);
+        let fields = self.settings.spec_fields;
+        self.show_specs_with(ui, 1.0, |ui, spec, _, manual_url, _| {
+            specs::show_specs_compact(ui, spec, manual_url, fields);
+        });
     }
 }
 
