@@ -60,6 +60,13 @@ impl Input {
         Input { keys: Some(rx) }
     }
 
+    /// A terminal the test types at through the returned sender.
+    #[cfg(test)]
+    pub(crate) fn typed() -> (mpsc::Sender<Key>, Self) {
+        let (tx, rx) = mpsc::channel();
+        (tx, Input { keys: Some(rx) })
+    }
+
     /// Whether keys can be polled without blocking — false for a piped run,
     /// which has to be asked rather than watched.
     pub(crate) fn is_tty(&self) -> bool {

@@ -737,6 +737,7 @@ mod tests {
             verified: false,
             gate: false,
             needs: &[],
+            wait_for_enter: false,
         };
         let mut report = CaptureReport::default();
         let path = std::env::temp_dir()
@@ -884,6 +885,7 @@ mod tests {
             verified: false,
             gate: false,
             needs: &[],
+            wait_for_enter: false,
         }
     }
 

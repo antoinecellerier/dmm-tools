@@ -38,6 +38,9 @@ pub(crate) struct CaptureStep {
     /// Equipment the instruction asks for, listed before the run so a step
     /// nobody can do is dropped rather than met halfway through.
     pub needs: &'static [Need],
+    /// Captures on Enter only: a sequence of presses whose intermediate
+    /// states the watcher would otherwise take.
+    pub wait_for_enter: bool,
 }
 
 impl From<&dmm_lib::protocol::CaptureStep> for CaptureStep {
@@ -51,6 +54,7 @@ impl From<&dmm_lib::protocol::CaptureStep> for CaptureStep {
             verified: ps.verified,
             gate: ps.gate,
             needs: ps.needs,
+            wait_for_enter: ps.wait_for_enter,
         }
     }
 }
@@ -485,8 +489,9 @@ pub(crate) fn run_capture_step(
             // cannot be seen arriving — DC V with the leads open and shorted
             // both read about zero — so it is Enter-only and the keyboard is
             // offered at once. A mode the tool just switched to is a change, so
-            // this is false there.
-            let ask = enter_only(expect, prev.last.as_ref());
+            // this is false there. A step that declares it waits for Enter is
+            // Enter-only wherever it runs.
+            let ask = step.wait_for_enter || enter_only(expect, prev.last.as_ref());
             // Something has to go on the probes, and the dial is usually
             // turned first: Enter is offered at once, and the watcher only
             // captures on its own once it has seen the reading fail first.
@@ -645,6 +650,7 @@ pub(super) fn cli_step(id: &'static str, verified: bool, gate: bool) -> CaptureS
         verified,
         gate,
         needs: &[],
+        wait_for_enter: false,
     }
 }
 
@@ -992,6 +998,7 @@ mod tests {
             verified: true,
             gate: false,
             needs: &[],
+            wait_for_enter: false,
         };
 
         let filed = |settle: Duration| {
@@ -1102,6 +1109,109 @@ mod tests {
             .map(|s| s.mode.as_str())
             .collect();
         assert_eq!(modes, ["Continuity"; 5]);
+    }
+
+    /// Issue #16: the UT804's REL step followed MAX MIN, whose instruction
+    /// ends "Press EXIT, then SEND, afterwards". The state those presses left
+    /// differed from MAX MIN's, so the step captured it before REL was
+    /// pressed. A step that waits for Enter files what the meter shows then.
+    #[test]
+    fn a_step_that_waits_for_enter_ignores_the_states_before_it() {
+        use crate::drive::Driver;
+
+        /// Presses Enter as it hands out response `at`: the operator reads
+        /// the new state off the LCD, then presses the key.
+        struct PressesEnter {
+            queue: QueuedTransport,
+            reads: Mutex<usize>,
+            at: usize,
+            key: Mutex<std::sync::mpsc::Sender<Key>>,
+        }
+
+        impl dmm_lib::transport::Transport for PressesEnter {
+            fn write(&self, data: &[u8]) -> dmm_lib::error::Result<()> {
+                self.queue.write(data)
+            }
+
+            fn read_timeout(
+                &self,
+                buf: &mut [u8],
+                timeout_ms: i32,
+            ) -> dmm_lib::error::Result<usize> {
+                let mut reads = self.reads.lock().unwrap();
+                if *reads == self.at {
+                    self.key.lock().unwrap().send(Key::Enter).unwrap();
+                }
+                *reads += 1;
+                self.queue.read_timeout(buf, timeout_ms)
+            }
+
+            fn send_feature_report(&self, data: &[u8]) -> dmm_lib::error::Result<()> {
+                self.queue.send_feature_report(data)
+            }
+        }
+
+        // DC V at one reading; only the flag bytes tell the states apart.
+        let flagged = |flag1: u8, flag2: u8| {
+            frame(&[
+                0x02, 0x30, b' ', b' ', b'5', b'.', b'2', b'0', b'9', 0, 0, flag1, flag2, 0x30,
+            ])
+        };
+        let max = flagged(0x38, 0x34); // MAX on a manual range
+        let auto = flagged(0x30, 0x30); // after EXIT and SEND
+        let rel = flagged(0x31, 0x30);
+
+        let mut before = dmm_replaying(vec![max; 3]);
+        let payloads = capture_samples(&mut before, 3, &mut ErrorLog::default());
+        let prev = PrevState {
+            baseline: Baseline::from_payloads(payloads.iter().map(|m| m.raw_payload.as_slice())),
+            last: None,
+        };
+
+        // Four frames of the clean-up's state: enough to settle on.
+        let mut responses = vec![auto; 4];
+        responses.extend(vec![rel; 6]);
+        let (key, input) = Input::typed();
+        let transport = PressesEnter {
+            queue: QueuedTransport {
+                responses: Mutex::new(responses.into()),
+            },
+            reads: Mutex::new(0),
+            at: 4,
+            key: Mutex::new(key),
+        };
+        let device = dmm_lib::protocol::registry::find_device("ut61eplus").unwrap();
+        let mut dmm = dmm_lib::Dmm::new(
+            Box::new(transport) as Box<dyn dmm_lib::transport::Transport>,
+            (device.new_protocol)(),
+        )
+        .unwrap();
+        let (_unused, recorder) =
+            crate::recording::RecordingTransport::new(Box::new(dmm_lib::transport::NullTransport));
+        let step = CaptureStep {
+            wait_for_enter: true,
+            ..cli_step("rel", false, false)
+        };
+        let mut report = CaptureReport::default();
+        run_capture_step(
+            &mut dmm,
+            &recorder,
+            &step,
+            &mut report,
+            true,
+            &input,
+            &prev,
+            &Trust::new(false, true, &[]),
+            &mut Driver::new(false),
+        )
+        .unwrap();
+
+        let rel: Vec<bool> = report.steps[0]
+            .samples
+            .iter()
+            .map(|s| s.flags.rel)
+            .collect();
+        assert_eq!(rel, [true; 5]);
     }
 
     /// Only the mode is compared, and only once the first sample is in it: a

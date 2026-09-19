@@ -477,6 +477,9 @@ pub struct CaptureStep {
     /// Equipment the instruction asks for beyond the meter and its leads, so
     /// a run can be planned — and pruned — before it starts.
     pub needs: &'static [Need],
+    /// Only the operator's Enter captures: the instruction is a sequence of
+    /// presses, and the meter reports the state each one leaves.
+    pub wait_for_enter: bool,
 }
 
 impl CaptureStep {
@@ -492,6 +495,7 @@ impl CaptureStep {
             gate: false,
             expect: None,
             needs: &[],
+            wait_for_enter: false,
         }
     }
 
@@ -512,6 +516,7 @@ impl CaptureStep {
             gate: false,
             expect: None,
             needs: &[],
+            wait_for_enter: false,
         }
     }
 
@@ -550,6 +555,14 @@ impl CaptureStep {
     /// Declare the equipment this step's instruction asks for.
     pub const fn needs(mut self, needs: &'static [Need]) -> Self {
         self.needs = needs;
+        self
+    }
+
+    /// Capture on Enter alone. Without it a step with no expectation captures
+    /// the first new state that holds, which on a multi-press instruction is
+    /// the first press's, or the previous step's clean-up.
+    pub const fn wait_for_enter(mut self) -> Self {
+        self.wait_for_enter = true;
         self
     }
 }
