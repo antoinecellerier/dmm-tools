@@ -1357,9 +1357,11 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   750.0V rung would also carry 0.1V on a 22,000-count display, so the
   decimal count cannot separate them. Only applying more than 750V AC could,
   which is not a test worth running; the manual settles it instead.
-- **UT61D+ amps: manual lists 6.000A and 20.00A; code has only 20A**
-  (`ut61d_plus.rs` dc_a/ac_a copied from E+). Needs the 6A range row;
-  blocked on D+ hardware for index ordering (issue #7).
+- **UT61D+ amps: 6A at range 0, 20A at range 1 — unconfirmed.** The
+  manual lists 6.000A and 20.00A, where the table carried two 20A entries
+  copied from the E+. Since 2026-09-19 `ut61d_plus.rs` has [6A, 20A],
+  ordered as the UT61B+'s [6A, 10A], which issue #19 verified. One D+
+  frame in each A range settles it (issue #7).
 - **Frequency ranges in code are invented structure, on every model in the
   family** — the manual gives only a span (10.00 Hz–10.00 MHz for the
   6,000-count models), no discrete ranges, and the code's five ranges top out

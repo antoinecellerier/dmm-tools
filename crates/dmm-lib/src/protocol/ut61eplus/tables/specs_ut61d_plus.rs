@@ -137,10 +137,10 @@ pub static AC_MA_SPECS: &[SpecInfo] = &[
     },
 ];
 
-// ── DC A: UT61D+ has 20A range (manual page 32) ────────────────────
+// ── DC A: UT61D+ 6A and 20A ranges (manual page 32) ────────────────
 pub static DC_A_SPECS: &[SpecInfo] = &[
     SpecInfo {
-        resolution: "10mA",
+        resolution: "1mA",
         accuracy: &[AccuracyBand {
             freq_range: None,
             accuracy: "1.2%+5",
@@ -161,10 +161,10 @@ pub static DC_A_MODE: ModeSpecInfo = ModeSpecInfo {
     notes: &[">5A: max 10s, rest 15min"],
 };
 
-// ── AC A: UT61D+ 20A range (manual page 33) ────────────────────────
+// ── AC A: UT61D+ 6A and 20A ranges (manual page 33) ────────────────
 pub static AC_A_SPECS: &[SpecInfo] = &[
     SpecInfo {
-        resolution: "10mA",
+        resolution: "1mA",
         accuracy: &[AccuracyBand {
             freq_range: Some("40Hz\u{2013}1kHz"),
             accuracy: "2.0%+5",

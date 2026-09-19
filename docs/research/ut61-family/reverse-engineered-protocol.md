@@ -366,10 +366,14 @@ that leaves 1-4 and 6 [DEDUCED].
 
 **A ranges:**
 
-| Range | UT61B+ | UT61D+/E+ |
-|-------|--------|-----------|
-| 0 | 6.000 A (1 mA) | UT61E+: 20.000 A (1 mA) |
-| 1 | 10.00 A (10 mA) | UT61D+: 20.00 A (10 mA) |
+| Range | UT61B+ | UT61D+ | UT61E+ |
+|-------|--------|--------|--------|
+| 0 | 6.000 A (1 mA) | 6.000 A (1 mA) | 20.000 A (1 mA) |
+| 1 | 10.00 A (10 mA) | 20.00 A (10 mA) | 20.000 A (1 mA) |
+
+The UT61E+ manual prints one A range; its range table labels both bytes
+20A, and the captures show range 1. The UT61D+ order is [DEDUCED] from the
+UT61B+'s, which issue #19 verified; no UT61D+ has confirmed it — issue #7.
 
 ### 5.6 Temperature (UT61D+ / UT161D only) — [MANUAL]
 
@@ -802,9 +806,9 @@ Source: `ut61d_plus.rs` (49 ranges).
 | `dc_ma` | DcMa | 1 | 600mA | mA | 600 | -600 |
 | `ac_ma` | AcMa | 0 | 60mA | mA | 60 | -60 |
 | `ac_ma` | AcMa | 1 | 600mA | mA | 600 | -600 |
-| `dc_a` | DcA | 0 | 20A | A | 20 | -20 |
+| `dc_a` | DcA | 0 | 6A | A | 6 | -6 |
 | `dc_a` | DcA | 1 | 20A | A | 20 | -20 |
-| `ac_a` | AcA | 0 | 20A | A | 20 | -20 |
+| `ac_a` | AcA | 0 | 6A | A | 6 | -6 |
 | `ac_a` | AcA | 1 | 20A | A | 20 | -20 |
 | `loz_v` | LozV, LozV2 | 0 | 600V | V | 600 | -600 |
 | `loz_v` | LozV, LozV2 | 1 | 1000V | V | 1000 | -1000 |

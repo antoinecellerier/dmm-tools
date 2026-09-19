@@ -6,7 +6,8 @@ use crate::protocol::ut61eplus::mode::Mode;
 
 /// Device table for the UNI-T UT61D+ (and UT161D).
 ///
-/// 6,000-count (3¾ digit) model. Same ranges as UT61B+ but WITH:
+/// 6,000-count (3¾ digit) model. Same ranges as UT61B+, but 20A for its
+/// 10A, and WITH:
 /// - Temperature (TempC/TempF, K-type thermocouple)
 /// - LoZ V mode
 /// - Peak (P-MAX/P-MIN)
@@ -92,9 +93,11 @@ impl Ut61dPlusTable {
             // mA: 60mA, 600mA
             dc_ma: [r("60mA", "mA"), r("600mA", "mA")],
             ac_ma: [r("60mA", "mA"), r("600mA", "mA")],
-            // A: UT61D+ has 20A max (same as E+)
-            dc_a: [r("20A", "A"), r("20A", "A")],
-            ac_a: [r("20A", "A"), r("20A", "A")],
+            // A: 6A and 20A, the manual's 6.000A and 20.00A rows. The order is
+            // [DEDUCED] from the UT61B+, whose 6A and 10A sit at 0 and 1
+            // (issue #19); unconfirmed on a UT61D+ — issue #7.
+            dc_a: [r("6A", "A"), r("20A", "A")],
+            ac_a: [r("6A", "A"), r("20A", "A")],
             // LoZ ACV: 600V and 1000V ranges (UT61D+ only)
             loz_v: [r("600V", "V"), r("1000V", "V")],
         }
@@ -440,7 +443,7 @@ mod tests {
     fn amp_ranges() {
         let t = table();
         for mode in [Mode::DcA, Mode::AcA] {
-            assert_eq!(t.range_info(mode, 0).unwrap().label, "20A");
+            assert_eq!(t.range_info(mode, 0).unwrap().label, "6A");
             assert_eq!(t.range_info(mode, 1).unwrap().label, "20A");
             assert!(t.range_info(mode, 2).is_none());
         }
