@@ -510,7 +510,7 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **Duty Cycle % (0x05):** Mode byte verified via SELECT2 on AC mA. Needs PWM signal for value verification.
 - **LPF mV (0x1A), LPF A (0x1C):** Need appropriate signals and dial positions.
 - **AC+DC mV (0x1B), AC+DC A (0x1D):** Need appropriate signals and dial positions.
-- **Live (0x13):** Unknown purpose.
+- **Live (0x13):** A contact live/neutral wire check (UNI-T protocol deck); on no UT61+ dial.
 - **Inrush (0x1E):** Inrush current mode.
 
 ### Modes not reachable on UT61E+

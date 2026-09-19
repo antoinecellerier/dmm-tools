@@ -30,6 +30,17 @@ tables, and bar graph segment count.
    UT61E+ analysis (see `docs/research/ut61eplus/`)
 4. **UT161E Software** — downloaded and binary-compared against V2.02
 5. **CP2110 Datasheet** and **AN434** (Silicon Labs) — transport layer
+6. **UNI-T protocol deck "UT61+系列通讯协议"** — a 9-slide `.pptx` titled
+   "UT161系列 UT61+系列 UT202S 蓝牙通讯协定" (Bluetooth protocol for the
+   UT161 series, UT61+ series and UT202S), listed on the UT61E+ product page
+   of UNI-T's Chinese site (https://meters.uni-trend.com.cn/content/1301.html)
+   and uploaded 2023-08-16. The page links it on `admin-meters.uni-trend.com.cn`,
+   which fails; the same path on `meters.uni-trend.com.cn` works. Read
+   2026-09-18 from the rendered slides. The only protocol description UNI-T
+   publishes for the family: line settings, framing, command table, mode
+   table, a range table per model and the status bits. Tagged [VENDOR-DOC]
+7. **UT61E+ PC software on the same page** (uploaded 2023-02-03) — its
+   installer is Software V2.02 unchanged (below)
 
 No community implementations, forum posts, or third-party reverse
 engineering work.
@@ -87,6 +98,13 @@ meters.uni-trend.com. The model customization is purely cosmetic.
 Note: The UT61E+ installer's `options.xml` says `<Model>UT61D+</Model>`
 (not UT61E+), confirming UNI-T treats the model string as a UI label
 with no protocol significance.
+
+### UT61E+ 2023-02-03 package — [VENDOR]
+
+The `.rar` on the UT61E+ CN page holds `Setup.exe` plus the software
+manual as loose PDFs. Its installer unpacks to the same 69 files as the
+V2.02 one, every one byte-identical (sha256, 2026-09-19): a repackaging,
+not a new build.
 
 ### LoZ mode disambiguation — [VENDOR]
 
@@ -146,6 +164,8 @@ find references/ut161/extracted-nsis/ -type f \
 | UNI-T | `references/ut161/UT161E-Software.zip` | UT161E installer (confirmed identical) |
 | UNI-T | `references/ut161/UT161-UserManual.pdf` | UT161 Series manual |
 | UNI-T | `references/ut61eplus/vendor-software/extracted/` | Software V2.02 (shared) |
+| UNI-T | `references/ut61eplus/ut61plus-protocol-1692155466800163.pptx` | Protocol deck (UT161/UT61+/UT202S) |
+| UNI-T | `references/ut61eplus/pc-software-2023-02-03/` | 2023-02-03 package (V2.02 repackaged) |
 | Analysis | `references/ut61eplus/vendor-software/CustomDmm_decompiled.txt` | Protocol plugin |
 | Analysis | `references/ut61eplus/vendor-software/DMM_decompiled.txt` | Main application |
 

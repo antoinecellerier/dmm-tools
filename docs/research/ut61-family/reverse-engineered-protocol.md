@@ -2,15 +2,22 @@
 
 Covers: **UT61B+**, **UT61D+**, **UT61E+**, **UT161B**, **UT161D**, **UT161E**
 
+UNI-T's protocol deck (below) also covers the **UT202S** clamp meter, which
+dmm-tools does not support.
+
 Based on:
 - UT61+ Series User Manual (UNI-T, covers UT61B+/UT61D+/UT61E+)
 - UT161 Series User Manual (UNI-T, covers UT161B/UT161D/UT161E)
 - CP2110 Datasheet and AN434 (Silicon Labs)
 - UNI-T Software V2.02 (decompiled with Ghidra)
+- UNI-T protocol deck "UT61+系列通讯协议" (UT161/UT61+/UT202S), published on
+  the UT61E+ product page of meters.uni-trend.com.cn — see
+  `reverse-engineering-approach.md`
 
 Confidence levels:
 - **[KNOWN]** — from official Silicon Labs documentation
 - **[VENDOR]** — confirmed by decompiling UNI-T's official software
+- **[VENDOR-DOC]** — stated in UNI-T's published protocol deck
 - **[MANUAL]** — stated in UNI-T's official user manual
 - **[DEDUCED]** — logical inferences not yet verified against hardware
 - **[UNVERIFIED]** — requires real device testing
@@ -24,11 +31,16 @@ that all six models share a single protocol.
 
 ---
 
-## 1. Protocol is Identical Across All Models — [VENDOR]
+## 1. Protocol is Identical Across All Models — [VENDOR + VENDOR-DOC]
 
 The vendor software contains **zero model-specific protocol logic**.
 All transport, framing, command, and response formats are shared. See
 `reverse-engineering-approach.md` for evidence.
+
+The protocol deck says the same outright: it is one "Bluetooth
+communication protocol" for the UT161 series, the UT61+ series and the
+UT202S, with one mode table spanning meters and clamps (§3) and a range
+table per model (§5). The same bytes reach us over the USB cable.
 
 | Aspect | Value | All 6 models |
 |--------|-------|:------------:|
@@ -424,8 +436,10 @@ byte 5, exactly as section 9 has it.
 
 ## 6. Commands — [VENDOR]
 
-All models accept the same command set (same `CustomDmm.dll`). Some
-commands have no effect on models lacking the corresponding feature:
+All models accept the same command set (same `CustomDmm.dll`), and every
+byte below is in the protocol deck's command table [VENDOR-DOC]; the deck's
+clamp-only commands are listed in the UT61E+ spec §2.3. Some commands have
+no effect on models lacking the corresponding feature:
 
 | Command | Byte | B+/161B | D+/161D | E+/161E |
 |---------|------|:-------:|:-------:|:-------:|
@@ -577,11 +591,12 @@ possible from the vendor software.
 4. **Temperature display format** — how °C/°F readings are encoded
    in the 7-byte ASCII display field. [UNVERIFIED]
 
-5. **Mode 0x13 (Live)** — availability on each model. [UNVERIFIED]
+5. **Mode 0x13 (Live)** — a contact live/neutral wire check
+   [VENDOR-DOC]. No UT61+ dial position lists it (§3.1) and no capture
+   has shown it. [UNVERIFIED]
 
-6. **Commands beyond confirmed 3** — 0x5E, 0x4A, 0x46 are [VENDOR]
-   confirmed in the software. All others are [DEDUCED] from UT61E+
-   device testing.
+6. ~~**Commands beyond confirmed 3**~~ — RESOLVED: every command byte is
+   in the protocol deck [VENDOR-DOC]; what each does per model is §6.
 
 7. **UT61B+ Peak command rejection** — whether PeakMinMax (0x4D) is
    silently ignored or returns an error. [UNVERIFIED]
@@ -616,7 +631,7 @@ possible from the vendor software.
 | LoZ mode byte sent by UT61D+ | **UNVERIFIED** | Requires device |
 | Temperature mode bytes (0x0A, 0x0B) | **DEDUCED** | Vendor mode table |
 | Range index → full-scale mapping | **DEDUCED** (E+ DC V, B+ bottom rungs **VERIFIED**) | Ascending order assumed; E+ DC V walked on the device 2026-09-07, B+ bottom rungs from the 2026-09-09 capture |
-| Commands beyond 0x5E/0x4A/0x46 | **DEDUCED** | UT61E+ device testing |
+| Commands beyond 0x5E/0x4A/0x46 | **VENDOR-DOC** | Protocol deck; per-model effects in §6 |
 
 ---
 

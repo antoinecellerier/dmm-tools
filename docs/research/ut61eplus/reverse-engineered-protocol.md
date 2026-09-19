@@ -5,10 +5,14 @@ Based on:
 - CP2110 Datasheet (Silicon Labs)
 - AN434: CP2110/4 Interface Specification (Silicon Labs)
 - UNI-T UT61E+ Software V2.02 (decompiled with Ghidra)
+- UNI-T protocol deck "UT61+系列通讯协议" (UT161/UT61+/UT202S), published on
+  the UT61E+ product page of meters.uni-trend.com.cn — see
+  `docs/research/ut61-family/reverse-engineering-approach.md`
 
 Confidence levels:
 - **[KNOWN]** — established facts from official Silicon Labs documentation
 - **[VENDOR]** — confirmed by decompiling UNI-T's official Windows software
+- **[VENDOR-DOC]** — stated in UNI-T's published protocol deck
 - **[MANUAL]** — stated in UNI-T's official user manual
 - **[DEDUCED]** — logical inferences not yet verified against real hardware
 - **[UNVERIFIED]** — requires real device testing to confirm
@@ -60,6 +64,9 @@ From CP2110.dll constructor (at 0x10001100):
 | Flow control | None (0x00) | Default (no override found in code) |
 | Read timeout | 100 ms | DMM.exe `setReadTimeout(0x64)` |
 | Write timeout | 100 ms | DMM.exe `setWriteTimeout(0x64)` |
+
+**[VENDOR-DOC]** The protocol deck states the same line settings: 9600 baud,
+no parity, 1 start bit, 8 data bits, 1 stop bit.
 
 ### 1.4 Initialization Sequence — [KNOWN + VENDOR]
 
@@ -194,6 +201,12 @@ received = (buf[checksum_offset] << 8) | buf[checksum_offset + 1]
 if computed != received: reject frame
 ```
 
+**[VENDOR-DOC]** The deck describes the same frame in both directions:
+header `AB CD`, a length byte counting from the command (or first data
+byte) through the checksum, and a two-byte checksum summing everything
+from the header up. It does not give the checksum's byte order; the
+big-endian order above is the one every real frame checks out with.
+
 ### 2.2 Request/Response Model — [VENDOR]
 
 The software uses a **polled** model. From `FUN_100016d0` (MyDmm
@@ -204,6 +217,10 @@ constructor):
 - An `OnceCommandPool` sends one-shot commands (Hold, Range, etc.)
 - Default polling interval: 1000 ms (can be configured in `options.xml`
   via `SampleRate`)
+
+The deck words 0x5E and 0x5F as commands that "enable" the meter to send
+its display value and its model name. Over the CP2110 each 0x5E still
+brings back exactly one measurement frame (§2.9).
 
 ### 2.3 Command Format (Host → Meter) — [VENDOR]
 
@@ -232,10 +249,12 @@ only entry here without a hardware-verified behaviour note. See the UT61E+
 section of docs/verification-backlog.md for the capture and the experiment
 that would settle it.
 
-**Probable commands** (from DMM.exe UI action names, not yet seen in
-decompiled code — DMM.exe decompilation was incomplete):
+**Further commands** — first inferred from DMM.exe UI action names (not
+seen in decompiled code; the DMM.exe decompilation was incomplete), now
+**[VENDOR-DOC]**: every byte below, and the three above, is in the
+protocol deck's command table (命令表一) with the same meaning.
 
-| Probable Byte | Name | UI Action | Hardware Status |
+| Byte | Name | UI Action | Hardware Status |
 |--------------|------|-----------|-----------------|
 | 0x41 | MinMax toggle | `actionMaxMin` | **[VERIFIED]** (remote) |
 | 0x42 | ExitMinMax | `actionExitMaxMin` | **[VERIFIED]** (remote) |
@@ -251,6 +270,19 @@ decompiled code — DMM.exe decompilation was incomplete):
 Hardware verification: commands issued against a real UT61E+ via `dmm-cli`
 command tools; effects observed on the meter LCD and subsequent response
 frames.
+
+**Clamp-meter commands — [VENDOR-DOC]**, in the same table and for
+features no UT61+ model has, so never sent by us:
+
+| Byte | Deck name |
+|------|-----------|
+| 0x43 | INRUSH (enter inrush current test) |
+| 0x44 | Exit INRUSH |
+| 0x45 | ZERO (DC current zeroing) |
+| 0x4F | Flight (flashlight) |
+
+The deck says nothing of the `FF 00` ack the meter sends after each command
+(family spec §6.1); that is from our captures only.
 
 **Checksum formula for commands**: Since length is always 0x03 and
 payload is one byte, the checksum for command `cmd` is:
@@ -285,6 +317,11 @@ AB CD 10 <mode> <range> <display×7> <bar×2> <flags×3> <chk_hi> <chk_lo>
 | 15 | 1 | Flags2 | HV, LowBat, AUTO |
 | 16 | 1 | Flags3 | bar_pol, P-MIN, P-MAX, DC |
 | 17-18 | 2 | Checksum | 16-bit BE sum of bytes 0-16 |
+
+**[VENDOR-DOC]** The deck gives this layout byte for byte (its
+`Msg[0]`–`Msg[18]`): length 0x10, mode ("function position") and range at
+3-4, the display as ASCII at 5-11, the bar graph at 12-13, status at
+14-16.
 
 **Display value parsing** (from decompilation):
 1. Extract bytes 5-11 as Latin-1 string
@@ -337,7 +374,7 @@ confirmed by the mode-specific code paths in FUN_10007d50:
 | 0x10 | DC A | DCA | String table position | **[VERIFIED]** (A⎓ dial) |
 | 0x11 | AC A | ACA | String table position | **[VERIFIED]** (A⎓ + SELECT) |
 | 0x12 | hFE | hFE | Multiplier check `cVar1 == '\x12'` | **[VERIFIED]** |
-| 0x13 | Live | Live | Bar graph "-" check `cVar1 == '\x13'` | [UNVERIFIED] |
+| 0x13 | Live (contact live/neutral wire check, [VENDOR-DOC]) | Live | Bar graph "-" check `cVar1 == '\x13'` | — (not on UT61E+) |
 | 0x14 | NCV | NCV | Multiplier/"-" checks `cVar1 == '\x14'` | **[VERIFIED]** |
 | 0x15 | LoZ Voltage | LozV | String table position | — (not on UT61E+) |
 | 0x16 | LoZ Voltage 2 | LozV | Multiplier check `cVar1 == '\x16'` | — (not on UT61E+) |
@@ -417,7 +454,8 @@ and 13 arrive raw (no `0x30` prefix) and combine as
 segments = byte12 * 10 + byte13
 ```
 
-where `byte12` is the tens digit and `byte13` is the ones digit.
+where `byte12` is the tens digit and `byte13` is the ones digit
+(**[VENDOR-DOC]** the deck says the same).
 Represents the number of lit segments on the 46-segment LCD bar graph.
 The LCD has fixed markings at 0, 5, 10, 15, 20; their meaning in real
 units scales with the range (e.g., on 22V range: 0=0V, 5≈5V, 20≈20V;
@@ -446,6 +484,10 @@ From FUN_10007d50 (response parser), the three flag bytes at offsets
 
 All three flag bytes arrive with a `0x30` high nibble and must be masked
 with `& 0x0F` before bit-extraction (verified on real device).
+
+**[VENDOR-DOC]** The deck draws each status byte as `0 0 1 1` over four
+flags, and bits 0-2 of all three bytes carry the names below. It names
+Flags2 bit 2 `Manu_flag` ("AUTO" shown when clear), as the table has it.
 
 **Byte 14 (offset 0x0E) — Flags1:**
 
@@ -615,8 +657,9 @@ Configuration is stored in `options.xml`:
 
 1. **Flag byte 15 bit 3**: reserved/unused? Stored by PC software but
    never read; no observed behavior yet.
-3. **Mode bytes 0x03, 0x0D, 0x0F, 0x13**: not exercised (DC mV, AC µA,
-   AC mA, Live). 0x0A/0x0B (temperature) are UT61D+ only.
+3. **Mode bytes 0x03, 0x0D, 0x0F**: not exercised with a signal (DC mV,
+   AC µA, AC mA). 0x0A/0x0B (temperature) are UT61D+ only; 0x13 (Live) is
+   on no UT61+ dial.
 4. **Speculative mode bytes 0x1A-0x1E**: not yet observed from any device.
 5. **Edge cases**: NCV two-or-more `-` segments (§2.4: EF and one dash
    verified), hFE display format, temperature handling on UT61D+, OL in
@@ -656,6 +699,8 @@ Configuration is stored in `options.xml`:
 | Range byte: 0x30 prefix confirmed | **VENDOR** | Table builder stores 0x30+index |
 | Full mode/range table with bar graph ranges | **VENDOR** | FUN_00413f30 disassembly |
 | Only 3 commands in vendor software | **VENDOR** | Searched all 4 decompiled binaries |
+| Command table 0x41-0x4F, 0x5E, 0x5F | **VENDOR-DOC** | Protocol deck, 命令表一 |
+| Frame layout, bar graph digits, flag bits 0-2 | **VENDOR-DOC** | Protocol deck |
 | Byte15 bit2 = !AUTO (inverted) | **VENDOR** | DMM.exe UI hides "AUTO" when set |
 | Byte15 bit1 = UI indicator widget | **VENDOR** | DMM.exe passes to widget method |
 | Byte15 bits 0,3 = stored, not displayed | **VENDOR** | DMM.exe never reads back |
