@@ -456,8 +456,8 @@ vendor software. **Not a priority target.**
 Surveyed 2026-09-19. Model pages are `meters.uni-trend.com.cn/content/<id>.html`
 (handhelds) and `instruments.uni-trend.com.cn/cate/<id>.html` (bench). File
 links on `admin-meters…` fail; the same path on `meters…` works. The
-instruments site hides its download links behind scripts, so only titles and
-dates are listed for it.
+instruments site's model pages hide their download links behind scripts;
+its download centre, `instruments…/download?keyword=<model>`, lists them.
 
 | Model | Page | Protocol document | PC software |
 |-------|------|-------------------|-------------|
@@ -468,15 +468,50 @@ dates are listed for it.
 | UT60BT | content/1298 | — | — (iDMM2.0 app) |
 | UT612 | content/1232 | — | 2021-11-23 |
 | UT71A–E | content/4534 | "UT71系列接口协议" (download centre) | 2026-05-15 |
-| UT800 series (UT804) | cate/140 | "UT804接口协议" V1.0, 2023-11-15 | UT804 V2.0 |
+| UT800 series (UT804) | cate/140 | "UT804接口协议" V1.0, 2023-11-15 (read) | UT804 V2.0 |
+| UT803 | cate/138 | "UT803编程手册" REV.2: the UCI manual (below) | REV.2 |
 | UT804+ | cate/143 | — | REV.2, 2021-01-28 |
-| UT8802N | cate/145 | programming manual V2.0, 2021-04-10 | V2.0 |
-| UT8803N | cate/146 | programming manual V2.0, 2019-04-15 | V2.0 |
+| UT8802N | cate/145 | "UT8802N编程手册" REV.2: the UCI manual (below) | V2.0 |
+| UT8803N | cate/146 | "UT8803N编程手册" REV.2: the UCI manual (below) | V2.0 |
 
 The UT61+ and UT171/UT181A pages also carry the iDMM2.0 Android app. The
 download centre (`meters…/menu/68.html`) holds protocol documents for the
 older UT61E and UT61B too. Not found on either site: UT161 (a calibration
 certificate only), UT632.
+
+The "programming manuals" on the UT803, UT803+, UT804, UT8802N and UT8803N
+pages are one file, byte-identical to the Chinese UCI SDK manual V1.1 that
+the UCI bench spec was built from (checked 2026-09-19). Searching both sites
+for 协议, 通讯, 通信 and 指令, and by family prefix, found no other protocol
+document for a meter we support. The bench download centre also has a
+general-purpose "优利德上位机软件" (UNI-T PC software), 2025-05-26 and
+2026-09-09.
+
+### UNI-T US site
+
+Surveyed 2026-09-19. uni-trendus.com lists its catalog at `/products.json`.
+For the meters we support it carries the UT8802E/UT8803E programming manual
+and UNI-T SDK V2.3, both byte-identical to the copies the UCI bench spec
+used, and guides to the UT171 and UT181A PC apps; nothing for the UT61+ or
+UT161. The global uni-trend.com is slow and has had nothing the Chinese or
+US sites lack.
+
+### Conrad (Voltcraft)
+
+Surveyed 2026-09-19. Conrad's shop pages refuse scripts (HTTP 403), but its
+file server serves each item's downloads at
+`https://asset.conrad.com/media10/add/160267/c1/-/gl/000<item><CODE>`, where
+the code is ML (manual), DS (datasheet), DL (software) or IN (information)
+and a two-digit slot. The IN files hold protocol documents:
+
+| Model | Item | Protocol document |
+|-------|------|-------------------|
+| VC-880 | 124609 | IN01: "VC880 Protocol Rev 2.4", 9 pages |
+| VC650BT | 124411 | IN01: the same VC880 Protocol Rev 2.4 |
+| VC-890 | 124600 | IN01: "VC890 Protocol Rev 1.3", 13 pages |
+| VC-870 | 124603 | IN01: a VC870 protocol (not fetched) |
+
+Voltsoft's own downloads and voltcraft.com carry no protocol document.
 
 ### EEVBlog forum threads
 - "If Brymen BM869s is cheaper and as good, why people would still buy Fluke?" — 17+ pages

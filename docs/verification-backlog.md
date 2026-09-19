@@ -1517,17 +1517,27 @@ run that tells them apart, one step at a time on the meter:
 A frame taken while the symbol is lit would also confirm bit 3 (the spec's
 "Must Verify" item 1).
 
-### Vendor sources on UNI-T's Chinese sites, not yet read
+### Vendor sources not yet read
 
-Found by the 2026-09-19 survey (table in
-`docs/research/new-device-candidates.md`, "UNI-T Chinese sites"). Each is a
-separate task:
+Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
+"Sources"). Each is a separate task:
 
 - ~~**UT804 interface protocol V1.0 (2023-11-15)**~~ — **DONE 2026-09-19**:
   read into the UT803/UT804 spec as [VENDOR-DOC]. It covers the UT804 alone,
   so it says nothing of the UT804+.
-- **UT8802N and UT8803N programming manuals V2.0**, newer than the UT8803E
-  V1.0/V1.1 editions the UCI bench spec was built from.
+- ~~**UT8802N and UT8803N programming manuals V2.0**~~ — **not new**
+  (2026-09-19): every bench "programming manual" on UNI-T's Chinese, US and
+  global sites is byte-identical to the UCI manual V1.1, Chinese or English,
+  that the UCI bench spec was built from.
+- **VC880 Protocol Rev 2.4** (VC-880, VC650BT) and **VC890 Protocol Rev
+  1.3** (VC-890), Conrad's protocol documents, archived in
+  `references/vc880/protocol/` and `references/vc890/protocol/` with a
+  SOURCE.txt each. The vc880 and vc890 specs were built from Voltsoft alone.
+  The VC880 document's text layer is broken: read it from rendered pages.
+- **UNI-T's general-purpose PC software** ("优利德上位机软件", `1.10.zip`
+  2025-05-26 and `Setup.zip` 2026-09-09, about 150 MB each), in the bench
+  download centre's UT80 and UT88 results. Unopened; it may drive several
+  bench meters.
 - **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+, the
   UT171 series and the UT181A. The UT61E+ one is V2.02 repackaged
   (ut61-family approach doc); hash-compare the others against what the
@@ -1536,7 +1546,8 @@ separate task:
   UT61+/UT171/UT181A pages' meters, archived in `references/idmm2/`,
   unanalysed. A source for the BLE transport and the UT202S.
 - **Protocol documents for families we don't support**: UT71 series (basis
-  of the Tenma 72-7730 candidates), the older UT61E and UT61B.
+  of the Tenma 72-7730 candidates), the older UT61E and UT61B, and the
+  Voltcraft VC-870 (Conrad item 124603, IN01).
 
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
