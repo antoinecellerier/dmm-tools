@@ -1482,6 +1482,26 @@ Left over from the 2026-09-19 re-verification against the UT61+ manual:
   - UT61D+ temperature: "should be less than 230°C/446°F", while the table
     runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
 
+### Vendor sources on UNI-T's Chinese sites, not yet read
+
+Found by the 2026-09-19 survey (table in
+`docs/research/new-device-candidates.md`, "UNI-T Chinese sites"). Each is a
+separate task:
+
+- **UT804 interface protocol V1.0 (2023-11-15)**, on the UT800 series page.
+  Read before any UT804+ work; may also refine the UT804 spec.
+- **UT8802N and UT8803N programming manuals V2.0**, newer than the UT8803E
+  V1.0/V1.1 editions the UCI bench spec was built from.
+- **Per-model PC software uploaded 2023-02-03** for the UT61B+, UT61D+, the
+  UT171 series and the UT181A. The UT61E+ one is V2.02 repackaged
+  (ut61-family approach doc); hash-compare the others against what the
+  family docs used.
+- **iDMM2.0 Android app** (2025-12-20), UNI-T's Bluetooth client for the
+  UT61+/UT171/UT181A pages' meters, archived in `references/idmm2/`,
+  unanalysed. A source for the BLE transport and the UT202S.
+- **Protocol documents for families we don't support**: UT71 series (basis
+  of the Tenma 72-7730 candidates), the older UT61E and UT61B.
+
 ### Mode byte collisions — RESOLVED
 Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
 were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.

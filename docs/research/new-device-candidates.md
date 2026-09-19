@@ -151,7 +151,7 @@ modern GUI.
 | Adapter | UT-D07A / UT-D07B (~$30) |
 | Connection | BLE 5.0 via ISSC BL79 BLETR chip |
 | Compatible meters | UT61E+, UT61B+, UT61D+, UT161 series, UT171 series, UT181A |
-| Protocol | **Transparent BLE-to-UART bridge** — same protocol as wired USB |
+| Protocol | **Transparent BLE-to-UART bridge** — same protocol as wired USB. UNI-T's UT61+ protocol deck is titled the Bluetooth protocol for the UT161, UT61+ and UT202S ([research/ut61-family](ut61-family/reverse-engineering-approach.md)) |
 
 **Why this is the highest strategic value:** dmm-tools already parses
 UT61E+/UT171/UT181A protocols. The UT-D07B is a transparent UART bridge
@@ -360,7 +360,8 @@ vendor software. **Not a priority target.**
 | **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
 | **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset |
 | **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04) |
-| **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). Its download page on [instruments.uni-trend.com.cn](https://instruments.uni-trend.com.cn/list_80/577.html) carries a "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf), which is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). Its interface-protocol document (V1.0, 2023-11-15) is not read yet; read it first, to check whether the protocol matches a family we support |
+| **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document; the "UT804接口协议" (V1.0, 2023-11-15) is on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html) and not read yet — read it first, to check whether the protocol matches a family we support |
+| **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. Needs a BLE transport |
 | **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional); see [research/ut8803](ut8803/reverse-engineering-approach.md) |
 
 ## Meters Investigated and Ruled Out
@@ -449,6 +450,33 @@ vendor software. **Not a priority target.**
 - [N0ury/dmm_util](https://github.com/N0ury/dmm_util) — Fluke 287/289 Python utility
 - [FlukeView Forms alternative — EEVBlog thread](https://www.eevblog.com/forum/testgear/flukeview-forms-alternative/)
 - [HKJ's Test Controller](https://lygte-info.dk/project/TestControllerIntro%20UK.html)
+
+### UNI-T Chinese sites
+
+Surveyed 2026-09-19. Model pages are `meters.uni-trend.com.cn/content/<id>.html`
+(handhelds) and `instruments.uni-trend.com.cn/cate/<id>.html` (bench). File
+links on `admin-meters…` fail; the same path on `meters…` works. The
+instruments site hides its download links behind scripts, so only titles and
+dates are listed for it.
+
+| Model | Page | Protocol document | PC software |
+|-------|------|-------------------|-------------|
+| UT61E+ / D+ / B+ | content/1301, 1300, 1299 | "UT61+系列通讯协议" deck, E+ page only (read) | one per model, 2023-02-03 (E+ = V2.02) |
+| UT171A/B/C | content/1258-1260 | — | one shared, 2023-02-03 |
+| UT181A | content/1261 | — | 2023-02-03 |
+| UT202S | content/1340 | — | — |
+| UT60BT | content/1298 | — | — (iDMM2.0 app) |
+| UT612 | content/1232 | — | 2021-11-23 |
+| UT71A–E | content/4534 | "UT71系列接口协议" (download centre) | 2026-05-15 |
+| UT800 series (UT804) | cate/140 | "UT804接口协议" V1.0, 2023-11-15 | UT804 V2.0 |
+| UT804+ | cate/143 | — | REV.2, 2021-01-28 |
+| UT8802N | cate/145 | programming manual V2.0, 2021-04-10 | V2.0 |
+| UT8803N | cate/146 | programming manual V2.0, 2019-04-15 | V2.0 |
+
+The UT61+ and UT171/UT181A pages also carry the iDMM2.0 Android app. The
+download centre (`meters…/menu/68.html`) holds protocol documents for the
+older UT61E and UT61B too. Not found on either site: UT161 (a calibration
+certificate only), UT632.
 
 ### EEVBlog forum threads
 - "If Brymen BM869s is cheaper and as good, why people would still buy Fluke?" — 17+ pages

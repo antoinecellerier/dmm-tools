@@ -19,9 +19,9 @@ This guide covers the complete lifecycle for adding a new multimeter, from initi
 **Steps:**
 1. Check `docs/supported-devices.md` — the device may already be documented as a candidate or ruled out
 2. Identify the USB transport: `lsusb` to get VID:PID, then search for the chip datasheet
-3. Find the vendor software — manufacturer website, product CD, or community mirrors
+3. Find the vendor software — manufacturer website, product CD, or community mirrors. For UNI-T, start at the model's page on the Chinese sites, meters.uni-trend.com.cn (handhelds) and instruments.uni-trend.com.cn (bench meters): their downloads carry protocol documents, per-model PC software and the phone app that the global site lacks. `/search?keyword=<model>` on either site also searches its download centre. File links on `admin-meters.uni-trend.com.cn` fail; the same path on `meters.uni-trend.com.cn` works
 4. Download the user manual
-5. Store all assets in `references/<device>/` (manual PDF, installer ZIP, extracted binaries)
+5. Store all assets in `references/<device>/` (manual PDF, installer ZIP, extracted binaries), noting the page each file came from
 
 **Quick triage from vendor software contents:**
 - `SLABHIDtoUART.dll` or `CP2110.dll` → Silicon Labs CP2110 HID-to-UART bridge
@@ -45,7 +45,7 @@ This guide covers the complete lifecycle for adding a new multimeter, from initi
 |----------|--------|------------------|
 | 1 | User manual | Application semantics: modes, ranges, features, display format |
 | 2 | USB bridge datasheet (CP2110, CH9329, etc.) | Transport layer: HID reports, feature reports, UART/bridge config |
-| 3 | Programming manual or SDK docs (if exists) | Wire protocol — rare but invaluable (e.g., UT8803 has one) |
+| 3 | Programming manual, SDK docs or vendor protocol document (if exists) | Wire protocol — rare but invaluable (e.g., UT8803 has one; UNI-T's Chinese pages carry protocol documents for the UT61+ and UT804) |
 | 4 | Vendor software binaries | Protocol implementation: commands, framing, byte layouts |
 | 5 | SDK examples/headers (if exists) | API definitions, struct layouts, flag constants |
 
