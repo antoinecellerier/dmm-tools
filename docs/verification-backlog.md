@@ -2,6 +2,37 @@
 
 Items that need real components or specific setups to verify.
 
+## Contents
+
+- [Device auto-detection](#device-auto-detection)
+- [Pending Verification](#pending-verification)
+  - [UT61+ remote mode selection (cycle-to-target)](#ut61-remote-mode-selection-cycle-to-target)
+  - [UT61+ flag settings (HOLD, REL, MIN/MAX, Peak)](#ut61-flag-settings-hold-rel-minmax-peak)
+  - [UT61E+ — range ladders walked end to end (2026-09-10)](#ut61e--range-ladders-walked-end-to-end-2026-09-10)
+  - [Capture leaves the meter manually ranged](#capture-leaves-the-meter-manually-ranged)
+  - [UT61B+ — hardware reports](#ut61b--hardware-reports)
+  - [Capture: gate steps placed after other steps](#capture-gate-steps-placed-after-other-steps)
+  - [Modes not yet tested with real signals](#modes-not-yet-tested-with-real-signals)
+  - [Modes not reachable on UT61E+](#modes-not-reachable-on-ut61e)
+  - [Experimental protocol families (no real hardware access)](#experimental-protocol-families-no-real-hardware-access)
+  - [UT181A — confirmed on hardware, formats still open](#ut181a--confirmed-on-hardware-formats-still-open)
+  - [CP2110 feature reports (AN434)](#cp2110-feature-reports-an434)
+  - [Commands not fully verified](#commands-not-fully-verified)
+  - [Range tables](#range-tables)
+  - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
+  - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
+  - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
+  - [Vendor sources not yet read](#vendor-sources-not-yet-read)
+  - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
+  - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
+  - [A flat trace labels its y-axis with six decimals](#a-flat-trace-labels-its-y-axis-with-six-decimals)
+  - [A meter power cycle surfaces a checksum error](#a-meter-power-cycle-surfaces-a-checksum-error)
+  - [GUI accessibility — screen reader walk-through](#gui-accessibility--screen-reader-walk-through)
+- [Completed Verification](#completed-verification)
+  - [MIN/MAX and Peak measurement reporting — RESOLVED](#minmax-and-peak-measurement-reporting--resolved)
+  - [UT61E+ RANGE command (0x46) — RESOLVED](#ut61e-range-command-0x46--resolved)
+  - [Mode byte collisions — RESOLVED](#mode-byte-collisions--resolved)
+
 ## Device auto-detection
 
 Detection identifies the meter from the bytes it sends instead of being
@@ -534,7 +565,8 @@ credited here in the same commit, and the checklist is regenerated into the
 issue. The items below are the wire-level questions those steps answer,
 plus what no step reaches.
 
-**Voltcraft VC-890**:
+#### Voltcraft VC-890
+
 - Polled communication model (0x5E request → live data response)
 - Frame extraction (66-byte, AB CD header, BE16 checksum)
 - Function code mapping (19 codes, 0x00-0x12, remapped from VC-880!)
@@ -642,7 +674,8 @@ plus what no step reaches.
   `remote control unreliable on this meter` line if it appears — those are
   the commands this meter refused
 
-**Voltcraft VC-880 / VC650BT**:
+#### Voltcraft VC-880 / VC650BT
+
 - Frame extraction (39-byte, AB CD header, BE16 checksum — same as UT61E+)
 - Streaming model (no trigger, auto-starts after PC button press)
 - Function code mapping (19 codes, 0x00-0x12) — do mode labels match LCD?
@@ -732,8 +765,8 @@ plus what no step reaches.
   `remote control unreliable on this meter` line if it appears — those are
   the commands this meter refused
 
-**UT803 / UT804 (CH9325 HID, proprietary structured packets)** — UT804
-VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
+#### UT803 / UT804 (CH9325 HID, proprietary structured packets) — UT804 VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION
+
 - **UT804 hardware reports** — four runs by @clazie in
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16), all over
   the UT-D04 (CH9325) cable at 2400 baud:
@@ -946,7 +979,8 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
   transport — separate scope from HID-based meters.
 
-**UT8802 / UT8802N**:
+#### UT8802 / UT8802N
+
 - Frame extraction (8-byte, 0xAC header, no checksum)
 - ~~Negative reading shown and exported unsigned~~ **Fixed 2026-09-08**:
   the parser now puts the sign in `display_raw`; the digit nibbles cannot
@@ -996,7 +1030,8 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
 - Overload detection (BCD nibble 0x0C)
 - Streaming rate
 
-**UT8803 / UT8803E** ([issue #3](https://github.com/antoinecellerier/dmm-tools/issues/3)):
+#### UT8803 / UT8803E ([issue #3](https://github.com/antoinecellerier/dmm-tools/issues/3))
+
 - Frame extraction (21-byte, AB CD header, BE checksum)
 - 0x5A streaming trigger byte. **Corrected (2026-06 review)**: the
   vendor never sends 0x5A on the CP2110 path (FUN_1001d460 performs no
@@ -1035,7 +1070,8 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
 - Display value parsing (5 bytes → float)
 - Streaming rate (~2-3 Hz per manual)
 
-**UT171A / UT171B / UT171C** ([issue #4](https://github.com/antoinecellerier/dmm-tools/issues/4)):
+#### UT171A / UT171B / UT171C ([issue #4](https://github.com/antoinecellerier/dmm-tools/issues/4))
+
 - Frame extraction. **Corrected (2026-06 review)**: framing is
   byte-identical to UT181A — 2-byte LE length = payload + checksum,
   total = length + 4, LE16 checksum over [2..len+2). The previous
@@ -1276,73 +1312,6 @@ own software sends, not hardware confirmation.
 ### Commands not fully verified
 - **Get Name (0x5F):** Verified — returns two frames: ack (FF 00) then ASCII name (e.g. "UT61E+").
 
-### MIN/MAX and Peak measurement reporting — RESOLVED
-
-Verified 2026-03-21 on real UT61E+ with bench PSU (DC V, 3.1V→5V ramp)
-and AC mV (open leads, ~8.7 mV noise).
-
-- **MIN/MAX sends the stored value, not the live reading.** With MIN/MAX
-  active during a 3.1V→5V ramp: MAX state reported 5.004V (frozen),
-  MIN state reported 3.102V (frozen). The display value field contains
-  the stored min or max, not the live measurement.
-- **MIN and MAX flag bits cycle independently.** The meter cycles
-  MAX (byte 11 bit 3 only) → MIN (byte 11 bit 2 only) → MAX → ...
-  as a 2-state cycle. The bits are never both set simultaneously.
-  No AVG state is reported over USB (AVG may be LCD-only or absent on UT61E+).
-- **AUTO flag is cleared during MIN/MAX** (byte 12 bit 2 set = manual range).
-  The meter locks the range when MIN/MAX recording is active.
-- **Peak mode works the same way.** Peak command (0x4D) activates on AC mV
-  (context-dependent — does not activate on DC V). Reports stored
-  instantaneous peak values (not RMS): P-MAX=19.33mV, P-MIN=-290.25mV.
-  Cycles P-MAX (byte 13 bit 2 only) → P-MIN (byte 13 bit 1 only).
-- **Exit Peak (0x4E) works.** Clears peak flags, returns to live readings.
-- **Mock updated** to match: independent flag cycling, stored values,
-  AUTO cleared during MIN/MAX.
-
-### UT61E+ RANGE command (0x46) — RESOLVED
-
-Resolved 2026-09-07 on our UT61E+ (CP2110 cable, `RUST_LOG=dmm_lib=debug`)
-with `dmm-cli get range` / `set range`, which press 0x46 and re-read the range
-byte until the target rung shows.
-
-- **The first press from auto engages manual ranging on the rung the meter
-  is already in** — it does not step. Every further press steps exactly one
-  rung up.
-- **The top rung wraps to the bottom:** 1000V → 2.2V on DC V.
-- **`0x47` restores auto-ranging**, from a manual rung, in one command.
-- **The mode byte never moved under any press**, on either the V⎓ or the V~
-  dial position. So `0x46` is a pure range stepper.
-- With 1.5 V DC applied, the same walk read 1.5023 V (2.2V), 1.502 V (22V),
-  1.51 V (220V) and 1.5 V (1000V): resolution follows the rung, as on the LCD.
-
-Evidence — leads open, V⎓ dial, auto in 2.2V at the start:
-
-```
-set range 22V     cycle: pressing RANGE (in Auto, want 22V)
-                  cycle: pressing RANGE (in 2.2V, want 22V)     → 22V
-set range 220V    cycle: pressing RANGE (in 22V, want 220V)     → 220V
-set range 2.2V    cycle: pressing RANGE (in 220V, want 2.2V)
-                  cycle: pressing RANGE (in 1000V, want 2.2V)   → 2.2V
-set range 1000V   three presses: 2.2V → 22V → 220V → 1000V
-set range auto    cycle: setting auto-range (in 1000V)          → auto (220V, settling to 22V)
-```
-
-The 2026-07-29 capture that opened this item — six `range` presses whose
-range index went 0, 2, 0, 0, 0, 0 and whose mode byte appeared to flip
-DC V ↔ AC+DC V at presses 4 and 6 — is explained by reading the frame before
-the meter had applied the press: the indices are stale reads, not a strange
-stepping order. Whatever produced the mode flips there, it was not `0x46`.
-The library now waits for a fresh frame and re-reads a stale one instead of
-pressing again, which is why the walk above lands one rung per press. The
-capture wizard still sends `range` once and restores auto rather than
-sweeping.
-
-`get` prints **no range row** where there is nothing to choose: verified
-2026-09-07 in DC mV (fixed range, and `get range` / `set range` answer
-`Note: UNI-T UT61E+ has no switchable ranges in DC mV — use the dial.`),
-in DC A and in AC A (both table entries read `20A`). AC mV joined them the
-same day — see "Range tables" below.
-
 ### Range tables
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
@@ -1549,12 +1518,6 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   of the Tenma 72-7730 candidates), the older UT61E and UT61B, and the
   Voltcraft VC-870 (Conrad item 124603, IN01).
 
-### Mode byte collisions — RESOLVED
-Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
-were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
-Confirmed by real device captures and independently by vendor software
-decompilation (see `docs/research/ut61eplus/protocol-comparison.md`).
-
 ### VC-890 VOID readings are plotted as valid
 
 `flags.void` means the meter marked a reading invalid (misplug /
@@ -1750,3 +1713,76 @@ to reflect what is actually confirmed working and what still needs fixes.
 | CP2110 read path (stack buffer) | — | Verified 2026-07-29: 50 consecutive reads, no skipped frames |
 | Paced-read loop (cancellable sleep) | — | Verified 2026-07-29: pacing intact over 50 reads; Ctrl-C responsiveness still untested |
 | Idle HID report handling | — | Verified 2026-07-29 on CP2110: no false timeouts over 50 reads |
+
+### MIN/MAX and Peak measurement reporting — RESOLVED
+
+Verified 2026-03-21 on real UT61E+ with bench PSU (DC V, 3.1V→5V ramp)
+and AC mV (open leads, ~8.7 mV noise).
+
+- **MIN/MAX sends the stored value, not the live reading.** With MIN/MAX
+  active during a 3.1V→5V ramp: MAX state reported 5.004V (frozen),
+  MIN state reported 3.102V (frozen). The display value field contains
+  the stored min or max, not the live measurement.
+- **MIN and MAX flag bits cycle independently.** The meter cycles
+  MAX (byte 11 bit 3 only) → MIN (byte 11 bit 2 only) → MAX → ...
+  as a 2-state cycle. The bits are never both set simultaneously.
+  No AVG state is reported over USB (AVG may be LCD-only or absent on UT61E+).
+- **AUTO flag is cleared during MIN/MAX** (byte 12 bit 2 set = manual range).
+  The meter locks the range when MIN/MAX recording is active.
+- **Peak mode works the same way.** Peak command (0x4D) activates on AC mV
+  (context-dependent — does not activate on DC V). Reports stored
+  instantaneous peak values (not RMS): P-MAX=19.33mV, P-MIN=-290.25mV.
+  Cycles P-MAX (byte 13 bit 2 only) → P-MIN (byte 13 bit 1 only).
+- **Exit Peak (0x4E) works.** Clears peak flags, returns to live readings.
+- **Mock updated** to match: independent flag cycling, stored values,
+  AUTO cleared during MIN/MAX.
+
+### UT61E+ RANGE command (0x46) — RESOLVED
+
+Resolved 2026-09-07 on our UT61E+ (CP2110 cable, `RUST_LOG=dmm_lib=debug`)
+with `dmm-cli get range` / `set range`, which press 0x46 and re-read the range
+byte until the target rung shows.
+
+- **The first press from auto engages manual ranging on the rung the meter
+  is already in** — it does not step. Every further press steps exactly one
+  rung up.
+- **The top rung wraps to the bottom:** 1000V → 2.2V on DC V.
+- **`0x47` restores auto-ranging**, from a manual rung, in one command.
+- **The mode byte never moved under any press**, on either the V⎓ or the V~
+  dial position. So `0x46` is a pure range stepper.
+- With 1.5 V DC applied, the same walk read 1.5023 V (2.2V), 1.502 V (22V),
+  1.51 V (220V) and 1.5 V (1000V): resolution follows the rung, as on the LCD.
+
+Evidence — leads open, V⎓ dial, auto in 2.2V at the start:
+
+```
+set range 22V     cycle: pressing RANGE (in Auto, want 22V)
+                  cycle: pressing RANGE (in 2.2V, want 22V)     → 22V
+set range 220V    cycle: pressing RANGE (in 22V, want 220V)     → 220V
+set range 2.2V    cycle: pressing RANGE (in 220V, want 2.2V)
+                  cycle: pressing RANGE (in 1000V, want 2.2V)   → 2.2V
+set range 1000V   three presses: 2.2V → 22V → 220V → 1000V
+set range auto    cycle: setting auto-range (in 1000V)          → auto (220V, settling to 22V)
+```
+
+The 2026-07-29 capture that opened this item — six `range` presses whose
+range index went 0, 2, 0, 0, 0, 0 and whose mode byte appeared to flip
+DC V ↔ AC+DC V at presses 4 and 6 — is explained by reading the frame before
+the meter had applied the press: the indices are stale reads, not a strange
+stepping order. Whatever produced the mode flips there, it was not `0x46`.
+The library now waits for a fresh frame and re-reads a stale one instead of
+pressing again, which is why the walk above lands one rung per press. The
+capture wizard still sends `range` once and restores auto rather than
+sweeping.
+
+`get` prints **no range row** where there is nothing to choose: verified
+2026-09-07 in DC mV (fixed range, and `get range` / `set range` answer
+`Note: UNI-T UT61E+ has no switchable ranges in DC mV — use the dial.`),
+in DC A and in AC A (both table entries read `20A`). AC mV joined them the
+same day — see "Range tables" below.
+
+### Mode byte collisions — RESOLVED
+Previously documented collisions (0x00=ACV/DCA, 0x02=DCV/hFE, 0x04=Hz/NCV)
+were incorrect. Each mode has a unique byte: DCA=0x10, hFE=0x12, NCV=0x14.
+Confirmed by real device captures and independently by vendor software
+decompilation (see `docs/research/ut61eplus/protocol-comparison.md`).
