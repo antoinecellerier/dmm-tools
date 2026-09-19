@@ -734,7 +734,7 @@ plus what no step reaches.
 
 **UT803 / UT804 (CH9325 HID, proprietary structured packets)** — UT804
 VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
-- **UT804 hardware reports** — three runs by @clazie in
+- **UT804 hardware reports** — four runs by @clazie in
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16), all over
   the UT-D04 (CH9325) cable at 2400 baud:
   - **2026-09-17, v0.7.0-dev (666fbf5), Linux Mint** — `debug --count 5`
@@ -748,19 +748,25 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
   - **2026-09-18 later, same build, Windows** — the gate failed on
     `ohm_ol` (the LCD's `.OL MΩ` against our `0L MΩ`): AC+DC V, signed
     zero, the LCD's OL and LO text, HOLD stopping the stream, and SEND.
+  - **2026-09-19, v0.7.0-dev (720072d), Windows** — `--steps max_min,rel`
+    and two photos of the LCD in diode mode. `max_min` showed status bit 1
+    after RANGE and MAX MIN. `rel` captured the state `max_min`'s EXIT and
+    SEND left, before REL was pressed: the tool's fault, since fixed by
+    steps that wait for Enter.
 
-  Together they carried the model to `Stability::Verified`: every dial
+  The first three carried the model to `Stability::Verified`: every dial
   position and SELECT alternate decoded correctly (°F has no step). The
-  issue stays open for MAX MIN and REL.
+  issue stays open for RANGE against MAX MIN (status bit 1) and REL.
 - ~~**Readings on a real meter**~~ — **VERIFIED** 2026-09-17 by @clazie on a
   real UT804 (UT-D04 / CH9325). `debug --count 5` and a `capture` `dcv` step
   each returned five DC V readings with no errors, and the reporter confirmed
   the last capture sample against the LCD. See
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16).
-- **Golden fixtures**: 26 in `crates/dmm-lib/tests/golden/ut804/`. Three are
+- **Golden fixtures**: 27 in `crates/dmm-lib/tests/golden/ut804/`. Three are
   from the 2026-09-17 run — open leads, the confirmed 1.4 mV reading and a
-  negative one — and the rest are a confirmed sample from each dial position
-  and SELECT alternate in the 2026-09-18 captures.
+  negative one — one is the 2026-09-19 `max_min` sample with status bit 1,
+  and the rest are a confirmed sample from each dial position and SELECT
+  alternate in the 2026-09-18 captures.
 - ~~**CH9325 on Windows**~~ — **VERIFIED** 2026-09-17 by @clazie: the same
   meter and cable ran under the Windows GUI as well as Linux Mint, with no
   driver installed, which is what `docs/setup.md` tells users to expect of a
@@ -865,7 +871,10 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
     its own (§7.4 item 2), so the parser leaves it silent; the UT804 bit
     is in neither vendor parser, and `UT804.LOG` says HOLD stops
     transmission rather than setting a bit, so it is reported as
-    unrecognised to draw a trace (noted 2026-09-17)
+    unrecognised to draw a trace (noted 2026-09-17). UT804 nibble 9 bit 1
+    came on, AUTO off, in a step that pressed RANGE and then MAX MIN
+    (@clazie, 2026-09-19, spec §3.6): sigrok's MAN, or MAX MIN. The
+    `manual_range` step, ahead of `max_min`, tells the two apart
   - ~~UT804 mode 0xF ("mA%") dial position; which of modes 1/2 each V
     dial sends~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804
     (UT-D04 / CH9325): 0xF is the mA position's 4-20 mA %, shown with
@@ -873,8 +882,11 @@ VERIFIED 2026-09-18, UT803 IMPLEMENTED AND NEEDS HARDWARE VERIFICATION:
   - UT804 mode 0xE (unknown glyph; hFE?): the UT804 has no dial position
     for it (manual Table 2-1), so it may never be sent
   - UT804 °F: no capture step asks for it
-  - UT804 diode OL: the rule the other OL frames follow predicts `.0L`,
-    which we print, but the reporter twice accepted `0L`; unconfirmed
+  - ~~UT804 diode OL: the rule the other OL frames follow predicts `.0L`,
+    which we print, but the reporter twice accepted `0L`~~ — **VERIFIED**
+    2026-09-19 by @clazie on a real UT804 (UT-D04 / CH9325): the LCD
+    shows `. OL`, its point where a diode reading's is (`0.6314`), which
+    is the `.0L` we print. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
   - UT803 frequency range 0 decimal position; tachometer (RPM) frames
   - A blank digit (A) inside a reading: `assemble_value` renders a blank
     right after the decimal-point digit with the point twice ("12..45"),

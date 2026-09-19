@@ -1,0 +1,10 @@
+# DC V, 5.209 V on the 40V range after RANGE and MAX MIN: status 2, AUTO clear.
+# Captured 2026-09-19 from a UT804 over UT-D04 (issue #16, v0.7.0-dev 720072d report, step max_min).
+raw_hex: "B0 B5 32 B0 B9 32 31 B0 32 0D 8A"
+mode: "DC V"
+value: "5.209"
+unit: "V"
+range_label: "40V"
+flags:
+  auto_range: false
+  dc: true

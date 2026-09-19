@@ -309,18 +309,18 @@ nibble 2 as an AC/DC flag.*
 The UT804's LCD draws nibbles 1-5 as they are — `A` blank, `C` as `L`, a
 digit as itself — with the range's decimal point after digit position
 `pos+1`, blank positions counted (§3.7), and the sign in front
-[HARDWARE]. Issue #16's reporter read three such packets off the LCD
-(2026-09-18); the 7-segment O is the digit 0:
+[HARDWARE]. Issue #16's reporter read four such packets off the LCD
+(2026-09-18, the diode's on 2026-09-19); the 7-segment O is the digit 0:
 
 | Nibbles 1-9 | Mode, range | LCD |
 |---|---|---|
 | `A A 0 C A 6 4 0 1` | Ω, range 6 (40 MΩ) | `.OL MΩ` |
+| `A A 0 C A 0 B 0 0` | Diode | `. OL` |
 | `A A 0 C A 0 A 0 0` | Continuity | `0.L Ω` |
 | `A C 0 A A 0 F 0 4` | 4-20 mA %, sign bit set | `- LO. %` |
 
-Diode's open-lead packet (`A A 0 C A 0 B 0 0`) was twice accepted as
-`0L`, where the rule gives `.0L`; which is right is [UNVERIFIED]. The
-vendor app forces the text to `0L` or `L0` instead (§7.4 item 6).
+The diode's point sits where it does in a reading, `0.6314`. The vendor
+app forces the text to `0L` or `L0` instead (§7.4 item 6).
 
 `LcdDisplay71A` checks nibble 10 = `D` and nibble 11 = `A` before
 parsing. Its callers guarantee both: the USB handler checks them, and
@@ -397,13 +397,17 @@ Nibble 9 is decomposed as individual bits in the UT804 parser
 |-----|------|------|-----------|
 | bit 3 | 0x8 | Unknown (stripped first, no visible effect) | [UNVERIFIED] |
 | bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4). Set on zero readings too, which the LCD shows with a minus | [HARDWARE] |
-| bit 1 | 0x2 | Unknown | [UNVERIFIED] |
+| bit 1 | 0x2 | Manual range per sigrok (§8), or MAX MIN: set after RANGE and MAX MIN (below) | [HARDWARE] set; meaning [UNVERIFIED] |
 | bit 0 | 0x1 | AUTO | [HARDWARE] — shows "AUTO" text |
 
 On a UT804 (issue #16, 2026-09-18), AUTO is set on V, Ω, capacitance,
 frequency, µA and mA, and clear on mV, A, diode, continuity, temperature
 and the 4-20 mA %, the positions with a single range. Bits 1 and 3 were
-never set.
+never set that day. On 2026-09-19 the same meter, asked for RANGE and
+then MAX MIN on DC V's 40 V range, went from status 1 to 2 from one
+packet to the next. The reading kept following the input, as the manual
+says the primary display does in MAX MIN (p.24), and EXIT then SEND
+brought status 1 back.
 
 The bit decomposition logic:
 ```
@@ -414,8 +418,9 @@ if value >= 4:
 if value == 1:             // bit 0 → AUTO active
 ```
 
-Where MIN, MAX, REL and low battery show, if at all, is [UNVERIFIED];
-the packet has no nibbles 12-14 (§2.1). HOLD sends nothing (§4.2).
+Which of RANGE and MAX MIN sets bit 1, and where REL and low battery
+show, if at all, is [UNVERIFIED]; the packet has no nibbles 12-14 (§2.1).
+HOLD sends nothing (§4.2).
 
 ### 3.7 Range Code (Nibble 6) — [VENDOR]
 
@@ -554,13 +559,12 @@ The UT804's sign, mode codes, coupling, AUTO bit and the ranges it sent
 are confirmed (§3). Still open:
 
 - The UT803's sign, mode list and range tables
-- Status flag bits (MIN, MAX, REL, Low Battery) — see §7.4
+- Status flag bits: bit 1 (MAN or MAX MIN), REL, Low Battery (§3.6)
 - Whether the meter needs anything sent (the apps send nothing, §4.2)
 - Streaming rate: a packet about every 656 ms on a UT804 (§4.2); the
   UT803's is open
 - Line format on the wire (§1.2): 7O1 on a UT804; the UT803's is open
-- Digit nibbles `B`, `D`-`F` (§3.2), and the UT804's LCD for the diode
-  overload (§3.3)
+- Digit nibbles `B`, `D`-`F` (§3.2)
 - Whether nibble 4 = 'B' guard condition has meaning
 - The UT804's °F packets (code D), and whether code E is ever sent
 
@@ -716,7 +720,7 @@ libsigrok's code unless it says "wiki".
 | Function codes | 1-F (§3.4); E and F uncertain | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
 | Range tables | §3.7 | — | Per function | ✓ (log) |
 | Coupling (nibble 8) | 0 = per mode, 1 AC, 2 DC, 3 AC+DC (§3.5) | Bit 0 AC, bit 1 DC | Same | ✓ |
-| Status (nibble 9) | Bit 0 AUTO, bit 2 sign, bits 1 and 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 new |
+| Status (nibble 9) | Bit 0 AUTO, bit 2 sign, bits 1 and 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 new, seen after RANGE and MAX MIN (§3.6) |
 | Duty cycle | Hz mode with the sign bit (§7.4) | Same | Same | ✓ |
 | Digit values A, C, F | A = blank or flag, B-F unknown (§3.2) | — | `:` blank, `<` 'L', `?` 'H' | ✓ A; C, F new |
 | Overload | Nibble 1 = A: overload unless nibble 2 = C, which gives 0.0 shown "L0." (§7.4) | `::0<:` overload, `:<0::` underload | `::0<:` overload; 4-20 mA `:<0::` "L0", `:?1::` "HI" | ✓³ |
@@ -775,6 +779,7 @@ Reference implementations:
 - UT804 operating manual — display counts; Table 2-1 rotary switch (p.14),
   Table 2-2 buttons (p.15-17), Table 2-3 ranges (p.18-19), MAX MIN (p.24)
 - Issue #16 — a UT804's CH9325 reports under dmm-tools 0.6.0 and 0.7.0-dev
-  (2026-09-16), and two capture reports under 0.7.0-dev (3806742) with the
-  LCD read back beside each step (2026-09-18)
+  (2026-09-16), two capture reports under 0.7.0-dev (3806742) with the
+  LCD read back beside each step (2026-09-18), and a MAX MIN capture under
+  0.7.0-dev (720072d) with two LCD photos of diode mode (2026-09-19)
 - CH9325 transport analysis — see `../uci-bench-family/reverse-engineered-protocol.md`

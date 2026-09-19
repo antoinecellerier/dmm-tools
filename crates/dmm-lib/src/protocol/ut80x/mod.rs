@@ -506,11 +506,10 @@ fn overload_display(negative: bool) -> Option<String> {
 /// `dp_pos + 1` and the sign in front (spec §3.3). `None` where a nibble is
 /// one the LCD has not been seen to draw.
 ///
-/// Issue #16's LCD confirmed three frames: `A A 0 C A` on Ω range 6 shows
-/// `.OL`, on continuity `0.L`, and `A C 0 A A` on mode F with the sign bit
-/// `- LO.`. The 7-segment O is the digit 0, so the text keeps `0`. Diode's
-/// `A A 0 C A` was twice accepted as `0L`, where this gives `.0L`: that one
-/// is unconfirmed.
+/// Issue #16's LCD confirmed four frames: `A A 0 C A` on Ω range 6 shows
+/// `.OL`, on diode `. OL`, on continuity `0.L`, and `A C 0 A A` on mode F
+/// with the sign bit `- LO.`. The 7-segment O is the digit 0, so the text
+/// keeps `0`, and a blank draws nothing, so the diode's reads `.0L`.
 fn ut804_lcd_text(digits: &[u8], dp_pos: u8, negative: bool) -> Option<String> {
     let mut s = String::with_capacity(digits.len() + 2);
     if negative {
@@ -1884,7 +1883,7 @@ raw_payload=11"#
         );
     }
 
-    /// Three frames whose LCD issue #16's reporter read back: the text is
+    /// Four frames whose LCD issue #16's reporter read back: the text is
     /// the digit nibbles as drawn, with the range's point and the sign.
     #[test]
     fn ut804_overload_and_lo_text_is_the_lcds() {
@@ -1896,6 +1895,15 @@ raw_payload=11"#
                 ],
                 "Ω",
                 "MΩ",
+                ".0L",
+            ),
+            // Diode, open leads: ". OL", the point where a reading's is.
+            (
+                [
+                    0xBA, 0xBA, 0xB0, 0xBC, 0xBA, 0xB0, 0x3B, 0xB0, 0xB0, 0x0D, 0x8A,
+                ],
+                "Diode",
+                "V",
                 ".0L",
             ),
             // Continuity, open leads: "0.L Ω".
