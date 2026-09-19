@@ -65,6 +65,7 @@
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
 - **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V.
 - **The UT61+/UT161 Specifications panel matches the manual** — the UT61B+/UT61D+ 600mV DC accuracy and the UT61E+ resistance open-circuit voltage were wrong.
+- **A lone accuracy figure keeps its frequency range in the Specifications panel** — UT61E+ AC+DC V and LPF V showed the figure without it.
 - **UT61+/UT161 NCV shows the detected level**
 - **UT8802 negative readings show their sign**
 - **VC-880 and VC-890 report the AVG flag**

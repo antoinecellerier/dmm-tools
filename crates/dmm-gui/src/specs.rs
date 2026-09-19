@@ -107,10 +107,28 @@ pub fn show_specs(
         match spec.accuracy {
             [] => {}
             [single] => {
-                ui.label(
-                    RichText::new(format!("Accuracy  {}", accuracy_text(single.accuracy)))
-                        .font(egui::FontId::proportional(main_font)),
-                );
+                let figure = RichText::new(format!("Accuracy  {}", accuracy_text(single.accuracy)))
+                    .font(egui::FontId::proportional(main_font));
+                match single.freq_range {
+                    // A lone band keeps its qualifier (LPF V's "40Hz~100Hz
+                    // (LPF)"), dimmed as in the band list. One label at one
+                    // size, so the row keeps a plain label's height and the
+                    // two parts share a baseline.
+                    Some(freq) => {
+                        let mut job = egui::text::LayoutJob::default();
+                        let style = ui.style();
+                        let font = egui::FontSelection::Default;
+                        figure.append_to(&mut job, style, font.clone(), egui::Align::BOTTOM);
+                        RichText::new(format!("  {freq}"))
+                            .font(egui::FontId::proportional(main_font))
+                            .color(weak)
+                            .append_to(&mut job, style, font, egui::Align::BOTTOM);
+                        ui.label(job);
+                    }
+                    None => {
+                        ui.label(figure);
+                    }
+                }
             }
             bands => {
                 ui.label(RichText::new("Accuracy").font(egui::FontId::proportional(main_font)));
@@ -246,6 +264,52 @@ mod tests {
             resolution: "0.01mV",
             accuracy,
         }
+    }
+
+    /// The text the full panel draws for `spec`.
+    fn panel_texts(spec: &SpecInfo) -> Vec<String> {
+        fn collect(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(t) => out.push(t.galley.text().to_string()),
+                egui::Shape::Vec(v) => v.iter().for_each(|s| collect(s, out)),
+                _ => {}
+            }
+        }
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            show_specs(ui, Some(spec), None, None, 1.0);
+        });
+        out.textures_delta.clear();
+        let mut texts = Vec::new();
+        for clipped in &out.shapes {
+            collect(&clipped.shape, &mut texts);
+        }
+        texts
+    }
+
+    /// LPF V's one band holds only from 40Hz to 100Hz; the panel says so.
+    #[test]
+    fn a_lone_band_keeps_its_qualifier() {
+        const LPF_BAND: &[AccuracyBand] = &[AccuracyBand {
+            freq_range: Some("40Hz~100Hz (LPF)"),
+            accuracy: "3.0%+50",
+        }];
+        let texts = panel_texts(&spec(LPF_BAND));
+        assert!(
+            texts
+                .iter()
+                .any(|t| t == "Accuracy  \u{00B1}(3.0%+50)  40Hz~100Hz (LPF)"),
+            "{texts:?}"
+        );
+    }
+
+    #[test]
+    fn a_dc_band_shows_the_figure_alone() {
+        let texts = panel_texts(&spec(DC_BAND));
+        assert!(
+            texts.iter().any(|t| t == "Accuracy  \u{00B1}(0.1%+5)"),
+            "{texts:?}"
+        );
     }
 
     /// Continuity and diode ship `accuracy: &[]`; the compact renderers must not

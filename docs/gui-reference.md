@@ -253,7 +253,8 @@ as the meter changes mode/range.
 - **Accuracy** — rated accuracy as ±(% of reading + counts). AC modes show
   separate accuracy for each frequency band (e.g., 40Hz–1kHz and 1kHz–10kHz).
   Temperature shows accuracy per sub-range (e.g., -40–0°C, 0–300°C).
-  LPF V shows only its own 40Hz–100Hz band, AC V only the bands without LPF.
+  LPF V shows only its own 40Hz–100Hz band, AC V only the bands without LPF;
+  a lone band shows its range after the figure.
 - **Input Z** — input impedance (e.g., About 10MΩ), when applicable
 - **Notes** — additional info like "True RMS", accuracy conditions or thermocouple type
 - **Manual** — hyperlink to the manufacturer's product page (shown whenever a
