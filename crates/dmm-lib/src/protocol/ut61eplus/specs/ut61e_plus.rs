@@ -78,8 +78,7 @@ pub(super) fn table(mode: Mode) -> Option<&'static ModeSpecs> {
 
 // The 220.00mV row is range 0 of DC mV, on the mV dial position, with an
 // input impedance of its own. The UT61E+ mV position is fixed at 220mV
-// in DC and AC: RANGE does nothing there and only range byte 0 has been
-// seen, so the range table's second entry (2.2V) has no row.
+// in DC and AC, its only range.
 static DC_MV: ModeSpecs = ModeSpecs {
     name: "DC Voltage",
     page: 14,

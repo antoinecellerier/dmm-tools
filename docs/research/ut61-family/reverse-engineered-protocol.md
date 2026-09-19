@@ -391,8 +391,12 @@ that leaves 1-4 and 6 [DEDUCED].
 | 1 | 10.00 A (10 mA) | 20.00 A (10 mA) | 20.000 A (1 mA) |
 
 The UT61E+ manual prints one A range; its range table labels both bytes
-20A, and the captures show range 1. The UT61D+ order is [DEDUCED] from the
-UT61B+'s, which issue #19 verified; no UT61D+ has confirmed it — issue #7.
+20A, and the captures show range 1 — the only byte the protocol deck's
+UT61E+ table gives (as "10A"). The UT61D+ order follows the UT61B+'s, which
+issue #19 verified, and the deck's joint UT61B+/UT61D+ table puts 6A at
+byte 0 [VENDOR-DOC]. It gives byte 1 as 10A for both models, where the
+manual gives the UT61D+ 20.00 A; we follow the manual. No UT61D+ has
+confirmed either — issue #7.
 
 ### 5.6 Temperature (UT61D+ / UT161D only) — [MANUAL]
 
@@ -405,7 +409,10 @@ UT61B+'s, which issue #19 verified; no UT61D+ has confirmed it — issue #7.
 | 32 to 572 °F | 0.2 °F | ±(1.0%+4 °F) |
 | 572 to 1832 °F | 2 °F | ±(1.0%+6 °F) |
 
-K-type thermocouple only. Uses mode bytes 0x0A (°C) and 0x0B (°F).
+K-type thermocouple only. Uses mode bytes 0x0A (°C) and 0x0B (°F), each
+with two range bytes in the protocol deck [VENDOR-DOC]: 0 for -40~300 °C
+(-40~572 °F) and 1 for 300~1000 °C (572~1832 °F), the split where the
+resolution changes.
 
 ### 5.7 Other Modes
 
@@ -438,6 +445,27 @@ point rather than match a fixed string.
 The point's position is also a second reading of the range byte: the B+'s
 `  O.L ` in Ω sits where a 60.00 MΩ rung puts its decimal, which is range
 byte 5, exactly as section 9 has it.
+
+### 5.9 Frequency — [VENDOR-DOC]
+
+The manual gives only a span (10.00 Hz–10.00 MHz on the 6,000-count
+models, 10 Hz–220 MHz on the UT61E+); the protocol deck gives the rungs:
+
+| Range | UT61B+/UT61D+ | UT61E+ |
+|-------|---------------|--------|
+| 0 | 99.99 Hz | 22 Hz |
+| 1 | 999.9 Hz | 220 Hz |
+| 2 | 9.999 kHz | 2.2 kHz |
+| 3 | 99.99 kHz | 22 kHz |
+| 4 | 999.9 kHz | 220 kHz |
+| 5 | 9.999 MHz | 2.2 MHz |
+| 6 | — | 22 MHz |
+| 7 | — | 220 MHz |
+
+The 6,000-count ladder counts to 9,999, and its top rung (9.999 MHz) stops
+short of the manual's 10.00 MHz. Rung 0 fits both UT61B+ Hz/%-position
+frames (`0.00`, `49.98`) and the UT61E+'s (`0.00`); no other rung has been
+seen on a meter (section 7, item 8).
 
 ## 6. Commands — [VENDOR]
 
@@ -606,11 +634,13 @@ possible from the vendor software.
 7. **UT61B+ Peak command rejection** — whether PeakMinMax (0x4D) is
    silently ignored or returns an error. [UNVERIFIED]
 
-8. **Frequency ladder on 6,000-count models** — the 2026-09-09 UT61B+
-   capture reported range index 0 in Hz from both the V~ position and
-   the Hz dial position, displaying `0.0` in one and `0.00` in the
-   other. One index cannot carry both full scales, so the code's five
-   invented Hz ranges do not describe the meter. [UNVERIFIED]
+8. **Frequency ladder on 6,000-count models** — the rungs are now the
+   protocol deck's (§5.9), which fit the Hz/% position's `0.00` and
+   `49.98` at index 0. Still open: the 2026-09-09 UT61B+ capture's `0.0`
+   at index 0 from the V~ position, one decimal where rung 0 has two. The
+   manual's AC remarks give the UT61B+/UT61D+ frequency 0.1 Hz resolution
+   on the AC positions, which would explain it; whether the range byte
+   then leaves 0 above 99.99 Hz is unknown. [UNVERIFIED]
 
 9. **NCV display on the UT61B+** — the same capture sent `   ----` in
    NCV (mode 0x14). Four dashes read as detection level 4 under the
@@ -667,7 +697,7 @@ zero (duty cycle, diode, hFE). Generated from the source tables, not retyped.
 
 ### UT61E+ (22,000 counts)
 
-Source: `ut61e_plus.rs` (50 ranges).
+Source: `ut61e_plus.rs` (51 ranges).
 
 | Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
 |---|---|---|---|---|---|---|
@@ -680,9 +710,7 @@ Source: `ut61e_plus.rs` (50 ranges).
 | `ac_v` | AcV | 2 | 220V | V | 220 | -220 |
 | `ac_v` | AcV | 3 | 1000V | V | 1000 | -1000 |
 | `dc_mv` | DcMv | 0 | 220mV | mV | 220 | -220 |
-| `dc_mv` | DcMv | 1 | 2.2V | mV | 2200 | -2200 |
 | `ac_mv` | AcMv | 0 | 220mV | mV | 220 | -220 |
-| `ac_mv` | AcMv | 1 | 2.2V | mV | 2200 | -2200 |
 | `ohm` | Ohm | 0 | 220Ω | Ω | 220 | — |
 | `ohm` | Ohm | 1 | 2.2kΩ | kΩ | 2.2 | — |
 | `ohm` | Ohm | 2 | 22kΩ | kΩ | 22 | — |
@@ -703,6 +731,9 @@ Source: `ut61e_plus.rs` (50 ranges).
 | `hz` | Hz | 2 | 2.2kHz | kHz | 2.2 | — |
 | `hz` | Hz | 3 | 22kHz | kHz | 22 | — |
 | `hz` | Hz | 4 | 220kHz | kHz | 220 | — |
+| `hz` | Hz | 5 | 2.2MHz | MHz | 2.2 | — |
+| `hz` | Hz | 6 | 22MHz | MHz | 22 | — |
+| `hz` | Hz | 7 | 220MHz | MHz | 220 | — |
 | `duty_cycle` | DutyCycle | 0 | Duty | % | 100 | 0 |
 | `temp_c` | TempC | 0 | Temp | °C | 1200 | -40 |
 | `temp_f` | TempF | 0 | Temp | °F | 2192 | -40 |
@@ -725,12 +756,12 @@ Source: `ut61e_plus.rs` (50 ranges).
 On the UT61E+ the mV dial is fixed-range in **both** of its modes — DC mV
 [VERIFIED] 2026-03-21, AC mV [VERIFIED] 2026-09-07 (three RANGE presses moved
 neither the range byte nor the AUTO annunciator). Only index 0 (220mV) has
-ever been seen there, so the meter never sends the 2.2V rows of
-`dc_mv`/`ac_mv`.
+ever been seen there, and the protocol deck's UT61E+ table has that rung
+alone.
 
 ### UT61B+ (6,000 counts)
 
-Source: `ut61b_plus.rs` (45 ranges).
+Source: `ut61b_plus.rs` (46 ranges).
 
 | Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
 |---|---|---|---|---|---|---|
@@ -759,11 +790,12 @@ Source: `ut61b_plus.rs` (45 ranges).
 | `capacitance` | Capacitance | 4 | 600µF | µF | 600 | — |
 | `capacitance` | Capacitance | 5 | 6mF | mF | 6 | — |
 | `capacitance` | Capacitance | 6 | 60mF | mF | 60 | — |
-| `hz` | Hz | 0 | 60Hz | Hz | 60 | — |
-| `hz` | Hz | 1 | 600Hz | Hz | 600 | — |
-| `hz` | Hz | 2 | 6kHz | kHz | 6 | — |
-| `hz` | Hz | 3 | 60kHz | kHz | 60 | — |
-| `hz` | Hz | 4 | 600kHz | kHz | 600 | — |
+| `hz` | Hz | 0 | 99.99Hz | Hz | 99.99 | — |
+| `hz` | Hz | 1 | 999.9Hz | Hz | 999.9 | — |
+| `hz` | Hz | 2 | 9.999kHz | kHz | 9.999 | — |
+| `hz` | Hz | 3 | 99.99kHz | kHz | 99.99 | — |
+| `hz` | Hz | 4 | 999.9kHz | kHz | 999.9 | — |
+| `hz` | Hz | 5 | 9.999MHz | MHz | 9.999 | — |
 | `duty_cycle` | DutyCycle | 0 | Duty | % | 100 | 0 |
 | `diode` | Diode | 0 | Diode | V | 3 | 0 |
 | `continuity` | Continuity | 0 | Cont | Ω | 600 | — |
@@ -782,7 +814,7 @@ Source: `ut61b_plus.rs` (45 ranges).
 
 ### UT61D+ (6,000 counts)
 
-Source: `ut61d_plus.rs` (49 ranges).
+Source: `ut61d_plus.rs` (52 ranges).
 
 | Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
 |---|---|---|---|---|---|---|
@@ -811,14 +843,17 @@ Source: `ut61d_plus.rs` (49 ranges).
 | `capacitance` | Capacitance | 4 | 600µF | µF | 600 | — |
 | `capacitance` | Capacitance | 5 | 6mF | mF | 6 | — |
 | `capacitance` | Capacitance | 6 | 60mF | mF | 60 | — |
-| `hz` | Hz | 0 | 60Hz | Hz | 60 | — |
-| `hz` | Hz | 1 | 600Hz | Hz | 600 | — |
-| `hz` | Hz | 2 | 6kHz | kHz | 6 | — |
-| `hz` | Hz | 3 | 60kHz | kHz | 60 | — |
-| `hz` | Hz | 4 | 600kHz | kHz | 600 | — |
+| `hz` | Hz | 0 | 99.99Hz | Hz | 99.99 | — |
+| `hz` | Hz | 1 | 999.9Hz | Hz | 999.9 | — |
+| `hz` | Hz | 2 | 9.999kHz | kHz | 9.999 | — |
+| `hz` | Hz | 3 | 99.99kHz | kHz | 99.99 | — |
+| `hz` | Hz | 4 | 999.9kHz | kHz | 999.9 | — |
+| `hz` | Hz | 5 | 9.999MHz | MHz | 9.999 | — |
 | `duty_cycle` | DutyCycle | 0 | Duty | % | 100 | 0 |
-| `temp_c` | TempC | 0 | Temp | °C | 1000 | -40 |
-| `temp_f` | TempF | 0 | Temp | °F | 1832 | -40 |
+| `temp_c` | TempC | 0 | -40~300°C | °C | 300 | -40 |
+| `temp_c` | TempC | 1 | 300~1000°C | °C | 1000 | 300 |
+| `temp_f` | TempF | 0 | -40~572°F | °F | 572 | -40 |
+| `temp_f` | TempF | 1 | 572~1832°F | °F | 1832 | 572 |
 | `diode` | Diode | 0 | Diode | V | 3 | 0 |
 | `continuity` | Continuity | 0 | Cont | Ω | 600 | — |
 | `dc_ua` | DcUa | 0 | 600µA | µA | 600 | -600 |

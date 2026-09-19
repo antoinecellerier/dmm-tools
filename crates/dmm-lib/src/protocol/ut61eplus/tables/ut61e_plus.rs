@@ -7,11 +7,11 @@ pub struct Ut61ePlusTable {
     // Tables indexed by range byte (0x00..0x07 typically)
     dc_v: [RangeInfo; 4],
     ac_v: [RangeInfo; 4],
-    dc_mv: [RangeInfo; 2],
-    ac_mv: [RangeInfo; 2],
+    dc_mv: [RangeInfo; 1],
+    ac_mv: [RangeInfo; 1],
     ohm: [RangeInfo; 7],
     capacitance: [RangeInfo; 8],
-    hz: [RangeInfo; 5],
+    hz: [RangeInfo; 8],
     duty_cycle: [RangeInfo; 1],
     temp_c: [RangeInfo; 1],
     temp_f: [RangeInfo; 1],
@@ -51,8 +51,13 @@ impl Ut61ePlusTable {
                 r("220V", "V"),
                 r("1000V", "V"),
             ],
-            dc_mv: [r("220mV", "mV"), r("2.2V", "mV")],
-            ac_mv: [r("220mV", "mV"), r("2.2V", "mV")],
+            // One range on this model, and RANGE does nothing in either mV
+            // mode — DC mV verified 2026-03-21, AC mV 2026-09-07 (three
+            // presses, range byte and AUTO annunciator unmoved); see the
+            // "Range tables" section of docs/verification-backlog.md. The
+            // protocol deck's UT61E+ table has this one rung too.
+            dc_mv: [r("220mV", "mV")],
+            ac_mv: [r("220mV", "mV")],
             ohm: [
                 r("220Ω", "Ω"),
                 r("2.2kΩ", "kΩ"),
@@ -78,6 +83,11 @@ impl Ut61ePlusTable {
                 r("2.2kHz", "kHz"),
                 r("22kHz", "kHz"),
                 r("220kHz", "kHz"),
+                // Range bytes 0x35-0x37, from the protocol deck's UT61E+
+                // table; the manual's span runs to 220MHz.
+                r("2.2MHz", "MHz"),
+                r("22MHz", "MHz"),
+                r("220MHz", "MHz"),
             ],
             duty_cycle: [r("Duty", "%")],
             temp_c: [r("Temp", "°C")],
@@ -226,18 +236,6 @@ impl ModeTables for Ut61ePlusTable {
     const DIAL_POSITIONS: &'static [DialPosition] = DIAL;
     const MODEL_NAME: &'static str = "UNI-T UT61E+";
 
-    /// The mV dial has one range on this model (220mV) and the RANGE
-    /// button does nothing in either of its modes — DC mV verified
-    /// 2026-03-21, AC mV 2026-09-07 (three presses, range byte and AUTO
-    /// annunciator unmoved); see the "Range tables" section of
-    /// docs/verification-backlog.md. Only range byte 0 has been seen there;
-    /// the table's second entry (2.2V) has never come from the meter, and the
-    /// length alone would not say so. Capacitance and Hz are dead on every
-    /// model of the family and come from the shared list.
-    fn range_is_fixed(&self, mode: Mode) -> bool {
-        super::FAMILY_FIXED_RANGE_MODES.contains(&mode) || matches!(mode, Mode::DcMv | Mode::AcMv)
-    }
-
     fn peak_modes(&self) -> &'static [Mode] {
         AC_PEAK_MODES
     }
@@ -329,10 +327,7 @@ mod tests {
             assert_eq!(r0.label, "220mV");
             assert_eq!(r0.unit, "mV");
 
-            let r1 = t.range_info(mode, 1).unwrap();
-            assert_eq!(r1.label, "2.2V");
-
-            assert!(t.range_info(mode, 2).is_none());
+            assert!(t.range_info(mode, 1).is_none());
         }
     }
 
@@ -388,7 +383,10 @@ mod tests {
         assert_eq!(t.range_info(Mode::Hz, 2).unwrap().label, "2.2kHz");
         assert_eq!(t.range_info(Mode::Hz, 2).unwrap().unit, "kHz");
         assert_eq!(t.range_info(Mode::Hz, 4).unwrap().label, "220kHz");
-        assert!(t.range_info(Mode::Hz, 5).is_none());
+        assert_eq!(t.range_info(Mode::Hz, 5).unwrap().label, "2.2MHz");
+        assert_eq!(t.range_info(Mode::Hz, 7).unwrap().label, "220MHz");
+        assert_eq!(t.range_info(Mode::Hz, 7).unwrap().unit, "MHz");
+        assert!(t.range_info(Mode::Hz, 8).is_none());
     }
 
     // --- Single-range modes ---

@@ -56,15 +56,8 @@ fn reading(id: &str, mode: Mode, range: u8) -> Measurement {
 /// Why a reading has no row, and which readings that is.
 type Listed = (&'static str, fn(SpecModel, Mode, u8) -> bool);
 
-/// Readings that take their table's mode data but no row.
-const MODE_SPEC_ONLY: &[Listed] = &[(
-    "UT61E+ and UT161E mV range 1: the mV position is fixed at 220mV in DC and AC (on a UT61E+, RANGE does nothing and only range byte 0 has been seen), so the meter never sends byte 1",
-    |model, mode, range| {
-        matches!(model, SpecModel::Ut61ePlus | SpecModel::Ut161e)
-            && matches!(mode, Mode::DcMv | Mode::AcMv)
-            && range == 1
-    },
-)];
+/// Readings that take their table's mode data but no row. None today.
+const MODE_SPEC_ONLY: &[Listed] = &[];
 
 /// Readings the parser accepts that have no spec in the manual.
 const NO_SPEC: &[Listed] = &[("NCV: the manual has no NCV table", |_, mode, _| {

@@ -458,20 +458,16 @@ Left open on this model:
   unasked on the B+. A mode or range walk now presses HOLD off and sends a
   press that changed nothing under HOLD again; unverified on the B+, where
   `set hold on` then `set mode Hz` from AC V exercises it.
-- **The Hz ladder — PARKED 2026-09-12, needs a signal generator we do not
-  have.** Raise it again if one turns up, or if a reporter offers. This is
-  the only open item on the model with a real correctness risk: the Hz rungs
-  are Hz, Hz, kHz, kHz, kHz, and `unit` comes from the range table, so if the
-  range byte really does stay at 0 above 6 kHz then everything up there is
-  labelled Hz while the meter shows kHz. Range index 0 carried two different
-  full scales across the two runs: `0.0` (one decimal) from the V~ Hz path on
-  2026-09-09 and `0.00` / `49.98` (two decimals) from the Hz/% dial position
-  on 2026-09-10. One index cannot mean both, so either the index is pinned at
-  0 in Hz and the rung shows only in the decimal placement, or the two paths
-  range differently. The code's five invented Hz ranges describe neither, and
-  the E+'s five are invented too, so no sibling can arbitrate. Settling it
-  needs one frame on a signal above 60 Hz — say a 1 kHz square wave — to see
-  whether the range byte ever leaves 0.
+- **The Hz ladder — labels from the protocol deck (2026-09-19); the V~ path
+  still open.** The code's five invented rungs are now the deck's six
+  (99.99 Hz … 9.999 MHz, family spec §5.9), whose rung 0 fits `0.00` and
+  `49.98` from the Hz/% position. Left: `0.0` (one decimal) at index 0 from
+  the V~ Hz path on 2026-09-09. The manual's AC remarks give B+/D+
+  frequency on the AC positions 0.1 Hz resolution, which fits, but then
+  either that path keeps index 0 above 99.99 Hz — and a reading there is
+  labelled Hz while the meter shows kHz — or it ranges like the Hz/%
+  position. One frame from V~ with a ~1 kHz signal settles it; no signal
+  generator here.
 
 ### Capture: gate steps placed after other steps
 
@@ -1359,20 +1355,16 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 - **UT61D+ amps: 6A at range 0, 20A at range 1 — unconfirmed.** The
   manual lists 6.000A and 20.00A, where the table carried two 20A entries
   copied from the E+. Since 2026-09-19 `ut61d_plus.rs` has [6A, 20A],
-  ordered as the UT61B+'s [6A, 10A], which issue #19 verified. One D+
-  frame in each A range settles it (issue #7).
-- **Frequency ranges in code are invented structure, on every model in the
-  family** — the manual gives only a span (10.00 Hz–10.00 MHz for the
-  6,000-count models), no discrete ranges, and the code's five ranges top out
-  at 600 kHz on the B+/D+ and 220 kHz on the E+. The E+'s five have no
-  provenance comment and no verification entry either, so it cannot arbitrate
-  for its siblings. The 2026-09-09 UT61B+ capture contradicts the structure
-  outright: two Hz readings at range index 0 with different full scales. The
-  2026-09-10 re-run cannot break the tie — it read `0.00` and `49.98` at
-  index 0, both the 60Hz rung — and RANGE is dead in Hz on both meters, so
-  the button cannot walk the ladder either. Needs one frame on a signal above
-  60 Hz. **PARKED 2026-09-12: no signal generator here**; the risk it carries
-  is set out under the UT61B+'s open items. Issue #7.
+  ordered as the UT61B+'s [6A, 10A], which issue #19 verified; the
+  protocol deck's joint B+/D+ table also has 6A at byte 0 (it gives byte 1
+  as 10A for both, where the manual gives the D+ 20.00A). One D+ frame in
+  each A range settles it (issue #7).
+- ~~**Frequency ranges in code are invented structure**~~ — **RESOLVED
+  2026-09-19** from the protocol deck (family spec §5.9): the E+ ladder runs
+  22 Hz … 220 MHz over bytes 0–7 (it stopped at 220 kHz, so a faster
+  signal came out with no unit and an unrecognised-range warning), the
+  B+/D+ one 99.99 Hz … 9.999 MHz over 0–5. Only rung 0 is seen on a meter;
+  the V~-path question is under the UT61B+'s open items. Issue #7.
 - **UT61B+/D+ range-index ordering: ascending, and the mV ranges are
   not part of the V ladder** — settled for the B+: index 0 is each
   ladder's bottom rung; the 2026-09-10 capture pinned DC V 0–1, AC V 0,
@@ -1470,9 +1462,9 @@ as `DialState` in `protocol/cycle.rs` does for mode selection.
 
 Left over from the 2026-09-19 re-verification against the UT61+ manual:
 
-- **The UT61E+ mV range tables keep a 2.2V entry at byte 1.** The meter
-  never sends it (see "Range tables" above) and it gets no spec; the entry
-  could go.
+- ~~**The UT61E+ mV range tables keep a 2.2V entry at byte 1.**~~ —
+  **DONE 2026-09-19**: dropped; the protocol deck's UT61E+ table has only
+  220mV there too.
 - **LPF V shares AC V's notes**, including "(1kHz–10kHz: 10%–100%)", which
   cannot apply with the filter on. It would need notes of its own.
 - **Short notes kept close to unclear manual wording**, to confirm on a meter

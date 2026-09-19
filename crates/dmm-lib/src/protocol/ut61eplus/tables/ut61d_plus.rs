@@ -23,10 +23,10 @@ pub struct Ut61dPlusTable {
     ac_mv: [RangeInfo; 2],
     ohm: [RangeInfo; 6],
     capacitance: [RangeInfo; 7],
-    hz: [RangeInfo; 5],
+    hz: [RangeInfo; 6],
     duty_cycle: [RangeInfo; 1],
-    temp_c: [RangeInfo; 1],
-    temp_f: [RangeInfo; 1],
+    temp_c: [RangeInfo; 2],
+    temp_f: [RangeInfo; 2],
     diode: [RangeInfo; 1],
     continuity: [RangeInfo; 1],
     dc_ua: [RangeInfo; 2],
@@ -70,18 +70,24 @@ impl Ut61dPlusTable {
                 r("6mF", "mF"),
                 r("60mF", "mF"),
             ],
-            // Hz: 6,000-count models max out at 10 MHz
+            // Hz: the protocol deck's UT61B+/UT61D+ ladder, labels as it
+            // prints them. The manual gives only a span (10.00Hz~10.00MHz).
+            // Same ladder as the UT61B+, whose rung 0 is verified; no
+            // UT61D+ has confirmed it (issue #7).
             hz: [
-                r("60Hz", "Hz"),
-                r("600Hz", "Hz"),
-                r("6kHz", "kHz"),
-                r("60kHz", "kHz"),
-                r("600kHz", "kHz"),
+                r("99.99Hz", "Hz"),
+                r("999.9Hz", "Hz"),
+                r("9.999kHz", "kHz"),
+                r("99.99kHz", "kHz"),
+                r("999.9kHz", "kHz"),
+                r("9.999MHz", "MHz"),
             ],
             duty_cycle: [r("Duty", "%")],
-            // UT61D+ has temperature (K-type thermocouple)
-            temp_c: [r("Temp", "°C")],
-            temp_f: [r("Temp", "°F")],
+            // UT61D+ has temperature (K-type thermocouple). Two range bytes,
+            // split where the manual's resolution changes (0.1° to 1° C,
+            // 0.2° to 2° F): the protocol deck's UT61B+/UT61D+ table.
+            temp_c: [r("-40~300°C", "°C"), r("300~1000°C", "°C")],
+            temp_f: [r("-40~572°F", "°F"), r("572~1832°F", "°F")],
             diode: [r("Diode", "V")],
             // Continuity: 600Ω range for 6,000-count models
             continuity: [r("Cont", "Ω")],
@@ -378,8 +384,10 @@ mod tests {
         let tf = t.range_info(Mode::TempF, 0).unwrap();
         assert_eq!(tf.unit, "°F");
 
-        assert!(t.range_info(Mode::TempC, 1).is_none());
-        assert!(t.range_info(Mode::TempF, 1).is_none());
+        assert_eq!(t.range_info(Mode::TempC, 1).unwrap().label, "300~1000°C");
+        assert_eq!(t.range_info(Mode::TempF, 1).unwrap().unit, "°F");
+        assert!(t.range_info(Mode::TempC, 2).is_none());
+        assert!(t.range_info(Mode::TempF, 2).is_none());
     }
 
     // --- LoZ V (UT61D+ has it!) ---

@@ -4,7 +4,7 @@ raw_hex: "04 30 20 20 34 39 2E 39 38 00 00 32 30 30"
 mode: "Hz"
 value: "49.98"
 unit: "Hz"
-range_label: "60Hz"
+range_label: "99.99Hz"
 flags:
   hold: true
   rel: false

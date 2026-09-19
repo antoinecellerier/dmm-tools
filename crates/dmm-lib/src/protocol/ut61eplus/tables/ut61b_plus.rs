@@ -10,8 +10,8 @@ use crate::protocol::ut61eplus::mode::Mode;
 /// every DC V rung, AC V 0 and 2, capacitance 0 and 5, both mV rung 0s, and
 /// µA, mA and A 0-1. The rungs left over sit *between* measured ends of an
 /// ascending ladder, so they have nowhere else to be: AC V 1 and 3,
-/// capacitance 1-4 and 6, mV 1. Only `hz` is still guesswork — see
-/// `docs/verification-backlog.md`.
+/// capacitance 1-4 and 6, mV 1. `hz` is the protocol deck's ladder, seen
+/// on a meter at rung 0 only — see `docs/verification-backlog.md`.
 ///
 /// Key differences from UT61E+ (22,000-count):
 /// - DC/AC V: 4 ranges (6V..1000V) vs 4 (2.2V..1000V)
@@ -28,7 +28,7 @@ pub struct Ut61bPlusTable {
     ac_mv: [RangeInfo; 2],
     ohm: [RangeInfo; 6],
     capacitance: [RangeInfo; 7],
-    hz: [RangeInfo; 5],
+    hz: [RangeInfo; 6],
     duty_cycle: [RangeInfo; 1],
     diode: [RangeInfo; 1],
     continuity: [RangeInfo; 1],
@@ -77,20 +77,17 @@ impl Ut61bPlusTable {
                 r("6mF", "mF"),
                 r("60mF", "mF"),
             ],
-            // Hz: 6,000-count models max out at 10 MHz (manual)
-            // Using same 5-range structure, scaled to 6000-count values.
-            // [DEDUCED] and known not to match the meter: the manual gives a
-            // span and no rungs, two runs read different full scales at index
-            // 0, and RANGE is dead here so no walk can settle it. These are
-            // also the only rungs in this table whose units differ, so a
-            // wrong one misreports by 1000x. Parked for want of a signal
-            // generator — docs/verification-backlog.md.
+            // Hz: the protocol deck's UT61B+/UT61D+ ladder, labels as it
+            // prints them. The manual gives only a span (10.00Hz~10.00MHz).
+            // Rung 0 is [VERIFIED] by 49.98 Hz of mains on the Hz/% position
+            // (issue #19); the rest are the deck's, unconfirmed on a meter.
             hz: [
-                r("60Hz", "Hz"),
-                r("600Hz", "Hz"),
-                r("6kHz", "kHz"),
-                r("60kHz", "kHz"),
-                r("600kHz", "kHz"),
+                r("99.99Hz", "Hz"),
+                r("999.9Hz", "Hz"),
+                r("9.999kHz", "kHz"),
+                r("99.99kHz", "kHz"),
+                r("999.9kHz", "kHz"),
+                r("9.999MHz", "MHz"),
             ],
             duty_cycle: [r("Duty", "%")],
             diode: [r("Diode", "V")],
