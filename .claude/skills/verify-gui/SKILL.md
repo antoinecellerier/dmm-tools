@@ -58,6 +58,7 @@ ${CLAUDE_SKILL_DIR}/scripts/gui-display.sh selftest
 
 - `key` takes xdotool keysym names joined by `+`: `ctrl+o`, `space`, `question`, `bracketleft`, `Home`. `click` and `wheel` coordinates are window-relative pixels at 1×.
 - `key` holds each modifier down across a frame and releases it after: egui reads its modifier snapshot when the frame runs, so a chord released within a millisecond can arrive with no modifiers.
+- `click` holds the button down across a frame too: a press and release inside one frame count as a click but never as a held button, which is what the graph minimap pans on.
 - `wheel <x> <y> [up|down] [ctrl]` sends one wheel tick at that point (default `down`): plain wheel scrolls the panels, `ctrl` zooms the graph. With `ctrl` it holds Ctrl across a frame the same way `key` does.
 - The zoom-in chord is `key ctrl+equal`, not `ctrl+plus`: xdotool's `plus` keysym needs Shift, and the app binds `Key::Equals` alongside `Plus`.
 - Ctrl+C, Ctrl+X and Ctrl+V (with or without Shift) become clipboard events in egui-winit before egui sees a key, so no app binding on them can fire — do not test one.
