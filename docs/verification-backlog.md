@@ -778,7 +778,7 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
 2026-09-18 (#16); the UT803 is implemented and needs hardware verification
 (#15).
 
-- **UT804 hardware reports** — four runs by @clazie in
+- **UT804 hardware reports** — five runs by @clazie in
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16), all over
   the UT-D04 (CH9325) cable at 2400 baud:
   - **2026-09-17, v0.7.0-dev (666fbf5), Linux Mint** — `debug --count 5`
@@ -797,20 +797,25 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
     after RANGE and MAX MIN. `rel` captured the state `max_min`'s EXIT and
     SEND left, before REL was pressed: the tool's fault, since fixed by
     steps that wait for Enter.
+  - **2026-09-19 later, v0.7.0-dev (959adfc), Windows** —
+    `--steps manual_range,max_min,rel` and two photos of the LCD in REL:
+    RANGE sets status bit 1, MAX MIN sends nothing of its own, and REL
+    sends the relative reading with bit 1.
 
   The first three carried the model to `Stability::Verified`: every dial
-  position and SELECT alternate decoded correctly (°F has no step). The
-  issue stays open for RANGE against MAX MIN (status bit 1) and REL.
+  position and SELECT alternate decoded correctly (°F has no step). With
+  the last two every capture step is confirmed; the low-battery indicator
+  is the one item left on the issue.
 - ~~**Readings on a real meter**~~ — **VERIFIED** 2026-09-17 by @clazie on a
   real UT804 (UT-D04 / CH9325). `debug --count 5` and a `capture` `dcv` step
   each returned five DC V readings with no errors, and the reporter confirmed
   the last capture sample against the LCD. See
   [#16](https://github.com/antoinecellerier/dmm-tools/issues/16).
-- **Golden fixtures**: 27 in `crates/dmm-lib/tests/golden/ut804/`. Three are
+- **Golden fixtures**: 28 in `crates/dmm-lib/tests/golden/ut804/`. Three are
   from the 2026-09-17 run — open leads, the confirmed 1.4 mV reading and a
-  negative one — one is the 2026-09-19 `max_min` sample with status bit 1,
-  and the rest are a confirmed sample from each dial position and SELECT
-  alternate in the 2026-09-18 captures.
+  negative one — two are 2026-09-19 samples, `max_min` with status bit 1 and
+  `rel`, and the rest are a confirmed sample from each dial position and
+  SELECT alternate in the 2026-09-18 captures.
 - ~~**CH9325 on Windows**~~ — **VERIFIED** 2026-09-17 by @clazie: the same
   meter and cable ran under the Windows GUI as well as Linux Mint, with no
   driver installed, which is what `docs/setup.md` tells users to expect of a
@@ -886,7 +891,10 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
     is on and REL is never transmitted; a UT71x packet has no nibbles
     12-14. ~~HOLD~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804
     (UT-D04 / CH9325): with HOLD on the LCD and SEND still lit, no
-    packet arrives. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). REL is open
+    packet arrives. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). ~~REL~~ —
+    **VERIFIED** 2026-09-19 by @clazie on a real UT804 (UT-D04 / CH9325):
+    no REL bit; the meter sends the relative reading (`-00.001` with 7.19 V
+    stored), with the Manual bit set. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)
   - `UT804.LOG` holds 36 real packets across 9 dial positions and their
     sub-functions. Run through `parse_measurement_ut804` as low nibbles
     (2026-09-16, throwaway test): mode, unit, decimal point, AUTO/MAN,
@@ -915,12 +923,13 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
     its own (§7.4 item 2), so the parser leaves it silent; the UT804 bit
     is in neither vendor parser, and `UT804.LOG` says HOLD stops
     transmission rather than setting a bit, so it is reported as
-    unrecognised to draw a trace (noted 2026-09-17). UT804 nibble 9 bit 1
-    came on, AUTO off, in a step that pressed RANGE and then MAX MIN
-    (@clazie, 2026-09-19, spec §3.6). UNI-T's UT804 sheet names it Manual
-    (2026-09-19), as sigrok does; the `manual_range` step, ahead of
-    `max_min`, will confirm that RANGE sets it. The sheet puts the sign in bit 3,
-    which the meter never set: it sends the sign in bit 2
+    unrecognised to draw a trace (noted 2026-09-17). UT804 ~~MAX MIN and
+    REL~~ — **VERIFIED** 2026-09-19 by @clazie on a real UT804 (UT-D04 /
+    CH9325): RANGE alone sets nibble 9 bit 1, the UNI-T sheet's Manual;
+    MAX MIN sends nothing of its own, and REL sends the relative reading
+    with bit 1 (spec §3.6). See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The sheet puts the sign in
+    bit 3, which the meter never set: it sends the sign in bit 2. Low
+    battery is open
   - ~~UT804 mode 0xF ("mA%") dial position; which of modes 1/2 each V
     dial sends~~ — **VERIFIED** 2026-09-18 by @clazie on a real UT804
     (UT-D04 / CH9325): 0xF is the mA position's 4-20 mA %, shown with

@@ -424,17 +424,20 @@ Nibble 9 is decomposed as individual bits in the UT804 parser
 |-----|------|------|-----------|
 | bit 3 | 0x8 | Unknown (stripped first, no visible effect). The UT804 sheet makes it the sign; the meter never sets it (below) | [UNVERIFIED] |
 | bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4). Set on zero readings too, which the LCD shows with a minus | [HARDWARE] |
-| bit 1 | 0x2 | Manual range [VENDOR-DOC]: set after RANGE and MAX MIN (below) | [HARDWARE] set; meaning [VENDOR-DOC] |
+| bit 1 | 0x2 | Manual range [VENDOR-DOC]: set by RANGE, and by REL (below) | [HARDWARE] + [VENDOR-DOC] |
 | bit 0 | 0x1 | AUTO | [HARDWARE] + [VENDOR-DOC] — shows "AUTO" text |
 
 On a UT804 (issue #16, 2026-09-18), AUTO is set on V, Ω, capacitance,
 frequency, µA and mA, and clear on mV, A, diode, continuity, temperature
 and the 4-20 mA %, the positions with a single range. Bits 1 and 3 were
-never set that day. On 2026-09-19 the same meter, asked for RANGE and
-then MAX MIN on DC V's 40 V range, went from status 1 to 2 from one
-packet to the next. The reading kept following the input, as the manual
-says the primary display does in MAX MIN (p.24), and EXIT then SEND
-brought status 1 back.
+never set that day. On 2026-09-19, on DC V's 40 V range, the same meter
+went from status 1 to 2 when RANGE was pressed, and stayed at 2 through
+MAX MIN, whose reading kept following the input as the manual says the
+primary display does (p.24). REL sent the LCD's primary display, the
+present value less the stored one (`-00.001` with both at 7.19 V), with
+status 6: sign and Manual. Neither MAX MIN nor REL has a bit of its own,
+and neither's secondary displays are sent. EXIT then SEND brought status 1
+back.
 
 The bit decomposition logic:
 ```
@@ -448,15 +451,13 @@ if value == 1:             // bit 0 → AUTO active
 **[VENDOR-DOC]** The UT804 sheet reads bits 0-2 as one field, `000` OFF,
 `001` AUTO, `010` Manual, and bit 3 as the sign, `0` plus and `1` minus.
 The field fits the meter: the single-range positions send OFF, the others
-AUTO, and bit 1 came on in a step that pressed RANGE. The sign does not:
+AUTO, and RANGE sets bit 1. The sign does not:
 every negative reading and signed zero from the #16 meter had bit 2 set and
 bit 3 clear (status `5`, or `4` without AUTO), which is also where the
 vendor app reads it (§7.4 item 2). The meter sends the sign in bit 2.
 
-By the sheet, bit 1 is the manual range that RANGE selects, not MAX MIN;
-whether RANGE alone sets it on the meter is [UNVERIFIED]. Where REL and
-low battery show, if at all, is [UNVERIFIED]; the packet has no nibbles
-12-14 (§2.1). HOLD sends nothing (§4.2).
+Where low battery shows, if at all, is [UNVERIFIED]; the packet has no
+nibbles 12-14 (§2.1). HOLD sends nothing (§4.2).
 
 ### 3.7 Range Code (Nibble 6) — [VENDOR]
 
@@ -605,12 +606,12 @@ The data nibbles are proprietary, NOT LCD segments (UT804 layout, §3.1):
 
 ### 7.3 What Needs Hardware Verification
 
-The UT804's sign, mode codes, coupling, AUTO bit and the ranges it sent
-are confirmed (§3). Still open:
+The UT804's sign, mode codes, coupling, AUTO and Manual bits, REL and
+the ranges it sent are confirmed (§3). Still open:
 
 - The UT803's sign, mode list and range tables
-- Status flag bits: whether RANGE alone sets bit 1 (the sheet's Manual),
-  bit 3 (the sheet's sign, never sent), REL, Low Battery (§3.6)
+- Status flag bits: bit 3 (the sheet's sign, never sent), Low Battery
+  (§3.6)
 - Whether the meter needs anything sent (the apps send nothing, §4.2)
 - Streaming rate: a packet about every 656 ms on a UT804 (§4.2); the
   UT803's is open
@@ -772,13 +773,13 @@ libsigrok's code unless it says "wiki".
 | Function codes | 1-F (§3.4); E and F uncertain | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
 | Range tables | §3.7 | — | Per function | ✓ (log) |
 | Coupling (nibble 8) | 0 = per mode, 1 AC, 2 DC, 3 AC+DC (§3.5) | Bit 0 AC, bit 1 DC | Same | ✓ |
-| Status (nibble 9) | Bit 0 AUTO, bit 1 manual range [VENDOR-DOC], bit 2 sign, bit 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 seen after RANGE and MAX MIN (§3.6) |
+| Status (nibble 9) | Bit 0 AUTO, bit 1 manual range [VENDOR-DOC], bit 2 sign, bit 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 set by RANGE (§3.6) |
 | Duty cycle | Hz mode with the sign bit (§7.4) | Same | Same | ✓ |
 | Digit values A, C, F | A = blank or flag, B-F unknown (§3.2) | — | `:` blank, `<` 'L', `?` 'H' | ✓ A; C, F new |
 | Overload | Nibble 1 = A: overload unless nibble 2 = C, which gives 0.0 shown "L0." (§7.4) | `::0<:` overload, `:<0::` underload | `::0<:` overload; 4-20 mA `:<0::` "L0", `:?1::` "HI" | ✓³ |
 | Nibbles 12-14 | No such bytes (§2.1) | No such bytes | No such bytes | ✓ |
 | HOLD | Wire encoding unknown (§7.4) | — | Nothing transmitted while HOLD is on | New |
-| REL | Unknown | — | Never transmitted | New |
+| REL | No bit of its own: the relative reading, with bit 1 (§3.6) | — | Never transmitted | ✓ |
 | 4000-count display | Nibble 5 = A is blank (§3.1) | Byte 4 = `:` | — | ✓ |
 | CH9325 report layout | Apps: rate, `00 00`, `03`; SDK DLL: rate, `03` (§1.2) | `[lo, hi, 00, 00, 03]` | — | ✓ apps⁴ |
 | CH9325 report byte 5 | `03` in the apps' report, `00` in the SDK DLL's (§1.2); meaning unknown | Wiki: data-bit count, 0-3 = 5-8 bits | — | New⁴ |
@@ -832,8 +833,9 @@ Reference implementations:
   Table 2-2 buttons (p.15-17), Table 2-3 ranges (p.18-19), MAX MIN (p.24)
 - Issue #16 — a UT804's CH9325 reports under dmm-tools 0.6.0 and 0.7.0-dev
   (2026-09-16), two capture reports under 0.7.0-dev (3806742) with the
-  LCD read back beside each step (2026-09-18), and a MAX MIN capture under
-  0.7.0-dev (720072d) with two LCD photos of diode mode (2026-09-19)
+  LCD read back beside each step (2026-09-18), and RANGE, MAX MIN and REL
+  captures under 0.7.0-dev (720072d, 959adfc) with LCD photos of diode mode
+  and REL (2026-09-19)
 - CH9325 transport analysis — see `../uci-bench-family/reverse-engineered-protocol.md`
 - UNI-T "UT804接口协议" (listed as V1.0, uploaded 2023-11-15; the file dates
   from 2005, last saved 2019) — line format, frame layout, function and

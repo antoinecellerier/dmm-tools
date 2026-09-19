@@ -921,12 +921,11 @@ impl Protocol for Ut80xProtocol {
         // and a step one model lacks is tagged where it is declared. The
         // UT804 has no AC mV, tachometer or ADP position (its manual's
         // Table 2-1, #16); RANGE, MAX MIN and REL are asked of the UT804
-        // alone. Issue #16's reporter walked every step the two share on a
-        // UT804 on 2026-09-18; RANGE, MAX MIN and REL are what a further run
-        // is for, and the UT803 has never answered.
+        // alone. Issue #16's reporter walked every UT804 step by 2026-09-19;
+        // the UT803 has never answered.
         let shared = |step: CaptureStep| Some(step.verified_if(!ut803));
         let ut803_only = |step: CaptureStep| ut803.then_some(step);
-        let ut804_only = |step: CaptureStep| (!ut803).then_some(step);
+        let ut804_only = |step: CaptureStep| (!ut803).then_some(step.verified());
 
         [
             shared(dcv),
@@ -1029,15 +1028,14 @@ impl Protocol for Ut80xProtocol {
                 CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
                 for_model(Some("mA%"), None),
             )),
-            // What RANGE, MAX MIN and REL put on the wire is open (spec
-            // §3.6), so none of these steps asserts anything. MAX MIN works
-            // on a manual range only (UT804 manual, "Using MAX MIN"); pressed
-            // together with RANGE it left status bit 1 set and AUTO clear
-            // (#16), so RANGE has a step of its own to tell which press set
-            // it. EXIT leaves all three, and turns the meter's data output off
-            // (#16). Each step waits for Enter: every press, and the previous
-            // step's EXIT and SEND, leaves a state the meter reports, and the
-            // watcher would capture the first of them.
+            // RANGE sets status bit 1 (Manual), MAX MIN puts nothing on the
+            // wire, and REL sends the relative reading with bit 1 set (spec
+            // §3.6, #16), so the steps assert nothing. MAX MIN works on a
+            // manual range only (UT804 manual, "Using MAX MIN"). EXIT leaves
+            // all three, and turns the meter's data output off (#16). Each
+            // step waits for Enter: every press, and the previous step's EXIT
+            // and SEND, leaves a state the meter reports, and the watcher
+            // would capture the first of them.
             ut804_only(
                 CaptureStep::basic("manual_range", "DC V: press RANGE, then Enter.")
                     .wait_for_enter(),
@@ -1364,16 +1362,12 @@ mod tests {
         );
         assert!(waits(Ut80xProtocol::new_ut803()).is_empty());
 
-        // #16's reporter walked every UT804 step but these three; nobody has
-        // run a UT803.
+        // #16's reporter walked every UT804 step; nobody has run a UT803.
         let unverified = |proto: Ut80xProtocol| -> Vec<&'static str> {
             let steps = proto.capture_steps();
             steps.iter().filter(|s| !s.verified).map(|s| s.id).collect()
         };
-        assert_eq!(
-            unverified(Ut80xProtocol::new_ut804()),
-            ["manual_range", "max_min", "rel"]
-        );
+        assert!(unverified(Ut80xProtocol::new_ut804()).is_empty());
         assert_eq!(
             unverified(Ut80xProtocol::new_ut803()),
             ids(Ut80xProtocol::new_ut803())
