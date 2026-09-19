@@ -17,6 +17,11 @@ Transcription shape (what transcribers write, and what `dump_specs --format json
 Everything is compared on a flattened form: one record per (table, range) with
 the effective impedance/overload (row override, else the table's), plus
 table-level records (page, notes). Values are normalised for comparison only.
+
+A dump may print one row in several parts of a table, each part with some of
+its bands (the UT61E+ AC Voltage rows, whose LPF band is a part of its own).
+compare merges them into one row, bands in part order, and reports a mismatch
+where the parts disagree on the row's resolution, impedance or overload.
 """
 import json
 import re
@@ -57,7 +62,8 @@ def norm(v):
     return s.lower()
 
 
-def check(t, path="<transcription>"):
+def check(t, path="<transcription>", split_rows=False):
+    """Shape errors; `split_rows` lets a (table, range) repeat across parts."""
     errs = []
     if not isinstance(t, dict):
         die(f"{path}: top level is not an object")
@@ -74,9 +80,8 @@ def check(t, path="<transcription>"):
                 errs.append(f"{where}: unknown key {k!r}")
         if not isinstance(tab.get("table"), str) or not tab["table"]:
             errs.append(f"{where}: table title missing")
-        # null only in a code dump of a table with no page recorded (UT61+).
-        if tab.get("page") is not None and not isinstance(tab.get("page"), int):
-            errs.append(f"{where}: page must be an int (PDF page) or null")
+        if not isinstance(tab.get("page"), int):
+            errs.append(f"{where}: page must be an int (PDF page)")
         if not isinstance(tab.get("notes", []), list):
             errs.append(f"{where}: notes must be a list")
         for ri, r in enumerate(tab.get("ranges") or []):
@@ -93,14 +98,19 @@ def check(t, path="<transcription>"):
                     if k not in BAND_KEYS:
                         errs.append(f"{w}.accuracy[{bi}]: unknown key {k!r}")
             key = (norm(tab.get("table")), norm(r.get("range")))
-            if key in seen:
+            if key in seen and not split_rows:
                 errs.append(f"{w}: duplicate row {tab.get('table')}{SEP}{r.get('range')}")
             seen.add(key)
     return errs
 
 
-def flatten(t):
-    """-> (tables {ntable: rec}, rows {(ntable, nrange): rec}) keeping original spellings."""
+def flatten(t, conflicts=None):
+    """-> (tables {ntable: rec}, rows {(ntable, nrange): rec}) keeping original spellings.
+
+    With `conflicts` (a list), a row repeated across parts is merged, its
+    bands in part order, and each field the parts disagree on is appended
+    to `conflicts`; without it, a later repeat replaces the earlier one.
+    """
     tables, rows = {}, {}
     for tab in t["tables"]:
         nt = norm(tab["table"])
@@ -109,7 +119,8 @@ def flatten(t):
             if n not in rec["notes"]:
                 rec["notes"].append(n)
         for r in tab.get("ranges", []):
-            rows[(nt, norm(r["range"]))] = {
+            key = (nt, norm(r["range"]))
+            rec = {
                 "table": tab["table"],
                 "range": r["range"],
                 "resolution": r.get("resolution"),
@@ -120,6 +131,17 @@ def flatten(t):
                 "input_impedance": r.get("input_impedance", tab.get("input_impedance")),
                 "overload_protection": r.get("overload_protection", tab.get("overload_protection")),
             }
+            prev = rows.get(key)
+            if conflicts is not None and prev is not None:
+                for f in ("resolution", "input_impedance", "overload_protection"):
+                    if norm(prev[f]) != norm(rec[f]):
+                        conflicts.append(
+                            f"{rec['table']}{SEP}{rec['range']}: {f} differs across parts: "
+                            f"{prev[f]!r} / {rec[f]!r}"
+                        )
+                prev["accuracy"] += rec["accuracy"]
+            else:
+                rows[key] = rec
     return tables, rows
 
 
@@ -304,13 +326,13 @@ def cmd_compare(v_path, dump_path, notes_path=None):
     v = load(v_path)
     app_notes = load(notes_path) if notes_path else None
     d = load(dump_path)
-    errs = check(d, dump_path)
+    errs = check(d, dump_path, split_rows=True)
     if errs:
         die(f"{dump_path} fails the shape check:\n  " + "\n  ".join(errs))
-    dt, dr = flatten(d)
+    out = []
+    dt, dr = flatten(d, conflicts=out)
     vt = {norm(t["table"]): t for t in v["tables"]}
     vr = {(norm(r["table"]), norm(r["range"])): r for r in v["rows"]}
-    out = []
     for nt in sorted(set(vt) | set(dt)):
         a, b = vt.get(nt), dt.get(nt)
         name = (a or b)["table"]
