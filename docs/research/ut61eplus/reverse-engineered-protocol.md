@@ -664,7 +664,10 @@ Configuration is stored in `options.xml`:
 
 1. **Flag byte 15 bit 3**: APO per the deck, never seen set; clear with no
    APO symbol on the LCD (2026-09-19). A frame taken with the symbol lit
-   would confirm it marks APO on.
+   would confirm it marks APO on. The same day, polled without a break by
+   `dmm-cli debug` in AC+DC V, the meter stayed on for more than 30
+   minutes, past the 15 the manual gives for APO, and the bit stayed clear
+   throughout.
 3. **Mode bytes 0x03, 0x0D, 0x0F**: not exercised with a signal (DC mV,
    AC µA, AC mA). 0x0A/0x0B (temperature) are UT61D+ only; 0x13 (Live) is
    on no UT61+ dial.

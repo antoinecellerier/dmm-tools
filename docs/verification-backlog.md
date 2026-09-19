@@ -1483,6 +1483,26 @@ Left over from the 2026-09-19 re-verification against the UT61+ manual:
   - UT61D+ temperature: "should be less than 230°C/446°F", while the table
     runs to 1000°C/1832°F; the manual does not tie the limit to the probe.
 
+### UT61E+ auto power-off while polled over USB
+
+Seen on our UT61E+ (2026-09-19, `dmm-cli debug --count 0`, CP2110, AC+DC V):
+the meter stayed on for more than 30 minutes of continuous polling, where the
+manual gives 15 minutes for APO. Flag byte 15 bit 3 (APO, ut61eplus spec §2.7)
+stayed clear, and the LCD showed no APO symbol that day.
+
+Not yet known which of three it is: USB traffic turns APO off, each request
+resets the APO timer, or APO was off on the meter before polling started. A
+run that tells them apart, one step at a time on the meter:
+
+1. Power the meter on with nothing reading it; note whether the LCD shows the
+   APO symbol.
+2. Start `dmm-cli debug`; note whether the symbol goes out.
+3. Stop the reader with the cable still in and wait past 15 minutes; note
+   whether the meter powers off.
+
+A frame taken while the symbol is lit would also confirm bit 3 (the spec's
+"Must Verify" item 1).
+
 ### Vendor sources on UNI-T's Chinese sites, not yet read
 
 Found by the 2026-09-19 survey (table in
