@@ -14,9 +14,9 @@
 #
 # Session time is frozen at each scene's preseed instant (see `launch`), so a
 # rerun stages exactly the same frame. Each capture prints the pixel difference
-# against the committed file; Xvfb is not guaranteed to render identically
-# across driver versions, so a small delta is still possible — look at the PNGs
-# before committing them.
+# against the committed file and leaves that file alone when there is none;
+# Xvfb is not guaranteed to render identically across driver versions, so a
+# small delta is still possible — look at the PNGs before committing them.
 set -euo pipefail
 
 # Byte semantics for the [0-9] classes below, and a stable number format in
@@ -237,12 +237,15 @@ shot() {
 	fi
 }
 
-# capture <asset> [crop] — shoot, report the delta, move into assets/.
+# capture <asset> [crop] — shoot, report the delta, move into assets/ unless no
+# pixel changed: a PNG carries the time it was written, so an identical picture
+# would still show up as modified in git.
 capture() {
 	local asset="$1" crop="${2:-}"
 	shot "$TMP/$asset" "$crop"
-	report "$asset" "$TMP/$asset"
-	mv "$TMP/$asset" "$ASSETS/$asset"
+	if report "$asset" "$TMP/$asset"; then
+		mv "$TMP/$asset" "$ASSETS/$asset"
+	fi
 }
 
 # fit <width> <height> — resize and echo the geometry the window settled on.
@@ -261,6 +264,7 @@ fit() {
 
 # How far the new picture is from the committed one, for the human who reviews
 # it: a mis-click or a popup left open shows up as a delta in the millions.
+# Fails when not one pixel differs.
 report() {
 	local asset="$1" new="$2" old="$ASSETS/$1" size delta
 	size="$(identify -format '%wx%h' "$new")"
@@ -273,7 +277,12 @@ report() {
 		return
 	fi
 	delta="$(compare -metric AE "$old" "$new" null: 2>&1 || true)"
-	echo "$asset: ${delta%%[^0-9]*} px differ, $size"
+	delta="${delta%%[^0-9]*}"
+	if [ "$delta" = 0 ]; then
+		echo "$asset: unchanged, $size"
+		return 1
+	fi
+	echo "$asset: $delta px differ, $size"
 }
 
 ## Scenes ####################################################################

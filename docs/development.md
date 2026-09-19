@@ -181,8 +181,9 @@ hands out its recording's first seconds in one burst and then runs session
 time at a thousandth of real time, so the window, the trace and the click
 coordinates stay put however long its keys and clicks take, and a rerun stages
 the same frame. Every capture prints how many pixels it differs from the
-committed file; X rendering is not identical across driver versions, so look
-at each PNG before committing it rather than trusting a zero. Three scenes
+committed file, and leaves that file alone when none do, since a rewritten PNG
+carries a new timestamp. X rendering is not identical across driver versions,
+so look at each changed PNG before committing it. Three scenes
 need the USB cable out and skip themselves with a message while one is plugged
 in: the two settings pictures, so the panel shows its defaults, and the
 connection-help one, which is the failed connection.
