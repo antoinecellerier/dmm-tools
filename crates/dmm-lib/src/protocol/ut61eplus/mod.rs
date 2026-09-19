@@ -99,9 +99,9 @@ impl Ut61PlusProtocol {
                 // 2026-09-09 to 2026-09-11: every mode its dial reaches
                 // decoded correctly, every command moved the flag it should,
                 // the second run passed the gate outright and the third
-                // walked the Ω and DC V ladders. Still open: the AC V top
-                // rung, capacitance 1-4 and 6, the mV and Hz ladders, and a
-                // 600Ω manual rung the meter did not hold — issue #7.
+                // walked the Ω and DC V ladders. What is left open on this
+                // model is in `docs/verification-backlog.md`, "UT61B+ —
+                // hardware reports".
                 "ut61b+" => (
                     Box::new(tables::ut61b_plus::Ut61bPlusTable::new()),
                     "UNI-T UT61B+",
