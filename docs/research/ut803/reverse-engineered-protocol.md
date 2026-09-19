@@ -586,22 +586,22 @@ gave `#` as diode, `?` as continuity, `@` as the AC indicator and `&` and
 
 ### 7.1 Packet Extraction
 
-Split the byte stream after each CR LF into 11-byte packets and keep the
-low nibbles (§2.1). Mask bit 7 before comparing CR and LF: the UT804's
-LF arrives as `8A` (§2.1). The apps rely on empty reports between packets
-instead (§2.2); splitting on CR LF does not depend on report timing. No
-checksum validation.
+Packets are 11 bytes ending in CR LF, with the data in the low nibbles
+(§2.1). Bit 7 is parity (§1.2): the UT804's LF arrives as `8A` (§2.1).
+The apps rely on empty reports between packets instead (§2.2); CR LF
+ends a packet whatever the report timing. There is no checksum.
 
 ### 7.2 Data Parsing
 
-Parse the proprietary data nibbles, NOT LCD segments:
-1. Validate format markers: nibble 10 = 0x0D, nibble 11 = 0x0A
-2. Read mode code from nibble 7
-3. Read range code from nibble 6
-4. Read AC/DC from nibble 8
-5. Read status flags from nibble 9
-6. Extract digits from nibbles 1-5 (handling flag mode when nibble 1 = 0x0A)
-7. Construct display value with decimal point from range table
+The data nibbles are proprietary, NOT LCD segments (UT804 layout, §3.1):
+1. Nibbles 10 and 11 are the format markers 0x0D and 0x0A
+2. Nibble 7 is the mode code
+3. Nibble 6 is the range code
+4. Nibble 8 is AC/DC
+5. Nibble 9 holds the status flags
+6. Nibbles 1-5 are the digits; nibble 1 = 0x0A marks an overload or LO
+   packet (§3.3)
+7. The decimal point is not sent: the range code gives its position (§3.7)
 
 ### 7.3 What Needs Hardware Verification
 

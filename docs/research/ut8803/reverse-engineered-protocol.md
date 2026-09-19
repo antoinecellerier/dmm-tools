@@ -737,19 +737,19 @@ function and range:
 
 ### 7.1 Without UCI SDK (Linux/Cross-platform)
 
-The raw wire protocol has been sufficiently reverse-engineered from
-the uci.dll decompilation to implement a direct driver:
+The uci.dll decompilation gives the whole raw wire protocol, so the
+meter can be read without the SDK:
 
-**Implementation steps:**
-1. Open HID device matching VID 0x10C4, PID 0xEA80
-2. Send feature report 0x41: Enable UART (`[0x41, 0x01]`)
-3. Send feature report 0x50: Configure 9600/8N1
+**What the wire involves:**
+1. The HID device is VID 0x10C4, PID 0xEA80
+2. Feature report 0x41 enables the UART (`[0x41, 0x01]`)
+3. Feature report 0x50 sets 9600/8N1
    (`[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x03, 0x00, 0x00]`)
-4. Read HID interrupt reports continuously (no trigger byte)
-5. Reassemble 21-byte frames by finding `0xAB 0xCD` headers
-6. Validate checksum (alternating-byte sum, BE at bytes 19-20)
-8. Parse mode (byte 4), range (byte 5 - 0x30), display (bytes 7-11),
-   and flags (bytes 14-18)
+4. The meter streams HID interrupt reports unprompted (no trigger byte)
+5. 21-byte frames start at `0xAB 0xCD` headers, not at report boundaries
+6. The checksum is an alternating-byte sum, BE at bytes 19-20
+8. Mode is byte 4, range byte 5 - 0x30, display bytes 7-11 and flags
+   bytes 14-18
 
 **Note**: The `:DISPlay:DATA?` string in uci.dll is used by the
 SCPI/text transport handler for oscilloscopes and signal generators,

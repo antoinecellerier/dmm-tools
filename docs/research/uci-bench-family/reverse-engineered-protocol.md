@@ -672,29 +672,29 @@ QinHeng models do not have inductance capability.
 
 ### 7.1 Multi-Transport Support
 
-A cross-platform implementation needs to handle three transport paths:
+The family reaches the host over three transport paths:
 
 1. **CP2110 HID** (UT8802, UT8803): Same transport as UT61E+.
-   Initialize with feature reports 0x41 + 0x50 (same as UT61E+, minus
-   the purge). No trigger byte (corrected 2026-06). Read continuously.
+   Feature reports 0x41 + 0x50 set it up (same as UT61E+, minus the
+   purge). No trigger byte (corrected 2026-06): the meter streams.
 
 2. **QinHeng HID** (UT632, UT803, UT804): Different chip, different
-   feature report format. Try primary init with trigger, fall back to
-   no-trigger if no data received within 300ms. Auto-detect wire format
-   from first frame header.
+   feature report format. uci.dll runs the primary init with trigger,
+   then the no-trigger one if no data arrives within 300ms (§2.2), and
+   takes the wire format from the first frame header (§2.3).
 
 3. **Serial** (UT805A): Standard COM port at 9600 baud. Data bits may
    be 7 (per manual) or 8 (per DLL default). Wire format unknown.
 
 ### 7.2 Wire Format Detection
 
-The CP2110 path uses a heuristic: try UT8802 parser first (shorter
-timeout), then UT8803 parser. The QinHeng path auto-detects from frame
-headers. An implementation should:
+uci.dll's CP2110 path uses a heuristic: UT8802 parser first (shorter
+timeout), then UT8803 parser (§2.2). Its QinHeng path auto-detects from
+frame headers (§2.3). On the wire:
 
-1. If VID:PID is 10C4:EA80: try parsing as both 0xAC and 0xABCD
-2. If VID:PID is 1A86:E008: scan for header bytes in incoming data
-3. Once detected, lock to that format for the session
+1. VID:PID 10C4:EA80 carries either 0xAC or 0xABCD frames
+2. VID:PID 1A86:E008: the UT803 and UT804 send neither header (§2.3)
+3. A meter sends one format only
 
 ### 7.3 UT8802 vs UT8803 Key Differences
 
@@ -713,23 +713,21 @@ headers. An implementation should:
 ### 7.4 Device Discrimination
 
 All CP2110-based meters (UT61E+, UT61B+, UT61D+, UT161x, UT8802,
-UT8803) share VID 0x10C4, PID 0xEA80. Discrimination must happen at
-the application layer:
+UT8803) share VID 0x10C4, PID 0xEA80. Only the application layer
+tells them apart:
 
 - UT61E+/B+/D+/UT161x: polled protocol (send request, get response)
 - UT8802: streaming unprompted, 0xAC frames
 - UT8803: streaming unprompted, 0xABCD frames
 
-An implementation could:
-1. Send the UT61E+ measurement request (`AB CD 03 5E 01 D9`)
-2. If a valid response arrives: it's a UT61E+ family device
-3. If no response: listen for unprompted streaming data
-4. Detect 0xAC vs 0xABCD from first frame header
+What separates them:
+1. The UT61E+ measurement request is `AB CD 03 5E 01 D9`
+2. A valid response to it means a UT61E+ family device
+3. The UT8802 and UT8803 stream without a request
+4. Their first frame header is 0xAC or 0xABCD
 
-The implemented algorithm is a wider version of this — Get Name (`0x5F`)
-rather than a measurement request, so the reply names the exact model, and
-the unprompted families recognised in whichever listen window they first
-speak; it is written up in
+The UT61E+ family also answers Get Name (`0x5F`), and the reply names the
+exact model; detection is written up in
 [docs/detection-design.md](../../detection-design.md).
 
 ---

@@ -568,11 +568,8 @@ The configured delay adds on top of the ~100 ms wire round-trip time.
 ### 2.9 Implementation Quirks — [VERIFIED]
 
 - **Byte-at-a-time delivery:** CP2110 at 9600 baud delivers response
-  bytes one at a time via HID interrupt reports. Accumulate in a buffer
-  and scan for complete `AB CD` frames. A full measurement response
-  requires ~19 individual reads.
-- **Timeout vs disconnect:** `HidDevice::read_timeout()` returns 0 on
-  timeout and an error on USB disconnect — handle both cases.
+  bytes one at a time via HID interrupt reports, so an `AB CD` frame
+  spans many reports: a full measurement response takes ~19 of them.
 - **Request-response only:** the meter never streams data; each reading
   requires sending the `0x5E` request command.
 - **Mode byte reflects active unit, not dial position:** on DC V dial

@@ -448,14 +448,14 @@ The VC-880 uses **identical framing** to the UT61E+:
 - Same length encoding (payload + 3)
 - Same checksum (BE16 sum of all preceding bytes)
 
-Reuse `extract_frame_abcd_be16()` with an accept filter for type 0x01.
+Live data is type 0x01; the other types of §3 use the same framing.
 
 ### Key differences from UT61E+
 
 | Aspect | UT61E+ | VC-880 |
 |--------|--------|--------|
 | Communication model | Polled (request → response) | Streaming (continuous) |
-| Init | Send measurement request | No-op (streams automatically) |
+| Trigger | A request per reading | None (streams automatically) |
 | Display encoding | 7 raw bytes (sometimes non-ASCII) | 7 ASCII bytes |
 | Range encoding | Raw byte with mode-specific meaning | ASCII '0'-'7' (0x30-based) |
 | Status flags | 2 flag bytes (14 bits) | 7 flag bytes (28 named bits) |
@@ -466,7 +466,6 @@ Reuse `extract_frame_abcd_be16()` with an accept filter for type 0x01.
 | Aspect | UT8803 | VC-880 |
 |--------|--------|--------|
 | Frame format | Fixed 21 bytes, custom checksum | Variable length, AB CD + BE16 checksum |
-| Init | Send 0x5A trigger | No trigger needed |
 | Display encoding | 5 raw bytes | 7 ASCII bytes |
 | Function codes | 23 modes (0x00-0x16) | 19 modes (0x00-0x12) |
 | Overload | Flag bit in status word | OL1/OL2 flags + "OL" in display string |

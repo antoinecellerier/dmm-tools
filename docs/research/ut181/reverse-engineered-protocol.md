@@ -639,17 +639,16 @@ chunk size until all samples retrieved.
 ### 11.1 Device Discrimination
 
 The UT181A shares VID 0x10C4, PID 0xEA80 with UT61E+, UT8802, and
-UT8803. Discrimination approaches:
+UT8803. What sets it apart on the wire:
 
 1. **Frame length**: UT181A uses 2-byte LE length vs UT61E+ 1-byte.
-   Send a UT61E+ measurement request and check if the response has
-   a valid 1-byte length or if garbage arrives.
-2. **Monitor mode**: Send command 0x05 (SET_MONITOR, enable). If the
-   device starts streaming type 0x02 packets, it's a UT181A.
-3. **User selection**: Let the user specify the device model.
+   What a UT181A answers to a UT61E+ measurement request is
+   [UNVERIFIED].
+2. **Monitor mode**: after command 0x05 (SET_MONITOR, enable) a UT181A
+   streams type 0x02 packets.
 
-The implemented algorithm uses the monitor-mode approach, with the payload
-length splitting a UT181A stream from a UT171 one; it is written up in
+A UT171 stream has the same framing and type byte, and its payload
+lengths overlap the UT181A's; detection is written up in
 [docs/detection-design.md](../../detection-design.md).
 
 ### 11.2 Communication Mode
@@ -670,7 +669,7 @@ The precision byte indicates decimal places for display formatting.
 ### 11.4 Existing Rust Implementation
 
 The [antage/cp211x_uart](https://github.com/antage/cp211x_uart) crate
-provides CP2110 UART control in Rust and could be used directly. The
+provides CP2110 UART control in Rust. The
 [antage/ut181a](https://github.com/antage/ut181a) crate provides a
 complete UT181A protocol library.
 
