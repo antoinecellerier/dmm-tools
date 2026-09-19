@@ -1,13 +1,12 @@
 //! Specification data for the UNI-T UT61E+ (22,000 counts).
 //!
-//! Transcribed from references/ut61eplus/ut61e_manual.pdf, the UT61+ Series
-//! User Manual (P/N:110401109614X), "IX. Specifications", 2. Electrical
-//! Specifications (PDF pages 14-18, printed 25-34): the UT61E+ tables and
-//! rows, with values as printed but for the typesetting slips noted where
-//! they are. Cross-checked against the UT61+ series product page and the
-//! UT61+/UT161 series datasheet. The notes are short app notes condensed from
-//! the manual's remarks (the verbatim text is in the local verified
-//! transcription).
+//! Transcribed from the UT61+ Series User Manual (P/N:110401109614X, no
+//! revision printed), "IX. Specifications", 2. Electrical Specifications (PDF
+//! pages 14-18, printed 25-34): the UT61E+ tables and rows, with values as
+//! printed but for the typesetting slips noted where they are. Cross-checked
+//! against the UT61+ series product page and the UT61+/UT161 series
+//! datasheet. The notes are short app notes condensed from the manual's
+//! remarks.
 //!
 //! A manual table is split into parts of the same name where its rows need
 //! different mode-level data or belong to different modes. Range bytes index

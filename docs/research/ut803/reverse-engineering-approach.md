@@ -17,15 +17,17 @@
 3. **CH9325 HID transport** — reverse engineered separately from uci.dll
    (documented in `../uci-bench-family/`).
 
-4. **UT803 operating manual** — RS232 port settings and data output
-   button; the spec data, from "Accuracy Specifications" (REV.3, PDF
-   pp. 39-48), cross-checked against the UT803 datasheet (identical to the
+4. **UT803 operating manual** (`references/ut800/ut803/ut803-manual.pdf`)
+   — RS232 port settings and data output button; the spec data, from
+   "Accuracy Specifications" (REV.3, PDF pp. 39-48), cross-checked against
+   the UT803 datasheet (`ut803-datasheet.pdf` beside it, identical to the
    one the UT800 series page links).
 
-5. **UT804 operating manual** — display counts; the spec data, from
-   "Detailed Accuracy Specifications" (P/N:110401108661X Jul.2019 REV.1,
-   PDF pp. 59-67), cross-checked against its basic specifications (PDF
-   p. 58), the UT804 datasheet and the UT800 series page.
+5. **UT804 operating manual** (`references/ut800/ut804/ut804-manual.pdf`)
+   — display counts; the spec data, from "Detailed Accuracy
+   Specifications" (P/N:110401108661X Jul.2019 REV.1, PDF pp. 59-67),
+   cross-checked against its basic specifications (PDF p. 58), the UT804
+   datasheet (`ut804-datasheet.pdf` beside it) and the UT800 series page.
 
 ### Avoided (clean-room boundary)
 - No external open-source implementations were consulted during RE

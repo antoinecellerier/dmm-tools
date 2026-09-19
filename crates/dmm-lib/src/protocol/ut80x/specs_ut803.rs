@@ -1,11 +1,10 @@
 //! Specification data for the UNI-T UT803 (6000 counts).
 //!
-//! Transcribed from references/ut800/ut803/ut803-manual.pdf, REV.3,
-//! "Accuracy Specifications" (PDF pages 39-48, printed 38-47), with values as
-//! printed but for the typesetting slips noted where they are. Cross-checked
-//! against the UT803 datasheet and the UT800 series page. The notes are short
-//! app notes condensed from the manual's remarks (the verbatim text is in the
-//! local verified transcription).
+//! Transcribed from the UT803 operating manual (REV.3), "Accuracy
+//! Specifications" (PDF pages 39-48, printed 38-47), with values as printed
+//! but for the typesetting slips noted where they are. Cross-checked against
+//! the UT803 datasheet and the UT800 series page. The notes are short app
+//! notes condensed from the manual's remarks.
 //!
 //! A manual table is split into parts of the same name where its rows need
 //! different mode-level data or belong to different modes. Range bytes

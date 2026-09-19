@@ -1,12 +1,11 @@
 //! Specification data for the UNI-T UT804 (40000 counts).
 //!
-//! Transcribed from references/ut800/ut804/ut804-manual.pdf, P/N:110401108661X
-//! Jul.2019 REV.1, "Detailed Accuracy Specifications" (PDF pages 59-67,
-//! printed 58-66), with values as printed but for the typesetting slips noted
-//! where they are. Cross-checked against the basic specifications (PDF p. 58),
-//! the UT804 datasheet and the UT800 series page. The notes are short app
-//! notes condensed from the manual's remarks (the verbatim text is in the
-//! local verified transcription).
+//! Transcribed from the UT804 operating manual (P/N:110401108661X Jul.2019
+//! REV.1), "Detailed Accuracy Specifications" (PDF pages 59-67, printed
+//! 58-66), with values as printed but for the typesetting slips noted where
+//! they are. Cross-checked against the basic specifications (PDF p. 58), the
+//! UT804 datasheet and the UT800 series page. The notes are short app notes
+//! condensed from the manual's remarks.
 //!
 //! A manual table is split into parts of the same name where its rows belong
 //! to different modes or need a different overload protection. Range bytes

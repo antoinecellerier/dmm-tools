@@ -1,14 +1,12 @@
 //! Specification data for the UNI-T UT181A (60000 counts).
 //!
-//! Transcribed from references/ut181/ut181-user-manual.pdf (PDF title
-//! "UTI181A English manual", no revision printed, file modified 2024-06-22),
-//! "2. Electrical Specifications", tables (1)-(15) on PDF pages 12-19
-//! (printed 36-43), with values as printed but for the typesetting slips noted
-//! where they are. Cross-checked against the UT181 series flyer
-//! (ut181a-data-sheet.pdf p. 4) and the product pages on meters.uni-trend.com
-//! and uni-trendus.com. The notes are short app notes condensed from the
-//! manual's remarks (the verbatim text is in the local verified
-//! transcription).
+//! Transcribed from the UT181A user manual (PDF title "UTI181A English
+//! manual", no revision printed, PDF modified 2024-06-22), "2. Electrical
+//! Specifications", tables (1)-(15) on PDF pages 12-19 (printed 36-43), with
+//! values as printed but for the typesetting slips noted where they are.
+//! Cross-checked against the UT181 series flyer (p. 4) and the product pages
+//! on meters.uni-trend.com and uni-trendus.com. The notes are short app notes
+//! condensed from the manual's remarks.
 //!
 //! A manual table is split into parts of the same name where its rows belong
 //! to different dial positions or need a different overload protection.
