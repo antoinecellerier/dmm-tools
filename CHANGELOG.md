@@ -4,7 +4,7 @@
 
 ### Devices
 
-- **The UT804 is a verified model** — every read timed out before; thanks to [@clazie](https://github.com/clazie) for the traces that found it and for testing on a real meter.
+- **The UT804 is a verified model** — it connected but no reading ever decoded; thanks to [@clazie](https://github.com/clazie) for testing on a real meter.
 - **The UT61B+ is a verified model** — thanks to [@ChrisTheExpie](https://github.com/ChrisTheExpie) for the captures.
 - **The UT181A is listed as partly verified** — thanks to [@alexander-magon](https://github.com/alexander-magon) and [@diego351](https://github.com/diego351) for running it on real meters.
 
@@ -13,10 +13,11 @@
 - **Auto-detect is the default device** — the meter on the cable is identified and remembered, so later sessions open it directly.
 - **Switch the meter's function and range from the readout** — the mode and range labels are dropdowns on the UT61+/UT161, UT181A, VC-880 and VC-890.
 - **Scale button converts readings from probes and sensors the meter doesn't know** — a factor, offset and unit label turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
-- **A recording exports as JSON or a replay file** — from the arrow beside Export…; `--replay` plays back either the GUI's file or `dmm-cli read --format replay`'s.
+- **A recording exports as JSON or a replay file** — `--replay` plays back the GUI's replay file or `dmm-cli read --format replay`'s.
 - **Export… works without pressing Record** — with nothing recorded, it saves the readings the graph holds.
 - **Discard drops a stopped recording** — a recording stayed until the next one replaced it.
-- **An export is named after the meter, its mode and the recording's start** — every save opened on `measurements.csv`.
+- **REL button on the UT181A**
+- **Exports are named after the meter, mode and recording start** — every save opened on `measurements.csv`.
 - **The graph and timeline keep the whole session** — up to 500K samples (~14 h at 10 Hz) instead of ~17 minutes; a **Buffer size** setting moves the bound.
 - **Ctrl + wheel zooms the graph, a plain wheel scrolls** — any wheel tick used to zoom the graph and leave live mode; a pinch zooms too.
 - **`Ctrl+O` connects, `Ctrl+W` quits, `F1` opens help, `F11` toggles fullscreen** — the documented `Ctrl+Shift+C` never fired, `Ctrl+W` only closed the help and `?` was the only help key.
@@ -29,7 +30,7 @@
 - **The Specifications panel folds to one line, and Settings picks its fields**
 - **Border and Weak text colours in Customize colors** — separators, panel edges, hints and captions were fixed per preset.
 - **Every panel scrolls when the window is too short** — the shortcut help, the settings rows and the stats, graph and recording below the reading were cut off.
-- **Toasts show in every layout** — minimal mode never showed them and a narrow top bar cut them off; they now float over the window.
+- **Toasts show in every layout** — minimal mode never showed them and a narrow top bar cut them off.
 - **Big meter modes name the connection problem** — the help steps were pushed off screen below the reading; hover the line for them.
 - **The meter's toggle buttons fill in when their mode is on**
 - **Custom Accent and Text colours reach the toggles and headings** — toggles that are on kept a fixed blue; a saturated Text colour washed out in bold headings.
@@ -38,44 +39,43 @@
 - **The status line, hints and toolbar captions are larger**
 - **Always on top says it is unavailable on Wayland** — the checkbox and `Ctrl+T` toggled a setting that did nothing there.
 - **Cable-not-found help suggests another USB port** — on Windows the steps stopped at the driver download.
-- **Meter and cable warnings print to the terminal without setting `RUST_LOG`** — data the app doesn't recognise now says so once, with where to report it.
+- **Meter and cable warnings print to the terminal without setting `RUST_LOG`** — data the app doesn't recognise says so once, with where to report it.
 
 ### CLI
 
-- **The meter on the cable is identified for you** — `--device` now only pins a model; when nothing answers, the steps that switch each meter's output on are printed.
+- **The meter on the cable is identified for you** — `--device` only pins a model; when nothing answers, the steps that switch each meter's output on are printed.
 - **`get` and `set` read and switch the meter's mode, range and toggles** — on the UT61+/UT161, UT181A, VC-880/VC650BT and VC-890; `get --format json` for scripts.
 - **`read` converts readings from probes and sensors the meter doesn't know** — `--scale`, `--offset` and `--unit` turn the reading into what the sensor measures; the meter's value stays alongside as `Raw`.
-- **`read --format replay` saves the meter's frames and `read --replay` plays them back** — the CLI runs a recording with no meter attached.
+- **`read --format replay` saves a session and `read --replay` plays it back** — the CLI runs a recording with no meter attached.
 - **Capture drives the meter and waits for readings itself** — every step stopped for an Enter and filed whatever was on screen; on meters that take commands it sets each range, flag and sub-mode.
 - **Capture covers every sub-mode and lists the equipment up front** — AC current, AC+DC, LPF, AC mV and the UT181A's Hz, Peak and dB had no step; a thermocouple or battery turned up mid-run.
 - **Capture reports carry every wire byte, parse error and sub-value** — a step the tool couldn't decode was saved empty; a meter that never answered left nothing; confirmations and `debug` showed only the main reading.
 - **`capture --unverified` runs only the steps no report has confirmed** — `--list-steps --format md` prints that checklist for an issue; `--plan` runs a maintainer-written step file.
-- **REL on the UT181A** — in the CLI and the GUI.
+- **A capture report is named after the meter you chose** — every meter that reports no name of its own wrote `capture-unknown.yaml`.
+- **Capture asks whether the reading matched and says how to resume** — answering the old prompt "correct" filed a mismatch; a run with steps left signed off as complete.
+- **REL on the UT181A** — `set rel on`, or `command rel` to toggle it.
 - **`read -o` picks the format from the file name** — `-o readings.json` writes JSON; `-o` alone names the file after the meter and the run.
 - **Sub-values in CSV output** — `read --format csv` gains `auxN_label`/`auxN_value`/`auxN_unit` columns for the UT181A and UT171, or any meter with a scale set.
 - **UT181A sub-values say what they are** — a second thermocouple, a frequency and its period all read "Aux1" or "Aux2".
 - **Mock modes with sub-values and noise** — `--mock-mode acv-hz`, `temp2`, `temp-diff` and `temp-diff-rev` stand in for a UT181A; `noise` is a spiky DC signal for the graph.
-- **Meter and cable warnings print without setting `RUST_LOG`** — data the tool doesn't recognise now says so once, with where to report it.
-- **A capture report is named after the meter you chose** — every meter that reports no name of its own wrote `capture-unknown.yaml`.
-- **A capture asks whether the reading matched, then what the meter showed** — answering the old prompt "correct" filed that word as a mismatch.
-- **A capture retakes a step the meter left while sampling** — it filed readings from whatever mode you had moved on to.
-- **A capture that ends with steps left says how to resume it** — it signed off as complete whether it had covered every step or one.
+- **Meter and cable warnings print without setting `RUST_LOG`** — data the tool doesn't recognise says so once, with where to report it.
 
 ### Bug fixes
 
-- **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
-- **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
+- **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. Headless machines keep a group on the rule: see `docs/setup.md`.
+- **UT61B+ and UT61D+ read DC V and AC V in volts** — readings under 60 V came out in mV, and higher ones named the wrong range.
+- **UT61E+ frequencies above 220 kHz show their unit** — the reading came with no unit; likewise above 1 MHz on the UT61B+ and UT61D+.
 - **UT61E+ AC+DC V readings flag the DC component in JSON output** — the `dc` flag was set on the AC component's readings instead.
+- **UT61+/UT161 NCV shows the detected level**
+- **UT8802 negative readings show their sign**
+- **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked two cells, shifting the sub-value columns.
 - **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V.
 - **The UT61+/UT161 Specifications panel matches the manual** — the UT61B+/UT61D+ 600mV DC accuracy and the UT61E+ resistance open-circuit voltage were wrong.
 - **A lone accuracy figure keeps its frequency range in the Specifications panel** — UT61E+ AC+DC V and LPF V showed the figure without it.
-- **UT61+/UT161 NCV shows the detected level**
-- **UT8802 negative readings show their sign**
 - **VC-880 and VC-890 report the AVG flag**
-- **`read --integrate` keeps CSV columns aligned for units it cannot integrate** — with a unit like W or Ω the rows lacked two cells, shifting the sub-value columns.
-- **Record asks before discarding a recording started during an export** — started while a save dialog was open, the next Record discarded it without asking.
 - **Capture reports' confirmation line names every flag** — HV, LOW BAT, LEAD ERR, COMP and REC were left out.
 - **The graph's time axis keeps its seconds past the first hour** — a zoomed-in window then labelled every grid mark alike.
+- **Record asks before discarding a recording started during an export** — started while a save dialog was open, the next Record discarded it without asking.
 - **UT61+/UT161 meters offer HOLD, REL, MIN/MAX and RANGE only where they work** — continuity, diode, capacitance, Hz, duty, NCV and AC+DC V offered controls that did nothing.
 - **RANGE steps through the UT181A's manual ranges** — every press jumped back to the first range.
 - **A UT181A command the meter refuses is reported as an error**
@@ -88,8 +88,7 @@
 
 ### Documentation
 
-- **Screenshots and command output come from recorded meter sessions** — the README and reference blocks were typed by hand and the pictures taken on the mock.
-- **Downloads carry the user docs as web pages, with their screenshots** — open `README.html`; archives held Markdown only, without images, beside developer notes.
+- **Downloads carry the user docs as web pages** — open `README.html`; its screenshots and command output are generated from the release they ship with.
 
 ### Internal
 
