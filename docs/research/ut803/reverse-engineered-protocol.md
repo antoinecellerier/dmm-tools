@@ -105,9 +105,9 @@ unused, as in UT804.exe.
 the CH9325 reads is [UNVERIFIED]. This section previously quoted the
 UT804.exe bytes as `[0x60, 0x09, 0x03]`, which hid the difference.
 
-Observed on a UT804 (issue #16, 2026-09-16): dmm-tools 0.6.0 sent the
-DLL's layout (`00 60 09 03 00 00 00 00 00 00`) and 0.7.0-dev the apps'
-(`00 60 09 00 00 03 00 00 00 00`), and both gave clean bytes at 2400
+Observed on a UT804 (issue #16, 2026-09-16): a host sending the DLL's
+layout (`00 60 09 03 00 00 00 00 00 00`) and one sending the apps'
+(`00 60 09 00 00 03 00 00 00 00`) both got clean bytes at 2400
 baud. That does not show the bridge reads either layout: 2400 may be its
 default.
 
@@ -424,7 +424,7 @@ Nibble 9 is decomposed as individual bits in the UT804 parser
 |-----|------|------|-----------|
 | bit 3 | 0x8 | Unknown (stripped first, no visible effect). The UT804 sheet makes it the sign; the meter never sets it (below) | [UNVERIFIED] |
 | bit 2 | 0x4 | **Negative sign** (duty-% selector in frequency mode). Corrected 2026-06 — previously misread as HOLD; the "'-' indicator" it lights is the sign (`LcdFH`), and the bit's value is prepended to the parsed number (see §7.4). Set on zero readings too, which the LCD shows with a minus | [HARDWARE] |
-| bit 1 | 0x2 | Manual range [VENDOR-DOC], as sigrok has it (§8): set after RANGE and MAX MIN (below) | [HARDWARE] set; meaning [VENDOR-DOC] |
+| bit 1 | 0x2 | Manual range [VENDOR-DOC]: set after RANGE and MAX MIN (below) | [HARDWARE] set; meaning [VENDOR-DOC] |
 | bit 0 | 0x1 | AUTO | [HARDWARE] + [VENDOR-DOC] — shows "AUTO" text |
 
 On a UT804 (issue #16, 2026-09-18), AUTO is set on V, Ω, capacitance,

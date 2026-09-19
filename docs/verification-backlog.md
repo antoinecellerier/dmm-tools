@@ -209,9 +209,11 @@ nothing else. The GUI's HOLD/REL/MIN-MAX/PEAK buttons come from
 `dmm-cli command <name>`, so a wrong entry here cannot stop anyone pressing
 the button — but it can stop `set` reaching a state the meter does have.
 
-**AUTO in LPF V** is a separate E+-only observation: the meter came up in
-1000V manual and stayed there, although the manual's AC V table lists LPF on
-every range. Not encoded.
+**AUTO in LPF V** is a separate E+-only observation (2026-09-07): the meter
+came up in 1000V manual — range byte 1000V with AUTO off — refused AUTO and
+stayed there, although the manual's AC V table lists LPF on every range.
+Whether any other range is reachable with a signal applied is open. Not
+encoded.
 
 The mock follows the same matrix from 2026-09-10, since a mock that offers a
 control the meter ignores is the false confidence `.claude/rules/protocol.md`
@@ -595,13 +597,7 @@ plus what no step reaches.
 - Battery level nibble (msg[62]) — what do the values mean?
 - Misplug warning nibble (msg[63]) — 0=none, 1=mA err, 2=A err, 3=V err
 - ACV LPF (0x01) range byte — vendor ignores it and fixes 1000V (2026-06
-  review, DMSShare_decompiled.cs:23466). On hardware (2026-09-07) LPF V
-  reported range byte 1000V with AUTO off and refused AUTO; whether any
-  other range is reachable with a signal applied is open.
-- ~~AC+DC V (0x19) alternates frames between the DC and AC components with
-  flag byte 3 bit 0x08 toggling~~ — a UT61E+ item, **RESOLVED 2026-09-19**:
-  across a 1.6 V cell the bit is set on the AC component's frames, as
-  UNI-T's protocol deck says (UT61E+ spec §2.7).
+  review, DMSShare_decompiled.cs:23466); what does the meter send there?
 - Inbound checksum — the vendor never validates meter→host checksums; our
   BE16 check is inferred from the host-side builder. If real frames are
   all rejected with ChecksumMismatch, suspect a different inbound scheme.
@@ -1325,7 +1321,11 @@ own software sends, not hardware confirmation.
 
 Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
 
-- Range byte values for most modes still need verification against real device.
+- The rungs a meter has sent are under
+  [UT61E+ — range ladders](#ut61e--range-ladders-walked-end-to-end-2026-09-10)
+  and [UT61B+ — hardware reports](#ut61b--hardware-reports); what is left on
+  those two models is in the bullets below. The UT61D+ and the UT161 models
+  are `Experimental`: no meter has answered for their tables (issue #7).
 - ~~**AC V top range: 750V vs 1000V conflict (2026-06 review).**~~ —
   **RESOLVED** 2026-09-12 in favour of **1000V**, from the manual's AC table
   read off the PDF rendering (printed page 27): the UT61E+ column ends at
@@ -1376,8 +1376,10 @@ Tracked in [issue #6](https://github.com/antoinecellerier/dmm-tools/issues/6).
   `acmv.yaml`). What is left is not [DEDUCED] in the guessing sense but
   *pinned between measured ends*: with ascending order established and both
   ends of a ladder measured, AC V 1, capacitance 1–4 and 6 and mV 1 have
-  nowhere else to sit. Only the Hz ladder is still genuinely unknown, and
-  the whole D+ table remains [DEDUCED] for want of D+ hardware. Issue #7.
+  nowhere else to sit. The Hz ladder is not pinned that way: its labels come
+  from the protocol deck (the two items above), rung 0 alone is seen on a
+  meter, and the V~ path is open under the UT61B+'s items. The whole D+
+  table remains [DEDUCED] for want of D+ hardware. Issue #7.
 - **UT61B+/D+ mV ladders are offered to the RANGE driver, untested — but
   needs no ask and no new step.** The `dcmv` and `acmv` steps are not gate
   steps, so the sweep walks their ladders like any other mode step's; they
@@ -1678,10 +1680,9 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Capacitance | 0x09 | Verified (stray cap reading) |
 | DC µA | 0x0C | Verified (PPK2 + 56kΩ: 59µA reading, cross-checked with PPK2 ~61µA) |
 | DC mA | 0x0E | Verified (bench PSU: 10mA→22mA range, 100mA→220mA range) |
-| DC A | 0x10 | Verified (bench PSU: 100mA, range byte=0x01 for 20A) |
 | hFE | 0x12 | Verified (mode byte capture) |
 | AC mA | 0x0F | Verified (mA + SELECT) |
-| DC A | 0x10 | Verified (A⎓ dial, bench PSU ~100mA, range byte=0x01) |
+| DC A | 0x10 | Verified (A⎓ dial, bench PSU: ~100mA, range byte=0x01 for 20A) |
 | AC A | 0x11 | Verified (A⎓ + SELECT) |
 | NCV | 0x14 | Verified (`"   EF  "` idle, `"     - "` at a mains cable — one `-` per level, manual §13; two or more segments unobserved) |
 | LPF V | 0x18 | Verified (V~ + SELECT, mode byte capture) |
@@ -1718,7 +1719,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Peak value reporting | — | Verified: meter sends stored instantaneous peak, not live/RMS |
 | Bar graph encoding | bytes 9-10 | Verified: decimal (b9*10+b10), ~46 segments. Negative: bar_pol flag. OL: 44. |
 | Bar polarity | bit0 of byte13 | Verified (set on negative readings) |
-| AC/DC indicator | bit3 of byte13 | Verified 2026-09-19: in AC+DC V set on the AC component's frames, clear on the DC's; clear in DC V and the AC modes |
+| AC/DC indicator | bit3 of byte13 | Verified 2026-09-19: AC+DC V (0x19) alternates frames between the DC and AC components with the bit (flag byte 3, 0x08) toggling; across a 1.6 V cell it is set on the AC component's frames, as UNI-T's protocol deck says (UT61E+ spec §2.7), and clear on the DC's; clear in DC V and the AC modes |
 | DC V range table | ranges 0-3 | Verified: 0=2.2V, 1=22V, 2=220V, 3=1000V (4 ranges, not 5) |
 | DC mV mode | 0x03 | Verified: separate mode via dial, range 0=220mV only on UT61E+; RANGE has no effect |
 | AC mV range | 0x01 | Verified 2026-09-07: fixed at 220mV — 3 RANGE presses moved neither the range byte nor AUTO |

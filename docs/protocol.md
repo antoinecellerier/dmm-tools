@@ -41,9 +41,11 @@ HID bridge chips appear across the supported devices:
   UT61+/UT161 and the UCI bench DMMs (UT8802/UT8803).
 - **CH9329** (WCH) — bidirectional, driverless, found on newer UT-D09
   cables for UT181A / UT171 / UT243, and reported on a UT61B+.
-- **CH9325** (QinHeng / HE2325U) — **receive-only** HID bridge used by
-  UT803/UT804 and some UT-D04 cables. Can stream meter data to the
-  host but cannot send commands back.
+- **CH9325** (QinHeng / HE2325U) — HID-to-UART, used by UT803/UT804
+  and some UT-D04 cables. The UT803/UT804 stream without a host request
+  and no command for them is known; the UNI-T SDK writes one `0x5A`
+  byte at init, and the host-to-meter report framing is
+  community-sourced ([UCI bench spec](research/uci-bench-family/reverse-engineered-protocol.md) §4.2, §9).
 
 See each per-family doc for the HID report layout and any chip-specific
 initialization sequence.
