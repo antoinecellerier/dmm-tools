@@ -802,8 +802,9 @@ mod tests {
 
     #[test]
     fn sample_data_flags_mapping() {
-        // flag1=0x0F (REL+HOLD+MIN+MAX), flag2=0x04 (manual range), flag3=0x08 (DC)
-        let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x0F, 0x04, 0x08));
+        // AC+DC V: flag1=0x0F (REL+HOLD+MIN+MAX), flag2=0x04 (manual range),
+        // flag3=0x00 (the DC component)
+        let m = make_test_measurement(0x19, 0x00, b"  1.234", (0x00, 0x00), (0x0F, 0x04, 0x00));
         let s = SampleData::from_measurement(&m);
         assert!(s.flags.hold);
         assert!(s.flags.rel);

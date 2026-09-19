@@ -286,7 +286,7 @@ simply never sets certain flag bits on models that lack the feature.
 | Low Battery | byte 15 bit 1 | Yes | Yes | Yes |
 | Peak MAX | byte 16 bit 2 | — | **Yes** | **Yes** |
 | Peak MIN | byte 16 bit 1 | — | **Yes** | **Yes** |
-| DC indicator | byte 16 bit 3 | Yes | Yes | Yes |
+| AC/DC (set on the AC component of AC+DC) | byte 16 bit 3 | — | — | **Yes** |
 | Bar polarity | byte 16 bit 0 | Yes | Yes | Yes |
 
 The protocol deck also names byte 15 bit 3 APO (auto power-off); no

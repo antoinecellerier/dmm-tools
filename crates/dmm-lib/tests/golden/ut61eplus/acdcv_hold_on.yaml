@@ -13,7 +13,7 @@ flags:
   avg: false
   low_battery: false
   hv_warning: false
-  dc: false
+  dc: true
   peak_min: false
   peak_max: false
   lead_error: false

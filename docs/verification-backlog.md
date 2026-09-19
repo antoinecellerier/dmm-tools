@@ -555,9 +555,10 @@ plus what no step reaches.
   review, DMSShare_decompiled.cs:23466). On hardware (2026-09-07) LPF V
   reported range byte 1000V with AUTO off and refused AUTO; whether any
   other range is reachable with a signal applied is open.
-- AC+DC V (0x19) alternates frames between the DC and AC components with
-  flag byte 3 bit 0x08 toggling (spec §2.7). Which component the set bit
-  marks needs a known source: a battery plus a mains-hum pickup would tell.
+- ~~AC+DC V (0x19) alternates frames between the DC and AC components with
+  flag byte 3 bit 0x08 toggling~~ — a UT61E+ item, **RESOLVED 2026-09-19**:
+  across a 1.6 V cell the bit is set on the AC component's frames, as
+  UNI-T's protocol deck says (UT61E+ spec §2.7).
 - Inbound checksum — the vendor never validates meter→host checksums; our
   BE16 check is inferred from the host-side builder. If real frames are
   all rejected with ChecksumMismatch, suspect a different inbound scheme.
@@ -1689,7 +1690,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Peak value reporting | — | Verified: meter sends stored instantaneous peak, not live/RMS |
 | Bar graph encoding | bytes 9-10 | Verified: decimal (b9*10+b10), ~46 segments. Negative: bar_pol flag. OL: 44. |
 | Bar polarity | bit0 of byte13 | Verified (set on negative readings) |
-| DC indicator | bit3 of byte13 | Verified (set on DC V, clear on AC mV) |
+| AC/DC indicator | bit3 of byte13 | Verified 2026-09-19: in AC+DC V set on the AC component's frames, clear on the DC's; clear in DC V and the AC modes |
 | DC V range table | ranges 0-3 | Verified: 0=2.2V, 1=22V, 2=220V, 3=1000V (4 ranges, not 5) |
 | DC mV mode | 0x03 | Verified: separate mode via dial, range 0=220mV only on UT61E+; RANGE has no effect |
 | AC mV range | 0x01 | Verified 2026-09-07: fixed at 220mV — 3 RANGE presses moved neither the range byte nor AUTO |

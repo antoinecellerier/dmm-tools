@@ -361,10 +361,10 @@ mod tests {
     /// to capture. A hunt between two rungs is not that (above).
     #[test]
     fn a_flag_blinking_by_design_still_settles() {
-        let mut w = StateWatcher::for_step(Some(Expect::mode("DC V")), None, true);
+        let mut w = StateWatcher::for_step(Some(Expect::mode("AC+DC V")), None, true);
         let frame = |i: usize| {
             let flag3 = if i.is_multiple_of(2) { 0x00 } else { 0x08 };
-            make_test_measurement(0x02, 0x01, b" 0.0008", (0x00, 0x00), (0x00, 0x00, flag3))
+            make_test_measurement(0x19, 0x01, b" 0.0008", (0x00, 0x00), (0x00, 0x00, flag3))
         };
         for i in 0..7 {
             assert_eq!(w.feed(&frame(i)), Verdict::Waiting, "frame {i}");

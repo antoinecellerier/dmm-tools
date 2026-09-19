@@ -1,4 +1,4 @@
-# AC+DC V 0.0873 V on the manual 2.2V range, DC annunciator lit, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acdcv/range:2.2V)
+# AC+DC V 0.0873 V on the manual 2.2V range, the AC component, captured 2026-09-07 from a UT61E+ (ut61eplus-verify5.yaml, step acdcv/range:2.2V)
 raw_hex: "19 30 20 30 2E 30 38 37 33 00 00 30 34 39"
 mode: "AC+DC V"
 value: "0.0873"
@@ -12,6 +12,6 @@ flags:
   max: false
   low_battery: false
   hv_warning: false
-  dc: true
+  dc: false
   peak_min: false
   peak_max: false

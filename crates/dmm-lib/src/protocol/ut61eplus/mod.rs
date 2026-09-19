@@ -912,8 +912,14 @@ fn ncv_level(display_compact: &str) -> Option<u8> {
 /// - byte 11 (`flag1`): bit0=REL, bit1=HOLD, bit2=MIN, bit3=MAX
 /// - byte 12 (`flag2`): bit0=HV warning, bit1=Low Battery, bit2=!AUTO (inverted),
 ///   bit3=APO (§2.7; not carried)
-/// - byte 13 (`flag3`): bit0=bar polarity, bit1=Peak MIN, bit2=Peak MAX, bit3=DC
-fn parse_flags(flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
+/// - byte 13 (`flag3`): bit0=bar polarity, bit1=Peak MIN, bit2=Peak MAX,
+///   bit3=AC (clear = DC)
+///
+/// `dc` marks the DC component of an AC+DC reading, which alternates frames
+/// between its two components: flag3 bit 3 is set on the AC one (§2.7).
+/// Elsewhere the mode says AC or DC, and `dc` stays clear.
+fn parse_flags(mode: Mode, flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
+    let ac_dc = matches!(mode, Mode::AcDcV | Mode::AcDcA | Mode::ClampAcDcA);
     StatusFlags {
         rel: flag1 & 0x01 != 0,
         hold: flag1 & 0x02 != 0,
@@ -924,7 +930,7 @@ fn parse_flags(flag1: u8, flag2: u8, flag3: u8) -> StatusFlags {
         // Inverted: bit2 of flag2 is the MANUAL range indicator.
         // When clear (0), the meter is in auto-range mode.
         auto_range: flag2 & 0x04 == 0,
-        dc: flag3 & 0x08 != 0,
+        dc: ac_dc && flag3 & 0x08 == 0,
         peak_max: flag3 & 0x04 != 0,
         peak_min: flag3 & 0x02 != 0,
         ..Default::default()
@@ -1042,7 +1048,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     })?;
     let display_raw = String::from_utf8_lossy(display_bytes).to_string();
     let progress = bar_hi * 10 + bar_lo;
-    let flags = parse_flags(flag1, flag2, flag3);
+    let flags = parse_flags(mode, flag1, flag2, flag3);
 
     // Look up range info from device table
     let range_info = table.range_info(mode, range_byte);
@@ -1151,7 +1157,7 @@ mod tests {
     #[test]
     fn parse_no_flags_auto_on() {
         // All zero → AUTO is on (inverted logic), everything else off
-        let flags = parse_flags(0x00, 0x00, 0x00);
+        let flags = parse_flags(Mode::DcV, 0x00, 0x00, 0x00);
         assert!(!flags.hold);
         assert!(!flags.rel);
         assert!(flags.auto_range); // inverted: bit clear = auto ON
@@ -1163,7 +1169,7 @@ mod tests {
     #[test]
     fn parse_hold_with_auto() {
         // flag1=0x02 (HOLD), flag2=0x00 (AUTO on)
-        let flags = parse_flags(0x02, 0x00, 0x00);
+        let flags = parse_flags(Mode::DcV, 0x02, 0x00, 0x00);
         assert!(flags.hold);
         assert!(!flags.rel);
         assert!(flags.auto_range);
@@ -1172,14 +1178,14 @@ mod tests {
     #[test]
     fn parse_manual_range() {
         // flag2=0x04 → AUTO bit set → auto_range OFF
-        let flags = parse_flags(0x00, 0x04, 0x00);
+        let flags = parse_flags(Mode::DcV, 0x00, 0x04, 0x00);
         assert!(!flags.auto_range);
     }
 
     #[test]
     fn parse_low_battery() {
         // flag2=0x02 → LOW BAT
-        let flags = parse_flags(0x00, 0x02, 0x00);
+        let flags = parse_flags(Mode::DcV, 0x00, 0x02, 0x00);
         assert!(flags.low_battery);
         assert!(flags.auto_range); // AUTO still on (bit2 is clear)
     }
@@ -1187,7 +1193,7 @@ mod tests {
     #[test]
     fn parse_min_max() {
         // flag1: bit2=MIN, bit3=MAX
-        let flags = parse_flags(0x0C, 0x00, 0x00);
+        let flags = parse_flags(Mode::DcV, 0x0C, 0x00, 0x00);
         assert!(flags.min);
         assert!(flags.max);
     }
@@ -1195,25 +1201,27 @@ mod tests {
     #[test]
     fn parse_all_flag1() {
         // flag1=0x0F: REL + HOLD + MIN + MAX
-        let flags = parse_flags(0x0F, 0x00, 0x00);
+        let flags = parse_flags(Mode::DcV, 0x0F, 0x00, 0x00);
         assert!(flags.rel);
         assert!(flags.hold);
         assert!(flags.min);
         assert!(flags.max);
     }
 
+    /// Our UT61E+ in AC+DC V across a 1.6 V cell (2026-09-19): the frames
+    /// reading 1.61 V carry flag3 bit 3 clear, the 0.0000 V ones set.
     #[test]
     fn parse_dc_flag() {
-        // flag3=0x08 → DC
-        let flags = parse_flags(0x00, 0x00, 0x08);
-        assert!(flags.dc);
+        assert!(parse_flags(Mode::AcDcV, 0x00, 0x00, 0x01).dc);
+        assert!(!parse_flags(Mode::AcDcV, 0x00, 0x00, 0x09).dc);
+        assert!(!parse_flags(Mode::DcV, 0x00, 0x00, 0x00).dc);
     }
 
     #[test]
     fn parse_real_device_hold() {
         // Real capture: meter on DC V with HOLD active
         // flag bytes (masked): 0x02, 0x00, 0x01
-        let flags = parse_flags(0x02, 0x00, 0x01);
+        let flags = parse_flags(Mode::DcV, 0x02, 0x00, 0x01);
         assert!(flags.hold);
         assert!(!flags.rel);
         assert!(flags.auto_range);

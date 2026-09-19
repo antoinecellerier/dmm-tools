@@ -63,6 +63,7 @@
 
 - **The udev rule works on Fedora and other distributions without `plugdev`** — install `70-dmm-tools.rules` and replug the cable; delete `/etc/udev/rules.d/99-dmm-tools.rules` if you installed a previous release. On a headless machine, keep a group on the rule — see `docs/setup.md`.
 - **UT61B+ and UT61D+ show the right unit in DC V and AC V** — both modes read in mV.
+- **UT61E+ AC+DC V readings flag the DC component in JSON output** — the `dc` flag was set on the AC component's readings instead.
 - **UT61+/UT161 meters name the top AC V range 1000V** — it read 750V.
 - **The UT61+/UT161 Specifications panel matches the manual** — the UT61B+/UT61D+ 600mV DC accuracy and the UT61E+ resistance open-circuit voltage were wrong.
 - **A lone accuracy figure keeps its frequency range in the Specifications panel** — UT61E+ AC+DC V and LPF V showed the figure without it.

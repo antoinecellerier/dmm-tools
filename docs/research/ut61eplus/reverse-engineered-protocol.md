@@ -315,7 +315,7 @@ AB CD 10 <mode> <range> <display×7> <bar×2> <flags×3> <chk_hi> <chk_lo>
 | 12-13 | 2 | Bar Graph | Bar graph position (raw bytes) |
 | 14 | 1 | Flags1 | REL, HOLD, MIN, MAX |
 | 15 | 1 | Flags2 | HV, LowBat, AUTO |
-| 16 | 1 | Flags3 | bar_pol, P-MIN, P-MAX, DC |
+| 16 | 1 | Flags3 | bar_pol, P-MIN, P-MAX, AC/DC |
 | 17-18 | 2 | Checksum | 16-bit BE sum of bytes 0-16 |
 
 **[VENDOR-DOC]** The deck gives this layout byte for byte (its
@@ -534,10 +534,10 @@ So bit2 SET = manual range (no AUTO label), bit2 CLEAR = auto range (show AUTO).
 
 | Bit | Mask | Flag | Status | Evidence |
 |-----|------|------|--------|----------|
-| 0 | 0x01 | bar_pol | **[VERIFIED]** | Set when the reading is negative; bar graph then holds the magnitude. |
+| 0 | 0x01 | bar_pol | **[VERIFIED]** | Set when the reading is negative; bar graph then holds the magnitude. Not in AC+DC V: there it was set on both components' frames across a 1.6 V cell either way round, the display text carrying the sign (2026-09-19), and on some open-lead frames. |
 | 1 | 0x02 | P-MIN | **[VERIFIED]** | `(bVar3 & 2) → "P-MIN"` |
 | 2 | 0x04 | P-MAX | **[VERIFIED]** | `(bVar3 & 4) → "P-MAX"` |
-| 3 | 0x08 | DC indicator | **[VERIFIED]** toggles | `(bVar3 & 8)`. In AC+DC V (0x19) the meter alternates frames, this bit set on every other one, and the two carry different readings (open leads, 2026-09-07: ≈0.001 V with the bit clear, ≈0.04 V with it set) — the AC and DC components in turn, as the LCD blinks AC/DC. Which component the set bit marks is unconfirmed. |
+| 3 | 0x08 | AC/DC (set = AC) | **[VERIFIED]** + **[VENDOR-DOC]** | `(bVar3 & 8)`; the deck's `AC_DC flag`, "AC" when set and "DC" when clear. In AC+DC V (0x19) the meter alternates frames between the AC and DC components, as the LCD blinks AC/DC, and this bit is set on the AC one: across a 1.6 V cell (2026-09-19) the ±1.61 V frames had it clear and the 0.0000 V frames set. Clear in every DC V and AC-mode capture, so it only tells the components apart. |
 
 **[VERIFIED] Peak cycle:** P-MAX only → P-MIN only → P-MAX (2-state,
 bits never both set). When set, the `display` field contains the stored
@@ -698,6 +698,7 @@ Configuration is stored in `options.xml`:
 | OL detection: "O"+"L" in display | **VENDOR** | `FUN_100026a0` |
 | Flags1 at byte[14]: REL/HOLD/MIN/MAX | **VENDOR** | `FUN_10007d50` bit operations |
 | Flags3 at byte[16]: P-MIN/P-MAX/DC | **VENDOR** | `FUN_10007d50` bit operations |
+| Byte16 bit3 set = AC component in AC+DC V | **VERIFIED** | 1.6 V cell, 2026-09-19; the deck's AC_DC flag |
 | Mode values 0x00-0x19 | **VENDOR** | String table + code path checks |
 | SI prefix table (T/G/M/k/m/µ/n/p) | **VENDOR** | `FUN_10001000` initializer |
 | CP2110 HID report format | **KNOWN** | AN434 |
