@@ -140,10 +140,10 @@ dmm-cli read [OPTIONS]
 | Option | Default | Description |
 |---|---|---|
 | `--interval-ms <MS>` | `0` | Interval between readings in milliseconds. 0 = fastest (~10 Hz). |
-| `--format <FORMAT>` | `text` | Output format: `text`, `csv`, `json` or `replay`. A replay file holds the meter's own frames for `--replay`, so `--scale`, `--offset`, `--unit` and `--integrate` are refused with it; writing one asks the meter its name (a UT61+ beeps once). |
-| `-o, --output [<FILE>]` | stdout | Write to FILE, whose extension — `.csv`, `.json`, `.replay`, `.txt` — picks the format unless `--format` names one; a `--format` that disagrees with the extension wins, and is noted on stderr. Given with no FILE, the run names the file `measurements-<meter>-<mode>-<start>.<ext>` and prints its path when it ends. |
+| `--format <FORMAT>` | `text`, or what `-o`'s extension names | Output format: `text`, `csv`, `json` or `replay`. |
+| `-o, --output [<FILE>]` | stdout | Write to FILE; with no FILE, to `measurements-<meter>-<mode>-<start>.<ext>`. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |
-| `--replay <FILE>` | | Play back a `--format replay` file instead of opening a meter; `--count` or Ctrl+C ends it. The file names the device. |
+| `--replay <FILE>` | | Play back a `--format replay` file instead of opening a meter; `--count` or Ctrl+C ends it. |
 | `--mock-mode <MODE>` | | Pin mock device to a specific mode (only with `--device mock`). See [Mock modes](#mock-modes). |
 | `--integrate` | off | Show cumulative time-integral. For current modes, this computes charge (Ah/mAh/µAh). For voltage modes, V·s. Adds `integral` and `integral_unit` columns to CSV/JSON output. |
 | `--scale <FACTOR>` | `1` | Multiply the reading, taken in base units, by FACTOR. See [Scaling readings in software](#scaling-readings-in-software). |
@@ -156,6 +156,11 @@ containing the device model, followed by one measurement object per line.
 Replay output is the meter's frames themselves, for playing a whole session
 back; to document what each mode shows instead, use
 [`capture`](#dmm-cli-capture).
+
+`--format replay` needs a real meter and refuses `--scale`, `--offset`,
+`--unit` and `--integrate`; pass those when playing the file back. Writing one
+asks the meter its name (a UT61+/UT161 beeps once). `--replay` takes the meter
+from the file and refuses `--device` and `--mock-mode`.
 
 Meters with more than one display (the UT181A's second thermocouple,
 frequency and period, REL, MIN/MAX and Peak; the UT171's frequency) report
@@ -338,10 +343,11 @@ non-zero: check the dial position, and for a range that the input is within it.
 On the UT61+/UT161 and the Voltcraft meters a switch is a burst of button
 presses (SELECT, Hz/% or RANGE; SHIFT/SETUP), each read back until the target
 shows, so it is slower than a single command and audible on the meter. A
-switch on a UT61+/UT161 in HOLD turns HOLD off. One
-gap follows from that: while a UT61+/UT161 shows Hz or Duty %, `get mode`
-lists only those two. Press Hz/% (`dmm-cli command select2`) until the
-position's voltage or current function shows and the full list is back.
+switch on a UT61+/UT161 in HOLD turns HOLD off.
+
+While a UT61+/UT161 shows Hz or Duty %, `get mode` lists only those two.
+Press Hz/% (`dmm-cli command select2`) until the position's voltage or current
+function shows and the full list is back.
 
 **Example:**
 
@@ -416,9 +422,9 @@ dmm-cli command <ACTION>          # send a command
 | `light` | Toggle backlight |
 | `select` | SHIFT/SETUP button: steps to the dial position's next function |
 
-#### UT8803
+#### UT8802 / UT8803 / UT803 / UT804
 
-No remote commands — the meter streams continuously after connection.
+No remote commands — the meters stream continuously after connection.
 
 **Example:**
 
@@ -481,8 +487,9 @@ leads, a DC source, a thermocouple). Give the numbers of anything you don't
 have; those steps are skipped and stay runnable later with `--steps`.
 
 Steps advance on the meter, not on a keypress: the tool captures once the
-meter settles into the state the instruction asks for. Enter captures now,
-`s` skips, `q` finishes and saves. A meter settled in something else is
+meter settles into the state the instruction asks for; a step the readings
+cannot tell from the one before waits for Enter. Enter captures now, `s`
+skips, `q` finishes and saves. A meter settled in something else is
 reported once and the step keeps waiting. Leave the meter in the step's mode
 until the samples are printed: leaving it retakes the step. Each sample is
 then read back for you to check against the screen: Enter accepts it, `n`
@@ -504,8 +511,7 @@ confirmation, asked the same way. `q` on its own finishes the pass.
 `--steps extra` runs just this pass.
 
 The run ends with how many unverified steps the report covers and the issue
-to attach it to. A run that stopped short is picked up by starting it again
-and answering `r`; `--steps <ids>` runs named steps on their own.
+to attach it to.
 
 **Examples:**
 

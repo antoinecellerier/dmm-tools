@@ -33,7 +33,7 @@ turn the meter on, long-press USB/Hz until the S icon shows.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT61E+ | 22000 | ✅ Verified | our reference meter |
-| UT61B+ | 6000 | ✅ Verified | 10 A max current; from community captures ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
+| UT61B+ | 6000 | ✅ Verified ([#19](https://github.com/antoinecellerier/dmm-tools/issues/19)) | 10 A max current |
 | UT61D+ | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | adds temperature and LoZ AC V |
 | UT161E | 22000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61E+ |
 | UT161D | 6000 | 🧪 Experimental ([#7](https://github.com/antoinecellerier/dmm-tools/issues/7)) | same tables as UT61D+ |
@@ -64,7 +64,7 @@ shows it; the UT804's EXIT turns SEND off.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT803 | 6000 | 🧪 Experimental ([#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) | |
-| UT804 | 40000 | ✅ Verified | from community captures ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
+| UT804 | 40000 | ✅ Verified ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) | |
 
 A reporter's UT804 has confirmed every dial position and auto-detection;
 what MAX MIN and REL send is still to confirm

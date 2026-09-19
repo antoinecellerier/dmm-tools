@@ -7,7 +7,8 @@ When filing a bug report, please include:
 1. What you expected vs. what happened
 2. Your meter model (printed on the meter, e.g. "UT61E+") and cable
 3. Your OS and the output of `dmm-cli --version`
-4. A protocol capture (see below) — this is the single most useful thing you can attach
+4. For a wrong or missing reading, a protocol capture (see below) — this is the single most useful thing you can attach
+5. For a graph or timing problem, a replay file: the arrow beside **Export…**, then **Replay…**, in the [GUI](docs/gui-reference.md#recording), or [`dmm-cli read --format replay`](docs/cli-reference.md#dmm-cli-read)
 
 ## Protocol captures
 
@@ -24,7 +25,7 @@ dmm-cli capture
 dmm-cli --device ut8803 capture
 ```
 
-It opens with what the run needs on the bench — shorted leads, a DC source, a thermocouple — and skips the steps for anything you don't have. Each step captures on its own once the meter is in the mode asked for; Enter captures now, `s` skips, `q` finishes and saves. The report is a YAML file such as `capture-ut61e+.yaml`. The [CLI reference](docs/cli-reference.md#dmm-cli-capture) describes the options.
+It opens with what the run needs on the bench — shorted leads, a DC source, a thermocouple — and skips the steps for anything you don't have. Each step captures on its own once the meter is in the mode asked for; Enter captures now, `s` skips, `q` finishes and saves. The report is a YAML file such as `capture-ut61eplus.yaml`. The [CLI reference](docs/cli-reference.md#dmm-cli-capture) describes the options.
 
 If you're short on time, run only the steps no one has confirmed on hardware yet:
 
