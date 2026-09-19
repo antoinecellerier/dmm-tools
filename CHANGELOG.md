@@ -84,6 +84,7 @@
 - **Peak MIN/MAX badges show in the reading display**
 - **Colour swatches wrap in a narrow settings panel** — the Graph row ran off the right edge with **Customize colors** open.
 - **Clicking a theme chip keeps keyboard focus on it** — the focus ring landed on the next chip.
+- **Cursor readouts stay inside the graph and off the trace** — near the right edge they ran off the plot.
 
 ### Documentation
 

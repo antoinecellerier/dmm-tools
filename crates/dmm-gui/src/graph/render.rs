@@ -80,6 +80,66 @@ pub(super) fn quantize_for_hash(v: f64) -> i64 {
     }
 }
 
+/// How far a cursor's readout stands off its point: clear of the vertical
+/// line and of the dashed level line.
+const CURSOR_LABEL_OFFSET: egui::Vec2 = egui::vec2(4.0, 2.0);
+
+/// Where a cursor's readout goes around its point: the first of right-above,
+/// left-above, right-below and left-below that stays inside the plot and off
+/// the trace. When none is clear, the first that stays inside the plot; in a
+/// plot too small for any, right-above.
+pub(super) fn cursor_label_rect(
+    point: egui::Pos2,
+    size: egui::Vec2,
+    plot: egui::Rect,
+    hits_trace: impl Fn(egui::Rect) -> bool,
+) -> egui::Rect {
+    use egui::{Align2, vec2};
+    let (dx, dy) = (CURSOR_LABEL_OFFSET.x, CURSOR_LABEL_OFFSET.y);
+    let corners = [
+        Align2::LEFT_BOTTOM.anchor_size(point + vec2(dx, -dy), size),
+        Align2::RIGHT_BOTTOM.anchor_size(point + vec2(-dx, -dy), size),
+        Align2::LEFT_TOP.anchor_size(point + vec2(dx, dy), size),
+        Align2::RIGHT_TOP.anchor_size(point + vec2(-dx, dy), size),
+    ];
+    let inside = || corners.iter().copied().filter(|r| plot.contains_rect(*r));
+    inside()
+        .find(|r| !hits_trace(*r))
+        .or_else(|| inside().next())
+        .unwrap_or(corners[0])
+}
+
+/// Whether the straight segment from `a` to `b` passes through `rect`
+/// (Liang–Barsky: clip the segment's parameter range against each edge).
+pub(super) fn segment_hits_rect(a: egui::Pos2, b: egui::Pos2, rect: egui::Rect) -> bool {
+    let d = b - a;
+    let (mut enter, mut leave) = (0.0_f32, 1.0_f32);
+    for (p, q) in [
+        (-d.x, a.x - rect.left()),
+        (d.x, rect.right() - a.x),
+        (-d.y, a.y - rect.top()),
+        (d.y, rect.bottom() - a.y),
+    ] {
+        if p == 0.0 {
+            // Parallel to this edge: outside it means outside the rect.
+            if q < 0.0 {
+                return false;
+            }
+        } else {
+            let r = q / p;
+            if p < 0.0 {
+                enter = enter.max(r);
+            } else {
+                leave = leave.min(r);
+            }
+            if enter > leave {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// Pre-computed data needed by `paint_overlay_labels` to draw text labels
 /// for mean, reference, and cursor overlays after the plot has been rendered.
 struct OverlayLabelData {
@@ -92,6 +152,8 @@ struct OverlayLabelData {
     cursor_b: Option<f64>,
     cursor_va: Option<f64>,
     cursor_vb: Option<f64>,
+    /// The plotted series' visible segments, which cursor readouts keep off.
+    trace: Vec<Vec<[f64; 2]>>,
     overlay_unit: String,
     view_max: f64,
     mean_color: egui::Color32,
@@ -613,6 +675,7 @@ impl Graph {
             cursor_b,
             cursor_va,
             cursor_vb,
+            trace: visible_segments,
             overlay_unit: self.current_unit.clone(),
             view_max,
             mean_color,
@@ -770,27 +833,35 @@ impl Graph {
 
         // Cursor labels
         if data.cursors_active {
-            if let Some(t) = data.cursor_a {
-                let y_val = data.cursor_va.unwrap_or(0.0);
+            for (name, t, value) in [
+                ("A", data.cursor_a, data.cursor_va),
+                ("B", data.cursor_b, data.cursor_vb),
+            ] {
+                let Some(t) = t else { continue };
+                let y_val = value.unwrap_or(0.0);
                 let pos = transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
-                painter.text(
-                    egui::pos2(pos.x + 4.0, pos.y - 2.0),
-                    egui::Align2::LEFT_BOTTOM,
-                    format!("A: {t:.2} s / {y_val:.4} {}", data.overlay_unit),
+                let galley = painter.layout_no_wrap(
+                    format!("{name}: {t:.2} s / {y_val:.4} {}", data.overlay_unit),
                     label_font.clone(),
                     data.cursor_color,
                 );
-            }
-            if let Some(t) = data.cursor_b {
-                let y_val = data.cursor_vb.unwrap_or(0.0);
-                let pos = transform.position_from_point(&egui_plot::PlotPoint::new(t, y_val));
-                painter.text(
-                    egui::pos2(pos.x + 4.0, pos.y - 2.0),
-                    egui::Align2::LEFT_BOTTOM,
-                    format!("B: {t:.2} s / {y_val:.4} {}", data.overlay_unit),
-                    label_font.clone(),
-                    data.cursor_color,
-                );
+                let rect = cursor_label_rect(pos, galley.size(), plot_rect, |rect| {
+                    // Only the stretch of trace under the rect's time span can
+                    // touch it.
+                    let t_lo = transform.value_from_position(rect.left_top()).x;
+                    let t_hi = transform.value_from_position(rect.right_top()).x;
+                    let screen = |p: [f64; 2]| {
+                        transform.position_from_point(&egui_plot::PlotPoint::new(p[0], p[1]))
+                    };
+                    data.trace.iter().any(|segment| {
+                        segment.windows(2).any(|w| {
+                            w[1][0] >= t_lo
+                                && w[0][0] <= t_hi
+                                && segment_hits_rect(screen(w[0]), screen(w[1]), rect)
+                        })
+                    })
+                });
+                painter.galley(rect.min, galley, data.cursor_color);
             }
         }
     }

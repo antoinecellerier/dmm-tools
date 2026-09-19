@@ -1,4 +1,4 @@
-use super::render::{KeyStyle, quantize_for_hash};
+use super::render::{KeyStyle, cursor_label_rect, quantize_for_hash, segment_hits_rect};
 use super::time::format_time_axis_label;
 use super::toolbar::{overlay_chip_label, series_chip_label};
 use super::*;
@@ -1046,6 +1046,80 @@ fn time_axis_label_hour_subsecond_step() {
     // seconds field when hours are involved and step is sub-second.
     let out = format_time_axis_label(3725.5, 0.1);
     assert_eq!(out, "1h 2m 5.5s");
+}
+
+/// The four corners `cursor_label_rect` picks from, for a 100x20 readout at
+/// (300, 200) in a 500x400 plot: right-above, left-above, right-below,
+/// left-below.
+fn readout_corners() -> [egui::Rect; 4] {
+    use egui::{Rect, pos2};
+    [
+        Rect::from_min_max(pos2(304.0, 178.0), pos2(404.0, 198.0)),
+        Rect::from_min_max(pos2(196.0, 178.0), pos2(296.0, 198.0)),
+        Rect::from_min_max(pos2(304.0, 202.0), pos2(404.0, 222.0)),
+        Rect::from_min_max(pos2(196.0, 202.0), pos2(296.0, 222.0)),
+    ]
+}
+
+fn readout_rect(plot_right: f32, hits: impl Fn(egui::Rect) -> bool) -> egui::Rect {
+    let plot = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(plot_right, 400.0));
+    cursor_label_rect(
+        egui::pos2(300.0, 200.0),
+        egui::vec2(100.0, 20.0),
+        plot,
+        hits,
+    )
+}
+
+#[test]
+fn cursor_readout_takes_the_first_clear_corner_inside_the_plot() {
+    let [right_above, left_above, right_below, left_below] = readout_corners();
+    // Room on the right and no trace: right-above.
+    assert_eq!(readout_rect(500.0, |_| false), right_above);
+    // Against the plot's right edge, the right-hand corners are out.
+    assert_eq!(readout_rect(400.0, |_| false), left_above);
+    // Out on the right and the trace through left-above: left-below.
+    assert_eq!(readout_rect(400.0, |r| r == left_above), left_below);
+    // Trace through right-above only: left-above, before right-below.
+    assert_eq!(readout_rect(500.0, |r| r == right_above), left_above);
+    // Trace through both above: right-below.
+    assert_eq!(
+        readout_rect(500.0, |r| r == right_above || r == left_above),
+        right_below
+    );
+}
+
+#[test]
+fn cursor_readout_falls_back_when_no_corner_is_clear() {
+    let [right_above, left_above, ..] = readout_corners();
+    // The trace everywhere: the first corner inside the plot.
+    assert_eq!(readout_rect(400.0, |_| true), left_above);
+    // A plot narrower than the readout: right-above.
+    let narrow = egui::Rect::from_min_max(egui::pos2(250.0, 0.0), egui::pos2(350.0, 400.0));
+    let rect = cursor_label_rect(
+        egui::pos2(300.0, 200.0),
+        egui::vec2(100.0, 20.0),
+        narrow,
+        |_| false,
+    );
+    assert_eq!(rect, right_above);
+}
+
+#[test]
+fn segment_hits_rect_follows_the_segment_not_its_ends() {
+    use egui::{Rect, pos2};
+    let rect = Rect::from_min_max(pos2(10.0, 10.0), pos2(20.0, 20.0));
+    // One end inside.
+    assert!(segment_hits_rect(pos2(15.0, 15.0), pos2(40.0, 40.0), rect));
+    // Both ends outside, straight through: a step edge crossing a readout.
+    assert!(segment_hits_rect(pos2(15.0, 0.0), pos2(15.0, 30.0), rect));
+    assert!(segment_hits_rect(pos2(0.0, 12.0), pos2(30.0, 18.0), rect));
+    // Beside it, parallel to an edge.
+    assert!(!segment_hits_rect(pos2(25.0, 0.0), pos2(25.0, 30.0), rect));
+    // Diagonal that passes the corner.
+    assert!(!segment_hits_rect(pos2(0.0, 5.0), pos2(30.0, -5.0), rect));
+    // Short of it.
+    assert!(!segment_hits_rect(pos2(0.0, 15.0), pos2(8.0, 15.0), rect));
 }
 
 #[test]
