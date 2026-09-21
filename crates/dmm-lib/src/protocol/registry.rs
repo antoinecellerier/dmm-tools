@@ -105,6 +105,17 @@ const ACTIVATION_UT804: &str = "\
 3. Press SEND; the display shows SEND
 Note: HOLD pauses the data, and EXIT turns SEND off.";
 
+/// The UT71 and the Voltcraft VC920/VC940/VC960 send nothing until MAX MIN
+/// is held for over a second, or the UT71A's SEND key is pressed, and the
+/// display shows SEND; EXIT turns it off (UT71 manual Table 2-2,
+/// VC920/940/960 manual §7). One text for all three entries, so the "no
+/// meter answered" help lists them once.
+const ACTIVATION_UT71: &str = "\
+1. Connect the USB cable to the meter
+2. Turn the meter on
+3. Hold MAX MIN for 1 s, or press SEND on a UT71A; the display shows SEND
+Note: EXIT turns SEND off.";
+
 const ACTIVATION_VC880: &str = "\
 1. Connect the USB cable to the meter
 2. Turn the meter on
@@ -227,6 +238,28 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
     },
     SelectableDevice {
+        id: "ut71ab",
+        display_name: "UT71A/B",
+        aliases: &["ut71a", "ut71b"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT71,
+        family: DeviceFamily::Ut80x,
+        new_protocol: || Box::new(Ut80xProtocol::new_ut71ab()),
+        fingerprint: Some(&ut80x::FINGERPRINT),
+        manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    },
+    SelectableDevice {
+        id: "ut71cde",
+        display_name: "UT71C/D/E",
+        aliases: &["ut71c", "ut71d", "ut71e"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT71,
+        family: DeviceFamily::Ut80x,
+        new_protocol: || Box::new(Ut80xProtocol::new_ut71cde()),
+        fingerprint: Some(&ut80x::FINGERPRINT),
+        manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    },
+    SelectableDevice {
         id: "ut171",
         display_name: "UT171A/B/C",
         aliases: &["ut171a", "ut171b", "ut171c"],
@@ -287,6 +320,17 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
         ),
+    },
+    SelectableDevice {
+        id: "vc920",
+        display_name: "Voltcraft VC920/VC940/VC960",
+        aliases: &["vc-920", "vc940", "vc-940", "vc960", "vc-960"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT71, // same keys as the UT71
+        family: DeviceFamily::Ut80x,
+        new_protocol: || Box::new(Ut80xProtocol::new_vc920()),
+        fingerprint: Some(&ut80x::FINGERPRINT),
+        manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
     },
     // Mock
     SelectableDevice {

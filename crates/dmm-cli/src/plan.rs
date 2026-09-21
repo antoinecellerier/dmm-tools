@@ -183,6 +183,7 @@ fn need_name(need: Need) -> &'static str {
         Need::DcSource => "dc_source",
         Need::Thermocouple => "thermocouple",
         Need::LiveWire => "live_wire",
+        Need::PowerAdapter => "power_adapter",
         Need::Transistor => "transistor",
         Need::Scr => "scr",
     }

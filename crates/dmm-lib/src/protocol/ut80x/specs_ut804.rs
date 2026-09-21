@@ -46,11 +46,12 @@ pub(super) fn has_rows(coupling: Option<Coupling>) -> bool {
 /// The table for a reading with mode code `mode`, its coupling and whether
 /// it is a duty cycle (`Ut804Fields`).
 ///
-/// `None` where the manual has no table: ADP (mode 0xE), and AC or AC+DC
-/// millivolts. The manual gives the UT804 no AC mV function: Table 2-1
-/// (printed p. 14) has the mV position measure DC millivoltage, Table 2-3
-/// lists only DCmV, section C is "Measuring DC Millivoltage", and AC+DC acts
-/// only "at AC measurement mode". Table B has no 400mV row either.
+/// `None` where the manual has no table: power (mode 0xE, which the UT804
+/// has no position for), and AC or AC+DC millivolts. The manual gives the
+/// UT804 no AC mV function: Table 2-1 (printed p. 14) has the mV position
+/// measure DC millivoltage, Table 2-3 lists only DCmV, section C is
+/// "Measuring DC Millivoltage", and AC+DC acts only "at AC measurement
+/// mode". Table B has no 400mV row either.
 pub(super) fn table(
     mode: u8,
     coupling: Option<Coupling>,

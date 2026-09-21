@@ -50,6 +50,7 @@ is probed with, and how well that probe is backed:
 | UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
 | UT8803 | nothing — the meter streams | `AB CD` frame, byte 3 `0x02`, 21-byte checksum | Deduced from the vendor traces, unverified |
 | UT803, UT804 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, taken as a UT804; a UT803 (19200 baud) is not detected | ~~detection unverified~~ — **VERIFIED** 2026-09-17 by @clazie on a real UT804 (UT-D04 / CH9325): `detect: ut804 identified from 11 received bytes during ut80x stream`, then `connected to UNI-T UT804`. See [#16](https://github.com/antoinecellerier/dmm-tools/issues/16). The UT803 is still undetectable by design |
+| UT71A–E, VC920/VC940/VC960 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, claimed as a UT804 — the packet does not name its model, so the user names the meter | Never seen: no UT71 or VC9x0 packet has been captured ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
 
@@ -522,8 +523,9 @@ Still split, each needing that family's own dial order and a hardware run:
 - **VC-880 / VC650BT / VC-890** — `acv`, `acdcv`, `dcmv`, `dcua`, `acua`,
   `dcma`, `acma`, `dca`, `aca`.
 
-The UT8802, UT8803, UT803, UT804 and UT171 lists are split too, but those
-families declare no `choices`, so nothing would be swept whatever the order.
+The UT8802, UT8803, UT803, UT804, UT71A/B, UT71C/D/E, VC920 and UT171 lists
+are split too, but those families declare no `choices`, so nothing would be
+swept whatever the order.
 The allow-list in `every_device_finishes_its_gate_before_any_other_step`
 (`crates/dmm-cli/src/capture/step.rs`) names all of them; deleting an entry is
 how a fix lands.
@@ -568,11 +570,13 @@ These protocols are implemented from reverse engineering (vendor software
 decompilation, community implementations), and anything known on hardware
 comes from a reporter's meter. One has been: the UT804 is `Verified`
 (issue #16, its block below). The VC-880, VC650BT, VC-890, UT803, UT8802,
-UT8803 and UT171 are `Experimental` and have **never been tested against real
-hardware** — every aspect needs end-to-end verification. The UT181A, partly
-verified, has [its own section](#ut181a--confirmed-on-hardware-formats-still-open).
+UT8803, UT171, UT71A–E and Voltcraft VC920/VC940/VC960 are `Experimental` and
+have **never been tested against real hardware** — every aspect needs
+end-to-end verification. The UT181A, partly verified, has
+[its own section](#ut181a--confirmed-on-hardware-formats-still-open).
 
-The ask in every family's issue (#3, #4, #5, #7, #12, #13, #14, #15, #16) is
+The ask in every family's issue (#3, #4, #5, #7, #12, #13, #14, #15, #16,
+#22, #23) is
 the same: `dmm-cli --device <id> capture --unverified`, attach the report.
 The issue's checklist is `dmm-cli --device <id> capture --list-steps
 --format md`, so a step a report confirms flips `.verified()` in code, is
@@ -1000,6 +1004,43 @@ CH9325 HID cable, proprietary structured packets. The UT804 is **VERIFIED**
 - UT805A uses USB-to-serial (virtual COM port, NOT HID) with a fully
   documented ASCII text protocol (9600/8N1, bidirectional). Needs serial
   transport — separate scope from HID-based meters.
+
+#### UT71A–E / Voltcraft VC920 / VC940 / VC960 (issues [#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23))
+
+The UT804's packets from a handheld, decoded by the UT804 parser over the
+model's own range labels; everything is from UNI-T's protocol sheets, the
+manuals and UNI-T's UT71 apps, and no packet has been seen
+(`docs/research/ut71/reverse-engineered-protocol.md` §6).
+
+- High nibble of the data bytes and bit-7 parity: LF `0A` or `8A` would
+  tell a UT71 from a UT804 only if the UT71 is truly 8N1, as its sheet
+  says; sigrok and the UT804 say 7O1 (spec §1.2, §2)
+- Which USB bridge each cable carries: CH9325 (`1A86:E008`) or HE2325U
+  (`04FA:2490`), which has no transport and no udev rule — for the UT71's
+  cable and for Voltcraft's USB adapter 120317, whose manual names no chip
+  (spec §1.1)
+- Code E power packets from a UT71E or VC940, and their decimal point;
+  where VA and cos φ go, if anywhere; what the UT71E's blue key sends on
+  its W position (spec §3.2, §3.1)
+- Code 0 (AC mV) never sent (spec §3.2)
+- AC V range 4: 1000 V on a UT71, 750 V on a VC9x0 (spec §3.5)
+- Coupling on DC readings, 0 or 2 (spec §3.3)
+- Status bit 3, and the AUTO/Manual field's values (spec §3.4)
+- Digit values `B`, `D`-`F`; overload and LO packets as the LCD shows them
+  (spec §3.1)
+- The duty-cycle sign bit (spec §3.4)
+- HOLD, REL, MAX MIN and PEAK on the wire (spec §3.4); the `hold` step
+  words its answer as the UT804's
+- What RECALL + ▶ sends, and how the store time reaches the software
+  (spec §4.1)
+- The UT71A/B's range codes and 4000-count codes (spec §3.5)
+- The 10 A range code, 0 (sheet) or 1 (UT804) (spec §3.5)
+- The `manual_range` step presses RANGE; the 2009 Voltcraft manual
+  describes no RANGE key
+- Sigrok discrepancies, each for hardware to settle (spec §7): continuity,
+  power and duty-cycle decimal points; 10 A range code 0; overload and LO
+  patterns beyond the two sigrok accepts
+- Spec tables for the three models, after a first hardware confirmation
 
 #### UT8802 / UT8802N
 

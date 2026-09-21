@@ -71,6 +71,28 @@ what MAX MIN and REL send is still to confirm
 ([backlog](verification-backlog.md)). The UT803 has not been run on a meter
 yet, and auto-detection does not find it: select UT803 as the device.
 
+## UT71 / Voltcraft VC920 / VC940 / VC960
+
+Handheld. Cable: UT-D04 (CH9325) for the UT71; the VC920/VC940/VC960 ship an
+RS-232 cable (serial, not supported) and take Voltcraft's optional USB
+adapter 120317, whose chip is unconfirmed. No remote commands. Switch on:
+hold MAX MIN for 1 s (press SEND on a UT71A) so the display shows SEND; EXIT
+turns it off.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| UT71A | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | no temperature or 4-20 mA %; SEND key |
+| UT71B | 20000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds °C/°F and 4-20 mA % |
+| UT71C / UT71D | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | |
+| UT71E | 40000 | 🧪 Experimental ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22)) | adds power (W); one V≂ position |
+| VC920 / VC960 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | resistance 4000 counts; AC V to 750 V |
+| VC940 | 40000 | 🧪 Experimental ([#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) | as VC920, adds power (W) |
+
+None has been run on a meter yet: the range tables come from UNI-T's protocol
+sheet and the manuals ([backlog](verification-backlog.md)). Auto-detection
+reports these meters as a UT804: pick UT71A/B, UT71C/D/E or Voltcraft VC920
+as the device once (`--device ut71ab`, `ut71cde` or `vc920`).
+
 ## UT171 / UT181A
 
 Handheld. Cable: UT-D09 (either chip). Switch on: SETUP → Communication →

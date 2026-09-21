@@ -206,7 +206,8 @@ pub enum DeviceFamily {
     Ut8802,
     /// UT8803 / UT8803E bench multimeter
     Ut8803,
-    /// UT803 / UT804 bench multimeter
+    /// UT803 / UT804 bench multimeter, and the UT71 and Voltcraft
+    /// VC920/VC940/VC960 handhelds that send the UT804's packets
     Ut80x,
     /// UT171A / UT171B / UT171C
     Ut171,
@@ -423,6 +424,9 @@ pub enum Need {
     Thermocouple,
     /// Mains wiring to hold the meter against for the NCV detector.
     LiveWire,
+    /// The meter's power-measurement adapter, plugged into a live outlet with
+    /// a load plugged into it.
+    PowerAdapter,
     /// A transistor to sit in the hFE socket.
     Transistor,
     /// A thyristor for the SCR test.
@@ -431,11 +435,12 @@ pub enum Need {
 
 impl Need {
     /// Every need, in the order the up-front checklist lists them.
-    pub const ALL: [Need; 6] = [
+    pub const ALL: [Need; 7] = [
         Need::ShortedLeads,
         Need::DcSource,
         Need::Thermocouple,
         Need::LiveWire,
+        Need::PowerAdapter,
         Need::Transistor,
         Need::Scr,
     ];
@@ -448,6 +453,7 @@ impl Need {
             Need::DcSource => "battery or other DC source",
             Need::Thermocouple => "K-type thermocouple",
             Need::LiveWire => "live mains wire nearby",
+            Need::PowerAdapter => "power adapter, live outlet and load",
             Need::Transistor => "transistor",
             Need::Scr => "SCR (thyristor)",
         }
@@ -754,6 +760,7 @@ mod tests {
             Need::DcSource => "revers",
             Need::Thermocouple => "temperature",
             Need::LiveWire => "ncv",
+            Need::PowerAdapter => "adapter",
             Need::Transistor => "transistor",
             Need::Scr => "thyristor",
         }

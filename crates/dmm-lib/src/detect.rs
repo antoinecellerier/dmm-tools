@@ -87,7 +87,7 @@ struct FamilyEvidence {
 /// The fingerprints worth running on `bridge`, in registry order and each one
 /// once: the ones the entries the registry places on that cable point at.
 ///
-/// That is what keeps the AB CD probes off the CH9325, whose UT803/UT804
+/// That is what keeps the AB CD probes off the CH9325, whose UT80x-family
 /// meters they mean nothing to, and the UT80x rule off every other bridge,
 /// where its frames cannot arrive — without this module knowing either bridge
 /// by name. A family has one fingerprint and several entries point at it, so
@@ -799,7 +799,8 @@ mod tests {
         let families = |bridge: &str| -> Vec<DeviceFamily> {
             fingerprints_on(bridge).iter().map(|fp| fp.family).collect()
         };
-        // The CH9325 is the UT803/UT804's cable and nothing else's.
+        // The CH9325 carries the UT80x family (UT803/UT804, UT71, VC9x0)
+        // and nothing else.
         assert_eq!(families("CH9325"), vec![DeviceFamily::Ut80x]);
         // Every AB CD family: the UT61+, the two bench meters, the LE16 twins
         // and the Voltcraft pair.

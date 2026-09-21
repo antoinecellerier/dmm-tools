@@ -1,10 +1,17 @@
-//! UT803/UT804 bench multimeter protocol.
+//! UT803/UT804 bench multimeter protocol, which the UT71 and Voltcraft
+//! VC920/VC940/VC960 handhelds speak too.
 //!
 //! These meters send 11-byte packets: 9 data bytes (`0x30`-`0x3F`, with odd
 //! parity in bit 7 on the UT804), then CR LF. No checksum. Only the low
 //! nibbles carry data, and they hold structured measurement data (mode
 //! codes, range codes, digit values, status flags), NOT raw LCD segment
 //! data.
+//!
+//! The UT71A/B, UT71C/D/E and VC920/VC940/VC960 send the UT804's layout:
+//! their vendor apps decode it with the UT804 app's parser, at the same 2400
+//! baud. Only the range labels differ, as the full scales do, and function
+//! code E is their power position
+//! (docs/research/ut71/reverse-engineered-protocol.md §1-§4).
 //!
 //! **UT803 and UT804 use different payload layouts** (2026-06 review,
 //! re-derived from UT803.exe V1.01 / UT804.exe V2.00 with string constants
@@ -55,12 +62,56 @@ use std::fmt;
 mod specs_ut803;
 mod specs_ut804;
 
-/// Which meter model the packets come from — the two share framing but
-/// not payload layout.
+/// Which meter model the packets come from. All share the framing; the
+/// UT803 has a payload layout of its own, and the rest send the UT804's.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Model {
     Ut803,
     Ut804,
+    /// UT71A/B: the UT804's packets, on a 20000-count display
+    /// (docs/research/ut71/reverse-engineered-protocol.md §3.5, §4).
+    Ut71Ab,
+    /// UT71C/D/E: the UT804's packets and range labels (ut71 spec §3.5, §4).
+    Ut71Cde,
+    /// Voltcraft VC920/VC940/VC960: the UT71C/D/E's packets, with a 750V
+    /// top AC V range (ut71 spec §3.5, §4).
+    Vc920,
+}
+
+impl Model {
+    /// Whether the model sends the UT804's payload layout.
+    fn ut804_layout(self) -> bool {
+        match self {
+            Model::Ut803 => false,
+            Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => true,
+        }
+    }
+
+    /// The registry id reports name the model by, so the hint they print
+    /// selects the same parser.
+    fn report_id(self) -> &'static str {
+        match self {
+            Model::Ut803 => "ut803",
+            Model::Ut804 => "ut804",
+            Model::Ut71Ab => "ut71ab",
+            Model::Ut71Cde => "ut71cde",
+            Model::Vc920 => "vc920",
+        }
+    }
+
+    /// The range label this model shows for a (mode, range) pair
+    /// [`ut804_mode_info`] labels `ut804`: the same codes and decimal points
+    /// on every UT804-layout model, with full scales of their own (ut71 spec
+    /// §3.5). The UT803 parser gives no labels and never asks.
+    fn range_label(self, mode: u8, range: u8, ut804: &'static str) -> &'static str {
+        match self {
+            Model::Ut803 | Model::Ut804 | Model::Ut71Cde => ut804,
+            Model::Ut71Ab => ut71ab_range_label(mode, range),
+            // The Voltcraft manuals stop AC V at 750V; DC V keeps 1000V.
+            Model::Vc920 if (mode, range) == (0x2, 4) => "750V",
+            Model::Vc920 => ut804,
+        }
+    }
 }
 
 /// UT804 per-(mode, range) display info: mode name, unit, decimal point
@@ -134,8 +185,10 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
             _ => return None,
         },
         0xD => ("Temperature", "°F", 3, ""),
-        // Unknown glyph in the vendor font ("W"); possibly hFE/ADP.
-        0xE => ("ADP", "", 3, ""),
+        // Power in watts, on the UT71E's and VC940's W position; the UT804
+        // has none and never sends it
+        // (docs/research/ut71/reverse-engineered-protocol.md §3.2).
+        0xE => ("Power", "W", 3, ""),
         // The 4-20 mA loop current as a % reading, on the mA position (UT804
         // manual Table 2-1). The mode keeps the vendor's unit string "mA%"
         // as its name; the LCD shows the unit as "%" (#16).
@@ -148,6 +201,50 @@ fn ut804_mode_info(mode: u8, range: u8) -> Option<(&'static str, &'static str, u
 /// (vendor applies "DC" to V/mV/µA/mA/A, spec §3.5).
 fn ut804_default_dc(mode: u8) -> bool {
     matches!(mode, 0x1 | 0x2 | 0x3 | 0x7 | 0x8 | 0x9)
+}
+
+/// UT71A/B range labels for the pairs [`ut804_mode_info`] knows: the UT804's
+/// codes and decimal points on a 20000-count display, so half its full
+/// scales, with 1000V still on top. Each is the full scale both the A/B
+/// vendor app and the UT71 manual's A/B ranges give
+/// (docs/research/ut71/reverse-engineered-protocol.md §3.5). Neither gives
+/// continuity or diode a range, so they have no label, nor, as on the
+/// UT804, do temperature, power and the 4-20 mA %.
+fn ut71ab_range_label(mode: u8, range: u8) -> &'static str {
+    match (mode, range) {
+        (0x1 | 0x2, 1) => "2V",
+        (0x1 | 0x2, 2) => "20V",
+        (0x1 | 0x2, 3) => "200V",
+        (0x1 | 0x2, 4) => "1000V",
+        (0x3, _) => "200mV",
+        (0x4, 1) => "200Ω",
+        (0x4, 2) => "2kΩ",
+        (0x4, 3) => "20kΩ",
+        (0x4, 4) => "200kΩ",
+        (0x4, 5) => "2MΩ",
+        (0x4, 6) => "20MΩ",
+        (0x5, 1) => "20nF",
+        (0x5, 2) => "200nF",
+        (0x5, 3) => "2µF",
+        (0x5, 4) => "20µF",
+        (0x5, 5) => "200µF",
+        (0x5, 6) => "2mF",
+        (0x5, 7) => "20mF",
+        (0x7, 0) => "200µA",
+        (0x7, 1) => "2000µA",
+        (0x8, 0) => "20mA",
+        (0x8, 1) => "200mA",
+        (0x9, _) => "10A",
+        (0xC, 0) => "20Hz",
+        (0xC, 1) => "200Hz",
+        (0xC, 2) => "2kHz",
+        (0xC, 3) => "20kHz",
+        (0xC, 4) => "200kHz",
+        (0xC, 5) => "2MHz",
+        (0xC, 6) => "20MHz",
+        (0xC, 7) => "200MHz",
+        _ => "",
+    }
 }
 
 /// UT803 per-(mode, range) display info, same convention as
@@ -533,11 +630,20 @@ fn ut804_lcd_text(digits: &[u8], dp_pos: u8, negative: bool) -> Option<String> {
 
 /// Parse a UT804 packet. Position k is byte k (spec §2.1), so
 /// `nibbles[k-1]` is position k.
-pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
+#[cfg(test)]
+fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
+    parse_ut804_layout(Model::Ut804, packet)
+}
+
+/// Parse a packet in the UT804's layout for `model`. The UT71 and VC9x0 send
+/// the UT804's packets, which their vendor apps decode with the UT804 app's
+/// parser (docs/research/ut71/reverse-engineered-protocol.md §2, §3); only
+/// the range labels, and the id in reports, differ.
+fn parse_ut804_layout(model: Model, packet: &[u8]) -> Result<Measurement> {
     let f = Ut804Fields::decode(packet)?;
     let nibbles = &f.nibbles;
     let unrecognised = Unrecognised {
-        model: "ut804",
+        model: model.report_id(),
         nibbles: &nibbles[..9],
     };
 
@@ -606,7 +712,7 @@ pub(crate) fn parse_measurement_ut804(packet: &[u8]) -> Result<Measurement> {
     };
     // Duty has no range of its own (spec §3.7).
     let range_label = match info {
-        Some((.., label)) if !f.duty() => label,
+        Some((.., label)) if !f.duty() => model.range_label(f.mode, f.range, label),
         _ => "",
     };
 
@@ -672,7 +778,7 @@ pub(crate) fn parse_measurement_ut803(packet: &[u8]) -> Result<Measurement> {
     let nibbles = &f.nibbles;
     // Positions 2-10 are data bytes 1-9.
     let unrecognised = Unrecognised {
-        model: "ut803",
+        model: Model::Ut803.report_id(),
         nibbles: &nibbles[1..10],
     };
 
@@ -748,7 +854,9 @@ const COMMANDS: &[&str] = &[];
 /// as the transport's own start-up does after its first report.
 const UT803_RATE_SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
 
-/// Protocol implementation for UT803/UT804 bench multimeters.
+/// Protocol implementation for the meters on the CH9325 11-byte packet
+/// stream: the UT803/UT804 bench meters, and the UT71 and Voltcraft VC9x0
+/// handhelds that send the UT804's packets.
 pub(crate) struct Ut80xProtocol {
     rx_buf: Vec<u8>,
     model: Model,
@@ -756,34 +864,54 @@ pub(crate) struct Ut80xProtocol {
 }
 
 impl Ut80xProtocol {
-    pub(crate) fn new_ut803() -> Self {
+    fn new(
+        model: Model,
+        model_name: &'static str,
+        stability: Stability,
+        verification_issue: u16,
+    ) -> Self {
         Self {
             rx_buf: Vec::with_capacity(128),
-            model: Model::Ut803,
+            model,
             profile: DeviceProfile {
                 family_name: "UT803/UT804",
-                model_name: "UNI-T UT803",
-                stability: Stability::Experimental,
+                model_name,
+                stability,
                 supported_commands: COMMANDS,
                 max_aux_values: 0,
-                verification_issue: Some(15),
+                verification_issue: Some(verification_issue),
             },
         }
     }
 
+    pub(crate) fn new_ut803() -> Self {
+        Self::new(Model::Ut803, "UNI-T UT803", Stability::Experimental, 15)
+    }
+
     pub(crate) fn new_ut804() -> Self {
-        Self {
-            rx_buf: Vec::with_capacity(128),
-            model: Model::Ut804,
-            profile: DeviceProfile {
-                family_name: "UT803/UT804",
-                model_name: "UNI-T UT804",
-                stability: Stability::Verified,
-                supported_commands: COMMANDS,
-                max_aux_values: 0,
-                verification_issue: Some(16),
-            },
-        }
+        Self::new(Model::Ut804, "UNI-T UT804", Stability::Verified, 16)
+    }
+
+    pub(crate) fn new_ut71ab() -> Self {
+        Self::new(Model::Ut71Ab, "UNI-T UT71A/B", Stability::Experimental, 22)
+    }
+
+    pub(crate) fn new_ut71cde() -> Self {
+        Self::new(
+            Model::Ut71Cde,
+            "UNI-T UT71C/D/E",
+            Stability::Experimental,
+            22,
+        )
+    }
+
+    pub(crate) fn new_vc920() -> Self {
+        Self::new(
+            Model::Vc920,
+            "Voltcraft VC920/VC940/VC960",
+            Stability::Experimental,
+            23,
+        )
     }
 
     /// The manual table for reading `m`, decoded again from the payload:
@@ -807,6 +935,8 @@ impl Ut80xProtocol {
                 let row = specs_ut804::has_rows(f.coupling()).then_some(f.range);
                 Some((table, row))
             }
+            // No spec tables transcribed from their manuals yet.
+            Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => None,
         }
     }
 
@@ -824,9 +954,14 @@ impl Protocol for Ut80xProtocol {
         // transport's 0x5A trigger helps.
         match self.model {
             // The CH9325 transport starts at 2400 baud, the UT804's rate,
-            // and a UT804 streams there (#16).
-            Model::Ut804 => {
-                debug!("ut80x: init (UT804, the transport's 2400 baud)");
+            // and a UT804 streams there (#16). The UT71 and VC9x0 vendor apps
+            // set the same 2400 baud (docs/research/ut71/
+            // reverse-engineered-protocol.md §1).
+            Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => {
+                debug!(
+                    "ut80x: init ({}, the transport's 2400 baud)",
+                    self.profile.model_name
+                );
             }
             // The UT803 talks at 19200 (spec §1.2), which the transport's
             // start-up only reaches when nothing answers at 2400 — and the
@@ -860,7 +995,9 @@ impl Protocol for Ut80xProtocol {
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
         match self.model {
             Model::Ut803 => parse_measurement_ut803(payload),
-            Model::Ut804 => parse_measurement_ut804(payload),
+            Model::Ut804 | Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => {
+                parse_ut804_layout(self.model, payload)
+            }
         }
     }
 
@@ -880,22 +1017,24 @@ impl Protocol for Ut80xProtocol {
         match self.model {
             Model::Ut803 => specs_ut803::ALL.iter().map(|t| t.sheet_table()).collect(),
             Model::Ut804 => specs_ut804::ALL.iter().map(|t| t.sheet_table()).collect(),
+            Model::Ut71Ab | Model::Ut71Cde | Model::Vc920 => Vec::new(),
         }
     }
 
     fn capture_steps(&self) -> Vec<CaptureStep> {
         use crate::protocol::steps::{self, Ohms, Volts};
-        use crate::protocol::{Expect, Need};
+        use crate::protocol::{Expect, Need, RangeExpect};
+        use Model::{Ut71Ab, Ut71Cde, Ut803, Ut804, Vc920};
 
         // The two parsers name the same dial position differently, and a
         // label this model cannot report leaves the step waiting for a state
         // that never arrives. Only the UT803's V and mV carry an AC/DC
         // prefix — its current modes are named by unit alone — and it has
         // neither the duty-cycle display nor the "mA%" mode, while AC+DC is
-        // the UT804's.
-        let ut803 = self.model == Model::Ut803;
+        // the UT804 layout's.
+        let ut804_layout = self.model.ut804_layout();
         let for_model = |ut804: Option<&'static str>, ut803_label: Option<&'static str>| {
-            if ut803 { ut803_label } else { ut804 }
+            if ut804_layout { ut804 } else { ut803_label }
         };
         // Assert the mode where this model has a label for it, and nothing
         // where it has not.
@@ -903,10 +1042,22 @@ impl Protocol for Ut80xProtocol {
             Some(label) => step.expect(Expect::mode(label)),
             None => step,
         };
+        // The UT71 and VC9x0 handhelds reach AC and each position's other
+        // functions with the blue button and AC+DC with the yellow one, and
+        // turn SEND on by holding MAX MIN, or with the UT71A's SEND key (UT71
+        // manual Tables 2-1 and 2-2; VC920/940/960 manual §6, §7). `say`
+        // picks their wording of a step the bench meters word otherwise.
+        let handheld = match self.model {
+            Ut803 | Ut804 => false,
+            Ut71Ab | Ut71Cde | Vc920 => true,
+        };
+        let say = |bench: &'static str, handheld_text: &'static str| {
+            if handheld { handheld_text } else { bench }
+        };
 
-        // These two models reach OL in a step of their own, after a plain
-        // "turn the dial" one, so the resistance gate is the second of the
-        // pair rather than the step called "ohm".
+        // These models reach OL in a step of their own, after a plain "turn
+        // the dial" one, so the resistance gate is the second of the pair
+        // rather than the step called "ohm".
         let [dcv, dcv_short, dcv_negative, ohm_ol, ohm_body, ohm_short] = steps::gate_steps(
             Volts::DcV,
             CaptureStep::basic("dcv", "Set meter to DC V"),
@@ -917,141 +1068,317 @@ impl Protocol for Ut80xProtocol {
             ),
         );
 
-        // Where each model's dial or buttons reach a step: most are on both,
-        // and a step one model lacks is tagged where it is declared. The
-        // UT804 has no AC mV, tachometer or ADP position (its manual's
-        // Table 2-1, #16); RANGE, MAX MIN and REL are asked of the UT804
-        // alone. Issue #16's reporter walked every UT804 step by 2026-09-19;
-        // the UT803 has never answered.
-        let shared = |step: CaptureStep| Some(step.verified_if(!ut803));
-        let ut803_only = |step: CaptureStep| ut803.then_some(step);
-        let ut804_only = |step: CaptureStep| (!ut803).then_some(step.verified());
+        // Which models' dial or buttons reach a step. The UT804 has no AC mV,
+        // tachometer or ADP position (its manual's Table 2-1, #16); RANGE,
+        // MAX MIN and REL are asked of the UT804 and the handhelds. On the
+        // handhelds the blue button steps resistance to continuity and
+        // diode, and Hz follows mV, whose position the UT71B/C/D and
+        // VC920/VC960 share it with; a UT71E or VC940 turns ahead to its
+        // °C/°F position for Hz and back. W sits between Ω and capacitance,
+        // as on those two dials. Issue #16's reporter walked every UT804 step
+        // by 2026-09-19; no other model has answered.
+        const ALL: &[Model] = &[Ut803, Ut804, Ut71Ab, Ut71Cde, Vc920];
+        const BENCH: &[Model] = &[Ut803, Ut804];
+        const HANDHELD: &[Model] = &[Ut71Ab, Ut71Cde, Vc920];
+        const BUTTONS: &[Model] = &[Ut804, Ut71Ab, Ut71Cde, Vc920];
+        let model = self.model;
+        let on = |models: &[Model], step: CaptureStep| {
+            models
+                .contains(&model)
+                .then(|| step.verified_if(model == Ut804))
+        };
 
         [
-            shared(dcv),
-            shared(dcv_short),
-            shared(dcv_negative),
-            shared(CaptureStep::basic("acv", "Set meter to AC V").expect(Expect::mode("AC V"))),
+            on(ALL, dcv),
+            on(ALL, dcv_short),
+            on(ALL, dcv_negative),
+            on(
+                ALL,
+                CaptureStep::basic(
+                    "acv",
+                    say(
+                        "Set meter to AC V",
+                        "Set meter to AC V (on a shared V position, press the blue button for AC)",
+                    ),
+                )
+                .expect(Expect::mode("AC V")),
+            ),
             // AC+DC is the AC/DC nibble's fourth value; the spec (§5) has it
             // on the UT804, behind a button of its own on the AC V position,
-            // and leaves the UT803 open.
-            shared(named(
-                CaptureStep::basic(
-                    "acdcv",
-                    if ut803 {
-                        "Set meter to AC+DC V (if the meter has it)"
-                    } else {
-                        "AC V: press the AC/AC+DC button so the display shows AC+DC"
-                    },
+            // and leaves the UT803 open. The handhelds' yellow button gives
+            // it on AC V (UT71 manual Table 2-2).
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic(
+                        "acdcv",
+                        match model {
+                            Ut803 => "Set meter to AC+DC V (if the meter has it)",
+                            Ut804 => "AC V: press the AC/AC+DC button so the display shows AC+DC",
+                            Ut71Ab | Ut71Cde | Vc920 => {
+                                "AC V: press the yellow AC+DC button so the display shows AC+DC"
+                            }
+                        },
+                    ),
+                    for_model(Some("AC+DC V"), None),
                 ),
-                for_model(Some("AC+DC V"), None),
-            )),
-            shared(CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV"))),
-            ut803_only(
+            ),
+            on(
+                ALL,
+                CaptureStep::basic("dcmv", "Set meter to DC mV").expect(Expect::mode("DC mV")),
+            ),
+            on(
+                &[Ut803],
                 CaptureStep::basic("acmv", "Set meter to AC mV (if the meter has it)")
                     .expect(Expect::mode("AC mV")),
             ),
-            shared(
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "hz",
+                    "Set meter to Frequency (Hz): the dial position marked Hz, \
+                     then the blue button until Hz shows",
+                )
+                .expect(Expect::mode("Frequency")),
+            ),
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "duty",
+                    "Frequency mode: press the blue button until % shows (duty cycle)",
+                )
+                .expect(Expect::mode("Duty %")),
+            ),
+            on(
+                ALL,
                 CaptureStep::basic("ohm", "Set meter to Resistance (Ω)").expect(Expect::mode("Ω")),
             ),
-            shared(ohm_ol),
-            shared(ohm_body),
-            shared(ohm_short),
-            shared(
+            on(ALL, ohm_ol),
+            on(ALL, ohm_body),
+            on(ALL, ohm_short),
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "cont",
+                    "Resistance position: press the blue button for Continuity",
+                )
+                .expect(Expect::mode("Continuity")),
+            ),
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "diode",
+                    "Resistance position: press the blue button again for Diode",
+                )
+                .expect(Expect::mode("Diode")),
+            ),
+            // Function code E (docs/research/ut71/reverse-engineered-protocol.md
+            // §3.2). The UT71E's and VC940's power adapter plugs into the
+            // input jacks and into a mains outlet, and the load into it (UT71
+            // manual, "Power Measurement"; VC920/940/960 manual §9 l).
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "power",
+                    "Set meter to W (power, if the meter has it): its adapter into a live \
+                     mains outlet, and a load into the adapter",
+                )
+                .needs(&[Need::PowerAdapter])
+                .expect(Expect::mode("Power")),
+            ),
+            on(
+                ALL,
                 CaptureStep::basic("cap", "Set meter to Capacitance")
                     .expect(Expect::mode("Capacitance")),
             ),
             // Both models name the frequency mode "Frequency", not "Hz".
-            shared(
+            on(
+                BENCH,
                 CaptureStep::basic("hz", "Set meter to Frequency (Hz)")
                     .expect(Expect::mode("Frequency")),
             ),
-            shared(named(
-                CaptureStep::basic(
-                    "duty",
-                    "Frequency mode: switch the display to Duty Cycle (%)",
+            on(
+                BENCH,
+                named(
+                    CaptureStep::basic(
+                        "duty",
+                        "Frequency mode: switch the display to Duty Cycle (%)",
+                    ),
+                    for_model(Some("Duty %"), None),
                 ),
-                for_model(Some("Duty %"), None),
-            )),
+            ),
             // Frequency with the alt bit set (spec §5).
-            ut803_only(
+            on(
+                &[Ut803],
                 CaptureStep::basic("rpm", "Set meter to Tachometer / RPM")
                     .expect(Expect::mode("Tachometer")),
             ),
-            shared(CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode"))),
+            on(
+                BENCH,
+                CaptureStep::basic("diode", "Set meter to Diode").expect(Expect::mode("Diode")),
+            ),
             // #16's second run verifies this one on the UT804: in the first,
             // the reporter pressed SELECT on to Diode and Ω before the
             // samples were in.
-            shared(
+            on(
+                BENCH,
                 CaptureStep::basic("cont", "Set meter to Continuity")
                     .expect(Expect::mode("Continuity")),
             ),
-            shared(
+            on(
+                ALL,
                 CaptureStep::basic(
                     "temp",
-                    "Set meter to temperature (K-type thermocouple, if available)",
+                    say(
+                        "Set meter to temperature (K-type thermocouple, if available)",
+                        "Set meter to temperature °C (if the meter has it; K-type \
+                         thermocouple, if available)",
+                    ),
                 )
                 .needs(&[Need::Thermocouple])
                 .expect(Expect::mode("Temperature")),
             ),
-            shared(named(
-                CaptureStep::basic("dcua", "Set meter to DC µA"),
-                for_model(Some("DC µA"), Some("µA")),
-            )),
-            shared(named(
-                CaptureStep::basic("acua", "Set meter to AC µA"),
-                for_model(Some("AC µA"), Some("µA")),
-            )),
-            shared(named(
-                CaptureStep::basic("dcma", "Set meter to DC mA"),
-                for_model(Some("DC mA"), Some("mA")),
-            )),
-            shared(named(
-                CaptureStep::basic("acma", "Set meter to AC mA"),
-                for_model(Some("AC mA"), Some("mA")),
-            )),
-            shared(named(
-                CaptureStep::basic("dca", "Set meter to DC A"),
-                for_model(Some("DC A"), Some("A")),
-            )),
-            shared(named(
-                CaptureStep::basic("aca", "Set meter to AC A"),
-                for_model(Some("AC A"), Some("A")),
-            )),
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "temp_f",
+                    "Temperature: press the blue button for °F (if the meter has it; K-type \
+                     thermocouple, if available)",
+                )
+                .needs(&[Need::Thermocouple])
+                .expect(Expect::mode("Temperature")),
+            ),
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic("dcua", "Set meter to DC µA"),
+                    for_model(Some("DC µA"), Some("µA")),
+                ),
+            ),
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic(
+                        "acua",
+                        say(
+                            "Set meter to AC µA",
+                            "µA position: press the blue button for AC µA",
+                        ),
+                    ),
+                    for_model(Some("AC µA"), Some("µA")),
+                ),
+            ),
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic("dcma", "Set meter to DC mA"),
+                    for_model(Some("DC mA"), Some("mA")),
+                ),
+            ),
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic(
+                        "acma",
+                        say(
+                            "Set meter to AC mA",
+                            "mA position: press the blue button for AC mA",
+                        ),
+                    ),
+                    for_model(Some("AC mA"), Some("mA")),
+                ),
+            ),
+            // The 4-20 mA loop reading in %, one more blue press on the mA
+            // position. With nothing in the loop it reads LO, as the UT804's
+            // did in #16, so no loop source is asked for.
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "ma_percent",
+                    "mA position: press the blue button until % shows (4-20 mA loop, \
+                     if the meter has it)",
+                )
+                .expect(Expect::mode("mA%")),
+            ),
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic("dca", "Set meter to DC A"),
+                    for_model(Some("DC A"), Some("A")),
+                ),
+            ),
+            on(
+                ALL,
+                named(
+                    CaptureStep::basic(
+                        "aca",
+                        say(
+                            "Set meter to AC A",
+                            "A position: press the blue button for AC A",
+                        ),
+                    ),
+                    for_model(Some("AC A"), Some("A")),
+                ),
+            ),
             // Mode 14 "ADP / Logic" is named by the vendor binaries alone
             // (spec §3.4). Mode 15 is the mA position's 4-20 mA loop reading
             // in %, whose mode keeps the vendor's name "mA%".
-            ut803_only(
+            on(
+                &[Ut803],
                 CaptureStep::basic("adp", "Set meter to ADP / logic").expect(Expect::mode("ADP")),
             ),
-            shared(named(
-                CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
-                for_model(Some("mA%"), None),
-            )),
+            on(
+                BENCH,
+                named(
+                    CaptureStep::basic("ma_percent", "Set meter to % (4-20 mA loop)"),
+                    for_model(Some("mA%"), None),
+                ),
+            ),
             // RANGE sets status bit 1 (Manual), MAX MIN puts nothing on the
             // wire, and REL sends the relative reading with bit 1 set (spec
             // §3.6, #16), so the steps assert nothing. MAX MIN works on a
-            // manual range only (UT804 manual, "Using MAX MIN"). EXIT leaves
-            // all three, and turns the meter's data output off (#16). Each
-            // step waits for Enter: every press, and the previous step's EXIT
-            // and SEND, leaves a state the meter reports, and the watcher
-            // would capture the first of them.
-            ut804_only(
+            // manual range only (UT804 manual and UT71 manual, "Using MAX MIN"),
+            // so it follows RANGE. EXIT leaves all three, and turns the
+            // meter's data output off (#16), so every step that presses it
+            // asks for SEND after it. Each step waits for Enter: every press,
+            // and the previous step's EXIT and SEND, leaves a state the meter
+            // reports, and the watcher would capture the first of them. The
+            // handhelds get a step of their own to return to AUTO.
+            on(
+                BUTTONS,
                 CaptureStep::basic("manual_range", "DC V: press RANGE, then Enter.")
                     .wait_for_enter(),
             ),
-            ut804_only(
+            on(
+                BUTTONS,
                 CaptureStep::basic(
                     "max_min",
-                    "DC V with AUTO off: press MAX MIN, then Enter. \
-                     Press EXIT, then SEND, afterwards.",
+                    say(
+                        "DC V with AUTO off: press MAX MIN, then Enter. \
+                         Press EXIT, then SEND, afterwards.",
+                        "DC V, still on the manual range: press MAX MIN, then Enter.",
+                    ),
                 )
                 .wait_for_enter(),
             ),
-            ut804_only(
+            on(
+                HANDHELD,
+                CaptureStep::basic(
+                    "auto_range",
+                    "DC V: press EXIT until AUTO shows and turn SEND on again, then Enter.",
+                )
+                .wait_for_enter()
+                .expect(Expect::new().range(RangeExpect::Auto)),
+            ),
+            on(
+                BUTTONS,
                 CaptureStep::basic(
                     "rel",
-                    "DC V: press REL, then Enter. Press EXIT, then SEND, afterwards.",
+                    say(
+                        "DC V: press REL, then Enter. Press EXIT, then SEND, afterwards.",
+                        "DC V: press REL, then Enter. Press EXIT, then turn SEND on again, \
+                         afterwards.",
+                    ),
                 )
                 .wait_for_enter(),
             ),
@@ -1062,22 +1389,46 @@ impl Protocol for Ut80xProtocol {
             // that is a valid result, that it can take up to a minute, and
             // how to leave HOLD for the rest of the run: EXIT turns the data
             // output off as well, and SEND turns it back on. That line is the
-            // result the reporter confirmed on the UT804. There the step waits
-            // for Enter, as REL's clean-up before it leaves a state of its own.
-            shared(if ut803 {
+            // result the reporter confirmed on the UT804; the handhelds, whose
+            // HOLD nobody has run, get the same. There the step waits for
+            // Enter, as REL's clean-up before it leaves a state of its own.
+            on(
+                ALL,
+                match model {
+                    Ut803 => CaptureStep::basic(
+                        "hold",
+                        "Press HOLD (wire encoding unknown — capture needed)",
+                    ),
+                    Ut804 => CaptureStep::basic(
+                        "hold",
+                        "Press HOLD on the meter, then Enter. If the meter stops sending, \
+                         \"No response from meter.\" shows within a minute: that is a valid \
+                         result. Press EXIT, then SEND, on the meter afterwards.",
+                    )
+                    .wait_for_enter(),
+                    Ut71Ab | Ut71Cde | Vc920 => CaptureStep::basic(
+                        "hold",
+                        "Press HOLD on the meter, then Enter. If the meter stops sending, \
+                         \"No response from meter.\" shows within a minute: that is a valid \
+                         result. Press EXIT, then turn SEND on again, afterwards.",
+                    )
+                    .wait_for_enter(),
+                },
+            ),
+            // Holding the blue button at power-on drops every function to
+            // 4000 counts until the next power cycle (UT71 manual Table 2-2;
+            // VC920/940/960 manual §9), which blanks digit 5 (ut71 spec §3.1).
+            // Powering on leaves SEND off.
+            on(
+                HANDHELD,
                 CaptureStep::basic(
-                    "hold",
-                    "Press HOLD (wire encoding unknown — capture needed)",
-                )
-            } else {
-                CaptureStep::basic(
-                    "hold",
-                    "Press HOLD on the meter, then Enter. If the meter stops sending, \
-                     \"No response from meter.\" shows within a minute: that is a valid result. \
-                     Press EXIT, then SEND, on the meter afterwards.",
+                    "fast_mode",
+                    "Turn the meter off, then back on at DC V while holding the blue button \
+                     (4000 counts); turn SEND on again, then Enter.",
                 )
                 .wait_for_enter()
-            }),
+                .expect(Expect::mode("DC V")),
+            ),
         ]
         .into_iter()
         .flatten()
@@ -1085,11 +1436,14 @@ impl Protocol for Ut80xProtocol {
     }
 }
 
-/// Detection for the UT803/UT804.
+/// Detection for the meters on this packet stream.
 ///
 /// The meters stream 11-byte CR LF packets and take no commands past the
 /// CH9325 transport's own init, so there is nothing to send
-/// (`docs/research/ut803/reverse-engineered-protocol.md`).
+/// (`docs/research/ut803/reverse-engineered-protocol.md`). A UT71 or VC9x0
+/// packet is the UT804's, so those meters are claimed as a UT804 and have to
+/// be named for their own range labels
+/// (`docs/research/ut71/reverse-engineered-protocol.md` §4).
 pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     family: DeviceFamily::Ut80x,
     label: "ut80x stream",
@@ -1101,8 +1455,10 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
 
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     // A packet does not say which model sent it. The CH9325 starts at 2400
-    // baud, where only the UT804 is heard: the UT803 talks at 19200 (spec
-    // §1.2, §5), so it is not detected and has to be named.
+    // baud, where the UT804 is heard: the UT803 talks at 19200 (spec §1.2,
+    // §5), so it is not detected and has to be named. The UT71 and VC9x0
+    // send the UT804's packets at 2400 (ut71 spec §1, §2), so they are
+    // claimed as a UT804, and have to be named too.
     extract_packet(buf).ok().flatten().map(|_| Evidence::Model {
         id: "ut804",
         reported_name: None,
@@ -1243,6 +1599,9 @@ mod tests {
         for proto in [
             Box::new(Ut80xProtocol::new_ut803()) as Box<dyn Protocol>,
             Box::new(Ut80xProtocol::new_ut804()),
+            Box::new(Ut80xProtocol::new_ut71ab()),
+            Box::new(Ut80xProtocol::new_ut71cde()),
+            Box::new(Ut80xProtocol::new_vc920()),
         ] {
             let name = proto.profile().model_name;
             for bytes in not_packets {
@@ -1278,14 +1637,22 @@ mod tests {
     }
 
     /// The UT803 talks at 19200, which the CH9325's start-up at 2400 never
-    /// leaves while the bridge keeps reporting; the UT804 stays at 2400, its
-    /// start-up untouched.
+    /// leaves while the bridge keeps reporting; the UT804, the UT71 and the
+    /// VC9x0 stay at 2400, their start-up untouched.
     #[test]
     fn only_the_ut803_init_changes_the_bridge_rate() {
         let mock = MockTransport::new(Vec::new());
-        Ut80xProtocol::new_ut804().init(&mock).unwrap();
-        assert!(mock.feature_reports.borrow().is_empty());
-        assert!(mock.written.borrow().is_empty());
+        for mut proto in [
+            Ut80xProtocol::new_ut804(),
+            Ut80xProtocol::new_ut71ab(),
+            Ut80xProtocol::new_ut71cde(),
+            Ut80xProtocol::new_vc920(),
+        ] {
+            proto.init(&mock).unwrap();
+            let name = proto.profile().model_name;
+            assert!(mock.feature_reports.borrow().is_empty(), "{name}");
+            assert!(mock.written.borrow().is_empty(), "{name}");
+        }
 
         Ut80xProtocol::new_ut803().init(&mock).unwrap();
         assert_eq!(
@@ -1404,6 +1771,284 @@ mod tests {
                 "ma_percent",
                 "hold",
             ]
+        );
+    }
+
+    // --- UT71 and VC9x0 --------------------------------------------------
+
+    /// The UT804-layout models that are not the UT804.
+    const HANDHELDS: [Model; 3] = [Model::Ut71Ab, Model::Ut71Cde, Model::Vc920];
+
+    /// The handhelds' protocols, in [`HANDHELDS`] order.
+    fn handheld_protocols() -> [Ut80xProtocol; 3] {
+        [
+            Ut80xProtocol::new_ut71ab(),
+            Ut80xProtocol::new_ut71cde(),
+            Ut80xProtocol::new_vc920(),
+        ]
+    }
+
+    /// The UT71 and VC9x0 walk their own dials: the gate, the UT804's list
+    /// reworded for their blue and yellow buttons, W and °F, and a step back
+    /// to AUTO after MAX MIN, which works on a manual range only. Nobody has
+    /// run one, so nothing is verified.
+    #[test]
+    fn the_handhelds_walk_their_own_list() {
+        let expected = [
+            "dcv",
+            "dcv_short",
+            "dcv_negative",
+            "acv",
+            "acdcv",
+            "dcmv",
+            "hz",
+            "duty",
+            "ohm",
+            "ohm_ol",
+            "ohm_body",
+            "ohm_short",
+            "cont",
+            "diode",
+            "power",
+            "cap",
+            "temp",
+            "temp_f",
+            "dcua",
+            "acua",
+            "dcma",
+            "acma",
+            "ma_percent",
+            "dca",
+            "aca",
+            "manual_range",
+            "max_min",
+            "auto_range",
+            "rel",
+            "hold",
+            "fast_mode",
+        ];
+        for proto in handheld_protocols() {
+            let name = proto.profile().model_name;
+            let steps = proto.capture_steps();
+            let ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
+            assert_eq!(ids, expected, "{name}");
+            assert!(steps.iter().all(|s| !s.verified), "{name}");
+            let waits: Vec<&str> = steps
+                .iter()
+                .filter(|s| s.wait_for_enter)
+                .map(|s| s.id)
+                .collect();
+            assert_eq!(
+                waits,
+                [
+                    "manual_range",
+                    "max_min",
+                    "auto_range",
+                    "rel",
+                    "hold",
+                    "fast_mode"
+                ],
+                "{name}"
+            );
+            // EXIT turns SEND off (UT71 manual Table 2-2).
+            for step in steps.iter().filter(|s| s.instruction.contains("EXIT")) {
+                assert!(
+                    step.instruction.contains("turn SEND on again"),
+                    "{name} {}: {:?}",
+                    step.id,
+                    step.instruction
+                );
+            }
+        }
+    }
+
+    /// Every mode a handheld step asserts is one its parser reports, or the
+    /// step waits for a state that never arrives.
+    #[test]
+    fn the_handhelds_are_asked_for_labels_their_parser_reports() {
+        for (model, proto) in HANDHELDS.into_iter().zip(handheld_protocols()) {
+            let modes: std::collections::HashSet<String> = ut804_layout_accepted_readings(model)
+                .into_iter()
+                .map(|(_, m)| m.mode.into_owned())
+                .collect();
+            for step in proto.capture_steps() {
+                if let Some(mode) = step.expect.and_then(|e| e.mode) {
+                    assert!(modes.contains(mode), "{model:?} {}: {mode}", step.id);
+                }
+            }
+        }
+    }
+
+    /// The handhelds send the UT804's packets, which their vendor apps read
+    /// with the UT804 app's parser (ut71 spec §2, §3): every reading the
+    /// UT804 accepts reads the same on them, range label aside. The UT71C/D/E
+    /// keeps the UT804's labels and the VC9x0 all but AC V's top one; the
+    /// UT71A/B's have a test of their own.
+    #[test]
+    fn the_handhelds_read_every_ut804_reading_the_same() {
+        for (p, ut804) in ut804_accepted_readings() {
+            let f = Ut804Fields::decode(&p).unwrap();
+            for model in HANDHELDS {
+                let (m, reports) =
+                    crate::protocol::capture_reports(|| parse_ut804_layout(model, &p));
+                let m = m.unwrap();
+                assert!(reports.is_empty(), "{model:?} {p:02X?}: {reports:?}");
+                assert_eq!(m.raw_payload, ut804.raw_payload);
+                let label = match model {
+                    Model::Vc920 if (f.mode, f.range) == (0x2, 4) => Some("750V"),
+                    Model::Ut71Cde | Model::Vc920 => Some(ut804.range_label.as_ref()),
+                    Model::Ut71Ab | Model::Ut803 | Model::Ut804 => None,
+                };
+                if let Some(label) = label {
+                    assert_eq!(m.range_label, label, "{model:?} {p:02X?}");
+                }
+                let relabelled = Measurement {
+                    range_label: ut804.range_label.clone(),
+                    ..m
+                };
+                assert_eq!(
+                    snapshot(&relabelled),
+                    snapshot(&ut804),
+                    "{model:?} {p:02X?}"
+                );
+            }
+        }
+    }
+
+    /// The UT71A/B counts to 20000 on the UT804's codes and decimal points
+    /// (ut71 spec §3.5): each label is half the UT804's full scale, apart
+    /// from the 1000V and 10A tops, and continuity and diode, which neither
+    /// the A/B vendor app nor the UT71 manual gives a range.
+    #[test]
+    fn ut71ab_range_labels_are_half_the_ut804s() {
+        for (p, ut804) in ut804_accepted_readings() {
+            let f = Ut804Fields::decode(&p).unwrap();
+            let ab = parse_ut804_layout(Model::Ut71Ab, &p).unwrap();
+            let label = ab.range_label.as_ref();
+            let context = format!(
+                "{} {p:02X?}: {label:?} for {:?}",
+                ut804.mode, ut804.range_label
+            );
+            match (f.mode, f.range) {
+                _ if ut804.range_label.is_empty() => assert_eq!(label, "", "{context}"),
+                (0xA | 0xB, _) => assert_eq!(label, "", "{context}"),
+                (0x1 | 0x2, 4) | (0x9, _) => assert_eq!(label, ut804.range_label, "{context}"),
+                _ => {
+                    let (full, unit) = si_quantity(&ut804.range_label).unwrap();
+                    let (half, ab_unit) = si_quantity(label).expect(&context);
+                    assert_eq!(ab_unit, unit, "{context}");
+                    assert!((half - full / 2.0).abs() <= 1e-9 * full, "{context}");
+                }
+            }
+        }
+        // As the A/B app's chart and the manual's A/B tables give them.
+        for (mode, range, acdc, label) in [
+            (0x1, 1, 2, "2V"),
+            (0x2, 4, 1, "1000V"),
+            (0x3, 0, 0, "200mV"),
+            (0x4, 1, 0, "200Ω"),
+            (0x4, 6, 0, "20MΩ"),
+            (0x5, 1, 0, "20nF"),
+            (0x5, 7, 0, "20mF"),
+            (0x7, 1, 0, "2000µA"),
+            (0x8, 0, 1, "20mA"),
+            (0x9, 0, 0, "10A"),
+            (0xC, 0, 0, "20Hz"),
+            (0xC, 7, 0, "200MHz"),
+            (0xA, 0, 0, ""),
+            (0xB, 0, 0, ""),
+            (0x6, 0, 0, ""),
+            (0xE, 0, 0, ""),
+            (0xF, 0, 0, ""),
+        ] {
+            let p = ut804_payload(&[0, 1, 2, 3, 0xA], range, mode, acdc, 0x0);
+            let m = parse_ut804_layout(Model::Ut71Ab, &p).unwrap();
+            assert_eq!(m.range_label, label, "mode {mode:#x} range {range}");
+        }
+    }
+
+    /// The Voltcraft manuals stop AC V at 750V; DC V, and every UT71's AC V,
+    /// stop at 1000V (ut71 spec §3.5).
+    #[test]
+    fn only_the_vc920s_ac_v_tops_out_at_750v() {
+        let label = |model, range, mode, acdc| {
+            let p = ut804_payload(&[0, 2, 3, 0, 0], range, mode, acdc, 0x0);
+            parse_ut804_layout(model, &p).unwrap().range_label
+        };
+        assert_eq!(label(Model::Vc920, 4, 0x2, 1), "750V");
+        assert_eq!(label(Model::Vc920, 4, 0x2, 3), "750V");
+        assert_eq!(label(Model::Vc920, 3, 0x2, 1), "400V");
+        assert_eq!(label(Model::Vc920, 4, 0x1, 2), "1000V");
+        for model in [Model::Ut71Ab, Model::Ut71Cde] {
+            assert_eq!(label(model, 4, 0x2, 1), "1000V", "{model:?}");
+        }
+    }
+
+    /// Function code E is the UT71E's and VC940's power position, in watts
+    /// with the point after digit 4 (ut71 spec §3.2), and reads without a
+    /// report on every UT804-layout model. Function 0 has no position in any
+    /// of their manuals (§3.2, §6), so it is still reported, under each
+    /// model's own id.
+    #[test]
+    fn code_e_is_power_and_code_0_is_still_reported() {
+        let power = ut804_payload(&[0, 1, 2, 3, 4], 0, 0xE, 0, 0x0);
+        let code_0 = ut804_payload(&[1, 2, 3, 4, 0xA], 0, 0x0, 0, 0x0);
+        for proto in [
+            Ut80xProtocol::new_ut804(),
+            Ut80xProtocol::new_ut71ab(),
+            Ut80xProtocol::new_ut71cde(),
+            Ut80xProtocol::new_vc920(),
+        ] {
+            let id = proto.model.report_id();
+            let (m, reports) = crate::protocol::capture_reports(|| proto.parse_payload(&power));
+            let m = m.unwrap();
+            assert_eq!(
+                (m.mode.as_ref(), m.unit.as_ref(), m.display_raw.as_deref()),
+                ("Power", "W", Some("0123.4")),
+                "{id}"
+            );
+            assert!(matches!(m.value, MeasuredValue::Normal(v) if (v - 123.4).abs() < 1e-9));
+            assert!(reports.is_empty(), "{id}: {reports:?}");
+
+            let (m, reports) = crate::protocol::capture_reports(|| proto.parse_payload(&code_0));
+            assert_eq!(m.unwrap().mode, "Unknown(0x00)", "{id}");
+            assert_eq!(
+                reports,
+                [format!(
+                    "{id}: unrecognised mode/range pair: nibbles 1234A0000"
+                )]
+            );
+        }
+    }
+
+    /// A report's hint reruns `--device <id>`, so each model reports under
+    /// its own registry id: a VC920 owner is not sent to the UT804's parser.
+    #[test]
+    fn each_model_reports_under_its_registry_id() {
+        use crate::protocol::registry;
+        // A digit nibble past 0xA among either layout's digits, on a UT804
+        // mode that is not a UT803 overload.
+        let p = wire([1, 0xF, 0xF, 0, 0xA, 1, 8, 2, 0]);
+        let devices: Vec<_> = registry::DEVICES
+            .iter()
+            .filter(|d| d.family == DeviceFamily::Ut80x)
+            .collect();
+        assert_eq!(devices.len(), 5);
+        for device in devices {
+            let proto = (device.new_protocol)();
+            let (_, reports) = crate::protocol::capture_reports(|| proto.parse_payload(&p));
+            let prefix = format!("{}: ", device.id);
+            assert!(
+                !reports.is_empty() && reports.iter().all(|r| r.starts_with(&prefix)),
+                "{}: {reports:?}",
+                device.id
+            );
+        }
+        let (_, reports) =
+            crate::protocol::capture_reports(|| Ut80xProtocol::new_vc920().parse_payload(&p));
+        assert_eq!(
+            reports,
+            ["vc920: unrecognised digit nibble: nibbles 1FF0A1820"]
         );
     }
 
@@ -2428,6 +3073,15 @@ raw_payload=11"#
             assert!(m.is_ok(), "{packet:02X?}: {m:?}");
             assert!(reports.is_empty(), "{packet:02X?}: {reports:?}");
         }
+        // The handhelds send the UT804's packets (ut71 spec §2, §3).
+        for model in HANDHELDS {
+            for packet in &ut804 {
+                let (m, reports) =
+                    crate::protocol::capture_reports(|| parse_ut804_layout(model, packet));
+                assert!(m.is_ok(), "{model:?} {packet:02X?}: {m:?}");
+                assert!(reports.is_empty(), "{model:?} {packet:02X?}: {reports:?}");
+            }
+        }
     }
 
     /// A pair outside the model's table still reads as an unknown mode.
@@ -2948,7 +3602,7 @@ raw_payload=11"#
 
     /// UT804 readings the parser accepts that have no spec in the manual.
     const UT804_NO_SPEC: &[Ut804NoSpec] = &[
-        ("ADP: no dial position, and no table", |f| f.mode == 0xE),
+        ("power: no dial position, and no table", |f| f.mode == 0xE),
         (
             "AC or AC+DC mV: the manual gives the UT804 no AC mV function, and table B no 400mV row",
             |f| f.mode == 0x3 && matches!(f.coupling(), Some(Coupling::Ac | Coupling::AcDc)),
@@ -2958,13 +3612,19 @@ raw_payload=11"#
     /// Every mode, range, coupling, sign and AUTO bit the parser accepts
     /// without a report, as a packet and its reading.
     fn ut804_accepted_readings() -> Vec<(Vec<u8>, Measurement)> {
+        ut804_layout_accepted_readings(Model::Ut804)
+    }
+
+    /// As [`ut804_accepted_readings`], read as `model`.
+    fn ut804_layout_accepted_readings(model: Model) -> Vec<(Vec<u8>, Measurement)> {
         let mut readings = Vec::new();
         for mode in 0..=0xF {
             for range in 0..=0xF {
                 for acdc in 0..=0x4 {
                     for status in [0x0, 0x1, 0x4, 0x5] {
                         let p = ut804_payload(&[1, 2, 3, 4, 0xA], range, mode, acdc, status);
-                        if let (Ok(m), reports) = parse_reported(parse_measurement_ut804, &p)
+                        if let (Ok(m), reports) =
+                            crate::protocol::capture_reports(|| parse_ut804_layout(model, &p))
                             && reports.is_empty()
                         {
                             readings.push((p, m));
@@ -3163,7 +3823,7 @@ raw_payload=11"#
 
     // --- Detection (crate::detect) ---------------------------------------
 
-    /// A packet does not name its model, and only the UT804 is heard at the
+    /// A packet does not name its model, and the UT804 is heard at the
     /// CH9325's 2400 baud start-up rate, so any whole packet is a UT804.
     #[test]
     fn a_whole_packet_is_recognised_as_a_ut804() {
@@ -3178,5 +3838,27 @@ raw_payload=11"#
                 reported_name: None,
             })
         );
+    }
+
+    /// Whether a UT71 or VC9x0 sets the UT804's parity bit is open (ut71
+    /// spec §6): a packet with bit 7 clear throughout, CR LF as `0D 0A`, is
+    /// still claimed as a UT804, which reads it as one.
+    #[test]
+    fn a_packet_without_parity_is_recognised_as_a_ut804() {
+        // DC V 12.345 on range 2, AUTO: every nibble as 0x30 | n.
+        let packet = [
+            0x31, 0x32, 0x33, 0x34, 0x35, 0x32, 0x31, 0x30, 0x31, 0x0D, 0x0A,
+        ];
+        assert!(packet.iter().all(|b| b & 0x80 == 0));
+        assert_eq!(
+            (FINGERPRINT.recognise)(&packet, &Probing::default()),
+            Some(Evidence::Model {
+                id: "ut804",
+                reported_name: None,
+            })
+        );
+        let m = parse_ut804_layout(Model::Ut71Cde, &packet).unwrap();
+        assert_eq!(m.display_raw.as_deref(), Some("12.345"));
+        assert_eq!(m.mode, "DC V");
     }
 }

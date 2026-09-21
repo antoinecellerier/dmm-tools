@@ -741,6 +741,22 @@ mod tests {
         }
     }
 
+    /// Whether HOLD silences a UT71 or VC9x0 is open, so their HOLD step
+    /// words the answer as the UT804's does, and quotes the same line.
+    #[test]
+    fn the_handheld_hold_steps_quote_the_no_response_line() {
+        for id in ["ut71ab", "ut71cde", "vc920"] {
+            let device = dmm_lib::protocol::registry::find_device(id).unwrap();
+            let steps = (device.new_protocol)().capture_steps();
+            let hold = steps.iter().find(|s| s.id == "hold").unwrap();
+            assert!(
+                hold.instruction.contains(&format!("\"{NO_RESPONSE}\"")),
+                "{id}: {:?}",
+                hold.instruction
+            );
+        }
+    }
+
     /// A rejected frame used to end the step, so the report carried neither a
     /// sample nor a reason. Keep polling and record why.
     #[test]
@@ -899,10 +915,12 @@ mod tests {
     /// - `ut181a`, `vc880`, `vc650bt`, `vc890` declare `choices`, so they do
     ///   lose coverage. Each fix needs that family's own dial order and a
     ///   hardware run — tracked in `docs/verification-backlog.md`.
-    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut171` declare no `choices`,
-    ///   so nothing is swept whatever the order and they cost nothing.
+    /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut71ab`, `ut71cde`, `vc920`,
+    ///   `ut171` declare no `choices`, so nothing is swept whatever the order
+    ///   and they cost nothing.
     const SPLIT_GATE: &[&str] = &[
-        "ut8802", "ut8803", "ut803", "ut804", "ut171", "ut181a", "vc880", "vc650bt", "vc890",
+        "ut8802", "ut8803", "ut803", "ut804", "ut71ab", "ut71cde", "vc920", "ut171", "ut181a",
+        "vc880", "vc650bt", "vc890",
     ];
 
     #[test]

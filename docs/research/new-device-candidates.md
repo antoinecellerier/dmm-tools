@@ -96,7 +96,13 @@ the segment-to-bit mapping.
 
 ---
 
-### UNI-T UT71A–E — CHEAPEST ADDITION
+### UNI-T UT71A–E — SUPPORTED (EXPERIMENTAL) SINCE 2026-09-21
+
+**Implemented as `ut71ab`, `ut71cde` and `vc920`** — see
+[supported devices](../supported-devices.md) and the spec in
+[research/ut71](ut71/reverse-engineered-protocol.md); the Tenma rebrands are
+sigrok's claim and have no registry entry. The analysis below is as it stood
+before.
 
 **Nothing new below the parser: the cable, the bridge and the packet shape are
 all ones we already handle, and UNI-T publishes the protocol.**
@@ -522,7 +528,7 @@ vendor software. **Not a priority target.**
 |-------|-------|------|-----------|-------|
 | **UT612** | UNI-T | LCR meter | USB HID (`10C4:EA80`) | ES51919 chipset, TX-only, CP2110 transport. [sigrok wiki](https://sigrok.org/wiki/UNI-T_UT612) |
 | **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset |
-| **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04). Covered by the UT71A–E entry above, whose protocol document is now read |
+| **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04), per sigrok only. The UT71A–E entry above is implemented; a Tenma would be named as a UT71 |
 | **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document. The "UT804接口协议" on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html), read 2026-09-19, describes the UT804 alone (its first digit runs 0-4, a 40000-count display), so whether the UT804+ speaks a protocol we support is still open |
 | **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. Needs a BLE transport |
 | **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional); see [research/ut8803](ut8803/reverse-engineering-approach.md). The shared bench programming manual's device table gives `[T:COM][PORT:8][BAUD:9600][PARITY:N][STOP:1][DATA:7]` and a CP210x driver |
@@ -551,7 +557,7 @@ vendor software. **Not a priority target.**
 
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
-| **UNI-T UT71A–E** | USB HID (CH9325) | Lowest cost of any candidate: the cable, the bridge and the 11-byte packet shape are already implemented, UNI-T publishes the protocol, and the Tenma and Voltcraft VC9x0 rebrands come with it | Moderate (sigrok works; vendor software is Windows 7 era) |
+| **UNI-T UT71A–E** — implemented 2026-09-21 | USB HID (CH9325) | Lowest cost of any candidate: the cable, the bridge and the 11-byte packet shape are already implemented, UNI-T publishes the protocol, and the Tenma and Voltcraft VC9x0 rebrands come with it | Done, experimental: `ut71ab`, `ut71cde`, `vc920` await a hardware report ([supported devices](../supported-devices.md)) |
 | **Brymen BM86x** | USB HID (Cypress) | Official protocol docs, strong community, no cross-platform GUI exists | Large |
 | **UNI-T via UT-D07B** | BLE | Reuses existing protocol parsers, #1 recommended logging meter on EEVBlog 2024, no desktop BLE tool | Large |
 | **Fluke 287/289** | USB serial (IR) | Officially documented ASCII protocol, millions of units, $200 Windows-only software is terrible | Large |
@@ -591,11 +597,12 @@ vendor software. **Not a priority target.**
 - **Adding serial transport** is smaller scope than BLE but the
   highest-value serial target (Fluke) overlaps more with existing tools.
 - **UT71 is the only UNI-T handheld family besides the UT61+ with a published
-  wire protocol.** The 2026-09-21 sweep found none for the UT171, UT181A,
-  UT161, UT139, UT89, UT19x, UT21x or the clamp line. UNI-T's newer bench
-  multimeters (UT8805/UT8806) do publish theirs, but as SCPI over USB TMC — a
-  different paradigm from everything we implement. So growth inside UNI-T's
-  catalogue means UT71 or UT632 over USB, or the BLE models over an adapter.
+  wire protocol**, and is implemented (experimental) since 2026-09-21. The
+  2026-09-21 sweep found none for the UT171, UT181A, UT161, UT139, UT89,
+  UT19x, UT21x or the clamp line. UNI-T's newer bench multimeters
+  (UT8805/UT8806) do publish theirs, but as SCPI over USB TMC — a different
+  paradigm from everything we implement. So growth inside UNI-T's catalogue
+  means UT632 over USB, or the BLE models over an adapter.
 
 ---
 

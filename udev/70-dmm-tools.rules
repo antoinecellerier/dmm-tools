@@ -19,5 +19,5 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea80", TAG+="ua
 # UNI-T multimeters — WCH CH9329 HID-to-UART bridge (UT-D09 cable for UT181A, UT171, etc.)
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e429", TAG+="uaccess"
 
-# UNI-T multimeters — WCH CH9325 HID bridge (UT-D04 cable for UT803, UT804, etc.)
+# UNI-T multimeters — WCH CH9325 HID bridge (UT-D04 cable for UT803, UT804, UT71, etc.)
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="e008", TAG+="uaccess"

@@ -60,11 +60,14 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut8803` | `ut8803e` | UT8803 (experimental) |
 | `ut803` |  | UT803 (experimental) |
 | `ut804` |  | UT804 (verified) |
+| `ut71ab` | `ut71a`, `ut71b` | UT71A/B (experimental) |
+| `ut71cde` | `ut71c`, `ut71d`, `ut71e` | UT71C/D/E (experimental) |
 | `ut171` | `ut171a`, `ut171b`, `ut171c` | UT171A/B/C (experimental) |
 | `ut181a` | `ut181` | UT181A (partly verified) |
 | `vc880` | `vc-880` | Voltcraft VC-880 (experimental) |
 | `vc650bt` | `vc-650bt` | Voltcraft VC650BT (experimental) |
 | `vc890` | `vc-890` | Voltcraft VC-890 (experimental) |
+| `vc920` | `vc-920`, `vc940`, `vc-940`, `vc960`, `vc-960` | Voltcraft VC920/VC940/VC960 (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 <!-- devices:end -->
 
@@ -422,9 +425,10 @@ dmm-cli command <ACTION>          # send a command
 | `light` | Toggle backlight |
 | `select` | SHIFT/SETUP button: steps to the dial position's next function |
 
-#### UT8802 / UT8803 / UT803 / UT804
+#### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960
 
-No remote commands — the meters stream continuously after connection.
+No remote commands — the meters stream continuously once their output is on
+([supported devices](supported-devices.md)).
 
 **Example:**
 
@@ -620,7 +624,7 @@ own steps. Plan steps never act as gate steps, and the report goes to
 | `instruction` | yes | What to do on the bench. |
 | `command` | | A button to press first, as `dmm-cli command` names it. |
 | `samples` | | Readings to record (default 5). |
-| `needs` | | Bench items the step needs: `shorted_leads`, `dc_source`, `thermocouple`, `live_wire`, `transistor`, `scr`. |
+| `needs` | | Bench items the step needs: `shorted_leads`, `dc_source`, `thermocouple`, `live_wire`, `power_adapter`, `transistor`, `scr`. |
 | `expect.mode` | | Mode name as the family's mode table spells it. |
 | `expect.flags` | | Flags by report name (`hold`, `rel`, `auto_range`, …), each `true` or `false`. |
 | `expect.range` | | `auto` or `manual`. |

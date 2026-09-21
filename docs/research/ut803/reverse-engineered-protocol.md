@@ -784,7 +784,7 @@ libsigrok's code unless it says "wiki".
 | Wire framing | 11 bytes ending CR LF, low nibbles only (§2.1) | UT71x: 11 bytes ending CR LF, for the RS232 and the UT-D04 (CH9325) cable | 11 bytes ending CR LF | ✓¹ |
 | Line format | 2400 baud; the app opens its port at 8N1 but reads only low nibbles, except CR (§1.2) | 2400 7O1 | 2400 7O1 | ✓ rate; 7O1 new |
 | Payload layout | Nibbles 1-11 = bytes 1-11 (§2.1, §3.1) | Bytes 0-4 digits, 5 range, 6 function, 7 coupling, 8 flags, 9-10 CR LF | Same | ✓² |
-| Function codes | 1-F (§3.4); E and F uncertain | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
+| Function codes | 1-F (§3.4); E is power [DEDUCED], F 4-20 mA % | 0-15, 14 = power, 15 = loop current | 1-9, `:` continuity, `;` diode, `<` Hz, `=` °F, `?` 4-20 mA %; no power on the UT804 | ✓; 1 = V DC, 2 = V AC new |
 | Range tables | §3.7 | — | Per function | ✓ (log) |
 | Coupling (nibble 8) | 0 = per mode, 1 AC, 2 DC, 3 AC+DC (§3.5) | Bit 0 AC, bit 1 DC | Same | ✓ |
 | Status (nibble 9) | Bit 0 AUTO, bit 1 manual range [VENDOR-DOC], bit 2 sign, bit 3 unknown (§3.6) | Bit 0 AUTO, bit 1 MAN, bit 2 sign | Same | ✓; bit 1 set by RANGE (§3.6) |

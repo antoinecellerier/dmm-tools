@@ -145,11 +145,14 @@ Which rules a bridge gets is the registry's call, not `detect.rs`'s: `preferred_
 families listed on the bridge it opened — the same list the "no meter answered" help draws on. The
 shortcut issue #9 assumed (CH9329 means UT181A) does not hold: a UT61B+ is verified over CH9329
 and older UT181A units ship the CP2110, so CP2110 and CH9329 run the same cascade. The CH9325
-carries the UT803/UT804 family alone; it is receive-only past its init, which already sends
-`0x5A`, so detection there is a single listen window that takes any whole CR LF packet as a
-UT804. A packet does not name its model, and the CH9325 starts at 2400 baud, where only the UT804
-is heard: a UT803 talks at 19200, so it is not detected and has to be named (`--device ut803`). A
-family seen on a new cable joins detection there by being listed on it.
+carries the UT80x family alone — the UT803/UT804, and the UT71 and Voltcraft VC920/VC940/VC960,
+which send the UT804's packets; it is receive-only past its init, which already sends `0x5A`,
+so detection there is a single listen window that takes any whole CR LF packet as a UT804. A
+packet does not name its model, so a UT71 or VC9x0 is claimed as a UT804 and has to be named
+(the GUI's device chip, saved once, or `--device ut71ab` / `ut71cde` / `vc920`); and the CH9325
+starts at 2400 baud, where only the UT804 is heard: a UT803 talks at 19200, so it is not detected
+and has to be named (`--device ut803`). A family seen on a new cable joins detection there by
+being listed on it.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a
@@ -183,6 +186,7 @@ worth. Extractor errors are ignored, never propagated.
 | Stale frame from an earlier session | CH9329 does not purge RX on open; a UT61+ mid-poll or a UT181A left streaming | Family evidence arriving before the probe reply | A name frame outranks a measurement frame within the window; a lone 14-byte UT61+ frame falls back to `ut61eplus` with `reported_name: None` and a WARN |
 | UT181A vs UT171 ambiguity | Same framing and type byte; payload lengths overlap (UT181A 19 bytes without aux or bargraph, UT171 16/22) | Wrong one of the two | Payload ≥ 31 → UT181A; a payload past 21 bytes is past the UT171's extended frame, and a frame right after SET_MONITOR is the UT181A's, so the UT171 rule declines both; what is left before any LE16 trigger → UT171 with a WARN; recorded in the backlog; parse-based arbitration once UT171 hardware exists |
 | VC650BT reported as VC-880 | The two Voltcraft meters speak a byte-identical protocol, so no frame tells them apart | The wrong name on screen, readings unaffected | Pick the VC650BT chip or `--device vc650bt` to carry the right name; same tables either way |
+| UT71 or VC9x0 reported as UT804 | The handhelds send the UT804's packets, so no frame tells them apart | The wrong name, the UT804's specs and range labels (a UT71A/B's 2 V range reads 4V), readings unaffected | Pick the UT71A/B, UT71C/D/E or Voltcraft VC920 chip once — the GUI saves it — or `--device ut71ab` / `ut71cde` / `vc920`; same decoding either way |
 | Unknown UT61+ name | UT61D+/UT161x/UT60BT names never seen; a future model | Reading works, tables may be off | Fall back to `ut61eplus` tables, keep `reported_name`, notice "meter reports X, using UT61E+ tables"; ask the user to report the name; registry aliases absorb spelling variants. What the GUI saves is that fallback entry, and its toast names the model the meter reported, which is what the user has to quote |
 | Probe side effect on the wrong meter | The UT171 connect is UT181A opcode `0x0A` (start recording); SET_MONITOR `0x05` meaning on a UT171 unknown; `0x5F` on VC-8x0/UT171/UT181A unknown | A recording started, a beep, or nothing | Order: `0x5F` first (registry order puts the most common meter first, and it is the most verified probe, replying within 200 ms), the UT171's `send_after` putting the UT181A trigger before the connect, so a UT181A with Communication ON that answers inside its own window is identified before `0x0A` goes out — a reply that only finishes arriving after that window's deadline is not, and the backlog carries the gap; one with Communication OFF ignores everything; each exposure listed in the backlog for reporters to confirm; `--device` avoids probing entirely |
 | Probe changes meter state | SET_MONITOR left on; the VC-890 ack burst | None expected | SET_MONITOR is what the UT181A init sends anyway; the acks are what the vendor software sends before every command |

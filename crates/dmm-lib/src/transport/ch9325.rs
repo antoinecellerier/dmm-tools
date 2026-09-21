@@ -1,9 +1,10 @@
 //! WCH CH9325 HID-to-UART transport.
 //!
 //! The CH9325 (or its predecessor HE2325U) is found in bench meters like the
-//! UT632, UT803, and UT804. It uses 8-byte HID reports with a different framing
-//! from both CP2110 (64-byte, length-prefixed) and CH9329 (65-byte, report-ID +
-//! length).
+//! UT632, UT803, and UT804; the UT71 and Voltcraft VC9x0 apps set up their
+//! cables as a CH9325 too (docs/research/ut71/reverse-engineered-protocol.md
+//! §1). It uses 8-byte HID reports with a different framing from both CP2110
+//! (64-byte, length-prefixed) and CH9329 (65-byte, report-ID + length).
 //!
 //! Key differences:
 //! - RX: first byte = `0xF0 + payload_length`, then up to 7 UART bytes

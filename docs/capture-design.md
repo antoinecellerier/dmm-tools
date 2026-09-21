@@ -248,7 +248,7 @@ carrying the old `screen` string still load, so a resume across versions works.
 ## G. Preparation up front
 
 Before the first step, capture lists what the run needs — shorted leads, a DC source, a
-thermocouple, a live wire, a transistor, an SCR — derived from the `needs` tag on steps and
+thermocouple, a live wire, a power adapter with a load, a transistor, an SCR — derived from the `needs` tag on steps and
 numbered in `Need::ALL` order, each line naming the steps waiting on it. The user gives the
 numbers of anything they haven't got and those steps are marked `skipped` with `error:
 "skipped: no <label>"` before the run starts, so the question is asked once rather than met

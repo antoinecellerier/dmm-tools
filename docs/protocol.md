@@ -17,11 +17,13 @@ tables, flag bytes, command encoding, and hardware-verified behavior.
 - [UT171 series](research/ut171/reverse-engineered-protocol.md)
 - [UT181A](research/ut181/reverse-engineered-protocol.md)
 - [UT803 / UT804 — proprietary structured data in 11-byte CR LF packets](research/ut803/reverse-engineered-protocol.md)
+- [UT71A–E — the UT804's packets from a handheld; covers the Voltcraft VC920/VC940/VC960](research/ut71/reverse-engineered-protocol.md)
 
 ## Voltcraft
 
 - [VC880](research/vc880/reverse-engineered-protocol.md)
 - [VC890](research/vc890/reverse-engineered-protocol.md)
+- VC920 / VC940 / VC960 — UT71 rebrands, in the [UT71 spec](research/ut71/reverse-engineered-protocol.md)
 
 ## Shared infrastructure
 
@@ -30,9 +32,10 @@ differ in the details: UT61+/UT161, UT8803, VC880, and VC890 use a
 1-byte length plus a 16-bit **big-endian** sum checksum, while UT171
 and UT181A use a 2-byte **little-endian** length (counting payload +
 checksum) plus a 16-bit **little-endian** sum. UT8802 uses a `0xAC`
-single-byte header with BCD frames and no checksum, and UT803/UT804
-send proprietary structured data in 11-byte packets ending CR LF — see
-the per-family docs for the exact wire format.
+single-byte header with BCD frames and no checksum, and UT803/UT804 —
+and the UT71 and VC920/VC940/VC960 with them — send proprietary
+structured data in 11-byte packets ending CR LF — see the per-family
+docs for the exact wire format.
 
 The UART byte stream is transport-agnostic within each family. Three
 HID bridge chips appear across the supported devices:
@@ -42,7 +45,10 @@ HID bridge chips appear across the supported devices:
 - **CH9329** (WCH) — bidirectional, driverless, found on newer UT-D09
   cables for UT181A / UT171 / UT243, and reported on a UT61B+.
 - **CH9325** (QinHeng / HE2325U) — HID-to-UART, used by UT803/UT804
-  and some UT-D04 cables. The UT803/UT804 stream without a host request
+  and some UT-D04 cables; the UT71 apps set their cable up as one, and
+  which chip the UT71 cable and Voltcraft's VC9x0 USB adapter carry is
+  unverified ([UT71 spec](research/ut71/reverse-engineered-protocol.md)
+  §1.1). These meters stream without a host request
   and no command for them is known; the UNI-T SDK writes one `0x5A`
   byte at init, and the host-to-meter report framing is
   community-sourced ([UCI bench spec](research/uci-bench-family/reverse-engineered-protocol.md) §4.2, §9).

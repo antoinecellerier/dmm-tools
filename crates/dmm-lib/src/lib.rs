@@ -165,7 +165,9 @@ struct KnownTransport {
 /// UT-D09 covers UT61x+/UT161x/UT171x/UT880x, the Voltcraft meters and older
 /// UT181A units; the CH9329 UT-D09 variant is sold for the UT181A and UT171
 /// series and is confirmed on a UT61B+ (issue #19); the CH9325 UT-D04 is
-/// what the UT803/UT804 use.
+/// what the UT803/UT804 use, and the UT71 and Voltcraft VC9x0, which send
+/// the UT804's packets, are taken to use it too
+/// (docs/research/ut71/reverse-engineered-protocol.md §1).
 ///
 /// Two things read it. Opening only orders the candidates —
 /// [`open_first_match`] still falls back to the remaining transports, so an
@@ -771,7 +773,7 @@ mod tests {
             .map(|kt| kt.name)
             .collect();
 
-        assert_eq!(ordered[0], "CH9325", "UT803/UT804 use the CH9325 UT-D04");
+        assert_eq!(ordered[0], "CH9325", "the UT80x family uses the CH9325");
         assert_eq!(
             ordered.len(),
             KNOWN_TRANSPORTS.len(),
@@ -793,8 +795,9 @@ mod tests {
         assert!(devices_on_bridge("no such bridge").is_empty());
     }
 
-    /// The CH9325 UT-D04 is the UT803/UT804's cable and nothing else's; the
-    /// help it prints must not offer a UT61+ setup to a UT803 owner.
+    /// The CH9325 carries the UT80x family (UT803/UT804, UT71, VC9x0) and
+    /// nothing else; the help it prints must not offer a UT61+ setup to a
+    /// UT803 owner.
     #[test]
     fn ch9325_carries_exactly_the_ut80x_family() {
         let on_bridge: Vec<&str> = devices_on_bridge("CH9325").iter().map(|d| d.id).collect();

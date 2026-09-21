@@ -23,6 +23,7 @@
 //! test rather than being ignored, so a typo can't silently check nothing.
 
 use dmm_lib::flags::Flag;
+use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::resolve_device;
 use dmm_lib::protocol::{Protocol, capture_reports};
 use serde::Deserialize;
@@ -108,13 +109,29 @@ fn discover_golden_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Check one fixture against what its device's parser produces.
-fn check_fixture(protocol: &dyn Protocol, stem: &str, path: &Path) {
+/// Read one fixture file.
+fn load_case(path: &Path) -> GoldenTestCase {
     let yaml_str = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    let case: GoldenTestCase = serde_yaml_ng::from_str(&yaml_str)
-        .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()));
+    serde_yaml_ng::from_str(&yaml_str)
+        .unwrap_or_else(|e| panic!("cannot parse {}: {e}", path.display()))
+}
 
+/// Check one fixture against what its device's parser produces.
+fn check_fixture(protocol: &dyn Protocol, stem: &str, path: &Path) {
+    let case = load_case(path);
+    let measurement = check_reading(protocol, stem, &case);
+    if let Some(resolution) = &case.resolution {
+        assert_eq!(
+            protocol.spec_info(&measurement).map(|s| s.resolution),
+            Some(resolution.as_str()),
+            "golden {stem}: resolution mismatch"
+        );
+    }
+}
+
+/// Check a fixture's reading, everything but the resolution, and return it.
+fn check_reading(protocol: &dyn Protocol, stem: &str, case: &GoldenTestCase) -> Measurement {
     let payload = decode_hex(&case.raw_hex);
     let (parsed, reports) = capture_reports(|| protocol.parse_payload(&payload));
     let measurement = parsed.unwrap_or_else(|e| panic!("golden {stem}: parse failed: {e}"));
@@ -148,14 +165,7 @@ fn check_fixture(protocol: &dyn Protocol, stem: &str, path: &Path) {
         );
     }
     assert_known_flag_names(stem, &case.flags);
-
-    if let Some(resolution) = &case.resolution {
-        assert_eq!(
-            protocol.spec_info(&measurement).map(|s| s.resolution),
-            Some(resolution.as_str()),
-            "golden {stem}: resolution mismatch"
-        );
-    }
+    measurement
 }
 
 #[test]
@@ -187,6 +197,25 @@ fn golden_fixtures_parse_as_recorded() {
         "golden: {passed} fixtures passed across {} devices",
         dirs.len()
     );
+}
+
+/// The UT71C/D/E sends the UT804's packets and shows the UT804's range
+/// labels (docs/research/ut71/reverse-engineered-protocol.md §2, §3.5), so
+/// every UT804 fixture reads the same under it. It has no spec tables, so
+/// the resolution is left out.
+#[test]
+fn ut804_fixtures_read_the_same_as_a_ut71cde() {
+    let device = resolve_device("ut71cde").expect("ut71cde is in the registry");
+    let protocol = (device.new_protocol)();
+    let files = discover_golden_files(&golden_root().join("ut804"));
+    assert!(!files.is_empty(), "no UT804 golden files");
+    for path in &files {
+        let stem = format!(
+            "ut804/{} as ut71cde",
+            path.file_stem().unwrap().to_string_lossy()
+        );
+        check_reading(protocol.as_ref(), &stem, &load_case(path));
+    }
 }
 
 /// A fixture that misspells a flag name must fail rather than quietly expect
