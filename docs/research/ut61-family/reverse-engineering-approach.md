@@ -38,7 +38,10 @@ tables, and bar graph segment count.
    which fails; the same path on `meters.uni-trend.com.cn` works. Read
    2026-09-18 from the rendered slides. The only protocol description UNI-T
    publishes for the family: line settings, framing, command table, mode
-   table, a range table per model and the status bits. Tagged [VENDOR-DOC]
+   table, a range table per model and the status bits. Its body also covers
+   the **UT216XD** clamp meter, which the title leaves out: slides 4 and 8 note
+   that it has no bargraph, so `Msg[12]-Msg[13]` can be ignored, and give it no
+   range table of its own. Tagged [VENDOR-DOC]
 7. **UT61E+ PC software on the same page** (uploaded 2023-02-03) — its
    installer is Software V2.02 unchanged (below)
 

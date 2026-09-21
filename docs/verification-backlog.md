@@ -20,6 +20,7 @@ Items that need real components or specific setups to verify.
   - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
   - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
   - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
+  - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
@@ -1516,6 +1517,23 @@ run that tells them apart, one step at a time on the meter:
 A frame taken while the symbol is lit would also confirm bit 3 (the spec's
 "Must Verify" item 1).
 
+### UT216XD: the UT61+ deck specifies a clamp meter we do not list
+
+Read from the archived deck 2026-09-21 (ut61-family approach doc, source 6).
+Its frame section names the **UT216XD** beside the UT61+, UT161 and UT202S, the
+only stated difference being that the meter has no bargraph, so
+`Msg[12]-Msg[13]` can be ignored. The deck's function table already carries the
+clamp modes (`0x16` clamp ACA, `0x17` clamp DCA, `0x1C` clamp LPF, `0x1D` clamp
+AC+DC).
+
+Two things are missing before it could be added: the deck gives range tables
+for the UT61B+/D+, UT61E+ and UT202S but **none for the UT216XD**, and it
+states no transport — the deck is a Bluetooth protocol, and the model has no
+page in UNI-T's Chinese catalogue. No archived source fills the gap: the
+iDMM2.0 APK has no UT216 package or range asset either (checked 2026-09-21), so
+the ranges would have to come from hardware. Tracked as a candidate in
+`docs/research/new-device-candidates.md`.
+
 ### Vendor sources not yet read
 
 Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
@@ -1544,9 +1562,15 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
 - **iDMM2.0 Android app** (2025-12-20), UNI-T's Bluetooth client for the
   UT61+/UT171/UT181A pages' meters, archived in `references/idmm2/`,
   unanalysed. A source for the BLE transport and the UT202S.
-- **Protocol documents for families we don't support**: UT71 series (basis
-  of the Tenma 72-7730 candidates), the older UT61E and UT61B, and the
-  Voltcraft VC-870 (Conrad item 124603, IN01).
+- ~~**UT71 series and UT81 series interface protocols**~~ — **DONE
+  2026-09-21**: both fetched and read, archived with provenance in
+  `references/ut71/` and `references/ut81/`, and written up in
+  `docs/research/new-device-candidates.md`. The UT71 archive also holds the
+  same document filed as the Voltcraft VC920/940/960 protocol; the UT81 one
+  covers the classic UT81A/B, not the current UT81A+–D+.
+- **Protocol documents for families we don't support**: the older UT61E and
+  UT61B (both are the chipset datasheets — ES51922 and FS9922-DMM3 — not
+  UNI-T documents), and the Voltcraft VC-870 (Conrad item 124603, IN01).
 
 ### VC-890 VOID readings are plotted as valid
 
