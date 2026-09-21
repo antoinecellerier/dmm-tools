@@ -16,7 +16,7 @@ Rust workspace for communicating with digital multimeters via USB (CP2110, CH932
 - `cargo clippy --workspace --all-targets -- -D warnings` (must pass clean)
 - `cargo fmt --check`
 
-A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite on every commit. Fix failures; never bypass with `--no-verify`.
+A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite on every commit; a commit-msg hook (`git-hooks/commit-msg`) rejects a `Claude-Session:` trailer. Fix failures; never bypass with `--no-verify`.
 
 ## Working with the user
 
