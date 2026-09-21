@@ -164,46 +164,47 @@ also a Voltcraft VC920/VC940/VC960 decoder.
 
 ### UNI-T UT632 / UT632N
 
-**Same bridge as the UT803, a different decoder — and the vendor code for it is
-already in `references/`.**
+**Same bridge as the UT803, a different framing — and the vendor code we hold
+decodes nothing.**
 
 | Aspect | Details |
 |--------|---------|
 | Models | UT632, UT632N (bench DMM) |
 | Connection | USB HID, driverless |
 | VID:PID | `1A86:E008` — the CH9325 bridge we already drive |
-| Protocol | Not the UT803's — its vendor app takes a different handler. What that handler decodes is open; see below |
+| Protocol | Not the UT803's. The UT803 app's UT632 configuration ends each frame at a byte whose high nibble is E and decodes nothing; what the frames carry needs a capture. Spec: [research/ut632](ut632/reverse-engineered-protocol.md) |
 | Vendor document | UNI-T's shared bench programming manual V1.1 lists it beside the UT803/UT804/UT8802/UT8803 with the device address `[C:DM][D:T632][T:HID][PID:0xe008][VID:0x1a86]`. No UT632 protocol document exists on either Chinese site |
 
 The UCI layer these bench meters share is already specified in
 [research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md),
 which names the UT632/UT632N throughout.
 
-**The UT803 vendor software we already hold is the UT632's software too.** Its
-`FormCreate` brands itself "UT632 Interface Program _Ver: 2.00" behind a
-`UT632` checkbox, and that checkbox installs **`H60BRData`** — not the
-`H70BRData` that the `IFUT803`, `IFUT70B`, `IFUT60D`, `IFPR3315` and `IFUT61C`
-boxes install. The same app also carries UT60D/UT60E, UT70B, UT61A-E, PR3315
-and 5198x boxes, and a `UT71D` box whose field nothing in the decompile reads.
+**The UT803 vendor software we already hold carries a UT632 configuration that
+the shipped form does not select.** Its `FormCreate` brands itself "UT632
+Interface Program _Ver: 2.00" behind a `UT632` checkbox that the shipped form
+leaves unchecked and out of view; the checked `IFUT803` box wins, so the exe
+runs as the UT803 app. The `UT632` box installs **`H60BRData`** on the serial
+port — not the `H70BRData` of the UT803 path — and no HID handler at all. The
+same app also carries UT60D/UT60E, UT70B, UT61A-E, PR3315 and 5198x boxes, and
+a `UT71D` box whose field nothing in the decompile reads.
 
-So the one thing established is that **the UT632 does not take the UT803's
-path**. What `H60BRData` decodes is not: in this binary it formats incoming
-bytes into hex strings and calls no display decoder at all — `LcdDisplay60B`
-does not exist here, only `LcdDisplay70B`, which `H70BRData` calls. A handler
-of the same name in UT804.exe is the RS232 side of that app's UT60A/B/C path,
-which reads 14 bytes whose high nibbles spell `123456789ABCDE` and 7-segment
-decodes them ([research/ut803 §2.4](ut803/reverse-engineered-protocol.md)) —
-suggestive, not evidence, since the two binaries differ. `[UNVERIFIED]`: what
-the UT632 actually sends, and whether its HID path and this RS232 handler
-agree.
+`H60BRData` ([research/ut632](ut632/reverse-engineered-protocol.md)) reads
+the port at 2400 baud, ends each frame at a byte whose high nibble is E and
+decodes nothing — UT803.exe holds no decoder for it. The same routine in UT804.exe requires 14 bytes whose
+high nibbles spell `123456789ABCDE` and 7-segment decodes them
+([research/ut803 §2.4](ut803/reverse-engineered-protocol.md)), so the UT632
+most likely sends 14-byte frames with index high nibbles and the data in the
+low nibbles `[DEDUCED]`. It is not the UT803/UT804's 11-byte CR LF packets,
+none of whose bytes has high nibble E. What the low nibbles encode — LCD
+segments as on the UT60A/B/C, or something else — is `[UNVERIFIED]` and needs
+a capture, as do the frame length, the line format and whether the meter needs
+a button press to send.
 
-The first question is therefore what `H60BRData` does with its bytes, and
-`references/ut800/ut803/` already holds what is needed to answer it — no
-hardware, no new download. Should the UT632 turn out to use the 14-byte
-index-nibble framing, the extractor for it is recoverable from git:
-`extract_frame_fs9721`, removed in 1693093 when the UT804 turned out to send
-11-byte packets instead. Only the framing is reusable — the parser above it
-read those nibbles as the UT803/UT804 structured layout, not as LCD segments.
+Should the UT632 use the 14-byte index-nibble framing, the extractor for it is
+recoverable from git: `extract_frame_fs9721`, removed in 1693093 when the UT804
+turned out to send 11-byte packets instead. Only the framing is reusable — the
+parser above it read those nibbles as the UT803/UT804 structured layout, not as
+LCD segments.
 
 ---
 
@@ -562,7 +563,7 @@ vendor software. **Not a priority target.**
 | **EEVBlog 121GW** | BLE | Largest enthusiast community (292-page thread), fragmented software | Moderate |
 | **OWON B35T+/B41T+** | BLE | Popular budget BLE meters, no cross-platform GUI, proprietary dongle required for PC | High |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
-| **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive, and its vendor software is already decompiled in `references/`; but it takes a different handler from the UT803, so the `ut80x` parsing may not carry over | Unmeasured |
+| **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 
 ### Tier 3: Lower priority
 

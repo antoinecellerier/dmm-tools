@@ -240,7 +240,9 @@ Program _Ver: 1.00":
 
 UT803.exe's `Read` handler (VA 0x55CF20) collects 14 low nibbles for
 the hidden label and calls no parser. UT803.exe has no 7-segment
-decoder.
+decoder. Its own `H60BRData` (VA 0x5580F0), installed by the `UT632` and
+`IFUT60E` boxes, ends each frame at a byte whose high nibble is E and
+decodes nothing (`../ut632/reverse-engineered-protocol.md`).
 
 ---
 

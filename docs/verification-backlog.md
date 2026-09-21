@@ -21,6 +21,7 @@ Items that need real components or specific setups to verify.
   - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
   - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
+  - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
@@ -1533,6 +1534,24 @@ page in UNI-T's Chinese catalogue. No archived source fills the gap: the
 iDMM2.0 APK has no UT216 package or range asset either (checked 2026-09-21), so
 the ranges would have to come from hardware. Tracked as a candidate in
 `docs/research/new-device-candidates.md`.
+
+### UT632: the vendor app frames its stream but decodes nothing
+
+Read from UT803.exe 2026-09-21 (`docs/research/ut632/`). The app carries a
+UT632 configuration the shipped form does not select. Selected, it reads the
+serial port at 2400 baud, ends each frame at a byte whose high nibble is E, and
+displays nothing: UT803.exe holds no decoder for it, and it installs no HID
+handler. UT804.exe's copy of the same handler requires 14 bytes whose high
+nibbles spell `123456789ABCDE` and 7-segment decodes them, which is where the
+14-byte index-frame reading comes from `[DEDUCED]`.
+
+A UT632 capture must settle the payload encoding (LCD segments as on the
+UT60A/B/C, or not), the frame length, the line format, whether the meter needs
+a button press to send, and whether the UT632N differs. UNI-T's general-purpose
+PC software ("Vendor sources not yet read" below) is the other vendor source
+not yet opened. Tracked as a candidate in
+`docs/research/new-device-candidates.md`; the 14-byte extractor is recoverable
+from 1693093 (`extract_frame_fs9721`, framing only).
 
 ### Vendor sources not yet read
 
