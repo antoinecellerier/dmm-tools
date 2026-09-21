@@ -371,11 +371,15 @@ given (issue #16, 2026-09-18):
 | B (11) | Diode | V | Ω, SELECT | [HARDWARE] |
 | C (12) | Frequency; duty cycle with the sign bit (§3.6) | Hz, kHz, MHz; % | mV⎓ / Hz Duty, SELECT | [HARDWARE] |
 | D (13) | Temperature | °F | °C °F, SELECT | [VENDOR] |
-| E (14) | Unknown glyph, possibly hFE | — | none | [VENDOR] |
+| E (14) | Power (`../ut71/reverse-engineered-protocol.md` §3.2) | W | none | [VENDOR] |
 | F (15) | 4-20 mA loop current as % | % (vendor string `mA%`) | mA %, SELECT | [HARDWARE] |
 
-The UT804 has no ADP, logic, AC mV or tachometer position (Table 2-1),
-and its reporter found none: code E is in the vendor app only.
+Code E is power [DEDUCED]: UNI-T's UT71 apps, which run this same
+parser, draw the unit W with the point after digit 4, and the UT71E has a
+power position (`../ut71/reverse-engineered-protocol.md` §3.2). The UT804 has no power,
+ADP, logic, AC mV or tachometer position (Table 2-1), and its reporter
+found none: code E is in the vendor app only. *Corrected 2026-09-21;
+earlier revisions called E an unknown glyph, possibly hFE.*
 
 **[VENDOR-DOC]** The UT804 sheet's function table agrees on codes 1-D and
 F. It names code A `Fm` (likely 蜂鸣, buzzer: the meter sends it on
@@ -457,6 +461,9 @@ AUTO, and RANGE sets bit 1. The sign does not:
 every negative reading and signed zero from the #16 meter had bit 2 set and
 bit 3 clear (status `5`, or `4` without AUTO), which is also where the
 vendor app reads it (§7.4 item 2). The meter sends the sign in bit 2.
+UNI-T's UT71 sheet, made from the same template, puts the sign in bit 2
+(`x1xx`), where the meter sends it
+(`../ut71/reverse-engineered-protocol.md` §3.4).
 
 Where low battery shows, if at all, is [UNVERIFIED]; the packet has no
 nibbles 12-14 (§2.1). HOLD sends nothing (§4.2).
@@ -548,7 +555,7 @@ command [VENDOR-DOC].
 | Display count | 6000 (3¾ digit, max 5999) | 40000 (4¾ digit), 4000 when RANGE is held at power-on [KNOWN] (UT804 manual) |
 | Mode count | V, mV, µA, mA and A (DC and AC), Ω, continuity, diode, capacitance, Hz, °C, °F, hFE, tachometer, ADP [KNOWN] (UT803 manual) | 15 codes, 14 on the dial (§3.4) |
 | RPM mode | Yes (`kRPM` unit string) | No (manual Table 2-1) [HARDWARE] |
-| ADP/Logic mode | Not seen | No dial position; code 14 in the app only (§3.4) [HARDWARE] |
+| ADP/Logic mode | Not seen | No dial position (§3.4) [HARDWARE]; code 14, in the app only, is power |
 | Temperature | Yes, °C and °F [KNOWN] (UT803 manual p.48) | Yes (modes 6 and D) |
 | AC+DC mode | On the meter, not on the wire: "+DC, hFE and β cannot output to the computer" [KNOWN] (UT803 manual p.37) | Yes (nibble 8 = 3) [HARDWARE] |
 | Data output on | RS232 button (UT803 manual p.36) | SEND button (§4.2) [HARDWARE] |
@@ -576,12 +583,16 @@ unit_372.ttf) where ASCII characters map to measurement symbols:
 | `&` | Beeper symbol |
 | `@` | `L` (overload text, §7.4 item 6) |
 | `$` | Battery symbol |
-| `W` | Unknown (ADP mode unit) |
+| `W` | W, the unit of code E, power (§3.4) |
 
 *Corrected 2026-06 from the rendered fonts (§7.4 item 7). Earlier
 revisions, from string extraction and the mode detection logic alone,
 gave `#` as diode, `?` as continuity, `@` as the AC indicator and `&` and
 `$` as unknown. The `W` row is theirs; §7.4 item 7 does not cover it.*
+
+*Corrected 2026-09-21: the `W` row read "Unknown (ADP mode unit)"; the
+UT71 apps, which share this parser, draw it as the power unit
+(`../ut71/reverse-engineered-protocol.md` §3.2).*
 
 ---
 
@@ -620,8 +631,8 @@ the ranges it sent are confirmed (§3). Still open:
 - Line format on the wire (§1.2): 7O1 on a UT804; the UT803's is open
 - Digit nibbles `B`, `D`-`F` (§3.2)
 - Whether nibble 4 = 'B' guard condition has meaning
-- The UT804's °F packets (code D), and whether code E or 0 (AC mV, the
-  sheet only) is ever sent
+- The UT804's °F packets (code D), and whether code E (power, no UT804
+  position) or 0 (AC mV, the sheet only) is ever sent
 
 ### 7.4 RESOLVED (2026-06): Sign, Nibbles 12-14, and the Two-Model Split
 
@@ -688,6 +699,7 @@ re-derived independently by an adversarial second pass:
    reused since negative frequency is impossible;
    ut804-decompiled.txt:224271-224283), D=Temp °F,
    E=unknown glyph (possibly hFE), F="mA%" (likely 4-20 mA loop).
+   *2026-09-21: E is power, unit W (§3.4).*
    Frequency unit boundaries: ranges 0-1 Hz, 2-4 kHz, 5-7 MHz; Ω:
    range 1 Ω, 2-4 kΩ, 5-6 MΩ. The unit strings are appended at
    ut804-decompiled.txt:224075-224184, and the range switches are at
