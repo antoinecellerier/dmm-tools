@@ -68,7 +68,9 @@ The top bar contains:
 - **Clear** button — resets graph history and statistics (does not affect
   a recording)
 - **Connection status** — colored dot (green = connected, orange =
-  reconnecting/paused, gray = disconnected) with device name
+  reconnecting/paused, gray = disconnected) with the device name and the link
+  it is on: `UT61E+ · USB cable` or `UT61E+ · Bluetooth`. A window too narrow
+  for the link drops it; hovering the status names it in full either way
 - **Version** (right side) — click it to open the "What's New" changelog
   popup. On release upgrades, this popup opens automatically on first launch.
 - **Help / GitHub** link — opens the project page

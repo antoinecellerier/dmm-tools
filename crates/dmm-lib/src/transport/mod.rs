@@ -43,7 +43,7 @@ pub trait Transport: Send {
 
     /// Human-readable transport name (e.g. "CP2110", "CH9329").
     fn transport_name(&self) -> &'static str {
-        "unknown"
+        NO_LINK
     }
 
     /// For a Bluetooth link, the [`crate::OpenOptions::adapter`] value that
@@ -53,6 +53,14 @@ pub trait Transport: Send {
         None
     }
 }
+
+/// What a transport with no link behind it calls itself.
+///
+/// The mock and a replay produce their readings in the process, so there is
+/// no cable or radio to name — [`crate::binary_help::short_link_name`] reads
+/// this back as "no link" rather than guessing a cable. What a replay says it
+/// is on comes from the file instead, not from here.
+pub(crate) const NO_LINK: &str = "unknown";
 
 /// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`
 /// works for runtime transport selection (CP2110 vs CH9329).

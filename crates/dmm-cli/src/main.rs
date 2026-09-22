@@ -1072,8 +1072,11 @@ fn cmd_read(
         let model = (format == OutputFormat::Replay)
             .then(|| dmm.get_name().ok().flatten())
             .flatten();
+        // The link these readings come over, so a session played back from
+        // the file says what it was recorded on rather than nothing.
+        let link = dmm_lib::binary_help::short_link_name(dmm.transport().transport_name());
         let out = read_output(format, &dmm, transform, integrate, || {
-            dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref())
+            dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref(), link)
         });
         info!("connected, starting measurement loop");
         run_read_loop(
@@ -1095,7 +1098,7 @@ fn cmd_read(
         // `--format replay` is refused for a device that synthesises its
         // readings, so the header below is never built.
         let out = read_output(format, &dmm, transform, integrate, || {
-            dmm_lib::replay::header(selection_id(selection), &recorded_now(), None)
+            dmm_lib::replay::header(selection_id(selection), &recorded_now(), None, None)
         });
         // Not hardware, so the selection names a registry entry — `auto` is a
         // cable to open and never lands here.
@@ -1251,7 +1254,14 @@ fn read_replay(
     // A copy keeps the session it came from, so the frames it holds export at
     // the times they were measured at whichever file they are played from.
     let out = read_output(format, &dmm, transform, integrate, || {
-        dmm_lib::replay::header(replay.device.id, &replay.recorded, replay.model.as_deref())
+        // The link the file recorded, not the playback's: re-exporting a
+        // recording must not turn a Bluetooth session into a cable one.
+        dmm_lib::replay::header(
+            replay.device.id,
+            &replay.recorded,
+            replay.model.as_deref(),
+            replay.link,
+        )
     });
     // A log line, not a banner: a replay's output is what the meter's was,
     // and a note on stderr would land in every doc snippet taken from one.

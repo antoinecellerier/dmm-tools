@@ -619,7 +619,12 @@ mod tests {
         let mut m = make_test_measurement(0x02, 0x30, b" 1.6109", (0x03, 0x02), (0x30, 0x30, 0x30));
         let first = m.timestamp;
         let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
-            dmm_lib::replay::header("ut61eplus", "2026-09-16T10:22:31.123+02:00", Some("UT61E+"))
+            dmm_lib::replay::header(
+                "ut61eplus",
+                "2026-09-16T10:22:31.123+02:00",
+                Some("UT61E+"),
+                Some("Bluetooth"),
+            )
         });
 
         let mut file = Vec::new();
@@ -637,6 +642,8 @@ mod tests {
         let replay = Replay::parse(&text).expect("parses as a replay");
         assert_eq!(replay.device.id, "ut61eplus");
         assert_eq!(replay.model.as_deref(), Some("UT61E+"));
+        // The link the run was on reaches the file and comes back.
+        assert_eq!(replay.link, Some("Bluetooth"));
         // Offsets run from the first frame, not from wherever the session was.
         assert_eq!(replay.duration(), Duration::from_millis(250));
     }
@@ -652,7 +659,7 @@ mod tests {
         // from.
         let m = Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
         let mut output = Output::new(OutputFormat::Replay, CsvLayout::default(), false, || {
-            dmm_lib::replay::header("ut61eplus", "2026-09-16T10:22:31.123+02:00", None)
+            dmm_lib::replay::header("ut61eplus", "2026-09-16T10:22:31.123+02:00", None, None)
         });
 
         let mut file = Vec::new();

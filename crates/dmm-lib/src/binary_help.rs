@@ -87,11 +87,64 @@ pub fn mock_mode_help(intro: &str, example: &str) -> String {
 /// their wording from here so the three cannot drift.
 pub fn link_name(bridge: &str) -> &'static str {
     if bridge == crate::BLUETOOTH {
-        "Bluetooth adapter"
+        BLUETOOTH_ADAPTER
     } else {
-        "USB cable"
+        USB_CABLE
     }
 }
+
+/// The cable link, in both the long and the short form.
+const USB_CABLE: &str = "USB cable";
+
+/// The radio link where the words around it already say what it is.
+const BLUETOOTH_LINK: &str = "Bluetooth";
+
+/// The radio link where they don't.
+const BLUETOOTH_ADAPTER: &str = "Bluetooth adapter";
+
+/// The full name of a link given in its short form, for text with the room
+/// to spell it out — a hover, where the bar had to shorten or drop it.
+///
+/// Takes what [`short_link_name`] returns, so the two forms of one link
+/// cannot come from different wordings.
+pub fn full_link_name(short: &str) -> &'static str {
+    if short == BLUETOOTH_LINK {
+        BLUETOOTH_ADAPTER
+    } else {
+        USB_CABLE
+    }
+}
+
+/// The same link, shortened for a status line that already names the meter,
+/// and `None` where there is no link at all.
+///
+/// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
+/// label around it no longer needs. The mock answers from inside the process,
+/// so it gets no link name.
+pub fn short_link_name(bridge: &str) -> Option<&'static str> {
+    match bridge {
+        crate::transport::NO_LINK => None,
+        crate::BLUETOOTH => Some(BLUETOOTH_LINK),
+        _ => Some(USB_CABLE),
+    }
+}
+
+/// A link name read back from a file, matched against the ones we write.
+///
+/// `None` for anything else, so a recording made by a version that knows a
+/// link this one does not still plays — it just says nothing about the link.
+pub(crate) fn link_from_name(name: &str) -> Option<&'static str> {
+    [USB_CABLE, BLUETOOTH_LINK]
+        .into_iter()
+        .find(|known| *known == name)
+}
+
+/// What a recording with no link recorded is played back as.
+///
+/// Every replay file written before the link was recorded came off a cable,
+/// and a session that says nothing about its link is less use than one that
+/// says the thing all of them had in common.
+pub(crate) const RECORDED_LINK_DEFAULT: Option<&'static str> = Some(USB_CABLE);
 
 /// Line the platform setup hint opens with, whatever the platform.
 const CABLE_CHECK: &str = "Check that the USB cable is plugged in and the meter is powered on.";
@@ -347,6 +400,31 @@ mod tests {
         assert_eq!(link_name(crate::BLUETOOTH), "Bluetooth adapter");
         for bridge in ["CP2110", "CH9329", "CH9325"] {
             assert_eq!(link_name(bridge), "USB cable");
+        }
+    }
+
+    /// The short form keeps the same two links and answers `None` for a
+    /// transport with nothing on the far end, such as the mock's.
+    #[test]
+    fn short_link_name_drops_the_adapter_and_the_link_that_isnt_one() {
+        use crate::transport::Transport;
+        assert_eq!(short_link_name(crate::BLUETOOTH), Some("Bluetooth"));
+        for bridge in ["CP2110", "CH9329", "CH9325"] {
+            assert_eq!(short_link_name(bridge), Some("USB cable"));
+        }
+        assert_eq!(
+            short_link_name(crate::transport::NullTransport.transport_name()),
+            None
+        );
+    }
+
+    /// Both forms of a link have to name the same thing: the short one goes
+    /// on a status line, the full one in the hover that spells it out.
+    #[test]
+    fn the_full_form_of_a_short_link_name_is_the_one_the_errors_use() {
+        for bridge in [crate::BLUETOOTH, "CP2110", "CH9329", "CH9325"] {
+            let short = short_link_name(bridge).expect("a link");
+            assert_eq!(full_link_name(short), link_name(bridge));
         }
     }
 

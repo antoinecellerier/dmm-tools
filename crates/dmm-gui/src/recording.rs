@@ -83,18 +83,22 @@ pub(crate) fn render_json(
 /// spacing its readings actually arrived at. The `# recorded:` line is that
 /// first sample's wall time, which is what pins playback to a clock origin.
 ///
+/// `link` is what the samples arrived over, so a session played back from the
+/// file is on the link the meter was.
+///
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
 pub(crate) fn render_replay(
     samples: &VecDeque<Sample>,
     device_id: &str,
     model: Option<&str>,
+    link: Option<&str>,
 ) -> Option<String> {
     let first = samples.front()?;
     let recorded = first
         .wall_time
         .to_rfc3339_opts(SecondsFormat::Millis, false);
-    let mut out = replay::header(device_id, &recorded, model);
+    let mut out = replay::header(device_id, &recorded, model, link);
     // Offset digits and a newline, plus three characters per payload byte.
     // Frame length is fixed per family, so the first sample sizes the rest.
     out.reserve(samples.len() * (10 + 3 * first.measurement.raw_payload.len()));
@@ -1127,12 +1131,19 @@ mod tests {
     #[test]
     fn render_replay_round_trips_through_the_parser() {
         let samples = replay_samples();
-        let text = render_replay(&samples, "ut61eplus", Some("UNI-T UT61E+"))
-            .expect("frames with wire bytes");
+        let text = render_replay(
+            &samples,
+            "ut61eplus",
+            Some("UNI-T UT61E+"),
+            Some("Bluetooth"),
+        )
+        .expect("frames with wire bytes");
 
         let replay = dmm_lib::replay::Replay::parse(&text).expect("a well-formed recording");
         assert_eq!(replay.device.id, "ut61eplus");
         assert_eq!(replay.model.as_deref(), Some("UNI-T UT61E+"));
+        // The link the session was on, so playing the file back says so too.
+        assert_eq!(replay.link, Some("Bluetooth"));
         assert_eq!(replay.duration(), Duration::from_millis(500));
         chrono::DateTime::parse_from_rfc3339(&replay.recorded)
             .expect("`# recorded:` is what --replay parses as a clock origin");
@@ -1154,8 +1165,9 @@ mod tests {
     /// must not produce an empty one the parser would have to skip.
     #[test]
     fn render_replay_leaves_out_an_unknown_model() {
-        let text = render_replay(&replay_samples(), "ut61eplus", None).expect("frames");
+        let text = render_replay(&replay_samples(), "ut61eplus", None, None).expect("frames");
         assert!(!text.contains("# model:"), "{text}");
+        assert!(!text.contains("# link:"), "{text}");
         assert_eq!(
             dmm_lib::replay::Replay::parse(&text).expect("parses").model,
             None
@@ -1169,8 +1181,8 @@ mod tests {
     fn render_replay_refuses_a_sample_without_a_frame() {
         let mut samples = replay_samples();
         samples[1].measurement.raw_payload = Vec::new();
-        assert!(render_replay(&samples, "ut61eplus", None).is_none());
-        assert!(render_replay(&VecDeque::new(), "ut61eplus", None).is_none());
+        assert!(render_replay(&samples, "ut61eplus", None, None).is_none());
+        assert!(render_replay(&VecDeque::new(), "ut61eplus", None, None).is_none());
     }
 
     /// The export and `dmm-cli read --format json` cannot drift, because both

@@ -210,7 +210,13 @@ impl App {
             }
             ExportFormat::Replay => self
                 .replay_device_id()
-                .and_then(|id| render_replay(samples, id, Some(device_model)))
+                .and_then(|id| {
+                    // What the samples came over, latched with the rest of
+                    // the provenance; the live link only where a recording
+                    // started before a meter answered.
+                    let link = self.capture_layout.link.or(self.connection.link);
+                    render_replay(samples, id, Some(device_model), link)
+                })
                 .ok_or_else(|| {
                     warn!("replay export refused: the buffered samples carry no meter frames");
                     NO_WIRE_FORMAT.to_string()
@@ -480,6 +486,7 @@ mod tests {
             device_id: Some("ut181a"),
             stability: Stability::Experimental,
             feedback_url: String::new(),
+            link: None,
             supported_commands: Vec::new(),
             max_aux_values: 0,
         })

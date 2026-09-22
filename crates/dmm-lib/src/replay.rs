@@ -16,6 +16,7 @@
 //! # device: ut61eplus
 //! # recorded: 2026-09-16T10:22:31.123+02:00
 //! # model: UT61E+
+//! # link: USB cable
 //! 0 02 30 20 31 2E 36 31 30 39 03 02 30 30 30
 //! 101 02 30 2D 30 2E 35 31 33 37 01 00 30 30 31
 //! ```
@@ -72,6 +73,11 @@ pub struct Replay {
     pub recorded: String,
     /// The name the meter reported when the recording was made, if it has one.
     pub model: Option<String>,
+    /// The link the recording came over, named as the binaries name it —
+    /// what a played-back session says it is on, since the playback itself
+    /// has no cable or radio. A file with no `# link:` line is a cable
+    /// recording; one naming a link this version does not know says nothing.
+    pub link: Option<&'static str>,
     /// Non-empty, offsets non-decreasing — both enforced by the parser.
     samples: Vec<(Duration, Vec<u8>)>,
 }
@@ -83,6 +89,7 @@ impl Replay {
         let mut device: Option<&'static SelectableDevice> = None;
         let mut recorded: Option<String> = None;
         let mut model: Option<String> = None;
+        let mut link = crate::binary_help::RECORDED_LINK_DEFAULT;
         let mut samples: Vec<(Duration, Vec<u8>)> = Vec::new();
 
         for (index, raw) in text.lines().enumerate() {
@@ -106,6 +113,10 @@ impl Replay {
                     recorded = Some(value.trim().to_string());
                 } else if let Some(value) = comment.strip_prefix("model:") {
                     model = Some(value.trim().to_string()).filter(|m| !m.is_empty());
+                } else if let Some(value) = comment.strip_prefix("link:") {
+                    // A link we don't know is not a reason to refuse a
+                    // recording: the frames are the file, the link is a label.
+                    link = crate::binary_help::link_from_name(value.trim());
                 }
                 // Anything else is a comment: a writer notes where a file came
                 // from, and an unknown key must not strand a whole recording.
@@ -131,6 +142,7 @@ impl Replay {
             device,
             recorded,
             model,
+            link,
             samples,
         })
     }
@@ -199,12 +211,27 @@ impl Replay {
 
 /// The header lines of a replay file, ending in a newline.
 ///
+/// `link` is the link the readings came over, as
+/// [`crate::binary_help::short_link_name`] names it; left out, the file plays
+/// back as a cable recording, which every file written before the line
+/// existed was.
+///
 /// Callers append [`sample_line`]s to this.
-pub fn header(device_id: &str, recorded_rfc3339: &str, model: Option<&str>) -> String {
+pub fn header(
+    device_id: &str,
+    recorded_rfc3339: &str,
+    model: Option<&str>,
+    link: Option<&str>,
+) -> String {
     let mut out = format!("{MAGIC}\n# device: {device_id}\n# recorded: {recorded_rfc3339}\n");
     if let Some(model) = model {
         out.push_str("# model: ");
         out.push_str(model);
+        out.push('\n');
+    }
+    if let Some(link) = link {
+        out.push_str("# link: ");
+        out.push_str(link);
         out.push('\n');
     }
     out
@@ -485,7 +512,7 @@ mod tests {
     /// A file written the way a recorder writes one, so the tests exercise
     /// [`header`] and [`sample_line`] rather than a hand-typed copy of them.
     fn file(frames: &[(u64, &str)]) -> String {
-        let mut text = header("ut61eplus", RECORDED, Some("UT61E+"));
+        let mut text = header("ut61eplus", RECORDED, Some("UT61E+"), None);
         for (ms, hex) in frames {
             text.push_str(&sample_line(Duration::from_millis(*ms), &payload(hex)));
         }
@@ -535,6 +562,21 @@ mod tests {
         );
     }
 
+    /// The link is written and read back whole, a file that names none plays
+    /// as the cable recording every early file was, and a link this version
+    /// does not know costs the frames nothing.
+    #[test]
+    fn the_recorded_link_round_trips_and_falls_back_to_the_cable() {
+        let mut text = header("ut61eplus", RECORDED, Some("UT61E+"), Some("Bluetooth"));
+        text.push_str(&sample_line(Duration::ZERO, &payload(DCV_BATTERY)));
+        assert_eq!(parsed(&text).link, Some("Bluetooth"));
+
+        assert_eq!(parsed(&three_frames()).link, Some("USB cable"));
+
+        let unknown = text.replace("# link: Bluetooth", "# link: carrier pigeon");
+        assert_eq!(parsed(&unknown).link, None);
+    }
+
     /// Blank lines and comments a writer or a human left behind are not data.
     #[test]
     fn blank_lines_and_unknown_comments_are_ignored() {
@@ -582,7 +624,10 @@ mod tests {
 
     #[test]
     fn a_file_with_no_samples_is_refused() {
-        assert_eq!(rejects(&header("ut61eplus", RECORDED, None)), "no samples");
+        assert_eq!(
+            rejects(&header("ut61eplus", RECORDED, None, None)),
+            "no samples"
+        );
     }
 
     #[test]
@@ -617,7 +662,7 @@ mod tests {
 
     #[test]
     fn a_sample_line_without_a_payload_is_refused() {
-        let text = format!("{}100\n", header("ut61eplus", RECORDED, None));
+        let text = format!("{}100\n", header("ut61eplus", RECORDED, None, None));
         assert!(rejects(&text).contains("no payload"));
     }
 
@@ -628,7 +673,7 @@ mod tests {
     fn a_replayed_reading_carries_its_specs() {
         // AC V on the 400V range, from `tests/golden/ut804/acv_mains.yaml`.
         const UT804_ACV_MAINS: &str = "32 32 37 32 B0 B3 32 31 31 0D 8A";
-        let mut text = header("ut804", RECORDED, Some("UT804"));
+        let mut text = header("ut804", RECORDED, Some("UT804"), None);
         text.push_str(&sample_line(Duration::ZERO, &payload(UT804_ACV_MAINS)));
         let mut dmm = parsed(&text)
             .open(Clock::manual())

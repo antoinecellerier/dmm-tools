@@ -113,6 +113,10 @@ pub(crate) enum DmmMessage {
         stability: Stability,
         /// URL for reporting feedback on experimental protocols.
         feedback_url: String,
+        /// What the meter answered over, for the status line: "USB cable" or
+        /// "Bluetooth" — for a replay, the link its recording was made on.
+        /// `None` for the mock, which is on no link at all.
+        link: Option<&'static str>,
         supported_commands: Vec<String>,
         /// Sub-value slots this meter family can report, from its profile.
         /// Fixes the CSV export's aux column count for the whole recording.
@@ -155,11 +159,16 @@ pub(crate) enum DmmMessage {
 /// `detected` is what identified the meter when nothing named it; `selected`
 /// is the entry the user picked. Exactly one of them is set, and together they
 /// tell the UI which meter it is now looking at.
+///
+/// `recorded_link` is the link a replay file was recorded over — a playback's
+/// own transport is no link at all, so the recording is the only thing that
+/// can say. `None` everywhere else, where the transport answers.
 fn establish_connection<T: Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     detected: Option<Detected>,
     selected: Option<&'static SelectableDevice>,
     query_name: bool,
+    recorded_link: Option<&'static str>,
     msg_tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
 ) {
@@ -174,6 +183,8 @@ fn establish_connection<T: Transport>(
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
     let model_name = profile.model_name.to_string();
+    let link = recorded_link
+        .or_else(|| dmm_lib::binary_help::short_link_name(dmm.transport().transport_name()));
     let device_id = detected
         .as_ref()
         .map(|d| d.device)
@@ -193,6 +204,7 @@ fn establish_connection<T: Transport>(
         device_id,
         stability,
         feedback_url,
+        link,
         supported_commands: cmds,
         max_aux_values,
     });
@@ -210,6 +222,10 @@ pub(super) struct ThreadContext {
     /// so a named meter reaches the UI as a registry entry too.
     pub selected: Option<&'static SelectableDevice>,
     pub query_name: bool,
+    /// The link a replay file was recorded over, for the status line. `None`
+    /// for a meter and for the mock: their transport names their link, or
+    /// says there is none.
+    pub recorded_link: Option<&'static str>,
     pub sample_interval_ms: u32,
     pub stop_flag: Arc<AtomicBool>,
 }
@@ -304,6 +320,7 @@ where
         ctx,
         selected,
         query_name,
+        recorded_link,
         sample_interval_ms,
         stop_flag,
     } = thread_ctx;
@@ -311,7 +328,15 @@ where
     info!("background thread: connecting to device");
     let mut dmm = match open_fn() {
         Ok((mut d, detected)) => {
-            establish_connection(&mut d, detected, selected, query_name, &msg_tx, &ctx);
+            establish_connection(
+                &mut d,
+                detected,
+                selected,
+                query_name,
+                recorded_link,
+                &msg_tx,
+                &ctx,
+            );
             d
         }
         Err(e) => {
@@ -431,6 +456,11 @@ where
                 //  stream itself has no Drop impl — the borrow-release we
                 //  actually need is what reassignment accomplishes here.)
                 let _ = stream;
+                // Release the old link before opening a new one: a Bluetooth
+                // transport disconnects its peripheral on drop, and dropped
+                // after the reopen that would cut the link just brought back
+                // up on the same adapter.
+                drop(dmm);
                 let retry_interval = Duration::from_secs(2);
                 let mut attempt: u32 = 0;
                 let mut last_error: Option<String> = None;
@@ -460,7 +490,13 @@ where
                         Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");
                             establish_connection(
-                                &mut d, detected, selected, query_name, &msg_tx, &ctx,
+                                &mut d,
+                                detected,
+                                selected,
+                                query_name,
+                                recorded_link,
+                                &msg_tx,
+                                &ctx,
                             );
                             dmm = d;
                             break;
@@ -732,5 +768,78 @@ mod tests {
             start.elapsed() >= PAUSE_POLL_INTERVAL,
             "must wait rather than spin"
         );
+    }
+
+    /// A link that drops on the first read, counting how many are open.
+    struct Dropout(Arc<std::sync::atomic::AtomicUsize>);
+
+    impl Dropout {
+        fn open(live: &Arc<std::sync::atomic::AtomicUsize>) -> Self {
+            live.fetch_add(1, Ordering::SeqCst);
+            Self(Arc::clone(live))
+        }
+    }
+
+    impl Drop for Dropout {
+        fn drop(&mut self) {
+            self.0.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    impl Transport for Dropout {
+        fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+        fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> dmm_lib::error::Result<usize> {
+            Err(dmm_lib::error::Error::LinkLost)
+        }
+        fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// A Bluetooth transport disconnects its peripheral when dropped, so a
+    /// reconnect that opened the new link before dropping the old one cut
+    /// the link it had just brought up. The old one has to be gone by the
+    /// time the opener runs again.
+    #[test]
+    fn a_reconnect_releases_the_old_link_before_opening_a_new_one() {
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (seen_tx, seen_rx) = mpsc::channel();
+        let (msg_tx, _msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let opens = std::sync::atomic::AtomicUsize::new(0);
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let open_live = Arc::clone(&live);
+        let open_fn = move || {
+            if opens.fetch_add(1, Ordering::SeqCst) > 0 {
+                let _ = seen_tx.send(open_live.load(Ordering::SeqCst));
+                return Err(dmm_lib::error::Error::Timeout);
+            }
+            dmm_lib::Dmm::new(Dropout::open(&open_live), (entry.new_protocol)()).map(|d| (d, None))
+        };
+        let thread = std::thread::spawn(move || {
+            run_device_thread(
+                open_fn,
+                ThreadContext {
+                    msg_tx,
+                    ctrl_rx,
+                    cmd_rx,
+                    ctx: egui::Context::default(),
+                    selected: None,
+                    query_name: false,
+                    recorded_link: None,
+                    sample_interval_ms: 10,
+                    stop_flag: Arc::new(AtomicBool::new(false)),
+                },
+            )
+        });
+        let open_at_reopen = seen_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the thread reconnects");
+        ctrl_tx.send(ThreadControl::Stop).unwrap();
+        thread.join().unwrap();
+        assert_eq!(open_at_reopen, 0, "the old link was still open");
     }
 }

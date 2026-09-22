@@ -182,6 +182,11 @@ struct CaptureLayout {
     /// the disconnect left behind, not a meter's. The export falls back to the
     /// live connection, as `device` and `device_id` do.
     experimental: Option<bool>,
+    /// The link those samples came over, for the replay export's `# link:`
+    /// line. Taken alongside `device_id` and for the same reason: a
+    /// disconnect clears the connection's link, and a file exported after
+    /// unplugging would then claim the cable every unmarked file is read as.
+    link: Option<&'static str>,
     /// Sub-value slots the connected meter family can report, from its
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.
@@ -278,6 +283,11 @@ pub(super) struct Connection {
     pub(super) stability: dmm_lib::protocol::Stability,
     /// URL for reporting feedback on experimental protocols.
     pub(super) feedback_url: String,
+    /// What the meter is answering over, as the status line names it:
+    /// "USB cable" or "Bluetooth" — for a replay, what its recording was
+    /// made over. `None` while disconnected, and for the mock, which is on
+    /// no link at all.
+    pub(super) link: Option<&'static str>,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
     /// Values the meter can be switched to for each setting the readout
@@ -313,6 +323,7 @@ impl Default for Connection {
             model_name: String::new(),
             stability: dmm_lib::protocol::Stability::Verified,
             feedback_url: String::new(),
+            link: None,
             supported_commands: Vec::new(),
             choices: SettingChoices::default(),
             paused: false,

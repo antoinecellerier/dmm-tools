@@ -15,7 +15,9 @@ impl App {
     /// group (version, Help, ?, settings) wraps to a second row to avoid
     /// clipping. The decision uses cached widget widths from the previous
     /// frame (egui Discussion #3468 pattern) — converges in one frame,
-    /// imperceptible to the user.
+    /// imperceptible to the user. Narrower still, the status drops the link
+    /// it names, which is the one thing on the row the hover can carry
+    /// instead — and which the window's minimum width is computed without.
     ///
     /// The right group is rendered via `show_top_bar_right` in left-to-right
     /// order so that Tab key navigation follows visual reading order
@@ -40,10 +42,22 @@ impl App {
         // whether both fit on one row.
         let left_id = egui::Id::new("top_bar_left_w");
         let right_id = egui::Id::new("top_bar_right_w");
+        let link_id = egui::Id::new("top_bar_link_w");
         let cached_left: f32 = ui.data(|d| d.get_temp(left_id)).unwrap_or(300.0);
         let cached_right: f32 = ui.data(|d| d.get_temp(right_id)).unwrap_or(200.0);
+        // What the link suffix would add. Cached apart from the row's own
+        // width so the row can be measured as if the link were not there —
+        // that width is what the window's minimum comes from, and naming the
+        // link must not stop the window being made as narrow as before.
+        let cached_link: f32 = ui.data(|d| d.get_temp(link_id)).unwrap_or(0.0);
         let spacing = ui.spacing().item_spacing.x;
-        let one_row = cached_left + cached_right + spacing < ui.available_width();
+        let available = ui.available_width();
+        // The link is the first thing the window edge takes: it names
+        // nothing the user has to act on, and the hover spells it out
+        // whether or not the bar has room for it.
+        let show_link = fits_with_link(cached_left, cached_link, available);
+        let link_shown_w = if show_link { cached_link } else { 0.0 };
+        let one_row = cached_left + link_shown_w + cached_right + spacing < available;
 
         // Row 1: device label, action buttons, status indicator
         ui.horizontal(|ui| {
@@ -125,13 +139,19 @@ impl App {
                 }
             }
 
+            // Whether the suffix ends up on the bar this frame, which is what
+            // the row's width has to be corrected by below.
+            let mut link_drawn = false;
             let (dot_color, status_text) = match &self.connection.state {
                 ConnectionState::Connected => {
                     let name = self.connection.device_name.as_deref().unwrap_or("Connected");
+                    let link = self.connection.link.filter(|_| show_link);
+                    link_drawn = link.is_some();
+                    let text = connected_status(name, link, self.connection.paused);
                     if self.connection.paused {
-                        (orange, format!("{name} (paused)"))
+                        (orange, text)
                     } else {
-                        (green, name.to_string())
+                        (green, text)
                     }
                 }
                 ConnectionState::Disconnected => (gray, "Disconnected".to_string()),
@@ -150,16 +170,29 @@ impl App {
             // explicit salt, the auto-derived scope id flips on every
             // state transition and AT loses the Status landmark.
             ui.landmark("status_landmark", egui::accesskit::Role::Status, |ui| {
-                // Decorative status dot — not interactive or focusable.
-                let (rect, _) =
+                // What the bar had no room to say, plus — a replayed session
+                // being a meter session in every visible way, which is the
+                // point — the file it is coming from, said where a human can
+                // find it and a screenshot cannot.
+                let mut hover: Vec<String> = Vec::new();
+                if self.connection.state == ConnectionState::Connected {
+                    hover.push(link_tooltip(self.connection.link, self.replay.is_some()));
+                }
+                if let Some(source) = &self.replay {
+                    hover.push(format!("Replaying {}", source.path.display()));
+                }
+                let hover = hover.join("\n");
+
+                // Status dot — decorative, so not focusable, but it hovers
+                // with the text beside it rather than being a dead spot in
+                // the middle of the status.
+                let (rect, dot) =
                     ui.allocate_exact_size(egui::vec2(12.0, 12.0), egui::Sense::hover());
                 ui.painter().circle_filled(rect.center(), 5.0, dot_color);
                 let status = ui.label(RichText::new(&status_text).small());
-                // A replayed session is a meter session in every visible way,
-                // which is the point — so the file it is coming from is said
-                // where a human can find it and a screenshot cannot.
-                if let Some(source) = &self.replay {
-                    status.on_hover_text(format!("Replaying {}", source.path.display()));
+                if !hover.is_empty() {
+                    dot.on_hover_text(&hover);
+                    status.on_hover_text(&hover);
                 }
 
                 // The EXPERIMENTAL badge names a protocol, so it comes from
@@ -192,8 +225,21 @@ impl App {
                 }
             });
 
-            let left_width = ui.min_rect().right() - left_start;
-            ui.data_mut(|d| d.insert_temp(left_id, left_width));
+            // The link is measured rather than read off the drawn row, so
+            // both numbers mean the same thing whether or not it is on the
+            // bar: what the row needs without the link, and what the link
+            // would add. Only the first reaches the window's minimum size.
+            let link_w = if self.connection.state == ConnectionState::Connected {
+                link_suffix_width(ui, self.connection.link)
+            } else {
+                0.0
+            };
+            let drawn = if link_drawn { link_w } else { 0.0 };
+            let left_width = ui.min_rect().right() - left_start - drawn;
+            ui.data_mut(|d| {
+                d.insert_temp(left_id, left_width);
+                d.insert_temp(link_id, link_w);
+            });
 
             // If wide enough, render right-side items on the same row
             if one_row {
@@ -279,5 +325,138 @@ impl App {
 
         let actual_width = ui.min_rect().right() - before;
         ui.data_mut(|d| d.insert_temp(cache_id, actual_width));
+    }
+}
+
+/// The text beside the status dot while a meter is connected: the meter, the
+/// link it answers over, and whether acquisition is halted.
+///
+/// The link answers the question a second meter or a second cable raises —
+/// which of them this window is watching. A replay names the link its
+/// recording was made over; the mock is on none, and reads as the meter alone.
+/// `link` is `None` for a row too narrow to hold it as well — the hover says
+/// it either way.
+fn connected_status(name: &str, link: Option<&str>, paused: bool) -> String {
+    let mut text = name.to_string();
+    if let Some(link) = link {
+        text.push_str(&link_suffix(link));
+    }
+    if paused {
+        text.push_str(" (paused)");
+    }
+    text
+}
+
+/// What the link adds to the status text.
+fn link_suffix(link: &str) -> String {
+    format!(" \u{b7} {link}")
+}
+
+/// What that suffix would add to the row's width, in points.
+///
+/// Laid out rather than read off the drawn row, so the answer is the same
+/// whether or not the link is on the bar this frame — the row's own width
+/// then stays what it was before the link existed, and with it the narrowest
+/// the window may be made.
+fn link_suffix_width(ui: &Ui, link: Option<&str>) -> f32 {
+    let Some(link) = link else {
+        return 0.0;
+    };
+    egui::WidgetText::from(RichText::new(link_suffix(link)).small())
+        .into_galley(
+            ui,
+            Some(egui::TextWrapMode::Extend),
+            f32::INFINITY,
+            egui::TextStyle::Small,
+        )
+        .size()
+        .x
+}
+
+/// Whether the status row has room for the link as well.
+///
+/// `row` is what the row needs without it, `link` what it would add, both as
+/// the previous frame measured them.
+fn fits_with_link(row: f32, link: f32, available: f32) -> bool {
+    row + link <= available
+}
+
+/// What the status hover says about the link, spelled out in full.
+///
+/// The bar has the short name, and a narrow window has none at all, so this
+/// is the one place the link is always named. `replayed` distinguishes a live
+/// link from the one a recording was made over — the rest of the window is
+/// deliberately identical for the two.
+fn link_tooltip(link: Option<&str>, replayed: bool) -> String {
+    match (link, replayed) {
+        (Some(link), false) => {
+            format!(
+                "Connected over the {}",
+                dmm_lib::binary_help::full_link_name(link)
+            )
+        }
+        (Some(link), true) => {
+            format!(
+                "Recorded over the {}",
+                dmm_lib::binary_help::full_link_name(link)
+            )
+        }
+        // Nothing is on the far end of a mock session, and a recording whose
+        // file names a link this build does not know says only that much.
+        (None, false) => "Mock meter, no link".to_string(),
+        (None, true) => "Recorded over an unnamed link".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{connected_status, fits_with_link, link_tooltip};
+
+    #[test]
+    fn the_status_names_the_link_where_there_is_one() {
+        assert_eq!(
+            connected_status("UT61E+", Some("Bluetooth"), false),
+            "UT61E+ \u{b7} Bluetooth"
+        );
+        assert_eq!(connected_status("UT61E+", None, false), "UT61E+");
+        assert_eq!(
+            connected_status("UT61E+", Some("USB cable"), true),
+            "UT61E+ \u{b7} USB cable (paused)"
+        );
+    }
+
+    /// A row with no room for the link drops it and keeps everything else —
+    /// including the paused marker, which says whether readings are arriving.
+    #[test]
+    fn a_narrow_row_drops_the_link_and_keeps_the_rest() {
+        let (row, link) = (200.0, 60.0);
+        assert!(fits_with_link(row, link, 260.0), "an exact fit still shows");
+        assert!(!fits_with_link(row, link, 259.0));
+        // What the render then composes at that width.
+        assert_eq!(
+            connected_status("UT61E+", None, true),
+            "UT61E+ (paused)",
+            "the link goes, the state stays"
+        );
+    }
+
+    /// The hover names the link whatever the bar had room for, and says
+    /// whether it is this session's link or the recording's.
+    #[test]
+    fn the_hover_spells_the_link_out() {
+        assert_eq!(
+            link_tooltip(Some("USB cable"), false),
+            "Connected over the USB cable"
+        );
+        assert_eq!(
+            link_tooltip(Some("Bluetooth"), false),
+            "Connected over the Bluetooth adapter"
+        );
+        assert_eq!(
+            link_tooltip(Some("USB cable"), true),
+            "Recorded over the USB cable"
+        );
+        assert_eq!(link_tooltip(None, false), "Mock meter, no link");
+        assert_eq!(link_tooltip(None, true), "Recorded over an unnamed link");
     }
 }

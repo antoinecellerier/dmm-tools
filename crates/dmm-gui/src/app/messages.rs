@@ -326,6 +326,8 @@ impl App {
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
             let selected = Some(replay.device);
+            // And which link they came over: playback is on none of its own.
+            let recorded_link = replay.link;
             let clock = self.clock.clone();
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
@@ -347,6 +349,7 @@ impl App {
                             ctx: ctx_clone,
                             selected,
                             query_name,
+                            recorded_link,
                             // No floor: the recording's own spacing is the
                             // cadence, and the protocol sleeps until each
                             // frame is due rather than returning at once.
@@ -403,6 +406,7 @@ impl App {
                             ctx: ctx_clone,
                             selected: device_entry,
                             query_name,
+                            recorded_link: None,
                             sample_interval_ms: mock_interval,
                             stop_flag,
                         },
@@ -436,6 +440,7 @@ impl App {
                             ctx: ctx_clone,
                             selected: device_entry,
                             query_name,
+                            recorded_link: None,
                             sample_interval_ms,
                             stop_flag,
                         },
@@ -470,6 +475,7 @@ impl App {
         self.connection.model_name.clear();
         self.connection.stability = dmm_lib::protocol::Stability::Verified;
         self.connection.feedback_url.clear();
+        self.connection.link = None;
         self.connection.supported_commands.clear();
         self.connection.choices.clear();
         self.connection.paused = false;
@@ -534,9 +540,11 @@ impl App {
         self.capture_layout.device = meter.map(|d| d.display_name);
         // Only a meter's frames can be replayed; the mock has none.
         self.capture_layout.device_id = meter.filter(|d| d.requires_hardware).map(|d| d.id);
-        // A reading only arrives on a live connection, so this stability is
-        // the meter's rather than the default a disconnect leaves behind.
+        // A reading only arrives on a live connection, so this stability and
+        // this link are the meter's rather than the defaults a disconnect
+        // leaves behind.
         self.capture_layout.experimental = Some(!self.connection.stability.is_verified());
+        self.capture_layout.link = self.connection.link;
         self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
         // A scale change clears the history, so the transform in force now is
         // the one every sample in it went through.
@@ -572,6 +580,7 @@ impl App {
                     device_id,
                     stability,
                     feedback_url,
+                    link,
                     supported_commands: cmds,
                     max_aux_values,
                 } => {
@@ -597,6 +606,7 @@ impl App {
                             .get_or_insert(!stability.is_verified());
                     }
                     self.connection.feedback_url = feedback_url;
+                    self.connection.link = link;
                     self.connection.supported_commands = cmds;
                     // A reconnect may find the dial elsewhere; the thread
                     // re-lists the choices with its first reading.
@@ -1378,6 +1388,7 @@ mod tests {
             device_id: Some(device_id),
             stability,
             feedback_url: String::new(),
+            link: None,
             supported_commands: Vec::new(),
             max_aux_values,
         }
