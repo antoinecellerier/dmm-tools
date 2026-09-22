@@ -37,6 +37,32 @@ jobs:
       # without it — and the stub the open path falls back to — compiling.
       - run: cargo check -p dmm-lib --no-default-features
 
+  # Clippy and the tests on the other platforms the releases ship for: code
+  # behind a cfg for one OS, and a test that only fails there, pass unseen on
+  # Linux. Started once the Linux check passes, alongside the builds, so they
+  # cost runner time more than wall-clock time. Formatting is the same
+  # everywhere and stays on Linux.
+  check-other:
+    name: Check & Test (${{ matrix.name }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
   lint-workflows:
     name: Lint workflows
     runs-on: ubuntu-latest
