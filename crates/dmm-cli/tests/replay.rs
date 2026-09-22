@@ -5,6 +5,10 @@
 //! snippet is generated from one — so the timestamps are asserted literally
 //! rather than by shape, and a second run is compared byte for byte.
 //!
+//! The tests that assert a timestamp, or a file name carrying one, are Linux
+//! and macOS only: they pin `TZ=UTC`, which chrono's `Local` ignores on
+//! Windows.
+//!
 //! `--format replay` against a meter has no test here: it needs the cable.
 
 use std::path::{Path, PathBuf};
@@ -24,6 +28,7 @@ const RECORDING: &str = "\
 
 /// What the three frames export as, in the RFC3339 form `read` prints: the
 /// `# recorded:` header plus each frame's own offset.
+#[cfg(not(windows))]
 const TIMESTAMPS: [&str; 3] = [
     "2026-09-02T10:00:00+00:00",
     "2026-09-02T10:00:00.100+00:00",
@@ -32,6 +37,7 @@ const TIMESTAMPS: [&str; 3] = [
 
 /// Two frames six seconds apart: a meter that stopped answering part-way
 /// through the recording, which plays back as a run of timeouts.
+#[cfg(not(windows))]
 const RECORDING_WITH_A_GAP: &str = "\
 # dmm-replay 1
 # device: ut61eplus
@@ -43,6 +49,7 @@ const RECORDING_WITH_A_GAP: &str = "\
 
 /// A session someone turned the dial during: DC V, then 80.45 kΩ across an
 /// 82 kΩ resistor (the `ohm_82k` golden fixture).
+#[cfg(not(windows))]
 const RECORDING_ACROSS_MODES: &str = "\
 # dmm-replay 1
 # device: ut61eplus
@@ -54,6 +61,7 @@ const RECORDING_ACROSS_MODES: &str = "\
 
 /// A recording whose only frame is truncated: it parses as a file, but the
 /// family refuses every frame in it, so a run of it never gets a reading.
+#[cfg(unix)]
 const RECORDING_ALL_CORRUPT: &str = "\
 # dmm-replay 1
 # device: ut61eplus
@@ -66,7 +74,9 @@ const RECORDING_ALL_CORRUPT: &str = "\
 /// registry's name for the meter the file names, whatever the meter reported
 /// in its `# model:` line, and the first frame's own time. Not the family
 /// name the CSV comment carries.
+#[cfg(not(windows))]
 const AUTO_NAME_STEM: &str = "measurements-UT61E+";
+#[cfg(not(windows))]
 const AUTO_NAME_START: &str = "2026-09-02_10-00-00";
 
 /// An empty directory of this test's own: what it runs in, so a file the run
@@ -128,6 +138,7 @@ fn read_csv(path: &Path, extra: &[&str]) -> (String, String, bool) {
     run(&args)
 }
 
+#[cfg(not(windows))]
 #[test]
 fn replay_exports_the_times_the_frames_were_recorded_at() {
     let path = recording_in(&dir_for("timestamps"));
@@ -166,6 +177,7 @@ fn replay_takes_the_clock_flags() {
 /// A gap plays back as the timeouts it was, and they are not a quiet meter:
 /// there is no `--device` to check and nothing on the cable to switch a USB
 /// mode on. The preseed spends the six seconds of silence without waiting.
+#[cfg(not(windows))]
 #[test]
 fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
     let path = recording_of(&dir_for("gap"), RECORDING_WITH_A_GAP);
@@ -219,6 +231,7 @@ fn a_replay_written_from_a_replay_plays_back_identically() {
 
 /// Given no file name, `-o` builds one from the meter, the mode the run
 /// stayed in and the first reading's time, and says where it went.
+#[cfg(not(windows))]
 #[test]
 fn a_bare_output_names_the_file_after_the_meter_and_the_mode() {
     let dir = dir_for("auto-name");
@@ -254,6 +267,7 @@ fn a_bare_output_names_the_file_after_the_meter_and_the_mode() {
 /// The name carries the second the run started in, so two runs that start in
 /// the same one — here, two plays of the same recording — ask for the same
 /// file. The second steps aside instead of writing over the first.
+#[cfg(not(windows))]
 #[test]
 fn two_runs_that_name_the_same_file_both_keep_their_readings() {
     let dir = dir_for("same-second");
@@ -288,6 +302,7 @@ fn two_runs_that_name_the_same_file_both_keep_their_readings() {
 
 /// A run that crossed a function switch is no one mode's, so the mode comes
 /// back out of the name when the run ends.
+#[cfg(not(windows))]
 #[test]
 fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
     let dir = dir_for("mode-change");
@@ -324,6 +339,7 @@ fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
 
 /// The rename that drops the mode at the end of a run is a write too: the
 /// name it renames onto may be a file another run already left there.
+#[cfg(not(windows))]
 #[test]
 fn a_rename_onto_an_existing_name_steps_aside() {
     let dir = dir_for("rename");

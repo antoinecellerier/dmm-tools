@@ -17,6 +17,7 @@
 //! `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites a stale block; a plain run
 //! fails with a diff. The run pins `TZ=UTC`, which chrono's `Local` ignores on
 //! Windows, so the test is Linux and macOS only.
+#![cfg(not(windows))]
 
 mod common;
 
@@ -242,7 +243,6 @@ fn check_doc(relative: &str) -> Vec<String> {
     diffs
 }
 
-#[cfg(not(windows))]
 #[test]
 fn doc_snippets_match_what_the_binary_prints() {
     let diffs: Vec<String> = DOCS.iter().flat_map(|doc| check_doc(doc)).collect();
