@@ -108,10 +108,12 @@ over the adapter, against about 10 over the cable.
 
 **Linux:** BlueZ must be running, as it is by default on desktop installs.
 
-**Windows and macOS:** untested — please
+**Windows:** nothing beyond the steps above.
+
+**macOS:** untested — please
 [report your experience](https://github.com/antoinecellerier/dmm-tools/issues).
-On macOS `dmm-cli list` names the adapter by a UUID rather than an address, and
-the first connection asks you to allow Bluetooth for your terminal app (or the
+`dmm-cli list` names the adapter by a UUID rather than an address, and the
+first connection asks you to allow Bluetooth for your terminal app (or the
 GUI binary).
 
 ## Troubleshooting

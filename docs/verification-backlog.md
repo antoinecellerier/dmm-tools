@@ -1634,7 +1634,8 @@ port scan** (80, 111, 5025, 49152 by firmware version).
 The adapter's GATT surface and its bring-up were read off our own unit
 2026-09-22 (`docs/research/ut-d07b/reverse-engineered-protocol.md`). What the
 transport does with them is only verified there, with our UT61E+ behind it and
-BlueZ 5.87 underneath, so each of the following needs someone's hardware.
+BlueZ 5.87 underneath, and on the same machine under Windows 11, so each of
+the following needs someone's hardware.
 
 - **The UT-D07A.** Nobody has enumerated its services. It is the same ISSC
   module class one radio generation back (Bluetooth 4.0), UNI-T lists it for
@@ -1663,14 +1664,43 @@ BlueZ 5.87 underneath, so each of the following needs someone's hardware.
   UT-D07A and UT-D07B covers, and the US mirror has not been checked. The
   list belongs to UNI-T's documentation and is to be taken from it rather
   than inferred from the adapter being transparent — even though it is.
-- **Windows and macOS.** Nothing has been run on either. Two things differ by
-  platform and are unknown: whether the adapter has to be paired in the
-  system's Bluetooth settings before it can be opened (on Linux it does not
-  have to be), and whether a bare macOS
-  binary gets a CoreBluetooth permission prompt or a silent refusal. Whether
-  `--adapter` should be handed a UUID there rather than an address is
-  documented but unconfirmed. The Windows check is the maintainer's own, on the
-  next dev build; macOS needs someone else's hardware.
+- ~~**Windows.**~~ — **VERIFIED** 2026-09-22 on Windows 11 Pro 26200 (Intel
+  radio, WinRT), 227bbc3 onwards, adapter never paired: `list` found it in six
+  scans out of six; `info` (Status: MTU 247, heartbeats), `--adapter` in
+  either case, `read --count 60 --interval-ms 0` at 2.9/s (see below),
+  `command hold` (ack 1.24 s, HOLD lit), the link released on exit (waiting
+  flash back), GUI reconnect after the adapter was switched off and on (on
+  its own, the third attempt), and with Bluetooth off, "turned off on this
+  computer" from `list`, `info` and `--adapter`, with the USB cable still
+  opened. Scan misses an awake adapter now and then, and WinRT's known list is
+  only connected devices, so a named address the scan missed is connected by
+  address (d49cf2f); that path was run awake (connected) and switched off
+  ("No Bluetooth device found at …" after ~11 s). Adapter spec §3-5.
+- **A second Windows PC that finds nothing.** On another Windows machine,
+  dev-ef142fb's `list` scanned 3 s and printed "No devices found.", and
+  `--adapter <address> info` failed too, while Microsoft's Bluetooth LE
+  Explorer saw the adapter at once and btleplug's trace showed the watcher
+  delivering devices. Not reproduced on the machine above. A
+  `RUST_LOG=dmm_lib=debug dmm-cli list` from 227bbc3 or later on that PC
+  prints one `saw …` line per device the scan returned, with its names, RSSI
+  and whether it matched — that says whether the adapter is missing, unnamed
+  or unmatched there, and `--adapter` now also tries the address directly.
+- **macOS.** Nothing has been run. Whether a bare binary gets a
+  CoreBluetooth permission prompt or a silent refusal, and whether pairing is
+  needed, are unknown; `--adapter` taking a UUID there rather than an address
+  is documented but unconfirmed. It needs someone else's hardware.
+- **Streamed rate under Windows.** 2.88 and 2.93 readings/s against 3.23 on
+  Linux, the adapter's cadence unchanged: Windows now and then delivers two
+  notifications back to back, and `newest_streamed` keeps the newer of two
+  it finds queued (66 notifications, 60 readings in a traced run). By design
+  for a slow reader; whether `--interval-ms 0` should keep both is open.
+- **The first connect after power-on.** Under Windows, an adapter heard
+  seconds after being switched on refused the connect that followed (WinRT
+  "not connected" after ~8 s) and took the next one. The open reports that as
+  "Bluetooth link lost", which fits a link that was up, not one that never
+  came up, and the setup retry does not cover the connect itself. The GUI's
+  reconnect loop absorbs it; a CLI run at that moment fails. Whether BlueZ
+  sees the same is unknown.
 - ~~**Link parameters.**~~ — **VERIFIED** 2026-09-22 on Linux, from a `btmon`
   capture: MTU 247; the adapter asks for the connection interval itself right
   after every connect (L2CAP update request, min 224 / max 255 × 1.25 ms,
@@ -1701,8 +1731,8 @@ BlueZ 5.87 underneath, so each of the following needs someone's hardware.
   the USB second — i.e. whether the wide window costs a real wait in practice
   — has not been measured.
 - ~~**Pairing as a requirement.**~~ — **VERIFIED** 2026-09-22 on Linux: not
-  required; an unpaired adapter is found by the scan and opens. Windows and
-  macOS remain unchecked.
+  required; an unpaired adapter is found by the scan and opens. Windows 11
+  the same, 2026-09-22; macOS remains unchecked.
 - **Link handling since the 2026-09-22 review.** Three changes are unit-tested
   only. A reconnect releases the old link before opening the new one. With no
   address named, an adapter connected to this host is opened at once, else

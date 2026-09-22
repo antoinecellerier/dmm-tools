@@ -14,6 +14,10 @@ Based on:
 - A `btmon` capture of a session on this machine, 2026-09-22: the HCI trace of
   a connect, the adapter's own parameter update, a host-forced connection
   update and the notification timing under each (§5)
+- Sessions on the same machine under Windows 11 Pro (build 26200), its
+  Intel Wireless Bluetooth radio through WinRT (btleplug 0.13.2), adapter
+  never paired there, 2026-09-22: scans, connects by address, a streamed
+  read and a button press (§3-5)
 - The archived iDMM2.0 Android app (`references/idmm2/`), read 2026-09-21,
   for the two BLE UART service sets UNI-T's own client knows
   (`../new-device-candidates.md`), and decompiled with jadx on 2026-09-22
@@ -119,7 +123,13 @@ the name comes back.
 Pairing is not required [HARDWARE]: with the bond removed from the host, a
 scan found the adapter, the connection and the subscription went through and
 the meter answered. A paired adapter is one the host lists without scanning;
-that is its only effect.
+that is its only effect. The same holds under Windows 11 [HARDWARE]: never
+paired there, the adapter was found, connected, streamed and took a button
+press, its ack 1.24 s after the command as on Linux.
+
+Windows does not keep the link [HARDWARE]: in both sessions watched, the
+adapter was back to its waiting flash once the program had closed its
+connection.
 
 ## 4. The adapter sleeps
 
@@ -160,6 +170,20 @@ most runs. A connect by address, which BlueZ runs as an LE-only connection
 attempt, reached it every time, within 10 s. How often a freshly powered
 adapter advertises is not measured.
 
+Windows 11's advertisement watcher, an active scan, hears it better
+[HARDWARE]: six 3 s scans in a row with the adapter waiting all reported it,
+the first sighting at most about 1.75 s in, among about ten other devices.
+One later 3 s scan did not report it at all, and a connect by address in the
+same moment reached it: WinRT connects to an address it has not heard since
+the program started, and finds the adapter itself. With the adapter
+switched off, that connect gave up after about 8 s.
+
+An adapter just switched back on can refuse its first connect [HARDWARE]:
+heard by a Windows scan within seconds of being switched on, it did not
+answer the connect that followed (WinRT reported it not connected after about
+8 s), and answered the next one, 5 s after that failure. Whether BlueZ sees the same is not known
+[UNVERIFIED].
+
 ## 5. Link parameters
 
 Read off the air with `btmon` on 2026-09-22, our UT61E+ behind the adapter,
@@ -176,6 +200,8 @@ BlueZ 5.87 on kernel HCI [HARDWARE].
 | Polled readings (one 0x5E each) | 1.44 Hz sustained, median gap 0.632 s, with an unacknowledged write; an acknowledged write measured 0.8 s a poll. At the forced 15 ms interval the same poll loop ran at 3.2 Hz, median gap 0.328 s (1.6 Hz before the update in that session) | [HARDWARE] |
 | The same poll over USB | about 0.1 s | [HARDWARE] |
 | First seconds of a fresh link | polls take up to 2 s while bluetoothd reads the Device Information characteristics (model, serial, firmware strings) | [HARDWARE] |
+| Under Windows 11 (WinRT), unpaired | MTU 247. The interval WinRT reported right after the connect was 15 ms in two sessions and 315 ms in a third; whether the adapter's update request had landed when it was read is not known | [HARDWARE]; the timing [UNVERIFIED] |
+| Streamed readings under Windows 11 | the same ~315 ms cadence (the gaps that are not doubled average 315 ms), but now and then two notifications arrive back to back: one run received 66 reading notifications while a reader that keeps the newer of two queued readings produced 60 | [HARDWARE] |
 
 A 19-byte UT61+ reading arrives as one notification on this MTU. The
 ~315 ms cadence is the adapter's own for this family: dropping the
