@@ -266,20 +266,25 @@ async fn central() -> Result<(Manager, Adapter)> {
 async fn connect(selector: Option<&str>) -> Result<Opened> {
     let (manager, adapter) = central().await?;
     let mut found = search(&adapter, selector, Match::First).await?;
+    // A named address the search did not turn up may still answer a connect.
+    let mut from_address = false;
+    if found.is_empty()
+        && let Some(candidate) = by_address(&adapter, selector).await
+    {
+        found.push(candidate);
+        from_address = true;
+    }
     if found.is_empty() {
-        return Err(match selector {
-            Some(selector) => Error::AdapterNotFound(selector.to_string()),
-            // The scan ran and found nothing, which is what the flag says.
-            None => Error::NoTransportFound {
-                bluetooth_searched: true,
-            },
-        });
+        return Err(not_found(selector));
     }
     let candidate = found.remove(0);
     let peripheral = candidate.peripheral.clone();
     // Nothing named and nothing heard: the scan may simply have missed an
     // awake adapter (research doc §4), so the known one is tried by address.
     let fallback = selector.is_none() && candidate.standing == Standing::Known;
+    // Either way nothing vouched for the adapter being awake, so one that
+    // does not answer is not found rather than a fault.
+    let unheard = fallback || from_address;
     if fallback {
         info!(
             "Bluetooth: no adapter heard, trying the known {} ({})",
@@ -302,13 +307,11 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
             // BlueZ keeps a timed-out connect pending; cancel it, or an
             // adapter that wakes later is linked with nobody reading it.
             disconnect(&peripheral).await;
-            if fallback {
-                // A known adapter that does not answer is the asleep case,
-                // which is "nothing found", not a Bluetooth fault.
+            if unheard {
+                // An adapter nothing heard that does not answer is the asleep
+                // case, which is "nothing found", not a Bluetooth fault.
                 info!("Bluetooth: {} did not answer: {e}", candidate.label());
-                return Err(Error::NoTransportFound {
-                    bluetooth_searched: true,
-                });
+                return Err(not_found(selector));
             }
             return Err(link_error(e));
         }
@@ -495,6 +498,48 @@ async fn known_peripherals(adapter: &Adapter) -> Vec<Peripheral> {
         }
     }
     peripherals
+}
+
+/// A peripheral for the address `selector` names, made without having heard
+/// it, for when neither the known devices nor the scan had it.
+///
+/// Windows only. There the known list is just the connected devices, so an
+/// adapter the scan missed would be out of reach; WinRT builds a device from
+/// a bare address, and a connect makes Windows look for it itself. BlueZ
+/// names a peripheral by a D-Bus path it only makes for a device it has
+/// heard, and CoreBluetooth has no addresses.
+#[cfg(windows)]
+async fn by_address(adapter: &Adapter, selector: Option<&str>) -> Option<Candidate> {
+    let address = named_address(selector)?;
+    let peripheral = match adapter
+        .add_peripheral(&btleplug::platform::PeripheralId::from(address))
+        .await
+    {
+        Ok(peripheral) => peripheral,
+        Err(e) => {
+            debug!("Bluetooth: cannot reach {address} by address: {e}");
+            return None;
+        }
+    };
+    info!("Bluetooth: {address} not heard, trying it by address");
+    Some(Candidate {
+        id: peripheral.id().to_string(),
+        address: address.to_string(),
+        name: None,
+        standing: Standing::Known,
+        peripheral,
+    })
+}
+
+#[cfg(not(windows))]
+async fn by_address(_adapter: &Adapter, _selector: Option<&str>) -> Option<Candidate> {
+    None
+}
+
+/// The Bluetooth address `selector` is, if it is one.
+#[cfg(any(windows, test))]
+fn named_address(selector: Option<&str>) -> Option<btleplug::api::BDAddr> {
+    selector.filter(|s| is_bd_addr(s))?.parse().ok()
 }
 
 /// A candidate's standing from what the platform says about it. `heard` is
@@ -690,6 +735,17 @@ fn drain_pending(pending: &mut VecDeque<u8>, buf: &mut [u8]) -> usize {
         *slot = byte;
     }
     n
+}
+
+/// Nothing answered: the adapter `selector` named, or with none, any adapter.
+fn not_found(selector: Option<&str>) -> Error {
+    match selector {
+        Some(selector) => Error::AdapterNotFound(selector.to_string()),
+        // The scan ran and found nothing, which is what the flag says.
+        None => Error::NoTransportFound {
+            bluetooth_searched: true,
+        },
+    }
 }
 
 /// A failure of the Bluetooth stack itself: nothing the caller retries will
@@ -931,6 +987,38 @@ mod tests {
         assert!(!matches_selector("12:34:56:78:9A:BD", id, address));
         // A macOS peripheral has no address; an empty one matches nothing.
         assert!(!matches_selector("", id, ""));
+    }
+
+    /// Only an address is tried by address: a UUID or a platform id names a
+    /// device the stack already has, and btleplug's looser parse (single
+    /// digits) must not take what the open path routes to HID.
+    #[test]
+    fn only_a_named_address_is_tried_by_address() {
+        assert_eq!(
+            named_address(Some("12:34:56:78:9a:bc")).map(|a| a.into_inner()),
+            Some([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC])
+        );
+        assert!(named_address(None).is_none());
+        assert!(named_address(Some("1ca4b9a3-9e6f-4f1e-8b0c-2d1f3a4b5c6d")).is_none());
+        assert!(named_address(Some("hci0/dev_12_34_56_78_9A_BC")).is_none());
+        assert!(named_address(Some("1:2:3:4:5:6")).is_none());
+        assert!(named_address(Some("123456789ABC")).is_none());
+    }
+
+    /// An adapter nothing heard and nothing answered is not found — the one
+    /// named, or any — rather than a lost link or a stack fault.
+    #[test]
+    fn an_unanswered_adapter_is_not_found() {
+        assert!(matches!(
+            not_found(Some("12:34:56:78:9A:BC")),
+            Error::AdapterNotFound(s) if s == "12:34:56:78:9A:BC"
+        ));
+        assert!(matches!(
+            not_found(None),
+            Error::NoTransportFound {
+                bluetooth_searched: true
+            }
+        ));
     }
 
     /// Auto-detection picks the adapter by the name it advertises, which a
