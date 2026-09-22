@@ -311,7 +311,9 @@ fn invalidate(keys: &mut ListedKeys, setting: Setting) {
 pub(super) fn run_device_thread<T, F>(open_fn: F, thread_ctx: ThreadContext)
 where
     T: Transport + Send + 'static,
-    F: Fn() -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)> + Send + 'static,
+    F: Fn(Option<&str>) -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)>
+        + Send
+        + 'static,
 {
     let ThreadContext {
         msg_tx,
@@ -326,7 +328,7 @@ where
     } = thread_ctx;
 
     info!("background thread: connecting to device");
-    let mut dmm = match open_fn() {
+    let mut dmm = match open_fn(None) {
         Ok((mut d, detected)) => {
             establish_connection(
                 &mut d,
@@ -362,6 +364,9 @@ where
     // interval keeps the USB handle open for the rest of the tick (plus the
     // read timeout) after the user clicks Disconnect, while the UI already
     // shows Disconnected and offers Connect again.
+    // The Bluetooth adapter this session is on, which a reconnect goes back
+    // to by address rather than scanning for one again.
+    let mut reopen_at = bluetooth_selector(&dmm);
     let sleep_stop = Arc::clone(&stop_flag);
     let mut stream = MeasurementStream::new(&mut dmm, tick)
         .with_cancel(move || sleep_stop.load(Ordering::Relaxed));
@@ -485,10 +490,16 @@ where
 
                     // Re-runs the opener whole, detection included: under
                     // Auto the meter that comes back is identified again
-                    // rather than assumed to be the one that went away.
-                    match open_fn() {
+                    // rather than assumed to be the one that went away. A
+                    // Bluetooth session goes back to its own adapter, by
+                    // address: a new one is the user's Disconnect/Connect.
+                    // Every failure here is retried, whatever its kind — an
+                    // adapter that does not answer yet is the case this loop
+                    // waits out, so it only updates the Reconnecting notice.
+                    match open_fn(reopen_at.as_deref()) {
                         Ok((mut d, detected)) => {
                             info!("background thread: reconnected on attempt {attempt}");
+                            reopen_at = bluetooth_selector(&d);
                             establish_connection(
                                 &mut d,
                                 detected,
@@ -516,6 +527,12 @@ where
 
         ctx.request_repaint();
     }
+}
+
+/// The address that reopens this session's Bluetooth adapter, `None` on
+/// any other link.
+fn bluetooth_selector<T: Transport>(dmm: &dmm_lib::Dmm<T>) -> Option<String> {
+    dmm.transport().bluetooth_selector().map(str::to_owned)
 }
 
 pub(super) fn handle_thread_panic(
@@ -770,13 +787,14 @@ mod tests {
         );
     }
 
-    /// A link that drops on the first read, counting how many are open.
-    struct Dropout(Arc<std::sync::atomic::AtomicUsize>);
+    /// A link that drops on the first read, counting how many are open. With
+    /// a selector it is a Bluetooth link on that adapter.
+    struct Dropout(Arc<std::sync::atomic::AtomicUsize>, Option<&'static str>);
 
     impl Dropout {
         fn open(live: &Arc<std::sync::atomic::AtomicUsize>) -> Self {
             live.fetch_add(1, Ordering::SeqCst);
-            Self(Arc::clone(live))
+            Self(Arc::clone(live), None)
         }
     }
 
@@ -796,6 +814,27 @@ mod tests {
         fn send_feature_report(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
             Ok(())
         }
+        fn bluetooth_selector(&self) -> Option<&str> {
+            self.1
+        }
+    }
+
+    fn thread_context(
+        msg_tx: mpsc::Sender<DmmMessage>,
+        ctrl_rx: mpsc::Receiver<ThreadControl>,
+        cmd_rx: mpsc::Receiver<RemoteCommand>,
+    ) -> ThreadContext {
+        ThreadContext {
+            msg_tx,
+            ctrl_rx,
+            cmd_rx,
+            ctx: egui::Context::default(),
+            selected: None,
+            query_name: false,
+            recorded_link: None,
+            sample_interval_ms: 10,
+            stop_flag: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     /// A Bluetooth transport disconnects its peripheral when dropped, so a
@@ -812,7 +851,7 @@ mod tests {
         let opens = std::sync::atomic::AtomicUsize::new(0);
         let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
         let open_live = Arc::clone(&live);
-        let open_fn = move || {
+        let open_fn = move |_: Option<&str>| {
             if opens.fetch_add(1, Ordering::SeqCst) > 0 {
                 let _ = seen_tx.send(open_live.load(Ordering::SeqCst));
                 return Err(dmm_lib::error::Error::Timeout);
@@ -820,20 +859,7 @@ mod tests {
             dmm_lib::Dmm::new(Dropout::open(&open_live), (entry.new_protocol)()).map(|d| (d, None))
         };
         let thread = std::thread::spawn(move || {
-            run_device_thread(
-                open_fn,
-                ThreadContext {
-                    msg_tx,
-                    ctrl_rx,
-                    cmd_rx,
-                    ctx: egui::Context::default(),
-                    selected: None,
-                    query_name: false,
-                    recorded_link: None,
-                    sample_interval_ms: 10,
-                    stop_flag: Arc::new(AtomicBool::new(false)),
-                },
-            )
+            run_device_thread(open_fn, thread_context(msg_tx, ctrl_rx, cmd_rx))
         });
         let open_at_reopen = seen_rx
             .recv_timeout(Duration::from_secs(10))
@@ -841,5 +867,59 @@ mod tests {
         ctrl_tx.send(ThreadControl::Stop).unwrap();
         thread.join().unwrap();
         assert_eq!(open_at_reopen, 0, "the old link was still open");
+    }
+
+    /// A lost Bluetooth link is reopened at its own adapter's address, with
+    /// no scan for others. That open fails with a Bluetooth error while the
+    /// adapter is off — a Configuration kind, which must still be retried
+    /// and shown as reconnecting rather than end the session in an error.
+    #[test]
+    fn a_lost_bluetooth_link_is_retried_at_its_address() {
+        const ADDRESS: &str = "12:34:56:78:9A:BC";
+        let live = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (seen_tx, seen_rx) = mpsc::channel();
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let opens = std::sync::atomic::AtomicUsize::new(0);
+        let entry = dmm_lib::protocol::registry::find_device("ut61eplus").expect("registry");
+        let timeout = || dmm_lib::error::Error::Bluetooth("connection timed out".to_string());
+        assert_eq!(timeout().kind(), ErrorKind::Configuration);
+        let open_fn = move |reopen_at: Option<&str>| {
+            if opens.fetch_add(1, Ordering::SeqCst) > 0 {
+                let _ = seen_tx.send(reopen_at.map(str::to_owned));
+                return Err(timeout());
+            }
+            let link = Dropout(Arc::clone(&live), Some(ADDRESS));
+            dmm_lib::Dmm::new(link, (entry.new_protocol)()).map(|d| (d, None))
+        };
+        let thread = std::thread::spawn(move || {
+            run_device_thread(open_fn, thread_context(msg_tx, ctrl_rx, cmd_rx))
+        });
+        let reopens: Vec<Option<String>> = (0..2)
+            .map(|_| {
+                seen_rx
+                    .recv_timeout(Duration::from_secs(10))
+                    .expect("the thread keeps reconnecting")
+            })
+            .collect();
+        ctrl_tx.send(ThreadControl::Stop).unwrap();
+        thread.join().unwrap();
+        assert_eq!(
+            reopens,
+            [Some(ADDRESS.to_string()), Some(ADDRESS.to_string())]
+        );
+        let messages: Vec<DmmMessage> = msg_rx.try_iter().collect();
+        assert!(
+            !messages.iter().any(|m| matches!(m, DmmMessage::Error(_))),
+            "a failed reconnect ended in an error notice"
+        );
+        assert!(messages.iter().any(|m| matches!(
+            m,
+            DmmMessage::Reconnecting {
+                attempt: 2,
+                last_error: Some(_)
+            }
+        )));
     }
 }

@@ -151,6 +151,8 @@ on their own once it transmits again.
 - A USB cable wins over Bluetooth: with a cable plugged in, `auto` uses it even
   when the meter behind it says nothing. Unplug the cable, or pass
   `--adapter <address>`.
+- Leave out `--no-bluetooth`, and tick **Look for Bluetooth adapters** in the
+  GUI's settings: with either off, nothing scans.
 
 A UT-D07A that is listed and connects but fails with "no UART … characteristic"
 carries a different service layout — please report it on

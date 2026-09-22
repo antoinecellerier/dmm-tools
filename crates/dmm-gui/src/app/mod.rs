@@ -443,6 +443,12 @@ impl App {
             settings.overrides.theme = Some(settings.theme);
             settings.theme = theme;
         }
+        // Only the off switch is a flag: there is nothing to force on, the
+        // setting already is.
+        if cli.no_bluetooth {
+            settings.overrides.bluetooth = Some(settings.shared.bluetooth);
+            settings.shared.bluetooth = false;
+        }
         settings.overrides.adapter = cli.adapter;
         let mut app = Self::from_settings(settings, cli.clock);
         app.replay = cli.replay;
@@ -992,6 +998,32 @@ mod tests {
         assert!(!app.connection.needs_reconnect);
     }
 
+    /// `--no-bluetooth` is one session's answer: no scanning
+    /// here, and the saved value is what [`Settings::save`] writes back.
+    #[test]
+    fn the_bluetooth_flag_does_not_reach_the_settings_file() {
+        let settings = Settings {
+            auto_connect: false,
+            ..Settings::default()
+        };
+        assert!(settings.shared.bluetooth, "probing is on by default");
+        let app = App::from_cli(
+            settings,
+            crate::CliOverrides {
+                device: None,
+                mock_mode: None,
+                theme: None,
+                renderer: None,
+                adapter: None,
+                no_bluetooth: true,
+                clock: dmm_lib::Clock::real(),
+                replay: None,
+            },
+        );
+        assert!(!app.settings.shared.bluetooth, "this session skips it");
+        assert_eq!(app.settings.overrides.bluetooth, Some(true));
+    }
+
     /// A pick on a real meter has nothing to do with the mock's pin.
     #[test]
     fn a_pick_on_a_real_meter_leaves_the_mock_pin_alone() {
@@ -1029,6 +1061,7 @@ mod tests {
                 theme: None,
                 renderer: None,
                 adapter: None,
+                no_bluetooth: false,
                 clock: dmm_lib::Clock::real(),
                 replay: Some(crate::ReplaySource {
                     replay: Arc::new(replay),

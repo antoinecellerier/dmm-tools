@@ -53,6 +53,12 @@ struct Cli {
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
+    /// Turn off Bluetooth scanning for this run: nothing scans for adapters and
+    /// 'list' shows cables only. Overrides the saved 'bluetooth' setting.
+    /// An address given to --adapter is still opened.
+    #[arg(long)]
+    no_bluetooth: bool,
+
     #[command(subcommand)]
     command: Cmd,
 }
@@ -362,12 +368,14 @@ fn main() {
     // from the settings file or from detection. Only `read --replay` asks.
     let device_named = cli.device.is_some();
 
+    let settings = dmm_shared::SharedSettings::load_if_exists();
+
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants
     // one.
     let (device_id, _source) = dmm_shared::resolve_device_family(
         cli.device.as_deref(),
-        dmm_shared::SharedSettings::load_if_exists().as_ref(),
+        settings.as_ref(),
         registry::AUTO_DEVICE_ID,
     );
     let selection = match registry::resolve_selection(&device_id) {
@@ -382,11 +390,15 @@ fn main() {
         }
     };
 
-    let adapter = cli.adapter.as_deref();
+    let bluetooth = bluetooth_probing(cli.no_bluetooth, settings.as_ref());
+    let opts = dmm_lib::OpenOptions {
+        adapter: cli.adapter.as_deref(),
+        bluetooth,
+    };
 
     // Device-independent commands — handle before mock/real split
     let result = match cli.command {
-        Cmd::List => cmd_list(),
+        Cmd::List => cmd_list(bluetooth),
         Cmd::Completions { shell } => {
             match shell {
                 Some(shell) => {
@@ -421,7 +433,7 @@ fn main() {
             std::process::exit(1);
         }
 
-        Cmd::Info => cmd_info(selection, adapter),
+        Cmd::Info => cmd_info(selection, opts),
         Cmd::Read {
             interval_ms,
             format,
@@ -471,7 +483,7 @@ fn main() {
                     }
                     cmd_read(
                         selection,
-                        adapter,
+                        opts,
                         interval_ms,
                         format,
                         destination,
@@ -485,18 +497,18 @@ fn main() {
                 }
             }
         }
-        Cmd::Command { action } => cmd_command(selection, adapter, action),
+        Cmd::Command { action } => cmd_command(selection, opts, action),
         Cmd::Get {
             setting,
             format,
             mock_mode,
-        } => cmd_get(selection, adapter, setting, format, mock_mode),
+        } => cmd_get(selection, opts, setting, format, mock_mode),
         Cmd::Set {
             setting,
             choice,
             mock_mode,
-        } => cmd_set(selection, adapter, setting, choice, mock_mode),
-        Cmd::Debug { count, interval_ms } => cmd_debug(selection, adapter, count, interval_ms),
+        } => cmd_set(selection, opts, setting, choice, mock_mode),
+        Cmd::Debug { count, interval_ms } => cmd_debug(selection, opts, count, interval_ms),
         Cmd::Capture {
             output,
             steps,
@@ -512,11 +524,11 @@ fn main() {
                 // Device-scoped: the steps come from the selected device's
                 // protocol, so what's listed is what `--steps` will match.
                 // With nothing selected, that means asking the cable first.
-                device_for_listing(selection, adapter).map(|device| {
+                device_for_listing(selection, opts).map(|device| {
                     capture::list_steps(device, format);
                 })
             } else {
-                open_recording_with_help(selection, adapter).and_then(|(dmm, recorder, device)| {
+                open_recording_with_help(selection, opts).and_then(|(dmm, recorder, device)| {
                     capture::cmd_capture(
                         output,
                         steps,
@@ -652,6 +664,27 @@ fn print_setup_sections(links: LinksSearched<'_>) {
     }
 }
 
+/// Whether this run may look for a Bluetooth adapter.
+///
+/// The saved setting decides, and `--no-bluetooth` overrides it for one run —
+/// the file is never written back: the GUI owns it.
+fn bluetooth_probing(no_bluetooth: bool, saved: Option<&dmm_shared::SharedSettings>) -> bool {
+    !no_bluetooth && saved.is_none_or(|s| s.bluetooth)
+}
+
+/// The links a listing looked at, for the help it prints when it found
+/// nothing. The open path answers this for itself — this is for `list`, which
+/// searches whatever it was told to and never opens anything.
+fn links_searched(bluetooth: bool) -> LinksSearched<'static> {
+    LinksSearched::from_usb_failure(scans_bluetooth(bluetooth))
+}
+
+/// Whether `list` scans the radio: only where probing is on and the build
+/// has a radio to scan.
+fn scans_bluetooth(bluetooth: bool) -> bool {
+    bluetooth && dmm_lib::BLUETOOTH_SUPPORTED
+}
+
 /// Print the whole "nothing found" help: what was looked for, then what to
 /// try on each link it was looked for on.
 fn print_not_found_help(links: LinksSearched<'_>) {
@@ -758,17 +791,17 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static SelectableDevi
 /// which entry answered — the one named, or the one detection found.
 fn open_with_help(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<(BoxedDmm, &'static SelectableDevice), Box<dyn std::error::Error>> {
     let (dmm, device) = match selection {
         Selection::Auto => {
             let (dmm, detected) =
-                dmm_lib::open_auto(adapter).map_err(|e| open_error_help(selection, e))?;
+                dmm_lib::open_auto(opts).map_err(|e| open_error_help(selection, e))?;
             let device = note_detected(detected);
             (dmm, device)
         }
         Selection::Device(device) => (
-            dmm_lib::open_device_by_id_auto(device.id, adapter)
+            dmm_lib::open_device_by_id_auto(device.id, opts)
                 .map_err(|e| open_error_help(selection, e))?,
             device,
         ),
@@ -781,7 +814,7 @@ fn open_with_help(
 /// for `capture` to put in its report.
 fn open_recording_with_help(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<
     (
         BoxedDmm,
@@ -797,7 +830,7 @@ fn open_recording_with_help(
         // hides how the meter was picked.
         Selection::Auto => {
             let (transport, bridge) =
-                dmm_lib::open_transport(&[], adapter).map_err(|e| open_error_help(selection, e))?;
+                dmm_lib::open_transport(&[], opts).map_err(|e| open_error_help(selection, e))?;
             let (transport, recorder) = recording::RecordingTransport::new(transport);
             let transport = Box::new(transport) as Boxed;
             let detected = dmm_lib::detect::detect_device(&*transport, bridge)
@@ -809,7 +842,7 @@ fn open_recording_with_help(
             // The mock has no USB link to open, and none to record either — it
             // goes through the same recorder so `capture` has one code path.
             let (transport, protocol): (Boxed, _) = if device.requires_hardware {
-                dmm_lib::open_transport_by_id_auto(device.id, adapter)
+                dmm_lib::open_transport_by_id_auto(device.id, opts)
                     .map_err(|e| open_error_help(selection, e))?
             } else {
                 (
@@ -829,10 +862,10 @@ fn open_recording_with_help(
 /// Identify the meter and hand the cable straight back, for the listings that
 /// need a registry entry but nothing from the meter itself.
 fn detect_only(
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<&'static SelectableDevice, Box<dyn std::error::Error>> {
     let (transport, bridge) =
-        dmm_lib::open_transport(&[], adapter).map_err(|e| open_error_help(Selection::Auto, e))?;
+        dmm_lib::open_transport(&[], opts).map_err(|e| open_error_help(Selection::Auto, e))?;
     let detected = dmm_lib::detect::detect_device(&*transport, bridge)
         .map_err(|e| open_error_help(Selection::Auto, e))?;
     Ok(note_detected(detected))
@@ -843,10 +876,10 @@ fn detect_only(
 /// listing another model's commands or capture steps.
 fn device_for_listing(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<&'static SelectableDevice, Box<dyn std::error::Error>> {
     match selection {
-        Selection::Auto => detect_only(adapter),
+        Selection::Auto => detect_only(opts),
         Selection::Device(device) => Ok(device),
     }
 }
@@ -1001,35 +1034,79 @@ fn open_error_help(
     }
 }
 
-fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
-    let cables = dmm_lib::list_devices()?;
+/// List what is reachable: the cables on the bus, and the adapters in range
+/// when `bluetooth` says the radio may be searched.
+fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>> {
+    // A HID API that cannot enumerate is no reason to skip the radio: the
+    // error goes out now and the scan still runs.
+    let (cables, cables_failed) = match dmm_lib::list_devices() {
+        Ok(cables) => (cables, false),
+        Err(e) => {
+            eprintln!("{} {e}", style("Error:").red().bold());
+            (Vec::new(), true)
+        }
+    };
     for (i, dev) in cables.iter().enumerate() {
         println!("{} {dev}", style(format!("[{i}]")).cyan());
     }
-    // The radio scan takes seconds where the bus listing is instant, so say
-    // what the wait is for before it starts.
-    eprintln!("{}", style("Scanning over Bluetooth\u{2026}").dim());
-    let adapters = match dmm_lib::list_bluetooth_devices() {
-        Ok(adapters) => adapters,
-        // A stack that is off or missing is not a device fault: the cables
-        // above still stand, so the reason goes out dim and the listing ends
-        // normally.
-        Err(e) => {
-            eprintln!("{}", style(e.to_string()).dim());
-            Vec::new()
+    // Probing off, or a build with no radio, the scan is skipped whole — and
+    // so is the line announcing it, which would promise a wait that never
+    // happens.
+    let adapters = if scans_bluetooth(bluetooth) {
+        // The radio scan takes seconds where the bus listing is instant, so
+        // say what the wait is for before it starts.
+        eprintln!("{}", style("Scanning over Bluetooth\u{2026}").dim());
+        match dmm_lib::list_bluetooth_devices() {
+            Ok(adapters) => adapters,
+            // A stack that is off or missing is not a device fault: the
+            // cables above still stand, so the reason goes out dim and the
+            // listing ends normally.
+            Err(e) => {
+                eprintln!("{}", style(e.to_string()).dim());
+                Vec::new()
+            }
         }
+    } else {
+        Vec::new()
     };
-    for (i, dev) in adapters.iter().enumerate() {
+    // Heard ones first, as the library sorts them; the known ones the scan
+    // missed keep the numbering, since `--adapter` takes them too.
+    let (heard, not_heard): (Vec<_>, Vec<_>) = adapters.iter().partition(|d| !d.not_heard);
+    for (i, dev) in heard.iter().enumerate() {
         println!("{} {dev}", style(format!("[{}]", cables.len() + i)).cyan());
     }
-    let total = cables.len() + adapters.len();
-    if total == 0 {
-        // The listing itself is the title, so only the sections follow.
-        eprintln!("{}", style("No devices found.").yellow());
-        print_setup_sections(LinksSearched::UsbAndBluetooth);
+    let found = cables.len() + heard.len();
+    // A paired adapter the scan missed is still a device the user may mean,
+    // so it is listed with the rest, before any help.
+    for (i, dev) in not_heard.iter().enumerate() {
+        println!(
+            "{} {}",
+            style(format!("[{}]", found + i)).cyan(),
+            style(format!(
+                "{dev}, paired but not heard: check it is switched on"
+            ))
+            .dim()
+        );
+    }
+    // The doc-screenshot scenes match both headings whole before picturing
+    // the app with no meter, so keep them in step with the script.
+    if found == 0 {
+        let heading = if not_heard.is_empty() {
+            "No devices found."
+        } else {
+            "No devices heard in range."
+        };
+        eprintln!("{}", style(heading).yellow());
+        print_setup_sections(links_searched(bluetooth));
+    }
+    if found == 0 {
+        // Already reported above; the status still says the listing failed.
+        if cables_failed {
+            std::process::exit(1);
+        }
         return Ok(());
     }
-    if total > 1 {
+    if found + not_heard.len() > 1 {
         eprintln!(
             "\n{}",
             style(format!(
@@ -1048,8 +1125,11 @@ fn detected_name() -> Option<String> {
     AUTO_DETECTED.get().and_then(|d| d.reported_name.clone())
 }
 
-fn cmd_info(selection: Selection, adapter: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
-    let (mut dmm, _device) = open_with_help(selection, adapter)?;
+fn cmd_info(
+    selection: Selection,
+    opts: dmm_lib::OpenOptions<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut dmm, _device) = open_with_help(selection, opts)?;
     let name = match detected_name() {
         Some(name) => Some(name),
         None => dmm.get_name()?,
@@ -1087,7 +1167,7 @@ fn cmd_info(selection: Selection, adapter: Option<&str>) -> Result<(), Box<dyn s
 #[allow(clippy::too_many_arguments)]
 fn cmd_read(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
     interval_ms: u64,
     format: OutputFormat,
     destination: output::Destination,
@@ -1115,7 +1195,7 @@ fn cmd_read(
     }
     refuse_clock_on_hardware(selection, &clock)?;
     if requires_hardware(selection) {
-        let (mut dmm, device) = open_with_help(selection, adapter)?;
+        let (mut dmm, device) = open_with_help(selection, opts)?;
         // Once, before the loop: on a UT61+ asking the meter its name is a
         // command it answers with a beep, so only a replay file — whose
         // header carries the name — pays for it.
@@ -1583,16 +1663,16 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
 
 fn cmd_command(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
     action: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let action = match action {
         Some(a) => a,
-        None => return print_available_commands(device_for_listing(selection, adapter)?),
+        None => return print_available_commands(device_for_listing(selection, opts)?),
     };
 
     if requires_hardware(selection) {
-        let (mut dmm, _device) = open_with_help(selection, adapter)?;
+        let (mut dmm, _device) = open_with_help(selection, opts)?;
         dmm.send_command(&action)?;
     } else {
         let mut dmm = dmm_lib::mock::open_mock()?;
@@ -1746,14 +1826,14 @@ fn print_tip(lead: &str, setting: Setting, choices: &[Choice]) {
 /// measuring now, so there is nothing to list until one frame has arrived.
 fn cmd_get(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
     setting: Option<SettingArg>,
     format: SettingsFormat,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let setting = setting.map(Setting::from);
     if requires_hardware(selection) {
-        let (mut dmm, _device) = open_with_help(selection, adapter)?;
+        let (mut dmm, _device) = open_with_help(selection, opts)?;
         run_get(&mut dmm, setting, format)
     } else {
         let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
@@ -1764,14 +1844,14 @@ fn cmd_get(
 /// Switch one setting, or list what it reaches when no choice was named.
 fn cmd_set(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
     setting: SettingArg,
     choice: Option<String>,
     mock_mode: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let setting = Setting::from(setting);
     if requires_hardware(selection) {
-        let (mut dmm, _device) = open_with_help(selection, adapter)?;
+        let (mut dmm, _device) = open_with_help(selection, opts)?;
         run_set(&mut dmm, setting, choice)
     } else {
         let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
@@ -2260,13 +2340,13 @@ fn resolve_choice<'a>(choices: &'a [Choice], input: &str) -> Result<&'a Choice, 
 
 fn cmd_debug(
     selection: Selection,
-    adapter: Option<&str>,
+    opts: dmm_lib::OpenOptions<'_>,
     count: usize,
     interval_ms: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let running = setup_ctrlc()?;
 
-    let (mut dmm, _device) = open_with_help(selection, adapter)?;
+    let (mut dmm, _device) = open_with_help(selection, opts)?;
 
     // Show transport info before entering measurement loop
     eprintln!(
@@ -2529,6 +2609,7 @@ mod tests {
     fn a_named_family_still_wins() {
         let saved = dmm_shared::SharedSettings {
             device_family: "ut8803".to_string(),
+            ..Default::default()
         };
         let (id, source) =
             dmm_shared::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
@@ -2545,6 +2626,46 @@ mod tests {
         );
         assert_eq!(source, dmm_shared::DeviceSource::Cli);
         assert_eq!(selection_id(selection(&id)), "ut61b+");
+    }
+
+    /// `--no-bluetooth` is one run's answer; the setting is every run's. With
+    /// neither, the radio is searched — the file a v0.7 install left behind
+    /// has no such field, and that version always searched.
+    #[test]
+    fn the_flag_overrides_the_saved_bluetooth_setting() {
+        let saved = |bluetooth| dmm_shared::SharedSettings {
+            bluetooth,
+            ..Default::default()
+        };
+        assert!(bluetooth_probing(false, None));
+        assert!(bluetooth_probing(false, Some(&saved(true))));
+        assert!(!bluetooth_probing(true, Some(&saved(true))));
+        assert!(!bluetooth_probing(false, Some(&saved(false))));
+        assert!(!bluetooth_probing(true, Some(&saved(false))));
+    }
+
+    /// With the radio out of the picture, the help that follows an empty
+    /// listing must not offer steps for it.
+    #[test]
+    fn a_listing_that_skipped_the_radio_offers_no_bluetooth_steps() {
+        let links: Vec<&str> = links_searched(false)
+            .sections()
+            .iter()
+            .map(|s| s.link)
+            .collect();
+        assert_eq!(links, ["USB cable"]);
+        assert_eq!(
+            links_searched(true).sections().len(),
+            if dmm_lib::BLUETOOTH_SUPPORTED { 2 } else { 1 }
+        );
+    }
+
+    /// A build with no radio neither scans nor announces a scan, whatever
+    /// the setting says.
+    #[test]
+    fn a_build_without_bluetooth_never_scans() {
+        assert_eq!(scans_bluetooth(true), dmm_lib::BLUETOOTH_SUPPORTED);
+        assert!(!scans_bluetooth(false));
     }
 
     /// `auto` is a value `--device` takes, and the only one the registry does

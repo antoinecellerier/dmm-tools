@@ -695,6 +695,29 @@ impl App {
             }
         });
 
+        ui.horizontal_wrapped(|ui| {
+            let label = if self.settings.overrides.has_bluetooth() {
+                "Look for Bluetooth adapters (--no-bluetooth)"
+            } else {
+                "Look for Bluetooth adapters"
+            };
+            // No reconnect: a session already running over an adapter would
+            // be dropped by one, and the setting only decides what the next
+            // connect looks at.
+            if setting_checkbox(
+                ui,
+                &mut self.settings.shared.bluetooth,
+                label,
+                "Look for an adapter in Bluetooth range when no USB cable answers. \
+                 Takes effect on the next connect.",
+            ) {
+                // Cleared like every other row the user sets by hand: the
+                // value they picked is theirs to keep.
+                self.settings.overrides.bluetooth = None;
+                self.settings.save();
+            }
+        });
+
         // Mock mode selector (only shown when mock device is selected)
         if self.selected_device().is_some_and(|d| d.id == "mock") {
             ui.horizontal_wrapped(|ui| {

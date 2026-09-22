@@ -399,7 +399,7 @@ impl App {
                         // picks the recording up where the session has got to
                         // instead of starting it again. Nothing to detect —
                         // the file names it.
-                        move || replay.open(clock.clone()).map(|dmm| (dmm, None)),
+                        move |_| replay.open(clock.clone()).map(|dmm| (dmm, None)),
                         ThreadContext {
                             msg_tx,
                             ctrl_rx,
@@ -453,7 +453,7 @@ impl App {
                         // reconnect, and the session clock outlives each
                         // `Dmm` it opens. Nothing to detect — the mock is
                         // what it says it is.
-                        move || {
+                        move |_| {
                             dmm_lib::mock::open_mock_clocked(mock_mode, clock.clone())
                                 .map(|dmm| (dmm, None))
                         },
@@ -477,6 +477,7 @@ impl App {
         } else {
             let device_id = device_entry.map(|d| d.id);
             let adapter = self.settings.overrides.adapter.clone();
+            let bluetooth = self.settings.shared.bluetooth;
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
                 let panic_ctx = ctx_clone.clone();
@@ -484,12 +485,21 @@ impl App {
                     run_device_thread(
                         // Re-run on every reconnect, detection included: a
                         // meter that comes back is identified again rather
-                        // than assumed to be the one that left.
-                        move || match device_id {
-                            Some(id) => dmm_lib::open_device_by_id_auto(id, adapter.as_deref())
-                                .map(|dmm| (dmm, None)),
-                            None => dmm_lib::open_auto(adapter.as_deref())
-                                .map(|(dmm, detected)| (dmm, Some(detected))),
+                        // than assumed to be the one that left. `reopen_at`
+                        // is the Bluetooth adapter a lost link was on, opened
+                        // by address like `--adapter`, which wins if given.
+                        move |reopen_at| {
+                            let opts = dmm_lib::OpenOptions {
+                                adapter: adapter.as_deref().or(reopen_at),
+                                bluetooth,
+                            };
+                            match device_id {
+                                Some(id) => {
+                                    dmm_lib::open_device_by_id_auto(id, opts).map(|dmm| (dmm, None))
+                                }
+                                None => dmm_lib::open_auto(opts)
+                                    .map(|(dmm, detected)| (dmm, Some(detected))),
+                            }
                         },
                         ThreadContext {
                             msg_tx,

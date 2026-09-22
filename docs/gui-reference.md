@@ -52,8 +52,9 @@ Help is shown automatically when connection fails:
 In big meter and minimal mode only the title is shown; hover it for the
 steps.
 
-Auto-reconnection retries every 2 seconds after a disconnect. Click **Disconnect**
-(or press `Ctrl+O`) while it is retrying to stop the loop.
+Auto-reconnection retries every 2 seconds after a disconnect; over Bluetooth it
+retries the same adapter. Click **Disconnect** (or press `Ctrl+O`) while it is
+retrying to stop the loop, then **Connect** to look for another adapter.
 
 ## Top Bar
 
@@ -383,6 +384,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Sample interval** | 0 ms | Delay between measurements: 0 (as fast as the link delivers: on a UT61E+, about 10 a second over USB, 3 over Bluetooth), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
 | **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
+| **Look for Bluetooth adapters** | on | When off, nothing scans for adapters and the connection help offers no Bluetooth steps. An address given to `--adapter` is still opened. Takes effect on the next connect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |
 | **Zoom** | 100% | UI scale (30%–300%). Also controllable via keyboard. |
 | **Always on top** | off | Keep the window above all other windows (`Ctrl+T`). Not available on Wayland (greyed out): right-click the title bar and use the window menu instead. |
@@ -467,6 +469,7 @@ do not modify the persisted `settings.json`.
 |--------|-------------|
 | `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
 | `--adapter <SERIAL_PATH_OR_ADDRESS>` | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter, from `dmm-cli list` output. |
+| `--no-bluetooth` | Turn off Bluetooth scanning for this session, whatever **Look for Bluetooth adapters** is set to. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |

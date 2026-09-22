@@ -205,6 +205,13 @@ fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static st
 /// fingerprint on this link for detection.
 pub const BLUETOOTH: &str = "Bluetooth";
 
+/// Whether this build can reach the Bluetooth link at all.
+///
+/// The open path answers this for itself; a binary needs it where nothing was
+/// opened — `dmm-cli list` deciding whether its "nothing found" help may
+/// offer Bluetooth steps.
+pub const BLUETOOTH_SUPPORTED: bool = cfg!(feature = "bluetooth");
+
 /// Transports are tried in order — most common first.
 const KNOWN_TRANSPORTS: &[KnownTransport] = &[
     KnownTransport {
@@ -239,23 +246,60 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
     },
 ];
 
+/// What a caller asks of the open path besides which meter to open.
+///
+/// The two travel together everywhere an open happens, so they are one value
+/// rather than a pair of arguments each caller has to keep in the right order.
+#[derive(Debug, Clone, Copy)]
+pub struct OpenOptions<'a> {
+    /// A specific adapter to open — a USB one by serial number or HID device
+    /// path (as shown by [`list_devices`]), a Bluetooth one by address or
+    /// peripheral identifier (as shown by [`list_bluetooth_devices`]).
+    /// `None` picks the first matching adapter (and logs a warning if several
+    /// are found).
+    pub adapter: Option<&'a str>,
+    /// Whether an open with nothing on the bus may go on to look for an
+    /// adapter in Bluetooth range. Off, nothing scans the radio — but an
+    /// address in `adapter` is still opened, having been asked for by name.
+    pub bluetooth: bool,
+}
+
+impl<'a> OpenOptions<'a> {
+    /// Open whatever answers first, radio included: what a caller with no
+    /// settings of its own wants.
+    pub fn new() -> Self {
+        Self {
+            adapter: None,
+            bluetooth: true,
+        }
+    }
+
+    /// The same, pinned to one adapter.
+    pub fn with_adapter(adapter: Option<&'a str>) -> Self {
+        Self {
+            adapter,
+            ..Self::new()
+        }
+    }
+}
+
+impl Default for OpenOptions<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Open a device by registry ID, automatically selecting the transport.
 ///
-/// Tries the USB bridges in order (CP2110, CH9329, CH9325), then a UT-D07B in
+/// Tries the USB bridges in order (CP2110, CH9329, CH9325), then an adapter in
 /// Bluetooth range.
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
 ///
 /// `id` may be [`registry::AUTO_DEVICE_ID`], in which case the meter is
 /// identified from the bytes it sends; a caller that wants to know which one
 /// it was calls [`open_auto`] instead.
-///
-/// When `adapter` is `Some`, selects a specific adapter — a USB one by serial
-/// number or HID device path (as shown by [`list_devices`]), a Bluetooth one
-/// by address or peripheral identifier (as shown by
-/// [`list_bluetooth_devices`]). When `None`, picks the first matching adapter
-/// (and logs a warning if multiple are found).
-pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box<dyn Transport>>> {
-    let (transport, protocol) = open_transport_by_id_auto(id, adapter)?;
+pub fn open_device_by_id_auto(id: &str, opts: OpenOptions<'_>) -> Result<Dmm<Box<dyn Transport>>> {
+    let (transport, protocol) = open_transport_by_id_auto(id, opts)?;
     Dmm::new(transport, protocol)
 }
 
@@ -271,15 +315,15 @@ pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box
 /// [`detect::detect_device`].
 pub fn open_transport_by_id_auto(
     id: &str,
-    adapter: Option<&str>,
+    opts: OpenOptions<'_>,
 ) -> Result<(Box<dyn Transport>, Box<dyn Protocol>)> {
     match selection_by_id(id)? {
         Selection::Auto => {
-            let (transport, detected) = open_detected(adapter)?;
+            let (transport, detected) = open_detected(opts)?;
             Ok((transport, (detected.device.new_protocol)()))
         }
         Selection::Device(entry) => {
-            let (transport, _bridge) = open_transport(preferred_transports(entry.family), adapter)?;
+            let (transport, _bridge) = open_transport(preferred_transports(entry.family), opts)?;
             Ok((transport, (entry.new_protocol)()))
         }
     }
@@ -291,8 +335,8 @@ pub fn open_transport_by_id_auto(
 /// ([`detect::detect_device`]) and opens it with the entry that came back.
 /// The [`detect::Detected`] is returned as well, so a caller can tell the user
 /// which meter was picked and what name it reported.
-pub fn open_auto(adapter: Option<&str>) -> Result<(Dmm<Box<dyn Transport>>, detect::Detected)> {
-    let (transport, detected) = open_detected(adapter)?;
+pub fn open_auto(opts: OpenOptions<'_>) -> Result<(Dmm<Box<dyn Transport>>, detect::Detected)> {
+    let (transport, detected) = open_detected(opts)?;
     let protocol = (detected.device.new_protocol)();
     Ok((Dmm::new(transport, protocol)?, detected))
 }
@@ -313,10 +357,10 @@ fn selection_by_id(id: &str) -> Result<Selection> {
 }
 
 /// Open a bridge with no family in mind and identify the meter behind it.
-fn open_detected(adapter: Option<&str>) -> Result<(Box<dyn Transport>, detect::Detected)> {
+fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::Detected)> {
     // No family, so no link to prefer: whichever bridge answers first is the
     // one the meter is probed through.
-    let (transport, bridge) = open_transport(&[], adapter)?;
+    let (transport, bridge) = open_transport(&[], opts)?;
     let detected = detect::detect_device(&*transport, bridge)?;
     Ok((transport, detected))
 }
@@ -338,16 +382,17 @@ fn open_detected(adapter: Option<&str>) -> Result<(Box<dyn Transport>, detect::D
 /// detection probe itself, say — opens it here and detects separately.
 pub fn open_transport(
     preferred: &[&'static str],
-    adapter: Option<&str>,
+    opts: OpenOptions<'_>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
     // An address or a peripheral UUID can only be a Bluetooth adapter, so the
-    // selector alone says which opener the user meant.
-    if let Some(selector) = adapter.filter(|s| ble::is_bluetooth_selector(s)) {
+    // selector alone says which opener the user meant — and asking for one by
+    // name is asking for the radio, whatever the probing setting says.
+    if let Some(selector) = opts.adapter.filter(|s| ble::is_bluetooth_selector(s)) {
         return Ok((ble::open_selected(selector)?, BLUETOOTH));
     }
 
-    let radio_gets_a_turn = bluetooth_is_next(preferred, adapter);
-    let hid = open_hid_transport(preferred, adapter);
+    let radio_gets_a_turn = bluetooth_is_next(preferred, opts);
+    let hid = open_hid_transport(preferred, opts.adapter);
     match hid {
         Ok(opened) => Ok(opened),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
@@ -372,10 +417,12 @@ pub fn open_transport(
 ///
 /// Only on the auto path: a user who named a USB adapter asked for that one,
 /// and a meter answering on a radio instead is not what they meant. A build
-/// without the feature has no radio to search.
-fn bluetooth_is_next(preferred: &[&'static str], adapter: Option<&str>) -> bool {
+/// without the feature has no radio to search, and neither has a caller that
+/// switched probing off.
+fn bluetooth_is_next(preferred: &[&'static str], opts: OpenOptions<'_>) -> bool {
     cfg!(feature = "bluetooth")
-        && adapter.is_none()
+        && opts.bluetooth
+        && opts.adapter.is_none()
         && (preferred.is_empty() || preferred.contains(&BLUETOOTH))
 }
 
@@ -871,22 +918,33 @@ mod tests {
     #[test]
     fn the_radio_gets_a_turn_only_where_it_could_answer() {
         let bluetooth = cfg!(feature = "bluetooth");
-        assert_eq!(bluetooth_is_next(&[], None), bluetooth, "the auto path");
+        let opts = OpenOptions::new();
+        assert_eq!(bluetooth_is_next(&[], opts), bluetooth, "the auto path");
         assert_eq!(
             bluetooth_is_next(
                 preferred_transports(protocol::DeviceFamily::Ut61EPlus),
-                None
+                opts
             ),
             bluetooth,
             "a family the adapter carries"
         );
         assert!(
-            !bluetooth_is_next(preferred_transports(protocol::DeviceFamily::Ut80x), None),
+            !bluetooth_is_next(preferred_transports(protocol::DeviceFamily::Ut80x), opts),
             "a cable-only family"
         );
         assert!(
-            !bluetooth_is_next(&[], Some("00C5B27A")),
+            !bluetooth_is_next(&[], OpenOptions::with_adapter(Some("00C5B27A"))),
             "a named USB adapter"
+        );
+        assert!(
+            !bluetooth_is_next(
+                &[],
+                OpenOptions {
+                    bluetooth: false,
+                    ..OpenOptions::new()
+                }
+            ),
+            "probing switched off"
         );
     }
 

@@ -57,6 +57,12 @@ struct Args {
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
+    /// Turn off Bluetooth scanning for this session.
+    /// Overrides the "Look for Bluetooth adapters" setting. An address given
+    /// to --adapter is still opened.
+    #[arg(long)]
+    no_bluetooth: bool,
+
     /// Play back a file written by 'dmm-cli read --format replay' or by
     /// Export… → Replay…, instead of connecting to a meter
     #[arg(long, value_name = "FILE", conflicts_with_all = ["device", "mock_mode"])]
@@ -99,6 +105,9 @@ pub struct CliOverrides {
     pub theme: Option<settings::ThemeMode>,
     pub renderer: Option<eframe::Renderer>,
     pub adapter: Option<String>,
+    /// `--no-bluetooth`: no Bluetooth scanning for this session, whatever the
+    /// saved setting says.
+    pub no_bluetooth: bool,
     /// Time base for this session's readings: real unless a `--mock-clock-*`
     /// flag was given. Under `--replay` the first Connect pins its origin to
     /// the recording's own start.
@@ -305,6 +314,7 @@ fn parse_args() -> CliOverrides {
         theme,
         renderer,
         adapter: args.adapter,
+        no_bluetooth: args.no_bluetooth,
         clock,
         replay,
     }

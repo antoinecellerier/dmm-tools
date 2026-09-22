@@ -253,6 +253,8 @@ pub struct Overrides {
     pub mock_mode: Option<String>,
     /// Original persisted value for theme (if overridden).
     pub theme: Option<ThemeMode>,
+    /// Original persisted value for Bluetooth probing (if overridden).
+    pub bluetooth: Option<bool>,
     /// CLI-specified adapter (serial number or HID path).
     pub adapter: Option<String>,
 }
@@ -269,6 +271,10 @@ impl Overrides {
 
     pub fn has_theme(&self) -> bool {
         self.theme.is_some()
+    }
+
+    pub fn has_bluetooth(&self) -> bool {
+        self.bluetooth.is_some()
     }
 }
 
@@ -335,6 +341,7 @@ impl Default for Settings {
                 // No meter named: a fresh install works out which one is on
                 // the cable rather than assuming the one we own.
                 device_family: dmm_lib::protocol::registry::AUTO_DEVICE_ID.to_string(),
+                ..SharedSettings::default()
             },
             theme: ThemeMode::Dark,
             show_graph: true,
@@ -415,6 +422,9 @@ impl Settings {
             }
             if let Some(original) = self.overrides.theme {
                 to_save.theme = original;
+            }
+            if let Some(original) = self.overrides.bluetooth {
+                to_save.shared.bluetooth = original;
             }
             if let Ok(json) = serde_json::to_string_pretty(&to_save) {
                 // Atomic (.tmp + fsync + rename) so a kill or disk-full
@@ -503,6 +513,7 @@ mod tests {
         let s = Settings {
             shared: SharedSettings {
                 device_family: "vc880".to_string(),
+                ..SharedSettings::default()
             },
             ..Default::default()
         };
@@ -516,6 +527,7 @@ mod tests {
         let s = Settings {
             shared: SharedSettings {
                 device_family: "ut8803".to_string(),
+                bluetooth: false,
             },
             theme: ThemeMode::Light,
             show_graph: false,
@@ -557,6 +569,7 @@ mod tests {
         assert_eq!(deserialized.max_samples, 2_000_000);
         assert_eq!(deserialized.color_preset, ColorPreset::HighContrast);
         assert_eq!(deserialized.shared.device_family, "ut8803");
+        assert!(!deserialized.shared.bluetooth);
     }
 
     #[test]

@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 /// Kept deliberately small. New shared fields go here; GUI-only or CLI-only
 /// fields stay in their respective crates and are merged onto this struct via
 /// `#[serde(flatten)]` at the call site.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SharedSettings {
     /// Device family ID from the registry (e.g. `"ut61eplus"`, `"ut8803"`), or
@@ -45,6 +45,26 @@ pub struct SharedSettings {
     /// they hand [`resolve_device_family`] (the CLI prints a notice; the GUI
     /// fills the device picker in).
     pub device_family: String,
+    /// Whether an open with no cable on it may go on to look for a Bluetooth
+    /// adapter. On by default; off, nothing scans the radio and no help offers
+    /// it. An address named on `--adapter` is still opened.
+    #[serde(default = "bluetooth_default")]
+    pub bluetooth: bool,
+}
+
+/// Bluetooth probing is on unless it was turned off: a settings file written
+/// before the field existed comes from a version that always probed.
+fn bluetooth_default() -> bool {
+    true
+}
+
+impl Default for SharedSettings {
+    fn default() -> Self {
+        Self {
+            device_family: String::new(),
+            bluetooth: bluetooth_default(),
+        }
+    }
 }
 
 /// Where the device family a tool ended up with came from.
@@ -236,6 +256,18 @@ mod tests {
         assert_eq!(s.device_family, "");
     }
 
+    /// Bluetooth is probed unless the user turned it off, and a file written
+    /// before the field existed came from a version that always probed — so
+    /// upgrading must not quietly stop finding adapters.
+    #[test]
+    fn bluetooth_probing_is_on_by_default() {
+        assert!(SharedSettings::default().bluetooth);
+        let old: SharedSettings = serde_json::from_str(r#"{"device_family":"ut61eplus"}"#).unwrap();
+        assert!(old.bluetooth);
+        let off: SharedSettings = serde_json::from_str(r#"{"bluetooth":false}"#).unwrap();
+        assert!(!off.bluetooth);
+    }
+
     #[test]
     fn deserializes_device_family() {
         let s: SharedSettings = serde_json::from_str(r#"{"device_family":"ut8803"}"#).unwrap();
@@ -261,6 +293,7 @@ mod tests {
     fn saved(family: &str) -> SharedSettings {
         SharedSettings {
             device_family: family.to_string(),
+            ..Default::default()
         }
     }
 
@@ -314,8 +347,9 @@ mod tests {
     fn serializes_to_top_level_field() {
         let s = SharedSettings {
             device_family: "vc880".to_string(),
+            ..Default::default()
         };
         let json = serde_json::to_string(&s).unwrap();
-        assert_eq!(json, r#"{"device_family":"vc880"}"#);
+        assert_eq!(json, r#"{"device_family":"vc880","bluetooth":true}"#);
     }
 }

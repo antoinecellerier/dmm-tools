@@ -28,6 +28,7 @@ Set `NO_COLOR=1` to disable colored output.
 |---|---|---|
 | `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is connected. See [Devices](#devices) below. |
 | `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter, from `list` output. |
+| `--no-bluetooth` | | Turn off Bluetooth scanning for this run. Overrides the `bluetooth` setting in the settings file; an address given to `--adapter` is still opened. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
@@ -103,16 +104,17 @@ dmm-cli --device mock read
 ### dmm-cli list
 
 List the connected USB cables and the Bluetooth adapters in range: the ones
-connected to this computer or advertising. A sleeping adapter is not listed,
-paired or not.
+connected to this computer or heard advertising. A paired adapter the scan
+did not hear is listed dim as "paired but not heard": check it is switched on.
 
 ```
 dmm-cli list
 ```
 
-Prints each device with an index number and transport type. If nothing is
-found, prints troubleshooting hints (udev rule install on Linux,
-driver install on Windows).
+Prints each device with an index number and transport type. The Bluetooth
+scan takes a few seconds; `--no-bluetooth` skips it and lists cables only. If
+nothing is found, prints troubleshooting steps for each link that was
+searched (udev rule install on Linux, driver install on Windows).
 
 When more than one device is reachable, use `--adapter` with a serial number,
 HID path or Bluetooth address from the `list` output to select one:

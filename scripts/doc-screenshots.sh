@@ -204,11 +204,15 @@ launch_without_meter() {
 # instead. Nothing is opened either way.
 #
 # A cable it finds is listed on stdout; "No devices found." and the advice under
-# it go to stderr, so both streams are read and the line matched whole.
+# it go to stderr, so both streams are read and the line matched whole. "No
+# devices heard in range." means a paired Bluetooth adapter the scan missed:
+# the app would still try it, so it must be switched off for these scenes.
 no_meter_or_skip() {
 	local listing
 	listing="$(cd "$ROOT" && cargo run -q -p dmm-cli -- list 2>&1 || true)"
-	if ! printf '%s\n' "$listing" | grep -qx 'No devices found.'; then
+	if printf '%s\n' "$listing" | grep -qx 'No devices heard in range.'; then
+		echo "$1: a paired Bluetooth adapter is listed — make sure it is switched off"
+	elif ! printf '%s\n' "$listing" | grep -qx 'No devices found.'; then
 		echo "$1: skipped — unplug the USB cable and run this scene again"
 		echo "  dmm-cli list said: $(printf '%s' "$listing" | head -1)"
 		return 1
