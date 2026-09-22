@@ -2,11 +2,10 @@
 
 ## Setup
 
-After cloning, install the git hooks:
+After cloning, turn on the git hooks:
 
 ```sh
-ln -sf ../../git-hooks/pre-commit .git/hooks/pre-commit
-ln -sf ../../git-hooks/commit-msg .git/hooks/commit-msg
+git config core.hooksPath git-hooks
 ```
 
 `pre-commit` runs `cargo fmt --check`, `cargo clippy`, and `cargo test` before each commit. `commit-msg` rejects a `Claude-Session:` trailer in the message; `Co-Authored-By` trailers are fine.

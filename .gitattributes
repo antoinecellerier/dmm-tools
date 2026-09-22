@@ -1,0 +1,4 @@
+# LF in every checkout, whatever core.autocrlf says: the doc tests compare
+# the docs byte for byte with what they generate, and a Windows checkout with
+# Git's default CRLF conversion fails them.
+* text=auto eol=lf
