@@ -2,17 +2,21 @@
 //! replay` writes one, and `-o` decides where it lands and what shape it is.
 //!
 //! The point of a replay is that it prints the same thing every time — a doc
-//! snippet is generated from one — so the timestamps are asserted literally
+//! snippet is generated from one — so the timestamps are asserted exactly
 //! rather than by shape, and a second run is compared byte for byte.
 //!
-//! The tests that assert a timestamp, or a file name carrying one, are Linux
-//! and macOS only: they pin `TZ=UTC`, which chrono's `Local` ignores on
-//! Windows.
+//! `read` prints times in the machine's own zone, and the zone cannot be
+//! pinned for the binary everywhere (`TZ` is ignored on Windows), so the
+//! expected times are the recorded instant rendered in that same zone.
 //!
 //! `--format replay` against a meter has no test here: it needs the cable.
 
+use chrono::{DateTime, Local, TimeDelta, Utc};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// The `# recorded:` line every recording below carries.
+const RECORDED: &str = "2026-09-02T10:00:00Z";
 
 /// Three real UT61E+ frames, from the golden fixtures in dmm-lib
 /// (`dcv_battery`, `dcv_negative`, `dcv_negative_zero`), 100 ms apart.
@@ -26,18 +30,20 @@ const RECORDING: &str = "\
 200 02 31 2D 20 30 2E 30 30 30 00 00 30 34 31
 ";
 
-/// What the three frames export as, in the RFC3339 form `read` prints: the
-/// `# recorded:` header plus each frame's own offset.
-#[cfg(not(windows))]
-const TIMESTAMPS: [&str; 3] = [
-    "2026-09-02T10:00:00+00:00",
-    "2026-09-02T10:00:00.100+00:00",
-    "2026-09-02T10:00:00.200+00:00",
-];
+/// When the frame `offset_ms` into a recording below was recorded, in this
+/// machine's zone: the `# recorded:` header plus the frame's own offset.
+fn recorded_at(offset_ms: i64) -> DateTime<Local> {
+    let start: DateTime<Utc> = RECORDED.parse().expect("the recordings' start");
+    (start + TimeDelta::milliseconds(offset_ms)).with_timezone(&Local)
+}
+
+/// What that frame exports as, in the RFC3339 form `read` prints.
+fn timestamp(offset_ms: i64) -> String {
+    recorded_at(offset_ms).to_rfc3339()
+}
 
 /// Two frames six seconds apart: a meter that stopped answering part-way
 /// through the recording, which plays back as a run of timeouts.
-#[cfg(not(windows))]
 const RECORDING_WITH_A_GAP: &str = "\
 # dmm-replay 1
 # device: ut61eplus
@@ -49,7 +55,6 @@ const RECORDING_WITH_A_GAP: &str = "\
 
 /// A session someone turned the dial during: DC V, then 80.45 kΩ across an
 /// 82 kΩ resistor (the `ohm_82k` golden fixture).
-#[cfg(not(windows))]
 const RECORDING_ACROSS_MODES: &str = "\
 # dmm-replay 1
 # device: ut61eplus
@@ -74,10 +79,12 @@ const RECORDING_ALL_CORRUPT: &str = "\
 /// registry's name for the meter the file names, whatever the meter reported
 /// in its `# model:` line, and the first frame's own time. Not the family
 /// name the CSV comment carries.
-#[cfg(not(windows))]
 const AUTO_NAME_STEM: &str = "measurements-UT61E+";
-#[cfg(not(windows))]
-const AUTO_NAME_START: &str = "2026-09-02_10-00-00";
+
+/// The first frame's time as a file name carries it.
+fn auto_name_start() -> String {
+    recorded_at(0).format("%Y-%m-%d_%H-%M-%S").to_string()
+}
 
 /// An empty directory of this test's own: what it runs in, so a file the run
 /// names itself lands here.
@@ -101,8 +108,9 @@ fn recording_in(dir: &Path) -> PathBuf {
 }
 
 /// Run the binary as a user would, with nothing of the environment left to
-/// move the output: `TZ` fixes the printed offset, `NO_COLOR` the styling,
-/// and an inherited `RUST_LOG` would add lines of its own.
+/// move the output: `NO_COLOR` fixes the styling, and an inherited
+/// `RUST_LOG` would add lines of its own. The zone is left as it is, the
+/// same one [`recorded_at`] renders in.
 fn run(args: &[&str]) -> (String, String, bool) {
     run_in(&std::env::temp_dir(), args)
 }
@@ -112,7 +120,6 @@ fn run_in(dir: &Path, args: &[&str]) -> (String, String, bool) {
     let out = Command::new(env!("CARGO_BIN_EXE_dmm-cli"))
         .args(args)
         .current_dir(dir)
-        .env("TZ", "UTC")
         .env("NO_COLOR", "1")
         .env_remove("RUST_LOG")
         .output()
@@ -138,7 +145,6 @@ fn read_csv(path: &Path, extra: &[&str]) -> (String, String, bool) {
     run(&args)
 }
 
-#[cfg(not(windows))]
 #[test]
 fn replay_exports_the_times_the_frames_were_recorded_at() {
     let path = recording_in(&dir_for("timestamps"));
@@ -147,8 +153,12 @@ fn replay_exports_the_times_the_frames_were_recorded_at() {
 
     let rows: Vec<&str> = stdout.lines().skip(2).collect();
     assert_eq!(rows.len(), 3, "one row per frame: {stdout}");
-    for (row, expected) in rows.iter().zip(TIMESTAMPS) {
-        assert_eq!(row.split(',').next(), Some(expected), "got {row}");
+    for (row, offset_ms) in rows.iter().zip([0, 100, 200]) {
+        assert_eq!(
+            row.split(',').next(),
+            Some(timestamp(offset_ms).as_str()),
+            "got {row}"
+        );
     }
     // The frames decode through the family's own parser, so the values are
     // the ones the goldens carry.
@@ -177,7 +187,6 @@ fn replay_takes_the_clock_flags() {
 /// A gap plays back as the timeouts it was, and they are not a quiet meter:
 /// there is no `--device` to check and nothing on the cable to switch a USB
 /// mode on. The preseed spends the six seconds of silence without waiting.
-#[cfg(not(windows))]
 #[test]
 fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
     let path = recording_of(&dir_for("gap"), RECORDING_WITH_A_GAP);
@@ -198,7 +207,7 @@ fn a_gap_in_a_recording_does_not_print_the_no_response_help() {
         "the gap was reported as a quiet meter: {stderr}"
     );
     // And the frame on the far side of the gap still plays, at its own time.
-    assert!(stdout.contains("2026-09-02T10:00:06+00:00"), "got {stdout}");
+    assert!(stdout.contains(&timestamp(6000)), "got {stdout}");
 }
 
 /// A recording written from a recording is the same session: the copy carries
@@ -231,7 +240,6 @@ fn a_replay_written_from_a_replay_plays_back_identically() {
 
 /// Given no file name, `-o` builds one from the meter, the mode the run
 /// stayed in and the first reading's time, and says where it went.
-#[cfg(not(windows))]
 #[test]
 fn a_bare_output_names_the_file_after_the_meter_and_the_mode() {
     let dir = dir_for("auto-name");
@@ -251,7 +259,8 @@ fn a_bare_output_names_the_file_after_the_meter_and_the_mode() {
     );
     assert!(ok, "the run failed: {stderr}");
 
-    let name = format!("{AUTO_NAME_STEM}-DC-V-{AUTO_NAME_START}.csv");
+    let start = auto_name_start();
+    let name = format!("{AUTO_NAME_STEM}-DC-V-{start}.csv");
     assert!(
         stderr.contains(&format!("Written to {name}")),
         "got {stderr}"
@@ -267,7 +276,6 @@ fn a_bare_output_names_the_file_after_the_meter_and_the_mode() {
 /// The name carries the second the run started in, so two runs that start in
 /// the same one — here, two plays of the same recording — ask for the same
 /// file. The second steps aside instead of writing over the first.
-#[cfg(not(windows))]
 #[test]
 fn two_runs_that_name_the_same_file_both_keep_their_readings() {
     let dir = dir_for("same-second");
@@ -287,8 +295,9 @@ fn two_runs_that_name_the_same_file_both_keep_their_readings() {
     let (_, second, ok) = run_in(&dir, &args);
     assert!(ok, "the second run failed: {second}");
 
-    let name = format!("{AUTO_NAME_STEM}-DC-V-{AUTO_NAME_START}.csv");
-    let beside = format!("{AUTO_NAME_STEM}-DC-V-{AUTO_NAME_START}-2.csv");
+    let start = auto_name_start();
+    let name = format!("{AUTO_NAME_STEM}-DC-V-{start}.csv");
+    let beside = format!("{AUTO_NAME_STEM}-DC-V-{start}-2.csv");
     assert!(first.contains(&format!("Written to {name}")), "got {first}");
     assert!(
         second.contains(&format!("Written to {beside}")),
@@ -302,7 +311,6 @@ fn two_runs_that_name_the_same_file_both_keep_their_readings() {
 
 /// A run that crossed a function switch is no one mode's, so the mode comes
 /// back out of the name when the run ends.
-#[cfg(not(windows))]
 #[test]
 fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
     let dir = dir_for("mode-change");
@@ -322,7 +330,8 @@ fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
     );
     assert!(ok, "the run failed: {stderr}");
 
-    let name = format!("{AUTO_NAME_STEM}-{AUTO_NAME_START}.csv");
+    let start = auto_name_start();
+    let name = format!("{AUTO_NAME_STEM}-{start}.csv");
     assert!(
         stderr.contains(&format!("Written to {name}")),
         "got {stderr}"
@@ -339,7 +348,6 @@ fn a_run_that_changes_mode_drops_the_mode_from_the_name() {
 
 /// The rename that drops the mode at the end of a run is a write too: the
 /// name it renames onto may be a file another run already left there.
-#[cfg(not(windows))]
 #[test]
 fn a_rename_onto_an_existing_name_steps_aside() {
     let dir = dir_for("rename");
@@ -359,8 +367,9 @@ fn a_rename_onto_an_existing_name_steps_aside() {
     let (_, second, ok) = run_in(&dir, &args);
     assert!(ok, "the second run failed: {second}");
 
-    let name = format!("{AUTO_NAME_STEM}-{AUTO_NAME_START}.csv");
-    let beside = format!("{AUTO_NAME_STEM}-{AUTO_NAME_START}-2.csv");
+    let start = auto_name_start();
+    let name = format!("{AUTO_NAME_STEM}-{start}.csv");
+    let beside = format!("{AUTO_NAME_STEM}-{start}-2.csv");
     assert!(first.contains(&format!("Written to {name}")), "got {first}");
     assert!(
         second.contains(&format!("Written to {beside}")),
@@ -396,7 +405,6 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
             "-o",
         ])
         .current_dir(&dir)
-        .env("TZ", "UTC")
         .env("NO_COLOR", "1")
         .env_remove("RUST_LOG")
         .stdout(std::process::Stdio::piped())
