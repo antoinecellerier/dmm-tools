@@ -13,6 +13,11 @@ pub enum Command {
     GetMeasurement = 0x5E,
     /// Get device name.
     GetName = 0x5F,
+    /// Start the readings stream. On a cable the meter only acknowledges
+    /// it; the UT-D07B Bluetooth adapter answers it by polling the meter
+    /// itself and forwarding every reading
+    /// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §3).
+    StartStream = 0x5D,
     /// Toggle MIN/MAX mode.
     MinMax = 0x41,
     /// Exit MIN/MAX mode.

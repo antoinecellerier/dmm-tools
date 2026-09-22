@@ -149,7 +149,7 @@ dmm-cli read [OPTIONS]
 
 | Option | Default | Description |
 |---|---|---|
-| `--interval-ms <MS>` | `0` | Interval between readings in milliseconds. 0 = fastest (~10 Hz). |
+| `--interval-ms <MS>` | `0` | Interval between readings in milliseconds. 0 = as fast as the link delivers (on a UT61E+, about 10 a second over USB, 3 over Bluetooth). |
 | `--format <FORMAT>` | `text`, or what `-o`'s extension names | Output format: `text`, `csv`, `json` or `replay`. |
 | `-o, --output [<FILE>]` | stdout | Write to FILE; with no FILE, to `measurements-<meter>-<mode>-<start>.<ext>`. |
 | `--count <N>` | `0` | Number of readings to take. 0 = unlimited (Ctrl+C to stop). |

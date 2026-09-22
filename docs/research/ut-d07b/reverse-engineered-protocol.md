@@ -11,9 +11,14 @@ Based on:
 - Live GATT enumeration of our own UT-D07B over BlueZ 5.87, 2026-09-22:
   services, characteristics, flags, advertising data and a first frame
   exchange with our UT61E+ behind it
+- A `btmon` capture of a session on this machine, 2026-09-22: the HCI trace of
+  a connect, the adapter's own parameter update, a host-forced connection
+  update and the notification timing under each (§5)
 - The archived iDMM2.0 Android app (`references/idmm2/`), read 2026-09-21,
   for the two BLE UART service sets UNI-T's own client knows
-  (`../new-device-candidates.md`)
+  (`../new-device-candidates.md`), and decompiled with jadx on 2026-09-22
+  (`references/idmm2/jadx-out/`) for the start command it sends and what it
+  makes of the adapter's heartbeat (§3)
 - UNI-T's UT-D series accessory page,
   https://meters.uni-trend.com/product/ut-d-series/, read 2026-09-22, and the
   Chinese accessory pages https://meters.uni-trend.com.cn/content/4374.html
@@ -28,6 +33,7 @@ Confidence levels:
 - **[VENDOR]** — from UNI-T's own app, accessory page or printed instructions
 - **[DEDUCED]** — logical inference from the above
 - **[UNVERIFIED]** — needs a measurement or another unit to confirm
+- **[COMMUNITY]** — from a community source, §7 only; never in §1-6
 
 ---
 
@@ -37,7 +43,9 @@ The UT-D07B is a transparent bridge [HARDWARE]. Bytes written to its UART RX
 characteristic reach the meter's serial line unchanged, and bytes the meter
 sends arrive as notifications on its UART TX characteristic — the same stream
 the UT-D09 USB cable carries. A host that already speaks a meter's protocol
-needs no new framing, no encapsulation and no adapter-level command set.
+needs no new framing and no encapsulation. It is not quite silent on the
+stream, though: it puts a heartbeat of its own there and it acts on the
+UT61+ start command itself (§3).
 
 The adapter cannot say which meter is behind it [HARDWARE]. Its Device
 Information service strings are all empty, and its PnP ID names vendor `0x005D`
@@ -69,8 +77,9 @@ UNI-T's native-BLE meters, which have no adapter [VENDOR].
 On connect, BlueZ 5.87 logs
 `profiles/gap/gas.c:read_ppcp_cb() GAS PPCP: Invalid Connection Parameters
 values` [HARDWARE]: the adapter's Peripheral Preferred Connection Parameters
-characteristic (`0x2A04`) holds values BlueZ rejects. The link works anyway —
-the host's own parameters are used instead.
+characteristic (`0x2A04`) holds values BlueZ rejects. It costs the adapter
+nothing: it asks for the parameters it wants over L2CAP instead, and gets
+them (§5).
 
 ## 3. Bringing the link up
 
@@ -81,6 +90,20 @@ and a checksummed `AB CD` frame came back as a notification. Nothing is written
 to the ISSC control characteristic first, and no configuration service is
 touched.
 
+The adapter takes the UT61+ start command itself [HARDWARE]. Writing
+`AB CD 03 5D 01 D8`, the command UNI-T's own client sends once to start
+reading, brings readings from about 1-2 s on and keeps them coming with
+nothing written again — one 19-byte frame per notification, about 3.2 a
+second with our UT61E+ behind it (§5). No ack for the command is ever seen. Behind a USB cable the same
+command to the same meter draws the `FF 00` ack and no readings at all
+(`../ut61eplus/reverse-engineered-protocol.md` §2.3), so the meter is not the
+one acting on it: the adapter polls the meter and forwards what comes back.
+
+A command meant for the meter is acked slowly [HARDWARE]. A button press
+(HOLD) written over a fresh link had its `FF 00` ack 1.26 s later, against
+about 0.1 s over the cable, and the meter's LCD followed. Presses work while
+the readings are streaming.
+
 The adapter puts one frame of its own on the stream [HARDWARE]:
 `AB CD 06 AA AA 6E 67 03 A7` — a UT61+-style frame (header, length 6,
 big-endian sum checksum) with the payload `AA AA 6E 67`. It comes once when a
@@ -89,11 +112,14 @@ the meter is silent: with the meter switched off and the adapter on its own
 batteries, the link stayed up and the frame kept coming. It is the adapter's,
 not the meter's — over USB the meter never sends it — and what `6E 67` encodes
 is not known. A host has to drop it before the meter's parser sees it.
+UNI-T's own client reads the frame as "no meter data" [VENDOR]: it blanks the
+displayed value and answers with Get Name, then the start command above, once
+the name comes back.
 
 Pairing is not required [HARDWARE]: with the bond removed from the host, a
 scan found the adapter, the connection and the subscription went through and
-the meter answered. A paired adapter is one the host lists without scanning,
-which is what makes a reconnect faster; that is its only effect.
+the meter answered. A paired adapter is one the host lists without scanning;
+that is its only effect.
 
 ## 4. The adapter sleeps
 
@@ -136,17 +162,29 @@ adapter advertises is not measured.
 
 ## 5. Link parameters
 
+Read off the air with `btmon` on 2026-09-22, our UT61E+ behind the adapter,
+BlueZ 5.87 on kernel HCI [HARDWARE].
+
 | Value | Reading | Confidence |
 |---|---|---|
 | ATT MTU | 247 bytes, as negotiated with BlueZ 5.87 | [HARDWARE] |
-| Connection interval, slave latency, supervision timeout | not measured — BlueZ does not expose them to a client | [UNVERIFIED] |
-| One UT61+ poll (write, reply) | about 0.63 s with an unacknowledged write, 0.8 s with an acknowledged one, once the link has settled; about 0.1 s over USB | [HARDWARE] |
+| Connection interval | the adapter sets it. Right after every connect it sends an L2CAP Connection Parameter Update Request for min 224 / max 255 (× 1.25 ms = 280-318.75 ms), latency 0, timeout 500 (5 s); the host accepts and the link runs at 315 ms. BlueZ stores the parameters, so the next connect is created at 315 ms directly | [HARDWARE] |
+| The PPCP characteristic (`0x2A04`) | rejected by BlueZ (§2) and it changes nothing — the L2CAP request above is what moves the link | [HARDWARE] |
+| A host-forced interval | an LE Connection Update from the host (`hcitool lecup --min 8 --max 16`, root) is accepted and the link moves to 15 ms; the adapter does not ask for its 315 ms back for the rest of the connection | [HARDWARE] |
+| Notification cadence | about 315 ms between readings, whatever the radio does: at the forced 15 ms interval they were still 315-330 ms apart | [HARDWARE] |
+| Streamed readings (after the start command, §3) | 3.23 Hz — 60 readings in 18.3 s, one 19-byte frame per notification; the same 3.2 Hz over two minutes | [HARDWARE] |
+| Polled readings (one 0x5E each) | 1.44 Hz sustained, median gap 0.632 s, with an unacknowledged write; an acknowledged write measured 0.8 s a poll. At the forced 15 ms interval the same poll loop ran at 3.2 Hz, median gap 0.328 s (1.6 Hz before the update in that session) | [HARDWARE] |
+| The same poll over USB | about 0.1 s | [HARDWARE] |
 | First seconds of a fresh link | polls take up to 2 s while bluetoothd reads the Device Information characteristics (model, serial, firmware strings) | [HARDWARE] |
 
-A 19-byte UT61+ reading arrives as one notification on this MTU. The poll
-time is well above the meter's own reply time, so the connection interval or
-the adapter's UART turnaround is what bounds the rate; which one is
-[UNVERIFIED].
+A 19-byte UT61+ reading arrives as one notification on this MTU. The
+~315 ms cadence is the adapter's own for this family: dropping the
+connection interval by a factor of twenty left it where it was. What the
+interval costs is the second trip a poll needs — at 315 ms a poll pays two
+of them and a streamed reading one, which is why the start command alone
+doubles the rate and why at 15 ms a polled link catches up with a streamed
+one. The cadence, not the radio, is the ceiling, and the start command
+reaches it with nothing asked of the host stack.
 
 ## 6. Which meters sit behind it
 
@@ -170,6 +208,9 @@ Facts about the adapter that any decoder has to live with:
 - The link carries the meter's bytes and nothing else. There is no
   adapter-level framing, length field or checksum wrapped around them, so a
   decoder written for the cable works unchanged.
+- The UT61+ start command is the adapter's, not the meter's (§3). A host that
+  sends it is fed at the adapter's own cadence with nothing written again;
+  one that does not pays a round trip for every reading.
 - Notifications are ATT-sized chunks, not frames. One notification may carry
   part of a frame or more than one frame, so the reader has to buffer and let
   the meter's own framing find the boundaries — the same way the HID bridges'
@@ -189,3 +230,29 @@ Facts about the adapter that any decoder has to live with:
   no replies.
 - The adapter identifies itself and not the meter (§1), so which meter is
   behind it has to be settled from the frames, exactly as on a USB cable.
+
+## 7. Cross-reference with community sources [COMMUNITY]
+
+Read 2026-09-22, after §1-6 were written from our own unit and UNI-T's own
+material; the clean-room boundary was opened that day for the adapter's read
+rate. Nothing here was merged into §1-6 and nothing here contradicts them.
+Sources and the boundary: `reverse-engineering-approach.md`.
+
+| Finding | Ours (§) | Community | Agree? |
+|---|---|---|---|
+| Module | PnP vendor `0x005D`, ISSC/Microchip (§1) | "UT-D07 (Bluetooth adapter, **ISSC BL79 BLETR** chip)" (libsigrok `README.devices:351`); a UT-D07A teardown found a PIC18LF25K22 and a BL79BLETRMC2 ([EEVblog, 2017-11-11](https://www.eevblog.com/forum/projects/uni-t-ut-d07a-bluetooth/msg1346931/#msg1346931)) | ✓, and names the part |
+| UART service, characteristics | ISSC `…fe7d…`, notify `…1e4d…`, write `…8841…`, control `…aca3…` unused (§2, §3) | Same UUIDs and roles in [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) (`GattMonitor.cs:44`), [libreble/multimeter](https://github.com/libreble/multimeter) (`docs/protocols/uni-t.md`), [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy) (`adapters/ut61xp.py:214-215`) and subsurface (`core/qt-ble.cpp:298-306`), which also avoids `…aca3…` and `…6daa…` | ✓ |
+| Pairing not required | §3 | Windows client pairs with `DevicePairingKinds.ConfirmOnly`, no passkey (`PairingHelper.cs:16-18`) | ✓ |
+| An unreachable adapter is asleep | §4 | "The BLE adapter will shutdown within a short period of time when it's not being communicated to, needs another power cycle to re-connect. The USB cable does not suffer from such a constraint." (libsigrok `src/hardware/uni-t-ut181a/protocol.c:34-39`) | ✓; adds idle as the trigger |
+| Heartbeat `AB CD 06 AA AA 6E 67 03 A7` | The adapter's, dropped before the parser; `6E 67` unknown (§3) | Both BLE clients treat a 9-byte `AB CD … AA AA …` frame as "no data, re-identify" and answer with Get Name (`DecoderUni_T.cs:337-352`; `framing.ts:42-47`). Nobody decodes `6E 67`. libreble's UT60BT captures — same family, no adapter in the path — never saw the frame | ✓; `6E 67` still unknown |
+| One UT61+ poll ≈ 0.63 s over BLE, ≈ 0.1 s over USB (§5) | | ut61xpy, which polls the same `0x5E` over a UT-D07B: "minimum achievable data readout interval is around 180 msec for USB adapter and around **800 msec for Bluetooth** adapter" (README) | ✓ on BLE; ✗ on USB (their 180 ms vs our ~100 ms) |
+| Connection interval 315 ms, asked for by the adapter; MTU 247; the adapter's ~315 ms cadence bounds the rate (§5) |  | new — nobody else measured them |
+| Write without response is the faster write (§5) | | libsigrok writes BLE with ATT Write Request, acknowledged (`bt_bluez.c:1036-1053`); ut61xpy and the Windows client write without response | ✗ with sigrok, by choice not by measurement |
+| The adapter carries a stream at near wire rate | not measured | A UT181A in monitor mode over a **UT-D07A** logged "a packet at 10Hz … At 55 Bytes" and, checked against a sine wave, "the ~10 Hz sample rate is real" ([2018-10-04](https://www.eevblog.com/forum/projects/uni-t-ut-d07a-bluetooth/msg1868123/#msg1868123), [2018-10-12](https://www.eevblog.com/forum/projects/uni-t-ut-d07a-bluetooth/msg1896485/#msg1896485)) | new |
+| What the ~0.5 s per poll was | the adapter's own cadence, measured (§5) | One unmeasured guess, host→adapter direction: "Perhaps there is a minimum time between packets when sending data to the D07A. I added a 500ms delay and a retry and it has been solid since" ([2018-10-09](https://www.eevblog.com/forum/projects/uni-t-ut-d07a-bluetooth/msg1882682/#msg1882682)) | new, unconfirmed |
+| Which meters sit behind which adapter (§6) | UNI-T's two pages disagree | A third position: "Uni-T multimeters with UT-D07A and UT-D07B Bluetooth Adaptor (UT61+ Series, UT161 Series, UT171 Series, and UT181A Only)" (webspiderteam README) | disagrees with UNI-T's global page |
+| UT-D07A vs UT-D07B | the A has not been seen (§6) | The A advertises a name starting `UT-D07A`; drivers match on it (`libreble` `ut171.ts:380-385`). Same ISSC module class as ours; its GATT tree is still unenumerated by anyone | partial |
+
+The UT-D07A "sometimes needs START repeated" for the UT171 (`libreble`
+`docs/protocols/ut171.md`, untested on their side), which matches the
+vendor app re-sending its start frame at +2 s and +3 s.

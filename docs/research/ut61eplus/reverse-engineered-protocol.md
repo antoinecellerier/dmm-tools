@@ -8,6 +8,8 @@ Based on:
 - UNI-T protocol deck "UT61+系列通讯协议" (UT161/UT61+/UT202S), published on
   the UT61E+ product page of meters.uni-trend.com.cn — see
   `docs/research/ut61-family/reverse-engineering-approach.md`
+- UNI-T's iDMM2.0 Android app, decompiled with jadx, for command 0x5D
+  (same approach doc)
 
 Confidence levels:
 - **[KNOWN]** — established facts from official Silicon Labs documentation
@@ -17,6 +19,7 @@ Confidence levels:
 - **[DEDUCED]** — logical inferences not yet verified against real hardware
 - **[UNVERIFIED]** — requires real device testing to confirm
 - **[VERIFIED]** — confirmed against a real UT61E+ device
+- **[COMMUNITY]** — from a community source, §7 only; never in §1-6
 
 ---
 
@@ -219,8 +222,10 @@ constructor):
   via `SampleRate`)
 
 The deck words 0x5E and 0x5F as commands that "enable" the meter to send
-its display value and its model name. Over the CP2110 each 0x5E still
-brings back exactly one measurement frame (§2.9).
+its display value and its model name. "Enable" means "send one": over the
+CP2110 each 0x5E brings back exactly one measurement frame (§2.9), and the
+one command that does start readings coming unasked — 0x5D, which the deck
+omits — is acked and changes nothing on the cable (§2.3).
 
 ### 2.3 Command Format (Host → Meter) — [VENDOR]
 
@@ -270,6 +275,22 @@ protocol deck's command table (命令表一) with the same meaning.
 Hardware verification: commands issued against a real UT61E+ via `dmm-cli`
 command tools; effects observed on the meter LCD and subsequent response
 frames.
+
+**Command 0x5D** — `AB CD 03 5D 01 D8`, in neither the deck nor V2.02.
+UNI-T's own Android client writes it once to start reading and then only
+listens (the decompiled app, `../ut61-family/reverse-engineering-approach.md`;
+§7 has the community's names for it). What it does depends on the link, both
+tested on our UT61E+ on 2026-09-22:
+
+| Link | What follows the command | Status |
+|------|--------------------------|--------|
+| CP2110 cable | the `FF 00` ack and nothing else; readings still take one 0x5E each | **[VERIFIED]** |
+| UT-D07B adapter | no ack ever seen, then readings unasked from about 1-2 s on, about 3.2 a second | **[VERIFIED]** |
+
+The pair puts the command at the adapter rather than at the meter: the
+adapter polls the meter itself once told to, and what the meter does with
+0x5D is what the cable shows
+(`../ut-d07b/reverse-engineered-protocol.md` §3, §5).
 
 **Clamp-meter commands — [VENDOR-DOC]**, in the same table and for
 features no UT61+ model has:
@@ -571,7 +592,8 @@ The configured delay adds on top of the ~100 ms wire round-trip time.
   bytes one at a time via HID interrupt reports, so an `AB CD` frame
   spans many reports: a full measurement response takes ~19 of them.
 - **Request-response only:** the meter never streams data; each reading
-  requires sending the `0x5E` request command.
+  requires sending the `0x5E` request command. 0x5D does not change that
+  (§2.3).
 - **Mode byte reflects active unit, not dial position:** on DC V dial
   with auto-range, the meter reports mode 0x02 (DCV) even when showing
   mV-scale values. The range byte determines the actual scale.
@@ -720,7 +742,74 @@ Configuration is stored in `options.xml`:
 | Bar graph position encoding (bytes 12-13) | **VERIFIED** | `byte12*10 + byte13` decimal, real device |
 | Commands 0x41/0x42/0x47/0x48/0x49/0x4B/0x4C/0x4D/0x4E | **VERIFIED** | Exercised against real UT61E+ via CLI |
 | Command 0x5F (GetName) | **VERIFIED** | Not in vendor software V2.02; confirmed on real UT61E+ — two-frame response (FF 00 ack, then ASCII name) |
+| Command 0x5D (start reading) | **VERIFIED** | Acked and inert over the CP2110; behind a UT-D07B the adapter, not the meter, streams (§2.3) |
 | Sampling rate ~10 Hz at 9600 baud | **VERIFIED** | Measured throughput, 19200/115200 unresponsive |
 | MIN/MAX and Peak 2-state cycles | **VERIFIED** | MAX → MIN → MAX, P-MAX → P-MIN → P-MAX |
 | Range byte 0x30 prefix sent by meter | **VERIFIED** | Real device observation |
 | CH9329 alternate transport | **VERIFIED** | Streams and takes the start command on a real UT181A (issue #5); no UT61+ report yet |
+
+---
+
+## 7. Cross-reference with Community Sources [COMMUNITY]
+
+Read 2026-09-22, when the clean-room boundary was opened for the question
+of how fast the family can be read over Bluetooth. Nothing here was merged
+into §1-6. Sources, and what was deliberately left unread, are listed in
+`docs/research/ut61-family/reverse-engineering-approach.md`.
+
+**Command 0x5D — `AB CD 03 5D 01 D8`.** Absent from the protocol deck and
+from Software V2.02 (§2.3), but it is what UNI-T's own Android client
+sends to start reading, and two community BLE clients send it too:
+
+- [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows)
+  (C#, commit `2b83d9e`) defines it as `GetData` beside `GetDeviceTypeName`
+  (0x5F) and `GetBackLight` (0x4B), writes Get Name, waits 200 ms, writes
+  0x5D **once** per connection and then never writes on a timer
+  (`GattMonitor.cs:22-30, 48-56, 213-231`).
+- [libreble/multimeter](https://github.com/libreble/multimeter)
+  (TypeScript, commit `e887b0f`) names it "start streaming measurements"
+  (`packages/protocol/src/framing.ts:13-24`) and records, live-confirmed on
+  a **UT60BT** on 2026-06-06, that after the handshake "the meter streams
+  19-byte `AB CD 10 …` measurement frames a few times a second"
+  ([`docs/protocols/uni-t.md`](https://github.com/libreble/multimeter/blob/main/docs/protocols/uni-t.md)).
+  The UT60BT is this family with the radio built in, so this is evidence
+  about the meter's firmware, not about an adapter.
+
+So 0x5D starting a continuous send is confirmed on a meter of the family
+that carries its own radio. On our UT61E+ over the CP2110 cable it is acked
+and starts nothing, and behind a UT-D07B the readings come from the adapter
+(§2.3).
+
+**Handshake order.** The same document states, live-confirmed, that the
+meter "ignores GET-DATA until it has answered GET-NAME", that a blind
+"wait ~200 ms then GET-DATA" loses the race and leaves the meter silent,
+and that a single 0x5D can be dropped — so the client waits for the name
+frame, then re-sends 0x5D up to five times with a 700 ms wait each.
+
+**0x31-0x37.** The six further button bytes the vendor app sends (our APK
+reading) appear in **no** community source. Every community command table
+stops at 0x41-0x4C: `framing.ts:16-23` and ljakob's `_COMMANDS` (65-78,
+i.e. 0x41-0x4E).
+
+**Polled 0x5E is what every USB implementation uses**, and none of them
+mentions 0x5D: [ljakob](https://github.com/ljakob/unit_ut61eplus)
+(`_SEQUENCE_SEND_DATA`), [mwuertinger](https://github.com/mwuertinger/ut61ep)
+(`requestData`), [mbraune/ut161b](https://github.com/mbraune/ut161b)
+(`ut161b_protocol.md`) and [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy)
+(`TRIGGER_CMD`, over Bluetooth as well). ljakob's checksum is
+`cmd = cmd + 379 # don't ask it's from the java source` — the same
+`cmd + 0x17B` as §2.3, from the same vendor Java.
+
+**Rate.** ut61xpy's README: "The minimum achievable data readout interval
+is around **180 msec for USB** adapter and around **800 msec for
+Bluetooth** adapter", polling 0x5E in both cases. The Bluetooth figure
+matches our 0.63-0.8 s per poll over a UT-D07B
+(`../ut-d07b/reverse-engineered-protocol.md` §5); the USB figure is well
+above the ~100 ms / ~10 Hz measured here (§2.8) and looks tool-bound, but
+it is the only other published number. No community source reports a
+streamed rate for this family over an adapter.
+
+**Frame layout.** ljakob's byte map (mode, range as ASCII digit, 7-byte
+display, two bargraph bytes, three flag bytes, 16-bit big-endian sum) and
+libreble's table agree with §2.4 and §2.7 field for field, including
+`auto` being the *inverse* of flags-B bit 2 and the AC/DC bit in flags C.

@@ -91,25 +91,25 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 ### Bluetooth — UT-D07B
 
-The UT-D07B adapter needs no driver and no udev rule. Enable Bluetooth on the
-computer, fit the adapter with its batteries in, turn the meter on and switch
-its data transmission on (the S icon). `dmm-cli list` then shows the adapter,
-`auto` finds it when no USB cable is plugged in, and `--adapter <address>`
-pins it. Which meters take the adapter is in
-[supported devices](supported-devices.md).
+For the UT-D07B adapter, turn on Bluetooth on the computer, put batteries in
+the adapter and fit it to the meter, turn the meter on and switch its data
+transmission on — the step, and which meters take the adapter, are in
+[supported devices](supported-devices.md). `dmm-cli list` then shows the
+adapter, `auto` finds it when no USB cable is plugged in, and
+`--adapter <address>` pins it.
 
-Pairing is not required; pairing the adapter in the system's Bluetooth
-settings makes later connections quicker.
+Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
-Readings arrive about every 0.6 s, against roughly ten a second over the cable.
+Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second
+over the adapter, against about 10 over the cable.
 
 **Linux:** BlueZ must be running, as it is by default on desktop installs.
 
 **Windows and macOS:** untested — please
 [report your experience](https://github.com/antoinecellerier/dmm-tools/issues).
 On macOS `dmm-cli list` names the adapter by a UUID rather than an address, and
-the first connection asks your terminal app (or the GUI binary) for Bluetooth
-permission.
+the first connection asks you to allow Bluetooth for your terminal app (or the
+GUI binary).
 
 ## Troubleshooting
 

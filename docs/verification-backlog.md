@@ -1653,21 +1653,55 @@ BlueZ 5.87 underneath, so each of the following needs someone's hardware.
   binary gets a CoreBluetooth permission prompt or a silent refusal. Whether
   `--adapter` should be handed a UUID there rather than an address is
   documented but unconfirmed.
-- **Link parameters.** The MTU (247) and the poll time (about 0.63 s a
-  reading) were measured on Linux; the connection interval, latency and
-  supervision timeout are `[UNVERIFIED]` because BlueZ does not hand them to a
-  client. `btmon` alongside a session would read them off the air, and say
-  whether the interval or the adapter's UART turnaround is what makes a
-  Bluetooth poll six times slower than a USB one.
+- ~~**Link parameters.**~~ — **VERIFIED** 2026-09-22 on Linux, from a `btmon`
+  capture: MTU 247; the adapter asks for the connection interval itself right
+  after every connect (L2CAP update request, min 224 / max 255 × 1.25 ms,
+  latency 0, timeout 5 s) and the link runs at 315 ms. Forcing it to 15 ms
+  (`hcitool lecup`) left the readings 315-330 ms apart, so ~315 ms is the
+  adapter's own cadence and not a radio limit: streamed 3.23 Hz, polled
+  1.44 Hz (median gap 0.632 s), and 3.2 Hz polled once the interval was
+  forced down. Details in the adapter spec §5.
 - **The adapter's heartbeat.** `AB CD 06 AA AA 6E 67 03 A7` comes from the
   adapter once per link and once a second while the meter is silent; the
-  transport drops it. What `6E 67` encodes is unknown (adapter state, battery,
-  firmware?), and so is whether the adapter sends the same bytes in front of
-  a UT171 or UT181A, whose framing is different — a capture from one of those
-  over the adapter settles both.
+  transport drops it. UNI-T's own app reads it as "no meter data" and answers
+  with Get Name, then the start command. What `6E 67` encodes is still unknown
+  (adapter state, battery, firmware?), and so is whether the adapter sends the
+  same bytes in front of a UT171 or UT181A, whose framing is different — a
+  capture from one of those over the adapter settles both.
+- **The start command in front of other meters.** Our UT61E+ is read at the
+  adapter's cadence because the adapter takes the UT61+ start command 0x5D and
+  polls the meter itself (adapter spec §3). What it does in front of a UT171
+  or a UT181A is unknown: those families send start frames of their own, and
+  whether the adapter also honours 0x5D there, or forwards the family's frame
+  and nothing more, decides which rate they reach. A UT181A over a **UT-D07A**
+  is reported at ~10 Hz by the community, far above our 3.2 Hz, so the cadence
+  may be per family or per adapter. Whether the **UT-D07A** honours 0x5D at
+  all is equally unseen — nobody has run one.
+- **The ack window over Bluetooth.** A button command's `FF 00` ack came
+  1.26 s after the command on a fresh link, so the driver waits 2.5 s over
+  Bluetooth against 1 s on the cable. Whether a warm link ever needs more than
+  the USB second — i.e. whether the wide window costs a real wait in practice
+  — has not been measured.
 - ~~**Pairing as a requirement.**~~ — **VERIFIED** 2026-09-22 on Linux: not
-  required; an unpaired adapter is found by the scan and opens. Pairing only
-  spares the scan on later opens. Windows and macOS remain unchecked.
+  required; an unpaired adapter is found by the scan and opens. Windows and
+  macOS remain unchecked.
+- **Link handling since the 2026-09-22 review.** Three changes are unit-tested
+  only. A reconnect releases the old link before opening the new one. With no
+  address named, an adapter connected to this host is opened at once, else
+  the first heard in the scan, else a paired one is tried by address — the
+  interleaved scan misses an awake adapter (UT-D07B spec §4); on 2026-09-22
+  `info` connected on all three runs (11-13 s, two through the paired
+  fallback) and `list` showed the awake adapter as not heard. And a streamed
+  reading is the newest one queued, not the oldest. With our adapter: take it
+  out of range mid-session and bring it back; run `dmm-cli list` and `info`
+  with it in standby (the fallback should end in "No meter found" after about
+  15 s); and check that `dmm-cli read --interval-ms 1000`, and a GUI pause and
+  resume, show readings that follow the meter.
+- **UT-D07B standby with the meter off.** The leaflet puts the adapter in
+  standby after 5 minutes without data to the phone (spec §4). Whether our
+  link survives that with the meter switched off — the adapter's heartbeat
+  may or may not count as data — is unverified: connect, switch the meter
+  off, and watch the link and the blue LED past 5 minutes.
 - **The `0000ff01`/`ff02`/`ff12` service set.** UNI-T's iDMM2.0 app carries it
   beside the ISSC group; it belongs to the native-BLE meters (UT60BT, UT202BT
   and the rest of the survey in `docs/research/new-device-candidates.md`),
@@ -1894,6 +1928,7 @@ to reflect what is actually confirmed working and what still needs fixes.
 | Modes with no range choice (UT61E+) | — | Verified 2026-09-07: `get` prints no range row in DC mV, AC mV, DC A or AC A |
 | Capture steps `dcv_negative`, `ohm_body`, `acdcv`, `lpfv`, `acmv`, `acua`, `acma`, `aca` | — | Verified 2026-09-07 on UT61E+ (captures 4 and 5): sign on a AAA battery, body resistance, and each SELECT sub-mode read back by the tool with open leads |
 | Get Name | 0x5F | Verified (two-frame response: ack FF 00 + ASCII name, e.g. "UT61E+") |
+| Start reading | 0x5D | Verified 2026-09-22 on UT61E+ over the CP2110: the meter acks it and sends nothing more — there is no USB streaming, each reading still costs a 0x5E. Behind a UT-D07B the readings do come unasked, from the adapter (UT61E+ spec §2.3, adapter spec §3) |
 | MIN/MAX flag cycling | byte11 bits 2-3 | Verified: MAX only (bit 3) → MIN only (bit 2), 2-state cycle, never both set |
 | MIN/MAX value reporting | — | Verified: meter sends stored min/max value, not live reading |
 | Peak flag cycling | byte13 bits 1-2 | Verified: P-MAX only (bit 2) → P-MIN only (bit 1), 2-state cycle |

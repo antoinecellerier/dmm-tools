@@ -3,7 +3,7 @@ pub mod mode;
 pub(crate) mod specs;
 pub mod tables;
 
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorKind, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
@@ -46,6 +46,9 @@ pub struct Ut61PlusProtocol {
     /// What the last reading said about where the dial sits, for
     /// [`Protocol::choices`] and [`Protocol::select`] for [`Setting::Mode`].
     dial: cycle::DialState,
+    /// Readings arrive unasked: the link's adapter polls the meter for us
+    /// (see [`Protocol::init`]), so a request is a read, not a write.
+    streaming: bool,
 }
 
 impl Default for Ut61PlusProtocol {
@@ -154,6 +157,7 @@ impl Ut61PlusProtocol {
             specs,
             rx_buf: Vec::with_capacity(64),
             dial: cycle::DialState::default(),
+            streaming: false,
             profile: DeviceProfile {
                 family_name: "UT61+/UT161",
                 model_name,
@@ -178,6 +182,13 @@ impl Ut61PlusProtocol {
         )
     }
 
+    /// Ask for one reading and read it.
+    fn poll_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
+        debug!("sending measurement request");
+        transport.write(&Command::GetMeasurement.encode())?;
+        self.read_measurement(transport)
+    }
+
     /// Read and parse a measurement response, skipping non-measurement frames.
     fn read_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         for _ in 0..5 {
@@ -195,6 +206,65 @@ impl Ut61PlusProtocol {
         Err(Error::Timeout)
     }
 
+    /// The newest reading the adapter has already delivered, `first` being
+    /// the oldest.
+    ///
+    /// The adapter streams about three readings a second whoever is reading
+    /// (adapter spec §3), so a caller that reads slower — a one-second
+    /// interval, or a pause — would otherwise be handed ever-older readings
+    /// stamped with the time they were read. Everything already queued is
+    /// taken off with zero-wait reads, and the newest checksummed reading
+    /// frame decides the answer, parse error included: that is what the
+    /// meter shows now. A frame that fails its checksum is dropped.
+    /// "Already queued" is anything that arrives within [`DRAIN_WAIT_MS`] of
+    /// the last frame taken off.
+    fn newest_streamed(
+        &mut self,
+        transport: &dyn Transport,
+        first: Result<Measurement>,
+    ) -> Result<Measurement> {
+        // A dead link or a silent adapter is the answer; only a frame, good
+        // or not, can be superseded by a newer one.
+        if let Err(e) = &first
+            && e.kind() != ErrorKind::Protocol
+        {
+            return first;
+        }
+        let mut newest = first;
+        let mut tmp = [0u8; 64];
+        for _ in 0..MAX_DRAIN_READS {
+            loop {
+                match framing::extract_frame_abcd_be16(&self.rx_buf) {
+                    Ok(Some((payload, consumed))) => {
+                        self.rx_buf.drain(..consumed);
+                        if payload.len() >= UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
+                            newest = parse_measurement(&payload, self.table.as_ref());
+                        } else {
+                            report_unknown_frame(&payload);
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(e) => {
+                        debug!("dropping a corrupt queued frame: {e}");
+                        self.rx_buf.clear();
+                        break;
+                    }
+                }
+            }
+            // Only partial frames are left here, but a stream that never
+            // frames must not grow the buffer either.
+            if self.rx_buf.len() > MAX_DRAIN_BUF {
+                self.rx_buf.clear();
+            }
+            let n = transport.read_timeout(&mut tmp, DRAIN_WAIT_MS)?;
+            if n == 0 {
+                break;
+            }
+            self.rx_buf.extend_from_slice(&tmp[..n]);
+        }
+        newest
+    }
+
     /// Write one command frame and wait for the meter's ack before returning.
     ///
     /// Whatever arrives up to and including the ack is discarded: leaving it
@@ -207,7 +277,12 @@ impl Ut61PlusProtocol {
         self.rx_buf.clear();
         // Real time, not the session clock: this waits on the meter itself.
         let sent = Instant::now();
-        let deadline = sent + PRESS_ACK_TIMEOUT;
+        let wait = if self.streaming {
+            BLUETOOTH_PRESS_ACK_TIMEOUT
+        } else {
+            PRESS_ACK_TIMEOUT
+        };
+        let deadline = sent + wait;
         // The bytes seen so far, trimmed to the tail an ack could still start
         // in: a CP2110 can hand over `AB CD 04` and `FF 00 02 7B` in separate
         // reads.
@@ -216,10 +291,7 @@ impl Ut61PlusProtocol {
         loop {
             let n = framing::read_uart_bytes(transport, &mut tmp, deadline)?;
             if n == 0 {
-                warn!(
-                    "no ack within {} ms of the command",
-                    PRESS_ACK_TIMEOUT.as_millis()
-                );
+                warn!("no ack within {} ms of the command", wait.as_millis());
                 break;
             }
             seen.extend_from_slice(&tmp[..n]);
@@ -256,17 +328,37 @@ impl Ut61PlusProtocol {
 }
 
 impl Protocol for Ut61PlusProtocol {
-    fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
-        // CP2110 init (UART enable, config, purge) is done by Cp2110::init_uart()
-        // before the protocol is created. Nothing else needed here.
+    fn init(&mut self, transport: &dyn Transport) -> Result<()> {
+        // A cable needs nothing: the CP2110 is set up by `Cp2110::init_uart()`
+        // before the protocol exists, and the meter only acknowledges 0x5D.
+        // The UT-D07B polls the meter itself once told to, at about three
+        // readings a second against under two when each one is a round trip
+        // over the radio (adapter spec §3, §5).
+        if transport.transport_name() == crate::BLUETOOTH {
+            debug!("starting the adapter's readings stream");
+            transport.write(&Command::StartStream.encode())?;
+            self.streaming = true;
+        }
         Ok(())
     }
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
-        let cmd = Command::GetMeasurement.encode();
-        debug!("sending measurement request");
-        transport.write(&cmd)?;
-        let m = self.read_measurement(transport)?;
+        let m = if self.streaming {
+            let first = match self.read_measurement(transport) {
+                // A start command can be lost on the adapter, so a silent
+                // stream is started again — and polled, because an adapter
+                // that ignores 0x5D (none seen yet) still answers a poll.
+                Err(Error::Timeout) => {
+                    debug!("no streamed reading: restarting the stream and polling");
+                    transport.write(&Command::StartStream.encode())?;
+                    self.poll_measurement(transport)
+                }
+                other => other,
+            };
+            self.newest_streamed(transport, first)?
+        } else {
+            self.poll_measurement(transport)?
+        };
         // The stream is the only place the meter states its mode, so every
         // reading is what keeps the dial position current.
         self.dial.observe(self.table.dial_positions(), m.mode_raw);
@@ -291,8 +383,11 @@ impl Protocol for Ut61PlusProtocol {
         // The reply is two frames, ack then name (§2.3). The third read is
         // for a bridge that had a reading buffered before the request: only
         // a frame that fails to be the name costs one, so a meter that
-        // answers straight away never waits for it.
-        for _ in 0..3 {
+        // answers straight away never waits for it. A streaming adapter can
+        // have a few readings queued ahead of the reply, hence the wider
+        // budget there.
+        let budget = if self.streaming { 10 } else { 3 };
+        for _ in 0..budget {
             let payload = self.read_raw_payload(transport)?;
             report_unknown_frame(&payload);
             // Anything else is another frame on this wire, not a name: the
@@ -698,6 +793,24 @@ const FALLBACK_ID: &str = "ut61eplus";
 /// reading) and 217 ms on a UT61B+ (in Hz with the leads open). Every press on
 /// record was acked, so the cap only matters if one goes missing.
 const PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(1000);
+/// The same wait over the UT-D07B, whose ack came 1.26 s after the command on
+/// a fresh link (adapter spec §5).
+const BLUETOOTH_PRESS_ACK_TIMEOUT: Duration = Duration::from_millis(2500);
+
+/// Most zero-wait reads one streamed request takes off the queue: one
+/// notification each, so about twenty minutes of readings at the adapter's
+/// three a second (adapter spec §3). A longer backlog — a pause left on for
+/// an hour — drains over the next few requests.
+const MAX_DRAIN_READS: usize = 4096;
+
+/// How long each of those reads waits. Not zero: the Bluetooth transport's
+/// runtime only moves notifications from the platform's socket onto its
+/// queue while a read is waiting, and a zero wait gives it no turn to.
+const DRAIN_WAIT_MS: i32 = 10;
+
+/// Most bytes of an unfinished frame kept between those reads; a frame is
+/// 19 bytes.
+const MAX_DRAIN_BUF: usize = 256;
 
 /// How long to leave the meter alone after it acks a button press before
 /// asking it what mode it is in.
@@ -1273,6 +1386,127 @@ mod tests {
             (0x00, 0x00),
             (0x00, 0x00, 0x00),
         ))
+    }
+
+    /// A mock that says it is the Bluetooth link, for the adapter-only paths.
+    struct BluetoothMock(MockTransport);
+
+    impl Transport for BluetoothMock {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            self.0.write(data)
+        }
+        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
+            self.0.read_timeout(buf, timeout_ms)
+        }
+        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
+            self.0.send_feature_report(data)
+        }
+        fn transport_name(&self) -> &'static str {
+            crate::BLUETOOTH
+        }
+    }
+
+    /// Over the adapter, init starts the stream and a reading is taken
+    /// without a request of its own.
+    #[test]
+    fn over_bluetooth_readings_are_streamed_not_polled() {
+        let mock = BluetoothMock(MockTransport::new(vec![frame_in(0x02)]));
+        let mut p = Ut61PlusProtocol::new();
+        p.init(&mock).unwrap();
+        assert_eq!(
+            mock.0.written.borrow().as_slice(),
+            &[Command::StartStream.encode().to_vec()]
+        );
+        p.request_measurement(&mock).unwrap();
+        mock.0.push_response(frame_in(0x02));
+        p.request_measurement(&mock).unwrap();
+        assert_eq!(mock.0.written.borrow().len(), 1, "no poll went out");
+    }
+
+    /// A streaming protocol, started, over `frames`.
+    fn streaming(frames: Vec<Vec<u8>>) -> (BluetoothMock, Ut61PlusProtocol) {
+        let mock = BluetoothMock(MockTransport::new(frames));
+        let mut p = Ut61PlusProtocol::new();
+        p.init(&mock).unwrap();
+        (mock, p)
+    }
+
+    /// The adapter streams whoever reads, so a reader slower than it finds
+    /// a backlog; it gets the newest reading, not the oldest, and the next
+    /// request starts from what arrives after it.
+    #[test]
+    fn a_slow_reader_gets_the_newest_streamed_reading() {
+        let (mock, mut p) = streaming(vec![frame_in(0x02), frame_in(0x04), frame_in(0x05)]);
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
+        mock.0.push_response(frame_in(0x02));
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
+        assert_eq!(mock.0.written.borrow().len(), 1, "no poll went out");
+    }
+
+    /// A frame split across notifications, or two in one, still drains to
+    /// the newest whole one; the unfinished tail waits for its next read.
+    #[test]
+    fn the_drain_follows_frames_across_reads() {
+        let newest = frame_in(0x05);
+        let (head, tail) = newest.split_at(7);
+        let mut two = frame_in(0x02);
+        two.extend(frame_in(0x04));
+        let (mock, mut p) = streaming(vec![two, head.to_vec()]);
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Hz");
+        mock.0.push_response(tail.to_vec());
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
+    }
+
+    /// A queued frame that fails its checksum is dropped, not reported:
+    /// a good reading behind it is newer.
+    #[test]
+    fn a_corrupt_queued_frame_is_dropped() {
+        let mut corrupt = frame_in(0x04);
+        *corrupt.last_mut().unwrap() ^= 0xFF;
+        let (mock, mut p) = streaming(vec![frame_in(0x02), corrupt, frame_in(0x05)]);
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
+    }
+
+    /// A backlog longer than one request drains is caught up over the next
+    /// ones, so a long pause costs a few stale readings, not minutes of them.
+    #[test]
+    fn a_long_backlog_drains_over_a_few_requests() {
+        let mut frames = vec![frame_in(0x02); MAX_DRAIN_READS + 10];
+        frames.push(frame_in(0x05));
+        let (mock, mut p) = streaming(frames);
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
+        assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
+    }
+
+    /// Over a cable nothing is started and every reading is a request.
+    #[test]
+    fn over_a_cable_every_reading_is_polled() {
+        let mock = MockTransport::new(vec![frame_in(0x02)]);
+        let mut p = Ut61PlusProtocol::new();
+        p.init(&mock).unwrap();
+        assert!(mock.written.borrow().is_empty());
+        p.request_measurement(&mock).unwrap();
+        assert_eq!(
+            mock.written.borrow().as_slice(),
+            &[Command::GetMeasurement.encode().to_vec()]
+        );
+    }
+
+    /// An adapter that never streams is polled instead of timing out.
+    #[test]
+    fn a_silent_stream_is_polled() {
+        let mock = BluetoothMock(MockTransport::new(vec![]));
+        let mut p = Ut61PlusProtocol::new();
+        p.init(&mock).unwrap();
+        assert!(matches!(p.request_measurement(&mock), Err(Error::Timeout)));
+        assert_eq!(
+            mock.0.written.borrow().as_slice(),
+            &[
+                Command::StartStream.encode().to_vec(),
+                Command::StartStream.encode().to_vec(),
+                Command::GetMeasurement.encode().to_vec()
+            ]
+        );
     }
 
     #[test]

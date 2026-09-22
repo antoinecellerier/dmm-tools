@@ -44,6 +44,11 @@ tables, and bar graph segment count.
    range table of its own. Tagged [VENDOR-DOC]
 7. **UT61E+ PC software on the same page** (uploaded 2023-02-03) — its
    installer is Software V2.02 unchanged (below)
+8. **iDMM2.0 Android app v1.2.356** (`references/idmm2/`), UNI-T's own
+   Bluetooth client for the family, decompiled with jadx 1.5.6 to
+   `references/idmm2/jadx-out/` and read 2026-09-22: the source for command
+   **0x5D** (`AB CD 03 5D 01 D8`), which the app sends once to start reading
+   and which is in neither the deck nor V2.02. Tagged [VENDOR]
 
 No community implementations, forum posts, or third-party reverse
 engineering work during the primary RE. Two community implementations were
@@ -203,3 +208,43 @@ Reference implementations:
 
 - [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) — Python, UT61E+ and UT61B+/D+ tables, UT161 and UT60BT support
 - [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) — Go, UT61E+
+
+### 2026-09-22: Bluetooth read rate and command 0x5D
+
+The boundary was opened again on **2026-09-22**, for one question: how fast
+the family can be read over the UT-D07B adapter, and whether command **0x5D**
+(absent from the deck and from Software V2.02) starts a continuous send. The
+findings are in `../ut61eplus/reverse-engineered-protocol.md` §7 and, for the
+adapter itself, `../ut-d07b/reverse-engineered-protocol.md` §7; the working
+note is `references/ut-d07b/analysis/findings/read-rate.md` §8.
+
+Read that day, all marked [COMMUNITY]:
+
+- [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows),
+  commit `2b83d9e` — C# BLE client; names `AB CD 03 5D 01 D8` "Get Data" and
+  sends it once per connection
+- [libreble/multimeter](https://github.com/libreble/multimeter), commit
+  `e887b0f` — Web-Bluetooth PWA; names 0x5D "start streaming measurements"
+  and reports the stream live-confirmed on a UT60BT, plus the GET-NAME →
+  name-frame → GET-DATA ordering the meter requires
+- [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy), commit `ad7b324` —
+  Python logger for UT61X+ over the UT-D09A **and the UT-D07B**; polls 0x5E
+  over both and publishes ~180 ms (USB) / ~800 ms (Bluetooth) minimum read
+  intervals
+- [mbraune/ut161b](https://github.com/mbraune/ut161b) — UT161B over the D09A
+  cable; polls 0x5E, documents the same framing
+- [libsigrok](https://github.com/sigrokproject/libsigrok) master `0bc2487778`
+  — for the BLE serial layer only; it has **no** driver for this family
+- EEVblog ["New Uni-T UT61 series (UT61e+)"](https://www.eevblog.com/forum/testgear/new-uni-t-ut61-series-(ut61e)/),
+  all 7 pages — nothing about the protocol
+
+Deliberately not read: `ljakob/unit_ut61eplus`'s `from_vendor/` directory
+(vendor files re-hosted under a licence its README disclaims; we have our own
+jadx tree of the same APK), community decompilations of the Android app, and
+APK mirrors.
+
+**Correction to the table above (2026-09-22).** The "UT60BT over Bluetooth"
+row credits ljakob with BT serial support. It has none: `ut61eplus.py` opens
+`hid.device()` on `0x10C4:0xEA80` and speaks CP2110 HID only. The UT60BT
+appears in its README as a model whose unit tables would need adjusting, not
+as a transport.
