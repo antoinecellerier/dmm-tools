@@ -66,10 +66,10 @@ SETTINGS_CROP="1920x960+0+0"
 # The colour rows of the settings panel plus a swatch picker opened at the
 # panel's right edge, where it covers no other setting.
 COLOR_CROP="1920x638+0+58"
-# The left column down to the rule under the connection help (y 611): the
-# no-reading dashes, then the cable help and its steps, which is the whole
-# subject — the rest of the window is an empty graph.
-HELP_CROP="478x565+0+46"
+# The left column down to the rule under the connection help (y 889): the
+# no-reading dashes, then the help's title and a section per link, which is
+# the whole subject — the rest of the window is an empty graph.
+HELP_CROP="478x843+0+46"
 GEAR_X=1884; GEAR_Y=22              # the settings gear, right end of the top bar
 CUSTOMIZE_X=150; CUSTOMIZE_Y=166    # the "Customize colors" collapsing header
 # The Graph row's last swatch, Crosshair: its picker opens against the right
@@ -454,11 +454,17 @@ scene_color_customization() {
 	capture gui-color-customization.png "$COLOR_CROP"
 }
 
-# The help shown when no USB cable is found.
+# The help shown when nothing answers on either link.
 scene_connection_help() {
 	no_meter_or_skip gui-connection-help.png || return 0
 	write_settings '{"device_family": "auto"}'
 	launch_without_meter
+	# The failure is not instant: the open path scans for a Bluetooth adapter
+	# once the bus has nothing, and an adapter that answers the scan but not
+	# the connect takes the transport's connect timeout on top. The help only
+	# goes up once that has run out — before it, the column says "Detecting
+	# the meter…".
+	sleep 20
 	park
 	capture gui-connection-help.png "$HELP_CROP"
 }
