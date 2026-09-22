@@ -40,11 +40,11 @@ GitHub, where you can report feedback.
 
 Help is shown automatically when connection fails:
 
-![Connection help in the left column: "USB cable not found" above the steps for this platform](../assets/gui-connection-help.png)
+![Connection help in the left column: "No meter found over USB or Bluetooth" above a section of steps for each link](../assets/gui-connection-help.png)
 
-- **USB cable not found:** platform-specific instructions (Linux: udev rule
-  install; Windows: Device Manager guidance to check if a driver is needed).
-  All cable variants are detected automatically.
+- **No meter found:** one section per link that was searched, each with its
+  steps (Linux: udev rule install; Windows: Device Manager guidance to check
+  if a driver is needed). All cable variants are detected automatically.
 - **No response from meter:** animated "Waiting for meter..." indicator
   during initial timeouts, then what each meter needs switched on (insert
   module, turn on, long-press USB/Hz until S icon appears).

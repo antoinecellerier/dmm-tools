@@ -14,11 +14,19 @@ pub(crate) fn is_bluetooth_selector(_selector: &str) -> bool {
 }
 
 pub(crate) fn open_first() -> Result<Box<dyn Transport>> {
-    Err(Error::NoTransportFound)
+    Err(not_found())
 }
 
 pub(crate) fn open_selected(_selector: &str) -> Result<Box<dyn Transport>> {
-    Err(Error::NoTransportFound)
+    Err(not_found())
+}
+
+/// `bluetooth_searched` is false: this build looked at no radio at all, so
+/// the help must not offer Bluetooth steps.
+fn not_found() -> Error {
+    Error::NoTransportFound {
+        bluetooth_searched: false,
+    }
 }
 
 pub(crate) fn list() -> Result<Vec<DeviceInfo>> {

@@ -2,6 +2,7 @@
 //! status landmark in the middle, and the version / Help / shortcuts /
 //! settings group on the right, wrapped to a second row when it doesn't fit.
 
+use dmm_lib::binary_help::Link;
 use eframe::egui::{self, RichText, Ui};
 
 use super::{App, ConnectionState};
@@ -336,7 +337,7 @@ impl App {
 /// recording was made over; the mock is on none, and reads as the meter alone.
 /// `link` is `None` for a row too narrow to hold it as well — the hover says
 /// it either way.
-fn connected_status(name: &str, link: Option<&str>, paused: bool) -> String {
+fn connected_status(name: &str, link: Option<Link>, paused: bool) -> String {
     let mut text = name.to_string();
     if let Some(link) = link {
         text.push_str(&link_suffix(link));
@@ -348,8 +349,8 @@ fn connected_status(name: &str, link: Option<&str>, paused: bool) -> String {
 }
 
 /// What the link adds to the status text.
-fn link_suffix(link: &str) -> String {
-    format!(" \u{b7} {link}")
+fn link_suffix(link: Link) -> String {
+    format!(" \u{b7} {}", link.short_name())
 }
 
 /// What that suffix would add to the row's width, in points.
@@ -358,7 +359,7 @@ fn link_suffix(link: &str) -> String {
 /// whether or not the link is on the bar this frame — the row's own width
 /// then stays what it was before the link existed, and with it the narrowest
 /// the window may be made.
-fn link_suffix_width(ui: &Ui, link: Option<&str>) -> f32 {
+fn link_suffix_width(ui: &Ui, link: Option<Link>) -> f32 {
     let Some(link) = link else {
         return 0.0;
     };
@@ -387,20 +388,10 @@ fn fits_with_link(row: f32, link: f32, available: f32) -> bool {
 /// is the one place the link is always named. `replayed` distinguishes a live
 /// link from the one a recording was made over — the rest of the window is
 /// deliberately identical for the two.
-fn link_tooltip(link: Option<&str>, replayed: bool) -> String {
+fn link_tooltip(link: Option<Link>, replayed: bool) -> String {
     match (link, replayed) {
-        (Some(link), false) => {
-            format!(
-                "Connected over the {}",
-                dmm_lib::binary_help::full_link_name(link)
-            )
-        }
-        (Some(link), true) => {
-            format!(
-                "Recorded over the {}",
-                dmm_lib::binary_help::full_link_name(link)
-            )
-        }
+        (Some(link), false) => format!("Connected over the {}", link.full_name()),
+        (Some(link), true) => format!("Recorded over the {}", link.full_name()),
         // Nothing is on the far end of a mock session, and a recording whose
         // file names a link this build does not know says only that much.
         (None, false) => "Mock meter, no link".to_string(),
@@ -410,17 +401,17 @@ fn link_tooltip(link: Option<&str>, replayed: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{connected_status, fits_with_link, link_tooltip};
+    use super::{Link, connected_status, fits_with_link, link_tooltip};
 
     #[test]
     fn the_status_names_the_link_where_there_is_one() {
         assert_eq!(
-            connected_status("UT61E+", Some("Bluetooth"), false),
+            connected_status("UT61E+", Some(Link::Bluetooth), false),
             "UT61E+ \u{b7} Bluetooth"
         );
         assert_eq!(connected_status("UT61E+", None, false), "UT61E+");
         assert_eq!(
-            connected_status("UT61E+", Some("USB cable"), true),
+            connected_status("UT61E+", Some(Link::UsbCable), true),
             "UT61E+ \u{b7} USB cable (paused)"
         );
     }
@@ -445,15 +436,15 @@ mod tests {
     #[test]
     fn the_hover_spells_the_link_out() {
         assert_eq!(
-            link_tooltip(Some("USB cable"), false),
+            link_tooltip(Some(Link::UsbCable), false),
             "Connected over the USB cable"
         );
         assert_eq!(
-            link_tooltip(Some("Bluetooth"), false),
+            link_tooltip(Some(Link::Bluetooth), false),
             "Connected over the Bluetooth adapter"
         );
         assert_eq!(
-            link_tooltip(Some("USB cable"), true),
+            link_tooltip(Some(Link::UsbCable), true),
             "Recorded over the USB cable"
         );
         assert_eq!(link_tooltip(None, false), "Mock meter, no link");

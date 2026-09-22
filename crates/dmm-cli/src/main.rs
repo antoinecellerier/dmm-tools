@@ -9,7 +9,7 @@ mod watch;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use console::style;
-use dmm_lib::binary_help::ConnectedAdapters;
+use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched};
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::protocol::{Choice, Setting};
@@ -547,9 +547,26 @@ fn main() {
             print_no_response_help(device);
         } else {
             eprintln!("{} {msg}", style("Error:").red().bold());
+            if let Some(address) = unreachable_adapter(&*e, cli.adapter.as_deref()) {
+                print_setup_sections(LinksSearched::BluetoothAt(address));
+            }
         }
         std::process::exit(1);
     }
+}
+
+/// The Bluetooth address `--adapter` named, when `error` is the stack failing
+/// to reach it — most often a paired adapter that is asleep, which wants the
+/// same steps as an address nothing answered.
+fn unreachable_adapter<'a>(
+    error: &(dyn std::error::Error + 'static),
+    adapter: Option<&'a str>,
+) -> Option<&'a str> {
+    let stack_failed = matches!(
+        error.downcast_ref::<dmm_lib::error::Error>(),
+        Some(dmm_lib::error::Error::Bluetooth(_))
+    );
+    adapter.filter(|a| stack_failed && dmm_lib::is_bluetooth_selector(a))
 }
 
 /// Build long help text for --device from the registry.
@@ -614,18 +631,37 @@ fn print_no_response_help(device: &SelectableDevice) {
     eprintln!("{}", style(device.activation_instructions).dim());
 }
 
-/// Print platform-specific setup instructions when no USB cable is detected.
+/// Print the setup help for the links that were searched, one section each.
 ///
-/// The hint's indented lines are commands to run or URLs to open; dimming
-/// them keeps the prose that explains them in the foreground.
-fn print_transport_setup_help() {
-    for line in dmm_lib::binary_help::transport_setup_hint() {
-        if line.starts_with(' ') {
-            eprintln!("{}", style(line).dim());
-        } else {
-            eprintln!("{line}");
+/// A section opens with the link in bold, so the two are told apart at a
+/// glance; its steps are indented under it, and the ones that are commands to
+/// run or URLs to open are dimmed to keep the prose that explains them in the
+/// foreground.
+fn print_setup_sections(links: LinksSearched<'_>) {
+    for section in links.sections() {
+        eprintln!();
+        eprintln!("{}: {}", style(section.link).bold(), section.check);
+        for step in section.steps {
+            let line = format!("  {step}");
+            if step.starts_with(' ') {
+                eprintln!("{}", style(line).dim());
+            } else {
+                eprintln!("{line}");
+            }
         }
     }
+}
+
+/// Print the whole "nothing found" help: what was looked for, then what to
+/// try on each link it was looked for on.
+fn print_not_found_help(links: LinksSearched<'_>) {
+    eprintln!(
+        "{}",
+        style(format!("{}.", links.not_found_title()))
+            .yellow()
+            .bold()
+    );
+    print_setup_sections(links);
 }
 
 /// Set up a Ctrl+C handler that clears the returned flag when triggered.
@@ -876,15 +912,19 @@ fn open_error_help(
     error: dmm_lib::error::Error,
 ) -> Box<dyn std::error::Error> {
     match error {
-        dmm_lib::error::Error::NoTransportFound => {
-            eprintln!("{}", style("USB cable not found.").yellow().bold());
-            print_transport_setup_help();
+        dmm_lib::error::Error::NoTransportFound {
+            bluetooth_searched, ..
+        } => {
+            print_not_found_help(LinksSearched::from_usb_failure(bluetooth_searched));
             // Nothing is known about the meter when it was never named and the
             // cable it would have been identified through never opened.
             if let Selection::Device(device) = selection {
                 let proto = (device.new_protocol)();
                 let profile = proto.profile();
                 if !profile.stability.is_verified() {
+                    // Its own paragraph: the sections above end in a step, and
+                    // this is about the meter rather than the link.
+                    eprintln!();
                     eprintln!(
                         "{}",
                         style(format!(
@@ -908,7 +948,7 @@ fn open_error_help(
                 "{}",
                 style(format!(
                     "No meter answered over the {}.",
-                    dmm_lib::binary_help::link_name(bridge)
+                    dmm_lib::binary_help::bridge_link_name(bridge)
                 ))
                 .yellow()
                 .bold()
@@ -923,6 +963,15 @@ fn open_error_help(
                 eprintln!("{}", style(line).yellow());
             }
             "device not identified".into()
+        }
+        // An address nothing answered: the bus listing would be beside the
+        // point, and the only thing that says which addresses are live is a
+        // scan, which the open has just run.
+        dmm_lib::error::Error::AdapterNotFound(ref selector)
+            if dmm_lib::is_bluetooth_selector(selector) =>
+        {
+            print_not_found_help(LinksSearched::BluetoothAt(selector));
+            "adapter not found".into()
         }
         dmm_lib::error::Error::AdapterNotFound(ref detail) => {
             eprintln!(
@@ -959,7 +1008,7 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     }
     // The radio scan takes seconds where the bus listing is instant, so say
     // what the wait is for before it starts.
-    eprintln!("{}", style("Scanning for Bluetooth adapters\u{2026}").dim());
+    eprintln!("{}", style("Scanning over Bluetooth\u{2026}").dim());
     let adapters = match dmm_lib::list_bluetooth_devices() {
         Ok(adapters) => adapters,
         // A stack that is off or missing is not a device fault: the cables
@@ -975,8 +1024,9 @@ fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
     }
     let total = cables.len() + adapters.len();
     if total == 0 {
+        // The listing itself is the title, so only the sections follow.
         eprintln!("{}", style("No devices found.").yellow());
-        print_transport_setup_help();
+        print_setup_sections(LinksSearched::UsbAndBluetooth);
         return Ok(());
     }
     if total > 1 {
@@ -1074,7 +1124,7 @@ fn cmd_read(
             .flatten();
         // The link these readings come over, so a session played back from
         // the file says what it was recorded on rather than nothing.
-        let link = dmm_lib::binary_help::short_link_name(dmm.transport().transport_name());
+        let link = dmm_lib::binary_help::Link::from_bridge(dmm.transport().transport_name());
         let out = read_output(format, &dmm, transform, integrate, || {
             dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref(), link)
         });
@@ -3457,7 +3507,9 @@ mod tests {
         let (mut dmm, _) = fake_meter_with(
             &a_full_meter(),
             Quirks {
-                post_switch_errors: vec![dmm_lib::error::Error::NoTransportFound],
+                post_switch_errors: vec![dmm_lib::error::Error::NoTransportFound {
+                    bluetooth_searched: false,
+                }],
                 ..Default::default()
             },
         );
@@ -3778,5 +3830,20 @@ mod tests {
             refuse_replay_format(OutputFormat::Replay, mock, true, &transform, false).is_none(),
             "a recording being copied brings its own frames"
         );
+    }
+
+    /// A named adapter the stack could not reach is explained by its link;
+    /// any other failure, or an adapter that is not a Bluetooth address, is
+    /// left as the bare error.
+    #[test]
+    fn a_named_adapter_that_would_not_connect_gets_the_bluetooth_steps() {
+        use dmm_lib::error::Error;
+        let address = "12:34:56:78:9A:BC";
+        let stack = Error::Bluetooth("Timed out after 10s".to_string());
+        let expected = dmm_lib::is_bluetooth_selector(address).then_some(address);
+        assert_eq!(unreachable_adapter(&stack, Some(address)), expected);
+        assert_eq!(unreachable_adapter(&stack, None), None);
+        assert_eq!(unreachable_adapter(&stack, Some("00C5B27A")), None);
+        assert_eq!(unreachable_adapter(&Error::LinkLost, Some(address)), None);
     }
 }

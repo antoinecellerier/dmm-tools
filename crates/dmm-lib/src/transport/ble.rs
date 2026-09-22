@@ -269,7 +269,10 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
     if found.is_empty() {
         return Err(match selector {
             Some(selector) => Error::AdapterNotFound(selector.to_string()),
-            None => Error::NoTransportFound,
+            // The scan ran and found nothing, which is what the flag says.
+            None => Error::NoTransportFound {
+                bluetooth_searched: true,
+            },
         });
     }
     let candidate = found.remove(0);
@@ -303,7 +306,9 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
                 // A known adapter that does not answer is the asleep case,
                 // which is "nothing found", not a Bluetooth fault.
                 info!("Bluetooth: {} did not answer: {e}", candidate.label());
-                return Err(Error::NoTransportFound);
+                return Err(Error::NoTransportFound {
+                    bluetooth_searched: true,
+                });
             }
             return Err(link_error(e));
         }

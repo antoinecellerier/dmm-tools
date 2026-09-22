@@ -79,18 +79,67 @@ pub fn mock_mode_help(intro: &str, example: &str) -> String {
     )
 }
 
-/// What to call the link a meter is on, for messages the user reads.
+/// The link a meter is on, as the user knows it.
 ///
 /// Never the bridge chip: someone plugged in a USB cable or switched a
 /// Bluetooth adapter on, and has no reason to know which chip is inside it.
 /// The error text, the CLI help and the GUI's connection messages all take
 /// their wording from here so the three cannot drift.
-pub fn link_name(bridge: &str) -> &'static str {
-    if bridge == crate::BLUETOOTH {
-        BLUETOOTH_ADAPTER
-    } else {
-        USB_CABLE
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Link {
+    UsbCable,
+    Bluetooth,
+}
+
+impl Link {
+    /// The link a bridge is on, by the name its transport gives, and `None`
+    /// for a transport with nothing on the far end: the mock and a replay
+    /// answer from inside the process.
+    pub fn from_bridge(bridge: &str) -> Option<Self> {
+        match bridge {
+            crate::transport::NO_LINK => None,
+            crate::BLUETOOTH => Some(Self::Bluetooth),
+            _ => Some(Self::UsbCable),
+        }
     }
+
+    /// The name for a status line that already names the meter, and what a
+    /// replay file's `# link:` line records.
+    ///
+    /// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
+    /// label around it no longer needs.
+    pub fn short_name(self) -> &'static str {
+        match self {
+            Self::UsbCable => USB_CABLE,
+            Self::Bluetooth => BLUETOOTH_LINK,
+        }
+    }
+
+    /// The name for text with the room to spell it out — an error, or a
+    /// hover where the bar had to shorten or drop it.
+    pub fn full_name(self) -> &'static str {
+        match self {
+            Self::UsbCable => USB_CABLE,
+            Self::Bluetooth => BLUETOOTH_ADAPTER,
+        }
+    }
+
+    /// A link read back from a file by its [`Link::short_name`].
+    ///
+    /// `None` for anything else, so a recording made by a version that knows
+    /// a link this one does not still plays — it just says nothing about the
+    /// link.
+    pub(crate) fn from_short_name(name: &str) -> Option<Self> {
+        [Self::UsbCable, Self::Bluetooth]
+            .into_iter()
+            .find(|link| link.short_name() == name)
+    }
+}
+
+/// The full name of the link `bridge` is on, and "link" for a transport with
+/// none — an error about it still reads as a sentence.
+pub fn bridge_link_name(bridge: &str) -> &'static str {
+    Link::from_bridge(bridge).map_or("link", Link::full_name)
 }
 
 /// The cable link, in both the long and the short form.
@@ -102,82 +151,32 @@ const BLUETOOTH_LINK: &str = "Bluetooth";
 /// The radio link where they don't.
 const BLUETOOTH_ADAPTER: &str = "Bluetooth adapter";
 
-/// The full name of a link given in its short form, for text with the room
-/// to spell it out — a hover, where the bar had to shorten or drop it.
-///
-/// Takes what [`short_link_name`] returns, so the two forms of one link
-/// cannot come from different wordings.
-pub fn full_link_name(short: &str) -> &'static str {
-    if short == BLUETOOTH_LINK {
-        BLUETOOTH_ADAPTER
-    } else {
-        USB_CABLE
-    }
-}
-
-/// The same link, shortened for a status line that already names the meter,
-/// and `None` where there is no link at all.
-///
-/// "Bluetooth adapter" doubles the width of a UT61E+ label for a word the
-/// label around it no longer needs. The mock answers from inside the process,
-/// so it gets no link name.
-pub fn short_link_name(bridge: &str) -> Option<&'static str> {
-    match bridge {
-        crate::transport::NO_LINK => None,
-        crate::BLUETOOTH => Some(BLUETOOTH_LINK),
-        _ => Some(USB_CABLE),
-    }
-}
-
-/// A link name read back from a file, matched against the ones we write.
-///
-/// `None` for anything else, so a recording made by a version that knows a
-/// link this one does not still plays — it just says nothing about the link.
-pub(crate) fn link_from_name(name: &str) -> Option<&'static str> {
-    [USB_CABLE, BLUETOOTH_LINK]
-        .into_iter()
-        .find(|known| *known == name)
-}
-
 /// What a recording with no link recorded is played back as.
 ///
 /// Every replay file written before the link was recorded came off a cable,
 /// and a session that says nothing about its link is less use than one that
 /// says the thing all of them had in common.
-pub(crate) const RECORDED_LINK_DEFAULT: Option<&'static str> = Some(USB_CABLE);
+pub(crate) const RECORDED_LINK_DEFAULT: Option<Link> = Some(Link::UsbCable);
 
-/// Line the platform setup hint opens with, whatever the platform.
-const CABLE_CHECK: &str = "Check that the USB cable is plugged in and the meter is powered on.";
+/// What the USB label line says to check, whatever the platform.
+const CABLE_CHECK: &str = "check it is plugged in and the meter is powered on.";
 
-/// First half of the Bluetooth check, shared by every platform. The adapter
-/// stops advertising when it goes to sleep, and only the meter can wake it
-/// (docs/research/ut-d07b/reverse-engineered-protocol.md §4).
-#[cfg(feature = "bluetooth")]
+/// What the Bluetooth label line says to check. Generic on purpose: which
+/// adapters we speak to is the catalog's business, not a message's.
 const BLUETOOTH_CHECK: &str =
-    "For a UT-D07B adapter, turn on Bluetooth here and data transmission on the meter.";
+    "turn on Bluetooth on this computer and data transmission on the meter.";
 
 #[cfg(target_os = "linux")]
-const SETUP_HINT: &[&str] = &[
-    CABLE_CHECK,
-    #[cfg(feature = "bluetooth")]
-    BLUETOOTH_CHECK,
-    #[cfg(feature = "bluetooth")]
-    "If the adapter is never found, switch the meter's data transmission off and on.",
+const USB_STEPS: &[&str] = &[
     "Ensure the udev rule is installed:",
     "  sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/",
     "  sudo udevadm control --reload-rules",
-    "Then replug the cable. On a headless machine, keep a group on the",
-    "rule — see the setup guide:",
+    "Then replug the cable. On a headless machine, keep a group on the rule:",
     "  https://github.com/antoinecellerier/dmm-tools/blob/main/docs/setup.md",
 ];
 
 #[cfg(target_os = "windows")]
-const SETUP_HINT: &[&str] = &[
-    CABLE_CHECK,
-    #[cfg(feature = "bluetooth")]
-    BLUETOOTH_CHECK,
-    #[cfg(feature = "bluetooth")]
-    "If the adapter is never found, switch the meter's data transmission off and on.",
+const USB_STEPS: &[&str] = &[
     "Open Device Manager with the cable plugged in:",
     "- 'CP2110 USB to UART Bridge' under HID devices: no action needed.",
     "- 'USB Input Device' under HID devices: no action needed.",
@@ -187,35 +186,133 @@ const SETUP_HINT: &[&str] = &[
 ];
 
 #[cfg(target_os = "macos")]
-const SETUP_HINT: &[&str] = &[
-    CABLE_CHECK,
-    #[cfg(feature = "bluetooth")]
-    BLUETOOTH_CHECK,
-    #[cfg(feature = "bluetooth")]
-    "If the adapter is never found, switch the meter's data transmission off and on,",
-    #[cfg(feature = "bluetooth")]
-    "and allow Bluetooth in System Settings > Privacy & Security.",
+const USB_STEPS: &[&str] = &[
     "The cable should be recognized automatically (no driver needed).",
     "If the device is not found, check System Settings > Privacy & Security > Input Monitoring.",
 ];
 
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-const SETUP_HINT: &[&str] = &[
-    CABLE_CHECK,
-    #[cfg(feature = "bluetooth")]
-    BLUETOOTH_CHECK,
-    #[cfg(feature = "bluetooth")]
-    "If the adapter is never found, switch the meter's data transmission off and on.",
+const USB_STEPS: &[&str] = &[];
+
+/// The Bluetooth steps every platform gets. The adapter stops advertising
+/// in standby, and its own power switch wakes it
+/// (docs/research/ut-d07b/reverse-engineered-protocol.md §4).
+const BLUETOOTH_STEPS: &[&str] = &[
+    "If both are on, switch the adapter off and on.",
+    #[cfg(target_os = "macos")]
+    "Allow Bluetooth in System Settings > Privacy & Security.",
 ];
 
-/// What to try when no USB cable was found, one line per step.
+/// Where the adapters and the meters that take one are listed, for the help
+/// that has no address to go on.
+const BLUETOOTH_CATALOG: &[&str] = &[
+    "Supported adapters and meters are listed in the device catalog:",
+    "  https://github.com/antoinecellerier/dmm-tools/blob/main/docs/supported-devices.md",
+];
+
+/// What to do instead when an address was named and nothing answered it: the
+/// scan is the only thing that says which addresses are live.
+const BLUETOOTH_SCAN: &[&str] = &["Run 'dmm-cli list' to scan for adapters in range."];
+
+/// One link's worth of "nothing found" help: a label line, then its steps.
 ///
-/// `cfg`-selected, so a binary only ever carries its own platform's steps.
-/// An indented line is a command to run or a URL to open — the CLI dims those
-/// to keep the prose in front; the GUI joins the lot with newlines and adds
-/// its own "Click Connect" close.
-pub fn transport_setup_hint() -> &'static [&'static str] {
-    SETUP_HINT
+/// Keyed by the link the user knows it by, so the two links never interleave
+/// and a third (LAN, for the bench meters) is another section rather than
+/// more lines in this one. The CLI prints `link` bold and dims the steps that
+/// are commands or URLs; the GUI draws the label line bold above them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupSection {
+    /// The link, as the user names it: "USB cable", "Bluetooth".
+    pub link: &'static str,
+    /// The rest of the label line, after `<link>: `.
+    pub check: &'static str,
+    /// One step per line, which the renderer indents. A step that starts with
+    /// a space of its own is a command to run or a URL to open.
+    pub steps: Vec<&'static str>,
+}
+
+impl SetupSection {
+    /// The label line, `<link>: <check>`, for a renderer that draws it whole.
+    pub fn label(&self) -> String {
+        format!("{}: {}", self.link, self.check)
+    }
+
+    /// The section as plain text, the steps indented under the label.
+    pub fn text(&self) -> String {
+        let mut out = self.label();
+        for step in &self.steps {
+            out.push_str("\n  ");
+            out.push_str(step);
+        }
+        out
+    }
+}
+
+/// Which links a failed open looked at — what the help is allowed to talk
+/// about, and what its title says was not found.
+///
+/// Narrowed by what the user asked for: a meter that only ships with a cable,
+/// or Bluetooth switched off, gets the cable section alone, and an address on
+/// `--adapter` gets the radio alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinksSearched<'a> {
+    /// The USB cables alone.
+    Usb,
+    /// Both links, which is what an unnamed meter gets.
+    UsbAndBluetooth,
+    /// One Bluetooth adapter, named by address or peripheral id.
+    BluetoothAt(&'a str),
+}
+
+impl LinksSearched<'_> {
+    /// What a failed open searched, from whether it reached the radio.
+    pub fn from_usb_failure(bluetooth_searched: bool) -> Self {
+        if bluetooth_searched {
+            Self::UsbAndBluetooth
+        } else {
+            Self::Usb
+        }
+    }
+
+    /// The line that says what was not found.
+    ///
+    /// No full stop: the CLI ends the sentence, the GUI's notice titles carry
+    /// none.
+    pub fn not_found_title(&self) -> String {
+        match self {
+            Self::Usb => "No USB cable found".to_string(),
+            Self::UsbAndBluetooth => "No meter found over USB or Bluetooth".to_string(),
+            Self::BluetoothAt(address) => format!("No Bluetooth device found at {address}"),
+        }
+    }
+
+    /// The sections to print under that title, in the order they are printed.
+    pub fn sections(&self) -> Vec<SetupSection> {
+        match self {
+            Self::Usb => vec![usb_section()],
+            Self::UsbAndBluetooth => vec![usb_section(), bluetooth_section(BLUETOOTH_CATALOG)],
+            // No cable was looked at, so nothing about cables applies — and
+            // the address the user typed is the only thing that did not
+            // answer.
+            Self::BluetoothAt(_) => vec![bluetooth_section(BLUETOOTH_SCAN)],
+        }
+    }
+}
+
+fn usb_section() -> SetupSection {
+    SetupSection {
+        link: USB_CABLE,
+        check: CABLE_CHECK,
+        steps: USB_STEPS.to_vec(),
+    }
+}
+
+fn bluetooth_section(closing: &'static [&'static str]) -> SetupSection {
+    SetupSection {
+        link: BLUETOOTH_LINK,
+        check: BLUETOOTH_CHECK,
+        steps: BLUETOOTH_STEPS.iter().chain(closing).copied().collect(),
+    }
 }
 
 /// The sentence both binaries use to say a protocol is not fully verified.
@@ -375,57 +472,130 @@ mod tests {
 
     /// Both binaries render these lines verbatim: the CLI dims the indented
     /// ones, the GUI joins them with newlines, so a blank line would show up
-    /// as a gap in the middle of the hint.
+    /// as a gap in the middle of a section.
     #[test]
-    fn setup_hint_is_printable_on_every_platform() {
-        let hint = transport_setup_hint();
-        assert_eq!(hint.first(), Some(&CABLE_CHECK));
-        assert!(hint.iter().all(|line| !line.trim().is_empty()));
+    fn every_section_is_printable_on_every_platform() {
+        for links in [
+            LinksSearched::Usb,
+            LinksSearched::UsbAndBluetooth,
+            LinksSearched::BluetoothAt("12:34:56:78:9A:BC"),
+        ] {
+            for section in links.sections() {
+                assert!(!section.link.is_empty());
+                assert!(section.check.ends_with('.'), "{}", section.check);
+                assert!(section.steps.iter().all(|line| !line.trim().is_empty()));
+            }
+        }
     }
 
-    /// The hint covers whichever links the build can open, and never promises
-    /// a Bluetooth adapter a feature-off build cannot reach.
+    /// The help covers the links the open path actually tried, and no others:
+    /// a cable-only meter, a build without the feature and a switched-off
+    /// radio all reach the cable section alone.
     #[test]
-    fn setup_hint_covers_bluetooth_when_the_build_does() {
-        let mentions = transport_setup_hint()
-            .iter()
-            .any(|line| line.contains("UT-D07B"));
-        assert_eq!(mentions, cfg!(feature = "bluetooth"));
+    fn the_sections_are_the_links_that_were_searched() {
+        let links = |l: LinksSearched| -> Vec<&'static str> {
+            l.sections().iter().map(|s| s.link).collect()
+        };
+        assert_eq!(links(LinksSearched::Usb), ["USB cable"]);
+        assert_eq!(
+            links(LinksSearched::UsbAndBluetooth),
+            ["USB cable", "Bluetooth"]
+        );
+        assert_eq!(links(LinksSearched::BluetoothAt("4C:3C")), ["Bluetooth"]);
+    }
+
+    /// The titles are the user's first line of both binaries' help, and the
+    /// GUI's notice title on top of that.
+    #[test]
+    fn the_title_names_what_was_looked_for() {
+        assert_eq!(LinksSearched::Usb.not_found_title(), "No USB cable found");
+        assert_eq!(
+            LinksSearched::UsbAndBluetooth.not_found_title(),
+            "No meter found over USB or Bluetooth"
+        );
+        assert_eq!(
+            LinksSearched::BluetoothAt("12:34:56:78:9A:BC").not_found_title(),
+            "No Bluetooth device found at 12:34:56:78:9A:BC"
+        );
+        assert_eq!(
+            LinksSearched::from_usb_failure(true),
+            LinksSearched::UsbAndBluetooth
+        );
+        assert_eq!(LinksSearched::from_usb_failure(false), LinksSearched::Usb);
+    }
+
+    /// An address nobody answered is answered with the scan, not with the
+    /// catalog: the user already knows which adapter they meant.
+    #[test]
+    fn a_named_address_is_sent_to_the_scan() {
+        let selected = LinksSearched::BluetoothAt("4C:3C").sections();
+        let text = selected[0].text();
+        assert!(text.contains("dmm-cli list"), "{text}");
+        assert!(!text.contains("supported-devices.md"), "{text}");
+
+        let unnamed = LinksSearched::UsbAndBluetooth.sections();
+        let text = unnamed[1].text();
+        assert!(text.contains("supported-devices.md"), "{text}");
+        assert!(!text.contains("dmm-cli list"), "{text}");
+    }
+
+    /// No product name in either binary: which adapters work is the catalog's
+    /// business, and a message that names one dates the moment a second is
+    /// supported.
+    #[test]
+    fn the_sections_name_no_product() {
+        for links in [
+            LinksSearched::Usb,
+            LinksSearched::UsbAndBluetooth,
+            LinksSearched::BluetoothAt("4C:3C"),
+        ] {
+            for section in links.sections() {
+                let text = section.text();
+                assert!(!text.contains("UT-D07"), "{text}");
+            }
+        }
     }
 
     /// The user plugged in a cable or switched an adapter on; either way the
     /// bridge chip must stay out of what they read.
     #[test]
-    fn link_name_says_cable_or_adapter_never_the_chip() {
-        assert_eq!(link_name(crate::BLUETOOTH), "Bluetooth adapter");
+    fn a_link_is_named_cable_or_adapter_never_the_chip() {
+        assert_eq!(bridge_link_name(crate::BLUETOOTH), "Bluetooth adapter");
         for bridge in ["CP2110", "CH9329", "CH9325"] {
-            assert_eq!(link_name(bridge), "USB cable");
+            assert_eq!(Link::from_bridge(bridge), Some(Link::UsbCable));
+            assert_eq!(bridge_link_name(bridge), "USB cable");
         }
     }
 
-    /// The short form keeps the same two links and answers `None` for a
-    /// transport with nothing on the far end, such as the mock's.
+    /// A transport with nothing on the far end, such as the mock's, is on no
+    /// link — not on a cable by default.
     #[test]
-    fn short_link_name_drops_the_adapter_and_the_link_that_isnt_one() {
+    fn a_transport_with_no_link_names_none() {
         use crate::transport::Transport;
-        assert_eq!(short_link_name(crate::BLUETOOTH), Some("Bluetooth"));
-        for bridge in ["CP2110", "CH9329", "CH9325"] {
-            assert_eq!(short_link_name(bridge), Some("USB cable"));
-        }
-        assert_eq!(
-            short_link_name(crate::transport::NullTransport.transport_name()),
-            None
-        );
+        let bridge = crate::transport::NullTransport.transport_name();
+        assert_eq!(Link::from_bridge(bridge), None);
+        assert_eq!(bridge_link_name(bridge), "link");
     }
 
-    /// Both forms of a link have to name the same thing: the short one goes
-    /// on a status line, the full one in the hover that spells it out.
+    /// The short form drops the word the status line no longer needs; the
+    /// full form is the one the errors use.
     #[test]
-    fn the_full_form_of_a_short_link_name_is_the_one_the_errors_use() {
-        for bridge in [crate::BLUETOOTH, "CP2110", "CH9329", "CH9325"] {
-            let short = short_link_name(bridge).expect("a link");
-            assert_eq!(full_link_name(short), link_name(bridge));
+    fn the_two_forms_of_a_link_name() {
+        assert_eq!(Link::Bluetooth.short_name(), "Bluetooth");
+        assert_eq!(Link::Bluetooth.full_name(), "Bluetooth adapter");
+        assert_eq!(Link::UsbCable.short_name(), "USB cable");
+        assert_eq!(Link::UsbCable.full_name(), "USB cable");
+    }
+
+    /// A replay file records the short name, so reading it back must give
+    /// the same link, and a name this version does not write gives none.
+    #[test]
+    fn a_short_name_reads_back_as_its_link() {
+        for link in [Link::UsbCable, Link::Bluetooth] {
+            assert_eq!(Link::from_short_name(link.short_name()), Some(link));
         }
+        assert_eq!(Link::from_short_name("Bluetooth adapter"), None);
+        assert_eq!(Link::from_short_name("carrier pigeon"), None);
     }
 
     #[test]

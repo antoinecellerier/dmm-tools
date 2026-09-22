@@ -92,7 +92,7 @@ pub(crate) fn render_replay(
     samples: &VecDeque<Sample>,
     device_id: &str,
     model: Option<&str>,
-    link: Option<&str>,
+    link: Option<dmm_lib::binary_help::Link>,
 ) -> Option<String> {
     let first = samples.front()?;
     let recorded = first
@@ -1135,7 +1135,7 @@ mod tests {
             &samples,
             "ut61eplus",
             Some("UNI-T UT61E+"),
-            Some("Bluetooth"),
+            Some(dmm_lib::binary_help::Link::Bluetooth),
         )
         .expect("frames with wire bytes");
 
@@ -1143,7 +1143,7 @@ mod tests {
         assert_eq!(replay.device.id, "ut61eplus");
         assert_eq!(replay.model.as_deref(), Some("UNI-T UT61E+"));
         // The link the session was on, so playing the file back says so too.
-        assert_eq!(replay.link, Some("Bluetooth"));
+        assert_eq!(replay.link, Some(dmm_lib::binary_help::Link::Bluetooth));
         assert_eq!(replay.duration(), Duration::from_millis(500));
         chrono::DateTime::parse_from_rfc3339(&replay.recorded)
             .expect("`# recorded:` is what --replay parses as a clock origin");

@@ -1,6 +1,6 @@
 # Setup
 
-You need a [supported multimeter](supported-devices.md) and its USB cable, or a UT-D07 Bluetooth adapter for the meters that take one.
+You need a [supported multimeter](supported-devices.md) and its USB cable, or one of the Bluetooth adapters listed there for the meters that take one.
 
 ## Install from pre-built binaries
 
@@ -116,7 +116,7 @@ GUI binary).
 
 ## Troubleshooting
 
-### "USB cable not found"
+### "No meter found over USB or Bluetooth"
 
 The GUI puts the steps for your platform on screen as its [connection
 help](../assets/gui-connection-help.png); the full list is:

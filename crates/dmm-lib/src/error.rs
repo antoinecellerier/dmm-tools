@@ -61,12 +61,17 @@ pub enum Error {
     /// know whether it carries a CP2110, a CH9329 or a CH9325. `bridge` is
     /// carried for the logs and for help text that lists the meters reachable
     /// over that bridge.
-    #[error("no meter answered over the {}", crate::binary_help::link_name(.bridge))]
+    #[error("no meter answered over the {}", crate::binary_help::bridge_link_name(.bridge))]
     DeviceNotIdentified { bridge: &'static str },
 
     /// The IDs come from the transport modules themselves rather than being
     /// spelled out here, so a corrected PID or a fourth bridge can't leave
     /// this message describing adapters we no longer look for.
+    ///
+    /// `bluetooth_searched` says whether the radio got a turn as well, which
+    /// is what the binaries' help titles itself on — they would otherwise
+    /// have to work the answer out again from the build, the settings and the
+    /// selected meter.
     #[error(
         "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x}){}",
         crate::transport::cp2110::VID,
@@ -75,21 +80,17 @@ pub enum Error {
         crate::transport::ch9329::PID,
         crate::transport::ch9325::VID,
         crate::transport::ch9325::PID,
-        bluetooth_searched()
+        bluetooth_clause(.bluetooth_searched)
     )]
-    NoTransportFound,
+    NoTransportFound { bluetooth_searched: bool },
 }
 
-/// The rest of the "nothing found" message: a build that can open a UT-D07B
-/// looked for one too, and saying so keeps the user from hunting for a cable
-/// fault that isn't there.
-const fn bluetooth_searched() -> &'static str {
-    #[cfg(feature = "bluetooth")]
-    {
-        ", nor a UT-D07B in Bluetooth range"
-    }
-    #[cfg(not(feature = "bluetooth"))]
-    {
+/// The rest of the "nothing found" message when the radio was searched too.
+/// Saying so keeps the user from hunting for a cable fault that isn't there.
+fn bluetooth_clause(searched: &bool) -> &'static str {
+    if *searched {
+        ", nor a Bluetooth adapter in range"
+    } else {
         ""
     }
 }
@@ -158,7 +159,7 @@ impl Error {
             return ErrorKind::Interrupted;
         }
         match self {
-            Self::NoTransportFound => ErrorKind::DeviceNotFound,
+            Self::NoTransportFound { .. } => ErrorKind::DeviceNotFound,
             // A lost link is the Bluetooth spelling of a pulled cable.
             Self::Hid(_) | Self::LinkLost => ErrorKind::Transport,
             // Nothing answered the probes — the same shape as a timeout, and
@@ -211,9 +212,16 @@ mod tests {
         assert!(!msg.contains("USB"), "got {msg}");
     }
 
+    /// The error a failed open carries, with `bluetooth_searched` as the
+    /// open path would have set it.
+    fn not_found(bluetooth_searched: bool) -> Error {
+        Error::NoTransportFound { bluetooth_searched }
+    }
+
     #[test]
     fn kind_maps_not_found() {
-        assert_eq!(Error::NoTransportFound.kind(), ErrorKind::DeviceNotFound);
+        assert_eq!(not_found(false).kind(), ErrorKind::DeviceNotFound);
+        assert_eq!(not_found(true).kind(), ErrorKind::DeviceNotFound);
     }
 
     /// A lost link is what a pulled cable is: the GUI reconnects from both.
@@ -279,7 +287,7 @@ mod tests {
     /// it advertising the old one.
     #[test]
     fn no_transport_message_uses_the_transport_constants() {
-        let msg = Error::NoTransportFound.to_string();
+        let msg = not_found(false).to_string();
         for (vid, pid) in [
             (crate::transport::cp2110::VID, crate::transport::cp2110::PID),
             (crate::transport::ch9329::VID, crate::transport::ch9329::PID),
@@ -289,14 +297,20 @@ mod tests {
         }
     }
 
-    /// A build that can open a UT-D07B says it looked for one; one that
-    /// cannot must not promise a search it never ran.
+    /// An open that reached the radio says so; one that never did must not
+    /// promise a search it never ran. Which it was is the open path's answer
+    /// (see `bluetooth_is_next`), and it names no product — the adapters we
+    /// speak to are the catalog's business.
     #[test]
     fn no_transport_message_names_every_link_tried() {
-        let msg = Error::NoTransportFound.to_string();
-        assert_eq!(
-            msg.contains("UT-D07B in Bluetooth range"),
-            cfg!(feature = "bluetooth"),
+        let msg = not_found(true).to_string();
+        assert!(
+            msg.contains(", nor a Bluetooth adapter in range"),
+            "got {msg}"
+        );
+        assert!(!msg.contains("UT-D07"), "got {msg}");
+        assert!(
+            !not_found(false).to_string().contains("Bluetooth"),
             "got {msg}"
         );
     }

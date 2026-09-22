@@ -57,8 +57,8 @@ pub trait Transport: Send {
 /// What a transport with no link behind it calls itself.
 ///
 /// The mock and a replay produce their readings in the process, so there is
-/// no cable or radio to name — [`crate::binary_help::short_link_name`] reads
-/// this back as "no link" rather than guessing a cable. What a replay says it
+/// no cable or radio to name — [`crate::binary_help::Link::from_bridge`] reads
+/// this back as no link rather than guessing a cable. What a replay says it
 /// is on comes from the file instead, not from here.
 pub(crate) const NO_LINK: &str = "unknown";
 

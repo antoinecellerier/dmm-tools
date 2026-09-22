@@ -51,7 +51,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `detect.rs` | `detect_device()`: the probe cascade behind `"auto"` — runs the families' `Fingerprint`s on an opened transport and ranks what answers (see below and `docs/detection-design.md`) |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
-| `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the "USB cable not found" setup hint and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
+| `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the per-link sections of the "nothing found" help and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
 | `docs_tables.rs` | Renders the `--device` table in `docs/cli-reference.md` from the registry; a `dmm-cli` test keeps the file's `devices:start`/`devices:end` block in sync and rewrites it under `UPDATE_DOCS=1` (see `docs/development.md`) |
 | `lib.rs` | `Dmm` struct: top-level API tying everything together |
 
@@ -106,7 +106,8 @@ address or a peripheral identifier can only mean a radio, so it goes straight to
 selected family lists Bluetooth among its links, an adapter in range is opened instead — a
 bounded scan, connect and service discovery, all inside the transport's own runtime. When that
 finds nothing the caller sees the USB error, because it names the cables that were looked for;
-why Bluetooth found nothing is logged at INFO. One consequence is documented rather than worked
+it carries whether the radio was searched, which is what both binaries title their setup help on,
+and why Bluetooth found nothing is logged at INFO. One consequence is documented rather than worked
 around: a cable with a silent meter on it wins over a live meter on an adapter, so unplug it or
 name the adapter. Listing is split for the same reason the opening order is — `list_devices()`
 enumerates USB and stays instant, because it backs a GUI control, while

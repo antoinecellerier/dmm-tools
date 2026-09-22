@@ -73,11 +73,11 @@ pub struct Replay {
     pub recorded: String,
     /// The name the meter reported when the recording was made, if it has one.
     pub model: Option<String>,
-    /// The link the recording came over, named as the binaries name it —
-    /// what a played-back session says it is on, since the playback itself
-    /// has no cable or radio. A file with no `# link:` line is a cable
-    /// recording; one naming a link this version does not know says nothing.
-    pub link: Option<&'static str>,
+    /// The link the recording came over — what a played-back session says
+    /// it is on, since the playback itself has no cable or radio. A file with
+    /// no `# link:` line is a cable recording; one naming a link this version
+    /// does not know says nothing.
+    pub link: Option<crate::binary_help::Link>,
     /// Non-empty, offsets non-decreasing — both enforced by the parser.
     samples: Vec<(Duration, Vec<u8>)>,
 }
@@ -116,7 +116,7 @@ impl Replay {
                 } else if let Some(value) = comment.strip_prefix("link:") {
                     // A link we don't know is not a reason to refuse a
                     // recording: the frames are the file, the link is a label.
-                    link = crate::binary_help::link_from_name(value.trim());
+                    link = crate::binary_help::Link::from_short_name(value.trim());
                 }
                 // Anything else is a comment: a writer notes where a file came
                 // from, and an unknown key must not strand a whole recording.
@@ -211,17 +211,16 @@ impl Replay {
 
 /// The header lines of a replay file, ending in a newline.
 ///
-/// `link` is the link the readings came over, as
-/// [`crate::binary_help::short_link_name`] names it; left out, the file plays
-/// back as a cable recording, which every file written before the line
-/// existed was.
+/// `link` is the link the readings came over, written by its
+/// [`crate::binary_help::Link::short_name`]; left out, the file plays back as
+/// a cable recording, which every file written before the line existed was.
 ///
 /// Callers append [`sample_line`]s to this.
 pub fn header(
     device_id: &str,
     recorded_rfc3339: &str,
     model: Option<&str>,
-    link: Option<&str>,
+    link: Option<crate::binary_help::Link>,
 ) -> String {
     let mut out = format!("{MAGIC}\n# device: {device_id}\n# recorded: {recorded_rfc3339}\n");
     if let Some(model) = model {
@@ -231,7 +230,7 @@ pub fn header(
     }
     if let Some(link) = link {
         out.push_str("# link: ");
-        out.push_str(link);
+        out.push_str(link.short_name());
         out.push('\n');
     }
     out
@@ -567,11 +566,16 @@ mod tests {
     /// does not know costs the frames nothing.
     #[test]
     fn the_recorded_link_round_trips_and_falls_back_to_the_cable() {
-        let mut text = header("ut61eplus", RECORDED, Some("UT61E+"), Some("Bluetooth"));
+        use crate::binary_help::Link;
+        let mut text = header("ut61eplus", RECORDED, Some("UT61E+"), Some(Link::Bluetooth));
+        // The on-disk spelling is what older and newer versions read back.
+        assert!(text.contains("\n# link: Bluetooth\n"), "{text}");
         text.push_str(&sample_line(Duration::ZERO, &payload(DCV_BATTERY)));
-        assert_eq!(parsed(&text).link, Some("Bluetooth"));
+        assert_eq!(parsed(&text).link, Some(Link::Bluetooth));
 
-        assert_eq!(parsed(&three_frames()).link, Some("USB cable"));
+        assert_eq!(parsed(&three_frames()).link, Some(Link::UsbCable));
+        let cable = three_frames().replacen('\n', "\n# link: USB cable\n", 1);
+        assert_eq!(parsed(&cable).link, Some(Link::UsbCable));
 
         let unknown = text.replace("# link: Bluetooth", "# link: carrier pigeon");
         assert_eq!(parsed(&unknown).link, None);

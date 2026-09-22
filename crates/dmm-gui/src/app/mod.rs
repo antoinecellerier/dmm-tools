@@ -186,7 +186,7 @@ struct CaptureLayout {
     /// line. Taken alongside `device_id` and for the same reason: a
     /// disconnect clears the connection's link, and a file exported after
     /// unplugging would then claim the cable every unmarked file is read as.
-    link: Option<&'static str>,
+    link: Option<dmm_lib::binary_help::Link>,
     /// Sub-value slots the connected meter family can report, from its
     /// profile. 0 until the first `Connected`, and kept on disconnect so a
     /// capture stays exportable with its full column layout.
@@ -283,11 +283,10 @@ pub(super) struct Connection {
     pub(super) stability: dmm_lib::protocol::Stability,
     /// URL for reporting feedback on experimental protocols.
     pub(super) feedback_url: String,
-    /// What the meter is answering over, as the status line names it:
-    /// "USB cable" or "Bluetooth" — for a replay, what its recording was
-    /// made over. `None` while disconnected, and for the mock, which is on
-    /// no link at all.
-    pub(super) link: Option<&'static str>,
+    /// What the meter is answering over — for a replay, what its recording
+    /// was made over. `None` while disconnected, and for the mock, which is
+    /// on no link at all.
+    pub(super) link: Option<dmm_lib::binary_help::Link>,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
     /// Values the meter can be switched to for each setting the readout
@@ -627,6 +626,9 @@ impl App {
             .flatten();
         // Rendered by the context rather than spelled out: the binding uses
         // `Modifiers::COMMAND`, which is Cmd on macOS.
+        // The sections and the prose under them as one string: the tooltip is
+        // the only place a big-meter session can read them.
+        let tooltip = notice.as_ref().map(|n| n.help_text());
         let hint = notice.is_some().then(|| {
             format!(
                 "{} for details",
@@ -670,11 +672,11 @@ impl App {
                         self.meter_fit.content_height
                     };
                     let tc = self.settings.theme_colors(ui.visuals().dark_mode);
-                    let no_reading = match (notice.as_ref(), hint.as_deref()) {
-                        (Some(n), Some(hint)) => display::NoReadingText::Notice {
+                    let no_reading = match (notice.as_ref(), hint.as_deref(), tooltip.as_deref()) {
+                        (Some(n), Some(hint), Some(tooltip)) => display::NoReadingText::Notice {
                             title: &n.title,
                             hint,
-                            tooltip: &n.body,
+                            tooltip,
                             color: tc.status_warning(),
                         },
                         _ => display::NoReadingText::Plain,

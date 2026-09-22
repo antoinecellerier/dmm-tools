@@ -346,33 +346,54 @@ pub fn open_transport(
         return Ok((ble::open_selected(selector)?, BLUETOOTH));
     }
 
+    let radio_gets_a_turn = bluetooth_is_next(preferred, adapter);
     let hid = open_hid_transport(preferred, adapter);
     match hid {
         Ok(opened) => Ok(opened),
-        Err(err) if bluetooth_is_next(&err, preferred, adapter) => match ble::open_first() {
-            Ok(transport) => Ok((transport, BLUETOOTH)),
-            Err(bluetooth_err) => {
-                // The USB error is what the user acts on: it lists the cables
-                // that were looked for. Why Bluetooth found nothing — stack
-                // off, nothing in range — stays in the log.
-                info!("no meter over Bluetooth either: {bluetooth_err}");
-                Err(err)
+        Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
+            match ble::open_first() {
+                Ok(transport) => Ok((transport, BLUETOOTH)),
+                Err(bluetooth_err) => {
+                    // The USB error is what the user acts on: it lists the
+                    // cables that were looked for. Why Bluetooth found
+                    // nothing — stack off, nothing in range — stays in the
+                    // log. The error says the radio was searched, so the help
+                    // titles itself on both links rather than on the cable.
+                    info!("no meter over Bluetooth either: {bluetooth_err}");
+                    Err(searched_bluetooth(err))
+                }
             }
-        },
+        }
         Err(err) => Err(err),
     }
 }
 
-/// Whether a failed USB open should be followed by a Bluetooth one.
+/// Whether the radio gets a turn when no cable answers.
 ///
 /// Only on the auto path: a user who named a USB adapter asked for that one,
-/// and a meter answering on a radio instead is not what they meant. `Hid` is
-/// in the list because it is what a missing or broken HID API returns, which
-/// on a machine with no USB support at all must not stop Bluetooth working.
-fn bluetooth_is_next(err: &Error, preferred: &[&'static str], adapter: Option<&str>) -> bool {
-    adapter.is_none()
+/// and a meter answering on a radio instead is not what they meant. A build
+/// without the feature has no radio to search.
+fn bluetooth_is_next(preferred: &[&'static str], adapter: Option<&str>) -> bool {
+    cfg!(feature = "bluetooth")
+        && adapter.is_none()
         && (preferred.is_empty() || preferred.contains(&BLUETOOTH))
-        && matches!(err, Error::NoTransportFound | Error::Hid(_))
+}
+
+/// Whether this USB failure is one the radio may answer instead. `Hid` is in
+/// the list because it is what a missing or broken HID API returns, which on
+/// a machine with no USB support at all must not stop Bluetooth working.
+fn usb_failure_falls_through(err: &Error) -> bool {
+    matches!(err, Error::NoTransportFound { .. } | Error::Hid(_))
+}
+
+/// Mark a "nothing found" error as having looked at the radio as well.
+fn searched_bluetooth(err: Error) -> Error {
+    match err {
+        Error::NoTransportFound { .. } => Error::NoTransportFound {
+            bluetooth_searched: true,
+        },
+        other => other,
+    }
 }
 
 /// Open one of the USB-HID bridges, the path every meter but a Bluetooth one
@@ -474,8 +495,7 @@ fn open_first_match(
             " Preferring the cable this meter uses."
         };
         warn!(
-            "Multiple USB adapters found ({match_count} devices).{preference} \
-             Specify an adapter to select a specific device."
+            "Multiple USB cables found ({match_count} devices).{preference} Pass --adapter to pick one."
         );
     }
 
@@ -496,7 +516,11 @@ fn open_first_match(
         }
     }
 
-    Err(Error::NoTransportFound)
+    // The bus alone was looked at here; [`open_transport`] marks the error
+    // if it goes on to search the radio.
+    Err(Error::NoTransportFound {
+        bluetooth_searched: false,
+    })
 }
 
 /// List all connected USB adapters (CP2110, CH9329, CH9325).
@@ -537,6 +561,18 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
 /// on a platform that exposes no address.
 pub fn list_bluetooth_devices() -> Result<Vec<DeviceInfo>> {
     ble::list()
+}
+
+/// Whether an `--adapter` value names a Bluetooth adapter rather than a USB
+/// one — an address or a peripheral identifier, neither of which a HID serial
+/// number or device path can look like.
+///
+/// The open path decides this for itself; both binaries ask so that an
+/// adapter nothing answered is explained in terms of the link it was on. A
+/// build without the `bluetooth` feature answers `false`: there is no radio
+/// for the value to have named.
+pub fn is_bluetooth_selector(selector: &str) -> bool {
+    ble::is_bluetooth_selector(selector)
 }
 
 /// Information about a connected adapter.
@@ -826,6 +862,32 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Which links a failed open looked at, which is what the binaries title
+    /// their help on. A build without the feature searches no radio, and
+    /// neither does a meter that only ships with a cable or a user who named
+    /// a USB adapter.
+    #[test]
+    fn the_radio_gets_a_turn_only_where_it_could_answer() {
+        let bluetooth = cfg!(feature = "bluetooth");
+        assert_eq!(bluetooth_is_next(&[], None), bluetooth, "the auto path");
+        assert_eq!(
+            bluetooth_is_next(
+                preferred_transports(protocol::DeviceFamily::Ut61EPlus),
+                None
+            ),
+            bluetooth,
+            "a family the adapter carries"
+        );
+        assert!(
+            !bluetooth_is_next(preferred_transports(protocol::DeviceFamily::Ut80x), None),
+            "a cable-only family"
+        );
+        assert!(
+            !bluetooth_is_next(&[], Some("00C5B27A")),
+            "a named USB adapter"
+        );
     }
 
     /// Every hardware device must name the cable it ships with, otherwise it

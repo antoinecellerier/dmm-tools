@@ -104,12 +104,12 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware. Click either to help verify.
 
-Cables, the Bluetooth adapter, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your model is not listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with its details.
+Cables, Bluetooth adapters, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your model is not listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with its details.
 
 ## Quick start
 
 1. Download the [latest release](https://github.com/antoinecellerier/dmm-tools/releases/latest) for your platform and extract it.
-2. Give the tool access to the cable:
+2. Give the tool access to the cable, or turn Bluetooth on:
    - Linux: install the udev rule, then re-plug the cable.
      ```sh
      sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules

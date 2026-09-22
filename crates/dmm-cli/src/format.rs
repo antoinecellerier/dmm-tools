@@ -623,7 +623,7 @@ mod tests {
                 "ut61eplus",
                 "2026-09-16T10:22:31.123+02:00",
                 Some("UT61E+"),
-                Some("Bluetooth"),
+                Some(dmm_lib::binary_help::Link::Bluetooth),
             )
         });
 
@@ -643,7 +643,7 @@ mod tests {
         assert_eq!(replay.device.id, "ut61eplus");
         assert_eq!(replay.model.as_deref(), Some("UT61E+"));
         // The link the run was on reaches the file and comes back.
-        assert_eq!(replay.link, Some("Bluetooth"));
+        assert_eq!(replay.link, Some(dmm_lib::binary_help::Link::Bluetooth));
         // Offsets run from the first frame, not from wherever the session was.
         assert_eq!(replay.duration(), Duration::from_millis(250));
     }

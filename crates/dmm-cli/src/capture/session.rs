@@ -59,11 +59,17 @@ pub(super) fn verify_meter(
                 Ok(_) => None,
                 Err(_) => {
                     eprintln!();
+                    // Name the link the session is on: "adapter" now reads as
+                    // the Bluetooth one, and over a cable it never was one.
+                    let link =
+                        dmm_lib::binary_help::bridge_link_name(dmm.transport().transport_name());
                     eprintln!(
                         "{}",
-                        style("The adapter was found but the meter is not responding.")
-                            .yellow()
-                            .bold()
+                        style(format!(
+                            "The {link} is connected but the meter isn't responding."
+                        ))
+                        .yellow()
+                        .bold()
                     );
                     eprintln!("To enable data transmission:");
                     for line in device.activation_instructions.lines() {

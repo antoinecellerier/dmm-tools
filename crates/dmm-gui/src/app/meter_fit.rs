@@ -315,7 +315,7 @@ mod tests {
         fit.record_pass(&failed, fit.content_height, ReadingRatios::default());
         assert!(
             fit.needs_recalc(&FitInputs {
-                notice_kind: Some(NoticeKind::DeviceNotFound),
+                notice_kind: Some(NoticeKind::NoMeterFound),
                 ..inputs()
             }),
             "one notice replacing another never reached the fit"

@@ -1,3 +1,4 @@
+use dmm_lib::binary_help::Link;
 use dmm_lib::detect::Detected;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
@@ -113,10 +114,10 @@ pub(crate) enum DmmMessage {
         stability: Stability,
         /// URL for reporting feedback on experimental protocols.
         feedback_url: String,
-        /// What the meter answered over, for the status line: "USB cable" or
-        /// "Bluetooth" — for a replay, the link its recording was made on.
-        /// `None` for the mock, which is on no link at all.
-        link: Option<&'static str>,
+        /// What the meter answered over, for the status line — for a replay,
+        /// the link its recording was made on. `None` for the mock, which is
+        /// on no link at all.
+        link: Option<Link>,
         supported_commands: Vec<String>,
         /// Sub-value slots this meter family can report, from its profile.
         /// Fixes the CSV export's aux column count for the whole recording.
@@ -168,7 +169,7 @@ fn establish_connection<T: Transport>(
     detected: Option<Detected>,
     selected: Option<&'static SelectableDevice>,
     query_name: bool,
-    recorded_link: Option<&'static str>,
+    recorded_link: Option<Link>,
     msg_tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
 ) {
@@ -183,8 +184,7 @@ fn establish_connection<T: Transport>(
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
     let model_name = profile.model_name.to_string();
-    let link = recorded_link
-        .or_else(|| dmm_lib::binary_help::short_link_name(dmm.transport().transport_name()));
+    let link = recorded_link.or_else(|| Link::from_bridge(dmm.transport().transport_name()));
     let device_id = detected
         .as_ref()
         .map(|d| d.device)
@@ -225,7 +225,7 @@ pub(super) struct ThreadContext {
     /// The link a replay file was recorded over, for the status line. `None`
     /// for a meter and for the mock: their transport names their link, or
     /// says there is none.
-    pub recorded_link: Option<&'static str>,
+    pub recorded_link: Option<Link>,
     pub sample_interval_ms: u32,
     pub stop_flag: Arc<AtomicBool>,
 }
