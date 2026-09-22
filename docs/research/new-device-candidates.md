@@ -493,32 +493,110 @@ rusty_meter validates the Rust/egui approach for multimeter desktop apps.
 ### UNI-T UT8805 / UT8805A / UT8806 / UT8806A (USB TMC/SCPI)
 
 **UNI-T's other bench multimeter generation — same brand as the UT8802/UT8803
-we support, an entirely different interface.**
+we support, an entirely different interface. Specified 2026-09-22 from
+UNI-T's manuals, firmware and tools:
+[research/ut8805](ut8805/reverse-engineered-protocol.md).**
 
 | Aspect | Details |
 |--------|---------|
-| Models | UT8805, UT8805N, UT8805A, UT8806, UT8806A (台式数字万用表, bench digital multimeter) |
-| Connection | USB DEVICE port or LAN |
-| Protocol | SCPI, reached over **USBTMC** and TCP/IP. The [UT8806 SCPI manual](https://china-instruments.oss-cn-shenzhen.aliyuncs.com/static/upload/file/20240618/UT8806%20%20SCPI%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.1%282023.pdf) (87 pages, read 2026-09-21) documents both, with NI-VISA `*IDN?` examples for each and `SYST:COMM:LAN:IPAD` to set the address |
-| Manuals | UT8805N REV.3, UT8805A REV.1, UT8806 REV.1, [UT8806A V0.1 (2026-03)](https://china-instruments.oss-cn-shenzhen.aliyuncs.com/uploads/attach/20260901/UT8806A%E5%8F%B0%E5%BC%8F%E6%95%B0%E5%AD%97%E4%B8%87%E7%94%A8%E8%A1%A8%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8CV0.1%EF%BC%882026.03%EF%BC%89.pdf) — all in the bench download centre |
+| Models | UT8805N, UT8805A, UT8805E (5½ digits); UT8806, UT8806A, UT8806E (6½ digits). The UT805A+ listing serves the UT8805N files. No rebrand found, and no sign of an OEM link in either direction |
+| Connection | Rear USB device port, LAN (RJ45), RS-232 (DB9); GPIB option |
+| USB | Genuine **USBTMC**: interface FE/03/01, bulk endpoints only, no interrupt IN, no USB488 features (no REN/GTL/LLO, no status byte). Two ID lines: UT8805N/E `0483:7540`; UT8805A and UT8806/A/E `0483:5740`. Both IDs are shared with generic ST products (a thermal printer, ST's virtual COM port), so neither identifies the meter on its own; the interface class and `*IDN?` do |
+| LAN | VXI-11 (`inst0`) on every line. A raw SCPI socket on **5025** on the UT8805A/UT8806 line only; that line serves HTTP too, and whether the UT8805N/E line does is disputed (spec §3.1). A UT8805E on V1.87.014 returned VXI-11 replies unpadded to 4 bytes (a strict XDR client fails; NI-VISA tolerates it), reportedly fixed in V1.87.017 |
+| RS-232 | SCPI over the DB9 reported working on a UT8805E (the manual's default line is 9600 8N1); terminator and handshake unrecorded |
+| Protocol | Plain query/response SCPI: `CONF?` gives function and range, then `READ?` or `DATA:LAST?` (the latter usable at any time, with a unit suffix). Overload is ±9.9E37. Replies end `\r\n` on the UT8805N/E, `\n` on the others. Queries can put the meter in remote (which ones varies by line: any query on the UT8805N/E, `READ?`/`FETCh?`/`MEAS?` on the UT8805A, every command but `*IDN?` on the UT8806); whether the keys lock is unverified; `*UNREMOTE` (UT8805) or `SYST:LOC` (UT8806) return it to local |
+| Vendor tools | UNI-T's PC apps, IVI-C and LabVIEW drivers all go through NI-VISA; the UNI-T SDK (`uci.dll`) does not cover these meters |
 
 **UNI-T's bench line splits in two.** The UT632, UT803, UT804, UT805A, UT8802
 and UT8803 speak the UCI protocols we implement, over HID or a COM port. The
-UT8805/UT8806 generation is a standard SCPI instrument instead — so
-supporting it is the Rigol/Siglent problem below, not an extension of our
-UT8802/UT8803 work: a USB TMC transport plus a text command layer, against a
-`Protocol` trait built for binary frames.
+UT8805/UT8806 generation is a standard SCPI instrument, and its command tree
+follows the same Keysight Truevolt run as Rigol's DM858 and Siglent's SDM:
+the UT8805 manuals open with `ABORt`, `FETCh?`, `INITiate`,
+`OUTPut:TRIGger:SLOPe`, `READ?`, `SAMPle:COUNt`, `UNIT:TEMPerature`, and
+every image registers those (except `OUTPut:TRIGger:SLOPe` on the
+UT8806) plus `DATA:LAST?`/`POINts?`/`REMove?` (the
+quoted `FUNC?` reply and the `DATA:LAST?` unit suffix are Truevolt's own
+behaviour, not departures; `R?` is left out — the manuals name it in prose
+only and the UT8805A/UT8806 images give it no handler). UNI-T's real
+departures: an unquoted `CONF?` reply with no resolution field, the long
+`VOLT:DC` token, `*UNREMOTE`/`SYST:RWL`, `\r\n` replies on the UT8805N/E,
+and NPLC as `Slow|Medium|Fast` on the UT8805. The UT8806 manual does not open with the run
+and the UT8806 images do not register `OUTPut:TRIGger:SLOPe`. So it is a
+third Truevolt-style dialect, and supporting it is the same decision as the
+Rigol/Siglent one below, not the same hardware — the earlier "same call as
+Rigol/Siglent" wording meant that.
 
-**Not a priority target** for the same reason as the others in this section:
-pyvisa, lxi-tools and vendor software already serve SCPI instruments well. It
-is listed because the brand overlap makes it a question users will ask.
+**What it would take**, costed by work content:
+
+- dmm-lib's open path is hidapi-only (`open_transport`, `KNOWN_TRANSPORTS`
+  in `crates/dmm-lib/src/lib.rs`) and auto-detection probes over HID
+  bridges. Any of these meters needs an address-based open (host or device
+  path) and identification by `*IDN?`. The `Protocol` trait is poll-based
+  (`request_measurement`) and fits SCPI query/response as it is; the
+  `Transport` trait (`crates/dmm-lib/src/transport/mod.rs`) is written
+  around HID reports and requires the HID-only `send_feature_report`, so a
+  network transport has to fit or change that trait. The SCPI text replies
+  need a new protocol family; no existing frame parser applies.
+- Transports, cheapest first: (1) **VXI-11 over `std::net`** — portmapper
+  plus core channel, a few hundred lines of XDR, std only, cross-platform,
+  reaches every model, must tolerate the UT8805N/E's unpadded replies;
+  (2) **raw socket 5025 over `std::net`** — trivial, UT8805A/UT8806 line
+  only; (3) **Linux `/dev/usbtmcN` through `std::fs`** — the kernel adds the
+  headers; Linux only, plus a udev rule; (4) **USBTMC over libusb/nusb** on
+  macOS and Windows — a new dmm-lib dependency against the "hidapi,
+  thiserror, log only" rule in `.claude/rules/protocol.md`, and Windows
+  needs WinUSB (Zadig) or a vendor VISA driver; (5) **RS-232** — the serial
+  transport the UT805A and OWON XDM would also use, with its own dependency
+  decision.
+- Value: pyvisa, NI-VISA and UNI-T's own tools serve them; HKJ's
+  TestController reaches the UT8805E over RS-232 only, on Linux and Mac as
+  well as Windows. What dmm-tools adds is a cross-platform GUI logger over
+  LAN or USB with no VISA install. A SCPI family with
+  per-dialect command maps would reach Rigol DM858/DM3068, Siglent SDM and
+  Teledyne T3DMM over the same transport.
+- UX cost to name: queries can put the meter in remote; whether the keys
+  lock varies by line and is unverified, and a session has to return the
+  meter to local when it closes.
+
+**Recommendation: Tier 2, go LAN-first when the project takes on a network
+transport** — VXI-11 plus the 5025 socket over `std::net`, no
+dependency-rule change, one SCPI family with a UNI-T command map first and
+Rigol/Siglent maps after. Defer USB TMC until the dependency decision is
+made, with Linux `usbtmc` as the cheap interim. Not ahead of the Tier 1
+items. Experimental plus a verification issue, since nobody on the project
+owns one; the open hardware questions are in the
+[backlog](../verification-backlog.md#ut8805ut8806-open-questions-before-a-scpi-implementation).
 
 ---
 
 ### Rigol / Siglent Bench DMMs (USB TMC/SCPI)
 
-Standard SCPI instruments, well-served by pyvisa, lxi-tools, sigrok, and
-vendor software. **Not a priority target.**
+Standard SCPI instruments, well-served by pyvisa, lxi-tools, sigrok and
+vendor software. Surveyed from their official documents 2026-09-21
+(`references/rigol-siglent/`, gitignored): **not rebrands of one protocol,
+but separate SCPI dialects over a common USBTMC and LAN transport** (VXI-11 on
+Siglent and Teledyne, the Rigols state LXI only; a 5025 socket where a port is documented at all — the DM858
+and SDM3000 give one, the DM3058 and SDM4000A none), in two lineages:
+
+- **Rigol DM3058/DM3068:** Rigol's own `:FUNCtion:…`/`:MEASure …` tree, with
+  `CMDSET` switching to a 34401A- or Fluke 45-compatible set (RIGOL is the
+  power-on default).
+- **Keysight Truevolt layout (34460A/34461A):** Rigol DM858, Siglent
+  SDM3000/SDM4000A, and Teledyne LeCroy T3DMM — a rebadged SDM3000 (a
+  leftover "SDM3055" sentence in Teledyne's manual, matching firmware
+  version strings, and a Siglent distributor's confirmation).
+
+| | Rigol DM3058/DM3068 | Rigol DM858, Siglent SDM, T3DMM | UNI-T UT8805/UT8806 |
+|---|---|---|---|
+| Select DC V | `:FUNCtion:VOLTage:DC` | `CONF:VOLT:DC`, `FUNC "VOLT"` / `"VOLT:DC"` | `CONF:VOLT:DC`, `FUNC "VOLT:DC"` |
+| One reading | `:MEASure:VOLTage:DC?` (no arguments) | `READ?`, `R?`, `DATA:LAST?` (DM858; Siglent SDM EN02A and SDM4000A §4.1) | `READ?`, `DATA:LAST?` with a unit suffix |
+| Overload | not stated remotely | `9.9E37` | `±9.90000000E+37` |
+
+UNI-T's UT8805/UT8806 tree follows the same Truevolt run, so it is a third
+dialect of that lineage; no sign of an OEM link between Rigol, Siglent and
+UNI-T was found. **Not a priority target on its own**, but a SCPI family built for the
+UT8805/UT8806 (above) would reach these with per-dialect command maps over
+the same transport.
 
 ---
 
@@ -570,6 +648,7 @@ vendor software. **Not a priority target.**
 | **OWON B35T+/B41T+** | BLE | Popular budget BLE meters, no cross-platform GUI, proprietary dongle required for PC | High |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
+| **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Moderate: a network transport (the HID-shaped `Transport` trait must fit or change), a SCPI protocol family, address-based open and `*IDN?` identification; USB TMC deferred behind the dependency decision |
 
 ### Tier 3: Lower priority
 
@@ -578,9 +657,8 @@ vendor software. **Not a priority target.**
 | Aneng/BSIDE/ZOYI BLE | BLE | Very cheap meters, users may not invest in tooling |
 | Mooshimeter | BLE | Discontinued, shrinking user base |
 | OWON XDM series | USB serial SCPI | Already well-served by rusty_meter (100 stars, Rust/egui) |
-| UNI-T UT8805/UT8806 | USB TMC/SCPI | Bench DMMs, but a standard SCPI instrument — pyvisa and lxi-tools serve them; needs a TMC transport and a text command layer |
 | Pokit Pro | BLE | Already well-served by dokit (63 stars) |
-| Rigol/Siglent bench | USB TMC/SCPI | Well-served by pyvisa/lxi-tools |
+| Rigol/Siglent bench | USB TMC/SCPI, LAN | Well-served by pyvisa/lxi-tools; separate SCPI dialects (Rigol DM3000 tree; Truevolt layout on DM858, Siglent SDM, Teledyne T3DMM). Would ride the UT8805/UT8806 SCPI family (Tier 2) as extra command maps over the same transport, not a project of its own |
 
 ### Strategic notes
 
@@ -600,9 +678,14 @@ vendor software. **Not a priority target.**
   wire protocol**, and is implemented (experimental) since 2026-09-21. The
   2026-09-21 sweep found none for the UT171, UT181A, UT161, UT139, UT89,
   UT19x, UT21x or the clamp line. UNI-T's newer bench multimeters
-  (UT8805/UT8806) do publish theirs, but as SCPI over USB TMC — a different
-  paradigm from everything we implement. So growth inside UNI-T's catalogue
-  means UT632 over USB, or the BLE models over an adapter.
+  (UT8805/UT8806) publish theirs as SCPI over USB TMC, LAN and RS-232, now
+  specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)): a
+  Truevolt-style dialect that the poll-based `Protocol` trait fits, needing
+  a network transport and a SCPI protocol family rather than another frame
+  parser. So growth inside UNI-T's
+  catalogue means UT632 over USB, the BLE models over an adapter, or the
+  SCPI bench meters over LAN — the last of which also opens Rigol and
+  Siglent.
 
 ---
 
