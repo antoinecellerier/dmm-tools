@@ -29,10 +29,13 @@ jobs:
         run: >
           sudo apt-get update && sudo apt-get install -y
           libudev-dev libgtk-3-dev libxcb-render0-dev libxcb-shape0-dev
-          libxcb-xfixes0-dev libxkbcommon-dev libssl-dev
+          libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libdbus-1-dev
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The Bluetooth transport is a default feature; this keeps the build
+      # without it — and the stub the open path falls back to — compiling.
+      - run: cargo check -p dmm-lib --no-default-features
 
   lint-workflows:
     name: Lint workflows

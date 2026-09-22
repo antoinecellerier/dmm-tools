@@ -24,7 +24,7 @@ use log::{info, warn};
 use protocol::Protocol;
 use protocol::registry::{self, SelectableDevice, Selection};
 use std::ffi::CString;
-use transport::{Transport, ch9325, ch9329, cp2110};
+use transport::{Transport, ble, ch9325, ch9329, cp2110};
 
 /// Top-level handle for communicating with the multimeter.
 pub struct Dmm<T: Transport> {
@@ -159,7 +159,8 @@ struct KnownTransport {
     init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
 }
 
-/// The USB cables a device family is found on, most likely first.
+/// The links a device family is found on, most likely first: the USB cables,
+/// and the UT-D07B Bluetooth adapter for the families seen on it.
 ///
 /// Sourced from the cable table in `docs/supported-devices.md`: the CP2110
 /// UT-D09 covers UT61x+/UT161x/UT171x/UT880x, the Voltcraft meters and older
@@ -167,7 +168,11 @@ struct KnownTransport {
 /// series and is confirmed on a UT61B+ (issue #19); the CH9325 UT-D04 is
 /// what the UT803/UT804 use, and the UT71 and Voltcraft VC9x0, which send
 /// the UT804's packets, are taken to use it too
-/// (docs/research/ut71/reverse-engineered-protocol.md §1).
+/// (docs/research/ut71/reverse-engineered-protocol.md §1). The UT-D07B
+/// Bluetooth adapter names the UT61+, UT161, UT171 and UT181 series on
+/// UNI-T's accessory page (https://meters.uni-trend.com/product/ut-d-series/,
+/// read 2026-09-22); the UT71 is listed for the UT-D07A only, whose GATT
+/// layout we have not seen.
 ///
 /// Two things read it. Opening only orders the candidates —
 /// [`open_first_match`] still falls back to the remaining transports, so an
@@ -181,12 +186,24 @@ fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static st
     use protocol::DeviceFamily as F;
     match family {
         F::Ut8802 | F::Ut8803 | F::Vc880 | F::Vc890 => &["CP2110"],
-        F::Ut61EPlus | F::Ut171 => &["CP2110", "CH9329"],
-        F::Ut181a => &["CH9329", "CP2110"],
+        // The UT-D07B is last in each list: it is a transparent bridge, so
+        // any meter with the matching socket can sit behind it, but the cable
+        // is what is usually plugged in.
+        F::Ut61EPlus | F::Ut171 => &["CP2110", "CH9329", BLUETOOTH],
+        F::Ut181a => &["CH9329", "CP2110", BLUETOOTH],
         F::Ut80x => &["CH9325"],
         F::Mock => &[],
     }
 }
+
+/// The Bluetooth link, as `--adapter`, `dmm-cli list` and the detection
+/// engine name it.
+///
+/// Not a [`KnownTransport`]: that table is the USB one, and the udev and
+/// VID:PID invariants that guard it have nothing to say about a radio. It
+/// still appears in [`preferred_transports`], which is what puts the UT61+'s
+/// fingerprint on this link for detection.
+pub const BLUETOOTH: &str = "Bluetooth";
 
 /// Transports are tried in order — most common first.
 const KNOWN_TRANSPORTS: &[KnownTransport] = &[
@@ -224,16 +241,19 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
 
 /// Open a device by registry ID, automatically selecting the transport.
 ///
-/// Tries transports in order (CP2110, CH9329, CH9325).
+/// Tries the USB bridges in order (CP2110, CH9329, CH9325), then a UT-D07B in
+/// Bluetooth range.
 /// Returns a type-erased `Dmm<Box<dyn Transport>>` suitable for both CLI and GUI.
 ///
 /// `id` may be [`registry::AUTO_DEVICE_ID`], in which case the meter is
 /// identified from the bytes it sends; a caller that wants to know which one
 /// it was calls [`open_auto`] instead.
 ///
-/// When `adapter` is `Some`, selects a specific USB adapter by serial number
-/// or HID device path (as shown by [`list_devices`]). When `None`, picks the
-/// first matching adapter (and logs a warning if multiple are found).
+/// When `adapter` is `Some`, selects a specific adapter — a USB one by serial
+/// number or HID device path (as shown by [`list_devices`]), a Bluetooth one
+/// by address or peripheral identifier (as shown by
+/// [`list_bluetooth_devices`]). When `None`, picks the first matching adapter
+/// (and logs a warning if multiple are found).
 pub fn open_device_by_id_auto(id: &str, adapter: Option<&str>) -> Result<Dmm<Box<dyn Transport>>> {
     let (transport, protocol) = open_transport_by_id_auto(id, adapter)?;
     Dmm::new(transport, protocol)
@@ -294,24 +314,70 @@ fn selection_by_id(id: &str) -> Result<Selection> {
 
 /// Open a bridge with no family in mind and identify the meter behind it.
 fn open_detected(adapter: Option<&str>) -> Result<(Box<dyn Transport>, detect::Detected)> {
-    // No family, so no cable to prefer: whichever bridge answers first is the
+    // No family, so no link to prefer: whichever bridge answers first is the
     // one the meter is probed through.
     let (transport, bridge) = open_transport(&[], adapter)?;
     let detected = detect::detect_device(&*transport, bridge)?;
     Ok((transport, detected))
 }
 
-/// Open a USB bridge and hand back the transport alone, with no protocol.
+/// Open a bridge and hand back the transport alone, with no protocol.
 ///
-/// `preferred` orders the cables to try — [`preferred_transports`] for a known
+/// `preferred` orders the links to try — [`preferred_transports`] for a known
 /// family, empty when the meter has not been identified yet. The returned name
-/// is the bridge's (`"CP2110"`, `"CH9329"`, `"CH9325"`), which
+/// is the bridge's (`"CP2110"`, `"CH9329"`, `"CH9325"`, [`BLUETOOTH`]), which
 /// [`detect::detect_device`] needs to know which probes are worth sending.
+///
+/// The USB bus comes first and Bluetooth is the fallback, which has one known
+/// consequence: a cable with a silent meter on it wins over a live meter on a
+/// UT-D07B, and detection ends in [`Error::DeviceNotIdentified`] on the cable.
+/// Unplug it, or name the adapter.
 ///
 /// This is the split half of [`open_transport_by_id_auto`]: a caller that
 /// wants to wrap the transport before *any* byte flows — recording the
 /// detection probe itself, say — opens it here and detects separately.
 pub fn open_transport(
+    preferred: &[&'static str],
+    adapter: Option<&str>,
+) -> Result<(Box<dyn Transport>, &'static str)> {
+    // An address or a peripheral UUID can only be a Bluetooth adapter, so the
+    // selector alone says which opener the user meant.
+    if let Some(selector) = adapter.filter(|s| ble::is_bluetooth_selector(s)) {
+        return Ok((ble::open_selected(selector)?, BLUETOOTH));
+    }
+
+    let hid = open_hid_transport(preferred, adapter);
+    match hid {
+        Ok(opened) => Ok(opened),
+        Err(err) if bluetooth_is_next(&err, preferred, adapter) => match ble::open_first() {
+            Ok(transport) => Ok((transport, BLUETOOTH)),
+            Err(bluetooth_err) => {
+                // The USB error is what the user acts on: it lists the cables
+                // that were looked for. Why Bluetooth found nothing — stack
+                // off, nothing in range — stays in the log.
+                info!("no meter over Bluetooth either: {bluetooth_err}");
+                Err(err)
+            }
+        },
+        Err(err) => Err(err),
+    }
+}
+
+/// Whether a failed USB open should be followed by a Bluetooth one.
+///
+/// Only on the auto path: a user who named a USB adapter asked for that one,
+/// and a meter answering on a radio instead is not what they meant. `Hid` is
+/// in the list because it is what a missing or broken HID API returns, which
+/// on a machine with no USB support at all must not stop Bluetooth working.
+fn bluetooth_is_next(err: &Error, preferred: &[&'static str], adapter: Option<&str>) -> bool {
+    adapter.is_none()
+        && (preferred.is_empty() || preferred.contains(&BLUETOOTH))
+        && matches!(err, Error::NoTransportFound | Error::Hid(_))
+}
+
+/// Open one of the USB-HID bridges, the path every meter but a Bluetooth one
+/// takes.
+fn open_hid_transport(
     preferred: &[&'static str],
     adapter: Option<&str>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
@@ -434,6 +500,9 @@ fn open_first_match(
 }
 
 /// List all connected USB adapters (CP2110, CH9329, CH9325).
+///
+/// USB only, and instant: the Bluetooth adapters in range come from
+/// [`list_bluetooth_devices`], which has to scan for them.
 pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
     let mut devices = Vec::new();
@@ -452,20 +521,36 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string()),
             transport: kt.name,
+            not_heard: false,
         });
     }
 
     Ok(devices)
 }
 
-/// Information about a connected USB adapter.
+/// The UT-D07B adapters in Bluetooth range, then the known ones the scan did
+/// not hear ([`DeviceInfo::not_heard`]).
+///
+/// Separate from [`list_devices`] because it scans, which takes seconds: the
+/// USB listing backs a GUI control and has to stay instant. `path` is what
+/// `--adapter` takes to pin one — its address, or the peripheral identifier
+/// on a platform that exposes no address.
+pub fn list_bluetooth_devices() -> Result<Vec<DeviceInfo>> {
+    ble::list()
+}
+
+/// Information about a connected adapter.
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
     pub path: String,
     pub product: Option<String>,
     pub serial: Option<String>,
-    /// Transport type: "CP2110", "CH9329", or "CH9325".
+    /// Transport type: "CP2110", "CH9329", "CH9325", or [`BLUETOOTH`].
     pub transport: &'static str,
+    /// A Bluetooth adapter the platform knows (paired) that the scan did not
+    /// hear: asleep, or missed by the scan. `--adapter` still tries it.
+    /// Always false for a cable.
+    pub not_heard: bool,
 }
 
 impl std::fmt::Display for DeviceInfo {
@@ -665,6 +750,7 @@ mod tests {
             product: Some("UT61E+".to_string()),
             serial: Some("12345".to_string()),
             transport: "CP2110",
+            not_heard: false,
         };
         let s = info.to_string();
         assert!(s.contains("/dev/hidraw0"));
@@ -680,6 +766,7 @@ mod tests {
             product: None,
             serial: None,
             transport: "CH9329",
+            not_heard: false,
         };
         assert_eq!(info.to_string(), "/dev/hidraw0 [CH9329]");
     }
@@ -733,7 +820,7 @@ mod tests {
         for device in protocol::registry::DEVICES {
             for name in preferred_transports(device.family) {
                 assert!(
-                    KNOWN_TRANSPORTS.iter().any(|kt| kt.name == *name),
+                    *name == BLUETOOTH || KNOWN_TRANSPORTS.iter().any(|kt| kt.name == *name),
                     "device {} prefers unknown transport {name:?}",
                     device.id,
                 );
@@ -792,6 +879,25 @@ mod tests {
                 kt.name
             );
         }
+        // The families UNI-T's accessory page names for the UT-D07B: that is
+        // what detection probes for over it and what the help it prints
+        // offers. The UT80x is not among them — the UT71 is listed for the
+        // UT-D07A, a different adapter.
+        use protocol::DeviceFamily as F;
+        let on_bluetooth: Vec<&str> = devices_on_bridge(BLUETOOTH).iter().map(|d| d.id).collect();
+        let listed: Vec<&str> = registry::DEVICES
+            .iter()
+            .filter(|d| d.requires_hardware)
+            .filter(|d| matches!(d.family, F::Ut61EPlus | F::Ut171 | F::Ut181a))
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(on_bluetooth, listed);
+        assert!(!on_bluetooth.is_empty());
+        assert!(
+            !devices_on_bridge(BLUETOOTH)
+                .iter()
+                .any(|d| d.family == F::Ut80x)
+        );
         assert!(devices_on_bridge("no such bridge").is_empty());
     }
 

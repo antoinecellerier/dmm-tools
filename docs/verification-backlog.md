@@ -23,6 +23,7 @@ Items that need real components or specific setups to verify.
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
+  - [UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
@@ -1627,6 +1628,59 @@ port scan** (80, 111, 5025, 49152 by firmware version).
   the UT8805A's `READ?` sign quirk; open-circuit replies for continuity and
   diode; the reading-memory size. The range ladders and NPLC lists per
   model, which gate the spec tables.
+
+### UT-D07B: what the Bluetooth transport has not shown yet
+
+The adapter's GATT surface and its bring-up were read off our own unit
+2026-09-22 (`docs/research/ut-d07b/reverse-engineered-protocol.md`). What the
+transport does with them is only verified there, with our UT61E+ behind it and
+BlueZ 5.87 underneath, so each of the following needs someone's hardware.
+
+- **Other meters over the adapter.** The UT61B+, UT61D+ and the UT161 series
+  are listed on it by UNI-T and are unverified over Bluetooth; so are the
+  UT171 and UT181A, whose families the registry also places on the adapter.
+  A reading over an adapter, and the `dmm-cli list` line for it, is what
+  settles each.
+- **The adapter's full compatibility list.** UNI-T's global page and the two
+  Chinese accessory pages already disagree on which meters each of the
+  UT-D07A and UT-D07B covers, and the US mirror has not been checked. The
+  list belongs to UNI-T's documentation and is to be taken from it rather
+  than inferred from the adapter being transparent — even though it is.
+- **Windows and macOS.** Nothing has been run on either. Two things differ by
+  platform and are unknown: whether the adapter has to be paired in the
+  system's Bluetooth settings before it can be opened (on Linux it does not
+  have to be), and whether a bare macOS
+  binary gets a CoreBluetooth permission prompt or a silent refusal. Whether
+  `--adapter` should be handed a UUID there rather than an address is
+  documented but unconfirmed.
+- **Link parameters.** The MTU (247) and the poll time (about 0.63 s a
+  reading) were measured on Linux; the connection interval, latency and
+  supervision timeout are `[UNVERIFIED]` because BlueZ does not hand them to a
+  client. `btmon` alongside a session would read them off the air, and say
+  whether the interval or the adapter's UART turnaround is what makes a
+  Bluetooth poll six times slower than a USB one.
+- **The adapter's heartbeat.** `AB CD 06 AA AA 6E 67 03 A7` comes from the
+  adapter once per link and once a second while the meter is silent; the
+  transport drops it. What `6E 67` encodes is unknown (adapter state, battery,
+  firmware?), and so is whether the adapter sends the same bytes in front of
+  a UT171 or UT181A, whose framing is different — a capture from one of those
+  over the adapter settles both.
+- ~~**Pairing as a requirement.**~~ — **VERIFIED** 2026-09-22 on Linux: not
+  required; an unpaired adapter is found by the scan and opens. Pairing only
+  spares the scan on later opens. Windows and macOS remain unchecked.
+- **The `0000ff01`/`ff02`/`ff12` service set.** UNI-T's iDMM2.0 app carries it
+  beside the ISSC group; it belongs to the native-BLE meters (UT60BT, UT202BT
+  and the rest of the survey in `docs/research/new-device-candidates.md`),
+  which have no adapter. Supporting those meters means a second service set in
+  the transport and a way to tell the two apart at scan time. The **UT-D07A**
+  sits in the same gap: it is a Bluetooth 4.0 adapter for other meter series
+  and nobody has seen its GATT layout, so whether it speaks the same ISSC
+  service is unknown.
+- **The UT202S registry entry.** UNI-T's UT61+ protocol deck specifies the
+  UT202S clamp meter with a full range table, and it is a Bluetooth meter —
+  now reachable. Adding it means a `SelectableDevice` entry with its own
+  range table and the two-display handling the deck describes for AC, LPF and
+  temperature, and a hardware report to go with it.
 
 ### Vendor sources not yet read
 

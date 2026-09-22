@@ -129,7 +129,7 @@ WAYLAND_DISPLAY= dmm-gui
 
 Requires the [Rust toolchain](https://rustup.rs/) (stable, 2024 edition).
 
-**Linux** also needs `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi.
+**Linux** also needs `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi, and `libdbus-1-dev` (Debian/Ubuntu) or `dbus-devel` (Fedora) for Bluetooth. To build without Bluetooth support, pass `--no-default-features` to the `dmm-lib` build.
 
 ### Clone and build
 

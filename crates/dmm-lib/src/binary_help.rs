@@ -79,12 +79,37 @@ pub fn mock_mode_help(intro: &str, example: &str) -> String {
     )
 }
 
+/// What to call the link a meter is on, for messages the user reads.
+///
+/// Never the bridge chip: someone plugged in a USB cable or switched a
+/// Bluetooth adapter on, and has no reason to know which chip is inside it.
+/// The error text, the CLI help and the GUI's connection messages all take
+/// their wording from here so the three cannot drift.
+pub fn link_name(bridge: &str) -> &'static str {
+    if bridge == crate::BLUETOOTH {
+        "Bluetooth adapter"
+    } else {
+        "USB cable"
+    }
+}
+
 /// Line the platform setup hint opens with, whatever the platform.
 const CABLE_CHECK: &str = "Check that the USB cable is plugged in and the meter is powered on.";
+
+/// First half of the Bluetooth check, shared by every platform. The adapter
+/// stops advertising when it goes to sleep, and only the meter can wake it
+/// (docs/research/ut-d07b/reverse-engineered-protocol.md §4).
+#[cfg(feature = "bluetooth")]
+const BLUETOOTH_CHECK: &str =
+    "For a UT-D07B adapter, turn on Bluetooth here and data transmission on the meter.";
 
 #[cfg(target_os = "linux")]
 const SETUP_HINT: &[&str] = &[
     CABLE_CHECK,
+    #[cfg(feature = "bluetooth")]
+    BLUETOOTH_CHECK,
+    #[cfg(feature = "bluetooth")]
+    "If the adapter is never found, switch the meter's data transmission off and on.",
     "Ensure the udev rule is installed:",
     "  sudo cp udev/70-dmm-tools.rules /etc/udev/rules.d/",
     "  sudo udevadm control --reload-rules",
@@ -96,6 +121,10 @@ const SETUP_HINT: &[&str] = &[
 #[cfg(target_os = "windows")]
 const SETUP_HINT: &[&str] = &[
     CABLE_CHECK,
+    #[cfg(feature = "bluetooth")]
+    BLUETOOTH_CHECK,
+    #[cfg(feature = "bluetooth")]
+    "If the adapter is never found, switch the meter's data transmission off and on.",
     "Open Device Manager with the cable plugged in:",
     "- 'CP2110 USB to UART Bridge' under HID devices: no action needed.",
     "- 'USB Input Device' under HID devices: no action needed.",
@@ -107,12 +136,24 @@ const SETUP_HINT: &[&str] = &[
 #[cfg(target_os = "macos")]
 const SETUP_HINT: &[&str] = &[
     CABLE_CHECK,
+    #[cfg(feature = "bluetooth")]
+    BLUETOOTH_CHECK,
+    #[cfg(feature = "bluetooth")]
+    "If the adapter is never found, switch the meter's data transmission off and on,",
+    #[cfg(feature = "bluetooth")]
+    "and allow Bluetooth in System Settings > Privacy & Security.",
     "The cable should be recognized automatically (no driver needed).",
     "If the device is not found, check System Settings > Privacy & Security > Input Monitoring.",
 ];
 
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
-const SETUP_HINT: &[&str] = &[CABLE_CHECK];
+const SETUP_HINT: &[&str] = &[
+    CABLE_CHECK,
+    #[cfg(feature = "bluetooth")]
+    BLUETOOTH_CHECK,
+    #[cfg(feature = "bluetooth")]
+    "If the adapter is never found, switch the meter's data transmission off and on.",
+];
 
 /// What to try when no USB cable was found, one line per step.
 ///
@@ -287,6 +328,26 @@ mod tests {
         let hint = transport_setup_hint();
         assert_eq!(hint.first(), Some(&CABLE_CHECK));
         assert!(hint.iter().all(|line| !line.trim().is_empty()));
+    }
+
+    /// The hint covers whichever links the build can open, and never promises
+    /// a Bluetooth adapter a feature-off build cannot reach.
+    #[test]
+    fn setup_hint_covers_bluetooth_when_the_build_does() {
+        let mentions = transport_setup_hint()
+            .iter()
+            .any(|line| line.contains("UT-D07B"));
+        assert_eq!(mentions, cfg!(feature = "bluetooth"));
+    }
+
+    /// The user plugged in a cable or switched an adapter on; either way the
+    /// bridge chip must stay out of what they read.
+    #[test]
+    fn link_name_says_cable_or_adapter_never_the_chip() {
+        assert_eq!(link_name(crate::BLUETOOTH), "Bluetooth adapter");
+        for bridge in ["CP2110", "CH9329", "CH9325"] {
+            assert_eq!(link_name(bridge), "USB cable");
+        }
     }
 
     #[test]

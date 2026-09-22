@@ -8,6 +8,11 @@ description = "Library for communicating with UNI-T and Voltcraft digital multim
 [dependencies]
 thiserror = "2"
 log.workspace = true
+# Bluetooth only: BlueZ/CoreBluetooth/WinRT behind one API, driven by a
+# current-thread runtime the transport owns (see transport/ble.rs).
+btleplug = { version = "0.13", optional = true }
+tokio = { version = "1", features = ["rt", "time"], optional = true }
+futures = { version = "0.3", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 hidapi = { version = "2.6", features = ["linux-static-hidraw"] }
@@ -16,6 +21,8 @@ hidapi = { version = "2.6", features = ["linux-static-hidraw"] }
 hidapi = { version = "2.6" }
 
 [features]
+default = ["bluetooth"]
+bluetooth = ["dep:btleplug", "dep:tokio", "dep:futures"]
 test-support = []
 
 [dev-dependencies]

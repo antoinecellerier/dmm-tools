@@ -38,7 +38,8 @@ structured data in 11-byte packets ending CR LF — see the per-family
 docs for the exact wire format.
 
 The UART byte stream is transport-agnostic within each family. Three
-HID bridge chips appear across the supported devices:
+HID bridge chips and one Bluetooth adapter appear across the supported
+devices:
 
 - **CP2110** (Silicon Labs) — bidirectional HID-to-UART, used by
   UT61+/UT161 and the UCI bench DMMs (UT8802/UT8803).
@@ -52,6 +53,10 @@ HID bridge chips appear across the supported devices:
   and no command for them is known; the UNI-T SDK writes one `0x5A`
   byte at init, and the host-to-meter report framing is
   community-sourced ([UCI bench spec](research/uci-bench-family/reverse-engineered-protocol.md) §4.2, §9).
+- **UT-D07B** (ISSC/Microchip) — a Bluetooth LE transparent-UART
+  adapter rather than a chip in a cable, carrying the same bytes the
+  cable does for the meter series UNI-T lists on it
+  ([UT-D07B spec](research/ut-d07b/reverse-engineered-protocol.md)).
 
 See each per-family doc for the HID report layout and any chip-specific
 initialization sequence.

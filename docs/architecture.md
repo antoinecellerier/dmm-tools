@@ -23,6 +23,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
+| `transport/ble.rs` | Bluetooth LE transport for the UT-D07B adapter: finds and connects the peripheral, subscribes to its transparent-UART characteristic, and turns notifications and chunked writes into the same byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` is the same three functions for a build without it |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |
@@ -62,6 +63,7 @@ CLI/GUI ──► registry::resolve_device()
                        └──► SelectableDevice.new_protocol()
                                            │
 USB HID ──► Cp2110, Ch9329 or Ch9325 (Box<dyn Transport>) ──► Box<dyn Protocol> ──► Measurement { mode, value, unit, flags }
+Bluetooth ──► Ble (Box<dyn Transport>) ──────────────────────┘
                                            │
                                            ├── Ut61PlusProtocol            (polled, per-model DeviceTable)
                                            ├── Ut8802Protocol              (streaming)
@@ -97,6 +99,18 @@ types directly. That opener returns a `Box<dyn Transport>`, trying the cable the
 in `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
 CP2110 and time out on every read — and the fallback keeps unusual cable pairings working.
+
+The same opener reaches the Bluetooth link. An `--adapter` selector shaped like a Bluetooth
+address or a peripheral identifier can only mean a radio, so it goes straight to
+`transport/ble.rs`; otherwise the USB bus is tried first, and when nothing answers there and the
+selected family lists Bluetooth among its links, an adapter in range is opened instead — a
+bounded scan, connect and service discovery, all inside the transport's own runtime. When that
+finds nothing the caller sees the USB error, because it names the cables that were looked for;
+why Bluetooth found nothing is logged at INFO. One consequence is documented rather than worked
+around: a cable with a silent meter on it wins over a live meter on an adapter, so unplug it or
+name the adapter. Listing is split for the same reason the opening order is — `list_devices()`
+enumerates USB and stays instant, because it backs a GUI control, while
+`list_bluetooth_devices()` has to scan.
 
 Handed `"auto"` instead of an entry, the same opener identifies the meter first: `detect.rs` runs
 a probe cascade on the opened transport, sending each family's trigger in turn and classifying
@@ -215,3 +229,4 @@ methods to it, so no panel owns state of its own.
 15. **Name the target, confirm from the stream** — `select()` never trusts a press. The cycle driver presses once, waits for a fresh frame, re-reads rather than re-presses on a stale or unanswered one, and gives up after ring length + 1 presses; a range walk aborts if the mode byte moves under it. A mode or range press that changes nothing while HOLD is lit is sent again once HOLD is pressed off: a press a held meter ignores is dropped rather than deferred, so the second press cannot overshoot. The flag settings never release HOLD. Choice id 0 is auto-range on every family and is sent as the meter's own command, never walked to. A setting the family cannot drive fails as `UnsupportedCommand` before any I/O; a switch the meter did not perform fails as `CommandRejected` after it. Both are `ErrorKind::Configuration`, so the GUI shows a toast instead of reconnecting.
 16. **Session clock** — `dmm_lib::Clock` stamps every reading in `Dmm::request_measurement` and is cloned into the mock's waveform and the pacing loop, so all three read the same time. `Clock::real()` is wall time; `Clock::scaled(f)` runs session time at `f` times real time and `with_preseed(secs)` spends a burst of it instantly, so screenshots and performance runs start with history; `Clock::manual()` moves only when a test advances it. Stamping in one place means stats, graph, recording and export follow without knowing a clock exists, and `WallClock::from_clock` backdates its origin by the burst so exported wall times stay true. A replay pins the clock's wall origin to the time its recording was made and stamps each reading with the session time it was recorded at, so exported timestamps are the recording's own. Hardware timeouts, settle delays and transport bring-up sleeps stay on real time: they pace physical USB.
 17. **Unrecognised data asks for a report, once** — data a parser's spec doesn't cover goes through `report_unknown()`, which warns on its first call of the process, with where to report it and how to trace more, and logs every later call at DEBUG. Once per process, because a meter parked on an unknown value would otherwise repeat it every frame and a reconnect every attempt; the parsers are free functions that replay and tests call directly, so the state is process-wide rather than per driver. Warnings from `dmm_lib` show by default, so anything that fires per frame logs at DEBUG, and the golden fixtures and bundled recordings are asserted to report nothing.
+18. **Bluetooth behind a default-on feature, driven only inside its own calls** — `btleplug` (with `tokio` and `futures`) joins `hidapi` as what the library talks to hardware with, behind the `bluetooth` feature so a build can drop the D-Bus/CoreBluetooth/WinRT stack and still compile: `ble_disabled.rs` carries the same three functions, so the open and list paths hold no `cfg`. The transport owns a current-thread runtime and every call to the stack runs inside `block_on` on the caller's thread — no background thread, no channel, and the `Transport` trait gains only `bluetooth_selector()`, the address a reconnect reopens. Nothing runs between two transport calls, which is the deal the HID transports already have: a meter that streams keeps sending and its notifications queue in the platform's socket the way HID reports queue in hidraw. Two error variants carry what USB has no word for: `LinkLost` (`ErrorKind::Transport`, so consumers reconnect as they would from a pulled cable) and `Bluetooth(String)` (`ErrorKind::Configuration` — a stack that is off or unpaired is not a meter that might answer the next poll; the GUI's reconnect loop still retries it, as it does every failed reopen).

@@ -41,29 +41,57 @@ pub enum Error {
     #[error("adapter not found: {0}")]
     AdapterNotFound(String),
 
+    /// The Bluetooth link went away mid-session — out of range, meter powered
+    /// off, adapter asleep. The same shape as a pulled USB cable, so consumers
+    /// reconnect from it.
+    #[error("Bluetooth link lost")]
+    LinkLost,
+
+    /// The Bluetooth stack cannot do what was asked: no adapter, powered off,
+    /// permission denied, the device is not a UT-D07B. Retrying never helps —
+    /// the message carries what the user has to change.
+    #[error("Bluetooth: {0}")]
+    Bluetooth(String),
+
     /// Auto-detection ran its whole probe cascade and nothing on the far end
     /// of the cable answered with a frame we recognise.
     ///
-    /// The message names the *cable*, never the bridge chip: the user plugged
-    /// in a USB cable and has no reason to know whether it carries a CP2110,
-    /// a CH9329 or a CH9325. `bridge` is carried for the logs and for help
-    /// text that lists the meters reachable over that bridge.
-    #[error("no meter answered over the USB cable")]
+    /// The message names the *link*, never the bridge chip: the user plugged
+    /// in a USB cable or switched a Bluetooth adapter on, and has no reason to
+    /// know whether it carries a CP2110, a CH9329 or a CH9325. `bridge` is
+    /// carried for the logs and for help text that lists the meters reachable
+    /// over that bridge.
+    #[error("no meter answered over the {}", crate::binary_help::link_name(.bridge))]
     DeviceNotIdentified { bridge: &'static str },
 
     /// The IDs come from the transport modules themselves rather than being
     /// spelled out here, so a corrected PID or a fourth bridge can't leave
     /// this message describing adapters we no longer look for.
     #[error(
-        "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x})",
+        "no supported USB adapter found (tried CP2110 {:#06x}:{:#06x}, CH9329 {:#06x}:{:#06x}, CH9325 {:#06x}:{:#06x}){}",
         crate::transport::cp2110::VID,
         crate::transport::cp2110::PID,
         crate::transport::ch9329::VID,
         crate::transport::ch9329::PID,
         crate::transport::ch9325::VID,
-        crate::transport::ch9325::PID
+        crate::transport::ch9325::PID,
+        bluetooth_searched()
     )]
     NoTransportFound,
+}
+
+/// The rest of the "nothing found" message: a build that can open a UT-D07B
+/// looked for one too, and saying so keeps the user from hunting for a cable
+/// fault that isn't there.
+const fn bluetooth_searched() -> &'static str {
+    #[cfg(feature = "bluetooth")]
+    {
+        ", nor a UT-D07B in Bluetooth range"
+    }
+    #[cfg(not(feature = "bluetooth"))]
+    {
+        ""
+    }
 }
 
 impl Error {
@@ -131,7 +159,8 @@ impl Error {
         }
         match self {
             Self::NoTransportFound => ErrorKind::DeviceNotFound,
-            Self::Hid(_) => ErrorKind::Transport,
+            // A lost link is the Bluetooth spelling of a pulled cable.
+            Self::Hid(_) | Self::LinkLost => ErrorKind::Transport,
             // Nothing answered the probes — the same shape as a timeout, and
             // the same cure: reconnect once transmission is enabled.
             Self::Timeout | Self::DeviceNotIdentified { .. } => ErrorKind::Timeout,
@@ -142,6 +171,7 @@ impl Error {
             | Self::AdapterNotFound(_)
             | Self::UnsupportedCommand(_)
             | Self::CommandRejected(_)
+            | Self::Bluetooth(_)
             | Self::Replay(_) => ErrorKind::Configuration,
         }
     }
@@ -169,9 +199,33 @@ mod tests {
         assert!(!msg.contains("CH9329"), "got {msg}");
     }
 
+    /// The same error, over the other link: the user switched a Bluetooth
+    /// adapter on, so the message must not send them looking at a cable.
+    #[test]
+    fn not_identified_names_the_link_it_happened_on() {
+        let err = Error::DeviceNotIdentified {
+            bridge: crate::BLUETOOTH,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("Bluetooth adapter"), "got {msg}");
+        assert!(!msg.contains("USB"), "got {msg}");
+    }
+
     #[test]
     fn kind_maps_not_found() {
         assert_eq!(Error::NoTransportFound.kind(), ErrorKind::DeviceNotFound);
+    }
+
+    /// A lost link is what a pulled cable is: the GUI reconnects from both.
+    /// A stack that cannot do what was asked is not — retrying a powered-off
+    /// adapter forever would hide the one thing the user has to change.
+    #[test]
+    fn kind_separates_a_lost_link_from_a_misconfigured_stack() {
+        assert_eq!(Error::LinkLost.kind(), ErrorKind::Transport);
+        assert_eq!(
+            Error::Bluetooth("turned off on this computer".into()).kind(),
+            ErrorKind::Configuration
+        );
     }
 
     /// The GUI hands whole errors from the acquisition thread to the UI
@@ -233,5 +287,17 @@ mod tests {
         ] {
             assert!(msg.contains(&format!("{vid:#06x}:{pid:#06x}")), "got {msg}");
         }
+    }
+
+    /// A build that can open a UT-D07B says it looked for one; one that
+    /// cannot must not promise a search it never ran.
+    #[test]
+    fn no_transport_message_names_every_link_tried() {
+        let msg = Error::NoTransportFound.to_string();
+        assert_eq!(
+            msg.contains("UT-D07B in Bluetooth range"),
+            cfg!(feature = "bluetooth"),
+            "got {msg}"
+        );
     }
 }

@@ -1,3 +1,9 @@
+#[cfg(feature = "bluetooth")]
+pub(crate) mod ble;
+/// Same module path either way, so nothing that opens a device needs a `cfg`.
+#[cfg(not(feature = "bluetooth"))]
+#[path = "ble_disabled.rs"]
+pub(crate) mod ble;
 pub(crate) mod ch9325;
 pub(crate) mod ch9329;
 pub(crate) mod cp2110;
@@ -39,6 +45,13 @@ pub trait Transport: Send {
     fn transport_name(&self) -> &'static str {
         "unknown"
     }
+
+    /// For a Bluetooth link, the [`crate::OpenOptions::adapter`] value that
+    /// opens this same adapter again by address, with no scan. `None` for
+    /// every other link.
+    fn bluetooth_selector(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`
@@ -66,6 +79,10 @@ impl Transport for Box<dyn Transport> {
 
     fn transport_name(&self) -> &'static str {
         (**self).transport_name()
+    }
+
+    fn bluetooth_selector(&self) -> Option<&str> {
+        (**self).bluetooth_selector()
     }
 }
 

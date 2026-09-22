@@ -27,4 +27,4 @@ paths:
 
 ## Dependencies
 
-- `dmm-lib` stays self-contained: only `hidapi`, `thiserror`, `log`. No external utility crates — this is the core that talks to hardware.
+- `dmm-lib` stays self-contained: only `hidapi`, `thiserror`, `log`, and — behind the `bluetooth` feature — `btleplug` with the `tokio` and `futures` its API needs. No external utility crates — this is the core that talks to hardware.

@@ -802,6 +802,17 @@ mod tests {
         // The CH9325 carries the UT80x family (UT803/UT804, UT71, VC9x0)
         // and nothing else.
         assert_eq!(families("CH9325"), vec![DeviceFamily::Ut80x]);
+        // The UT-D07B gets the probes of the families UNI-T lists for it, and
+        // not the UT80x's — the UT71 is on the UT-D07A, a different adapter.
+        assert_eq!(
+            families(crate::BLUETOOTH),
+            vec![
+                DeviceFamily::Ut61EPlus,
+                DeviceFamily::Ut171,
+                DeviceFamily::Ut181a,
+            ],
+            "the registry places these families on the UT-D07B"
+        );
         // Every AB CD family: the UT61+, the two bench meters, the LE16 twins
         // and the Voltcraft pair.
         assert_eq!(
