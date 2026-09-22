@@ -541,6 +541,16 @@ async fn usable(
             Some(selector) => matches_selector(selector, &id, &address),
             None => is_ut_d07(name.as_deref(), advertised_name.as_deref()),
         };
+        // Every device the stack reports, kept or not: when an adapter in
+        // range is not found, this line says what the platform made of it.
+        debug!(
+            "Bluetooth: saw {address:?} id {id:?} local name {:?} advertised {:?} \
+             RSSI {:?}: {}",
+            properties.as_ref().and_then(|p| p.local_name.as_deref()),
+            advertised_name,
+            properties.as_ref().and_then(|p| p.rssi),
+            if wanted { "match" } else { "no match" }
+        );
         if !wanted {
             continue;
         }
