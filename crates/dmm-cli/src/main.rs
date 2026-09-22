@@ -47,9 +47,10 @@ struct Cli {
     #[arg(long)]
     device: Option<String>,
 
-    /// Select a specific USB adapter when multiple are connected.
-    /// Use serial number or HID device path from 'dmm-cli list' output.
-    #[arg(long, value_name = "SERIAL_OR_PATH")]
+    /// Select a specific adapter when more than one is reachable.
+    /// Use the serial number or HID path of a USB cable, or the address of a
+    /// Bluetooth adapter, as 'dmm-cli list' prints them.
+    #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
     #[command(subcommand)]
@@ -58,7 +59,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// List connected USB adapters
+    /// List connected USB cables and Bluetooth adapters in range
     List,
     /// Connect and print device info
     Info,
@@ -590,7 +591,7 @@ fn build_after_long_help() -> String {
          \x20 --device precedence:\n\
          \x20   1. Command-line flag\n\
          \x20   2. device_family from the settings file above\n\
-         \x20   3. auto \u{2014} detect the meter over the USB cable\n\
+         \x20   3. auto \u{2014} detect the connected meter\n\
          \n\
          ENVIRONMENT:\n\
          \x20 RUST_LOG    Log filter. Unset, dmm_lib warnings and all errors are shown.\n\
@@ -654,6 +655,11 @@ const NOT_IDENTIFIED_SELF_HELP: &str = "\nIf the meter is on and transmitting bu
      dmm-cli --device <id> ...      (dmm-cli --help lists the ids)\n\
      and please report it with RUST_LOG=dmm_lib=debug output at\n  \
      https://github.com/antoinecellerier/dmm-tools/issues";
+
+/// How both `--adapter` hints spell the value: whatever `dmm-cli list`
+/// printed for that device — a USB cable's serial number or HID path, or a
+/// Bluetooth adapter's address.
+const ADAPTER_SELECTOR: &str = "--adapter <serial-path-or-address>";
 
 /// Whether this selection means opening a USB cable. Auto does: there is
 /// nothing to detect without one.
@@ -900,9 +906,12 @@ fn open_error_help(
         dmm_lib::error::Error::DeviceNotIdentified { bridge } => {
             eprintln!(
                 "{}",
-                style("No meter answered over the USB cable.")
-                    .yellow()
-                    .bold()
+                style(format!(
+                    "No meter answered over the {}.",
+                    dmm_lib::binary_help::link_name(bridge)
+                ))
+                .yellow()
+                .bold()
             );
             for (instructions, names) in activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
                 eprintln!("\n{}", style(names.join(", ")).yellow());
@@ -934,7 +943,7 @@ fn open_error_help(
             if listed {
                 eprintln!(
                     "\n{}",
-                    style("Use --adapter <serial-or-path> to select one.").dim()
+                    style(format!("Use {ADAPTER_SELECTOR} to select one.")).dim()
                 );
             }
             "adapter not found".into()
@@ -944,19 +953,39 @@ fn open_error_help(
 }
 
 fn cmd_list() -> Result<(), Box<dyn std::error::Error>> {
-    let devices = dmm_lib::list_devices()?;
-    if devices.is_empty() {
+    let cables = dmm_lib::list_devices()?;
+    for (i, dev) in cables.iter().enumerate() {
+        println!("{} {dev}", style(format!("[{i}]")).cyan());
+    }
+    // The radio scan takes seconds where the bus listing is instant, so say
+    // what the wait is for before it starts.
+    eprintln!("{}", style("Scanning for Bluetooth adapters\u{2026}").dim());
+    let adapters = match dmm_lib::list_bluetooth_devices() {
+        Ok(adapters) => adapters,
+        // A stack that is off or missing is not a device fault: the cables
+        // above still stand, so the reason goes out dim and the listing ends
+        // normally.
+        Err(e) => {
+            eprintln!("{}", style(e.to_string()).dim());
+            Vec::new()
+        }
+    };
+    for (i, dev) in adapters.iter().enumerate() {
+        println!("{} {dev}", style(format!("[{}]", cables.len() + i)).cyan());
+    }
+    let total = cables.len() + adapters.len();
+    if total == 0 {
         eprintln!("{}", style("No devices found.").yellow());
         print_transport_setup_help();
         return Ok(());
     }
-    for (i, dev) in devices.iter().enumerate() {
-        println!("{} {dev}", style(format!("[{i}]")).cyan());
-    }
-    if devices.len() > 1 {
+    if total > 1 {
         eprintln!(
             "\n{}",
-            style("Tip: use --adapter <serial-or-path> to select a specific device").dim()
+            style(format!(
+                "Tip: use {ADAPTER_SELECTOR} to select a specific device"
+            ))
+            .dim()
         );
     }
     Ok(())
@@ -2464,12 +2493,11 @@ mod tests {
     fn the_device_help_offers_auto() {
         let help = build_device_help();
         assert!(
-            help.contains("auto         Detect the meter over the USB cable (default)"),
+            help.contains("auto         Detect the connected meter (default)"),
             "{help}"
         );
         assert!(
-            build_after_long_help()
-                .contains("3. auto \u{2014} detect the meter over the USB cable"),
+            build_after_long_help().contains("3. auto \u{2014} detect the connected meter"),
             "the precedence list still names a model as the fallback"
         );
     }

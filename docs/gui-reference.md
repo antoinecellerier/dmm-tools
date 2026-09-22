@@ -24,7 +24,7 @@ and remote control of UNI-T and Voltcraft multimeters.
 ## Connecting
 
 The Settings panel includes a **Device** selector. **Auto-detect**, the
-default, works out which meter is on the USB cable from its replies
+default, works out which meter is connected from its replies
 ([how](detection-design.md)), shows it in the top bar and saves it as the
 **Device**; pick **Auto-detect** again after swapping meters. The probe makes
 a UT61+/UT161 beep once.
@@ -464,7 +464,7 @@ do not modify the persisted `settings.json`.
 | Option | Description |
 |--------|-------------|
 | `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
-| `--adapter <SERIAL_OR_PATH>` | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `dmm-cli list` output. |
+| `--adapter <SERIAL_PATH_OR_ADDRESS>` | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter, from `dmm-cli list` output. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. |
 | `--theme <THEME>` | Theme override: `dark`, `light`, or `system`. |

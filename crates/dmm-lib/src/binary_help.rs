@@ -45,7 +45,7 @@ pub fn device_help(intro: &str) -> String {
     // Leads the list: it is what the flag does when nothing names a meter, and
     // the one value the registry does not carry.
     help.push_str(&format!(
-        "  {:<12} Detect the meter over the USB cable (default)\n",
+        "  {:<12} Detect the connected meter (default)\n",
         registry::AUTO_DEVICE_ID
     ));
     for d in registry::DEVICES {
@@ -279,7 +279,7 @@ mod tests {
         // it leads, being what a user who names nothing gets.
         let listing = help.split("Devices:\n").nth(1).expect("device list");
         assert!(
-            listing.starts_with("  auto         Detect the meter over the USB cable (default)\n"),
+            listing.starts_with("  auto         Detect the connected meter (default)\n"),
             "{listing}"
         );
         for d in registry::DEVICES {

@@ -21,7 +21,7 @@ pub fn cli_reference_table() -> String {
     // registry entry. Its description links to the design the way the rows
     // below send a reader to `supported-devices.md`.
     table.push_str(&format!(
-        "\n| `{}` |  | [Detect the meter over the USB cable](detection-design.md) (default) |",
+        "\n| `{}` |  | [Detect the connected meter](detection-design.md) (default) |",
         registry::AUTO_DEVICE_ID
     ));
     for device in registry::DEVICES {
@@ -86,7 +86,7 @@ mod tests {
         let first_row = table.lines().nth(2).expect("a first device row");
         assert_eq!(
             first_row,
-            "| `auto` |  | [Detect the meter over the USB cable](detection-design.md) (default) |"
+            "| `auto` |  | [Detect the connected meter](detection-design.md) (default) |"
         );
         assert!(table.contains("| UT61E+ (verified) |"), "{table}");
         assert_eq!(table.matches("default").count(), 1, "{table}");

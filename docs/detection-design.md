@@ -136,7 +136,8 @@ report so an alias can absorb it.
 
 With nothing identified, `detect_device` returns `Error::DeviceNotIdentified { bridge }`, whose
 `kind()` is `ErrorKind::Timeout` — reconnecting after enabling transmission on the meter does
-help. Its `Display` names the USB cable, never the bridge chip.
+help. Its `Display` names the link the probe ran over — the USB cable or the Bluetooth
+adapter — never the bridge chip.
 
 ## Bridges and adapters
 
@@ -152,7 +153,10 @@ packet does not name its model, so a UT71 or VC9x0 is claimed as a UT804 and has
 (the GUI's device chip, saved once, or `--device ut71ab` / `ut71cde` / `vc920`); and the CH9325
 starts at 2400 baud, where only the UT804 is heard: a UT803 talks at 19200, so it is not detected
 and has to be named (`--device ut803`). A family seen on a new cable joins detection there by
-being listed on it.
+being listed on it. The UT-D07B Bluetooth adapter is a transparent UART bridge like the cables, so the
+UT61+, UT171 and UT181A fingerprints listed on it run unchanged. It is
+opened after the USB bus, so a cable with a silent meter on it wins over a live meter on the
+adapter.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a

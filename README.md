@@ -1,12 +1,12 @@
 # dmm-tools
 
-USB multimeter logger and remote control for UNI-T and Voltcraft digital multimeters, on Linux, macOS and Windows.
+USB and Bluetooth multimeter logger and remote control for UNI-T and Voltcraft digital multimeters, on Linux, macOS and Windows.
 
 [![CI](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/antoinecellerier/dmm-tools/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter over its USB cable. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 and the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 and the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
@@ -78,7 +78,7 @@ Meter now in 220V (manual range)
 ```
 <!-- /snippet -->
 
-The meter on the cable is detected automatically; `--device` pins a model:
+The connected meter is detected automatically; `--device` pins a model:
 
 ```
 $ dmm-cli --device ut8803 capture
@@ -104,7 +104,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware. Click either to help verify.
 
-Cables, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your model is not listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with its details.
+Cables, the Bluetooth adapter, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your model is not listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with its details.
 
 ## Quick start
 
@@ -116,7 +116,7 @@ Cables, what to switch on and what each model has confirmed are in [supported de
      ```
    - Windows: the CP2110 cable may need the [Silicon Labs driver](https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers); other cables need nothing.
    - macOS: nothing to install.
-3. Switch the meter's USB output on and run:
+3. Switch the meter's data transmission on and run:
    ```sh
    dmm-cli read            # stream measurements
    dmm-gui                 # launch the GUI

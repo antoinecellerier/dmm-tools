@@ -15,7 +15,7 @@ dmm-cli <COMMAND> [OPTIONS]
 
 ## Description
 
-Communicates with UNI-T and Voltcraft multimeters over USB. Supports live
+Communicates with UNI-T and Voltcraft multimeters over USB or Bluetooth. Supports live
 measurement reading, button commands, settings switching, protocol debugging, and
 guided data capture for verification. See [supported devices](supported-devices.md) for
 the full compatibility list.
@@ -26,15 +26,15 @@ Set `NO_COLOR=1` to disable colored output.
 
 | Option | Default | Description |
 |---|---|---|
-| `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is on the cable. See [Devices](#devices) below. |
-| `--adapter <SERIAL_OR_PATH>` | | Select a specific USB adapter when multiple are connected. Use serial number or HID device path from `list` output. |
+| `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is connected. See [Devices](#devices) below. |
+| `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter, from `list` output. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
 ### Devices
 
 The `--device` flag selects the meter model. `auto` (the default) works out
-which meter is on the cable from its replies ([how](detection-design.md));
+which meter is connected from its replies ([how](detection-design.md));
 naming a model skips the probe. The probe makes a UT61+/UT161 beep once. If
 nothing answers, the CLI lists what each meter needs switched on.
 
@@ -49,7 +49,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 <!-- devices:start -->
 | Value | Aliases | Description |
 |---|---|---|
-| `auto` |  | [Detect the meter over the USB cable](detection-design.md) (default) |
+| `auto` |  | [Detect the connected meter](detection-design.md) (default) |
 | `ut61eplus` | `ut61e+`, `ut61e` | UT61E+ (verified) |
 | `ut61b+` | `ut61bplus`, `ut61b` | UT61B+ (verified) |
 | `ut61d+` | `ut61dplus`, `ut61d` | UT61D+ (experimental) |
@@ -102,34 +102,41 @@ dmm-cli --device mock read
 
 ### dmm-cli list
 
-List connected USB adapters.
+List the connected USB cables and the Bluetooth adapters in range: the ones
+connected to this computer or advertising. A sleeping adapter is not listed,
+paired or not.
 
 ```
 dmm-cli list
 ```
 
-Prints each detected device with an index number and transport type. If no
-devices are found, prints troubleshooting hints (udev rule install on Linux,
+Prints each device with an index number and transport type. If nothing is
+found, prints troubleshooting hints (udev rule install on Linux,
 driver install on Windows).
 
-When multiple devices are connected, use `--adapter` with a serial number or
-HID path from the `list` output to select a specific device:
+When more than one device is reachable, use `--adapter` with a serial number,
+HID path or Bluetooth address from the `list` output to select one:
 
 ```
 dmm-cli list
 # [0] /dev/hidraw3 [CP2110] — CP2110 HID UART Bridge (S/N: 00C5B27A)
-# [1] /dev/hidraw5 [CP2110] — CP2110 HID UART Bridge (S/N: 00D8F132)
+# [1] 12:34:56:78:9A:BC [Bluetooth] — UT-D07B
 
-dmm-cli --adapter 00C5B27A read
+dmm-cli --adapter 12:34:56:78:9A:BC read
 ```
 
 ### dmm-cli info
 
 Connect to the meter and print device info: model name, transport type, and
-transport-specific diagnostics (e.g., CP2110 firmware version and UART error flags).
+transport-specific diagnostics (CP2110 firmware version and UART error flags
+over USB, MTU and adapter heartbeats over Bluetooth).
 
 ```
-dmm-cli info
+$ dmm-cli --adapter 12:34:56:78:9A:BC info
+Device: UT61E+
+Transport: Bluetooth
+  UT-D07B (12:34:56:78:9A:BC)
+  Status: MTU: 247 bytes, adapter heartbeats: 1
 ```
 
 ### dmm-cli read

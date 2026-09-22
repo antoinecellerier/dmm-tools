@@ -656,7 +656,7 @@ impl App {
                     selected_id == registry::AUTO_DEVICE_ID,
                     "Auto-detect".to_string(),
                 ),
-                tooltip: "Work out which meter is on the USB cable".to_string(),
+                tooltip: "Work out which meter is connected".to_string(),
             });
             let devices = registry::DEVICES.iter().map(|device| {
                 let selected = selected_id == device.id;
@@ -664,7 +664,7 @@ impl App {
                     value: device.id,
                     selected,
                     label: with_override(selected, device.display_name.to_string()),
-                    tooltip: format!("Talk to a {} over USB", device.display_name),
+                    tooltip: format!("Talk to a {}", device.display_name),
                 }
             });
             let chips = auto.chain(devices);

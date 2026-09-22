@@ -51,9 +51,10 @@ struct Args {
     #[arg(long)]
     renderer: Option<String>,
 
-    /// Select a specific USB adapter when multiple are connected.
-    /// Use serial number or HID device path from 'dmm-cli list' output.
-    #[arg(long, value_name = "SERIAL_OR_PATH")]
+    /// Select a specific adapter when more than one is reachable.
+    /// Use the serial number or HID path of a USB cable, or the address of a
+    /// Bluetooth adapter, as 'dmm-cli list' prints them.
+    #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
     /// Play back a file written by 'dmm-cli read --format replay' or by

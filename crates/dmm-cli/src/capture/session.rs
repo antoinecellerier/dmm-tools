@@ -61,7 +61,7 @@ pub(super) fn verify_meter(
                     eprintln!();
                     eprintln!(
                         "{}",
-                        style("USB adapter found but the meter is not responding.")
+                        style("The adapter was found but the meter is not responding.")
                             .yellow()
                             .bold()
                     );

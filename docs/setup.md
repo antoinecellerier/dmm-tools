@@ -1,6 +1,6 @@
 # Setup
 
-You need a [supported multimeter](supported-devices.md) and its USB cable.
+You need a [supported multimeter](supported-devices.md) and its USB cable, or the UT-D07B Bluetooth adapter for the meters that take one.
 
 ## Install from pre-built binaries
 
@@ -89,6 +89,28 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 > **macOS Intel note:** macOS ARM (Apple Silicon) has been confirmed working against real hardware. Intel Mac builds are provided but have not been tested yet — if you have an Intel Mac, please [report your experience](https://github.com/antoinecellerier/dmm-tools/issues/2).
 
+### Bluetooth — UT-D07B
+
+The UT-D07B adapter needs no driver and no udev rule. Enable Bluetooth on the
+computer, fit the adapter with its batteries in, turn the meter on and switch
+its data transmission on (the S icon). `dmm-cli list` then shows the adapter,
+`auto` finds it when no USB cable is plugged in, and `--adapter <address>`
+pins it. Which meters take the adapter is in
+[supported devices](supported-devices.md).
+
+Pairing is not required; pairing the adapter in the system's Bluetooth
+settings makes later connections quicker.
+
+Readings arrive about every 0.6 s, against roughly ten a second over the cable.
+
+**Linux:** BlueZ must be running, as it is by default on desktop installs.
+
+**Windows and macOS:** untested — please
+[report your experience](https://github.com/antoinecellerier/dmm-tools/issues).
+On macOS `dmm-cli list` names the adapter by a UUID rather than an address, and
+the first connection asks your terminal app (or the GUI binary) for Bluetooth
+permission.
+
 ## Troubleshooting
 
 ### "USB cable not found"
@@ -101,6 +123,7 @@ help](../assets/gui-connection-help.png); the full list is:
 - **Linux, cable listed by `lsusb` but still not found:** `ls -l /dev/hidraw*` — the cable's node should show a trailing `+`, marking the ACL. For the detail, `getfacl /dev/hidrawN` (from the `acl` package) should list your user as `user:<you>:rw-`. If it doesn't, the udev rule isn't installed under a name that sorts before `73-seat-late.rules`, or you're on a headless machine (see above)
 - **Windows:** check Device Manager for the CP2110 device — if missing or showing an error, reinstall the driver
 - **macOS:** `ioreg -p IOUSB -l | grep CP2110` — if missing, try a different USB port or hub. Check System Settings > Privacy & Security > Input Monitoring if the device appears in `ioreg` but the tool can't open it
+- **Bluetooth:** see [Bluetooth adapter not found](#bluetooth-adapter-not-found)
 
 ### "No response from meter"
 
@@ -108,6 +131,23 @@ The cable is found but the meter isn't sending. The tool lists what each
 meter needs switched on; the same steps are under each family in
 [supported devices](supported-devices.md). If you named a `--device`, check
 it matches the meter.
+
+Over Bluetooth, a meter switched off gives the same message; readings resume
+on their own once it transmits again.
+
+### Bluetooth adapter not found
+
+`dmm-cli list` scans but shows no adapter:
+
+- The adapter's blue LED shows its state: one flash every 3 s is waiting,
+  two every 1.5 s is connected, off is standby after 5 minutes without a
+  connection or data. From standby, switch the adapter off and on to wake
+  it.
+- A phone app connected to the adapter keeps it off the air — the adapter takes
+  one connection at a time. Disconnect it there first.
+- A USB cable wins over Bluetooth: with a cable plugged in, `auto` uses it even
+  when the meter behind it says nothing. Unplug the cable, or pass
+  `--adapter <address>`.
 
 ### GUI shows a black screen or won't render
 
@@ -129,7 +169,7 @@ WAYLAND_DISPLAY= dmm-gui
 
 Requires the [Rust toolchain](https://rustup.rs/) (stable, 2024 edition).
 
-**Linux** also needs `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi, and `libdbus-1-dev` (Debian/Ubuntu) or `dbus-devel` (Fedora) for Bluetooth. To build without Bluetooth support, pass `--no-default-features` to the `dmm-lib` build.
+**Linux** also needs `libudev-dev` (Debian/Ubuntu) or `systemd-devel` (Fedora) for hidapi, and `libdbus-1-dev` (Debian/Ubuntu) or `dbus-devel` (Fedora) for Bluetooth.
 
 ### Clone and build
 

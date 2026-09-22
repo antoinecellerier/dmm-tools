@@ -128,9 +128,11 @@ fn adapter_not_found_help(selector: &str) -> String {
 /// so the meters are grouped by the instruction text rather than listed one by
 /// one, which would repeat the same four steps six times over.
 fn not_identified_help(bridge: &str) -> String {
-    let mut msg = String::from(
-        "The USB adapter is connected but no meter identified itself.\n\n\
-         Switch on the meter's USB mode, or pick the model in Settings (\u{2699}):\n",
+    let mut msg = format!(
+        "The {} is connected but no meter identified itself.\n\n\
+         Switch on the meter's data transmission, or pick the model in \
+         Settings (\u{2699}):\n",
+        dmm_lib::binary_help::link_name(bridge)
     );
     let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
     for device in dmm_lib::devices_on_bridge(bridge) {
@@ -829,7 +831,7 @@ impl App {
                 "Check that the correct device is selected in Settings (\u{2699}), \
                  or pick Auto-detect there"
             } else {
-                "Switch on the meter's USB mode, or pick the model in Settings (\u{2699})"
+                "Switch on the meter's data transmission, or pick the model in Settings (\u{2699})"
             };
             return Some(notice(NoticeKind::Waiting, title, body.to_string()));
         }
@@ -876,11 +878,13 @@ impl App {
                 help.clone(),
             ))
         } else if let ConnectionIssue::NotIdentified { help } = issue {
-            // The cable is fine and the probe ran; nothing on the far end
-            // spoke a protocol we know.
+            // The link is fine and the probe ran; nothing on the far end
+            // spoke a protocol we know. Which link it was is in the body —
+            // the title stays one string per notice, which is what the big
+            // meter's fit cache keys on.
             Some(notice(
                 NoticeKind::NotIdentified,
-                "No meter answered over the USB cable".to_string(),
+                "No meter answered".to_string(),
                 help.clone(),
             ))
         } else {
@@ -890,7 +894,7 @@ impl App {
             // there is neither a model to name nor steps to give.
             let instructions = match self.active_device() {
                 Some(entry) => format!(
-                    "The USB adapter is connected but the meter \n\
+                    "The adapter is connected but the meter \n\
                      isn't responding ({} selected).\n\
                      \n\
                      If this is the wrong device, change it in Settings (\u{2699}), or pick Auto-detect there.\n\
@@ -898,8 +902,8 @@ impl App {
                      {}",
                     entry.display_name, entry.activation_instructions
                 ),
-                None => "No meter answered over the USB cable \u{2014} switch on the meter's \n\
-                         USB mode, or pick the model in Settings (\u{2699})."
+                None => "No meter answered \u{2014} switch on the meter's data \n\
+                         transmission, or pick the model in Settings (\u{2699})."
                     .to_string(),
             };
             Some(notice(
@@ -1017,7 +1021,7 @@ mod tests {
             },
         );
         assert_eq!(n.kind, NoticeKind::NotIdentified);
-        assert_eq!(n.title, "No meter answered over the USB cable");
+        assert_eq!(n.title, "No meter answered");
         assert_eq!(n.body, "switch USB mode on");
 
         let n = notice_for(&mut app, ConnectionIssue::Other("timed out".to_string()));
@@ -1277,9 +1281,25 @@ mod tests {
         assert!(help.contains("UT61E+"), "got {help}");
         assert!(help.contains("Long press the USB/Hz button"), "got {help}");
         // gui.md: user-facing text names the cable, never the bridge chip.
+        assert!(help.contains("USB cable is connected"), "got {help}");
         for chip in ["CP2110", "CH9329", "CH9325"] {
             assert!(!help.contains(chip), "{chip} leaked into: {help}");
         }
+    }
+
+    /// The same probe over the radio: the user switched an adapter on, so the
+    /// help must not send them looking at a cable.
+    #[test]
+    fn the_silent_link_is_named_as_the_user_sees_it() {
+        let help = not_identified_help(dmm_lib::BLUETOOTH);
+        assert!(
+            help.starts_with("The Bluetooth adapter is connected"),
+            "got {help}"
+        );
+        // The meters UNI-T lists on the adapter, with their steps. The steps
+        // themselves are the meter's own and name its USB socket, which is
+        // where the adapter plugs in.
+        assert!(help.contains("UT61E+"), "got {help}");
     }
 
     /// Six UT61+ models share one four-step instruction. Listing each meter

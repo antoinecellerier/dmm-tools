@@ -4,6 +4,7 @@
 
 ### Devices
 
+- **Bluetooth via the UT-D07B adapter** — UT61+/UT161 meters connect wirelessly, verified on a UT61E+; `dmm-cli list` shows the adapters in range and `--adapter <address>` pins one.
 - **The UT71A–E and Voltcraft VC920/VC940/VC960 can be picked as experimental models** — auto-detection reports them as a UT804, so name the meter ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)).
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models

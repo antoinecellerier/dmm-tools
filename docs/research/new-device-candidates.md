@@ -263,7 +263,14 @@ BLE is where the largest unmet demand lives. sigrok's BLE is Linux-only
 and flaky. No cross-platform desktop BLE multimeter tool exists with a
 modern GUI.
 
-### UNI-T Meters via UT-D07B BLE Adapter — HIGHEST STRATEGIC VALUE
+### UNI-T Meters via UT-D07B BLE Adapter — SUPPORTED SINCE 2026-09-22
+
+**Implemented as the Bluetooth transport** — auto-detected, or pinned with
+`--adapter <address>`; verified on our UT61E+. What the adapter does on the
+wire is in [research/ut-d07b](ut-d07b/reverse-engineered-protocol.md); the
+`ff01/ff02/ff12` service set of the native-BLE meters, the UT-D07A and the
+UT202S entry are still open ([backlog](../verification-backlog.md)). The
+analysis below is as it stood before.
 
 | Aspect | Details |
 |--------|---------|
@@ -608,7 +615,7 @@ the same transport.
 | **VC-870** | Voltcraft | Handheld DMM (40000 counts) | USB HID (`1A86:E008`) | CH9325 (UT-D04 cable), ES51966A chipset |
 | **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04), per sigrok only. The UT71A–E entry above is implemented; a Tenma would be named as a UT71 |
 | **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document. The "UT804接口协议" on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html), read 2026-09-19, describes the UT804 alone (its first digit runs 0-4, a 40000-count display), so whether the UT804+ speaks a protocol we support is still open |
-| **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. Needs a BLE transport |
+| **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. The Bluetooth transport now carries it; it needs a registry entry and a capture |
 | **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional); see [research/ut8803](ut8803/reverse-engineering-approach.md). The shared bench programming manual's device table gives `[T:COM][PORT:8][BAUD:9600][PARITY:N][STOP:1][DATA:7]` and a CP210x driver |
 | **UT216XD** | UNI-T | Clamp meter | Unstated — the deck that specifies it is a Bluetooth protocol | Speaks the UT61+ frame, bargraph bytes aside (Bluetooth section above). **No archived source carries its ranges**: the deck names it only in the two bargraph exceptions, the iDMM2.0 APK has no UT216 package or range asset, and it has no page in the Chinese catalogue. Its range table would have to come from hardware or from vendor software we do not have |
 | **UT61B / UT61C / UT61D / UT61E** | UNI-T | Handheld DMM (classic, pre-`+`) | UT-D04 (CH9325) in practice | UNI-T's "protocol" downloads are the chipset datasheets: ["UT61E接口协议"](https://meters.uni-trend.com.cn/static/upload/file/20220908/1662605553430400.pdf) is the Cyrustek **ES51922** (19230 baud, 7-odd-1) and ["UT61B通信协议"](https://meters.uni-trend.com.cn/static/upload/file/20220110/UT61B%20protocol.pdf) is the Fortune **FS9922-DMM3**. Long discontinued; sigrok covers both chipsets |
@@ -637,7 +644,7 @@ the same transport.
 |-----------|-----------|-----|-----|
 | **UNI-T UT71A–E** — implemented 2026-09-21 | USB HID (CH9325) | Lowest cost of any candidate: the cable, the bridge and the 11-byte packet shape are already implemented, UNI-T publishes the protocol, and the Tenma and Voltcraft VC9x0 rebrands come with it | Done, experimental: `ut71ab`, `ut71cde`, `vc920` await a hardware report ([supported devices](../supported-devices.md)) |
 | **Brymen BM86x** | USB HID (Cypress) | Official protocol docs, strong community, no cross-platform GUI exists | Large |
-| **UNI-T via UT-D07B** | BLE | Reuses existing protocol parsers, #1 recommended logging meter on EEVBlog 2024, no desktop BLE tool | Large |
+| **UNI-T via UT-D07B** — implemented 2026-09-22 | BLE | Reuses existing protocol parsers, #1 recommended logging meter on EEVBlog 2024, no desktop BLE tool | Done, verified on a UT61E+: the UT171 and UT181 series UNI-T lists on the adapter await a hardware report ([supported devices](../supported-devices.md)) |
 | **Fluke 287/289** | USB serial (IR) | Officially documented ASCII protocol, millions of units, $200 Windows-only software is terrible | Large |
 
 ### Tier 2: Worth considering

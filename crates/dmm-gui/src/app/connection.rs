@@ -57,7 +57,7 @@ pub(super) const NO_RESPONSE_TIMEOUTS: u32 = 5;
 
 /// What the UI records as the failure once that threshold is crossed.
 pub(super) const NO_RESPONSE: &str = "No response from meter \u{2014} check device selection and \
-                                      USB mode";
+                                      data transmission";
 
 /// How often a paused thread wakes to look for work.
 ///
