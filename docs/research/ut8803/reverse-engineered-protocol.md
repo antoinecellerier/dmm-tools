@@ -381,10 +381,12 @@ HID reports), reassembles complete frames by looking for `0xAB 0xCD`
 (UT8803) or `0xAC` (UT8802) headers, then dispatches to the appropriate
 parser.
 
-**The `:DISPlay:DATA?` string**: This string appears in the
-`PLAIN-TEXT` transport handler (`FUN_10038300` area, line 45478), which
-is used for text-based instruments (oscilloscopes, signal generators).
-The DMM parser path (`FUN_1001e5f0`) does not use SCPI commands.
+**The `:DISPlay:DATA?` string**: This string is built into a local
+string inside `FUN_10038a80`, the read routine of the `PLAIN-TEXT`
+handler's UPO5000CS session, and is never sent (the write sends the
+caller's message). The `PLAIN-TEXT` handler serves UNI-T's
+P330XC/P330XM/PDP-B power supplies and the UPO-5M4G scope. The DMM
+parser path (`FUN_1001e5f0`) does not use SCPI commands.
 
 | Aspect | Details | Confidence |
 |--------|---------|------------|
@@ -751,10 +753,11 @@ meter can be read without the SDK:
 8. Mode is byte 4, range byte 5 - 0x30, display bytes 7-11 and flags
    bytes 14-18
 
-**Note**: The `:DISPlay:DATA?` string in uci.dll is used by the
-SCPI/text transport handler for oscilloscopes and signal generators,
-**not** by the DMM binary parser. The UT8803 DMM uses a pure binary
-protocol.
+**Note**: The `:DISPlay:DATA?` string in uci.dll belongs to the
+`PLAIN-TEXT` handler's UPO5000CS read routine (`FUN_10038a80`), which
+serves UNI-T's P330XC/P330XM/PDP-B power supplies and the UPO-5M4G
+scope. It is never sent, and the DMM binary parser does **not** use it.
+The UT8803 DMM uses a pure binary protocol.
 
 ### 7.2 Flag Decoding Example
 
@@ -819,7 +822,7 @@ D24-D27 = 0x2 = Decimal point position 2
 | Flag byte-to-status-word mapping | **[VENDOR]** | Ghidra: bit shifts + format string verification |
 | Byte 6: unused by parser (reserved/padding) | **[VENDOR]** | Ghidra: no access to byte offset 6 |
 | Flag bytes 14-18: bits read per byte (§2.3); bytes 12-13 not read | **[VENDOR]** | Ghidra: bit extraction in `FUN_1001e5f0` |
-| `:DISPlay:DATA?` is for oscilloscopes, not DMMs | **[VENDOR]** | Ghidra: only in PLAIN-TEXT handler path |
+| `:DISPlay:DATA?` is a never-sent local string of the PLAIN-TEXT handler (power supplies, UPO-5M4G), not DMMs | **[VENDOR]** | Ghidra: `FUN_10038a80`, UPO5000CS read routine |
 | Maximum sampling rate | **[UNVERIFIED]** | Manual says 2-3 Hz refresh |
 
 ---
@@ -836,8 +839,9 @@ Instead:
 - The UCI library reads these frames in a loop; `uci_ReadX("data?;")`
   and `uci_ReadX("disp?;")` return the most recent parsed measurement
 - There is no SCPI text protocol for DMMs — the `:DISPlay:DATA?`
-  string in uci.dll is part of the oscilloscope/signal generator
-  handler, not the DMM path
+  string in uci.dll is a never-sent local string in the PLAIN-TEXT
+  handler's UPO5000CS read routine (`FUN_10038a80`; the handler serves
+  UNI-T's power supplies and the UPO-5M4G scope), not the DMM path
 [VENDOR]
 
 ### Q2: Is the meter streaming continuously or polled?

@@ -252,7 +252,8 @@ but includes DMM support through the `data?;` and `disp?;` commands.
 - Checksum validation: `[UT8803] Data check sum error!`
 - Frame parsing: `[Frame]%d cur frame = %dBytes, nRead = %d, left = %d`
 - Protocol commands: `data?;`, `disp?;`, `FRMDATA?`, `mode`
-- SCPI-like display command: `:DISPlay:DATA?`
+- SCPI-like string `:DISPlay:DATA?` (a never-sent local string in the
+  PLAIN-TEXT handler's UPO5000CS read routine, `FUN_10038a80`)
 - Baud rate configuration: `baud=%d parity=%c data=%d stop=%d`, `[BAUD:`
 - HID transport: `HidD_SetFeature`, `HidD_GetAttributes`, `HidD_GetHidGuid`
 - Class hierarchy: `HIDCOM`, `UTXHID`, `SyncCOM`, `CSerialPort`
@@ -458,7 +459,7 @@ defines the programming interface:
 | Separate UT8802 and UT8803 parsers | **[VENDOR]** | String: `[UT880X] Parse is UT8802/UT8803` |
 | Checksummed protocol under UCI layer | **[VENDOR]** | String: `[UT8803] Data check sum error!` |
 | Frame-based transport under UCI layer | **[VENDOR]** | String: `[Frame]%d cur frame = %dBytes` |
-| `:DISPlay:DATA?` string (for oscilloscopes, not DMMs) | **[VENDOR]** | Ghidra: only in PLAIN-TEXT handler |
+| `:DISPlay:DATA?` string (PLAIN-TEXT handler for power supplies and the UPO-5M4G scope, never sent; not DMMs) | **[VENDOR]** | Ghidra: local string in `FUN_10038a80` |
 | libusb driver used on Windows | **[VENDOR]** | SDK driver package: DriverPack_Libusb |
 
 ### From Ghidra decompilation of uci.dll
@@ -485,7 +486,7 @@ defines the programming interface:
 | Byte 6: not accessed by parser (reserved) | **[VENDOR]** | Parser: no reference to byte offset 6 |
 | Bytes 12-13: not read; inductance flags come from byte 17 | **[VENDOR]** | Parser: `*(byte*)((int)param_2 + 0x11)` bit extraction |
 | High-byte flags: D4-D7 from mode equality checks | **[VENDOR]** | Parser: `bVar1==0x0C/0x0D/0x0F/0x10` |
-| `:DISPlay:DATA?` is oscilloscope path, not DMM | **[VENDOR]** | Ghidra: only in `PLAIN-TEXT` handler |
+| `:DISPlay:DATA?` is a never-sent string of the `PLAIN-TEXT` path (power supplies, UPO-5M4G), not DMM | **[VENDOR]** | Ghidra: `FUN_10038a80` |
 
 ### What still requires device verification
 
