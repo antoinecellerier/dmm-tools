@@ -26,7 +26,7 @@ warning on connect. The per-family research is under
 | UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |
 | UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per UNI-T's page | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
-| UT-D07A | Bluetooth LE | — | both ways | UT171, UT181 series per UNI-T's page (also UT71, which the tool does not read over Bluetooth yet) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
+| UT-D07A | Bluetooth LE | — | both ways | UT171, UT181 series per UNI-T's page (also UT71, which auto-detection does not look for over Bluetooth yet) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
 
 ## UT61+ / UT161
 
@@ -96,6 +96,11 @@ None has been run on a meter yet: the range tables come from UNI-T's protocol
 sheet and the manuals ([backlog](verification-backlog.md)). Auto-detection
 reports these meters as a UT804: pick UT71A/B, UT71C/D/E or Voltcraft VC920
 as the device once (`--device ut71ab`, `ut71cde` or `vc920`).
+
+A UT71 on a UT-D07A Bluetooth adapter is untested and not found by
+auto-detection: name both the model and the adapter
+(`--device ut71ab --adapter <address>`) and report the result on
+[#25](https://github.com/antoinecellerier/dmm-tools/issues/25).
 
 ## UT171 / UT181A
 

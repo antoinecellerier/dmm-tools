@@ -1649,7 +1649,10 @@ BlueZ 5.87 underneath, so each of the following needs someone's hardware.
   `RUST_LOG=dmm_lib=trace dmm-cli debug`, and `bluetoothctl info <address>` if
   the open fails. The UT71 (family `ut80x`, 2400 baud, receive-only) is kept
   off the Bluetooth link in `preferred_transports()` until a report says the A
-  carries it; the UT171 and UT181A families are already on it.
+  carries it; naming the model and the adapter address
+  (`--device ut71ab --adapter <address>`) opens it over Bluetooth anyway, and
+  #25 asks UT71 owners for that run. The UT171 and UT181A families are
+  already on it.
 - **Other meters over the adapter.** The UT61B+, UT61D+ and the UT161 series
   are listed on it by UNI-T and are unverified over Bluetooth; so are the
   UT171 and UT181A, whose families the registry also places on the adapter.
