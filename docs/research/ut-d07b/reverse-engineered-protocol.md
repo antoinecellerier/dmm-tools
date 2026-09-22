@@ -199,7 +199,11 @@ The two pages already disagree on how much each adapter covers, the US mirror
 may name more again, and the adapter being transparent (§1), any meter with the
 matching socket can physically sit behind one. The only meter this document's findings were read
 with is our own UT61E+ [HARDWARE]. Whether the UT-D07A carries the same ISSC
-service set is unknown — it has not been seen.
+service set is unknown — it has not been seen. A first capture from one settles
+three things: which service and characteristic pair its transparent UART sits
+on (§2), whether it sends the same heartbeat frame while the meter is silent,
+and whether it acts on the UT61+ start command 0x5D the way this one does (§3)
+[UNVERIFIED].
 
 ## Implementation Notes
 

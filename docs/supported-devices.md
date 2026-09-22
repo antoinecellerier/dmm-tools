@@ -2,8 +2,8 @@
 
 <!-- Keep this file updated when adding support for new models. -->
 
-Every supported meter talks over a USB HID-to-UART cable; the UT-D07B
-Bluetooth adapter serves the meters listed for it below. The tool works out
+Every supported meter talks over a USB HID-to-UART cable; the UT-D07
+Bluetooth adapters serve the meters listed for them below. The tool works out
 which link and which meter are attached from the bytes the meter sends
 ([how](detection-design.md)), so the default `auto` device needs no setup
 beyond switching the meter's data transmission on, as listed per family below.
@@ -25,13 +25,14 @@ warning on connect. The per-family research is under
 | UT-D09 | CH9329 | `1A86:E429` | both ways | sold for UT181A, UT171, UT243 | UT181A (two units), UT61B+ |
 | UT-D04 | CH9325 / HE2325U | `1A86:E008` | meter to PC (these meters take no commands) | UT803, UT804, and the UT71A–E per UNI-T's accessory page | UT804 on Linux and Windows ([#16](https://github.com/antoinecellerier/dmm-tools/issues/16)) |
 | UT-D02 | RS232 level converter | — | both ways | serial port, not USB; not supported | — |
-| UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per UNI-T's page | UT61E+ |
+| UT-D07B | Bluetooth LE | — | both ways | UT61+/UT161, UT171, UT181 series per UNI-T's page | UT61E+ ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
+| UT-D07A | Bluetooth LE | — | both ways | UT171, UT181 series per UNI-T's page (also UT71, which the tool does not read over Bluetooth yet) | — untested ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)) |
 
 ## UT61+ / UT161
 
 Handheld. Cable: UT-D09 (either chip), or the UT-D07B Bluetooth adapter
-([setup](setup.md#bluetooth--ut-d07b)). Switch on: insert the USB module,
-turn the meter on, long-press USB/Hz until the S icon shows.
+([setup](setup.md#bluetooth--ut-d07b-and-ut-d07a)). Switch on: insert the USB
+module, turn the meter on, long-press USB/Hz until the S icon shows.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
@@ -98,9 +99,9 @@ as the device once (`--device ut71ab`, `ut71cde` or `vc920`).
 
 ## UT171 / UT181A
 
-Handheld. Cable: UT-D09 (either chip), or the UT-D07B Bluetooth adapter
-([setup](setup.md#bluetooth--ut-d07b)). Switch on: SETUP → Communication →
-ON; the UT181A forgets this at power-off.
+Handheld. Cable: UT-D09 (either chip), or the UT-D07B or UT-D07A (untested)
+Bluetooth adapter ([setup](setup.md#bluetooth--ut-d07b-and-ut-d07a)). Switch on: SETUP →
+Communication → ON; the UT181A forgets this at power-off.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|

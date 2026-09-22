@@ -1,6 +1,6 @@
 # Setup
 
-You need a [supported multimeter](supported-devices.md) and its USB cable, or the UT-D07B Bluetooth adapter for the meters that take one.
+You need a [supported multimeter](supported-devices.md) and its USB cable, or a UT-D07 Bluetooth adapter for the meters that take one.
 
 ## Install from pre-built binaries
 
@@ -89,7 +89,7 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 > **macOS Intel note:** macOS ARM (Apple Silicon) has been confirmed working against real hardware. Intel Mac builds are provided but have not been tested yet — if you have an Intel Mac, please [report your experience](https://github.com/antoinecellerier/dmm-tools/issues/2).
 
-### Bluetooth — UT-D07B
+### Bluetooth — UT-D07B and UT-D07A
 
 For the UT-D07B adapter, turn on Bluetooth on the computer, put batteries in
 the adapter and fit it to the meter, turn the meter on and switch its data
@@ -97,6 +97,9 @@ transmission on — the step, and which meters take the adapter, are in
 [supported devices](supported-devices.md). `dmm-cli list` then shows the
 adapter, `auto` finds it when no USB cable is plugged in, and
 `--adapter <address>` pins it.
+
+The UT-D07A takes the same steps and has not been run on this tool — please
+[report what it does](https://github.com/antoinecellerier/dmm-tools/issues/25).
 
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
@@ -148,6 +151,11 @@ on their own once it transmits again.
 - A USB cable wins over Bluetooth: with a cable plugged in, `auto` uses it even
   when the meter behind it says nothing. Unplug the cable, or pass
   `--adapter <address>`.
+
+A UT-D07A that is listed and connects but fails with "no UART … characteristic"
+carries a different service layout — please report it on
+[#25](https://github.com/antoinecellerier/dmm-tools/issues/25) with
+the output of `bluetoothctl info <address>`.
 
 ### GUI shows a black screen or won't render
 
