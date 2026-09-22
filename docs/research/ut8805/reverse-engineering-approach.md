@@ -75,8 +75,13 @@ V1.01.0101, Instrument Application V2.00) were listed but not fetched.
   makers' own documents, sits in the same findings directory
   (`rigol-siglent.md`); nothing from it is used here. Every claim in
   `reverse-engineered-protocol.md` rests on the UNI-T files above.
-- **The boundary opens after this spec is committed.** Date of opening
-  and what was read: to be recorded here when it happens.
+- **Opened 2026-09-22, with approval, after the spec was committed as
+  fdddfa2.** What was read, and what it changed, is in
+  [Cross-Reference with Community Sources](#cross-reference-with-community-sources)
+  below and in the spec's §14. Nothing in the spec's §1-§13 was
+  rewritten on it: §1, §2.1, §3.1, §4 and §5.3 carry one-line pointers
+  to §14 where it settles, disputes or adds a wire fact, §13 records its
+  weak rows as leans, and no community source is cited inline.
 
 ## Methodology
 
@@ -210,4 +215,36 @@ delivered, and on the analysis files:
 - **UT8806A specifics:** LOW — its manual carries a mechanical "2→1"
   edit and no UT8806A firmware was available.
 - **Anything about a real reply:** [UNVERIFIED] — no UT8805 or UT8806
-  has been on the bench.
+  has been on our bench; what other people's UT8805E units have shown
+  (the `*IDN?` first fields, the firmware line, SCPI over RS-232, the
+  VXI-11 padding) is in the cross-reference below and the spec's §14.
+
+## Cross-Reference with Community Sources
+
+Opened 2026-09-22, with approval, once the spec above was committed
+(fdddfa2). Read, by source type (`references/ut8805/analysis/findings/community-xref.md`
+has the per-item table and URLs):
+
+- **Device definitions:** HKJ TestController's `UT8805E.txt` (v1.0,
+  2026-05-13, "tested with RS232 under linux only") and its
+  device-definition documentation; the EEVBlog TestController thread
+  replies that added it.
+- **User reports from real meters:** the NI forum thread "UT8805E Pyvisa
+  Communication" (2024-10 to 2025-12), with raw VXI-11 tests and a
+  support-sent firmware.
+- **Reviews and teardowns:** Voltlog's UT8805E review and "New Revision"
+  videos and blog post (web page and About screens read from frames);
+  Kerry Wong's UT8805E and UT8806E teardowns and UT8806E review.
+- **Code:** a B&R PLC VXI-11 client, the psytestbench README, libsigrok's
+  `scpi-dmm` and USBTMC backend, the Linux `usbtmc` and `cdc-acm` drivers.
+- **Hardware databases:** linux-hardware.org and `usb.ids` for
+  0483:7540 and 0483:5740.
+- **For the rebrand question only:** EEVBlog buying-advice threads and
+  Teledyne's and Siglent's firmware pages (T3DMM = Siglent SDM3000; no
+  UT8805/UT8806 rebrand found, no sign of a Rigol/Siglent/UNI-T OEM
+  link; recorded in `docs/research/new-device-candidates.md`).
+- **Searched, nothing found:** sigrok's wiki and udev rules, GitHub
+  issues and code, pymeasure, QCoDeS, python-ivi, InstrumentKit,
+  pyvisa-py and lxi-tools issues, GitLab, PyPI, npm.
+
+The comparison — what it settles, disputes and adds — is the spec's §14.

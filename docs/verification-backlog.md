@@ -22,6 +22,7 @@ Items that need real components or specific setups to verify.
   - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
+  - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
   - [Entering NCV leaves the previous mode's trace on the graph](#entering-ncv-leaves-the-previous-modes-trace-on-the-graph)
@@ -1593,6 +1594,39 @@ PC software ("Vendor sources not yet read" below) is the other vendor source
 not yet opened. Tracked as a candidate in
 `docs/research/new-device-candidates.md`; the 14-byte extractor is recoverable
 from 1693093 (`extract_frame_fs9721`, framing only).
+
+### UT8805/UT8806: open questions before a SCPI implementation
+
+Specified 2026-09-22 from UNI-T's manuals, five firmware images and UNI-T's
+tools (`docs/research/ut8805/reverse-engineered-protocol.md`, §13 and §14),
+cross-referenced the same day. Not implemented; nobody on the project owns
+one. Community reports cover the UT8805E only, and no `*IDN?` capture, `lsusb`
+or port scan was found for any model. Three captures would settle the most at
+once: **`lsusb -v`** (VID, the FE/03/01 interface, the string descriptors), **a
+raw `*IDN?` over USB** (separators, the `SW ` prefix, the terminator) and **a
+port scan** (80, 111, 5025, 49152 by firmware version).
+
+- **USB.** VID as enumerated: 0483 in every descriptor, 0486 on a UT8805E's
+  own web page. Both PIDs are shared with generic ST products, so detection
+  must read the interface class and `*IDN?`. GET_CAPABILITIES bytes as sent.
+- **LAN.** Whether the N line (UT8805N/E) serves a web page on port 80: a
+  V1.87.001 unit does, the V1.87.014 image holds no web strings. Whether
+  the H7 line (UT8805A, UT8806/A/E) answers on 5025 and 80 as its images
+  say. A UT8805E on V1.87.014 returned VXI-11 replies unpadded to 4 bytes,
+  reportedly fixed in V1.87.017: which versions ship each way.
+- **Message layer.** The reply terminator per line (`\r\n` N, `\n` H7, from
+  firmware). `CONF?` and `FUNC?` bytes (firmware writes `VOLT:DC +2.0…E+01`
+  and `"VOLT:DC"`; the UT8805 manuals print `CONF?` two other ways, the
+  UT8806 manuals the firmware's way, and all print `FUNC?` unquoted). What enters remote
+  per line and whether `*UNREMOTE` releases the N line, `SYST:LOC` the
+  UT8806. The RS-232 terminator and handshake; SCPI over RS-232 itself works
+  on a UT8805E.
+- **Readings.** Whether `DATA:LAST?` follows the free-running panel without
+  `INIT`, and its unit token per function. What `MEASurement:CONTinuous` and
+  `READ:LAST?` (the UT8805N V2.0 app's loop) do. Overload signs per line and
+  the UT8805A's `READ?` sign quirk; open-circuit replies for continuity and
+  diode; the reading-memory size. The range ladders and NPLC lists per
+  model, which gate the spec tables.
 
 ### Vendor sources not yet read
 

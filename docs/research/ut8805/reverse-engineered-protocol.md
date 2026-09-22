@@ -45,7 +45,7 @@ E85, E100, B101.
 | | UT8805N / UT8805E | UT8805A | UT8806 / UT8806E | UT8806A |
 |---|---|---|---|---|
 | Rear ports [KNOWN] | USB Device, LAN, RS-232C (DB9), Ext Trig, VM Comp (NU p.15); GPIB option on the N (NU p.15) and in EG p.10, absent from EU p.10 and ED p.3, p.10 | same, GPIB option (AU p.14) | same, GPIB option (U6 p19-20; U6E p20-22) | same |
-| Firmware line [VENDOR] | N; the E assumed on the N line [INFERRED] | H7 | H7 | none fetched |
+| Firmware line [VENDOR] | N; the E reported on the N line too (§14) | H7 | H7 | none fetched |
 
 Stated support: "USB-TMC, IEEE 488.2, VXI11 and SCPI" (NU p.8; AU p.6;
 EU p.6; U6 p8; U6E p8). The I/O menu holds only a LAN and a UART page;
@@ -94,7 +94,7 @@ as a generic "USB Device" [VENDOR, `uci-sdk.md`]. The IVI-C examples use
 `Examples/Cpp/CppExample1/Program.cpp:31`), the H7 line's ID with its
 placeholder serial; the UT8805 apps' hot-plug filter accepts 0483:7540
 (V1.10 `FUN_00414a10`), the N line's ID [VENDOR]. Both are right for
-their line.
+their line. Neither ID is unique to these meters (§14).
 
 ### 2.2 USBTMC Handling — [VENDOR]
 
@@ -142,6 +142,11 @@ rejected; after a transfer without EOM the continuation header
 The N also registers `SYSTem:COMMunication:TCPIP:CONTROL?` (handler
 0x080321B3); its reply is unknown [UNVERIFIED].
 
+TCP 80 on the N line is disputed, as is the VID a UT8805E's own web page
+prints against the descriptor's 0x0483 (§14) [UNVERIFIED]. A UT8805E on
+V1.87.014 was observed returning VXI-11 replies unpadded to 4 bytes
+(§14).
+
 ### 3.2 What the Manuals Say — [KNOWN]
 
 VXI-11 is the stated LAN protocol (U6 p20; U6E p21; ND p.3; AD p.2; ED
@@ -178,7 +183,8 @@ V0.01.0084 release note "Optimize serial port communication reception"
 with the UI's baud, parity and stop bits, always 8 data bits (UT8805
 V1.10 `FUN_00433c30`) [VENDOR]. The IVI-C driver sets 8N1, LF termchar,
 no flow control on ASRL sessions (`UT8806.cpp:1819-1852`) [VENDOR]. The
-RS-232 reply terminator and handshake are [UNVERIFIED].
+RS-232 reply terminator and handshake are [UNVERIFIED]. A UT8805E has
+been driven over its serial port (§14).
 
 ---
 
@@ -218,6 +224,9 @@ The model and SN fields are the strings set with `FACTORY:MIS:MODEL` and
 source of the fields]. B101's version string reads `SW V1.01.0101`
 although its listing says V0.01.0101; the About screen photographed in
 the UT8806 user manuals shows `SW V1.01.0100` (U6 p65; U6E p76) [KNOWN].
+
+A UT8805E's reply is reported to start `UNI-T,UT8805,` (§14); the bytes
+themselves are uncaptured [UNVERIFIED].
 
 The manuals' examples are `UNI-T UT8805A, UT1A13460051200, V0.01.0000`
 (AP p.5; S6 p6; S6E p6) and `UNI-T UT8806A, UT1A13460051100, V0.01.0000`
@@ -521,12 +530,16 @@ readme routes SCPI instruments to NI-VISA (`uci-sdk.md`).
 
 ## 13. What Needs Hardware Verification
 
-No UT8805 or UT8806 has been on the bench. Every [UNVERIFIED] item:
+No UT8805 or UT8806 has been on the bench; what real units have shown
+so far is in §14. Every [UNVERIFIED] item, with the way it leans where
+§14 gives one:
 
-- `*IDN?` as sent: separators, `SW ` prefix, model field on an E model,
-  `FACTORY:MIS:MODEL/SN` as its source (§5.3)
-- Reply terminator per line; RS-232 terminator and handshake (§4, §5.1)
-- `CONFigure?` and `FUNCtion?` bytes as sent (§6.2)
+- The raw `*IDN?` bytes: the `SW ` prefix and the SN field (a UT8805E's
+  first two fields are `UNI-T,UT8805`, §5.3); `FACTORY:MIS:MODEL/SN` as
+  the source of the fields (§5.3)
+- Reply terminator per line; the RS-232 terminator and handshake (SCPI
+  over RS-232 itself works, §4, §5.1)
+- `CONFigure?` and `FUNCtion?` bytes as sent; `FUNC?` leans quoted (§6.2, §14)
 - `DATA:LAST?` without `INIT` on the free-running panel; its unit token
   per function (§7.1, §8)
 - `MEASurement:CONTinuous`, `READ:LAST?`, `:SYNC:DATA?`, `CREAD?`,
@@ -538,15 +551,73 @@ No UT8805 or UT8806 has been on the bench. Every [UNVERIFIED] item:
   threshold default, 0 or 30 Ω; whether dB/dBm, limits or statistics
   change `READ?` (§8)
 - Range ladders per model (UT8806 user manual against S6E; UT8805
-  capacitance top range, EP p.22 "10000uF"; every UT8806A "2→1" figure,
-  `FRES:ZERO:AUTO` and AC bandwidth included); the UT8806A NPLC list;
-  the N/E thermocouple types (EP p.21 against p.27) (§6.3, §6.4, §11)
+  capacitance top range, EP p.22 "10000uF", leaning 2 mF (§14); every UT8806A
+  "2→1" figure, `FRES:ZERO:AUTO` and AC bandwidth included); the UT8806A
+  NPLC list; the N/E thermocouple types, EP p.21 against p.27, leaning
+  the eight-type list (§14) (§6.3, §6.4, §11)
 - `TRIGger:DELay` range on both families; `OUTPut:TRIGger:SLOPe` on a
   UT8806 (§7.3)
 - What enters remote per line and whether keys lock; `*UNREMOTE` on
-  the N (§9)
-- Firmware line and VID:PID of the UT8806A and the UT8805E (§1, §11)
-- LAN ports per line and VXI-11 `inst0` (§3); GPIB address setting and
-  the E models' GPIB option (§1)
+  the N, leaning accepted (§9, §14)
+- `SYSTem:BEEPer:STATe`, reportedly without effect on a UT8805E (§14)
+- Firmware line and VID:PID of the UT8806A (§1, §11); the UT8805E's
+  VID as enumerated, 0x0483 against the 0x0486 its web page prints, and
+  an `lsusb -v` of any model (§2.1, §3.1)
+- LAN: TCP 80 on the N line and the port set per version (§3.1); GPIB
+  address setting and the E models' GPIB option (§1)
 - `0x5345:0x1234` matching nothing (§2.1); GET_CAPABILITIES bytes as
   sent (§2.2); the meaning of `ROUTe:TERMinals?` (§6.3)
+
+---
+
+## 14. Cross-Reference with Community Sources
+
+Added after the independent analysis above; the approach doc records the
+boundary (opened 2026-09-22, after commit fdddfa2). Every finding here is
+about the UT8805E, the only model anyone has reported on, except two
+UT8806E videos; no community `*IDN?` capture, `lsusb` output, web page
+or port-5025 report was found for the UT8805N, UT8805A, UT8806, UT8806A
+or UT8806E. Nothing in §1-§13 was rewritten on this evidence: §1, §2.1,
+§3.1, §4 and §5.3 carry one-line pointers here where a row settles,
+disputes or adds a wire fact, and §13 records the weak rows as leans.
+
+| Aspect | § | Our spec | Community source | Class |
+|---|---|---|---|---|
+| `*IDN?` first fields on the E | 5.3 | firmware `UNI-T,UT8805,<SN>,SW V1.87.014` | TestController's `UT8805E.txt` `#idString UNI-T,UT8805,` — an exact match on the first two fields, "tested with RS232 under linux only"; the meter's LXI page "Instrument Model: UT8805" | settles the fields; the bytes stay uncaptured |
+| UT8805E firmware line | 1 | assumed the N line | Voltlog: V1.82 → SW V1.87.001, a 2024 unit on V1.87.005; an NI-forum unit on V1.87.014, sent V1.87.017 by support | settles |
+| UT8805E USB resource | 2.1 | 0483:7540, serial = instrument SN | the LXI page prints `USB0::0x0486::0x7540::<SN>::INSTR` | PID and serial agree; **VID disagrees** |
+| Shared VID:PIDs | 2.1 | — | linux-hardware.org / usb.ids: 0483:7540 also an ST thermal printer, 0483:5740 ST's virtual COM port; no UNI-T probe under either | new |
+| TCP 80 on the N line | 3.1 | none; no web strings in V1.87.014 | Voltlog, SW V1.87.001: info-only LXI page, `/UT8805_status.shtml`, `/UT8805_hep.shtml`; UNI-T: web control "cannot technically" be done for memory reasons | **disagrees** |
+| Web page identity | 3.1 | no web strings in V1.87.014 | the same page shows "Firmware Revision 01.01.00.01.10.00.00" and the description "UNIT UT8805A Digital Multimeter", neither of which is in the image | leans "pages stored outside the `.UGD`", not resolved |
+| VXI-11 reply padding | 3.1 | — | NI forum, a UT8805E on V1.87.014: pyvisa-py `query("*IDN?")` raises EOFError over VXI-11 while `*ESR?` works; the poster: "It looks like" the meter "doesn't pad the response to a multiple of 4 bytes", and his hand-built VXI-11 request "returns the data fine"; NI-VISA and NI MAX work; support-sent V1.87.017 "pads the 4 byte alignment correctly" | new (observed on .014) |
+| VXI-11 `inst0` | 3 | resource `inst0` | NI MAX, pyvisa, a B&R PLC client (portmapper GETPORT, link `inst0`, `READ?`, termchar 10); pyvisa-py `list_resources()` misses the meter, consistent with a TCP-only portmapper | agrees |
+| USB on Linux | 2 | USBTMC | NI forum p.1: a UT8805E worked over USB on Linux after a udev rule and a firmware update; no `lsusb` posted | agrees (lean) |
+| SCPI over RS-232 | 4 | [INFERRED] | TestController `#port com`, polls `READ?` and `:SENS:FUNC?`, sets `FUNC "VOLT:DC"`, LF eol; no baud set in the file (9600 is the manual's default and the web page's "Usart 9600") | settles; terminator and handshake still open |
+| `FUNC?` quoted | 6.2 | firmware `"VOLT:DC"` | TestController passes the reply through `unQuote()` — but its Siglent file does the same, so possibly copied | agrees (weak) |
+| `*UNREMOTE` on the N line | 9 | registered | TestController `#finalCmd *UNREMOTE`, no error reported | agrees (weak) |
+| Number format on the N line | 8 | unnormalised mantissas in S6E examples | TestController lists `VOLT:DC:RANGE?` → `+0.20000000E+00`, `CAP:RANGE?` → `+0.20000000E-08`; `CURR:DC:TERM?` returns `200mA`/`2A` though set with `S`/`B` | agrees; `TERM?` reply new |
+| Range and type lists | 6.3, 6.4, 11 | EP p.36 FRES to 100 MΩ; EP p.22 CAP "10000uF"; six or eight TC types | TestController UI lists: FRES 200 Ω-2 MΩ; CAP top 2 mF; TC J K E T N R S B; `TEMP:TRAN:TYPE` also THER/FTH; R0 0-500 | disagrees (weak: UI lists, not captures) |
+| `SYST:BEEP:STAT` | — | registered | TestController: "Continuity Test Beep disable SCPI command doesn't seems to work with actual firmware" | new |
+| H7 line MCU | 2.1 | STM32H74x/H75x-class | Kerry Wong UT8806E teardown video (2:46) and the post's tag: STM32H750 on "UT8806 KEYBOARD V0.4" (the page text says F750) | agrees |
+
+Sources read (all 2026-09-22):
+
+- HKJ TestController, `Devices/UT8805E.txt` in
+  https://lygte-info.dk/pic/Projects/TestController/TestController.zip
+  (v1.0, 2026-05-13) and its device-definition docs
+  (https://lygte-info.dk/project/TestControllerConfigDevice%20UK.html);
+  EEVBlog "Program that can log from many multimeters" replies #6372-6373
+  (2026-05-14)
+- NI forum "UT8805E Pyvisa Communication",
+  https://forums.ni.com/t5/Instrument-Control-GPIB-Serial/UT8805E-Pyvisa-Communication/td-p/4406180
+  (2024-10 to 2025-12, two pages)
+- Voltlog #483 (https://www.youtube.com/watch?v=7gF55VqXbr4, 2024-04-23),
+  "New Revision" (https://www.youtube.com/watch?v=7RWlmzaEKR0, 2024-05-15)
+  and the review post
+  (https://www.voltlog.com/the-uni-t-ut8805e-review-packed-with-features-but-voltlog-480/)
+- Kerry Wong, UT8806E teardown video
+  (https://www.youtube.com/watch?v=x4Kwptu3WpM, 2024-10-12) and post
+  (http://www.kerrywong.com/2024/10/12/uni-t-ut8806e-6-1-2-digits-benchtop-multimeter-teardown-pictures/)
+- https://github.com/Bikeprincess/BnR-VXI11 (2024-10-15)
+- https://linux-hardware.org/?id=usb:0483-7540 and `usb:0483-5740`;
+  http://www.linux-usb.org/usb.ids (2026-06-26)
