@@ -176,6 +176,10 @@ fn adapter_not_found_help(selector: &str) -> String {
     if !matches!(adapters, ConnectedAdapters::None) {
         msg.push_str("\n\nRestart with the correct --adapter value.");
     }
+    if let Some(hint) = dmm_lib::binary_help::colonless_address_hint(selector) {
+        msg.push_str("\n\n");
+        msg.push_str(&hint);
+    }
     msg
 }
 

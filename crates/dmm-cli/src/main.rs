@@ -1028,6 +1028,9 @@ fn open_error_help(
                     style(format!("Use {ADAPTER_SELECTOR} to select one.")).dim()
                 );
             }
+            if let Some(hint) = dmm_lib::binary_help::colonless_address_hint(detail) {
+                eprintln!("\n{}", style(hint).yellow());
+            }
             "adapter not found".into()
         }
         e => e.into(),

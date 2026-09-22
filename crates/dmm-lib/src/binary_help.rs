@@ -399,6 +399,31 @@ impl ConnectedAdapters {
     }
 }
 
+/// The line both binaries add when an `--adapter` value nothing matched is
+/// twelve hex digits — a Bluetooth address without its colons, the way
+/// Windows' Device Manager shows one.
+///
+/// Only a hint: a USB cable's serial number can be the same twelve digits,
+/// so the value is not opened as an address. `None` for any other value, and
+/// in a build without the radio.
+pub fn colonless_address_hint(selector: &str) -> Option<String> {
+    if !cfg!(feature = "bluetooth")
+        || selector.len() != 12
+        || !selector.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return None;
+    }
+    let pairs: Vec<String> = selector
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| String::from_utf8_lossy(pair).to_ascii_uppercase())
+        .collect();
+    Some(format!(
+        "If that is a Bluetooth address, write it {}.",
+        pairs.join(":")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,6 +481,25 @@ mod tests {
             ConnectedAdapters::Unavailable.lines(),
             ["Run 'dmm-cli list' to see connected devices."]
         );
+    }
+
+    /// A Bluetooth address typed the way Device Manager shows it gets the
+    /// colon form back; anything else that is not twelve hex digits gets
+    /// nothing.
+    #[cfg(feature = "bluetooth")]
+    #[test]
+    fn a_colonless_address_is_shown_its_colon_form() {
+        assert_eq!(
+            colonless_address_hint("123456789abc").as_deref(),
+            Some("If that is a Bluetooth address, write it 12:34:56:78:9A:BC.")
+        );
+        assert!(colonless_address_hint("12:34:56:78:9A:BC").is_none());
+        assert!(colonless_address_hint("123456789AB").is_none());
+        assert!(colonless_address_hint("123456789ABCD").is_none());
+        assert!(colonless_address_hint("12345678ZABC").is_none());
+        assert!(colonless_address_hint("/dev/hidraw0").is_none());
+        // Twelve bytes but not hex: no pair may split a character.
+        assert!(colonless_address_hint("éééééé").is_none());
     }
 
     /// The CLI's copy of this list went four modes stale; rendering it from
