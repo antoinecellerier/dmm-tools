@@ -510,7 +510,7 @@ impl Protocol for Ut61PlusProtocol {
         let mark = |s: CaptureStep| s.samples(3).verified_if(hw);
         let [dcv, dcv_short, dcv_negative, ohm, ohm_body, ohm_short] = steps::gate_steps(
             Volts::DcV,
-            CaptureStep::basic("dcv", "Set meter to DC V (V\u{23CF}). Leave leads open."),
+            CaptureStep::basic("dcv", "Set meter to DC V (V\u{2393}). Leave leads open."),
             Ohms::Symbol,
             CaptureStep::basic(
                 "ohm",
@@ -583,7 +583,7 @@ impl Protocol for Ut61PlusProtocol {
             // which have always assumed the dial is here.
             CaptureStep::basic(
                 "dcv_ranges",
-                "Set meter to DC V (V\u{23CF}). Leave leads open.",
+                "Set meter to DC V (V\u{2393}). Leave leads open.",
             )
             .samples(3)
             .verified_if(hw)
@@ -600,7 +600,7 @@ impl Protocol for Ut61PlusProtocol {
             // step per mode the ring reaches, in dial order.
             CaptureStep::basic(
                 "acdcv",
-                "Set meter to V\u{23CF} and press SELECT for AC+DC V.",
+                "Set meter to V\u{2393} and press SELECT for AC+DC V.",
             )
             .samples(3)
             .verified_if(hw)
@@ -655,7 +655,7 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("AC mA")),
-            CaptureStep::basic("dca", "Set meter to DC A (A\u{23CF}).")
+            CaptureStep::basic("dca", "Set meter to DC A (A\u{2393}).")
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("DC A")),
