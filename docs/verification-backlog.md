@@ -1868,8 +1868,23 @@ the following needs someone's hardware.
   "not connected" after ~8 s) and took the next one. The open reports that as
   "Bluetooth link lost", which fits a link that was up, not one that never
   came up, and the setup retry does not cover the connect itself. The GUI's
-  reconnect loop absorbs it; a CLI run at that moment fails. Whether BlueZ
-  sees the same is unknown.
+  reconnect loop absorbs it; a CLI run at that moment fails. BlueZ refuses
+  early too: on 2026-09-22 the GUI's first tries after power-on failed with
+  "Timed out after 10s", ATT error 0x0e and "Failed to register notify
+  session" before one took.
+- ~~**GUI reconnect under Linux.**~~ — **VERIFIED** 2026-09-22 (BlueZ 5.87,
+  twice) and 2026-09-25: the adapter switched off mid-session and back on
+  showed "waiting for meter", then readings about 20 s after power-on, on the
+  third attempt.
+- **A slow reconnect under Linux.** On 2026-09-26 the same off-and-on test
+  took about 60 s, and btleplug panicked reading the MTU of a link BlueZ had
+  not finished setting up; 5129e81 catches that and retries. The panic's
+  message still prints on stderr although it is caught: silencing it takes a
+  process-wide panic hook, left out on purpose. Neither showed
+  on 2026-09-22 with the same kernel and BlueZ. What changed is open: compare
+  6a69591 and the current build under `RUST_LOG=dmm_lib=debug`, and check
+  whether the notify subscription goes out while BlueZ is still tearing the
+  old link down ("StartNotify is not allowed" in bluetoothd's log).
 - ~~**Link parameters.**~~ — **VERIFIED** 2026-09-22 on Linux, from a `btmon`
   capture: MTU 247; the adapter asks for the connection interval itself right
   after every connect (L2CAP update request, min 224 / max 255 × 1.25 ms,
