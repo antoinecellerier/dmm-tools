@@ -94,6 +94,13 @@ pub trait DeviceTable: Send {
         super::UT61EPLUS_COMMANDS
     }
 
+    /// Whether the model has a secondary display, sent in frames of its own
+    /// (family spec §2.3) and carried as a reading's one sub-value.
+    /// Default: no, and such a frame is an unknown mode.
+    fn has_secondary_display(&self) -> bool {
+        false
+    }
+
     /// Whether the meter wants Get Name answered before it starts streaming
     /// over Bluetooth (family spec §6.4). Default: no.
     fn name_before_stream(&self) -> bool {
@@ -195,6 +202,9 @@ pub(crate) trait ModeTables: Send {
     /// Returned by `DeviceTable::name_before_stream`.
     const NAME_BEFORE_STREAM: bool = false;
 
+    /// Returned by `DeviceTable::has_secondary_display`.
+    const SECONDARY_DISPLAY: bool = false;
+
     /// Returned by `DeviceTable::capture_steps`. Default: the family list.
     fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
         None
@@ -241,6 +251,10 @@ impl<T: ModeTables> DeviceTable for T {
 
     fn name_before_stream(&self) -> bool {
         T::NAME_BEFORE_STREAM
+    }
+
+    fn has_secondary_display(&self) -> bool {
+        T::SECONDARY_DISPLAY
     }
 
     fn capture_steps(&self) -> Option<Vec<CaptureStep>> {

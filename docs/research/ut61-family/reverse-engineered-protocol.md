@@ -22,8 +22,8 @@ Confidence levels:
 - **[VENDOR]** — confirmed by decompiling UNI-T's official software
 - **[VENDOR-DOC]** — stated in UNI-T's published protocol deck
 - **[MANUAL]** — stated in UNI-T's official user manual
-- **[COMMUNITY]** — reported by a community source; the sources are in a
-  cross-reference section
+- **[COMMUNITY]** — reported by a community source; the sources are in
+  §10 and UT61E+ spec §7
 - **[DEDUCED]** — logical inferences not yet verified against hardware
 - **[UNVERIFIED]** — requires real device testing
 
@@ -50,8 +50,9 @@ table per model (§5). The same bytes travel over the USB cable.
 The UT60BT and UT202BT send the same frames with the radio built in, over
 the ISSC service the UT-D07B carries (`docs/research/ut-d07b/`). UNI-T's
 iDMM2.0 app decodes them with the parser it uses for the UT61+ behind a
-UT-D07B, after the same 0x5F then 0x5D handshake, and a range table each
-(§9) [VENDOR].
+UT-D07B, after the same 0x5F then 0x5D handshake (§6.4), and a range table
+each (§9) [VENDOR]. Over a UT60BT's own radio each frame arrives whole in one
+notification, and no adapter heartbeat appears [COMMUNITY] (§10).
 
 | Aspect | Value | All 6 models |
 |--------|-------|:------------:|
@@ -108,6 +109,37 @@ Binary comparison of the UT161E installer vs UT61E+ Software V2.02:
 - DMM.exe: 8 bytes differ (model name string only)
 - options.xml: `<Model>` tag differs
 - No functional difference whatsoever
+
+### 2.3 Secondary-display frame — [VENDOR + VENDOR-DOC + MANUAL]
+
+A clamp meter with a second display sends it in a frame of its own: the
+19-byte measurement frame (UT61E+ spec §2.4) with bit 7 of the mode byte
+set. [VENDOR] from iDMM2.0's parser, which reads it from any model:
+
+| Offset | Field | In a secondary frame |
+|--------|-------|----------------------|
+| 3 | Mode | bit 7 set; bits 0-6 are the function, numbered as a main frame's mode byte (UT61E+ spec §2.5) |
+| 4 | Range | as a main frame, an index into that function's range table |
+| 5-11 | Display | 7 ASCII characters, as a main frame |
+| 12-16 | Bar graph, flags | not read by the app; content unknown |
+
+The app shows the value beside the main reading and blanks it 500 ms after
+a main frame when no new secondary has come.
+
+Which meters send it:
+
+- **UT202S** — [VENDOR-DOC] the protocol deck's UT202S slide: in ACV, ACA,
+  LPF ACV, LPF ACA and °C/°F the meter sends a main and a secondary display,
+  and the phone shows both. The deck does not give the encoding.
+- **UT202BT** — [MANUAL] the auxiliary display shows frequency in AC V
+  (P8/14) and AC A (P11/20), °F beside °C (P11/19), and "CUT" in AC A when
+  the clamp overheats (P12/21). The manual says nothing of it in DC V, LPF,
+  peak, inrush, Ω or capacitance.
+- **UT60BT** — no second display in its manual.
+
+[UNVERIFIED]: no capture from any meter holds a secondary frame. How often
+one comes and where it falls against the main frames, what the bar graph and
+flag bytes hold, and how "CUT" is sent are unknown.
 
 ---
 
@@ -620,6 +652,31 @@ UT161 behind a UT-D07B.
 - **Behind a UT-D07B the order does not matter** — [VERIFIED] on our UT61E+:
   0x5D alone starts the readings, the adapter acting on it itself
   (`../ut-d07b/reverse-engineered-protocol.md` §3).
+- **A UT60BT answers the 0x5E poll all the same**, one frame per request —
+  [COMMUNITY] (§10).
+
+### 6.5 UT60BT and UT202BT buttons — [VENDOR]
+
+The bytes iDMM2.0's button pages send to the two meters, and no others; the
+button names are the manuals'. What each does on the meter is [UNVERIFIED].
+
+| Byte | UT60BT | UT202BT |
+|------|--------|---------|
+| 0x31 | — | A~ (yellow), short press |
+| 0x32 | — | A~, long press (inrush) |
+| 0x33 | — | V~ (red) |
+| 0x35 | — | Ω (blue) |
+| 0x36 | — | NCV/PEAK, short press |
+| 0x37 | — | NCV/PEAK, long press (peak capture) |
+| 0x46 | RANGE | RANGE |
+| 0x47 | RANGE, long press (auto) | — |
+| 0x48 | REL | — |
+| 0x4A | HOLD | HOLD |
+| 0x4C | SELECT | — |
+
+0x31-0x37 are in neither the protocol deck nor Software V2.02. The app
+disables MAX/MIN on the UT60BT, which has no such button. Community clients
+send further bytes to a UT60BT (§10).
 
 ---
 
@@ -1011,3 +1068,31 @@ alone. The capacitance top rung is printed "99.9mF" in the manual and "105mF"
 in the asset. The manual has no frequency table: frequency shows on the
 auxiliary display in AC V and AC A. The asset's °F bounds (590, −58) do not
 match its own label.
+
+---
+
+## 10. Cross-reference with Community Sources [COMMUNITY]
+
+Read 2026-09-25 for the UT60BT and UT202BT, after the iDMM2.0 read. The
+sources, their commits and the boundary are in `reverse-engineering-approach.md`
+("2026-09-25: UT60BT and UT202BT"); the 2026-09-22 read on reading the family
+over Bluetooth is UT61E+ spec §7. Only the UT60BT has been run by a community
+source; no UT202BT capture exists anywhere.
+
+- **Framing over the meter's own radio.** On a live UT60BT each 19-byte frame
+  arrives whole in one notification, never split, its checksum valid, and
+  neither the UT-D07B's `AB CD 06 AA AA …` heartbeat nor any other adapter
+  frame appears ([libreble/multimeter](https://github.com/libreble/multimeter),
+  `docs/protocols/uni-t.md`).
+- **The 0x5E poll is answered.** iDMM2.0 never sends it (§6.4), but
+  [QtDMM](https://github.com/qtdmm/QtDMM) and
+  [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy) poll a UT60BT with
+  `AB CD 03 5E 01 D9` and get one 19-byte frame per request; QtDMM's dial walk
+  of 2026-09-24 was read that way.
+- **Buttons.** libreble's UT60BT client sends 0x41 MAX/MIN, 0x46, 0x47,
+  0x48, 0x49 Hz/duty, 0x4A, 0x4B backlight and 0x4C, and says they all take
+  effect. 0x49 and 0x4B are beyond the app's set (§6.5); 0x41 is one the app
+  never sends. Its UT202BT client, unrun on a meter, sends 0x31, 0x33, 0x35,
+  0x36, 0x46 and 0x4A, all in the app's set.
+- **Secondary display.** Every community decoder masks bit 7 of the mode
+  byte (§2.3); libreble finds it always clear on a UT60BT.

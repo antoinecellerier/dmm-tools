@@ -30,8 +30,8 @@ const PEAK_MODES: &[Mode] = &[Mode::AcV, Mode::AcA, Mode::ClampAcA];
 /// "ACA"; which one the meter sends is unknown. The app's LPF, LPF A and
 /// °C rows start above range byte 0, and the missing bytes are [`GAP`]s.
 ///
-/// The meter also shows a secondary display, sent in frames this table does
-/// not describe.
+/// The meter's secondary display (frequency in AC V and AC A, °F beside °C)
+/// comes in frames of its own, read with this same table (family spec §2.3).
 pub struct Ut202btTable {
     dc_v: [RangeInfo; 3],
     ac_v: [RangeInfo; 3],
@@ -118,6 +118,8 @@ impl ModeTables for Ut202btTable {
     /// UNI-T's app asks the name first, and a UT60BT is reported to need it
     /// (family spec §6.4).
     const NAME_BEFORE_STREAM: bool = true;
+    /// Frequency beside AC V and AC A, °F beside °C (family spec §2.3).
+    const SECONDARY_DISPLAY: bool = true;
     const MODES: &'static [Mode] = &[
         Mode::AcV,
         Mode::DcV,

@@ -1061,8 +1061,17 @@ frames on record; the UT202BT has no capture anywhere.
   answers to both. The `aca` capture step asserts neither.
 - **UT202BT sparse rows.** LPF V and LPF A are listed at range byte 2 only,
   °C at byte 1 only; a frame at another byte reports an unrecognised range.
-- **UT202BT secondary display** (mode byte bit 7): frequency in AC V and AC
-  A, °F beside °C. Such a frame is rejected as an unknown mode byte today.
+- **UT202BT secondary display** (mode byte bit 7, ut61-family spec §2.3):
+  decoded from the app and shown as a sub-value of the next main reading;
+  unconfirmed on a meter. A first UT202BT capture should show which modes
+  send one (the manual: frequency in AC V and AC A, °F beside °C, "CUT" on
+  clamp overheating), whether it comes before or after its main frame and
+  how often, what HOLD does to it, and what its bar graph and flag bytes
+  hold. That decides how it attaches: today it rides on the next main
+  frame, without the app's 500 ms blanking, and a command does not clear
+  one held from before it. A replay keeps the main readings only: the
+  secondary frames are not recorded. Any other model reports a bit-7 frame
+  as an unknown mode byte that looks like a secondary display.
 - **UT202BT peak.** Peak modes are AC V and AC A (both codes), from the
   manual (P8/13, P8/14, P11/20). Which flag bits the meter sets is
   unconfirmed; the `peak` capture step shows the bits.

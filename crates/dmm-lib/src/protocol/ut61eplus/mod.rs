@@ -5,7 +5,7 @@ pub mod tables;
 
 use crate::error::{Error, ErrorKind, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
 use crate::protocol::registry;
 use crate::protocol::unrecognised::report_unknown;
@@ -53,6 +53,10 @@ pub struct Ut61PlusProtocol {
     /// Readings arrive unasked: the link's adapter polls the meter for us
     /// (see [`Protocol::init`]), so a request is a read, not a write.
     streaming: bool,
+    /// The secondary display last sent, held for the next main reading
+    /// (family spec §2.3). That reading takes it, so a main frame with no
+    /// secondary since the one before it carries none.
+    secondary: Option<AuxValue>,
 }
 
 impl Default for Ut61PlusProtocol {
@@ -164,6 +168,8 @@ impl Ut61PlusProtocol {
         } else {
             Stability::Experimental
         };
+        // One sub-value: a model's secondary display (family spec §2.3).
+        let max_aux_values = usize::from(table.has_secondary_display());
         // The family issue stays on every model but the UT61E+, verified or
         // not: the UT61B+ is decoded correctly everywhere it was looked at,
         // and its range rungs above the ones auto-ranging reached are still
@@ -181,12 +187,13 @@ impl Ut61PlusProtocol {
             rx_buf: Vec::with_capacity(64),
             dial: cycle::DialState::default(),
             streaming: false,
+            secondary: None,
             profile: DeviceProfile {
                 family_name: "UT61+/UT161",
                 model_name,
                 stability,
                 supported_commands,
-                max_aux_values: 0,
+                max_aux_values,
                 verification_issue,
             },
         }
@@ -217,7 +224,10 @@ impl Ut61PlusProtocol {
         for _ in 0..5 {
             let payload = self.read_raw_payload(transport)?;
             if payload.len() >= UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
-                return parse_measurement(&payload, self.table.as_ref());
+                match self.take_reading(&payload) {
+                    Some(reading) => return reading,
+                    None => continue,
+                }
             }
             debug!(
                 "skipping non-measurement frame ({} bytes): {:02X?}",
@@ -227,6 +237,27 @@ impl Ut61PlusProtocol {
             report_unknown_frame(&payload);
         }
         Err(Error::Timeout)
+    }
+
+    /// A measurement-sized payload as a reading, or `None` for a
+    /// secondary-display frame (family spec §2.3) on a model that has the
+    /// display, which is held for the next main reading instead of being
+    /// returned as one. On any other model the frame's mode byte is unknown,
+    /// as it has always been.
+    fn take_reading(&mut self, payload: &[u8]) -> Option<Result<Measurement>> {
+        if self.table.has_secondary_display() && is_secondary(payload) {
+            // An unrecognised one clears the held value too: it is older
+            // than what the meter now shows beside the next reading.
+            self.secondary = parse_secondary(payload, self.table.as_ref());
+            return None;
+        }
+        let secondary = self.secondary.take();
+        Some(
+            parse_measurement(payload, self.table.as_ref()).map(|mut m| {
+                m.aux_values.extend(secondary);
+                m
+            }),
+        )
     }
 
     /// The newest reading the adapter has already delivered, `first` being
@@ -261,7 +292,9 @@ impl Ut61PlusProtocol {
                     Ok(Some((payload, consumed))) => {
                         self.rx_buf.drain(..consumed);
                         if payload.len() >= UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
-                            newest = parse_measurement(&payload, self.table.as_ref());
+                            if let Some(reading) = self.take_reading(&payload) {
+                                newest = reading;
+                            }
                         } else {
                             report_unknown_frame(&payload);
                         }
@@ -1240,6 +1273,70 @@ fn report_unrecognised_fields(
     }
 }
 
+/// Report a mode byte §2.5 does not list.
+///
+/// One with bit 7 set over a function we decode is most likely a
+/// secondary-display frame (family spec §2.3) from a model not known to
+/// send one, so the report says so and carries the whole frame: it is what
+/// tells us another meter has a second display.
+fn report_unknown_mode(payload: &[u8]) {
+    let mode_byte = payload[0];
+    match Mode::from_byte(mode_byte & !SECONDARY) {
+        Ok(function) if mode_byte & SECONDARY != 0 => report_unknown(
+            "ut61eplus",
+            "mode byte",
+            format_args!(
+                "{mode_byte:#04x}, which looks like a secondary-display frame for {function} \
+                 (family spec §2.3): {:02X?}",
+                &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN]
+            ),
+        ),
+        _ => report_unknown("ut61eplus", "mode byte", format_args!("{mode_byte:#04x}")),
+    }
+}
+
+/// Bit 7 of the mode byte marks a secondary-display frame (family spec §2.3).
+const SECONDARY: u8 = 0x80;
+
+/// Whether a measurement-sized payload is a secondary-display frame.
+fn is_secondary(payload: &[u8]) -> bool {
+    payload[0] & SECONDARY != 0
+}
+
+/// The sub-value a secondary-display frame carries, or `None` for a function
+/// or range the model's table lacks, reported once.
+///
+/// The frame is laid out as a main one (family spec §2.3): the function in
+/// the mode byte's low seven bits, then the range byte and the 7-char
+/// display. Its bar graph and flag bytes are not read: UNI-T's app ignores
+/// them, and what they hold is unknown. The unit comes from the model's own
+/// table for that function, as a main reading's does.
+fn parse_secondary(payload: &[u8], table: &dyn DeviceTable) -> Option<AuxValue> {
+    const FAMILY: &str = "ut61eplus";
+    let frame = &payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN];
+    let range_byte = payload[1] & 0x0F;
+    let Some((mode, range)) = Mode::from_byte(payload[0] & !SECONDARY)
+        .ok()
+        .and_then(|mode| Some((mode, table.range_info(mode, range_byte)?)))
+    else {
+        report_unknown(FAMILY, "secondary display", format_args!("{frame:02X?}"));
+        return None;
+    };
+    let display_raw = String::from_utf8_lossy(&payload[2..9]).to_string();
+    let label = match mode {
+        Mode::Hz => "Frequency",
+        Mode::TempC | Mode::TempF => "Temperature",
+        other => other.as_static_str(),
+    };
+    Some(AuxValue {
+        label: Cow::Borrowed(label),
+        value: display_value(mode, &display_raw),
+        unit: Cow::Borrowed(range.unit),
+        display_raw: Some(display_raw),
+        elapsed_secs: None,
+    })
+}
+
 /// Parse a UT61E+/UT61B+/UT61D+/UT161 measurement payload (pure function).
 ///
 /// Layout (verified against real device captures):
@@ -1277,9 +1374,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let flag3 = payload[13] & 0x0F;
 
     // §2.5 lists no mode byte past 0x1E.
-    let mode = Mode::from_byte(mode_byte).inspect_err(|_| {
-        report_unknown("ut61eplus", "mode byte", format_args!("{mode_byte:#04x}"));
-    })?;
+    let mode = Mode::from_byte(mode_byte).inspect_err(|_| report_unknown_mode(payload))?;
     let display_raw = String::from_utf8_lossy(display_bytes).to_string();
     let progress = bar_hi * 10 + bar_lo;
     let flags = parse_flags(mode, flag1, flag2, flag3);
@@ -1290,10 +1385,27 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let unit = range_info.map(|r| r.unit).unwrap_or("");
     let range_label = range_info.map(|r| r.label).unwrap_or("");
 
-    // Parse display value.
-    let display_trimmed = display_raw.trim();
-    let display_compact: String = display_trimmed.chars().filter(|c| *c != ' ').collect();
-    let value = if mode == Mode::Ncv {
+    let value = display_value(mode, &display_raw);
+
+    Ok(Measurement {
+        mode: Cow::Borrowed(mode.as_static_str()),
+        mode_raw: mode_byte as u16,
+        range_raw: range_byte,
+        value,
+        unit: Cow::Borrowed(unit),
+        range_label: Cow::Borrowed(range_label),
+        progress: Some(progress),
+        display_raw: Some(display_raw),
+        flags,
+        ..Measurement::from_payload(&payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN])
+    })
+}
+
+/// The value a 7-char display field shows in `mode`, the same for a main
+/// and a secondary display (UT61E+ spec §2.4).
+fn display_value(mode: Mode, display_raw: &str) -> MeasuredValue {
+    let display_compact: String = display_raw.trim().chars().filter(|c| *c != ' ').collect();
+    if mode == Mode::Ncv {
         let level = ncv_level(&display_compact).unwrap_or_else(|| {
             report_unknown(
                 "ut61eplus",
@@ -1317,20 +1429,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
                 MeasuredValue::Overload
             }
         }
-    };
-
-    Ok(Measurement {
-        mode: Cow::Borrowed(mode.as_static_str()),
-        mode_raw: mode_byte as u16,
-        range_raw: range_byte,
-        value,
-        unit: Cow::Borrowed(unit),
-        range_label: Cow::Borrowed(range_label),
-        progress: Some(progress),
-        display_raw: Some(display_raw),
-        flags,
-        ..Measurement::from_payload(&payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN])
-    })
+    }
 }
 
 /// Build a 14-byte UT61E+ protocol payload from parts (for tests).
@@ -1825,6 +1924,166 @@ mod tests {
         let (mock, mut p) = streaming(frames);
         assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
         assert_eq!(p.request_measurement(&mock).unwrap().mode, "Duty %");
+    }
+
+    // --- The secondary display (family spec §2.3) --------------------------
+
+    /// A UT202BT secondary-display frame: `function` with bit 7 set.
+    fn secondary(function: u8, range: u8, display: &[u8; 7]) -> Vec<u8> {
+        make_payload(function | 0x80, range, display, (0, 0), (0, 0, 0))
+    }
+
+    fn main_frame(mode: u8, range: u8, display: &[u8; 7]) -> Vec<u8> {
+        make_payload(mode, range, display, (0, 0), (0, 0, 0))
+    }
+
+    fn ut202bt() -> Ut61PlusProtocol {
+        Ut61PlusProtocol::for_model("ut202bt").expect("known model")
+    }
+
+    /// Only the UT202BT has a secondary display, so only it has a sub-value
+    /// slot in an export.
+    #[test]
+    fn only_the_ut202bt_has_a_sub_value_slot() {
+        for model in [
+            "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
+        ] {
+            let p = Ut61PlusProtocol::for_model(model).expect("known model");
+            let want = usize::from(model == "ut202bt");
+            assert_eq!(p.profile().max_aux_values, want, "{model}");
+        }
+    }
+
+    /// Frequency beside AC V, as the UT202BT manual describes (P8/14): one
+    /// reading, carrying the secondary as its one sub-value.
+    #[test]
+    fn a_secondary_frame_rides_on_the_next_reading() {
+        let mut p = ut202bt();
+        let mut replies = vec![ACK.to_vec(), NAME_UT61EPLUS.to_vec()];
+        replies.push(test_frame_be16(&secondary(0x04, 0x00, b"  50.02")));
+        replies.push(test_frame_be16(&main_frame(0x00, 0x02, b"  230.4")));
+        let mock = BluetoothMock(MockTransport::new(replies));
+        p.init(&mock).unwrap();
+        let (m, reports) = capture_reports(|| p.request_measurement(&mock).unwrap());
+        assert!(reports.is_empty(), "{reports:?}");
+        assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("AC V", "V"));
+        assert_eq!(m.aux_values.len(), 1);
+        let aux = &m.aux_values[0];
+        assert_eq!(aux.label, "Frequency");
+        assert_eq!(aux.value_str(), "50.02");
+        assert_eq!(aux.unit, "Hz");
+        assert_eq!(m.aux_summary(), "Frequency 50.02 Hz");
+    }
+
+    /// °F beside °C (manual P11/19), the unit from the table's °F row.
+    #[test]
+    fn fahrenheit_beside_celsius() {
+        let mut p = ut202bt();
+        assert!(p.take_reading(&secondary(0x0B, 0x00, b"   77  ")).is_none());
+        let m = p
+            .take_reading(&main_frame(0x0A, 0x01, b"   25  "))
+            .unwrap()
+            .unwrap();
+        assert_eq!(m.unit, "°C");
+        assert_eq!(m.aux_summary(), "Temperature 77 °F");
+    }
+
+    /// A secondary goes with the main frame after it and no further: a main
+    /// frame with none since the one before it carries none.
+    #[test]
+    fn a_secondary_is_carried_once() {
+        let mut p = ut202bt();
+        let reading = |p: &mut Ut61PlusProtocol| {
+            p.take_reading(&main_frame(0x00, 0x02, b"  230.4"))
+                .unwrap()
+                .unwrap()
+        };
+        p.take_reading(&secondary(0x04, 0x00, b"  50.02"));
+        assert_eq!(reading(&mut p).aux_values.len(), 1);
+        assert!(reading(&mut p).aux_values.is_empty());
+        // The newest of two secondaries is the one kept.
+        p.take_reading(&secondary(0x04, 0x00, b"  50.02"));
+        p.take_reading(&secondary(0x04, 0x00, b"  49.98"));
+        assert_eq!(reading(&mut p).aux_summary(), "Frequency 49.98 Hz");
+    }
+
+    /// A model with no secondary display rejects the frame as an unknown
+    /// mode, as it always has. The report says what the frame looks like and
+    /// carries it whole, so a second meter that sends one shows up.
+    #[test]
+    fn a_secondary_frame_on_a_model_without_one_is_an_unknown_mode() {
+        for model in ["ut61e+", "ut60bt"] {
+            let mut p = Ut61PlusProtocol::for_model(model).expect("known model");
+            let frame = secondary(0x04, 0x00, b"  50.02");
+            let (reading, reports) = capture_reports(|| p.take_reading(&frame));
+            assert!(
+                matches!(reading, Some(Err(Error::UnknownMode(0x84)))),
+                "{model}: {reading:?}"
+            );
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut61eplus: unrecognised mode byte: 0x84, which looks like a \
+                     secondary-display frame for Hz (family spec §2.3): {frame:02X?}"
+                )],
+                "{model}"
+            );
+        }
+    }
+
+    /// A secondary function or range the table lacks is reported, not shown.
+    #[test]
+    fn a_secondary_the_table_lacks_is_reported() {
+        let mut p = ut202bt();
+        // DC µA is not on the UT202BT; Hz stops at range byte 5.
+        for frame in [
+            secondary(0x0C, 0x00, b"  12.34"),
+            secondary(0x04, 0x06, b"  12.34"),
+        ] {
+            let (_, reports) = capture_reports(|| p.take_reading(&frame));
+            assert_eq!(
+                reports,
+                [format!(
+                    "ut61eplus: unrecognised secondary display: {frame:02X?}"
+                )]
+            );
+            let m = p
+                .take_reading(&main_frame(0x00, 0x02, b"  230.4"))
+                .unwrap()
+                .unwrap();
+            assert!(m.aux_values.is_empty());
+        }
+    }
+
+    /// An unrecognised secondary replaces the one held before it: the older
+    /// value is no longer what the meter shows.
+    #[test]
+    fn an_unrecognised_secondary_drops_the_held_one() {
+        let mut p = ut202bt();
+        p.take_reading(&secondary(0x04, 0x00, b"  50.02"));
+        // DC µA is not on the UT202BT.
+        let (_, reports) = capture_reports(|| p.take_reading(&secondary(0x0C, 0x00, b"  12.34")));
+        assert_eq!(reports.len(), 1, "{reports:?}");
+        let m = p
+            .take_reading(&main_frame(0x00, 0x02, b"  230.4"))
+            .unwrap()
+            .unwrap();
+        assert!(m.aux_values.is_empty(), "{:?}", m.aux_values);
+    }
+
+    /// A stream of secondaries alone is never read as a reading.
+    #[test]
+    fn a_secondary_frame_is_never_a_reading() {
+        let mut p = ut202bt();
+        let frame = test_frame_be16(&secondary(0x04, 0x00, b"  50.02"));
+        let mock = BluetoothMock(MockTransport::new(vec![
+            ACK.to_vec(),
+            NAME_UT61EPLUS.to_vec(),
+            frame.clone(),
+            frame,
+        ]));
+        p.init(&mock).unwrap();
+        assert!(matches!(p.request_measurement(&mock), Err(Error::Timeout)));
     }
 
     /// Over a cable nothing is started and every reading is a request.
@@ -3018,6 +3277,12 @@ raw_payload=14"#
         let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
         assert!(matches!(m, Err(Error::UnknownMode(0x1F))), "{m:?}");
         assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x1f"]);
+
+        // Bit 7 over a function nobody decodes is no secondary display.
+        let payload = make_payload(0x9F, 0x00, b"  0.000", (0, 0), (0, 0, 0));
+        let (m, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
+        assert!(matches!(m, Err(Error::UnknownMode(0x9F))), "{m:?}");
+        assert_eq!(reports, ["ut61eplus: unrecognised mode byte: 0x9f"]);
     }
 
     /// Temperature is a UT61D+ position (family spec §3.1), not a UT61E+ one.

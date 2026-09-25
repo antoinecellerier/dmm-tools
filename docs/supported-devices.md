@@ -58,7 +58,7 @@ shows.
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | UT60BT | 9999 | 🧪 Experimental | |
-| UT202BT | 9999 | 🧪 Experimental | clamp: 600 A AC, inrush, LPF |
+| UT202BT | 9999 | 🧪 Experimental | clamp: 600 A AC, inrush, LPF; second display as a sub-value |
 
 Neither has been run on a meter yet: the range tables come from UNI-T's
 iDMM2.0 app and the manuals ([backlog](verification-backlog.md)).

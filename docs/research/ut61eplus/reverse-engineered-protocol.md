@@ -431,6 +431,10 @@ meter. The protocol deck names them:
 
 The deck gives no ranges for the current variants 0x1A/0x1B.
 
+**Bit 7** of the mode byte marks a clamp meter's secondary-display frame,
+the function in the low seven bits (family spec §2.3). No UT61+ capture
+holds one.
+
 ### 2.6 Unit Prefix Table — [VENDOR]
 
 From `FUN_10001000` (static initializer), the range byte maps to a unit
@@ -787,9 +791,10 @@ and that a single 0x5D can be dropped — so the client waits for the name
 frame, then re-sends 0x5D up to five times with a 700 ms wait each.
 
 **0x31-0x37.** The six further button bytes the vendor app sends (our APK
-reading) appear in **no** community source. Every community command table
-stops at 0x41-0x4C: `framing.ts:16-23` and ljakob's `_COMMANDS` (65-78,
-i.e. 0x41-0x4E).
+reading) appeared in **no** community source read that day. Every community
+command table stopped at 0x41-0x4C: `framing.ts:16-23` and ljakob's
+`_COMMANDS` (65-78, i.e. 0x41-0x4E). The 2026-09-25 read found four of them
+in libreble's UT202BT client (family spec §10).
 
 **Polled 0x5E is what every USB implementation uses**, and none of them
 mentions 0x5D: [ljakob](https://github.com/ljakob/unit_ut61eplus)
