@@ -170,6 +170,13 @@ const ACTIVATION_ZT5BQ: &str = "\
 2. Press Power and Hz together; the Bluetooth symbol shows
 Note: the meter switches off after 15 minutes idle; hold Hz/NCV while turning it on to disable that.";
 
+/// ZT-5B manual p.1 panel 3: the red button turns the meter on and, with a
+/// short press, Bluetooth; the same panel gives the auto power-off.
+const ACTIVATION_ZT5B: &str = "\
+1. Hold the red button for 2 seconds to turn the meter on
+2. Short press the red button; the Bluetooth symbol shows
+Note: the meter switches off after 15 minutes idle; press NCV before turning it on to disable that.";
+
 const ACTIVATION_MOCK: &str = "No setup required \u{2014} this is a simulated device.";
 
 /// All selectable devices, in GUI display order.
@@ -485,6 +492,19 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_ZT5BQ,
         family: DeviceFamily::Zotek,
         new_protocol: || Box::new(ZotekProtocol::new_zt5bq()),
+        fingerprint: Some(&zotek::FINGERPRINT),
+        manual_url: Some(ZOTEK_SUPPORT_URL),
+        bluetooth_only: true,
+        bluetooth_names: &["Bluetooth DMM"],
+    },
+    SelectableDevice {
+        id: "zt5b",
+        display_name: "ZT-5B / V05B",
+        aliases: &["zt-5b", "v05b"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_ZT5B,
+        family: DeviceFamily::Zotek,
+        new_protocol: || Box::new(ZotekProtocol::new_zt5b()),
         fingerprint: Some(&zotek::FINGERPRINT),
         manual_url: Some(ZOTEK_SUPPORT_URL),
         bluetooth_only: true,
@@ -819,7 +839,7 @@ mod tests {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
         // Experimental, with their verification issues still to be opened.
-        const ISSUE_TO_OPEN: &[&str] = &["zt300ab", "zt5566se", "zt5bq"];
+        const ISSUE_TO_OPEN: &[&str] = &["zt300ab", "zt5566se", "zt5bq", "zt5b"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

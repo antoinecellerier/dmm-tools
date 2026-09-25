@@ -32,7 +32,7 @@ other programs.
 ## ZOTEK (ZOYI / BSIDE / ANENG)
 
 - [ZT-300AB, ZT-5B, ZT-5BQ, ZT-5566 family — Bluetooth LE, one protocol with four packet layouts](research/zotek/reverse-engineered-protocol.md)
-  — the ZT-300AB, ZT-5566SE and ZT-5BQ layouts are implemented, experimental. The ANENG AN9002, V05B,
+  — all four layouts are implemented, experimental. The ANENG AN9002, V05B,
   ST207 and AN999S are sold as rebrands (matched by specs and keys; AN999S ≈ ZT-5566S/SE).
 
 ## Shared infrastructure

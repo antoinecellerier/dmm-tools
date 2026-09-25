@@ -107,6 +107,8 @@ pub(super) enum Meaning {
     Peak,
     /// INRUSH, on the clamp (spec §7.2).
     Inrush,
+    /// Over-voltage, type 2's byte 3 bit 2 (spec §7.3).
+    OverVoltage,
     /// Type 4's secondary display units (spec §7.4).
     SecondaryPercent,
     SecondaryHertz,
@@ -438,10 +440,50 @@ pub(crate) static ZT5BQ: Layout = Layout {
     max_aux_values: 0,
 };
 
-/// Every layout implemented, by type byte.
-pub(super) static LAYOUTS: &[&Layout] = &[&ZT300AB, &ZT5566SE, &ZT5BQ];
+/// Type 2, named for the ZT-5B (spec §7.3).
+pub(crate) static ZT5B: Layout = Layout {
+    type_byte: 2,
+    id: "zt5b",
+    name: "ZT-5B / V05B",
+    digits: Digits::Split,
+    bits: &[
+        bit(3, 3, Meaning::Continuity),
+        // Named `over_vol` by the app; community captures have it set at
+        // 180 and 233 V AC and clear at low voltage (§11.2).
+        bit(3, 2, Meaning::OverVoltage),
+        bit(3, 1, Meaning::Hold),
+        bit(3, 0, Meaning::LowBattery),
+        // The Bluetooth icon, set in every community notification, and
+        // `power`, never set (§11.4). Bits 5-4 are used by neither app and
+        // never set: reported.
+        bit(7, 7, Meaning::Silent),
+        bit(7, 6, Meaning::Silent),
+        bit(8, 7, Meaning::Prefix(Prefix::Micro, VOLT_AMP_FARAD)),
+        bit(8, 6, Meaning::Unit(Unit::Amp)),
+        bit(8, 5, Meaning::Diode),
+        bit(8, 4, Meaning::Unit(Unit::Farad)),
+        bit(8, 3, Meaning::Ac),
+        bit(8, 2, Meaning::Dc),
+        bit(8, 1, Meaning::Unit(Unit::Volt)),
+        bit(8, 0, Meaning::Prefix(Prefix::Nano, VOLT_AMP_FARAD)),
+        bit(9, 7, Meaning::Unit(Unit::Celsius)),
+        bit(9, 6, Meaning::Unit(Unit::Fahrenheit)),
+        bit(9, 5, Meaning::Unit(Unit::Hertz)),
+        bit(9, 4, Meaning::Unit(Unit::Percent)),
+        bit(9, 3, Meaning::Prefix(Prefix::Mega, OHM_HZ)),
+        bit(9, 2, Meaning::Prefix(Prefix::Milli, VOLT_AMP_FARAD)),
+        bit(9, 1, Meaning::Prefix(Prefix::Kilo, OHM_HZ)),
+        bit(9, 0, Meaning::Unit(Unit::Ohm)),
+    ],
+    // An auto-only pocket meter: a prefix is a range step (spec §1).
+    prefix_names_position: false,
+    max_aux_values: 0,
+};
 
-/// The layout a type byte selects, where it is implemented.
+/// Every layout, by type byte: one for each type the apps define (spec §1).
+pub(super) static LAYOUTS: &[&Layout] = &[&ZT300AB, &ZT5566SE, &ZT5BQ, &ZT5B];
+
+/// The layout a type byte selects; `None` for a type no app defines.
 pub(super) fn for_type(type_byte: u8) -> Option<&'static Layout> {
     LAYOUTS
         .iter()
@@ -449,22 +491,16 @@ pub(super) fn for_type(type_byte: u8) -> Option<&'static Layout> {
         .find(|layout| layout.type_byte == type_byte)
 }
 
-/// The layout of a whole descrambled packet: header, a type byte whose
-/// layout is implemented, and that type's length (spec §5).
+/// The layout of a whole descrambled packet: header, a type byte with a
+/// layout, and that type's length (spec §5).
 pub(super) fn layout_of(packet: &[u8]) -> Result<&'static Layout> {
     if packet.len() <= TYPE_AT || !packet.starts_with(&HEADER) {
         return Err(Error::invalid_response("zotek: no 5A A5 header", packet));
     }
     let type_byte = packet[TYPE_AT];
-    let Some(len) = frame::packet_len(type_byte) else {
+    let (Some(layout), Some(len)) = (for_type(type_byte), frame::packet_len(type_byte)) else {
         return Err(Error::invalid_response(
             format!("zotek: no layout has type byte {type_byte:#04x}"),
-            packet,
-        ));
-    };
-    let Some(layout) = for_type(type_byte) else {
-        return Err(Error::invalid_response(
-            format!("zotek: the type-{type_byte} layout is not supported"),
             packet,
         ));
     };
@@ -480,8 +516,8 @@ pub(super) fn layout_of(packet: &[u8]) -> Result<&'static Layout> {
     Ok(layout)
 }
 
-/// The layout of `packet` if it looks like one a meter sends: whole, of an
-/// implemented type, and every digit a glyph the spec lists (spec §6.1),
+/// The layout of `packet` if it looks like one a meter sends: whole, of a
+/// known type, and every digit a glyph the spec lists (spec §6.1),
 /// which the words are built from too.
 pub(super) fn plausible(packet: &[u8]) -> Option<&'static Layout> {
     let layout = layout_of(packet).ok()?;
@@ -603,6 +639,7 @@ struct Lit {
     low_battery: bool,
     peak: bool,
     inrush: bool,
+    over_voltage: bool,
     secondary_percent: bool,
     secondary_hertz: bool,
     secondary_kilo: bool,
@@ -637,6 +674,7 @@ impl Lit {
                 Meaning::LowBattery => lit.low_battery = true,
                 Meaning::Peak => lit.peak = true,
                 Meaning::Inrush => lit.inrush = true,
+                Meaning::OverVoltage => lit.over_voltage = true,
                 Meaning::SecondaryPercent => lit.secondary_percent = true,
                 Meaning::SecondaryHertz => lit.secondary_hertz = true,
                 Meaning::SecondaryKilo => lit.secondary_kilo = true,
@@ -905,6 +943,7 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
         min: lit.min,
         max: lit.max,
         low_battery: lit.low_battery,
+        hv_warning: lit.over_voltage,
         dc: function.coupled() && lit.dc,
         ..StatusFlags::default()
     };
@@ -1581,7 +1620,112 @@ mod tests {
         assert!(matches!(m.value, MeasuredValue::Overload));
     }
 
+    // --- Type 2 (ZT-5B) ---------------------------------------------------
+
+    fn t2(glyphs: &str, dp_at: Option<usize>, flags: &[(usize, u8)]) -> Vec<u8> {
+        split_packet(2, glyphs, dp_at, false, flags)
+    }
+
+    /// Spec §9: 4.700 kΩ, the Bluetooth icon lit.
+    #[test]
+    fn type2_worked_example() {
+        let m = quiet(EXAMPLES[2].1);
+        assert_eq!(m.mode, "Ω");
+        assert_eq!(m.mode_raw, 0x06);
+        assert_eq!(m.unit, "kΩ");
+        assert_eq!(m.display_raw.as_deref(), Some("4.700"));
+        assert_eq!(value(&m), 4.7);
+        assert!(flags_set(&m).is_empty());
+    }
+
+    /// Every §7.3 bit, one at a time over a function where it needs one:
+    /// (bits, mode, mode_raw, unit, flags set).
+    #[test]
+    fn type2_every_annunciator() {
+        type Case = (
+            &'static [(usize, u8)],
+            &'static str,
+            u16,
+            &'static str,
+            &'static [&'static str],
+        );
+        let cases: &[Case] = &[
+            (&[(3, 0x08), (9, 0x01)], "Continuity", 0x07, "Ω", &[]),
+            (&[(3, 0x04), (8, 0x0A)], "AC V", 0x21, "V", &["hv_warning"]),
+            (&[(3, 0x02), (8, 0x06)], "DC V", 0x11, "V", &["hold", "dc"]),
+            (
+                &[(3, 0x01), (8, 0x06)],
+                "DC V",
+                0x11,
+                "V",
+                &["low_battery", "dc"],
+            ),
+            (&[(7, 0x80), (8, 0x06)], "DC V", 0x11, "V", &["dc"]),
+            (&[(7, 0x40), (8, 0x06)], "DC V", 0x11, "V", &["dc"]),
+            (&[(8, 0xC4)], "DC A", 0x13, "µA", &["dc"]),
+            (&[(8, 0x44)], "DC A", 0x13, "A", &["dc"]),
+            (&[(8, 0x48), (9, 0x04)], "AC A", 0x23, "mA", &[]),
+            (&[(8, 0x22)], "Diode", 0x08, "V", &[]),
+            (&[(8, 0x10)], "Capacitance", 0x09, "F", &[]),
+            (&[(8, 0x90)], "Capacitance", 0x09, "µF", &[]),
+            (&[(8, 0x11)], "Capacitance", 0x09, "nF", &[]),
+            (&[(8, 0x10), (9, 0x04)], "Capacitance", 0x09, "mF", &[]),
+            (&[(8, 0x0A), (9, 0x04)], "AC V", 0x21, "mV", &[]),
+            (&[(9, 0x80)], "°C", 0x0C, "°C", &[]),
+            (&[(9, 0x40)], "°F", 0x0D, "°F", &[]),
+            (&[(9, 0x20)], "Hz", 0x0A, "Hz", &[]),
+            (&[(9, 0x22)], "Hz", 0x0A, "kHz", &[]),
+            (&[(9, 0x28)], "Hz", 0x0A, "MHz", &[]),
+            (&[(9, 0x10)], "Duty %", 0x0B, "%", &[]),
+            (&[(9, 0x09)], "Ω", 0x06, "MΩ", &[]),
+            (&[(9, 0x01)], "Ω", 0x06, "Ω", &[]),
+        ];
+        for &(flags, mode, mode_raw, unit, set) in cases {
+            let m = quiet(&t2("1234", Some(2), flags));
+            assert_eq!(m.mode, mode, "{flags:02X?}");
+            assert_eq!(m.mode_raw, mode_raw, "{flags:02X?}");
+            assert_eq!(m.unit, unit, "{flags:02X?}");
+            assert_eq!(flags_set(&m), set, "{flags:02X?}");
+            assert_eq!(value(&m), 12.34);
+        }
+    }
+
+    /// Byte 7 bits 5-4: used by neither app, never set (spec §7.3, §11.4).
+    #[test]
+    fn type2_unread_bits_are_reported() {
+        for bits in [0x10, 0x20] {
+            let (_, reports) = reported(&t2("1234", None, &[(7, bits), (8, 0x06)]));
+            assert_eq!(reports.len(), 1, "{bits:#04x}: {reports:?}");
+            assert!(reports[0].starts_with("zt5b: "), "{reports:?}");
+        }
+    }
+
+    #[test]
+    fn type2_words() {
+        let m = quiet(&t2("Auto", None, &[(7, 0x80)]));
+        assert!(matches!(m.value, MeasuredValue::NoReading("Auto")));
+        let m = quiet(&t2(" EF ", None, &[(7, 0x80)]));
+        assert!(matches!(m.value, MeasuredValue::NcvLevel(0)));
+        let m = quiet(&t2("--  ", None, &[(7, 0x80)]));
+        assert!(matches!(m.value, MeasuredValue::NcvLevel(2)));
+        let m = quiet(&t2(" 0L ", Some(1), &[(8, 0x22)]));
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.mode, "Diode");
+    }
+
     // --- Every layout -----------------------------------------------------
+
+    /// Every type the apps define has a layout, the length the extractor
+    /// cuts it at, and a registry entry.
+    #[test]
+    fn every_defined_type_has_a_layout() {
+        for type_byte in 1..=4 {
+            let layout = for_type(type_byte).expect("a layout");
+            assert!(frame::packet_len(type_byte).is_some());
+            assert!(crate::protocol::registry::find_device(layout.id).is_some());
+        }
+        assert!(for_type(0).is_none() && for_type(5).is_none());
+    }
 
     /// No digit lit on the main display: no reading to give, so the packet
     /// is reported and refused, a sign or a point on the blanks included.

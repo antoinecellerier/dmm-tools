@@ -3,8 +3,7 @@
 Scope: the Bluetooth LE multimeters made by Shenzhen ZOTEK Instruments
 (深圳市众仪电测科技有限公司) and sold as ZOYI, ZOTEK, BSIDE and ANENG — the
 ZT-300AB, ZT-5B, ZT-5BQ, ZT-5566 family and ZT-6S, and ANENG's AN9002, V05B,
-ST207 and AN999S. The ZT-300AB's, ZT-5566SE's and ZT-5BQ's layouts are implemented,
-experimentally; this
+ST207 and AN999S. All four layouts are implemented, experimentally; this
 pair of documents records what they do on the wire, which the implementation
 builds on.
 

@@ -88,6 +88,10 @@ impl ZotekProtocol {
         Self::new(&layout::ZT5BQ)
     }
 
+    pub(crate) fn new_zt5b() -> Self {
+        Self::new(&layout::ZT5B)
+    }
+
     /// The layout a packet of `type_byte` is in, the first time it is not
     /// the entry's on this connection; `None` every other time.
     fn other_layout(&mut self, type_byte: u8) -> Option<&'static Layout> {
@@ -100,21 +104,6 @@ impl ZotekProtocol {
     }
 }
 
-/// Whether the read loop takes `packet`: a layout that is not implemented
-/// yet is reported and skipped.
-fn implemented(entry: &'static str, packet: &[u8]) -> bool {
-    let type_byte = packet[frame::TYPE_AT];
-    let known = layout::for_type(type_byte).is_some();
-    if !known {
-        report_unknown(
-            entry,
-            "packet type",
-            format_args!("{type_byte}, whose layout is not supported yet"),
-        );
-    }
-    known
-}
-
 impl Protocol for ZotekProtocol {
     fn init(&mut self, _transport: &dyn Transport) -> Result<()> {
         // The meter streams once connected; no app writes anything first
@@ -125,16 +114,16 @@ impl Protocol for ZotekProtocol {
 
     fn request_measurement(&mut self, transport: &dyn Transport) -> Result<Measurement> {
         // The extractor never fails, so the recovery mode and the skip
-        // pattern are never used. About 2.6 packets a second arrive
+        // pattern are never used, and it only cuts packets of the four
+        // types, each with a layout. About 2.6 packets a second arrive
         // (spec §11.4), well inside read_frame's 2 s. A packet with no digit
         // lit on the main display has no reading, so it is reported and
         // skipped for the next one.
-        let entry = self.layout.id;
         let packet = framing::read_frame(
             &mut self.rx_buf,
             transport,
             frame::extract_packet,
-            |p| implemented(entry, p) && layout::shows_digits(p),
+            layout::shows_digits,
             FrameErrorRecovery::Propagate,
             LOG,
             &frame::RAW_HEADER,
@@ -174,7 +163,7 @@ pub(crate) static FINGERPRINT: Fingerprint = Fingerprint {
     recognise,
 };
 
-/// One whole packet anywhere in `buf`: the on-air header, an implemented
+/// One whole packet anywhere in `buf`: the on-air header, a known
 /// type, that type's length, and every digit a listed glyph. There is no
 /// checksum (spec §5), so the glyphs are what stands in for one.
 fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
@@ -203,7 +192,7 @@ mod tests {
     /// Each worked example is recognised as its layout's entry.
     #[test]
     fn the_worked_examples_are_recognised_as_their_layouts() {
-        for (example, id) in [(0, "zt300ab"), (1, "zt5bq"), (3, "zt5566se")] {
+        for (example, id) in [(0, "zt300ab"), (1, "zt5bq"), (2, "zt5b"), (3, "zt5566se")] {
             let (raw, _) = EXAMPLES[example];
             assert_eq!(
                 recognise(raw, &Probing::default()),
@@ -273,21 +262,6 @@ mod tests {
         ZotekProtocol::new_zt300ab().init(&mock).unwrap();
         assert!(mock.written.borrow().is_empty());
         assert!(mock.feature_reports.borrow().is_empty());
-    }
-
-    /// A packet of a layout not implemented yet is reported and skipped.
-    #[test]
-    fn a_layout_not_implemented_yet_is_skipped() {
-        let (raw, plain) = EXAMPLES[0];
-        let (other, _) = EXAMPLES[2];
-        let mut stream = other.to_vec();
-        stream.extend_from_slice(raw);
-        let mock = MockTransport::new(vec![stream]);
-        let mut proto = ZotekProtocol::new_zt300ab();
-        let (m, reports) = crate::protocol::capture_reports(|| proto.request_measurement(&mock));
-        assert_eq!(m.unwrap().raw_payload, plain);
-        assert_eq!(reports.len(), 1, "{reports:?}");
-        assert!(reports[0].contains("packet type"), "{reports:?}");
     }
 
     /// Notifications arrive in pieces and back to back; each read returns

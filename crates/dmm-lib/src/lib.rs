@@ -1329,6 +1329,7 @@ mod tests {
             ("zt300ab", "Bluetooth DMM"),
             ("zt5566se", "Bluetooth DMM"),
             ("zt5bq", "Bluetooth DMM"),
+            ("zt5b", "Bluetooth DMM"),
         ] {
             assert_eq!(
                 peers(id),
@@ -1397,7 +1398,7 @@ mod tests {
             .collect();
         assert_eq!(
             bluetooth_only,
-            ["ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq"]
+            ["ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b"]
         );
         for kt in KNOWN_TRANSPORTS {
             assert!(

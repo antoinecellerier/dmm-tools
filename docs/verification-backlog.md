@@ -57,7 +57,7 @@ is probed with, and how well that probe is backed:
 | UT71A–E, VC920/VC940/VC960 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, claimed as a UT804 — the packet does not name its model, so the user names the meter | Never seen: no UT71 or VC9x0 packet has been captured ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
-| ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207 | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
+| ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
 
 Open questions, each needing a meter:
 
@@ -1693,11 +1693,12 @@ port scan** (80, 111, 5025, 49152 by firmware version).
 Specified 2026-09-25 from ZOTEK's three apps and six manuals
 (`docs/research/zotek/reverse-engineered-protocol.md`, §10). Implemented
 2026-09-26 as the `zotek` family, experimental, one registry entry per
-packet layout: `zt300ab` (type 3), `zt5566se` (type 4), `zt5bq` (type 1). Nobody on the project owns one, so where
-an item below is open the driver's choice is noted with it. Spec tables wait
-for a first real-device confirmation, as for every new meter; the ZOTEK
-manuals carry them. The clean-room boundary was opened the same
-day, after the spec: community captures (spec §11) answer several items
+packet layout: `zt300ab` (type 3), `zt5566se` (type 4), `zt5bq` (type 1),
+`zt5b` (type 2). Nobody on the project owns one, so where an item below is
+open the driver's choice is noted with it. Spec tables wait for a first
+real-device confirmation, as for every new meter; the ZOTEK manuals carry
+them. The clean-room boundary was opened the same day as the spec, after
+it: community captures (spec §11) answer several items
 below, but they are not our verification — each still wants a reporter's
 capture. One capture settles the most at once: **the name a meter advertises
 and a few seconds of its raw FFF4 notifications**, with the model, the
@@ -1793,7 +1794,9 @@ function shown and the LCD reading noted.
   capture.
 - **Type-2 over-voltage** (byte 3 bit 2, [INFERRED] from V2's name):
   community V05B captures show it set at 180 and 233 V AC and clear at low
-  voltage. Confirm with a reporter's capture.
+  voltage. Confirm with a reporter's capture. The driver shows it as the HV
+  warning flag. The capture plan has no step for it: that would put the
+  leads on mains.
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 
