@@ -20,7 +20,9 @@ Based on:
 
 Citation keys:
 - **V2@N** — byte offset N into
-  `references/zotek/e-bull-v2/unzipped/assets/apps/__UNI__59084C7/www/app-service.js`
+  `references/zotek/e-bull-v2/unzipped/assets/apps/__UNI__59084C7/www/app-service.js`;
+  `references/zotek/e-bull-v2/v2loc.py N` shows that spot in a readable copy,
+  `app-service.pretty.js`, whose lines keep their original offsets
 - **V1** — `references/zotek/e-bull-v1/jadx-out/sources/com/yscoco/multimeter/`;
   **BCU** = `ble/Util/BleComputeUtil.java`, **BMA** =
   `base/BaseMainActivity.java`, **DataParsing** = `ble/DataParsing.java`; **blue/** =
@@ -136,7 +138,8 @@ key = 41 21 73 55 A2 C1 32 71 66 AA 3B D0 E2 A8 33 14 20 1A AA BB
 ```
 
 Both apps hold the key as signed bytes
-(`{65,33,115,85,-94,-63,50,113,102,-86,59,-48,-30,-88,51,20,32,26,-86,-69}`).
+(`{65,33,115,85,-94,-63,50,113,102,-86,59,-48,-30,-88,51,20,32,26,-86,-69}`);
+V2's `Buffer.from` stores each as `255&v` (V2@47727).
 Commands to the meter are scrambled with the same key from byte 0 (§8). XOR is
 its own inverse, so one function does both [VENDOR].
 
@@ -255,7 +258,7 @@ only digit 2. Which positions the meters use is [UNVERIFIED].
 | Display | On the LCD | When | Tag |
 |---|---|---|---|
 | AUTO | `Auto` across the digits (5B p.1/-1-; 5BQ p.1/-1-, -4-) | auto mode before a reading: the meter shows one "only when the voltage is higher than 0.8V" (5B p.1/-3-; 5BQ p.1/-4-; 6S p.1/-3-); the ZT-300AB's AUTO dial position has the same rule (300AB p.12, p.14) but its own AUTO annunciator (legend #14) | look [KNOWN]; the "when" [INFERRED] |
-| EF | `EF` (the apps' patterns) | NCV, as both apps treat it (V2@253820; V1 BMA:504, 533) | [INFERRED] |
+| EF | `EF` (the apps' patterns) | NCV, as both apps treat it (V2@253820, only while no function flag is set, V2@1830549; V1 BMA:504, 533) | [INFERRED] |
 | dashes | one to four `-` (the apps' patterns) | NCV, as for EF; what the count means is not stated | meaning [UNVERIFIED] |
 | OL | `0L` | overload, open resistance, reversed diode (300AB p.6, p.16, p.17; 5566SE p.7, drawn `0L`) | [KNOWN] |
 
@@ -597,7 +600,10 @@ What the wire requires of any decoder:
 - The same bit means different things in different types (byte 3 bit 2 is
   Bluetooth in types 1 and 3, over-voltage in type 2, AUTO in type 4), so the
   type byte is read before any flag.
-- A blank digit is `00`, not a separate code.
+- A blank digit is `00`, not a separate code. The sign and DP bits sit in a
+  digit's high nibble whatever its glyph, so a blank digit carrying one reads
+  `10` [INFERRED from §6.2]; V2 shows that as OL (V2@1831370), and whether a
+  meter sends it is [UNVERIFIED] (§10).
 - Commands carry their own `AB CD` header and a checksum; received packets
   carry neither.
 
@@ -638,6 +644,8 @@ What the wire requires of any decoder:
     (Community captures: §11.)
 14. **Update rate on the air** against the LCD's 3 per second (§3).
     (Community captures: §11.)
+15. **A sign or DP on a blank digit** (`10`, Implementation Notes): whether a
+    meter sends one, e.g. a negative reading with a blank leading digit.
 
 ---
 

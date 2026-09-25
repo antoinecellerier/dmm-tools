@@ -1759,7 +1759,8 @@ function shown and the LCD reading noted.
   rules differ); community captures show OL as `0` `L` in digits 2-3 with the
   DP moving by range, EF in digits 2-3, and 1-4 NCV dashes filling from the
   left, and dashes also with INRUSH on an ST207 (spec §11). Confirm with a
-  reporter's capture; what a packet with two DP bits means (never seen).
+  reporter's capture; what a packet with two DP bits means (never seen);
+  whether a blank digit ever carries the sign or DP bit (`10`, spec §10).
 - **Rate.** Notifications per second against the LCD's 3 updates a second:
   about 2.6 a second on a community AN9002. Confirm with a reporter's
   capture.

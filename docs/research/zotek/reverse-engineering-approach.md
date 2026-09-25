@@ -198,7 +198,12 @@ and a fact without one is tagged [UNVERIFIED].
    ```
 
    V2 needed no decompiler: the APK was unzipped and `app-service.js` read
-   with `grep -bo` and byte slices (no beautifier was available offline).
+   with `grep -bo` and byte slices. Afterwards `pretty.js` (the acorn
+   tokenizer) wrote a readable copy whose lines keep their original offsets,
+   `app-service.pretty.js`, and `v2loc.py` resolves a `V2@N` citation to it
+   (both in `references/zotek/e-bull-v2/`). A second blind decode of V2 from
+   that copy found nothing new about the wire; it added the `Buffer.from`
+   masking and the blank-digit note (`findings/pretty-vs-recorded.md`).
 3. **Grouping.** One pass over all three apps for scan, GATT, writes, parser
    entry, descramble and model dispatch (`findings/protocol-groups.md`), with
    V1 and Bluetooth DMM `diff -rq`'d after a package rename. Result: one
