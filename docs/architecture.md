@@ -23,9 +23,10 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
-| `transport/ble/mod.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: connects it, subscribes to its UART characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
+| `transport/ble/mod.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: connects it, picks the GATT profile from its services (ISSC first, else FFF0), subscribes to that profile's notify characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
 | `transport/ble/search.rs` | Finds a Bluetooth peer by its advertised name, or the one an address names |
 | `transport/ble/issc.rs` | The ISSC transparent-UART profile's UUIDs, and the adapter's name prefix and heartbeat frame |
+| `transport/ble/fff0.rs` | The FFF0 profile's UUIDs: one characteristic, FFF4, carries both directions |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |

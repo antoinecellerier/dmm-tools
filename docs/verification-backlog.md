@@ -1718,7 +1718,8 @@ function shown and the LCD reading noted.
   lists FFF4 as write without response. Confirm on a reporter's meter, with
   GATT discovery on a type-1 and a type-4 meter (two community clients write
   FFF3), and whether write with response is also taken (V1 writes without
-  response; V2's runtime uses the characteristic's default).
+  response; V2's runtime uses the characteristic's default). The transport
+  writes without response unless FFF4 lists only writes with response.
 - **Replies.** Whether a key press draws an `AB`-led notification (the older
   app logs and drops those of 10 bytes or more as replies), and its format.
   No community source reports one. Still open.
@@ -1909,9 +1910,10 @@ the following needs someone's hardware.
   [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)).
 - **Design questions the next Bluetooth meter settles.** Left as they are
   until a meter needs otherwise:
-  - One GATT layout for every peer (ISSC service and characteristics, write
-    type, the UT-D07's heartbeat strip); the first non-ISSC meter settles
-    whether it becomes a per-entry profile.
+  - The GATT layout is picked from the peer's services, not per entry:
+    ISSC first, else FFF0/FFF4 (since 2026-09-25, `transport/ble/`). The
+    UT-D07's heartbeat strip runs on ISSC peers only; writes go without
+    response except to an FFF4 that lists only writes with response.
   - UT61+ streams whenever the link is Bluetooth: link, peer or family
     property? Settled by the UT117C/UT197/UT219PV group or a UT171/UT181A
     behind a UT-D07A.

@@ -1,16 +1,27 @@
 //! The ISSC transparent-UART profile, and what UNI-T's UT-D07 adapters add
 //! to it.
 
+use super::GattProfile;
 use std::collections::VecDeque;
+
+/// The profile. Every peer on it gets the adapter's heartbeat stripped: a
+/// meter with the radio built in never sends one, so that costs it nothing.
+pub(super) const ISSC_UART: GattProfile = GattProfile {
+    name: "ISSC transparent UART",
+    service: UART_SERVICE,
+    notify: UART_TX_CHARACTERISTIC,
+    write: UART_RX_CHARACTERISTIC,
+    strips_adapter_heartbeat: true,
+};
 
 /// ISSC transparent-UART service the UT-D07B carries
 /// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2), and the
 /// meters with Bluetooth built in too.
-pub(super) const UART_SERVICE: &str = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
+const UART_SERVICE: &str = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
 /// UART TX, meter → host: notifications carry the meter's frames (§2).
-pub(super) const UART_TX_CHARACTERISTIC: &str = "49535343-1e4d-4bd9-ba61-23c647249616";
+const UART_TX_CHARACTERISTIC: &str = "49535343-1e4d-4bd9-ba61-23c647249616";
 /// UART RX, host → meter: commands are written here (§2).
-pub(super) const UART_RX_CHARACTERISTIC: &str = "49535343-8841-43f4-a8d4-ecbe34729bb3";
+const UART_RX_CHARACTERISTIC: &str = "49535343-8841-43f4-a8d4-ecbe34729bb3";
 /// Local name prefix UNI-T's adapters advertise, uppercase: the UT-D07B
 /// advertises `UT-D07B` (research doc §2) and the UT-D07A a name starting
 /// `UT-D07A` (§7). A meter with the radio built in is named by the caller

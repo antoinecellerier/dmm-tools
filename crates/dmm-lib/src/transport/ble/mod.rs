@@ -8,6 +8,10 @@
 //! Everything Bluetooth-specific is here
 //! (`docs/research/ut-d07b/reverse-engineered-protocol.md`).
 //!
+//! A peer carries its byte stream over one of two GATT profiles, picked from
+//! the services it offers once connected: ISSC's transparent UART
+//! (`issc.rs`), or the FFF0/FFF4 one (`fff0.rs`).
+//!
 //! There is no background thread and no channel: the struct owns a
 //! current-thread tokio runtime and every btleplug call runs inside
 //! `block_on` on the caller's thread, so nothing runs between two transport
@@ -17,6 +21,7 @@
 //! hidraw, to be taken off at the next read. The framing layer resyncs on the
 //! next header, so no pump task is needed.
 
+mod fff0;
 mod issc;
 mod search;
 
@@ -25,19 +30,20 @@ use crate::error::{Error, Result};
 use crate::protocol::registry::SelectableDevice;
 use crate::transport::{BluetoothPeers, Transport};
 use btleplug::api::{
-    Central, CentralState, Characteristic, Manager as _, Peripheral as _, ValueNotification,
-    WriteType,
+    Central, CentralState, CharPropFlags, Characteristic, Manager as _, Peripheral as _,
+    ValueNotification, WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
+use fff0::FFF0;
 use futures::stream::{Stream, StreamExt};
-use issc::{UART_RX_CHARACTERISTIC, UART_SERVICE, UART_TX_CHARACTERISTIC, strip_heartbeats};
+use issc::{ISSC_UART, strip_heartbeats};
 use log::{debug, info, trace};
 use search::{
     Match, Standing, Target, built_in_meter_named, by_address, is_bd_addr, is_uuid, printable,
     search,
 };
 use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -65,16 +71,33 @@ const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(2);
 /// default ATT MTU of 23 bytes minus the three-byte write header.
 const DEFAULT_WRITE_CHUNK: usize = 20;
 
-/// A UNI-T peer, open and subscribed.
+/// A GATT layout a peer carries its byte stream on. UUIDs are lowercase:
+/// btleplug renders them that way, and the comparison is textual.
+#[derive(Debug, PartialEq, Eq)]
+struct GattProfile {
+    /// What the log calls it.
+    name: &'static str,
+    service: &'static str,
+    /// Meter → host: its notifications carry the stream.
+    notify: &'static str,
+    /// Host → meter: commands are written here.
+    write: &'static str,
+    /// Whether UNI-T's adapter heartbeat is taken off the stream.
+    strips_adapter_heartbeat: bool,
+}
+
+/// A peer, open and subscribed.
 pub(crate) struct Ble {
     /// Kept alive: dropping the manager tears the platform session down under
     /// the peripheral.
     _manager: Manager,
     _adapter: Adapter,
     peripheral: Peripheral,
+    /// The profile the peer's services picked.
+    profile: &'static GattProfile,
     /// Host → meter. The notify characteristic is not kept: it is only needed
     /// to subscribe, which the opener has already done.
-    rx_char: Characteristic,
+    write_char: Characteristic,
     notifications: RefCell<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>,
     /// Bytes a notification delivered that did not fit the caller's buffer.
     pending: RefCell<VecDeque<u8>>,
@@ -151,13 +174,14 @@ struct Opened {
     manager: Manager,
     adapter: Adapter,
     peripheral: Peripheral,
-    rx_char: Characteristic,
+    profile: &'static GattProfile,
+    write_char: Characteristic,
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
     built_in_meter: Option<&'static SelectableDevice>,
 }
 
-/// Open a peer and subscribe to its UART notifications.
+/// Open a peer and subscribe to its notifications.
 fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
     let rt = runtime()?;
     let opened = rt.block_on(connect(target))?;
@@ -166,7 +190,8 @@ fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
         _manager: opened.manager,
         _adapter: opened.adapter,
         peripheral: opened.peripheral,
-        rx_char: opened.rx_char,
+        profile: opened.profile,
+        write_char: opened.write_char,
         notifications: RefCell::new(opened.notifications),
         pending: RefCell::new(VecDeque::new()),
         heartbeats: Cell::new(0),
@@ -210,7 +235,8 @@ async fn central() -> Result<(Manager, Adapter)> {
     Ok((manager, adapter))
 }
 
-/// Find a peer, connect to it and subscribe to the UART characteristic.
+/// Find a peer, connect to it and subscribe to its profile's notify
+/// characteristic.
 async fn connect(target: Target<'_>) -> Result<Opened> {
     let selector = target.selector();
     let (manager, adapter) = central().await?;
@@ -270,19 +296,19 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
     // is up (an ATT error), and answer the next one: try once more on the
     // same link before giving it up. Both tries share one discovery bound.
     let deadline = tokio::time::Instant::now() + DISCOVERY_TIMEOUT;
-    let uart = match subscribe_uart(&peripheral, deadline).await {
+    let subscribed = match subscribe_profile(&peripheral, deadline).await {
         Err(e) => {
             debug!("Bluetooth: link setup failed, trying once more: {e}");
             tokio::time::sleep_until(deadline.min(tokio::time::Instant::now() + SETUP_RETRY_PAUSE))
                 .await;
-            subscribe_uart(&peripheral, deadline).await
+            subscribe_profile(&peripheral, deadline).await
         }
-        uart => uart,
+        subscribed => subscribed,
     };
     // From here on the link is up, so a failure has to take it down again:
     // left connected, the peer stays awake with nobody reading it.
-    let (rx_char, notifications) = match uart {
-        Ok(uart) => uart,
+    let (profile, write_char, notifications) = match subscribed {
+        Ok(subscribed) => subscribed,
         Err(e) => {
             disconnect(&peripheral).await;
             return Err(e);
@@ -298,52 +324,131 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         manager,
         adapter,
         peripheral,
-        rx_char,
+        profile,
+        write_char,
         notifications,
         selector,
         built_in_meter: built_in_meter_named(candidate.name.as_deref()),
     })
 }
 
-/// Find the UART characteristics on a connected peer and subscribe to its
-/// notifications, handing back the write characteristic and the stream.
-async fn subscribe_uart(
+/// Find a profile on a connected peer and subscribe to its notifications,
+/// handing back the profile, the write characteristic and the stream.
+///
+/// The service tree fills in as the platform resolves it, so it is looked
+/// at again until a profile is there or the deadline passes. What one look
+/// sees depends on the backend (btleplug 0.13):
+/// - CoreBluetooth answers `discover_services` once every service's
+///   characteristics are in, so each look is the whole tree.
+/// - WinRT lists the services all at once, but leaves out of that look any
+///   service whose characteristics failed to load, and tries it again at the
+///   next.
+/// - BlueZ's is a snapshot of the objects the daemon exports at that moment,
+///   with no wait for it to finish resolving. The connect waits for that,
+///   but a peer that was already linked skips the connect, and one whose
+///   connect timed out with the link up goes on without it.
+///
+/// So one look can miss a service the peer has. ISSC is taken the moment it
+/// is complete, as before there was a second profile: it comes first, so
+/// nothing that arrives later can change the choice. FFF0 is the fallback,
+/// taken once two looks in a row saw the same tree — one that stopped
+/// changing, so an ISSC service still resolving had its chance — or at the
+/// deadline.
+async fn subscribe_profile(
     peripheral: &Peripheral,
     deadline: tokio::time::Instant,
 ) -> Result<(
+    &'static GattProfile,
     Characteristic,
     Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
 )> {
-    // The service tree fills in as the platform resolves it, so look again
-    // until both UART characteristics are there or the deadline passes.
-    let (rx_char, tx_char) = loop {
+    let mut last_look = None;
+    let chosen = loop {
         peripheral.discover_services().await.map_err(link_error)?;
         let characteristics = peripheral.characteristics();
-        let uart = |uuid: &str| {
-            characteristics
-                .iter()
-                .find(|c| c.service_uuid.to_string() == UART_SERVICE && c.uuid.to_string() == uuid)
-                .cloned()
-        };
-        match (uart(UART_RX_CHARACTERISTIC), uart(UART_TX_CHARACTERISTIC)) {
-            (Some(rx), Some(tx)) => break (rx, tx),
-            (rx, _) if tokio::time::Instant::now() >= deadline => {
-                return Err(missing_characteristic(if rx.is_none() {
-                    "write"
-                } else {
-                    "notify"
-                }));
+        let past_deadline = tokio::time::Instant::now() >= deadline;
+        match choose_profile(&characteristics) {
+            Ok(chosen) if chosen.profile == &ISSC_UART => break chosen,
+            Ok(chosen) if past_deadline || last_look.as_ref() == Some(&characteristics) => {
+                break chosen;
             }
-            _ => tokio::time::sleep(DISCOVERY_POLL).await,
+            Err(role) if past_deadline => return Err(missing_characteristic(role)),
+            _ => {}
         }
+        last_look = Some(characteristics);
+        tokio::time::sleep(DISCOVERY_POLL).await;
+    };
+    debug!("Bluetooth: {} profile", chosen.profile.name);
+
+    // Bring-up is subscribe and go on either profile: nothing is written to
+    // any other characteristic first (research doc §3;
+    // `docs/research/zotek/reverse-engineered-protocol.md` §3).
+    peripheral
+        .subscribe(&chosen.notify)
+        .await
+        .map_err(link_error)?;
+    let notifications = peripheral.notifications().await.map_err(link_error)?;
+    Ok((chosen.profile, chosen.write, notifications))
+}
+
+/// A profile's characteristics, as one look at a peer's services found them.
+struct Chosen {
+    profile: &'static GattProfile,
+    notify: Characteristic,
+    write: Characteristic,
+}
+
+/// The profile a peer's discovered characteristics carry, or the role
+/// (`"write"` or `"notify"`) that is missing.
+///
+/// ISSC first, by its two characteristics alone, as before there was a
+/// second profile. Then FFF0, whose one characteristic has to both notify
+/// and take a write: FFF0 is a common service on generic modules, so it is
+/// held to what the stream needs. No known ISSC peer has an FFF0 service
+/// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2); one that
+/// carried both would be read over ISSC.
+fn choose_profile(
+    characteristics: &BTreeSet<Characteristic>,
+) -> std::result::Result<Chosen, &'static str> {
+    let find = |service: &str, uuid: &str| {
+        characteristics
+            .iter()
+            .find(|c| c.service_uuid.to_string() == service && c.uuid.to_string() == uuid)
+    };
+    let chosen = |profile, notify: &Characteristic, write: &Characteristic| Chosen {
+        profile,
+        notify: notify.clone(),
+        write: write.clone(),
     };
 
-    // Bring-up is subscribe and go: the meter answers a command written to
-    // the RX characteristic with a notification, with nothing written to the
-    // control characteristic first (research doc §3).
-    peripheral.subscribe(&tx_char).await.map_err(link_error)?;
-    let notifications = peripheral.notifications().await.map_err(link_error)?;
-    Ok((rx_char, notifications))
+    let issc_notify = find(ISSC_UART.service, ISSC_UART.notify);
+    let issc_write = find(ISSC_UART.service, ISSC_UART.write);
+    if let (Some(notify), Some(write)) = (issc_notify, issc_write) {
+        return Ok(chosen(&ISSC_UART, notify, write));
+    }
+
+    let fff0_notify = find(FFF0.service, FFF0.notify).filter(|c| {
+        // Indications carry the stream as well: btleplug's subscribe takes
+        // whichever the characteristic offers, as ZOTEK's current app does
+        // (spec §2).
+        c.properties
+            .intersects(CharPropFlags::NOTIFY | CharPropFlags::INDICATE)
+    });
+    let fff0_write = find(FFF0.service, FFF0.write).filter(|c| {
+        c.properties
+            .intersects(CharPropFlags::WRITE | CharPropFlags::WRITE_WITHOUT_RESPONSE)
+    });
+    if let (Some(notify), Some(write)) = (fff0_notify, fff0_write) {
+        return Ok(chosen(&FFF0, notify, write));
+    }
+
+    // Name what the closer profile lacks; ISSC when neither has anything,
+    // which is what a peer with no known profile always heard.
+    let fff0_closer = issc_notify.is_none()
+        && issc_write.is_none()
+        && (fff0_notify.is_some() || fff0_write.is_some());
+    let write = if fff0_closer { fff0_write } else { issc_write };
+    Err(if write.is_none() { "write" } else { "notify" })
 }
 
 /// Take the link down, bounded: a stack that does not answer must not hold
@@ -401,10 +506,29 @@ fn link_error(e: btleplug::Error) -> Error {
     }
 }
 
-/// The peer answered but carries no transparent UART.
+/// How to write to `write_char`: unacknowledged wherever the peer takes it.
+///
+/// An acknowledged write costs a round trip per poll (0.8 s against 0.63 s
+/// per reading on our adapter), and a dead link is caught by `read_timeout`
+/// instead. ISSC peers are always written that way. An FFF4 that lists only
+/// acknowledged writes gets those, as ZOTEK's current app writes with the
+/// characteristic's own type (`docs/research/zotek/reverse-engineered-protocol.md` §2).
+fn write_type(profile: &GattProfile, write_char: &Characteristic) -> WriteType {
+    let props = write_char.properties;
+    if *profile == ISSC_UART
+        || props.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
+        || !props.contains(CharPropFlags::WRITE)
+    {
+        WriteType::WithoutResponse
+    } else {
+        WriteType::WithResponse
+    }
+}
+
+/// The peer answered but carries neither profile.
 fn missing_characteristic(role: &str) -> Error {
     Error::Bluetooth(format!(
-        "the Bluetooth device has no UART {role} characteristic — \
+        "the Bluetooth device has no data {role} characteristic we recognise — \
          it is not a supported adapter or meter, or its services never resolved"
     ))
 }
@@ -413,13 +537,11 @@ impl Transport for Ble {
     fn write(&self, data: &[u8]) -> Result<()> {
         let chunk = write_chunk_size(self.peripheral.mtu());
         trace!("Bluetooth TX ({} bytes): {data:02X?}", data.len());
-        // Unacknowledged: an acknowledged write costs a round trip per poll
-        // (0.8 s against 0.63 s per reading on our adapter). A dead link is
-        // caught by `read_timeout` instead.
+        let write_type = write_type(self.profile, &self.write_char);
         self.rt.block_on(async {
             for part in data.chunks(chunk) {
                 self.peripheral
-                    .write(&self.rx_char, part, WriteType::WithoutResponse)
+                    .write(&self.write_char, part, write_type)
                     .await
                     .map_err(link_error)?;
             }
@@ -451,19 +573,21 @@ impl Transport for Ble {
 
         match received {
             Ok(Some(note)) => {
-                // Only the UART characteristic is subscribed, so anything
-                // else is the platform replaying a subscription we did not
-                // make; its bytes are not UART payload.
-                if note.uuid.to_string() != UART_TX_CHARACTERISTIC {
+                // Only the profile's notify characteristic is subscribed, so
+                // anything else is the platform replaying a subscription we
+                // did not make; its bytes are not the meter's.
+                if note.uuid.to_string() != self.profile.notify {
                     debug!("Bluetooth: ignoring a notification from {}", note.uuid);
                     return Ok(0);
                 }
                 let mut pending = self.pending.borrow_mut();
                 pending.extend(note.value.iter().copied());
-                let stripped = strip_heartbeats(&mut pending);
-                if stripped > 0 {
-                    self.heartbeats.set(self.heartbeats.get() + stripped);
-                    debug!("Bluetooth: adapter heartbeat ({stripped})");
+                if self.profile.strips_adapter_heartbeat {
+                    let stripped = strip_heartbeats(&mut pending);
+                    if stripped > 0 {
+                        self.heartbeats.set(self.heartbeats.get() + stripped);
+                        debug!("Bluetooth: adapter heartbeat ({stripped})");
+                    }
                 }
                 let n = drain_pending(&mut pending, buf);
                 trace!("Bluetooth RX ({n} bytes): {:02X?}", &buf[..n]);
@@ -508,11 +632,11 @@ impl Transport for Ble {
     }
 
     fn transport_status(&self) -> Result<String> {
-        let mut status = format!(
-            "MTU: {} bytes, adapter heartbeats: {}",
-            self.peripheral.mtu(),
-            self.heartbeats.get()
-        );
+        let mut status = format!("MTU: {} bytes", self.peripheral.mtu());
+        // Only a profile an adapter can sit on has heartbeats to count.
+        if self.profile.strips_adapter_heartbeat {
+            status.push_str(&format!(", adapter heartbeats: {}", self.heartbeats.get()));
+        }
         self.rt.block_on(async {
             // Both are best-effort: no backend exposes all of it, and a
             // reporter's `info` output is more useful with what it does.
@@ -601,6 +725,143 @@ mod tests {
                 bluetooth_searched: true
             }
         ));
+    }
+
+    /// One characteristic as discovery reports it.
+    fn characteristic(service: &str, uuid: &str, properties: CharPropFlags) -> Characteristic {
+        Characteristic {
+            uuid: uuid.parse().unwrap(),
+            service_uuid: service.parse().unwrap(),
+            properties,
+            descriptors: BTreeSet::new(),
+        }
+    }
+
+    /// The UART characteristics with the flags the UT-D07B lists
+    /// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2).
+    fn issc() -> [Characteristic; 2] {
+        [
+            characteristic(ISSC_UART.service, ISSC_UART.notify, CharPropFlags::NOTIFY),
+            characteristic(
+                ISSC_UART.service,
+                ISSC_UART.write,
+                CharPropFlags::WRITE | CharPropFlags::WRITE_WITHOUT_RESPONSE,
+            ),
+        ]
+    }
+
+    /// FFF4 with `properties`.
+    fn fff4(properties: CharPropFlags) -> Characteristic {
+        characteristic(FFF0.service, FFF0.notify, properties)
+    }
+
+    /// FFF4 with the flags a ZT-5B lists
+    /// (`docs/research/zotek/reverse-engineered-protocol.md` §11.4).
+    fn fff4_as_listed() -> Characteristic {
+        fff4(CharPropFlags::READ | CharPropFlags::WRITE_WITHOUT_RESPONSE | CharPropFlags::NOTIFY)
+    }
+
+    /// The name of the profile `characteristics` pick, or the missing role.
+    fn choose(
+        characteristics: impl IntoIterator<Item = Characteristic>,
+    ) -> std::result::Result<&'static str, &'static str> {
+        choose_profile(&characteristics.into_iter().collect()).map(|c| c.profile.name)
+    }
+
+    /// A peer with ISSC is read over it, even beside an FFF0 service, with
+    /// the TX characteristic subscribed and the RX one written.
+    #[test]
+    fn issc_is_chosen_first() {
+        assert_eq!(choose(issc()), Ok(ISSC_UART.name));
+        assert_eq!(
+            choose(issc().into_iter().chain([fff4_as_listed()])),
+            Ok(ISSC_UART.name)
+        );
+
+        let chosen = choose_profile(&issc().into_iter().collect()).unwrap();
+        assert_eq!(chosen.notify.uuid.to_string(), ISSC_UART.notify);
+        assert_eq!(chosen.write.uuid.to_string(), ISSC_UART.write);
+    }
+
+    /// A peer with FFF0 alone is read over FFF4 both ways, whichever write
+    /// it takes.
+    #[test]
+    fn fff0_is_chosen_without_issc() {
+        assert_eq!(choose([fff4_as_listed()]), Ok(FFF0.name));
+        assert_eq!(
+            choose([fff4(CharPropFlags::WRITE | CharPropFlags::NOTIFY)]),
+            Ok(FFF0.name)
+        );
+
+        let chosen = choose_profile(&[fff4_as_listed()].into_iter().collect()).unwrap();
+        assert_eq!(chosen.notify.uuid.to_string(), FFF0.notify);
+        assert_eq!(chosen.write, chosen.notify);
+    }
+
+    /// An FFF4 that only indicates still carries the stream: btleplug
+    /// subscribes to whichever the characteristic offers.
+    #[test]
+    fn fff4_may_indicate_instead_of_notify() {
+        assert_eq!(
+            choose([fff4(
+                CharPropFlags::WRITE_WITHOUT_RESPONSE | CharPropFlags::INDICATE
+            )]),
+            Ok(FFF0.name)
+        );
+    }
+
+    /// Writes go unacknowledged wherever the peer takes that: always on
+    /// ISSC, and on an FFF4 unless it lists acknowledged writes alone.
+    #[test]
+    fn write_type_follows_what_fff4_takes() {
+        let [_, issc_write] = issc();
+        assert_eq!(
+            write_type(&ISSC_UART, &issc_write),
+            WriteType::WithoutResponse
+        );
+        assert_eq!(
+            write_type(&FFF0, &fff4_as_listed()),
+            WriteType::WithoutResponse
+        );
+        assert_eq!(
+            write_type(&FFF0, &fff4(CharPropFlags::WRITE | CharPropFlags::NOTIFY)),
+            WriteType::WithResponse
+        );
+    }
+
+    /// An FFF4 that cannot carry the stream both ways is no profile, and the
+    /// error names what it lacks.
+    #[test]
+    fn fff4_needs_notify_and_a_write() {
+        assert_eq!(
+            choose([fff4(CharPropFlags::READ | CharPropFlags::NOTIFY)]),
+            Err("write")
+        );
+        assert_eq!(
+            choose([fff4(
+                CharPropFlags::READ | CharPropFlags::WRITE_WITHOUT_RESPONSE
+            )]),
+            Err("notify")
+        );
+        assert_eq!(choose([fff4(CharPropFlags::READ)]), Err("write"));
+    }
+
+    /// A peer with neither profile fails as it did with ISSC alone; a known
+    /// characteristic under another service does not count.
+    #[test]
+    fn a_peer_with_neither_profile_is_refused() {
+        assert_eq!(choose([]), Err("write"));
+        assert_eq!(
+            choose([characteristic(
+                "0000180a-0000-1000-8000-00805f9b34fb",
+                FFF0.notify,
+                CharPropFlags::WRITE | CharPropFlags::NOTIFY,
+            )]),
+            Err("write")
+        );
+        let [notify, write] = issc();
+        assert_eq!(choose([notify]), Err("write"));
+        assert_eq!(choose([write]), Err("notify"));
     }
 
     /// An over-MTU write is rejected by the peer, so the chunk size has to
