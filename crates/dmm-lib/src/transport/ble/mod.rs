@@ -94,6 +94,8 @@ pub(crate) struct Ble {
     /// Host → meter. The notify characteristic is not kept: it is only needed
     /// to subscribe, which the opener has already done.
     write_char: Characteristic,
+    /// The ATT MTU, as [`read_mtu`] found it when the link was set up.
+    mtu: u16,
     notifications: RefCell<Pin<Box<dyn Stream<Item = ValueNotification> + Send>>>,
     /// Bytes a notification delivered that did not fit the caller's buffer.
     pending: RefCell<VecDeque<u8>>,
@@ -172,6 +174,7 @@ struct Opened {
     peripheral: Peripheral,
     profile: &'static GattProfile,
     write_char: Characteristic,
+    mtu: u16,
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
     advertised_name: Option<String>,
@@ -188,6 +191,7 @@ fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
         peripheral: opened.peripheral,
         profile: opened.profile,
         write_char: opened.write_char,
+        mtu: opened.mtu,
         notifications: RefCell::new(opened.notifications),
         pending: RefCell::new(VecDeque::new()),
         heartbeats: Cell::new(0),
@@ -311,6 +315,11 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         }
     };
 
+    let Some(mtu) = read_mtu(&peripheral) else {
+        disconnect(&peripheral).await;
+        return Err(Error::LinkLost);
+    };
+
     let selector = candidate.selector();
     info!(
         "connected to {} over Bluetooth ({selector})",
@@ -322,10 +331,30 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         peripheral,
         profile,
         write_char,
+        mtu,
         notifications,
         selector,
         advertised_name: candidate.taken_by,
     })
+}
+
+/// The link's ATT MTU, read once while the link is being set up.
+///
+/// btleplug 0.13's BlueZ backend unwraps a characteristic's MTU that BlueZ
+/// leaves unset while it re-creates a reconnected peer's GATT objects (seen
+/// on a UT-D07B switched off and on, 2026-09-26). The panic fires with the
+/// peripheral's service lock held, poisoning it for every later call, so it
+/// is caught here, once, and the open fails as a lost link: the caller's
+/// next try gets a fresh peripheral. Writes use the value read here and never
+/// ask again.
+fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| peripheral.mtu())) {
+        Ok(mtu) => Some(mtu),
+        Err(_) => {
+            debug!("Bluetooth: the platform could not report the MTU yet");
+            None
+        }
+    }
 }
 
 /// Find a profile on a connected peer and subscribe to its notifications,
@@ -531,7 +560,7 @@ fn missing_characteristic(role: &str) -> Error {
 
 impl Transport for Ble {
     fn write(&self, data: &[u8]) -> Result<()> {
-        let chunk = write_chunk_size(self.peripheral.mtu());
+        let chunk = write_chunk_size(self.mtu);
         trace!("Bluetooth TX ({} bytes): {data:02X?}", data.len());
         let write_type = write_type(self.profile, &self.write_char);
         self.rt.block_on(async {
@@ -628,7 +657,7 @@ impl Transport for Ble {
     }
 
     fn transport_status(&self) -> Result<String> {
-        let mut status = format!("MTU: {} bytes", self.peripheral.mtu());
+        let mut status = format!("MTU: {} bytes", self.mtu);
         // Only a profile an adapter can sit on has heartbeats to count.
         if self.profile.strips_adapter_heartbeat {
             status.push_str(&format!(", adapter heartbeats: {}", self.heartbeats.get()));
