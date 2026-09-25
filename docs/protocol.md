@@ -5,6 +5,10 @@ Each supported meter family has its own wire protocol documented under
 documents are the authoritative reference for transport, framing, mode
 tables, flag bytes, command encoding, and hardware-verified behavior.
 
+The protocols are documented from the vendors' own software and manuals for
+interoperability: so that owners can read and control their meters from
+other programs.
+
 ## UNI-T
 
 - [UT61+ / UT161 family](research/ut61-family/reverse-engineered-protocol.md)
