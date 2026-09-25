@@ -95,9 +95,10 @@ All ZOTEK's own, or ZOTEK's distributors'. Fetched 2026-09-25, analysed
    and the szzotek.com code now lead to e-Bull V2 (iOS id6755057944, Android
    https://fir.xcxwo.com/yt7h8e). Which build fir serves was not retrieved.
 
-### Avoided (clean-room boundary)
+### Avoided during the vendor analysis
 
-These turned up in searches and were **not opened**:
+These turned up in searches and were **not opened** while §1-10 of the spec
+were written:
 
 - github.com/ludwich66/Bluetooth-DMM and its wiki
 - github.com/webspiderteam/Bluetooth-DMM-For-Windows and its YouTube video
@@ -114,25 +115,72 @@ These turned up in searches and were **not opened**:
 - APK mirrors (Aptoide, APKCombo, APKPure, APKSum): listing pages only, no
   APK taken from one
 
-webspiderteam and libreble were opened on 2026-09-22 and 2026-09-25 for the
-UNI-T adapter and meters, limited to the files listed in
+webspiderteam and libreble had been opened on 2026-09-22 and 2026-09-25 for
+the UNI-T adapter and meters, limited to the files listed in
 `../ut-d07b/reverse-engineering-approach.md` and
-`../ut61-family/reverse-engineering-approach.md`; nothing from them is used
-here. The earlier lines on these meters in `../new-device-candidates.md`
+`../ut61-family/reverse-engineering-approach.md`; nothing from them was used
+for §1-10. The earlier lines on these meters in `../new-device-candidates.md`
 (packet lengths, the `fff4` UUID) came from the April 2026 survey and were
 replaced with what the vendor apps show.
 
-Community code stays closed until the user opens the boundary. When it is
-opened, the date and what was read go here, and the findings go to a
-labelled cross-reference section at the end of the spec, not into its body.
+### Cross-referenced (clean-room boundary opened 2026-09-25)
+
+The user opened the boundary on **2026-09-25**, after the vendor-only spec
+was committed and grounding-checked. The findings are §11 of the spec,
+marked [COMMUNITY]; nothing was merged into §1-10. Working notes:
+`findings/community-crossref.md` (the comparison) and
+`findings/vendor-recheck.md` (methodology step 8). Repositories were
+cloned into a scratch directory and deleted afterwards; no community code
+was copied.
+
+Read on 2026-09-25:
+
+1. [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM) and
+   its wiki: Home, Bluetooth---Analyses, Protocol-all-Variants, the 10- and
+   11-byte pages, Technical-Data-Multimeter-(4), BT-Module-F9788Scematic,
+   File-Export.
+2. [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows),
+   `2b83d9e` (2026-05-01) with its history: README, LICENSE,
+   `Binary raw data.md`, `Decoders/DecoderBluetoothDMM.cs`, `GattMonitor.cs`,
+   the test data in `Utilities.cs`, `HeartRateMonitor.cs` at `9cc2307^`; the
+   wiki page Remote-Features; issues #2, #3, #29, #33, #36, #45, #58 and #69
+   and discussions #30, #35, #41 and #65 with their comments.
+3. [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48`:
+   `docs/protocols/bdm.md`, `docs/HARDWARE.md`,
+   `packages/protocol/src/drivers/bdm.ts`.
+4. riktw: https://justanotherelectronicsblog.com/?p=930 and
+   [riktw/AN9002_info](https://github.com/riktw/AN9002_info).
+5. [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy), `adapters/aneng.py`
+   and README.
+6. [meijerwynand/bt-multimeter-cli](https://github.com/meijerwynand/bt-multimeter-cli),
+   [hoeulm/ble_aneng](https://github.com/hoeulm/ble_aneng),
+   [bendtherules/multimeter-connect-web](https://github.com/bendtherules/multimeter-connect-web),
+   [Shiro-Nek0/Bluetooth-DMM.py](https://github.com/Shiro-Nek0/Bluetooth-DMM.py),
+   [840922704/BLE_DMM_Client](https://github.com/840922704/BLE_DMM_Client),
+   [blackPantherOS/AN9002](https://github.com/blackPantherOS/AN9002) and
+   [anszom's gist](https://gist.github.com/anszom/732b5b7dda9ccb624980153dff1d7c1f).
+7. Searched with nothing found: [libsigrok](https://github.com/sigrokproject/libsigrok)
+   `0bc2487` and the sigrok wiki's API search; the GitHub topics zt-300ab,
+   zt-5b, zt-5bq, v05b, an9002, zt-5566, an999s, st207, zoyi, aneng and
+   bluetooth-dmm (which found the repositories above).
+8. Opened in full this time, no protocol content: wiki.seeedstudio.com's
+   Bluetooth multimeter page, blog.jj5.net's AN-999S post (the jj5.net wiki
+   again denied access), the BudgetLightForum V05B thread (pages 1 and 2) and
+   ts-software-jp.net's TSDMMView pages.
+
+Still not opened: BLE_DMM_Client's `Reference/*.zip` (a vendor APK and its
+decompilation; we have our own copies from ZOTEK), issue attachments
+(`log.txt`, `btsnoop_hci.log`, `.ods`), YouTube videos, EEVblog,
+lab.fawno.com, m5.8266.de, mysku, blackPantherOS/Aneng-Bluetooth-DMM, the
+libreble demo, and APK mirrors.
 
 ### Model-recall disclosure
 
 The assistant that wrote these documents was likely trained on community
 write-ups of this protocol (the projects above among them). Recall was never
-used as a source: every fact in `reverse-engineered-protocol.md` cites a
-vendor app location (`file:line` or `V2@offset`) or a manual page, and a
-fact without one is tagged [UNVERIFIED].
+used as a source: every fact in §1-10 of `reverse-engineered-protocol.md`
+cites a vendor app location (`file:line` or `V2@offset`) or a manual page,
+and a fact without one is tagged [UNVERIFIED].
 
 ## Methodology
 
@@ -170,6 +218,18 @@ fact without one is tagged [UNVERIFIED].
    (`findings/manuals-small.md`) and the ZT-5566 family
    (`findings/manuals-5566.md`). Each type's flag set was compared with the
    LCD legend of the model its identifier names.
+7. **Community cross-reference** (boundary opened 2026-09-25, above). Each
+   claim of spec §1-10 compared with the community sources, noting for each
+   source whether it rests on hardware captures or on the vendor app
+   (`findings/community-crossref.md`).
+8. **Vendor re-check.** Each disputed point went back to the vendor code as
+   a neutral question, without the community claim, answered from V1, BD and
+   V2 alone, with baksmali (from the jadx jar) wherever jadx output was
+   garbled (`findings/vendor-recheck.md`). The spec's reading of the apps
+   held in every case; the one misreading it found, V1's dash tests as jadx
+   renders them, is already corrected in the committed spec. So each
+   disagreement in spec §11.3 sets a meter capture against the vendor code
+   or the spec's own example, or is a community error.
 
 Resolved disagreements (`findings/adjudication.md`):
 
@@ -184,7 +244,7 @@ Resolved disagreements (`findings/adjudication.md`):
    examples); the on-LCD `0L` from the manuals; which positions the meters
    use [UNVERIFIED].
 5. Type-4 byte 13 bit 4: a colon, [INFERRED] from V1 and the ZT-5566's
-   `1.8.8:8.8` readout.
+   `1.8.8:8.8` readout (a community capture disputes it: spec §11.3 D1).
 6. Type-4 secondary display (bytes 5–8): V2's decode, which V1 ignores.
 7. Unknown type bytes: only 1–4 defined (V1 parses others with the type-1 layout,
    labelled `S_5G`; V2 drops them).
@@ -203,3 +263,4 @@ As used in `reverse-engineered-protocol.md`:
 - **[INFERRED]** — logical inference from the above, reason given
 - **[UNVERIFIED]** — no source confirms it; needs a real meter
 - **[HARDWARE]** — seen on a real meter: none yet for this family
+- **[COMMUNITY]** — from a community source, spec §11 only

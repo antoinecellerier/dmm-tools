@@ -5,8 +5,9 @@ and ANENG — send and accept. One protocol: every notification is XOR-scrambled
 with a fixed 20-byte key, starts `5A A5` once descrambled, and carries a type
 byte that selects one of four packet layouts, each a dump of the meter's LCD
 segments and annunciators. Nothing here is implemented, and no meter has been
-on our bench: every fact comes from ZOTEK's apps and manuals. The approach doc
-beside it records the sources, the method and the clean-room boundary.
+on our bench: every fact in §1-10 comes from ZOTEK's apps and manuals, and
+§11 compares them with community sources. The approach doc beside it records
+the sources, the method and the clean-room boundary.
 
 Based on:
 - e-Bull V2 1.1.2 (`com.zoyi.bleapp`), a uni-app whose protocol code is the
@@ -45,6 +46,7 @@ Confidence levels:
 - **[INFERRED]** — logical inference from the above, reason given
 - **[UNVERIFIED]** — no source confirms it; needs a real meter (all in §10)
 - **[HARDWARE]** — seen on a real meter: none yet for this family
+- **[COMMUNITY]** — from a community source, §11 only; never in §1-10
 
 ---
 
@@ -246,9 +248,9 @@ by different rules [VENDOR]:
   `----` as digits 2, 3 and 4 are dashes too (BCU:155-166; jadx inverts the
   digit-2 test there, the smali does not).
 
-The rules disagree on §9's EF example (`E`, `F` in digits 3-4): V2 reads it
-as EF, V1 shows the glyphs but not as EF, since it checks only digit 2.
-Which positions the meters use is [UNVERIFIED].
+The rules agree on §9's examples. They disagree when `E`, `F` sit in digits
+3-4: V2 reads that as EF, V1 shows the glyphs but not as EF, since it checks
+only digit 2. Which positions the meters use is [UNVERIFIED].
 
 | Display | On the LCD | When | Tag |
 |---|---|---|---|
@@ -529,13 +531,13 @@ Digits: `0A`+sign (byte 3 high `1`, byte 4 low `A`) = 1 with minus; `AD` = 2;
 `9F` = 3 with DP (byte 5 bit 4, two decimals); `4E` = 4. Byte 3 bit 2
 Bluetooth; byte 9 = `50`: DC, V; byte 10 = `01`: AUTO.
 
-**Type 3 special displays**, bytes 3-7 (node-checked against V2; V1 reads
-the EF one differently, §6.4):
+**Type 3 special displays**, bytes 3-7 (node-checked against V2; each also
+reads the same in V1's rules, §6.4):
 
 | Display | Bytes 3-7 |
 |---|---|
 | AUTO | `E0 2E 63 25 07` |
-| EF | `00 00 E0 E5 04` |
+| EF | `04 E0 E5 04 00` |
 | OL | `00 E0 6B 01 00` |
 | `----` | `00 04 04 04 04` |
 
@@ -603,30 +605,140 @@ What the wire requires of any decoder:
 
 1. **Model ↔ type byte.** Every row of §1: ZT-5BQ → 1, ZT-5B → 2, ZT-300AB →
    3, ZT-5566 family → 4, and each ANENG and BSIDE rebrand. The ZT-6S has no
-   evidence at all.
+   evidence at all. (Community captures: §11.)
 2. **Does the ZT-5566 stream readings?** Its manuals document a Bluetooth
    speaker (5566 p.20, 5566SE p.22); the SE manual's app section names only
-   other models (5566SE p.32-35).
+   other models (5566SE p.32-35). (Community captures: §11.)
 3. **Advertised name** per model: "Bluetooth DMM", "ZY" or other, and whether
-   it is in the advertisement or the scan response.
+   it is in the advertisement or the scan response. (Community evidence:
+   §11.)
 4. **Notification length** per type, and anything past the last byte the
-   apps read (§5).
+   apps read (§5). (Community captures: §11.)
 5. **Write characteristic.** Whether FFF4 accepts writes, or V2's by-property
    pick lands elsewhere, and whether it takes write without response, write
-   with response or both (§2).
+   with response or both (§2). (Community evidence: §11.)
 6. **Replies.** Whether the meter answers a command with an `AB`-led frame,
-   and its format (§5, §8.1).
+   and its format (§5, §8.1). (Community evidence: §11.)
 7. **Keys per model.** Which of §8.2's codes each type honours, and what
    each of `C8`-`CB` selects: V1 and V2 disagree on the AC codes.
+   (Community reports: §11.)
 8. **Clock set.** Whether a type-4 meter needs or acts on cmd `04` (§8.3).
 9. **Type 3 byte 10 bits 7-4.** Unread by both apps; TRUE RMS is the one
-   ZT-300AB legend item with no bit.
+   ZT-300AB legend item with no bit. (Community captures: §11.)
 10. **Type 4 bytes 14-15** (bar graph?), byte 3 bit 0, byte 13 bits 5 and 0, byte 16 bits
-    3-0, byte 17 bits 7-4, byte 18 bits other than 4.
+    3-0, byte 17 bits 7-4, byte 18 bits other than 4. (Community captures:
+    §11.)
 11. **Unnamed bits:** `power` (types 1, 2), `vfc`, `l1_power` (type 4; the
-    auto-standby icon, §7.4?).
+    auto-standby icon, §7.4?). (Community captures: §11.)
 12. **Special displays:** which digit positions each word uses (the apps'
     rules differ, §6.4); what the number of dashes
-    means in NCV; whether type 4 shows words at all.
+    means in NCV; whether type 4 shows words at all. (Community captures:
+    §11.)
 13. **Two DP bits** in one packet (§6.2), and the type-4 colon's use (§6.3).
+    (Community captures: §11.)
 14. **Update rate on the air** against the LCD's 3 per second (§3).
+    (Community captures: §11.)
+
+---
+
+## 11. Cross-reference with community sources [COMMUNITY]
+
+Read 2026-09-25, after §1-10 were written from ZOTEK's apps and manuals and
+grounding-checked; nothing here was merged into §1-10. Every point a
+community source disputes was then re-read in the vendor code alone, asked
+neutrally and with smali where jadx was garbled: the reading of the apps in
+§1-10 holds in every case. Sources and the boundary:
+`reverse-engineering-approach.md`; working notes:
+`findings/community-crossref.md` and `findings/vendor-recheck.md`.
+
+Three projects derive their decoders from the vendor apps: webspiderteam for
+types 1, 2 and 4 ("We get protocols from original app", its issue #36),
+libreble (ported from webspiderteam, then checked against Bluetooth DMM) and
+BLE_DMM_Client (from a decompiled Bluetooth DMM 1.0.13). Where they match
+§6-7 they confirm our reading of the apps, not the meters; their value is
+their captures. Independent of the apps: riktw's AN9002 work, ludwich's
+captures, ut61xpy, ble_aneng, bt-multimeter-cli's GATT probe and the logs
+reporters posted to webspiderteam's repo.
+
+### 11.1 Sources
+
+| Source | Covers | Hardware captures | Licence |
+|---|---|---|---|
+| [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM) and its wiki | Bit tables for all four types; V05B gatttool captures (2021); a BSIDE ZT-300AB table of plain bytes; a GATT dump of an `FC:58:FA:…` meter; photos of the F-9788 module | Yes, types 2 and 3 and the GATT dump; its type-1 and type-4 tables are not from captures | none |
+| [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) `2b83d9e` with history, wiki, issues and discussions | Decoder for types 1-4. Test logs in `Utilities.cs`: **ST207 log** (type 1, 124 notifications, from a reporter, 2022), a type-2 log (124, unlabelled, very likely ludwich's V05B), **ZT-5566SE log** (type 4, 425, from a reporter, 2023). **AN9002 frames**: 36 annotated frames in `Binary raw data.md`. A btsnoop of the vendor app driving a V05B (issue #29); an **emulator log** of what the vendor app writes (discussion #35) | Yes | MIT (Microsoft's BLE Explorer file) |
+| [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48` | Types 2 and 3; says bench-verified on an AN9002 and a ZOYI ZT-5B | Claimed | MIT |
+| [riktw's AN9002 post](https://justanotherelectronicsblog.com/?p=930) and [riktw/AN9002_info](https://github.com/riktw/AN9002_info) | AN9002: name, FFF4, 11-byte notifications, a sweep of 0-9, update rate | Yes | code Apache-2.0; post none |
+| [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy) `adapters/aneng.py` | AN9002 / ZT-300AB, type 3 | Yes | Unlicense |
+| [meijerwynand/bt-multimeter-cli](https://github.com/meijerwynand/bt-multimeter-cli) | ZOYI ZT-5B GATT probe; a work-in-progress icon table | The probe | MIT |
+| [hoeulm/ble_aneng](https://github.com/hoeulm/ble_aneng) | ESP32 V05B client that scans for the advertised FFF0 | Yes | none |
+| [bendtherules/multimeter-connect-web](https://github.com/bendtherules/multimeter-connect-web) | Type 3; Web Bluetooth filter on FFF0 | Implied (reported working on an AN9002) | MIT |
+| [Shiro-Nek0/Bluetooth-DMM.py](https://github.com/Shiro-Nek0/Bluetooth-DMM.py) | Port of ludwich's tables; 11-byte path "tested with real device" | Yes, type 3 | GPL-2.0 |
+| [840922704/BLE_DMM_Client](https://github.com/840922704/BLE_DMM_Client) | Decoder from a decompiled Bluetooth DMM 1.0.13; ZOYI ZT-300AB | Yes, ZT-300AB | GPL-3.0 |
+| [anszom's gist](https://gist.github.com/anszom/732b5b7dda9ccb624980153dff1d7c1f) | Perl decoder, type 3 | Unclear | none |
+| [blackPantherOS/AN9002](https://github.com/blackPantherOS/AN9002) | A code comment listing an AN9002's primary services | That comment | GPL-2.0 |
+
+Nothing on this family in libsigrok or the sigrok wiki, Seeed's Bluetooth
+multimeter wiki, jj5's AN-999S post, the BudgetLightForum V05B review or
+TSDMMView's pages.
+
+### 11.2 Agree
+
+| Spec § | What the community sources show | Evidence |
+|---|---|---|
+| §2 name, service, notify, write | Every scan shows "Bluetooth DMM" (ludwich's `hcitool`, riktw); FFF0 holds only FFF4 and its CCCD on a ZT-300AB (ludwich's dump); the vendor app writes its key frames to FFF4 on a V05B (btsnoop, issue #29) | captures |
+| §3 unprompted stream | Clients only subscribe, and readings arrive (riktw, libreble, ut61xpy) | captures |
+| §4 key, method, on-air `1B 84` | Byte-wise XOR from byte 0 in every notification; the type byte arrives as `72`, `71`, `70`, `77` in the ST207, V05B, AN9002 and ZT-5566SE captures | captures, all four types |
+| §5 framing | `5A A5`, no checksum, one notification = one packet | captures |
+| §6.1-6.3 glyphs and digits | Every glyph code but `b`, `C` and `d` occurs in real frames; the minus and every DP position decode as specified (V05B −4.023 V, AN9002 −00.26 mV); the ZT-5566SE log decodes with §6.3's offsets, leading "1" and sign to coherent readings (19.588 V, −19.620 V, 08.25 Ω, "0.L" Ω). No capture has two DP bits | captures |
+| §6.4 AUTO | `A u t o` glyphs on types 1, 2 and 3 | captures |
+| §7.1 type 3 | Each listed bit, in ludwich's ZT-300AB table and the AN9002 frames; battery at byte 3 bit 0 (webspiderteam issue #3) | captures |
+| §7.2 type 1 | PEAK with HOLD in V DC, INRUSH in A AC, REL with nF (ST207 log) | captures |
+| §7.3 type 2 | Every unit and flag, µF (byte 8 = `90`), mF, mA included; byte 3 bit 2 set at 233.3 and 180.1 V AC, clear at 11.98 V AC and 4 V DC, which fits over-voltage | captures |
+| §7.4 type 4 | AUTO, REL (which clears AUTO), V, DC, Ω, k, M, n, F where the ZT-5566SE log exercises them | captures |
+| §8.1-8.3 command frame, keys, clock set | The emulator log shows the app writing `AB CD 03 <key> …` for `B8`, `B6`, `B0`-`B4`, `C4`, `C6`, `C9`, `BE`, `D1`, and `B5` only in capacitance, all with valid sums; and `AB CD 04 13 38 0A 00 00 01 D1` at connect, to a ZT-5566SE only | the apps' side only |
+
+### 11.3 Disagree
+
+"Vendor re-check" is what the apps do on a neutral re-read. "Kind" says
+whether the conflict is between the vendor code and a meter, or a community
+error.
+
+| # | Spec § | Community | Vendor re-check | Kind: evidence favours | Settled by |
+|---|---|---|---|---|---|
+| D1 | §6.3, §7.4 byte 13 bit 4 = colon [INFERRED] | ludwich and webspiderteam label it ":" too, but in the ZT-5566SE log (our analysis) it behaves as the first segment of the bar graph: clear in all 294 notifications of ≤ 489 counts, set from 825 counts. With bytes 14-15, byte 16 bits 3-0, byte 17 bits 7-4 and byte 18 bits 6, 5, 3-0 (31 bits in all), the lit count rises with the reading: 1 at 825 counts, 3 at ~2100, 5 at ~3000, 8 at ~5000, all 31 at 19.6 V. One frame at −11.024 V has all 31 lit, likely a bar lagging a ramp | V1 reads it only as the colon (BCU:261, 320-321); V2 never reads it, nor bytes 14-15 | vendor vs meter: the capture. One bit cannot be both, and the rise is monotonic over 425 frames; a colon may still use it outside measurement | A ZT-5566/SE reading near 4 % of range, bar segments counted against the bits; if it streams in clock mode, whether the bit lights with the colon |
+| D2 | §6.4 positions; §9's EF example had `E F` in digits 3-4 (now the form both apps read as EF) | AN9002 and ST207 captures: bytes 3-7 `04 E0 E5 04 00`, E in digit 2, F in digit 3, digit 4 blank | Both apps read the captured form as EF; §9's form only V2 does (V1 charts it as 9970) | meters vs §9's old example: the capture; the reading of the apps holds, and the old example used a position no meter was seen to send | NCV on any model, digit 4 read |
+| D3 | §6.4 dashes "When: NCV" | ST207 log: `----` with AC, A and INRUSH (bytes 7-9 `84 04 90`) | V1 highlights NCV on EF or dashes only while the INRUSH label is hidden (BMA:504, 533); V2 flags NCV regardless | extends the spec: the capture, which V1 anticipates | INRUSH on a ZT-5BQ / ST207 |
+| D4 | §7.1 byte 8 bit 6 = m, bit 5 = µ | ludwich's all-variants page and multimeter-connect-web swap them | Both apps: bit 6 m, bit 5 µ | community error: webspiderteam, libreble, ut61xpy and ludwich's older 11-byte page agree with the spec; no source has a type-3 µF or mF capture | 10-100 µF on a ZT-300AB / AN9002: byte 8 = `A0` |
+| D5 | §7.3 byte 3 bit 2 = over-voltage | libreble: REL, "confirmed live" on a ZT-5B | V2 names it `over_vol`, V1 ignores it; no type-2 REL in either | community error: the V05B captures track voltage (§11.2) | AC V from a few volts to above 180 V on a ZT-5B / V05B |
+| D6 | §7.2 byte 3 bit 2 = Bluetooth icon | ludwich: "H.V"; webspiderteam: HV, inverted | V2 names it `ble` and leaves it unused, V1 ignores it; neither inverts | community error: set in 124 of 124 ST207 notifications, 0.000 V included | High and zero voltage on a ZT-5BQ / ST207: the bit stays set |
+| D7 | §7.3 byte 8 | bt-multimeter-cli's table: bit 0 F, bit 4 n, bit 6 mF | Both apps agree with the spec | community error: V05B "221.1 µF" has byte 8 = `90`, "100.8 mA DC" `44`; the table is marked work in progress | settled |
+| D8 | §2 write on FFF4 | webspiderteam since 2024-05 and libreble write FFF3 (libreble: "declared for profile-completeness only") | V1/BD write FFF4 and never use their FFF2/FFF3 constants; V2 picks by property | community error: the vendor app writes FFF4 on a V05B (btsnoop), webspiderteam's 2022-23 FFF4 writes worked there, a ZT-300AB has no FFF3, and a ZT-5B lists FFF4 as read, write without response, notify | GATT discovery on a type-1 and a type-4 meter |
+| D9 | §2 name | libreble: inconsistent names, "BDM" the common prefix; bt-multimeter-cli's README example: "ZOYI-ZT5B" | No app contains "BDM" | community error: every scan shows "Bluetooth DMM"; bt-multimeter-cli's own probe shows no name | A passive scan per model |
+| D10 | §4 key byte 17 = `1A` | ludwich's wiki, anszom, BLE_DMM_Client, bt-multimeter-cli: `21` | All three apps: `1A` (smali `array-data` too) | community typo: only `1A` gives coherent ZT-5566SE byte-17 flags (n, F in capacitance); only type 4 reaches byte 17 | settled |
+| D11 | §5, §6.3 type 4: 19 bytes, digits 9-12, sign and leading "1" in 13 | ludwich: "Only 17 Byte", digits 8-11, sign, ":" and leading 1 in 12 | Both apps: at least 19 bytes, digits 9-12, flags in 13 | community error: the ZT-5566SE log has 19-byte packets that decode only with the spec's offsets; ludwich's row is shifted one byte | settled |
+
+### 11.4 New
+
+Facts §1-10 lack or mark [UNVERIFIED], all from captures unless marked:
+
+| Topic (§) | Finding | Source |
+|---|---|---|
+| Model ↔ type (§1, §10.1) | AN9002 and ZT-300AB (BSIDE, ZOYI) → 3; V05B and ZOYI ZT-5B → 2; ANENG ST207 → 1; ZOYI ZT-5566SE → 4. Unseen: ZT-5BQ, AN999S, ZT-5566, ZT-5566S, ZT-6S | riktw, ludwich, ut61xpy, BLE_DMM_Client; ludwich, libreble, bt-multimeter-cli; ST207 log; ZT-5566SE log |
+| ZT-5566SE streams (§10.2) | Type-4 packets; the reporter confirms V AC/DC, Ω, capacitance, diode and current readings in the app | ZT-5566SE log, discussion #35 |
+| Lengths (§5, §10.4) | Exactly 10, 10, 11 and 19 bytes: 124 of 124 type-1 and 425 of 425 type-4 notifications; nothing past the last byte the apps read | all logs |
+| Write (§2, §10.5) | FFF4 takes writes: the vendor app's key frames on a V05B; FFF4 is read, write without response, notify on a ZT-5B | btsnoop (issue #29), bt-multimeter-cli |
+| GATT (§2) | Services 1800, 1801, FFF0 (handles `0x0007`-`0x000A`: FFF4 at `0x0009`, CCCD `0x000A`), 180A (2A23-2A29, 2A2A, 2A50) and a TI-style OAD service `F000FFC0-0451-4000-B000-000000000000` with FFC1/FFC2 | ludwich's dump, blackPantherOS (AN9002 / ZT-300AB) |
+| Module (§2) | F-9788 with a Beken BK3432; a ZT-5B's Device Information reads "BK-BLE-1.0", "BEKEN SAS" | ludwich, riktw, bt-multimeter-cli |
+| Advertisement (§10.3) | The FFF0 UUID is advertised: clients filtering on it find a V05B and an AN9002. Name in advertisement or scan response, and "ZY", unseen | ble_aneng, multimeter-connect-web (inferred from working tools) |
+| Rate (§3, §10.14) | "around 2.6 measurements per second" on an AN9002; no way found to change it | riktw |
+| OL (§6.4, §10.12) | Types 1-3: glyphs `0` `L` in digits 2-3, digits 1 and 4 blank, the DP moving with the range: " 0.L" MΩ, " .0L" kΩ and diode, " 0L." Ω. Type 4 shows "0.L" and ".0L" as glyphs too. The `o` glyph is never used. V1's rule needs `L` without a DP (BCU:42), so it misses the MΩ form | captures; vendor re-check §6 |
+| Dashes (§6.4, §10.12) | NCV fills 1-4 dashes from the left, which both apps' rules count; also inrush (D3) | AN9002 frames |
+| TRUE RMS (§7.1, §10.9) | Type-3 byte 10 bits 7-4 never set, an AC TRUE RMS frame included: no separate bit | AN9002 frames, ludwich, riktw |
+| MANUAL (§7.1) | Byte 10 bit 1 never set, even on manual range; only AUTO clears | ludwich's ZT-300AB table, AN9002 frames |
+| Unnamed bits (§7, §10.11) | `ble` set in every type-1, -2 and -3 notification (the icon lit while connected); type-1 `power` always set; type-2 `power` and byte 7 bits 5-4 never set; type-4 `vfc` and byte 3 bit 0 never set, `l1_power` toggles in long runs in V DC | logs |
+| Type-4 other bits (§7.4, §10.10) | The bar graph (D1); byte 13 bit 5 set except in the one notification reading exactly 0.0000; byte 18 bit 7 always set; byte 4 bits 7-5 and bytes 5-8 always 0 — the log covers V DC, Ω and capacitance only, no AC mode and no secondary display | ZT-5566SE log |
+| Type-4 HOLD, secondary (§7.4) | "hold has a bug that device sending realtime data"; in AC the app is "not showing frequency", never checked | discussion #35, anecdotal |
+| Keys (§8.2, §10.7) | A V05B beeps for AUTO, NCV, °C, °F, CAP, Hz and DIODE, and HOLD works; not MAX/MIN, Ω or mV/Hz. Keys step modes like SEL and cannot switch between the V/Ω and A inputs; ZERO works in capacitance. A ZT-5566SE ignores AUTO. Clamp untested | btsnoop (issue #29), discussion #35, webspiderteam wiki |
+| Replies (§5, §8.1, §10.6) | None reported ("does not handshake or answer requests"). One loose end: ludwich logged on-air `EA EC 8E E1 A2 C1 32 71 65 83` = `AB CD FD B4 00 00 00 00 03 29` (valid sum), and an `AB CD FD B0 …` copy with its sum off by `0x10`, in LightBlue after a button press in the Android app. No vendor app builds cmd `FD` (V1 builds 3 and 4, V2 only 3); direction and origin unknown | libreble; ludwich |
+| Backlight | Not in the data | webspiderteam issue #2, ludwich |
+| Auto power-off | After 15 min even while connected; held SEL (AN9002) or Hz/NCV (clamp) at power-on disables it | ut61xpy, ludwich |

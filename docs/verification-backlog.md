@@ -1687,43 +1687,85 @@ port scan** (80, 111, 5025, 49152 by firmware version).
 
 Specified 2026-09-25 from ZOTEK's three apps and six manuals
 (`docs/research/zotek/reverse-engineered-protocol.md`, §10). Not implemented;
-nobody on the project owns one, and the clean-room boundary is still closed.
-One capture settles the most at once: **the name a meter advertises and a few
-seconds of its raw FFF4 notifications**, with the model, the function shown
-and the LCD reading noted.
+nobody on the project owns one. The clean-room boundary was opened the same
+day, after the spec: community captures (spec §11) answer several items
+below, but they are not our verification — each still wants a reporter's
+capture. One capture settles the most at once: **the name a meter advertises
+and a few seconds of its raw FFF4 notifications**, with the model, the
+function shown and the LCD reading noted.
 
 - **Model ↔ type byte.** Inferred from the layout names only: ZT-5BQ → 1,
-  ZT-5B → 2, ZT-300AB → 3, ZT-5566 family → 4. Unconfirmed for every model,
-  and for each rebrand separately: ANENG AN9002, V05B, ST207, AN999S, and
-  BSIDE's ZT-300AB, ZT-5B, ZT-5BQ and ZT5566. The ZT-6S has no evidence of
-  any kind.
+  ZT-5B → 2, ZT-300AB → 3, ZT-5566 family → 4. Community captures show
+  AN9002 and ZT-300AB → 3, V05B and ZOYI ZT-5B → 2, ANENG ST207 → 1, ZOYI
+  ZT-5566SE → 4; confirm with a reporter's capture. Nothing seen for the
+  ZT-5BQ, AN999S, ZT-5566, ZT-5566S or BSIDE's ZT-5B, ZT-5BQ and ZT5566. The
+  ZT-6S has no evidence of any kind.
 - **ZT-5566 readings.** Both ZT-5566 manuals document a Bluetooth speaker,
-  and the SE manual's app section names only other models; whether any
-  ZT-5566 variant streams readings at all.
-- **Advertised name.** "Bluetooth DMM" per the apps and manuals; which
+  and the SE manual's app section names only other models. A community log
+  shows a ZT-5566SE streaming type-4 packets; confirm with a reporter's
+  capture, and whether the plain ZT-5566 and the ZT-5566S stream at all.
+- **Advertised name.** "Bluetooth DMM" per the apps and manuals, and in every
+  community scan (AN9002 / ZT-300AB); community clients that filter on the
+  FFF0 UUID find a V05B and an AN9002, so it is advertised. Open: which
   models, if any, advertise the "ZY" the older apps also accept; whether the
   name sits in the advertisement or the scan response.
 - **Notification length** per type. The apps read at least 10, 10, 11 and
-  19 bytes; whether the meter sends more.
+  19 bytes; community captures show exactly those lengths, with nothing
+  after. Confirm with a reporter's capture.
 - **Write characteristic.** The older apps notify and write on FFF4; the
-  current one picks by property. Whether FFF4 takes writes on a real meter,
-  and whether write without response, write with response or both (V1
-  writes without response; V2's runtime uses the characteristic's default).
+  current one picks by property. Community evidence: the vendor app writes
+  its key frames to FFF4 on a V05B, a ZT-300AB has no FFF3, and a ZT-5B
+  lists FFF4 as write without response. Confirm on a reporter's meter, with
+  GATT discovery on a type-1 and a type-4 meter (two community clients write
+  FFF3), and whether write with response is also taken (V1 writes without
+  response; V2's runtime uses the characteristic's default).
 - **Replies.** Whether a key press draws an `AB`-led notification (the older
   app logs and drops those of 10 bytes or more as replies), and its format.
+  No community source reports one. Still open.
+- **`AB CD FD` frame.** A community log has `AB CD FD B4 00 00 00 00 03 29`
+  (valid sum) and an `AB CD FD B0 …` copy with its sum off by `0x10`, seen in
+  LightBlue after a button press in the Android app. No vendor app builds
+  cmd `FD`. Whether a meter sends it, and what it means.
 - **Keys.** Which of the key codes each type honours; what `C8`-`CB` each
-  select (the apps disagree on the AC codes); whether the ZT-300AB, a rotary-dial meter, acts on any.
+  select (the apps disagree on the AC codes); whether the ZT-300AB, a
+  rotary-dial meter, acts on any. Community reports: a V05B reacts to AUTO,
+  NCV, °C, °F, CAP, Hz, DIODE and HOLD, and ZERO in capacitance, but not to
+  MAX/MIN, Ω or mV/Hz, and cannot be switched between the V/Ω and A inputs;
+  a ZT-5566SE ignores AUTO. Confirm the V05B subset on a ZT-5B / V05B; the
+  clamp, the ZT-300AB and the rest of type 4 are untested.
 - **Clock set.** Whether a type-4 meter needs or acts on cmd `04`; only the
   older apps send it, after the first type-4 packet and then every half hour.
+  A community emulator log confirms the app side only. Still open.
+- **Type-4 bar graph.** A community ZT-5566SE log (425 notifications) has
+  byte 13 bit 4 — the colon in the spec — and bytes 14-18's unread bits
+  (bytes 14-15, byte 16 bits 3-0, byte 17 bits 7-4, byte 18 bits 6, 5, 3-0)
+  rising with the reading like an analog bar (spec §11.3 D1). Confirm on a
+  ZT-5566/SE by counting bar segments against the bits near 4 % of range,
+  and whether the colon, in clock mode, uses the same bit.
+- **Type-4 HOLD and AC.** A community report says HOLD on a ZT-5566SE does
+  not freeze the stream, and the community log never shows AC mode or the
+  secondary display (byte 4 bits 7-5, bytes 5-8 always 0). Needs a capture
+  with HOLD on, and one in V AC and in Hz.
 - **Unread bits.** Type 3 byte 10 bits 7-4 (TRUE RMS, the one ZT-300AB legend
-  item with no bit?); type 4 bytes 14-15 (the bar graph?), byte 3 bit 0, byte
-  13 bits 5 and 0, byte 16 bits 3-0, byte 17 bits 7-4, byte 18 except bit 4. Unnamed:
-  `power` (types 1, 2), `vfc` and `l1_power` (type 4).
+  item with no bit?): never set in community captures, an AC TRUE RMS frame
+  included, so likely no separate bit. Type 4 bytes 14-15, byte 16 bits 3-0,
+  byte 17 bits 7-4, byte 18 bits 6, 5, 3-0 and byte 13 bit 4: the bar graph
+  above; byte 3 bit 0 never set; byte 13 bit 5 set except at exactly 0.0000;
+  byte 18 bit 7 always set; byte 13 bit 0 not covered. Unnamed: `power` (type 1
+  always set, type 2 never set), `vfc` (never set) and `l1_power` (toggles
+  in V DC) in type 4. Type-3 MANUAL (byte 10 bit 1) never set in community
+  captures, even on manual range. Confirm each with a reporter's capture.
 - **Special displays.** Which digit positions each word uses (the two apps'
-  rules differ); what the number of dashes
-  means in NCV; whether a type-4 meter shows words; what a packet with two DP
-  bits means; the type-4 colon.
-- **Rate.** Notifications per second against the LCD's 3 updates a second.
+  rules differ); community captures show OL as `0` `L` in digits 2-3 with the
+  DP moving by range, EF in digits 2-3, and 1-4 NCV dashes filling from the
+  left, and dashes also with INRUSH on an ST207 (spec §11). Confirm with a
+  reporter's capture; what a packet with two DP bits means (never seen).
+- **Rate.** Notifications per second against the LCD's 3 updates a second:
+  about 2.6 a second on a community AN9002. Confirm with a reporter's
+  capture.
+- **Type-2 over-voltage** (byte 3 bit 2, [INFERRED] from V2's name):
+  community V05B captures show it set at 180 and 233 V AC and clear at low
+  voltage. Confirm with a reporter's capture.
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 

@@ -437,8 +437,9 @@ Research only; not implemented.**
 
 Which model sends which type byte is inferred from the layout names alone
 (`AB_300`/`300ab` for the ZT-300AB, type 3, the priority); none of the apps
-ties a type to a model. The ZT-5566 manuals document the Bluetooth speaker,
-and the SE manual's app section names only other models. Every open question is in the
+ties a type to a model. Community captures fit it for four models (AN9002 /
+ZT-300AB 3, V05B / ZT-5B 2, ST207 1, ZT-5566SE 4). The ZT-5566 manuals
+document the Bluetooth speaker, and the SE manual's app section names only other models. Every open question is in the
 [backlog](../verification-backlog.md#zotek-zoyi--aneng--bside-open-questions-before-an-implementation).
 
 **Gap: moderate.** No cross-platform desktop tool; Bluetooth-DMM-For-Windows
@@ -760,12 +761,12 @@ the same transport.
 - [tpwrules/121gw-re](https://github.com/tpwrules/121gw-re) — 121GW reverse engineering
 - [DeanCording/owonb35](https://github.com/DeanCording/owonb35) — OWON B35 Linux client
 - [sercona/Owon-Multimeters](https://github.com/sercona/Owon-Multimeters) — OWON multi-model support
-- [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM) — Aneng/BSIDE protocol docs (outside the ZOTEK clean-room boundary; not used for its spec)
+- [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM) — Aneng/BSIDE protocol docs (cross-referenced after the vendor-only ZOTEK spec, 2026-09-25: its §11)
 - [Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) — Windows BLE DMM app
 - [pcolby/dokit](https://github.com/pcolby/dokit) — Pokit cross-platform tools
 - [mooshim/Mooshimeter-PythonAPI](https://github.com/mooshim/Mooshimeter-PythonAPI)
 - [sigrok Bluetooth support](https://sigrok.org/wiki/Bluetooth)
-- [AN9002 BLE protocol analysis](https://justanotherelectronicsblog.com/?p=930) (outside the ZOTEK clean-room boundary; not used for its spec)
+- [AN9002 BLE protocol analysis](https://justanotherelectronicsblog.com/?p=930) (cross-referenced after the vendor-only ZOTEK spec, 2026-09-25: its §11)
 
 ### USB serial / IR
 - [markusdd/rusty_meter](https://github.com/markusdd/rusty_meter) — Rust/egui OWON XDM tool (100 stars)
