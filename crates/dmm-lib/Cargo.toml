@@ -9,7 +9,7 @@ description = "Library for communicating with UNI-T and Voltcraft digital multim
 thiserror = "2"
 log.workspace = true
 # Bluetooth only: BlueZ/CoreBluetooth/WinRT behind one API, driven by a
-# current-thread runtime the transport owns (see transport/ble.rs).
+# current-thread runtime the transport owns (see transport/ble/mod.rs).
 btleplug = { version = "0.13", optional = true }
 tokio = { version = "1", features = ["rt", "time"], optional = true }
 futures = { version = "0.3", optional = true }

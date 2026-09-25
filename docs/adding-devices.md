@@ -31,7 +31,7 @@ This guide covers the complete lifecycle for adding a new multimeter, from initi
 - Direct serial port usage (`Qt5SerialPort.dll`, COM port references) → CDC/ACM or RS-232 adapter
 - If none of the above match, the vendor software itself becomes the primary source for understanding the transport
 
-**Non-CP2110 devices:** The `Transport` trait abstracts the byte-level transport. Adding a new transport backend requires implementing `Transport` — see the existing `Cp2110`, `Ch9329`, `Ch9325` and `MockTransport` for the interface, and `transport/ble.rs` for one that is not HID at all (the UT-D07B Bluetooth adapter: it owns its runtime and hands the layer above the same byte stream). The protocol layer above is transport-agnostic. Note: the UCI SDK's `uci.dll` contains a whitelist of 5 USB-to-serial bridge VID:PID pairs used by bench meters (including Owon/Hoitek, WCH CH341, and QinHeng HID), which is useful context for identifying which bridge a new bench DMM uses.
+**Non-CP2110 devices:** The `Transport` trait abstracts the byte-level transport. Adding a new transport backend requires implementing `Transport` — see the existing `Cp2110`, `Ch9329`, `Ch9325` and `MockTransport` for the interface, and `transport/ble/` for one that is not HID at all (the UT-D07B Bluetooth adapter: it owns its runtime and hands the layer above the same byte stream). The protocol layer above is transport-agnostic. Note: the UCI SDK's `uci.dll` contains a whitelist of 5 USB-to-serial bridge VID:PID pairs used by bench meters (including Owon/Hoitek, WCH CH341, and QinHeng HID), which is useful context for identifying which bridge a new bench DMM uses.
 
 ## Phase 2: Clean-Room Reverse Engineering
 
