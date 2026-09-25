@@ -35,7 +35,6 @@ pub(crate) fn cmd_capture(
     mut dmm: dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     recorder: SharedRecorder,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
-    known_name: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let step_filter: Option<std::collections::HashSet<String>> =
         filter.map(|v| v.into_iter().collect());
@@ -43,7 +42,7 @@ pub(crate) fn cmd_capture(
     // reporter's typo, and they should hear about it straight away.
     let plan_steps = plan_path.as_deref().map(crate::plan::load).transpose()?;
 
-    let (device_name, supported) = match verify_meter(&mut dmm, device, known_name) {
+    let (device_name, supported) = match verify_meter(&mut dmm, device) {
         Ok(verified) => verified,
         Err(e) => {
             match save_no_response(&mut dmm, &recorder, device, output_override.as_deref()) {
@@ -288,7 +287,6 @@ mod tests {
             dmm,
             recorder,
             device,
-            None,
         );
         assert_eq!(result.unwrap_err().to_string(), "meter not responding");
 

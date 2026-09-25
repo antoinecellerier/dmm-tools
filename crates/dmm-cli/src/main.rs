@@ -540,7 +540,6 @@ fn main() {
                         dmm,
                         recorder,
                         device,
-                        detected_name(),
                     )
                 })
             }
@@ -804,7 +803,7 @@ fn opened_device(selection: Selection) -> Option<&'static SelectableDevice> {
 /// The meter was picked for the user, so the name it was picked by belongs on
 /// screen — dim and on stderr, like every other notice, so a redirected CSV or
 /// JSON stream stays machine-readable.
-fn note_detected(detected: dmm_lib::detect::Detected) -> &'static SelectableDevice {
+fn note_detected(detected: dmm_lib::detect::Detected) -> &'static dmm_lib::detect::Detected {
     let detected = AUTO_DETECTED.get_or_init(|| detected);
     let device = detected.device;
     // A name the registry doesn't carry still identifies the family, and the
@@ -826,7 +825,7 @@ fn note_detected(detected: dmm_lib::detect::Detected) -> &'static SelectableDevi
         "{}",
         style(format!("Detected {}{note}", device.display_name)).dim()
     );
-    device
+    detected
 }
 
 /// Open the meter with helpful error messages for common failures, and say
@@ -839,8 +838,7 @@ fn open_with_help(
         Selection::Auto => {
             let (dmm, detected) =
                 dmm_lib::open_auto(opts).map_err(|e| open_error_help(selection, e))?;
-            let device = note_detected(detected);
-            (dmm, device)
+            (dmm, note_detected(detected).device)
         }
         Selection::Device(device) => (
             dmm_lib::open_device_by_id_auto(device.id, opts)
@@ -866,7 +864,7 @@ fn open_recording_with_help(
     Box<dyn std::error::Error>,
 > {
     type Boxed = Box<dyn dmm_lib::transport::Transport>;
-    let (transport, recorder, device, protocol): (Boxed, _, _, _) = match selection {
+    let (dmm, recorder, device) = match selection {
         // Wrap first, then detect: the probe and the meter's answer to it are
         // the first bytes on the wire, and a report that starts after them
         // hides how the meter was picked.
@@ -877,26 +875,26 @@ fn open_recording_with_help(
             let transport = Box::new(transport) as Boxed;
             let detected = dmm_lib::detect::detect_device(&*transport, bridge)
                 .map_err(|e| open_error_help(selection, e))?;
-            let device = note_detected(detected);
-            (transport, recorder, device, (device.new_protocol)())
+            let detected = note_detected(detected);
+            let dmm = dmm_lib::Dmm::from_detected(transport, detected)
+                .map_err(|e| open_error_help(selection, e))?;
+            (dmm, recorder, detected.device)
         }
         Selection::Device(device) => {
             // The mock has no USB link to open, and none to record either — it
             // goes through the same recorder so `capture` has one code path.
-            let (transport, protocol): (Boxed, _) = if device.requires_hardware {
-                dmm_lib::open_transport_by_id_auto(device.id, opts)
+            let transport: Boxed = if device.requires_hardware {
+                dmm_lib::open_device_transport(device, opts)
                     .map_err(|e| open_error_help(selection, e))?
             } else {
-                (
-                    Box::new(dmm_lib::transport::NullTransport),
-                    (device.new_protocol)(),
-                )
+                Box::new(dmm_lib::transport::NullTransport)
             };
             let (transport, recorder) = recording::RecordingTransport::new(transport);
-            (Box::new(transport) as Boxed, recorder, device, protocol)
+            let dmm = dmm_lib::Dmm::new(Box::new(transport) as Boxed, (device.new_protocol)())
+                .map_err(|e| open_error_help(selection, e))?;
+            (dmm, recorder, device)
         }
     };
-    let dmm = dmm_lib::Dmm::new(transport, protocol).map_err(|e| open_error_help(selection, e))?;
     warn_if_experimental(device, dmm.profile());
     Ok((dmm, recorder, device))
 }
@@ -910,7 +908,7 @@ fn detect_only(
         dmm_lib::open_transport(&[], opts).map_err(|e| open_error_help(Selection::Auto, e))?;
     let detected = dmm_lib::detect::detect_device(&*transport, bridge)
         .map_err(|e| open_error_help(Selection::Auto, e))?;
-    Ok(note_detected(detected))
+    Ok(note_detected(detected).device)
 }
 
 /// The entry a listing describes. Nothing is read from the meter, but with
@@ -1180,23 +1178,13 @@ fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// The name the detection probe already got from the meter, if it ran and
-/// the meter gave one: asking again would spend a second round trip — and on
-/// a UT61+ a second beep — on a name we have.
-fn detected_name() -> Option<String> {
-    AUTO_DETECTED.get().and_then(|d| d.reported_name.clone())
-}
-
 fn cmd_info(
     selection: Selection,
     opts: dmm_lib::OpenOptions<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (mut dmm, _device) = open_with_help(selection, opts)?;
-    let name = match detected_name() {
-        Some(name) => Some(name),
-        None => dmm.get_name()?,
-    };
-    match name {
+    // The name detection got, if it ran: the session keeps it.
+    match dmm.get_name()? {
         Some(ref n) => println!("Device: {}", style(n).bold()),
         None => println!("Device: {}", style("(name not supported)").dim()),
     }
@@ -1260,7 +1248,7 @@ fn cmd_read(
         let (mut dmm, device) = open_with_help(selection, opts)?;
         // Once, before the loop: on a UT61+ asking the meter its name is a
         // command it answers with a beep, so only a replay file — whose
-        // header carries the name — pays for it.
+        // header carries the name — pays for it, and not when detection has.
         let model = (format == OutputFormat::Replay)
             .then(|| dmm.get_name().ok().flatten())
             .flatten();

@@ -190,14 +190,14 @@ fn establish_connection<T: Transport>(
         .map(|d| d.device)
         .or(selected)
         .map(|d| d.id);
-    // Detection asks a UT61+ for its name to identify it at all, so the answer
-    // is already in hand: asking again would spend a second round trip — and a
-    // second beep — on a name we have.
-    let name = match detected.and_then(|d| d.reported_name) {
-        Some(reported) => reported,
-        None if query_name => dmm.get_name().ok().flatten().unwrap_or_default(),
-        None => String::new(),
+    // A name the meter already gave on this link — to detection, say — is
+    // shown either way: it costs nothing more. Asking is what beeps.
+    let name = if query_name {
+        dmm.get_name().ok().flatten()
+    } else {
+        dmm.known_name().map(str::to_owned)
     };
+    let name = name.unwrap_or_default();
     let _ = msg_tx.send(DmmMessage::Connected {
         name,
         model_name,

@@ -618,6 +618,15 @@ pub trait Protocol: Send {
         Ok(None)
     }
 
+    /// Whether the meter wants [`Protocol::get_name`] answered before `init`
+    /// starts it on `transport`. [`crate::Dmm`] asks, or uses the name it
+    /// already has, then runs `init`; the protocol keeps no name of its own.
+    ///
+    /// Default `false`.
+    fn name_before_init(&self, _transport: &dyn Transport) -> bool {
+        false
+    }
+
     /// Static device profile information.
     fn profile(&self) -> &DeviceProfile;
 

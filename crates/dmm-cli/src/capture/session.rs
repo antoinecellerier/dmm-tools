@@ -38,20 +38,14 @@ fn status_banner(stability: Stability) -> (&'static str, Option<&'static str>) {
 /// that answer no name query — the report records it as such, while the file
 /// and the banner name the model the run was started for.
 ///
-/// `known_name` is the name the detection probe already got, when it ran:
-/// the meter has answered once, so it is neither asked again nor made to
-/// beep again.
+/// A name the detection probe already got is the session's: the meter has
+/// answered once, so it is neither asked again nor made to beep again.
 pub(super) fn verify_meter(
     dmm: &mut dmm_lib::Dmm<Box<dyn dmm_lib::transport::Transport>>,
     device: &'static dmm_lib::protocol::registry::SelectableDevice,
-    known_name: Option<String>,
 ) -> Result<(String, bool), Box<dyn std::error::Error>> {
     eprintln!("{}", style("Checking meter communication...").dim());
-    let name = match known_name {
-        Some(name) => Ok(Some(name)),
-        None => dmm.get_name(),
-    };
-    let reported = match name {
+    let reported = match dmm.get_name() {
         Ok(Some(name)) => Some(name),
         Ok(None) | Err(_) => {
             // get_name failed or unsupported — try a plain measurement as fallback

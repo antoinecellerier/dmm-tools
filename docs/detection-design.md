@@ -8,7 +8,8 @@ got 0x07ed` from a UT181A read as a UT61+.
 
 Detection lives in `crates/dmm-lib/src/detect.rs`. `detect_device(transport, bridge)` walks a
 probe cascade and returns the registry entry it settled on plus the name the meter reported,
-if it gave one. What each family sends and what it recognises is the family's own
+if it gave one; `Dmm::from_detected` opens the session with both, so the name is not asked
+again. What each family sends and what it recognises is the family's own
 `Fingerprint`, declared in the family module next to the constants it already puts on the wire;
 `detect.rs` is the engine that runs them. This document is the algorithm and the reasons behind
 its shape; the CLI and GUI surface (`--device auto`, the Auto-detect chip) is described in

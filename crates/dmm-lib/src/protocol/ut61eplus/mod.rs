@@ -43,10 +43,6 @@ pub struct Ut61PlusProtocol {
     specs: SpecModel,
     rx_buf: Vec<u8>,
     profile: DeviceProfile,
-    /// The name `init` read before starting the stream, on a model that asks
-    /// first ([`DeviceTable::name_before_stream`]); `get_name` answers with
-    /// it rather than asking again.
-    name_at_start: Option<String>,
     /// What the last reading said about where the dial sits, for
     /// [`Protocol::choices`] and [`Protocol::select`] for [`Setting::Mode`].
     dial: cycle::DialState,
@@ -182,7 +178,6 @@ impl Ut61PlusProtocol {
         let supported_commands = table.commands();
         Self {
             table,
-            name_at_start: None,
             specs,
             rx_buf: Vec::with_capacity(64),
             dial: cycle::DialState::default(),
@@ -365,18 +360,6 @@ impl Ut61PlusProtocol {
         Ok(())
     }
 
-    /// Get Name, waited for, as UNI-T's app sends it ahead of 0x5D: a UT60BT
-    /// is reported to ignore 0x5D until it has answered 0x5F (family spec
-    /// §6.4). The wait is `get_name`'s, a few frames of at most 2 s each, and
-    /// no name is no reason to give up: the stream is started either way.
-    fn ask_name_before_stream(&mut self, transport: &dyn Transport) {
-        match self.get_name(transport) {
-            Ok(Some(name)) => self.name_at_start = Some(name),
-            Ok(None) => debug!("no name before the stream start; starting it anyway"),
-            Err(e) => debug!("no name before the stream start ({e}); starting it anyway"),
-        }
-    }
-
     fn command_from_name(name: &str) -> Result<Command> {
         match name {
             "hold" => Ok(Command::Hold),
@@ -402,10 +385,9 @@ impl Protocol for Ut61PlusProtocol {
         // The UT-D07B polls the meter itself once told to, at about three
         // readings a second against under two when each one is a round trip
         // over the radio (adapter spec §3, §5).
+        // A model that wants its name asked first has had it by now
+        // (`name_before_init`).
         if transport.transport_name() == crate::BLUETOOTH {
-            if self.table.name_before_stream() {
-                self.ask_name_before_stream(transport);
-            }
             debug!("starting the adapter's readings stream");
             transport.write(&Command::StartStream.encode())?;
             self.streaming = true;
@@ -451,10 +433,6 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn get_name(&mut self, transport: &dyn Transport) -> Result<Option<String>> {
-        // Asked already by `init`: every ask beeps the meter.
-        if let Some(name) = &self.name_at_start {
-            return Ok(Some(name.clone()));
-        }
         let cmd = Command::GetName.encode();
         debug!("sending get_name request");
         transport.write(&cmd)?;
@@ -479,6 +457,13 @@ impl Protocol for Ut61PlusProtocol {
         }
 
         Ok(None)
+    }
+
+    /// Get Name, answered, ahead of 0x5D, as UNI-T's app sends it: a UT60BT
+    /// is reported to ignore 0x5D until it has answered 0x5F (family spec
+    /// §6.4). The wait is `get_name`'s, a few frames of at most 2 s each.
+    fn name_before_init(&self, transport: &dyn Transport) -> bool {
+        transport.transport_name() == crate::BLUETOOTH && self.table.name_before_stream()
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -1788,6 +1773,32 @@ mod tests {
         ]
     }
 
+    /// Which models want their name asked before `init`: the two flagged ones,
+    /// over Bluetooth only. The protocol keeps no name, so `init` on its own
+    /// only starts the stream; [`crate::Dmm`] does the asking.
+    #[test]
+    fn only_the_flagged_models_want_their_name_first_and_only_on_bluetooth() {
+        for model in [
+            "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
+        ] {
+            let p = Ut61PlusProtocol::for_model(model).expect("known model");
+            let flagged = matches!(model, "ut60bt" | "ut202bt");
+            let radio = BluetoothMock(MockTransport::new(vec![]));
+            assert_eq!(p.name_before_init(&radio), flagged, "{model}");
+            assert!(
+                !p.name_before_init(&MockTransport::new(vec![])),
+                "{model} on a cable"
+            );
+        }
+        let mock = BluetoothMock(MockTransport::new(vec![]));
+        let mut p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        p.init(&mock).unwrap();
+        assert_eq!(
+            mock.0.written.borrow().as_slice(),
+            &[Command::StartStream.encode().to_vec()]
+        );
+    }
+
     /// A model that wants its name asked first is asked, waited for, then
     /// started, and later asks for the name get the one it gave without
     /// another write: every ask beeps the meter.
@@ -1799,17 +1810,17 @@ mod tests {
                 test_frame_be16(name.as_bytes()),
                 frame_in(0x02),
             ]));
-            let mut p = Ut61PlusProtocol::for_model(model).expect("known model");
-            p.init(&mock).unwrap();
+            let p = Ut61PlusProtocol::for_model(model).expect("known model");
+            let mut dmm = crate::Dmm::new(mock, Box::new(p)).unwrap();
             assert_eq!(
-                mock.0.written.borrow().as_slice(),
+                dmm.transport().0.written.borrow().as_slice(),
                 &name_then_start(),
                 "{model}"
             );
-            assert_eq!(p.request_measurement(&mock).unwrap().mode, "DC V");
-            assert_eq!(p.get_name(&mock).unwrap().as_deref(), Some(name));
+            assert_eq!(dmm.request_measurement().unwrap().mode, "DC V");
+            assert_eq!(dmm.get_name().unwrap().as_deref(), Some(name));
             assert_eq!(
-                mock.0.written.borrow().len(),
+                dmm.transport().0.written.borrow().len(),
                 2,
                 "{model}: no poll or ask went out"
             );
@@ -1850,10 +1861,10 @@ mod tests {
             mock: MockTransport::new(vec![ACK.to_vec(), head.to_vec(), tail.to_vec()]),
             log: RefCell::new(Vec::new()),
         };
-        let mut p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
-        p.init(&link).unwrap();
+        let p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let dmm = crate::Dmm::new(link, Box::new(p)).unwrap();
         assert_eq!(
-            *link.log.borrow(),
+            *dmm.transport().log.borrow(),
             ["write 5F", "read 7", "read 4", "read 7", "write 5D"]
         );
     }
@@ -1863,12 +1874,15 @@ mod tests {
     #[test]
     fn a_meter_that_gives_no_name_is_still_started() {
         let mock = BluetoothMock(MockTransport::new(vec![]));
-        let mut p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
-        p.init(&mock).unwrap();
-        assert_eq!(mock.0.written.borrow().as_slice(), &name_then_start());
-        assert!(p.streaming);
-        assert!(p.get_name(&mock).is_err(), "nothing answers");
-        assert_eq!(mock.0.written.borrow().len(), 3);
+        let p = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        let mut dmm = crate::Dmm::new(mock, Box::new(p)).unwrap();
+        assert_eq!(
+            dmm.transport().0.written.borrow().as_slice(),
+            &name_then_start()
+        );
+        assert_eq!(dmm.known_name(), None);
+        assert!(dmm.get_name().is_err(), "nothing answers");
+        assert_eq!(dmm.transport().0.written.borrow().len(), 3);
     }
 
     /// A streaming protocol, started, over `frames`.

@@ -80,6 +80,13 @@ Bluetooth ──► Ble (Box<dyn Transport>) ───────────�
 `get_name()`, `profile()`, and `capture_steps()`. Each family implements its own framing,
 parsing, and command encoding internally, but all produce the same `Measurement` struct.
 
+`Dmm` keeps the meter's name, the one copy for every family: `Dmm::get_name()` returns the
+name the meter already gave on this link, else asks and keeps the answer, and
+`Dmm::known_name()` never asks. Detection's answer seeds it (`Dmm::from_detected()`), and a
+protocol whose `name_before_init()` says the meter wants its name first gets it through that
+same cache before `init()`, so a meter detection already asked is not asked again. The binaries
+call these and carry no name of their own.
+
 Remote control has two paths. `send_command()` sends a named button press and reads nothing
 back. `choices(Setting, &Measurement)` lists the values a setting (`Mode`, `Range`, `Hold`,
 `Rel`, `MinMax`, `Peak`) can take from where the meter sits, each a `Choice { id, label,
@@ -129,7 +136,8 @@ ranking what they answer by how strong the evidence is. The cascade and its fail
 `docs/detection-design.md`. `open_auto()` is that path with the `Detected` entry handed back, so a
 caller can name the meter it picked; `open_transport()` is its split half — a bridge and its name,
 no protocol chosen — for a caller that must wrap the transport before the probe bytes flow, and
-pairs with `detect::detect_device()`. `devices_on_bridge()` inverts
+pairs with `detect::detect_device()` and `Dmm::from_detected()`; `open_device_transport()` is
+the same for a named entry. `devices_on_bridge()` inverts
 those links to list the meters that could have been on a bridge nothing answered on,
 and `find_by_model_name()` maps an open session's `model_name` back to its entry.
 Adding a new device requires only a registry entry, a `Protocol` implementation and — to be found

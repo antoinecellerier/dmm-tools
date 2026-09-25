@@ -174,7 +174,8 @@ back; to document what each mode shows instead, use
 
 `--format replay` needs a real meter and refuses `--scale`, `--offset`,
 `--unit` and `--integrate`; pass those when playing the file back. Writing one
-asks the meter its name (a UT61+/UT161 beeps once). `--replay` takes the meter
+asks the meter its name unless detection already has it (a UT61+/UT161 beeps
+once). `--replay` takes the meter
 and its link from the file and refuses `--device` and `--mock-mode`.
 
 Meters with more than one display (the UT181A's second thermocouple,

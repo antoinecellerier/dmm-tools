@@ -20,7 +20,7 @@ pub use clock::Clock;
 pub use wall_clock::WallClock;
 
 use error::{BluetoothOnlyMiss, Error, Result};
-use log::{info, warn};
+use log::{debug, info, warn};
 use protocol::Protocol;
 use protocol::registry::{self, SelectableDevice, Selection};
 use std::ffi::CString;
@@ -36,23 +36,57 @@ pub struct Dmm<T: Transport> {
     /// Whether the protocol stamps its own readings; see
     /// [`Dmm::with_protocol_timestamps`].
     protocol_stamps: bool,
+    /// The name the meter gave on this link, once it has: to detection
+    /// ([`Dmm::from_detected`]), to the ask ahead of `init`
+    /// ([`Protocol::name_before_init`]) or to [`Dmm::get_name`]. The one copy
+    /// of it, for every family: asking again costs a round trip, and a UT61+
+    /// beeps at every ask.
+    name: Option<String>,
 }
 
 impl<T: Transport> Dmm<T> {
     /// Create a new Dmm with the given transport and protocol.
-    pub fn new(transport: T, mut protocol: Box<dyn Protocol>) -> Result<Self> {
+    pub fn new(transport: T, protocol: Box<dyn Protocol>) -> Result<Self> {
+        Self::open(transport, protocol, None)
+    }
+
+    /// Open the meter [`detect::detect_device`] identified on `transport`,
+    /// with the registry entry it picked and the name it reported: the meter
+    /// has answered on this link already, so it is not asked again.
+    pub fn from_detected(transport: T, detected: &detect::Detected) -> Result<Self> {
+        let protocol = (detected.device.new_protocol)();
+        Self::open(transport, protocol, detected.reported_name.clone())
+    }
+
+    fn open(transport: T, protocol: Box<dyn Protocol>, name: Option<String>) -> Result<Self> {
         let profile = protocol.profile();
         info!(
             "connected to {} ({})",
             profile.model_name, profile.family_name
         );
-        protocol.init(&transport)?;
-        Ok(Self {
+        let mut dmm = Self {
             transport,
             protocol,
             clock: Clock::real(),
             protocol_stamps: false,
-        })
+            name,
+        };
+        if dmm.protocol.name_before_init(&dmm.transport) {
+            dmm.ask_name_before_init();
+        }
+        dmm.protocol.init(&dmm.transport)?;
+        Ok(dmm)
+    }
+
+    /// The name, for a meter that wants it asked before `init` starts it. A
+    /// name already in hand will do: the meter gave it on this link. No name
+    /// is no reason to give up: `init` runs either way.
+    fn ask_name_before_init(&mut self) {
+        match self.get_name() {
+            Ok(Some(_)) => {}
+            Ok(None) => debug!("no name before init; starting the meter anyway"),
+            Err(e) => debug!("no name before init ({e}); starting the meter anyway"),
+        }
     }
 
     /// Stamp this session's readings with `clock` instead of wall time.
@@ -134,9 +168,24 @@ impl<T: Transport> Dmm<T> {
         self.protocol.select(&self.transport, setting, id)
     }
 
-    /// Request the device name from the meter.
+    /// The meter's name for itself: the one it already gave on this link,
+    /// else asked of it, and kept once it answers. `None` for a family with no
+    /// name query.
     pub fn get_name(&mut self) -> Result<Option<String>> {
-        self.protocol.get_name(&self.transport)
+        if let Some(name) = &self.name {
+            return Ok(Some(name.clone()));
+        }
+        let name = self.protocol.get_name(&self.transport)?;
+        if name.is_some() {
+            self.name.clone_from(&name);
+        }
+        Ok(name)
+    }
+
+    /// The name the meter already gave on this link, without asking it: for
+    /// a caller that shows the name only when it costs nothing.
+    pub fn known_name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     /// Get the device profile.
@@ -338,31 +387,33 @@ impl Default for OpenOptions<'_> {
 /// identified from the bytes it sends; a caller that wants to know which one
 /// it was calls [`open_auto`] instead.
 pub fn open_device_by_id_auto(id: &str, opts: OpenOptions<'_>) -> Result<Dmm<Box<dyn Transport>>> {
-    let (transport, protocol) = open_transport_by_id_auto(id, opts)?;
-    Dmm::new(transport, protocol)
+    match selection_by_id(id)? {
+        Selection::Auto => open_auto(opts).map(|(dmm, _)| dmm),
+        Selection::Device(entry) => {
+            Dmm::new(open_device_transport(entry, opts)?, (entry.new_protocol)())
+        }
+    }
 }
 
-/// Open the transport and build the protocol without running `Protocol::init`.
+/// Open the link a named meter is on, without running `Protocol::init`.
 ///
 /// Lets a caller wrap the transport — recording wire bytes, say — before the
-/// init handshake runs, so those bytes are observable too. Pass the pair to
-/// [`Dmm::new`] to finish opening the device.
+/// init handshake runs, so those bytes are observable too. Pass it with the
+/// entry's protocol to [`Dmm::new`] to finish opening the device.
 ///
-/// With [`registry::AUTO_DEVICE_ID`] the detection probe runs here, before the
-/// transport is handed back, so its bytes go out unwrapped. A caller that must
-/// see them wraps the transport itself: [`open_transport`] then
-/// [`detect::detect_device`].
-pub fn open_transport_by_id_auto(
-    id: &str,
+/// The same for a meter not named yet is [`open_transport`], then
+/// [`detect::detect_device`] and [`Dmm::from_detected`], which keeps the name
+/// detection got.
+pub fn open_device_transport(
+    device: &SelectableDevice,
     opts: OpenOptions<'_>,
-) -> Result<(Box<dyn Transport>, Box<dyn Protocol>)> {
-    match selection_by_id(id)? {
-        Selection::Auto => {
-            let (transport, detected) = open_detected(opts)?;
-            Ok((transport, (detected.device.new_protocol)()))
-        }
-        Selection::Device(entry) => Ok((open_entry(entry, opts)?, (entry.new_protocol)())),
+) -> Result<Box<dyn Transport>> {
+    if device.bluetooth_only {
+        return open_bluetooth_only(device, opts);
     }
+    let preferred = preferred_transports(device.family);
+    let (transport, _bridge) = open_links(preferred, &bluetooth_peers(Some(device)), opts)?;
+    Ok(transport)
 }
 
 /// Open the meter on the cable without being told which one it is.
@@ -373,8 +424,7 @@ pub fn open_transport_by_id_auto(
 /// which meter was picked and what name it reported.
 pub fn open_auto(opts: OpenOptions<'_>) -> Result<(Dmm<Box<dyn Transport>>, detect::Detected)> {
     let (transport, detected) = open_detected(opts)?;
-    let protocol = (detected.device.new_protocol)();
-    Ok((Dmm::new(transport, protocol)?, detected))
+    Ok((Dmm::from_detected(transport, &detected)?, detected))
 }
 
 /// Resolve a device id for the open path: [`registry::AUTO_DEVICE_ID`], or an
@@ -399,16 +449,6 @@ fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::D
     let (transport, bridge) = open_transport(&[], opts)?;
     let detected = detect::detect_device(&*transport, bridge)?;
     Ok((transport, detected))
-}
-
-/// Open the link one registry entry is on.
-fn open_entry(entry: &SelectableDevice, opts: OpenOptions<'_>) -> Result<Box<dyn Transport>> {
-    if entry.bluetooth_only {
-        return open_bluetooth_only(entry, opts);
-    }
-    let preferred = preferred_transports(entry.family);
-    let (transport, _bridge) = open_links(preferred, &bluetooth_peers(Some(entry)), opts)?;
-    Ok(transport)
 }
 
 /// Open a meter with the radio built in, over Bluetooth alone.
@@ -458,9 +498,10 @@ fn open_bluetooth_only(
 /// UT-D07B, and detection ends in [`Error::DeviceNotIdentified`] on the cable.
 /// Unplug it, or name the adapter.
 ///
-/// This is the split half of [`open_transport_by_id_auto`]: a caller that
-/// wants to wrap the transport before *any* byte flows — recording the
-/// detection probe itself, say — opens it here and detects separately.
+/// This is the split half of [`open_auto`]: a caller that wants to wrap the
+/// transport before *any* byte flows — recording the detection probe itself,
+/// say — opens it here, detects separately and finishes with
+/// [`Dmm::from_detected`].
 pub fn open_transport(
     preferred: &[&'static str],
     opts: OpenOptions<'_>,
@@ -915,6 +956,133 @@ mod tests {
             m2.timestamp.saturating_duration_since(m1.timestamp),
             std::time::Duration::from_secs(5)
         );
+    }
+
+    /// A mock on the named link, as `open_transport` hands one back.
+    struct Link {
+        mock: MockTransport,
+        name: &'static str,
+    }
+
+    impl Transport for Link {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            self.mock.write(data)
+        }
+        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
+            self.mock.read_timeout(buf, timeout_ms)
+        }
+        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
+            self.mock.send_feature_report(data)
+        }
+        fn transport_name(&self) -> &'static str {
+            self.name
+        }
+    }
+
+    /// What a caller does with the name once the session is open.
+    #[derive(Clone, Copy, Debug)]
+    enum NameUse {
+        /// `read` in text, CSV or JSON, and the GUI with its name option off:
+        /// only a name already in hand.
+        Known,
+        /// `info`, `capture`, `read --format replay`, the GUI with its name
+        /// option on — asked twice, to show the second costs nothing.
+        Asked,
+    }
+
+    /// Open `model` on `link` the way the binaries do, `auto` through
+    /// detection, and use the name as `then` says. Returns the Get Name
+    /// writes, every write, and the name the caller ends up with.
+    fn name_asks(
+        model: &str,
+        name: &str,
+        link: &'static str,
+        auto: bool,
+        then: NameUse,
+    ) -> (usize, Vec<Vec<u8>>, Option<String>) {
+        const ACK: [u8; 7] = [0xAB, 0xCD, 0x04, 0xFF, 0x00, 0x02, 0x7B];
+        let transport = Link {
+            mock: MockTransport::new(vec![
+                ACK.to_vec(),
+                crate::protocol::framing::test_frame_be16(name.as_bytes()),
+            ]),
+            name: link,
+        };
+        let mut dmm = if auto {
+            let detected = detect::detect_device(&transport, link).unwrap();
+            assert_eq!(detected.device.id, model);
+            Dmm::from_detected(transport, &detected).unwrap()
+        } else {
+            let entry = registry::find_device(model).expect("registry entry");
+            Dmm::new(transport, (entry.new_protocol)()).unwrap()
+        };
+        let shown = match then {
+            NameUse::Known => dmm.known_name().map(str::to_owned),
+            NameUse::Asked => {
+                let first = dmm.get_name().unwrap();
+                assert_eq!(dmm.get_name().unwrap(), first);
+                first
+            }
+        };
+        let written = dmm.transport().mock.written.borrow().clone();
+        let get_name = crate::protocol::ut61eplus::command::Command::GetName.encode();
+        let asks = written.iter().filter(|w| **w == get_name).count();
+        (asks, written, shown)
+    }
+
+    /// The meter is asked its name at most once a session, whoever wants it:
+    /// detection's answer, or the ask ahead of `init`, is the one every later
+    /// caller gets. A meter nothing asked stays unasked.
+    #[test]
+    fn a_session_asks_the_meter_its_name_at_most_once() {
+        use NameUse::{Asked, Known};
+        let ut61e = |link, auto, then| name_asks("ut61eplus", "UT61E+", link, auto, then);
+        let ut60bt = |auto, then| name_asks("ut60bt", "UT60BT", BLUETOOTH, auto, then);
+        let named = |name: &str| Some(name.to_string());
+        for link in ["CP2110", BLUETOOTH] {
+            // Detection asks; nothing after it does.
+            assert_eq!(ut61e(link, true, Known).0, 1, "{link}");
+            assert_eq!(ut61e(link, true, Known).2, named("UT61E+"), "{link}");
+            assert_eq!(ut61e(link, true, Asked).0, 1, "{link}");
+            assert_eq!(ut61e(link, true, Asked).2, named("UT61E+"), "{link}");
+            // Named: only a caller that wants the name asks for it.
+            assert_eq!(ut61e(link, false, Known), (0, ut61e_init(link), None));
+            assert_eq!(ut61e(link, false, Asked).0, 1, "{link}");
+            assert_eq!(ut61e(link, false, Asked).2, named("UT61E+"), "{link}");
+        }
+        // Asked before the stream, by detection or by the session, and never
+        // again.
+        let name_then_start = vec![
+            crate::protocol::ut61eplus::command::Command::GetName
+                .encode()
+                .to_vec(),
+            crate::protocol::ut61eplus::command::Command::StartStream
+                .encode()
+                .to_vec(),
+        ];
+        for auto in [true, false] {
+            for then in [Known, Asked] {
+                assert_eq!(
+                    ut60bt(auto, then),
+                    (1, name_then_start.clone(), named("UT60BT")),
+                    "auto {auto}, {then:?}"
+                );
+            }
+        }
+    }
+
+    /// What a UT61E+ session's `init` writes on `link`: nothing on a cable,
+    /// the stream start over Bluetooth.
+    fn ut61e_init(link: &str) -> Vec<Vec<u8>> {
+        if link == BLUETOOTH {
+            vec![
+                crate::protocol::ut61eplus::command::Command::StartStream
+                    .encode()
+                    .to_vec(),
+            ]
+        } else {
+            Vec::new()
+        }
     }
 
     #[test]
