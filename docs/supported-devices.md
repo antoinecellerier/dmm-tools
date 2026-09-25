@@ -133,8 +133,8 @@ the manuals and the remote commands from the vendor software.
 
 ## Not supported yet
 
-Bluetooth meters with protocols of their own (UT60BT, EEVBlog 121GW, OWON) and
-serial meters (Fluke 28x, UT805A) need a transport the tool does not have.
+Meters with a Bluetooth radio built in (UT60BT, EEVBlog 121GW, OWON) and
+serial meters (Fluke 28x, UT805A) are not supported yet.
 Candidates, their protocols and what each would take are researched in
 [new-device-candidates.md](research/new-device-candidates.md). Your model is
 missing? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues)

@@ -48,7 +48,14 @@ tables, and bar graph segment count.
    Bluetooth client for the family, decompiled with jadx 1.5.6 to
    `references/idmm2/jadx-out/` and read 2026-09-22: the source for command
    **0x5D** (`AB CD 03 5D 01 D8`), which the app sends once to start reading
-   and which is in neither the deck nor V2.02. Tagged [VENDOR]
+   and which is in neither the deck nor V2.02. Tagged [VENDOR]. Read again
+   2026-09-25 for the models it drives natively (working note
+   `references/idmm2/analysis/findings/protocol-groups.md`): the **UT60BT**
+   and **UT202BT** go through the same parser (`TestDataModel.anylseData`),
+   19-byte frame and 0x5F-then-0x5D handshake as the UT61+ and UT161 behind a
+   UT-D07B, over the same ISSC service (`BleManager`), and differ only in
+   their range tables, the APK assets `funOl1_UT60BT.json` and
+   `funOl1_UT202BT.json`, which share the UT61+ assets' schema
 
 No community implementations, forum posts, or third-party reverse
 engineering work during the primary RE. Two community implementations were
@@ -248,3 +255,37 @@ row credits ljakob with BT serial support. It has none: `ut61eplus.py` opens
 `hid.device()` on `0x10C4:0xEA80` and speaks CP2110 HID only. The UT60BT
 appears in its README as a model whose unit tables would need adjusting, not
 as a transport.
+
+### 2026-09-25: UT60BT and UT202BT
+
+Opened again after the iDMM2.0 read of the two native-BLE models (source 8),
+to check it before tables are written. Working note:
+`references/idmm2/analysis/findings/community-ut60bt-ut202bt.md`. All
+[COMMUNITY]:
+
+- [libreble/multimeter](https://github.com/libreble/multimeter) `d26ba48`
+  (protocol files unchanged since `e887b0f`) — the only source with UT202BT
+  code, marked ported-unverified, with no captures
+- [webspiderteam/Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) `2b83d9e`
+- [QtDMM](https://github.com/qtdmm/QtDMM) `ad2f785` — new; UT60BT support
+  from 2026-09-24 with a hardware dial walk
+- [olegv142/ut61xpy](https://github.com/olegv142/ut61xpy) `3384a9f` — its
+  UT60BT Bluetooth adapter
+
+| Finding | iDMM2.0 | Community | Agreement |
+|---------|---------|-----------|:---------:|
+| Service and characteristics | ISSC, notify `1e4d`, write `8841` | Same in all four; a live UT60BT has no `ff`/`fff0` service | ✓ |
+| Advertised name | `UT60BT`, `UT202BT` | One UT60BT advertises `UT60BTk` and answers Get Name with `UT60BT` | new: match a prefix |
+| Handshake | 0x5F, then 0x5D, stream | Same bytes; the meter ignores 0x5D until it has answered 0x5F | ✓, ordering new |
+| 0x5E poll | never sent by the app | QtDMM and ut61xpy poll it on a UT60BT, one frame per request | the meter answers it |
+| 19-byte layout and flags | as the UT61+ | Same; checksums valid on real frames | ✓ |
+| Secondary display (byte 3 bit 7) | any model | Masked by all; always 0 on a UT60BT | not covered |
+| UT60BT range table | `funOl1_UT60BT.json` | QtDMM matches it, and its dial walk confirms V r0 = mV and Ω r4 = MΩ; libreble's generic table disagrees on V r0, Hz and capacitance r2/r5, mA r1 | ✓ where measured |
+| UT202BT range table | `funOl1_UT202BT.json` | No source has one; libreble's generic codes give INRUSH and LPFA in V where the asset says A | not covered |
+| Buttons | UT60BT 0x46-0x48, 0x4A, 0x4C; UT202BT 0x31-0x37 | Agree; libreble adds 0x41, 0x49, 0x4B for the UT60BT on a blanket claim | partly |
+
+**Boundary note.** The subagent that did this read also opened
+`ljakob/unit_ut61eplus`'s `from_vendor/funOl_UT60BT.json`, which the
+2026-09-22 note above excludes. It was compared only; nothing was taken from
+it. It is an older copy of the same vendor asset — same units, different
+bounds. QtDMM's tables derive from that file.

@@ -75,8 +75,10 @@ Our unit, 2026-09-22 [HARDWARE]: GAP name
 
 `0000ff12` appears in the advertising data only — there is no GATT service by
 that UUID on this unit [HARDWARE]. It is a scan hint, not a data path. The
-`0000ff01`/`ff02`/`ff12` service set the iDMM2.0 app also carries belongs to
-UNI-T's native-BLE meters, which have no adapter [VENDOR].
+`0000ff01`/`ff02`/`ff12` service set the iDMM2.0 app also carries is the
+UT513C insulation tester's older firmware only; the app talks to the
+native-BLE UT60BT and UT202BT over the ISSC service above, as to this adapter
+[VENDOR] (read 2026-09-25, `new-device-candidates.md`).
 
 On connect, BlueZ 5.87 logs
 `profiles/gap/gas.c:read_ppcp_cb() GAS PPCP: Invalid Connection Parameters

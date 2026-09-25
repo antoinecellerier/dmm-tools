@@ -1750,11 +1750,12 @@ the following needs someone's hardware.
   link survives that with the meter switched off — the adapter's heartbeat
   may or may not count as data — is unverified: connect, switch the meter
   off, and watch the link and the blue LED past 5 minutes.
-- **The `0000ff01`/`ff02`/`ff12` service set.** UNI-T's iDMM2.0 app carries it
-  beside the ISSC group; it belongs to the native-BLE meters (UT60BT, UT202BT
-  and the rest of the survey in `docs/research/new-device-candidates.md`),
-  which have no adapter. Supporting those meters means a second service set in
-  the transport and a way to tell the two apart at scan time.
+- **The UT60BT and UT202BT.** Read from the iDMM2.0 app 2026-09-25: they speak
+  the UT61+ protocol over the same ISSC service as the UT-D07B and advertise
+  their own names, so the transport needs only to accept those names, plus a
+  range table each (`docs/research/new-device-candidates.md`, Bluetooth
+  section). The `0000ff01`/`ff02`/`ff12` set the app also carries is the
+  UT513C's older firmware only.
 - **The UT202S registry entry.** UNI-T's UT61+ protocol deck specifies the
   UT202S clamp meter with a full range table, and it is a Bluetooth meter —
   now reachable. Adding it means a `SelectableDevice` entry with its own
@@ -1786,9 +1787,12 @@ Found by the 2026-09-19 surveys (`docs/research/new-device-candidates.md`,
   UT171 series and the UT181A. The UT61E+ one is V2.02 repackaged
   (ut61-family approach doc); hash-compare the others against what the
   family docs used.
-- **iDMM2.0 Android app** (2025-12-20), UNI-T's Bluetooth client for the
-  UT61+/UT171/UT181A pages' meters, archived in `references/idmm2/`,
-  unanalysed. A source for the BLE transport and the UT202S.
+- ~~**iDMM2.0 Android app** (2025-12-20)~~ — **read 2026-09-22** for the
+  0x5D command and **2026-09-25** for every model it drives: protocol groups
+  in `docs/research/new-device-candidates.md` (Bluetooth section), working
+  note `references/idmm2/analysis/findings/protocol-groups.md`. It carries no
+  UT202S; its UT202BT table is still to be compared with the deck's UT202S
+  one.
 - ~~**UT71 series and UT81 series interface protocols**~~ — **DONE
   2026-09-21**: both fetched and read, archived with provenance in
   `references/ut71/` and `references/ut81/`, and written up in

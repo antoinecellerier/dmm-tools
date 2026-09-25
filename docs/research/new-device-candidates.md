@@ -268,9 +268,9 @@ modern GUI.
 **Implemented as the Bluetooth transport** — auto-detected, or pinned with
 `--adapter <address>`; verified on our UT61E+. What the adapter does on the
 wire is in [research/ut-d07b](ut-d07b/reverse-engineered-protocol.md); the
-`ff01/ff02/ff12` service set of the native-BLE meters, the UT-D07A and the
-UT202S entry are still open ([backlog](../verification-backlog.md)). The
-analysis below is as it stood before.
+UT-D07A and the UT202S entry are still open ([backlog](../verification-backlog.md)).
+The analysis below is as it stood before, except the native-BLE paragraphs,
+rewritten 2026-09-25 from the iDMM2.0 app.
 
 | Aspect | Details |
 |--------|---------|
@@ -302,13 +302,46 @@ UT513G/UT515A+/UT516E, UT251A+/UT252C/UT253C, UT253A/B, UT267C, UT275+,
 UT677A+/UT677C, UT620E, UT343E.
 
 UNI-T's phone client is **iDMM2.0** (优利德智测). Its manual carries no model
-list at all, but the archived APK (`references/idmm2/`) does: per-model packages
-`ut117c`, `ut197`, `ut219p`, `ut219pv`, `ut251c`, `ut275a`, `ut501e`,
-`ut503pv`, `ut505a`, `ut513`, and range assets for the UT61B+/D+/E+,
-UT161B/D/E, UT171, UT181A, UT60BT and UT202BT. It carries two BLE UART service
-sets — `0000ff01`/`ff02`/`ff12` and the ISSC/Microchip transparent-UART
-`49535343-…` group, the second consistent with the ISSC chip these adapters
-use — so a BLE transport would need both. Read from the APK 2026-09-21.
+list at all, but the archived APK (`references/idmm2/`) does. Read 2026-09-25
+(working note `references/idmm2/analysis/findings/protocol-groups.md`), it
+picks a decoder by advertised name alone, and every model but one talks over
+the same ISSC transparent-UART service as the UT-D07B. The
+`0000ff01`/`ff02`/`ff12` set it also carries is the UT513C's "Old" firmware
+and nothing else's (`UT513Manager`). All frames start `AB CD` and end in a
+16-bit byte sum, but they fall into four groups [VENDOR]:
+
+- **The UT61+ parser: UT60BT and UT202BT.** Same 19-byte frame, same parser
+  (`TestDataModel.anylseData`) and same 0x5F then 0x5D handshake as the UT61+
+  and UT161 behind a UT-D07B; the meters advertise names starting `UT60BT` and
+  `UT202BT` (one UT60BT advertises `UT60BTk`, per community sources). Only
+  the range tables differ, shipped as `funOl1_UT60BT.json` (9999 counts,
+  999.9 mV to 999.9 V, nF to mF, NCV) and `funOl1_UT202BT.json` (clamp: 600 V
+  and A, INRUSH, LPF, peak) in the UT61+ tables' schema. A frame with bit 7 of
+  byte 3 set carries a secondary display, for any model. **The next Bluetooth
+  step:** our transport needs only to accept their names.
+- **The UT171 and UT181A**, over the UT-D07A/B: 16-bit little-endian length,
+  binary floats. Already supported.
+- **A 2-byte big-endian length: UT117C, UT197/UT197PV, UT219PV.** One polled
+  frame, `AB CD 00 04 05 00 01 81` every 300-600 ms, replying with ASCII value
+  and unit strings; UT61+'s checksum rule. The field layout differs per model
+  (`UT117cManager`, `UT197Manager`, `UT219pvManager`), so this would be a new
+  family with a layout per model.
+- **Formats of their own**, one model each, all polled unless noted:
+  - UT219P: big-endian length, little-endian sum from byte 2; paged reads
+    (cmd 05 + page 0-8), name cmd 0x17.
+  - UT513C: big-endian length, big-endian sum over command and payload only;
+    `AB CD 00 03 05 00 05`; ISSC or the `ff` set, whichever the meter has.
+  - UT505A: the UT181A's framing; `AB CD 03 00 05 08 00` every 500 ms.
+  - UT501E: little-endian length; the app sends no poll, so the meter
+    presumably pushes.
+  - UT503PV: polls like the UT505A, answers with a big-endian length and sum.
+  - UT251C+ and UT275A: `AB CD 04 00 05 <type> cs` every 300 ms; big-endian
+    length excluding the sum, which is little-endian on the UT251C+ and
+    big-endian on the UT275A.
+
+The app has no code, asset or resource naming the UT343E, UT620E, UT281F,
+UT217A/B, UT677A+/C, UT253A/B/C, UT252C, UT251A+, UT267C, UT513E/G,
+UT515A+/C or UT516E: no source for their protocols is known.
 
 The UT60BT was the **#1 recommendation** in the 2024 EEVBlog "General
 Purpose Multimeter Recommendations" thread for logging multimeters. The
@@ -616,6 +649,9 @@ the same transport.
 | **72-7730 / 72-7732** | Tenma | Handheld DMM | USB HID (`1A86:E008`) | UNI-T UT71 rebrands, CH9325 / HE2325U (UT-D04), per sigrok only. The UT71A–E entry above is implemented; a Tenma would be named as a UT71 |
 | **UT804+** | UNI-T | Bench DMM (59999 counts per its Chinese product page) | USB (HID per UNI-T's download listing, unverified) | A newer model than the supported UT804 (40000 counts). A "UT804" [programming manual](https://instruments.uni-trend.com.cn/static/upload/file/20220920/UT804%E7%BC%96%E7%A8%8B%E6%89%8B%E5%86%8C%20REV.2.pdf) is the Chinese original of the UCI SDK manual (V1.1, 2019): it covers the UT804/UT804N and not the UT804+ ([research/uci-bench-family](uci-bench-family/reverse-engineered-protocol.md)). The [UT804+ page](https://instruments.uni-trend.com.cn/cate/143.html) lists software but no protocol document. The "UT804接口协议" on the [UT800 series page](https://instruments.uni-trend.com.cn/cate/140.html), read 2026-09-19, describes the UT804 alone (its first digit runs 0-4, a 40000-count display), so whether the UT804+ speaks a protocol we support is still open |
 | **UT202S** | UNI-T | Clamp meter | Bluetooth, per UNI-T's protocol deck | Speaks the UT61+ protocol: the [deck](ut61-family/reverse-engineering-approach.md) gives its range table (V and A to 600, LPF, temperature) and says it sends a main and a secondary display in AC, LPF and temperature modes. Its [page](https://meters.uni-trend.com.cn/content/1340.html) offers only the UT202S/UT202BT manual. The Bluetooth transport now carries it; it needs a registry entry and a capture |
+| **UT60BT** | UNI-T | Handheld DMM (9999 counts, per the app's range table) | Bluetooth LE, built in | The UT61+ protocol over the UT-D07B's ISSC service (Bluetooth section above). The iDMM2.0 app ships its range table. Needs the transport to accept its name, a table and a registry entry; the lib already reads its name reply as the UT61+ family on UT61E+ tables |
+| **UT202BT** | UNI-T | Clamp meter | Bluetooth LE, built in | As the UT60BT, with a clamp table (INRUSH, LPF, peak) and a secondary display. Whether its table matches the deck's UT202S one is unchecked |
+| **UT117C, UT197 / UT197PV, UT219PV** | UNI-T | Not recorded | Bluetooth LE, built in (ISSC) | One polled `AB CD` frame with a 2-byte length and ASCII readings, a field layout per model (Bluetooth section above). The iDMM2.0 app is the only source |
 | **UT805A / UT805N** | UNI-T | Bench DMM (220000 counts) | Serial | USB-to-serial (virtual COM port, not HID), ASCII text protocol (9600/8N1, bidirectional); see [research/ut8803](ut8803/reverse-engineering-approach.md). The shared bench programming manual's device table gives `[T:COM][PORT:8][BAUD:9600][PARITY:N][STOP:1][DATA:7]` and a CP210x driver |
 | **UT216XD** | UNI-T | Clamp meter | Unstated — the deck that specifies it is a Bluetooth protocol | Speaks the UT61+ frame, bargraph bytes aside (Bluetooth section above). **No archived source carries its ranges**: the deck names it only in the two bargraph exceptions, the iDMM2.0 APK has no UT216 package or range asset, and it has no page in the Chinese catalogue. Its range table would have to come from hardware or from vendor software we do not have |
 | **UT61B / UT61C / UT61D / UT61E** | UNI-T | Handheld DMM (classic, pre-`+`) | UT-D04 (CH9325) in practice | UNI-T's "protocol" downloads are the chipset datasheets: ["UT61E接口协议"](https://meters.uni-trend.com.cn/static/upload/file/20220908/1662605553430400.pdf) is the Cyrustek **ES51922** (19230 baud, 7-odd-1) and ["UT61B通信协议"](https://meters.uni-trend.com.cn/static/upload/file/20220110/UT61B%20protocol.pdf) is the Fortune **FS9922-DMM3**. Long discontinued; sigrok covers both chipsets |
@@ -645,6 +681,7 @@ the same transport.
 | **UNI-T UT71A–E** — implemented 2026-09-21 | USB HID (CH9325) | Lowest cost of any candidate: the cable, the bridge and the 11-byte packet shape are already implemented, UNI-T publishes the protocol, and the Tenma and Voltcraft VC9x0 rebrands come with it | Done, experimental: `ut71ab`, `ut71cde`, `vc920` await a hardware report ([supported devices](../supported-devices.md)) |
 | **Brymen BM86x** | USB HID (Cypress) | Official protocol docs, strong community, no cross-platform GUI exists | Large |
 | **UNI-T via UT-D07B** — implemented 2026-09-22 | BLE | Reuses existing protocol parsers, #1 recommended logging meter on EEVBlog 2024, no desktop BLE tool | Done, verified on a UT61E+: the UT171 and UT181 series UNI-T lists on the adapter await a hardware report ([supported devices](../supported-devices.md)) |
+| **UNI-T UT60BT / UT202BT** | BLE (built in) | The UT61+ protocol over the Bluetooth transport we have; the UT60BT is the #1 logging pick on EEVBlog 2024 | Small: accept their advertised names, two range tables from the iDMM2.0 app, the UT202BT's secondary display |
 | **Fluke 287/289** | USB serial (IR) | Officially documented ASCII protocol, millions of units, $200 Windows-only software is terrible | Large |
 
 ### Tier 2: Worth considering
@@ -655,6 +692,7 @@ the same transport.
 | **OWON B35T+/B41T+** | BLE | Popular budget BLE meters, no cross-platform GUI, proprietary dongle required for PC | High |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
+| **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
 | **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Moderate: a network transport (the HID-shaped `Transport` trait must fit or change), a SCPI protocol family, address-based open and `*IDN?` identification; USB TMC deferred behind the dependency decision |
 
 ### Tier 3: Lower priority
@@ -676,6 +714,11 @@ the same transport.
 - **rusty_meter** (100 stars, Rust/egui, OWON XDM) validates the exact
   tech stack dmm-tools uses. Proves community demand for native desktop
   multimeter apps.
+- **Other brands' BLE meters need more than names and tables.** The 121GW,
+  OWON B35T+/B41T+ and the ZOTEK rebrands (Aneng/BSIDE/ZOYI) are not known to
+  use the ISSC service (the ZOTEK ones use `fff4`), so each needs its own GATT
+  path, and their protocols are documented only in community code, so each
+  needs a clean-room source decision before work starts.
 - **Bluetooth-DMM-For-Windows** (47 stars, now abandoned) proves demand
   for a multi-device BLE desktop app. Its Windows-only nature and
   inactivity leave the gap wide open.
@@ -689,9 +732,8 @@ the same transport.
   specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)): a
   Truevolt-style dialect that the poll-based `Protocol` trait fits, needing
   a network transport and a SCPI protocol family rather than another frame
-  parser. So growth inside UNI-T's
-  catalogue means UT632 over USB, the BLE models over an adapter, or the
-  SCPI bench meters over LAN — the last of which also opens Rigol and
+  parser. So growth inside UNI-T's catalogue means UT632 over USB, the BLE
+  models (native or over an adapter), or the SCPI bench meters over LAN — the last of which also opens Rigol and
   Siglent.
 
 ---
