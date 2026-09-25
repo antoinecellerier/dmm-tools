@@ -12,14 +12,16 @@
 //! - `frame.rs`: the key, the per-type lengths and the stream extractor
 //! - `glyph.rs`: the seven-segment glyphs and the words they spell
 //! - `layout.rs`: each layout's bit table, and packet → `Measurement`
+//! - `keys.rs`: the remote keys each layout offers, and their frames
 //! - `capture.rs`: the capture steps per layout
 
 mod capture;
 mod frame;
 mod glyph;
+mod keys;
 mod layout;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
@@ -27,7 +29,7 @@ use crate::protocol::{
     CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
 };
 use crate::transport::Transport;
-use layout::Layout;
+use layout::{Layout, Showing};
 use log::{debug, warn};
 
 /// The packet being decoded, for reporting what in it no spec section
@@ -56,6 +58,9 @@ pub(crate) struct ZotekProtocol {
     /// Whether this connection has already said the meter sends another
     /// layout than the entry's.
     warned_layout: bool,
+    /// The type byte of the last packet decoded on this connection, and
+    /// what it showed, which the key codes follow; `None` before the first.
+    showing: Option<(u8, Showing)>,
 }
 
 impl ZotekProtocol {
@@ -67,12 +72,12 @@ impl ZotekProtocol {
                 family_name: "ZOTEK",
                 model_name: layout.name,
                 stability: Stability::Experimental,
-                // Key presses (spec §8.2) are a later addition.
-                supported_commands: &[],
+                supported_commands: keys::commands(layout),
                 max_aux_values: layout.max_aux_values,
                 verification_issue: None,
             },
             warned_layout: false,
+            showing: None,
         }
     }
 
@@ -134,13 +139,39 @@ impl Protocol for ZotekProtocol {
                 other.name, other.id
             );
         }
-        self.parse_payload(&packet)
+        let (reading, showing) = layout::decode_showing(&packet)?;
+        self.showing = Some((packet[frame::TYPE_AT], showing));
+        Ok(reading)
     }
 
     /// `payload` is one whole descrambled packet, as the stream delivers it
     /// and a replay file stores it; it is decoded by its own type byte.
     fn parse_payload(&self, payload: &[u8]) -> Result<Measurement> {
         layout::decode(payload)
+    }
+
+    /// Press a remote key, one of those the entry's profile lists. The codes
+    /// follow the layout of the meter's packets, the entry's before the
+    /// first.
+    fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
+        if !self.profile.supported_commands.contains(&command) {
+            return Err(Error::UnsupportedCommand(command.to_string()));
+        }
+        // A key whose code follows the display needs a packet first when
+        // none has arrived on this connection, as when `dmm-cli command`
+        // opens the meter and presses at once.
+        if self.showing.is_none() && keys::follows_display(command) {
+            self.request_measurement(transport)?;
+        }
+        let (type_byte, showing) = self
+            .showing
+            .unwrap_or((self.layout.type_byte, Showing::default()));
+        let code = keys::code(type_byte, command, showing)?;
+        let frame = keys::frame(code);
+        debug!("zotek: key {command} ({code:02X}), frame {frame:02X?}");
+        // One write, no reply awaited: neither app waits for one, and the
+        // stream shows what the key did (spec §8.1).
+        transport.write(&frame)
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -262,6 +293,99 @@ mod tests {
         ZotekProtocol::new_zt300ab().init(&mock).unwrap();
         assert!(mock.written.borrow().is_empty());
         assert!(mock.feature_reports.borrow().is_empty());
+    }
+
+    /// A key is one frame, written without waiting for anything: the mock
+    /// has nothing to read.
+    #[test]
+    fn a_key_is_one_write_and_no_read() {
+        let mock = MockTransport::new(Vec::new());
+        let mut proto = ZotekProtocol::new_zt5b();
+        proto.send_command(&mock, "auto_function").unwrap();
+        assert_eq!(
+            *mock.written.borrow(),
+            [[0xEA, 0xEC, 0x70, 0xED, 0xA2, 0xC1, 0x32, 0x71, 0x64, 0x99]],
+            "spec §9's AUTO frame"
+        );
+    }
+
+    /// Spec §9's type-4 packet, on air, with V off, DC kept only if `dc`,
+    /// and `bit` of `byte` lit.
+    fn type4_showing(byte: usize, bit: u8, dc: bool) -> Vec<u8> {
+        let mut plain = EXAMPLES[3].1.to_vec();
+        plain[4] &= !0x10;
+        if !dc {
+            plain[13] &= !0x02;
+        }
+        plain[byte] |= bit;
+        scrambled(&plain)
+    }
+
+    /// Before any packet, a key that follows the display reads one; after
+    /// it, keys follow that one without reading.
+    #[test]
+    fn a_display_key_follows_the_last_packet() {
+        // A, DC (spec §7.4).
+        let mock = MockTransport::new(vec![type4_showing(18, 0x10, true)]);
+        let mut proto = ZotekProtocol::new_zt5566se();
+        proto.send_command(&mock, "current").unwrap();
+        assert_eq!(*mock.written.borrow(), [keys::frame(0xC8)]);
+
+        let err = proto.send_command(&mock, "zero").unwrap_err();
+        assert!(matches!(err, Error::CommandRejected(_)), "{err:?}");
+        assert_eq!(mock.written.borrow().len(), 1, "nothing sent");
+    }
+
+    /// An entry opened on a meter sending another layout: the keys follow
+    /// the layout of its packets, here type 4's current key in A DC, not
+    /// the ZT-300AB's `C9`.
+    #[test]
+    fn keys_follow_the_layout_the_meter_sends() {
+        let mock = MockTransport::new(vec![type4_showing(18, 0x10, true)]);
+        let mut proto = ZotekProtocol::new_zt300ab();
+        proto.request_measurement(&mock).unwrap();
+        proto.send_command(&mock, "current").unwrap();
+        assert_eq!(*mock.written.borrow(), [keys::frame(0xC8)]);
+    }
+
+    #[test]
+    fn zero_goes_out_while_farads_show() {
+        // F (spec §7.4).
+        let mock = MockTransport::new(vec![type4_showing(17, 0x01, false)]);
+        let mut proto = ZotekProtocol::new_zt5566se();
+        assert_eq!(proto.request_measurement(&mock).unwrap().unit, "F");
+        proto.send_command(&mock, "zero").unwrap();
+        assert_eq!(*mock.written.borrow(), [keys::frame(0xB5)]);
+    }
+
+    /// A display key with no packet to read fails as the read does, and
+    /// sends nothing.
+    #[test]
+    fn a_display_key_with_nothing_to_read_times_out() {
+        let mock = MockTransport::new(Vec::new());
+        let mut proto = ZotekProtocol::new_zt5bq();
+        let err = proto.send_command(&mock, "temp_unit").unwrap_err();
+        assert!(matches!(err, Error::Timeout), "{err:?}");
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// The ZT-300AB entry refuses the keys its layout goes without, and
+    /// no entry takes the other families' `auto`.
+    #[test]
+    fn keys_outside_the_layout_are_unsupported() {
+        let mock = MockTransport::new(Vec::new());
+        let mut proto = ZotekProtocol::new_zt300ab();
+        for command in ["hold", "auto_function", "auto"] {
+            let err = proto.send_command(&mock, command).unwrap_err();
+            assert!(matches!(err, Error::UnsupportedCommand(_)), "{err:?}");
+        }
+        assert!(mock.written.borrow().is_empty());
+        assert!(
+            ZotekProtocol::new_zt5b()
+                .profile()
+                .supported_commands
+                .contains(&"hold")
+        );
     }
 
     /// Notifications arrive in pieces and back to back; each read returns

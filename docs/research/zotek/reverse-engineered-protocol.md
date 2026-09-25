@@ -476,29 +476,34 @@ The sum is `0x017B + key`; on air the frame reads
 | Key | Button (V2 English tip) | Sent when | Tag |
 |---|---|---|---|
 | `B8` | AUTO, "Click to switch to auto test functions" | always | [VENDOR] |
-| `B6` / `B7` | °C/°F, "Test Celsius,Fahrenheit" | `B7` while the display shows °C, else `B6` | [VENDOR] |
+| `B6` / `B7` | °C/°F, "Test Celsius,Fahrenheit" | V1: on types 1-2, `B7` while the display shows °C, else `B6`; on types 3-4 always `B6` (its °C state is set for types 1-2 only, BMA:486-491). V2: `B7` while the display shows °C, which type 3 can too, else `B6` | [VENDOR] |
 | `B0` | "Test Capacitance" | always | [VENDOR] |
 | `B1` | "Test Diode,Buzzer,Continuity" | always | [VENDOR] |
 | `B2` | "Test NCV" | always | [VENDOR] |
 | `B3` | "Test Frequency" | always | [VENDOR] |
 | `B4` | HOLD, "Maintain the displayed data" | always | [VENDOR] |
-| `B5` | ZERO, "Clear Key" | only in capacitance | [VENDOR] |
+| `B5` | ZERO, "Clear Key" | only while the display unit is F (capacitance), on every type; otherwise nothing is sent | [VENDOR] |
 | `C4` | "Test the voltage of v" | always | [VENDOR] |
 | `C6` | "Test the voltage of mv" (V1's icon: mV~/Hz) | always | [VENDOR] |
 | `BE` | "Test Resistance" | always | [VENDOR] |
 | `D1` | MAX/MIN, "Maximum/minimum value of the data" | always | [VENDOR] |
-| `C8`-`CB` | "Test Current" | V1 by the current mode shown on a type-4 meter: `CB` AC A, `C8` DC A, `C9` AC mA, `CA` DC mA; `C9` on types 1-3. V2: `CB` in AC, `CA` in DC, else `C9`; its dead branch for A (it tests a field never set) would send `C9` in AC and `C8` in DC | codes [VENDOR]; the per-code meanings [UNVERIFIED]: V1 and V2's branch swap the AC codes |
+| `C8`-`CB` | "Test Current" | V1 by what a type-4 meter shows: `CB` AC A, `C8` DC A, `C9` AC mA, `CA` DC mA, `C9` for anything else; always `C9` on types 1-3. V2: `CB` in AC, `CA` in DC, else `C9`; its dead branch for A (it tests a field never set) would send `C9` in AC and `C8` in DC | codes [VENDOR]; the per-code meanings [UNVERIFIED]: V1 and V2's branch swap the AC codes |
 
 Both apps offer every button to every type (V1
 `jadx-out/resources/res/layout/activity_main.xml:219-292`; V2's static
-`menuArr`, V2@891528); V1 greys out capacitance, NCV, Hz and HOLD for type 3
-(BMA:473-478).
+`menuArr`, V2@891528); for type 3, V1 greys out capacitance, NCV, Hz and
+HOLD, and locks AUTO on (BMA:473-478).
 The manuals show the same remote-button screen (300AB p.29; 5BQ p.3/-2-)
 [KNOWN] and never say the meter acts on it. The set fits the auto-ranging
 pocket meters more than the ZT-300AB's rotary dial [INFERRED]: the ZT-5B's
 H/ZERO "can clean the reading" in capacitance, as `B5` is sent only there,
-and its SEL/NCV cycles the modes (5B p.1/-3-). Which keys each model honours
-is [UNVERIFIED].
+and its SEL/NCV cycles the modes (5B p.1/-3-). That manual documents three
+buttons, power/Bluetooth, H/ZERO and SEL/NCV, whose presses cycle
+continuity/diode, capacitance, Hz and temperature (5B p.1/-3-, -4-,
+p.2/-5-, -6-); V, Ω and current are auto-matched from the input jack (5B
+p.1/-4-, p.2/-5-), and the spec table lists no mV function (5B p.2/-7-)
+[KNOWN]. So the ZT-5B has no key a `BE` or `C6` could stand for [INFERRED].
+Which keys each model honours is otherwise [UNVERIFIED].
 
 ### 8.3 Clock set, cmd `04`
 

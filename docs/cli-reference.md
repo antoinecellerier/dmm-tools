@@ -442,6 +442,29 @@ dmm-cli command <ACTION>          # send a command
 | `light` | Toggle backlight |
 | `select` | SHIFT/SETUP button: steps to the dial position's next function |
 
+#### ZOTEK commands
+
+The keys of ZOTEK's app, not yet tried on a meter; watch the reading for
+what a key did. The ZT-300AB offers no `hold`, `auto_function`,
+`capacitance`, `hz` or `ncv`; the ZT-5B no `ohms` or `millivolts`; only the
+ZT-5566SE offers `minmax`.
+
+| Command | Description |
+|---|---|
+| `hold` | HOLD key |
+| `minmax` | MAX/MIN key |
+| `auto_function` | AUTO key: the meter picks the function |
+| `volts` | V key |
+| `millivolts` | mV key |
+| `ohms` | Ω key |
+| `capacitance` | Capacitance key |
+| `hz` | Hz key |
+| `diode_continuity` | Diode/continuity key |
+| `ncv` | NCV key |
+| `current` | Current key |
+| `temp_unit` | °C/°F key |
+| `zero` | ZERO key; capacitance only |
+
 #### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960
 
 No remote commands — the meters stream continuously once their output is on

@@ -163,7 +163,8 @@ short-press the red button on the ZT-5B, until the Bluetooth symbol shows.
 | ZT-5B / V05B | 6000 | 🧪 Experimental | auto-only pocket meter |
 
 Not run on a meter yet: the decoding comes from ZOTEK's apps and manuals,
-whose ZT-5566SE pages document Bluetooth for the speaker only. The meter
+whose ZT-5566SE pages document Bluetooth for the speaker only, and the
+remote keys from the apps. The meter
 names only its packet layout, so auto-detection picks the row above that
 sends it ([backlog](verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)).
 

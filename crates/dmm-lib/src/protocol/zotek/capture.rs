@@ -3,6 +3,8 @@
 //!
 //! Nothing here has run on a meter. The keys are the manuals'
 //! (`docs/research/zotek/reverse-engineered-protocol.md` §1 lists them).
+//! After them come the remote keys the layout's entry offers (spec §8.2),
+//! each sent once from a state it would change.
 
 use super::layout::Layout;
 use crate::flags::Flag;
@@ -10,16 +12,21 @@ use crate::protocol::steps::{self, Ohms, Volts};
 use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
 
 pub(super) fn steps(layout: &Layout) -> Vec<CaptureStep> {
-    match layout.type_byte {
-        3 => zt300ab(),
-        4 => zt5566se(),
-        1 => zt5bq(),
-        2 => zt5b(),
-        _ => Vec::new(),
-    }
+    let (mut steps, keys) = match layout.type_byte {
+        3 => (zt300ab(), zt300ab_keys()),
+        4 => (zt5566se(), zt5566se_keys()),
+        1 => (zt5bq(), zt5bq_keys()),
+        2 => (zt5b(), zt5b_keys()),
+        _ => return Vec::new(),
+    };
+    // A key leaves the meter wherever the key put it, which no manual step
+    // starts from, so the keys go last.
+    steps.extend(keys);
+    steps
 }
 
 const HOLD_ON: &[(Flag, bool)] = &[(Flag::Hold, true)];
+const HOLD_OFF: &[(Flag, bool)] = &[(Flag::Hold, false)];
 const REL_ON: &[(Flag, bool)] = &[(Flag::Rel, true)];
 
 /// The ZT-300AB's dial runs OFF, AUTO, V, mV, Ω, Hz %, A, mA, µA; SEL steps
@@ -504,9 +511,275 @@ fn zt5b() -> Vec<CaptureStep> {
     ]
 }
 
+/// A step that sends `command` once the user has set the meter up.
+///
+/// With no expectation, a key step captures the first change from what the
+/// meter showed before the key, and files "did nothing" when none comes:
+/// the ZERO steps rely on that, since capacitance shows before ZERO as
+/// after it.
+const fn key(id: &'static str, instruction: &'static str, command: &'static str) -> CaptureStep {
+    CaptureStep::with_command(id, instruction, command, 5)
+}
+
+/// The ZT-300AB entry's keys: the app greys out capacitance, NCV, Hz and
+/// HOLD, and locks AUTO on, for this layout (spec §8.2). A key cannot turn
+/// the dial, and which keys a meter acts on is open (§10.7), so each step
+/// starts on a position the key would leave. Only Ω names one mode: V, mV
+/// and current leave AC or DC open, diode/continuity either function, the
+/// apps disagree on this layout's °C/°F code (§8.2), and which of MAX and
+/// MIN a press shows is undocumented, so those expect nothing.
+fn zt300ab_keys() -> Vec<CaptureStep> {
+    vec![
+        key(
+            "key_ohms",
+            "Dial at V, leads open: we will send the Ω key.",
+            "ohms",
+        )
+        .expect(Expect::mode("Ω")),
+        key(
+            "key_diode_cont",
+            "Dial at V, leads open: we will send the diode/continuity key.",
+            "diode_continuity",
+        ),
+        key(
+            "key_millivolts",
+            "Dial at V, leads open: we will send the mV key.",
+            "millivolts",
+        ),
+        key(
+            "key_volts",
+            "Dial at mV, leads open: we will send the V key.",
+            "volts",
+        ),
+        key(
+            "key_current",
+            "Dial at V, leads open: we will send the current key.",
+            "current",
+        ),
+        key(
+            "key_temp_unit",
+            "Dial at mV, thermocouple in, temperature showing °C (SEL twice): we will \
+             send °C/°F.",
+            "temp_unit",
+        )
+        .needs(&[Need::Thermocouple]),
+        key(
+            "key_zero",
+            "Dial at Ω, SEL until capacitance shows, leads open: we will send ZERO.",
+            "zero",
+        ),
+        key(
+            "key_minmax",
+            "Dial at V, SEL until DC shows, leads open: we will send MAX/MIN. Hold MAX/MIN \
+             for 2 s afterwards.",
+            "minmax",
+        ),
+    ]
+}
+
+/// The ZT-5566SE entry's keys, every one the app has (spec §8.2). V, mV and
+/// current leave AC or DC open, and the current codes' meanings are
+/// unverified; diode/continuity names either function; a ZT-5566SE is
+/// reported to ignore AUTO (§11.4); it has no NCV, and °C/°F only on its
+/// knob's display, which no packet carries (§7.4); which of MAX and MIN a
+/// press shows is undocumented. Those expect nothing.
+fn zt5566se_keys() -> Vec<CaptureStep> {
+    vec![
+        key(
+            "key_capacitance",
+            "Leads open, DC V showing (V~/⎓ Hz button): we will send the capacitance key.",
+            "capacitance",
+        )
+        .expect(Expect::mode("Capacitance")),
+        key(
+            "key_zero",
+            "Capacitance showing (capacitance button if not), leads open: we will send ZERO.",
+            "zero",
+        ),
+        key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
+        key(
+            "key_diode_cont",
+            "Leads open: we will send the diode/continuity key.",
+            "diode_continuity",
+        ),
+        key("key_ohms", "Leads open: we will send the Ω key.", "ohms").expect(Expect::mode("Ω")),
+        key("key_volts", "Leads open: we will send the V key.", "volts"),
+        key(
+            "key_millivolts",
+            "Leads open: we will send the mV key.",
+            "millivolts",
+        ),
+        key(
+            "key_current",
+            "Leads out of the A and mA jacks: we will send the current key.",
+            "current",
+        ),
+        key(
+            "key_auto",
+            "Leads open: we will send AUTO.",
+            "auto_function",
+        ),
+        key("key_ncv", "Leads open: we will send the NCV key.", "ncv"),
+        key(
+            "key_temp_unit",
+            "Leads open: we will send the °C/°F key.",
+            "temp_unit",
+        ),
+        key(
+            "key_minmax",
+            "Leads open, DC V showing (V~/⎓ Hz button): we will send MAX/MIN. Long-press \
+             MAX/MIN afterwards.",
+            "minmax",
+        ),
+        key("key_hold", "DC V showing: we will send HOLD.", "hold")
+            .expect(Expect::new().flags(HOLD_ON)),
+        key("key_hold_off", "We will send HOLD again.", "hold")
+            .expect(Expect::new().flags(HOLD_OFF)),
+    ]
+}
+
+/// The ZT-5BQ entry's keys: all but MAX/MIN (spec §8.2). No clamp has run
+/// them (§11.4), so each expects what the app's button names, except V, mV
+/// and current, which leave AC or DC open (and mV reads as a V range on
+/// this layout), and diode/continuity, which names either function. The
+/// °C/°F code follows the °C shown on this layout, so it is sent both ways.
+fn zt5bq_keys() -> Vec<CaptureStep> {
+    vec![
+        key(
+            "key_capacitance",
+            "Leads open, meter showing Auto: we will send the capacitance key.",
+            "capacitance",
+        )
+        .expect(Expect::mode("Capacitance")),
+        key(
+            "key_zero",
+            "Capacitance showing (Power/Select twice from Auto if not), leads open: we \
+             will send ZERO.",
+            "zero",
+        ),
+        key("key_hz", "Leads open: we will send the Hz key.", "hz").expect(Expect::mode("Hz")),
+        key(
+            "key_diode_cont",
+            "Leads open: we will send the diode/continuity key.",
+            "diode_continuity",
+        ),
+        key("key_ohms", "Leads open: we will send the Ω key.", "ohms").expect(Expect::mode("Ω")),
+        key(
+            "key_auto",
+            "Leads open, meter not showing Auto (Power/Select once if it is): we will send \
+             AUTO.",
+            "auto_function",
+        )
+        .expect(Expect::new().value(ValueExpect::NoReading)),
+        key("key_volts", "Leads open: we will send the V key.", "volts"),
+        key(
+            "key_millivolts",
+            "Leads open: we will send the mV key.",
+            "millivolts",
+        ),
+        key(
+            "key_current",
+            "Leads out, jaw empty: we will send the current key.",
+            "current",
+        ),
+        key(
+            "key_ncv",
+            "Leads out, away from mains wiring: we will send the NCV key.",
+            "ncv",
+        )
+        .expect(Expect::mode("NCV")),
+        key(
+            "key_temp_unit",
+            "Thermocouple in, temperature showing °C (Power/Select until °C shows): we \
+             will send °C/°F.",
+            "temp_unit",
+        )
+        .needs(&[Need::Thermocouple])
+        .expect(Expect::mode("°F")),
+        key(
+            "key_temp_back",
+            "Temperature showing °F: we will send °C/°F again.",
+            "temp_unit",
+        )
+        .needs(&[Need::Thermocouple])
+        .expect(Expect::mode("°C")),
+        key(
+            "key_hold",
+            "Leads on a DC source above 0.8 V (DC V shows): we will send HOLD.",
+            "hold",
+        )
+        .expect(Expect::new().flags(HOLD_ON)),
+        key("key_hold_off", "We will send HOLD again.", "hold")
+            .expect(Expect::new().flags(HOLD_OFF)),
+    ]
+}
+
+/// The ZT-5B entry's keys. A V05B's keys step its modes as SEL does, and
+/// HOLD works (spec §11.4), so only HOLD expects a result: each other step
+/// records what its key did. A V05B does not beep for Ω, mV or MAX/MIN
+/// (§11.4), so no step sends them.
+fn zt5b_keys() -> Vec<CaptureStep> {
+    vec![
+        key(
+            "key_capacitance",
+            "Leads open, meter showing Auto: we will send the capacitance key.",
+            "capacitance",
+        ),
+        key(
+            "key_zero",
+            "Capacitance showing (SEL twice from Auto if not), leads open: we will send ZERO.",
+            "zero",
+        ),
+        key("key_hz", "Leads open: we will send the Hz key.", "hz"),
+        key(
+            "key_diode_cont",
+            "Leads open: we will send the diode/continuity key.",
+            "diode_continuity",
+        ),
+        key(
+            "key_auto",
+            "Leads open, meter not showing Auto (SEL once if it is): we will send AUTO.",
+            "auto_function",
+        ),
+        key("key_volts", "Leads open: we will send the V key.", "volts"),
+        key(
+            "key_current",
+            "Leads out of the A mA jack: we will send the current key.",
+            "current",
+        ),
+        key(
+            "key_ncv",
+            "Leads out of the A mA jack, away from mains wiring: we will send the NCV key.",
+            "ncv",
+        ),
+        key(
+            "key_temp_unit",
+            "Thermocouple in, temperature showing °C (SEL four times from Auto): we will \
+             send °C/°F.",
+            "temp_unit",
+        )
+        .needs(&[Need::Thermocouple]),
+        key(
+            "key_temp_back",
+            "Temperature: we will send °C/°F again.",
+            "temp_unit",
+        )
+        .needs(&[Need::Thermocouple]),
+        key(
+            "key_hold",
+            "Leads on a DC source above 0.8 V (DC V shows): we will send HOLD.",
+            "hold",
+        )
+        .expect(Expect::new().flags(HOLD_ON)),
+        key("key_hold_off", "We will send HOLD again.", "hold")
+            .expect(Expect::new().flags(HOLD_OFF)),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::zotek::keys;
     use crate::protocol::zotek::layout::LAYOUTS;
 
     /// Every layout has its steps, a gate among them, and none claims a
@@ -517,6 +790,20 @@ mod tests {
             let steps = steps(layout);
             assert!(steps.iter().any(|s| s.gate), "{}", layout.id);
             assert!(steps.iter().all(|s| !s.verified), "{}", layout.id);
+        }
+    }
+
+    /// A key step sends a key its layout's entry offers, or the run files
+    /// the refusal instead of the key's effect.
+    #[test]
+    fn key_steps_send_keys_the_entry_offers() {
+        for layout in LAYOUTS {
+            let offered = keys::commands(layout);
+            for step in steps(layout) {
+                if let Some(command) = step.command {
+                    assert!(offered.contains(&command), "{} {}", layout.id, step.id);
+                }
+            }
         }
     }
 }

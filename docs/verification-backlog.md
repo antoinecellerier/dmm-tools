@@ -1748,8 +1748,13 @@ function shown and the LCD reading noted.
   NCV, °C, °F, CAP, Hz, DIODE and HOLD, and ZERO in capacitance, but not to
   MAX/MIN, Ω or mV/Hz, and cannot be switched between the V/Ω and A inputs;
   a ZT-5566SE ignores AUTO. Confirm the V05B subset on a ZT-5B / V05B; the
-  clamp, the ZT-300AB and the rest of type 4 are untested. The driver sends
-  no key yet.
+  clamp, the ZT-300AB and the rest of type 4 are untested. The driver
+  offers every key on the ZT-5566SE entry; the ZT-300AB's goes without
+  the five V1 greys out or locks, the ZT-5BQ's and ZT-5B's without MAX/MIN,
+  and the ZT-5B's also without Ω and mV, for which its manual has no key.
+  It picks the codes that follow the display by V1's rules from the last
+  packet decoded, reading one first when none has arrived; it refuses ZERO
+  outside capacitance.
 - **Clock set.** Whether a type-4 meter needs or acts on cmd `04`; only the
   older apps send it, after the first type-4 packet and then every half hour.
   A community emulator log confirms the app side only. Still open; the

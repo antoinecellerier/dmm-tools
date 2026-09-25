@@ -25,8 +25,9 @@ pub enum Error {
     UnsupportedCommand(String),
 
     /// The meter received the command and refused it — typically because the
-    /// dial isn't where the command needs it. Retrying the same command won't
-    /// help; the user has to change something.
+    /// dial isn't where the command needs it — or the driver refused it
+    /// unsent for the same reason. Retrying the same command won't help; the
+    /// user has to change something.
     #[error("command rejected: {0}")]
     CommandRejected(String),
 

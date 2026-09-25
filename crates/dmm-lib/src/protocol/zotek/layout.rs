@@ -533,8 +533,9 @@ pub(super) fn plausible(packet: &[u8]) -> Option<&'static Layout> {
 }
 
 /// AC/DC, as the annunciators show it.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Coupling {
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(super) enum Coupling {
+    #[default]
     None,
     Dc,
     Ac,
@@ -548,9 +549,10 @@ enum Coupling {
 /// `mode_raw` is this code, plus `0x10` for DC and `0x20` for AC on the
 /// volt and amp functions and `0x40` for PEAK — an internal number, stable
 /// for bug reports, not a byte the meter sends.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub(super) enum Function {
     /// No function annunciator lit.
+    #[default]
     None = 0x00,
     Volts = 0x01,
     Millivolts = 0x02,
@@ -835,6 +837,21 @@ fn dashes(n: u8) -> &'static str {
     }
 }
 
+/// What a packet shows that some key codes follow (spec §8.2).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(super) struct Showing {
+    /// The unit annunciator the reading is in.
+    pub(super) unit: Option<Unit>,
+    /// The function the reading is in, as its mode names it.
+    pub(super) function: Function,
+    pub(super) coupling: Coupling,
+}
+
+/// Decode one whole descrambled packet, by its own type byte.
+pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
+    decode_showing(packet).map(|(reading, _)| reading)
+}
+
 /// Whether the main display of a whole descrambled packet has a digit lit:
 /// one with none has no reading, and [`decode`] refuses it. No section of
 /// the spec shows a blank main display, so one is reported.
@@ -856,8 +873,8 @@ pub(super) fn shows_digits(packet: &[u8]) -> bool {
 /// What a blank main display is reported as.
 const BLANK_MAIN: &str = "blank main display";
 
-/// Decode one whole descrambled packet, by its own type byte.
-pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
+/// [`decode`], and what the packet shows for the keys.
+pub(super) fn decode_showing(packet: &[u8]) -> Result<(Measurement, Showing)> {
     let layout = layout_of(packet)?;
     let unrecognised = Unrecognised {
         id: layout.id,
@@ -931,7 +948,7 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
         _ => Cow::Borrowed(function.mode(coupling)),
     };
     let peak_bit = if lit.peak { 0x40 } else { 0 };
-    let unit = match (function, unit) {
+    let unit_text = match (function, unit) {
         (Function::Ncv, _) | (_, None) => "",
         (_, Some(unit)) => unit_str(prefix, unit),
     };
@@ -948,18 +965,24 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
         ..StatusFlags::default()
     };
 
-    Ok(Measurement {
+    let showing = Showing {
+        unit,
+        function,
+        coupling,
+    };
+    let reading = Measurement {
         mode,
         mode_raw: function.mode_raw(coupling) | peak_bit,
         value,
-        unit: Cow::Borrowed(unit),
+        unit: Cow::Borrowed(unit_text),
         display_raw: Some(readout.text),
         flags,
         aux_values: secondary(layout, &lit, unrecognised, packet)
             .into_iter()
             .collect(),
         ..Measurement::from_payload(packet)
-    })
+    };
+    Ok((reading, showing))
 }
 
 #[cfg(test)]
@@ -1770,6 +1793,37 @@ mod tests {
         unknown_type[2] = 9;
         assert!(decode(&unknown_type).is_err());
         assert!(decode(&[]).is_err());
+    }
+
+    /// What the keys follow: the unit lit, and the function and coupling the
+    /// mode names.
+    #[test]
+    fn showing_is_the_unit_function_and_coupling() {
+        let showing = |packet: &[u8]| capture_reports(|| decode_showing(packet)).0.unwrap().1;
+        assert_eq!(
+            showing(&t1("1234", Some(2), &[(9, 0x08)])),
+            Showing {
+                unit: Some(Unit::Celsius),
+                function: Function::Celsius,
+                coupling: Coupling::None
+            }
+        );
+        let ac_ma = t4(
+            "2345",
+            Some(1),
+            false,
+            false,
+            None,
+            &[(18, 0x10), (13, 0x40), (17, 0x04)],
+        );
+        assert_eq!(
+            showing(&ac_ma),
+            Showing {
+                unit: Some(Unit::Amp),
+                function: Function::Milliamps,
+                coupling: Coupling::Ac
+            }
+        );
     }
 
     #[test]
