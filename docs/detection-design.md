@@ -58,7 +58,7 @@ own.
 | 2 | `AB CD 04 00 05 01 0A 00` (UT181A SET_MONITOR) | UT181A |
 | 3 | `AB CD 04 00 0A 01 0F 00` (UT171 connect) | UT171 |
 | 4 | 3× `AB CD 04 FF 00 02 7B` then `AB CD 03 5E 01 D9` (VC-890 poll) | VC-890 |
-| any | — (nothing sent) | UT8803, UT8802, VC-880 |
+| any | — (nothing sent) | UT8803, UT8802, VC-880; on Bluetooth, the ZOTEK meters |
 
 The order is load-bearing, and it is derived rather than written down. Registry order is the
 preference — `DEVICES` lists the most common meters first, which is what puts `0x5F` at the head,
@@ -91,7 +91,7 @@ every read, against every candidate offset in the buffer, and the strongest answ
 | 4 | a model the meter named itself | the UT61+ name frame, the only one that picks an exact sibling |
 | 3 | a model from a frame whose checksum held | UT8803, UT171, UT181A, VC-880, VC-890 |
 | 2 | `FamilyOnly` — a checksummed frame naming no model | a bare 14-byte UT61+ reading |
-| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), UT804 (any CR LF packet) |
+| 1 | a model from a rule that validates no checksum | UT8802 (`0xAC`), UT804 (any CR LF packet), ZOTEK (a whole descrambled packet) |
 
 A `FamilyOnly` at the top is remembered rather than acted on: the window keeps listening, and a
 name frame arriving in it outranks the fallback (see
@@ -170,7 +170,10 @@ and has to be named (`--device ut803`). A family seen on a new cable joins detec
 being listed on it. The UT-D07B Bluetooth adapter is a transparent UART bridge like the cables, so the
 UT61+, UT171 and UT181A fingerprints listed on it run unchanged. It is
 opened after the USB bus, so a cable with a silent meter on it wins over a live meter on the
-adapter.
+adapter. The ZOTEK meters have the radio built in and stream on their own, so their rule sends
+nothing and reads whatever window is open: it takes one whole packet, found by its scrambled
+header, cut at its type's length and made only of listed glyphs, and the packet's type byte picks
+the registry entry for that layout — the meter never names its model.
 
 Only the first adapter found is probed. With several plugged in, the existing
 multiple-adapter warning applies and `--adapter` selects one; probing every adapter is a

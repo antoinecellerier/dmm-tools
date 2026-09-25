@@ -426,7 +426,7 @@ The 47-star Windows-only app is abandoned.
 
 **One OEM, one protocol, four packet layouts. Specified 2026-09-25 from
 ZOTEK's apps and manuals: [research/zotek](zotek/reverse-engineered-protocol.md).
-Research only; not implemented.**
+Implemented 2026-09-26, experimental: the ZT-300AB layout.**
 
 | Aspect | Details |
 |--------|---------|
@@ -440,7 +440,7 @@ Which model sends which type byte is inferred from the layout names alone
 ties a type to a model. Community captures fit it for four models (AN9002 /
 ZT-300AB 3, V05B / ZT-5B 2, ST207 1, ZT-5566SE 4). The ZT-5566 manuals
 document the Bluetooth speaker, and the SE manual's app section names only other models. Every open question is in the
-[backlog](../verification-backlog.md#zotek-zoyi--aneng--bside-open-questions-before-an-implementation).
+[backlog](../verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report).
 
 **Gap: moderate.** No cross-platform desktop tool; Bluetooth-DMM-For-Windows
 is Windows-only and inactive. The ZT-300AB/AN9002 pair ranks first of the
@@ -699,7 +699,7 @@ the same transport.
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
-| **ZOTEK BLE (ZOYI/BSIDE/ANENG)** | BLE (built in) | Specified from ZOTEK's own apps ([research/zotek](zotek/reverse-engineered-protocol.md)): one streamed protocol in ZOTEK's apps, which serve ZOYI/ZOTEK meters and their BSIDE and ANENG rebrands, led by the ZT-300AB/AN9002; no cross-platform desktop tool | Moderate: a per-device GATT profile (`FFF0`/`FFF4`) on the Bluetooth transport we have, and a new protocol family; which model sends which layout needs a hardware report |
+| **ZOTEK BLE (ZOYI/BSIDE/ANENG)** — implemented 2026-09-26 | BLE (built in) | Specified from ZOTEK's own apps ([research/zotek](zotek/reverse-engineered-protocol.md)): one streamed protocol in ZOTEK's apps, which serve ZOYI/ZOTEK meters and their BSIDE and ANENG rebrands, led by the ZT-300AB/AN9002; no cross-platform desktop tool | Done, experimental: `zt300ab` awaits a hardware report; the other three layouts are specified |
 | **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Moderate: a network transport (the HID-shaped `Transport` trait must fit or change), a SCPI protocol family, address-based open and `*IDN?` identification; USB TMC deferred behind the dependency decision |
 
 ### Tier 3: Lower priority

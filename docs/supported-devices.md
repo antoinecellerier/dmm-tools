@@ -3,9 +3,9 @@
 <!-- Keep this file updated when adding support for new models. -->
 
 Most supported meters talk over a USB HID-to-UART cable; the UT-D07
-Bluetooth adapters serve the meters listed for them below, and the UT60BT and
-UT202BT have Bluetooth built in. The tool works out which link and which
-meter are attached from the bytes the meter sends
+Bluetooth adapters serve the meters listed for them below, and the UT60BT,
+UT202BT and ZOTEK meters have Bluetooth built in. The tool works out which
+link and which meter are attached from the bytes the meter sends
 ([how](detection-design.md)), so the default `auto` device needs no setup
 beyond switching the meter's data transmission on, as listed per family below.
 
@@ -146,6 +146,19 @@ Cable: UT-D09 (CP2110). Switch on: press the PC button on the meter.
 
 No Voltcraft meter has been run on hardware yet: the mode tables come from
 the manuals and the remote commands from the vendor software.
+
+## ZOTEK / ZOYI / BSIDE / ANENG
+
+Handheld. Bluetooth built in, no cable; the meter shows up as "Bluetooth DMM"
+([setup](setup.md#bluetooth)). Switch on: hold Hz% for 2 s until the
+Bluetooth symbol shows.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| ZT-300AB / AN9002 | 6000 | 🧪 Experimental | rotary dial; also sold by BSIDE |
+
+Not run on a meter yet: the decoding comes from ZOTEK's apps and manuals
+([backlog](verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)).
 
 ## Not supported yet
 

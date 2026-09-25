@@ -13,6 +13,7 @@ pub mod ut61eplus;
 pub(crate) mod ut8802;
 pub(crate) mod ut8803;
 pub(crate) mod vc8x0;
+pub(crate) mod zotek;
 
 pub use expect::{Expect, RangeExpect, ValueExpect};
 #[doc(hidden)]
@@ -217,6 +218,9 @@ pub enum DeviceFamily {
     Vc880,
     /// Voltcraft VC-890
     Vc890,
+    /// ZOTEK Bluetooth meters (ZOYI, ZOTEK, BSIDE, ANENG), one entry per
+    /// packet layout
+    Zotek,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -232,6 +236,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Ut181a => write!(f, "ut181a"),
             DeviceFamily::Vc880 => write!(f, "vc880"),
             DeviceFamily::Vc890 => write!(f, "vc890"),
+            DeviceFamily::Zotek => write!(f, "ZOTEK"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }

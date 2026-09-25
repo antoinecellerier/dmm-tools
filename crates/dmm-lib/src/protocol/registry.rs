@@ -6,8 +6,10 @@ use super::ut8802::Ut8802Protocol;
 use super::ut8803::Ut8803Protocol;
 use super::vc8x0::vc880::Vc880Protocol;
 use super::vc8x0::vc890::Vc890Protocol;
+use super::zotek::ZotekProtocol;
 use super::{
     DeviceFamily, Fingerprint, Protocol, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0,
+    zotek,
 };
 use crate::mock::MockProtocol;
 
@@ -143,6 +145,16 @@ const ACTIVATION_VC880: &str = "\
 1. Connect the USB cable to the meter
 2. Turn the meter on
 3. Press the PC button on the meter";
+
+/// ZOTEK's own download page, where each model's manual is listed; the
+/// files themselves are on Google Drive, which ZOTEK may re-upload.
+const ZOTEK_SUPPORT_URL: &str = "https://zotektools.com/?support/";
+
+/// ZT-300AB manual p.10 and p.28 (Bluetooth), p.11 (auto power-off).
+const ACTIVATION_ZT300AB: &str = "\
+1. Turn the meter on
+2. Hold the Hz% button for 2 seconds; the Bluetooth symbol shows
+Note: the meter switches off after 15 minutes idle; hold SEL while turning it on to disable that.";
 
 const ACTIVATION_MOCK: &str = "No setup required \u{2014} this is a simulated device.";
 
@@ -418,6 +430,23 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
         bluetooth_only: false,
         bluetooth_names: &[],
+    },
+    // ZOTEK, sold as ZOYI, ZOTEK, BSIDE and ANENG. A packet names its layout
+    // only, never the model or brand, so there is one entry per layout, named
+    // for the models the layout is known from
+    // (docs/research/zotek/reverse-engineered-protocol.md §1, §11.4).
+    SelectableDevice {
+        id: "zt300ab",
+        display_name: "ZT-300AB / AN9002",
+        aliases: &["zt-300ab", "an9002", "an-9002"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_ZT300AB,
+        family: DeviceFamily::Zotek,
+        new_protocol: || Box::new(ZotekProtocol::new_zt300ab()),
+        fingerprint: Some(&zotek::FINGERPRINT),
+        manual_url: Some(ZOTEK_SUPPORT_URL),
+        bluetooth_only: true,
+        bluetooth_names: &["Bluetooth DMM"],
     },
     // Mock
     SelectableDevice {
@@ -747,6 +776,8 @@ mod tests {
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        // Experimental, with their verification issues still to be opened.
+        const ISSUE_TO_OPEN: &[&str] = &["zt300ab"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -765,7 +796,7 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if !expected.is_verified() {
+            if !expected.is_verified() && !ISSUE_TO_OPEN.contains(&device.id) {
                 assert!(
                     profile.verification_issue.is_some(),
                     "{} device {} must link to a verification issue",

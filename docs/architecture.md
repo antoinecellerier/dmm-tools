@@ -41,6 +41,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut171/` | UT171 family: `Ut171Protocol` — streaming once the user turns communication on at the meter |
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` in `mod.rs` (streaming driver, device-sent unit strings); `parse.rs` decodes the normal, REL, MIN/MAX, Peak and COMP payloads, `command.rs` builds the AB CD command frames and reads the OK/ER reply, `mode.rs` holds the dial families SET_MODE and SET_RANGE move within |
 | `protocol/vc8x0/` | Voltcraft VC-880/VC650BT and VC-890: `Vc8x0Protocol<M>` in `mod.rs` implements `Protocol` and `CycleMeter` once over a `Vc8x0Model`; `vc880.rs` (streaming) and `vc890.rs` (polled) hold each family's tables, dial, frame layout and the drain or ack around its I/O, and name the driver over their model `Vc880Protocol` / `Vc890Protocol` |
+| `protocol/zotek/` | ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG): `ZotekProtocol` — streaming, one registry entry per packet layout, every packet decoded by its own layout; `frame.rs` finds and descrambles packets in the notification stream, `glyph.rs` reads the seven-segment digits and the words spelled in them, `layout.rs` holds each layout's annunciator table and builds the reading from what is lit, `capture.rs` the capture steps per layout |
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic); `AuxValue` sub-values, with `AuxValue::export_cells` + `Measurement::export_aux_slots` supplying the cells and slot order `export.rs` lays out (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
 | `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |
@@ -75,7 +76,8 @@ Bluetooth ──► Ble (Box<dyn Transport>) ───────────�
                                            ├── Ut171Protocol               (streaming)
                                            ├── Ut181aProtocol              (streaming, device-sent units)
                                            ├── Vc8x0Protocol<Vc880Model>   (streaming)
-                                           └── Vc8x0Protocol<Vc890Model>   (polled)
+                                           ├── Vc8x0Protocol<Vc890Model>   (polled)
+                                           └── ZotekProtocol               (streaming, per-layout LCD image)
 ```
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,

@@ -222,7 +222,8 @@ struct KnownTransport {
 /// Bluetooth adapter names the UT61+, UT161, UT171 and UT181 series on
 /// UNI-T's accessory page (https://meters.uni-trend.com/product/ut-d-series/,
 /// read 2026-09-22); the UT71 is listed for the UT-D07A only, whose GATT
-/// layout we have not seen.
+/// layout we have not seen. The ZOTEK meters have the radio built in and no
+/// cable.
 ///
 /// Two things read it. Opening only orders the candidates —
 /// [`open_first_match`] still falls back to the remaining transports, so an
@@ -242,6 +243,8 @@ fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static st
         F::Ut61EPlus | F::Ut171 => &["CP2110", "CH9329", BLUETOOTH],
         F::Ut181a => &["CH9329", "CP2110", BLUETOOTH],
         F::Ut80x => &["CH9325"],
+        // Bluetooth built in, no cable.
+        F::Zotek => &[BLUETOOTH],
         F::Mock => &[],
     }
 }
@@ -1284,16 +1287,17 @@ mod tests {
                 kt.name
             );
         }
-        // The families UNI-T's accessory page names for the UT-D07B: that is
-        // what detection probes for over it and what the help it prints
-        // offers. The UT80x is not among them — the UT71 is listed for the
-        // UT-D07A, a different adapter.
+        // The families UNI-T's accessory page names for the UT-D07B, and the
+        // ZOTEK meters with the radio built in: that is what detection
+        // probes for over it and what the help it prints offers. The UT80x
+        // is not among them — the UT71 is listed for the UT-D07A, a
+        // different adapter.
         use protocol::DeviceFamily as F;
         let on_bluetooth: Vec<&str> = devices_on_bridge(BLUETOOTH).iter().map(|d| d.id).collect();
         let listed: Vec<&str> = registry::DEVICES
             .iter()
             .filter(|d| d.requires_hardware)
-            .filter(|d| matches!(d.family, F::Ut61EPlus | F::Ut171 | F::Ut181a))
+            .filter(|d| matches!(d.family, F::Ut61EPlus | F::Ut171 | F::Ut181a | F::Zotek))
             .map(|d| d.id)
             .collect();
         assert_eq!(on_bluetooth, listed);
@@ -1319,7 +1323,11 @@ mod tests {
         for id in ["ut61eplus", "ut61b+", "ut161e", "ut171", "ut181a"] {
             assert_eq!(peers(id), adapters, "{id}");
         }
-        for (id, name) in [("ut60bt", "UT60BT"), ("ut202bt", "UT202BT")] {
+        for (id, name) in [
+            ("ut60bt", "UT60BT"),
+            ("ut202bt", "UT202BT"),
+            ("zt300ab", "Bluetooth DMM"),
+        ] {
             assert_eq!(
                 peers(id),
                 BluetoothPeers {
@@ -1332,7 +1340,7 @@ mod tests {
             bluetooth_peers(None),
             BluetoothPeers {
                 adapters: true,
-                meters: vec!["UT60BT", "UT202BT"],
+                meters: vec!["UT60BT", "UT202BT", "Bluetooth DMM"],
             }
         );
     }
@@ -1385,7 +1393,7 @@ mod tests {
             .filter(|d| d.bluetooth_only)
             .map(|d| d.id)
             .collect();
-        assert_eq!(bluetooth_only, ["ut60bt", "ut202bt"]);
+        assert_eq!(bluetooth_only, ["ut60bt", "ut202bt", "zt300ab"]);
         for kt in KNOWN_TRANSPORTS {
             assert!(
                 !devices_on_bridge(kt.name).iter().any(|d| d.bluetooth_only),

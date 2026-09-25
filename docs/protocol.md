@@ -32,8 +32,8 @@ other programs.
 ## ZOTEK (ZOYI / BSIDE / ANENG)
 
 - [ZT-300AB, ZT-5B, ZT-5BQ, ZT-5566 family — Bluetooth LE, one protocol with four packet layouts](research/zotek/reverse-engineered-protocol.md)
-  — research only, not implemented. The ANENG AN9002, V05B, ST207 and AN999S
-  are sold as rebrands (matched by specs and keys; AN999S ≈ ZT-5566S/SE).
+  — the ZT-300AB layout is implemented, experimental. The ANENG AN9002, V05B,
+  ST207 and AN999S are sold as rebrands (matched by specs and keys; AN999S ≈ ZT-5566S/SE).
 
 ## Shared infrastructure
 
@@ -45,7 +45,7 @@ checksum) plus a 16-bit **little-endian** sum. UT8802 uses a `0xAC`
 single-byte header with BCD frames and no checksum, and UT803/UT804 —
 and the UT71 and VC920/VC940/VC960 with them — send proprietary
 structured data in 11-byte packets ending CR LF — see the per-family
-docs for the exact wire format. The ZOTEK meters (research only) stream
+docs for the exact wire format. The ZOTEK meters stream
 XOR-scrambled `5A A5` packets with no checksum and take `AB CD` commands
 with no length byte and a 16-bit big-endian sum.
 

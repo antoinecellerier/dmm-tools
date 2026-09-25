@@ -4,8 +4,8 @@ What the Bluetooth LE multimeters made by ZOTEK — sold as ZOYI, ZOTEK, BSIDE
 and ANENG — send and accept. One protocol: every notification is XOR-scrambled
 with a fixed 20-byte key, starts `5A A5` once descrambled, and carries a type
 byte that selects one of four packet layouts, each a dump of the meter's LCD
-segments and annunciators. Nothing here is implemented, and no meter has been
-on our bench: every fact in §1-10 comes from ZOTEK's apps and manuals, and
+segments and annunciators. The type-3 layout is implemented, experimentally
+(`crates/dmm-lib/src/protocol/zotek/`), and no meter has been on our bench: every fact in §1-10 comes from ZOTEK's apps and manuals, and
 §11 compares them with community sources. The approach doc beside it records
 the sources, the method and the clean-room boundary.
 

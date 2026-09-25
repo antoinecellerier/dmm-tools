@@ -23,7 +23,7 @@ Items that need real components or specific setups to verify.
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
-  - [ZOTEK (ZOYI / ANENG / BSIDE): open questions before an implementation](#zotek-zoyi--aneng--bside-open-questions-before-an-implementation)
+  - [ZOTEK (ZOYI / ANENG / BSIDE): experimental, awaiting a hardware report](#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
@@ -57,6 +57,7 @@ is probed with, and how well that probe is backed:
 | UT71A–E, VC920/VC940/VC960 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, claimed as a UT804 — the packet does not name its model, so the user names the meter | Never seen: no UT71 or VC9x0 packet has been captured ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
+| ZOTEK ZT-300AB / AN9002 | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
 
 Open questions, each needing a meter:
 
@@ -85,6 +86,10 @@ Open questions, each needing a meter:
 - **Does a VC-890 answer `0x5E` on the first attempt?** The vendor software
   retries the name request up to 10 times with a buffer flush between
   attempts, so a single poll may not be enough.
+- **What the UT61+, UT181A and UT171 probes do to a ZOTEK meter.** They go
+  out on the Bluetooth link before its listen-only rule has heard a packet,
+  and FFF4 takes writes; unscrambled, none is a frame the meter's command
+  format (ZOTEK spec §8) would accept, but no meter has been watched.
 - **Opening after detection runs the family's `init` again**, so a UT181A
   receives SET_MONITOR twice and a UT171 its connect frame twice per auto
   open. Harmless on paper — both are what the meter was already sent — but
@@ -1683,11 +1688,15 @@ port scan** (80, 111, 5025, 49152 by firmware version).
   diode; the reading-memory size. The range ladders and NPLC lists per
   model, which gate the spec tables.
 
-### ZOTEK (ZOYI / ANENG / BSIDE): open questions before an implementation
+### ZOTEK (ZOYI / ANENG / BSIDE): experimental, awaiting a hardware report
 
 Specified 2026-09-25 from ZOTEK's three apps and six manuals
-(`docs/research/zotek/reverse-engineered-protocol.md`, §10). Not implemented;
-nobody on the project owns one. The clean-room boundary was opened the same
+(`docs/research/zotek/reverse-engineered-protocol.md`, §10). Implemented
+2026-09-26 as the `zotek` family, experimental, one registry entry per
+packet layout: `zt300ab` (type 3). Nobody on the project owns one, so where
+an item below is open the driver's choice is noted with it. Spec tables wait
+for a first real-device confirmation, as for every new meter; the ZOTEK
+manuals carry them. The clean-room boundary was opened the same
 day, after the spec: community captures (spec §11) answer several items
 below, but they are not our verification — each still wants a reporter's
 capture. One capture settles the most at once: **the name a meter advertises
@@ -1699,7 +1708,9 @@ function shown and the LCD reading noted.
   AN9002 and ZT-300AB → 3, V05B and ZOYI ZT-5B → 2, ANENG ST207 → 1, ZOYI
   ZT-5566SE → 4; confirm with a reporter's capture. Nothing seen for the
   ZT-5BQ, AN999S, ZT-5566, ZT-5566S or BSIDE's ZT-5B, ZT-5BQ and ZT5566. The
-  ZT-6S has no evidence of any kind.
+  ZT-6S has no evidence of any kind. The driver decodes every packet by its
+  own type byte, whichever entry was opened, and warns once when that is
+  another entry's layout.
 - **ZT-5566 readings.** Both ZT-5566 manuals document a Bluetooth speaker,
   and the SE manual's app section names only other models. A community log
   shows a ZT-5566SE streaming type-4 packets; confirm with a reporter's
@@ -1711,7 +1722,9 @@ function shown and the LCD reading noted.
   name sits in the advertisement or the scan response.
 - **Notification length** per type. The apps read at least 10, 10, 11 and
   19 bytes; community captures show exactly those lengths, with nothing
-  after. Confirm with a reporter's capture.
+  after. Confirm with a reporter's capture. The driver cuts packets at
+  exactly these lengths out of the byte stream, resyncing on the on-air
+  `1B 84` and type byte.
 - **Write characteristic.** The older apps notify and write on FFF4; the
   current one picks by property. Community evidence: the vendor app writes
   its key frames to FFF4 on a V05B, a ZT-300AB has no FFF3, and a ZT-5B
@@ -1733,10 +1746,12 @@ function shown and the LCD reading noted.
   NCV, °C, °F, CAP, Hz, DIODE and HOLD, and ZERO in capacitance, but not to
   MAX/MIN, Ω or mV/Hz, and cannot be switched between the V/Ω and A inputs;
   a ZT-5566SE ignores AUTO. Confirm the V05B subset on a ZT-5B / V05B; the
-  clamp, the ZT-300AB and the rest of type 4 are untested.
+  clamp, the ZT-300AB and the rest of type 4 are untested. The driver sends
+  no key yet.
 - **Clock set.** Whether a type-4 meter needs or acts on cmd `04`; only the
   older apps send it, after the first type-4 packet and then every half hour.
-  A community emulator log confirms the app side only. Still open.
+  A community emulator log confirms the app side only. Still open; the
+  driver never sends it.
 - **Type-4 bar graph.** A community ZT-5566SE log (425 notifications) has
   byte 13 bit 4 — the colon in the spec — and bytes 14-18's unread bits
   (bytes 14-15, byte 16 bits 3-0, byte 17 bits 7-4, byte 18 bits 6, 5, 3-0)
@@ -1756,12 +1771,18 @@ function shown and the LCD reading noted.
   always set, type 2 never set), `vfc` (never set) and `l1_power` (toggles
   in V DC) in type 4. Type-3 MANUAL (byte 10 bit 1) never set in community
   captures, even on manual range. Confirm each with a reporter's capture.
+  The driver keeps every bit the spec lists quiet, these included, and
+  reports any other.
 - **Special displays.** Which digit positions each word uses (the two apps'
   rules differ); community captures show OL as `0` `L` in digits 2-3 with the
   DP moving by range, EF in digits 2-3, and 1-4 NCV dashes filling from the
   left, and dashes also with INRUSH on an ST207 (spec §11). Confirm with a
   reporter's capture; what a packet with two DP bits means (never seen);
   whether a blank digit ever carries the sign or DP bit (`10`, spec §10).
+  The driver reads any `L` as OL, `E F` with no function lit as NCV level 0,
+  one to four dashes as the NCV level, `A u t o` as a no-reading word, two
+  DP bits as the leftmost (reported), and a blank carrying a sign or point
+  as a blank with it.
 - **Rate.** Notifications per second against the LCD's 3 updates a second:
   about 2.6 a second on a community AN9002. Confirm with a reporter's
   capture.

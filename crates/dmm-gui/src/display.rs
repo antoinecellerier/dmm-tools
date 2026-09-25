@@ -110,7 +110,11 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
                 parts.push(' ');
                 parts.push_str(&spoken_unit(&m.unit));
             }
-            if !m.mode.is_empty() {
+            // "Auto" with no function lit is both the word and the mode;
+            // saying it twice reads as two things.
+            let mode_is_the_word =
+                matches!(m.value, MeasuredValue::NoReading(word) if word == m.mode);
+            if !m.mode.is_empty() && !mode_is_the_word {
                 parts.push_str(", ");
                 parts.push_str(&m.mode);
             }
@@ -1431,7 +1435,13 @@ mod tests {
         assert_eq!(format_value_display(&m), "   Auto");
         assert_eq!(
             live_region_label(Some(&m), false, NO_READING_TITLE),
-            "no reading (Auto), Auto"
+            "no reading (Auto)"
+        );
+        let mut in_a_mode = m.clone();
+        in_a_mode.mode = "DC V".into();
+        assert_eq!(
+            live_region_label(Some(&in_a_mode), false, NO_READING_TITLE),
+            "no reading (Auto), DC V"
         );
 
         let mut over = m.clone();

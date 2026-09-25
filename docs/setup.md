@@ -108,6 +108,11 @@ symbol shows. The UT202BT switches Bluetooth off after 5 minutes without a
 connection. For either, keep **Look for Bluetooth devices** ticked and
 leave out `--no-bluetooth`.
 
+The ZOTEK meters (ZOYI, BSIDE, ANENG) have Bluetooth built in too and need no
+pairing: switch Bluetooth on at the meter as
+[supported devices](supported-devices.md) lists, and it shows up as
+"Bluetooth DMM".
+
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
 Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second

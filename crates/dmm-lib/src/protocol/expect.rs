@@ -33,6 +33,8 @@ pub enum ValueExpect {
     /// An NCV level of at least 1: the meter found a live wire. Level 0 is
     /// what NCV shows the moment the dial reaches it.
     NcvDetected,
+    /// A word the meter shows instead of a reading, such as `Auto`.
+    NoReading,
 }
 
 impl ValueExpect {
@@ -43,6 +45,7 @@ impl ValueExpect {
             ValueExpect::Negative => "a negative reading",
             ValueExpect::Finite => "a numeric reading",
             ValueExpect::NcvDetected => "an NCV level of 1 or more",
+            ValueExpect::NoReading => "a word instead of a reading",
         }
     }
 
@@ -52,6 +55,7 @@ impl ValueExpect {
             (ValueExpect::Negative, MeasuredValue::Normal(v)) => v.is_finite() && *v < 0.0,
             (ValueExpect::Finite, MeasuredValue::Normal(v)) => v.is_finite(),
             (ValueExpect::NcvDetected, MeasuredValue::NcvLevel(level)) => *level >= 1,
+            (ValueExpect::NoReading, MeasuredValue::NoReading(_)) => true,
             _ => false,
         }
     }
@@ -343,6 +347,17 @@ mod tests {
         assert_eq!(
             Expect::new().value(ValueExpect::Finite).check(&idle),
             Err("value is Auto, want a numeric reading".to_string())
+        );
+        assert_eq!(
+            Expect::new().value(ValueExpect::NoReading).check(&idle),
+            Ok(())
+        );
+        assert_eq!(
+            Expect::new().value(ValueExpect::NoReading).check(&finite),
+            Err(format!(
+                "value is {}, want a word instead of a reading",
+                finite.value
+            ))
         );
     }
 
