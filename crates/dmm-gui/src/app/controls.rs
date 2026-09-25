@@ -709,7 +709,7 @@ impl App {
                 ui,
                 &mut self.settings.shared.bluetooth,
                 &label,
-                "Look for an adapter in Bluetooth range when no USB cable answers. \
+                "Look for a Bluetooth adapter or meter in range when no USB cable answers. \
                  Takes effect on the next connect.",
             ) {
                 // Cleared like every other row the user sets by hand: the

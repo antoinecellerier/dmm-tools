@@ -105,7 +105,7 @@ The UT60BT and UT202BT have Bluetooth built in and take the same steps
 without the adapter: turn the meter on, then long-press SEL on the UT60BT,
 or short-press the Bluetooth button on the UT202BT, until the Bluetooth
 symbol shows. The UT202BT switches Bluetooth off after 5 minutes without a
-connection. For either, keep **Look for Bluetooth adapters** ticked and
+connection. For either, keep **Look for Bluetooth devices** ticked and
 leave out `--no-bluetooth`.
 
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
@@ -160,7 +160,7 @@ on their own once it transmits again.
 - A USB cable wins over Bluetooth: with a cable plugged in, `auto` uses it even
   when the meter behind it says nothing. Unplug the cable, or pass
   `--adapter <address>`.
-- Leave out `--no-bluetooth`, and tick **Look for Bluetooth adapters** in the
+- Leave out `--no-bluetooth`, and tick **Look for Bluetooth devices** in the
   GUI's settings: with either off, nothing scans.
 
 A UT-D07A that is listed and connects but fails with "no UART … characteristic"

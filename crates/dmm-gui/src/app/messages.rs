@@ -1400,7 +1400,7 @@ mod tests {
         assert_eq!(
             n.body,
             "UT60BT connects over Bluetooth only, and Bluetooth is switched off. \
-             Tick \"Look for Bluetooth adapters\" in Settings (\u{2699})."
+             Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."
         );
         assert!(n.sections.is_empty());
 

@@ -206,7 +206,7 @@ const USB_STEPS: &[&str] = &[];
 
 /// The GUI setting that lets an open search the radio, as its checkbox
 /// reads. The CLI reads the same saved setting, so its help names it too.
-pub const BLUETOOTH_SETTING: &str = "Look for Bluetooth adapters";
+pub const BLUETOOTH_SETTING: &str = "Look for Bluetooth devices";
 
 /// What turns the radio search back on in the CLI, for a meter with the
 /// radio built in that was not looked for: `flag_given` when
@@ -245,7 +245,7 @@ const BLUETOOTH_CATALOG: &[&str] = &[
 
 /// What to do instead when an address was named and nothing answered it: the
 /// scan is the only thing that says which addresses are live.
-const BLUETOOTH_SCAN: &[&str] = &["Run 'dmm-cli list' to scan for adapters in range."];
+const BLUETOOTH_SCAN: &[&str] = &["Run 'dmm-cli list' to scan for adapters and meters in range."];
 
 /// One link's worth of "nothing found" help: a label line, then its steps.
 ///
@@ -716,11 +716,11 @@ mod tests {
         assert_eq!(cli_bluetooth_off_hint(true), "Leave out --no-bluetooth.");
         assert_eq!(
             cli_bluetooth_off_hint(false),
-            "Tick \"Look for Bluetooth adapters\" in dmm-gui's settings, which dmm-cli reads too."
+            "Tick \"Look for Bluetooth devices\" in dmm-gui's settings, which dmm-cli reads too."
         );
         assert_eq!(
             gui_bluetooth_off_hint(),
-            "Tick \"Look for Bluetooth adapters\" in Settings (\u{2699})."
+            "Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."
         );
     }
 

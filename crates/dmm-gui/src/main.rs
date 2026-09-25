@@ -58,7 +58,7 @@ struct Args {
     adapter: Option<String>,
 
     /// Turn off Bluetooth scanning for this session.
-    /// Overrides the "Look for Bluetooth adapters" setting. An address given
+    /// Overrides the "Look for Bluetooth devices" setting. An address given
     /// to --adapter is still opened.
     #[arg(long)]
     no_bluetooth: bool,

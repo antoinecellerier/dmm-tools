@@ -346,8 +346,8 @@ pub struct OpenOptions<'a> {
     /// `None` picks the first matching adapter (and logs a warning if several
     /// are found).
     pub adapter: Option<&'a str>,
-    /// Whether an open with nothing on the bus may go on to look for an
-    /// adapter in Bluetooth range. Off, nothing scans the radio — but an
+    /// Whether an open with nothing on the bus may go on to look for a
+    /// Bluetooth adapter or meter in range. Off, nothing scans the radio — but an
     /// address in `adapter` is still opened, having been asked for by name.
     pub bluetooth: bool,
 }

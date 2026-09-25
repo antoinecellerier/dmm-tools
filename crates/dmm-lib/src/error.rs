@@ -139,7 +139,7 @@ fn bluetooth_only_message(model: &str, miss: &BluetoothOnlyMiss) -> String {
 /// Saying so keeps the user from hunting for a cable fault that isn't there.
 fn bluetooth_clause(searched: &bool) -> &'static str {
     if *searched {
-        ", nor a Bluetooth adapter in range"
+        ", nor a Bluetooth device in range"
     } else {
         ""
     }
@@ -404,7 +404,7 @@ mod tests {
     fn no_transport_message_names_every_link_tried() {
         let msg = not_found(true).to_string();
         assert!(
-            msg.contains(", nor a Bluetooth adapter in range"),
+            msg.contains(", nor a Bluetooth device in range"),
             "got {msg}"
         );
         assert!(!msg.contains("UT-D07"), "got {msg}");
