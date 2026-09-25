@@ -5,7 +5,7 @@
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
-use crate::transport::Transport;
+use crate::transport::{BluetoothPeers, Transport};
 
 /// No selector is a Bluetooth one here, so `--adapter` stays on the HID path
 /// and an address nothing answers to fails as a missing adapter.
@@ -13,7 +13,7 @@ pub(crate) fn is_bluetooth_selector(_selector: &str) -> bool {
     false
 }
 
-pub(crate) fn open_first() -> Result<Box<dyn Transport>> {
+pub(crate) fn open_first(_peers: &BluetoothPeers) -> Result<Box<dyn Transport>> {
     Err(not_found())
 }
 
@@ -29,6 +29,6 @@ fn not_found() -> Error {
     }
 }
 
-pub(crate) fn list() -> Result<Vec<DeviceInfo>> {
+pub(crate) fn list(_peers: &BluetoothPeers) -> Result<Vec<DeviceInfo>> {
     Ok(Vec::new())
 }

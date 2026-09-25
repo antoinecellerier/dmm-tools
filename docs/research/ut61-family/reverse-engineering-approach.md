@@ -56,6 +56,11 @@ tables, and bar graph segment count.
    UT-D07B, over the same ISSC service (`BleManager`), and differ only in
    their range tables, the APK assets `funOl1_UT60BT.json` and
    `funOl1_UT202BT.json`, which share the UT61+ assets' schema
+9. **UT60BT manual** (English, 2 pages, from its Chinese product page,
+   read 2026-09-25): wireless mode P1 §VIII and P2 §11, dial P1, ranges P2 §X
+10. **UT202T/UT202BT manual** (English, and the Chinese UT202S/UT202BT one
+    to cross-check, read 2026-09-25): Bluetooth P13/24 and P14/25, buttons
+    P7/12 and P8/13, ranges P14/26 to P17/31 (PDF page/printed page)
 
 No community implementations, forum posts, or third-party reverse
 engineering work during the primary RE. Two community implementations were

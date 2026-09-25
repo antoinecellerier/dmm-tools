@@ -57,6 +57,8 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `ut161b` |  | UT161B (experimental) |
 | `ut161d` |  | UT161D (experimental) |
 | `ut161e` | `ut161` | UT161E (experimental) |
+| `ut60bt` |  | UT60BT (experimental) |
+| `ut202bt` |  | UT202BT (experimental) |
 | `ut8802` | `ut8802n` | UT8802 (experimental) |
 | `ut8803` | `ut8803e` | UT8803 (experimental) |
 | `ut803` |  | UT803 (experimental) |
@@ -103,9 +105,10 @@ dmm-cli --device mock read
 
 ### dmm-cli list
 
-List the connected USB cables and the Bluetooth adapters in range: the ones
-connected to this computer or heard advertising. A paired adapter the scan
-did not hear is listed dim as "paired but not heard": check it is switched on.
+List the connected USB cables, and the Bluetooth adapters and meters in range:
+the ones connected to this computer or heard advertising. A paired adapter the
+scan did not hear is listed dim as "paired but not heard": check it is switched
+on.
 
 ```
 dmm-cli list

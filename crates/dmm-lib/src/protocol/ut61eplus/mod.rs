@@ -74,6 +74,7 @@ impl Ut61PlusProtocol {
     /// - "ut61e+" (Verified), "ut161e" -> UT61E+ table
     /// - "ut61b+" (Verified), "ut161b" -> UT61B+ table
     /// - "ut61d+", "ut161d" -> UT61D+ table
+    /// - "ut60bt", "ut202bt" -> their own tables
     ///
     /// Several models share a table — the UT161x meters are believed to speak
     /// the same protocol as their UT61x+ counterparts — so the reported model
@@ -129,6 +130,18 @@ impl Ut61PlusProtocol {
                     false,
                     SpecModel::Ut161d,
                 ),
+                "ut60bt" => (
+                    Box::new(tables::ut60bt::Ut60btTable::new()),
+                    "UNI-T UT60BT",
+                    false,
+                    SpecModel::Untranscribed,
+                ),
+                "ut202bt" => (
+                    Box::new(tables::ut202bt::Ut202btTable::new()),
+                    "UNI-T UT202BT",
+                    false,
+                    SpecModel::Untranscribed,
+                ),
                 _ => return None,
             };
         Some(Self::with_profile(table, model_name, verified, specs))
@@ -150,8 +163,13 @@ impl Ut61PlusProtocol {
         // The family issue stays on every model but the UT61E+, verified or
         // not: the UT61B+ is decoded correctly everywhere it was looked at,
         // and its range rungs above the ones auto-ranging reached are still
-        // open there.
-        let verification_issue = (model_name != "UNI-T UT61E+").then_some(7);
+        // open there. The UT60BT and UT202BT get issues of their own, not yet
+        // opened.
+        let verification_issue = match model_name {
+            "UNI-T UT61E+" | "UNI-T UT60BT" | "UNI-T UT202BT" => None,
+            _ => Some(7),
+        };
+        let supported_commands = table.commands();
         Self {
             table,
             specs,
@@ -162,7 +180,7 @@ impl Ut61PlusProtocol {
                 family_name: "UT61+/UT161",
                 model_name,
                 stability,
-                supported_commands: UT61EPLUS_COMMANDS,
+                supported_commands,
                 max_aux_values: 0,
                 verification_issue,
             },
@@ -370,6 +388,10 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn send_command(&mut self, transport: &dyn Transport, command: &str) -> Result<()> {
+        // A button this model does not have (family spec §6.5).
+        if !self.profile.supported_commands.contains(&command) {
+            return Err(Error::UnsupportedCommand(command.to_string()));
+        }
         let cmd = Self::command_from_name(command)?;
         debug!("sending command: {command}");
         self.press_command(transport, cmd)
@@ -427,9 +449,13 @@ impl Protocol for Ut61PlusProtocol {
     }
 
     fn capture_steps(&self) -> Vec<crate::protocol::CaptureStep> {
-        use crate::flags::Flag;
         use crate::protocol::steps::{self, Ohms, Volts};
-        use crate::protocol::{CaptureStep, Expect, Need, RangeExpect, ValueExpect};
+        use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
+
+        // A model whose buttons the family list does not describe.
+        if let Some(steps) = self.table.capture_steps() {
+            return steps;
+        }
 
         // The list is shared by the whole UT61+/UT161 family; the UT61E+ and
         // the UT61B+ have run every step of it (docs/verification-backlog.md).
@@ -450,6 +476,17 @@ impl Protocol for Ut61PlusProtocol {
             ),
         )
         .map(mark);
+        let [
+            hold,
+            hold_off,
+            rel,
+            rel_off,
+            minmax,
+            minmax_off,
+            range,
+            auto,
+        ] = command_steps(hw);
+        let duty = self.table.duty_instruction();
 
         let mut steps = vec![
             // The six gate steps first, both trios, so the gate is decided by
@@ -509,63 +546,14 @@ impl Protocol for Ut61PlusProtocol {
             .samples(3)
             .verified_if(hw)
             .expect(Expect::mode("DC V")),
-            // Flags & commands. These run wherever the dial is, so they sit
-            // on DC V: at the end of the list the dial was on DC A, a single
-            // range where RANGE and AUTO have nothing to do (`auto did
-            // nothing` on hardware, 2026-09-07); DC V has four rungs.
-            CaptureStep::with_command(
-                "hold",
-                "DC V mode: press HOLD on the meter, or we will send the command.",
-                "hold",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().flags(&[(Flag::Hold, true)])),
-            CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3)
-                .verified_if(hw)
-                .expect(Expect::new().flags(&[(Flag::Hold, false)])),
-            CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3)
-                .verified_if(hw)
-                .expect(Expect::new().flags(&[(Flag::Rel, true)])),
-            CaptureStep::with_command(
-                "rel_off",
-                "We will send REL again to turn it off.",
-                "rel",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().flags(&[(Flag::Rel, false)])),
-            // Which of MIN and MAX the first press lands on is the meter's
-            // own cycle, so only the exit is asserted.
-            CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3)
-                .verified_if(hw),
-            CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
-                .verified_if(hw)
-                .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
-            // A single RANGE press, not a sweep. A six-step sweep was tried
-            // and removed: on hardware it produced range indices 0, 2, 0, 0,
-            // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
-            // between DC V (0x02) and AC+DC V (0x19) partway through, which
-            // is the documented effect of SELECT (0x4C), not RANGE (0x46).
-            // Until what 0x46 actually does is known, stepping it repeatedly
-            // just files misleading data. See the UT61E+ section of
-            // docs/verification-backlog.md.
-            CaptureStep::with_command(
-                "range",
-                "We will send RANGE to switch to manual.",
-                "range",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().range(RangeExpect::Manual)),
-            CaptureStep::with_command(
-                "auto",
-                "We will send AUTO to return to auto-range.",
-                "auto",
-                3,
-            )
-            .verified_if(hw)
-            .expect(Expect::new().range(RangeExpect::Auto)),
+            hold,
+            hold_off,
+            rel,
+            rel_off,
+            minmax,
+            minmax_off,
+            range,
+            auto,
             // The rest of each dial position's SELECT ring (spec §3.1): one
             // step per mode the ring reaches, in dial order.
             CaptureStep::basic(
@@ -595,13 +583,10 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("Hz")),
-            CaptureStep::basic(
-                "duty",
-                "Hz/% position: short-press the USB button for Duty %.",
-            )
-            .samples(3)
-            .verified_if(hw)
-            .expect(Expect::mode("Duty %")),
+            CaptureStep::basic("duty", duty)
+                .samples(3)
+                .verified_if(hw)
+                .expect(Expect::mode("Duty %")),
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .samples(3)
                 .verified_if(hw)
@@ -651,21 +636,94 @@ impl Protocol for Ut61PlusProtocol {
         ];
         // The list names every mode in the family; a model's dial table says
         // which it reaches (spec §2.1: temperature and LoZ are UT61D+/UT161D
-        // positions), so the others are not asked for.
+        // positions), so the others are not asked for. A table without a
+        // dial lists its modes instead.
         let dial = self.table.dial_positions();
+        let reached: Vec<Mode> = if dial.is_empty() {
+            self.table.modes().to_vec()
+        } else {
+            dial.iter()
+                .flat_map(|p| p.modes())
+                .filter_map(|m| Mode::from_byte(u8::try_from(m).ok()?).ok())
+                .collect()
+        };
         steps.retain(|step| {
             let Some(label) = step.expect.and_then(|e| e.mode) else {
                 return true;
             };
-            dial.iter().flat_map(|p| p.modes()).any(|m| {
-                u8::try_from(m)
-                    .ok()
-                    .and_then(|b| Mode::from_byte(b).ok())
-                    .is_some_and(|mode| mode.as_static_str() == label)
-            })
+            reached.iter().any(|mode| mode.as_static_str() == label)
         });
+        // Nor is a command the model's buttons do not take (family spec §6.5).
+        let commands = self.profile.supported_commands;
+        steps.retain(|step| step.command.is_none_or(|c| commands.contains(&c)));
         steps
     }
+}
+
+/// The command steps: HOLD, REL and MIN/MAX on and off, then RANGE and AUTO,
+/// all on DC V. `hw` marks them verified, for a model that has run them.
+///
+/// Flags & commands run wherever the dial is, so they sit on DC V: at the end
+/// of the list the dial was on DC A, a single range where RANGE and AUTO have
+/// nothing to do (`auto did nothing` on hardware, 2026-09-07); DC V has four
+/// rungs.
+fn command_steps(hw: bool) -> [crate::protocol::CaptureStep; 8] {
+    use crate::flags::Flag;
+    use crate::protocol::{CaptureStep, Expect, RangeExpect};
+    [
+        CaptureStep::with_command(
+            "hold",
+            "DC V mode: press HOLD on the meter, or we will send the command.",
+            "hold",
+            3,
+        )
+        .verified_if(hw)
+        .expect(Expect::new().flags(&[(Flag::Hold, true)])),
+        CaptureStep::with_command("hold_off", "Press HOLD again to turn it off.", "hold", 3)
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Hold, false)])),
+        CaptureStep::with_command("rel", "DC V mode: we will send REL.", "rel", 3)
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Rel, true)])),
+        CaptureStep::with_command(
+            "rel_off",
+            "We will send REL again to turn it off.",
+            "rel",
+            3,
+        )
+        .verified_if(hw)
+        .expect(Expect::new().flags(&[(Flag::Rel, false)])),
+        // Which of MIN and MAX the first press lands on is the meter's
+        // own cycle, so only the exit is asserted.
+        CaptureStep::with_command("minmax", "We will send MIN/MAX.", "minmax", 3).verified_if(hw),
+        CaptureStep::with_command("minmax_off", "We will exit MIN/MAX.", "exit_minmax", 3)
+            .verified_if(hw)
+            .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
+        // A single RANGE press, not a sweep. A six-step sweep was tried
+        // and removed: on hardware it produced range indices 0, 2, 0, 0,
+        // 0, 0 — never visiting 22V or 1000V — and flipped the mode byte
+        // between DC V (0x02) and AC+DC V (0x19) partway through, which
+        // is the documented effect of SELECT (0x4C), not RANGE (0x46).
+        // Until what 0x46 actually does is known, stepping it repeatedly
+        // just files misleading data. See the UT61E+ section of
+        // docs/verification-backlog.md.
+        CaptureStep::with_command(
+            "range",
+            "We will send RANGE to switch to manual.",
+            "range",
+            3,
+        )
+        .verified_if(hw)
+        .expect(Expect::new().range(RangeExpect::Manual)),
+        CaptureStep::with_command(
+            "auto",
+            "We will send AUTO to return to auto-range.",
+            "auto",
+            3,
+        )
+        .verified_if(hw)
+        .expect(Expect::new().range(RangeExpect::Auto)),
+    ]
 }
 
 /// The ack the meter answers every command with
@@ -738,7 +796,7 @@ fn send_get_name(transport: &dyn Transport) -> Result<()> {
 /// The scan runs to the end of the buffer even once a reading has been seen:
 /// on the CH9329, which does not purge its RX buffer on open, a stale frame
 /// from an earlier session can sit in front of the name.
-fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
+fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
     let mut evidence = None;
     for start in framing::abcd_header_offsets(buf) {
         let Ok(Some((payload, _))) = framing::extract_frame_abcd_be16(&buf[start..]) else {
@@ -756,17 +814,40 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
                         reported_name: Some(name),
                     }
                 }
-                None => {
-                    report_unknown(
-                        "ut61eplus",
-                        "model name",
-                        format_args!("{name:?}, using the UT61E+ tables"),
-                    );
-                    Evidence::Model {
-                        id: FALLBACK_ID,
-                        reported_name: Some(name),
+                // A meter with Bluetooth built in named its model in the name
+                // it advertises (docs/detection-design.md, Names and the
+                // registry), and its ranges are not the UT61E+'s.
+                None => match probing
+                    .advertised
+                    .filter(|d| d.family == DeviceFamily::Ut61EPlus)
+                {
+                    Some(device) => {
+                        report_unknown(
+                            "ut61eplus",
+                            "model name",
+                            format_args!(
+                                "{name:?}, using the {} tables, the model its Bluetooth name \
+                                 advertises",
+                                device.display_name
+                            ),
+                        );
+                        Evidence::Model {
+                            id: device.id,
+                            reported_name: Some(name),
+                        }
                     }
-                }
+                    None => {
+                        report_unknown(
+                            "ut61eplus",
+                            "model name",
+                            format_args!("{name:?}, using the UT61E+ tables"),
+                        );
+                        Evidence::Model {
+                            id: FALLBACK_ID,
+                            reported_name: Some(name),
+                        }
+                    }
+                },
             });
         }
         if payload.len() == UT61EPLUS_MEASUREMENT_PAYLOAD_LEN {
@@ -936,6 +1017,12 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     /// same table `range_label` reads, so a rung is named exactly as the
     /// reading that lands on it will be.
     fn range_ladder(&self, mode: u16) -> Vec<Cow<'static, str>> {
+        // The ladder comes with an Auto rung, which AUTO sets: a model that
+        // does not take it has no way back from a manual rung (family spec
+        // §6.5), so it is offered none.
+        if !self.profile.supported_commands.contains(&"auto") {
+            return Vec::new();
+        }
         match u8::try_from(mode).map(Mode::from_byte) {
             Ok(Ok(mode)) => tables::range_ladder(self.table.as_ref(), mode),
             // A mode byte this family's parser cannot name has no table.
@@ -958,6 +1045,16 @@ impl cycle::CycleMeter for Ut61PlusProtocol {
     /// that list. Peak depends on the model as well, so it stays with the
     /// table.
     fn flag_states(&self, setting: cycle::FlagSetting, mode: u16) -> &'static [u16] {
+        // A flag whose button the model does not have (family spec §6.5).
+        let command = match setting {
+            cycle::FlagSetting::Hold => "hold",
+            cycle::FlagSetting::Rel => "rel",
+            cycle::FlagSetting::MinMax => "minmax",
+            cycle::FlagSetting::Peak => "peak",
+        };
+        if !self.profile.supported_commands.contains(&command) {
+            return &[];
+        }
         let named = u8::try_from(mode).map(Mode::from_byte);
         let dead = |modes: &[Mode]| matches!(named, Ok(Ok(m)) if modes.contains(&m));
         match setting {
@@ -1362,6 +1459,142 @@ mod tests {
         for id in ["temp", "tempf", "loz"] {
             assert!(d_plus.contains(&id), "{id} missing on the D+");
         }
+        // No dial described: the table's own mode list decides.
+        let ut60bt = ids("ut60bt");
+        for id in [
+            "acv", "dcmv", "duty", "ncv", "dcua", "acma", "temp", "tempf",
+        ] {
+            assert!(ut60bt.contains(&id), "{id} missing on the UT60BT");
+        }
+        // Nor the commands its buttons do not take: MAX/MIN (spec §6.5).
+        for id in [
+            "acdcv",
+            "lpfv",
+            "hfe",
+            "dca",
+            "aca",
+            "loz",
+            "minmax",
+            "minmax_off",
+        ] {
+            assert!(!ut60bt.contains(&id), "{id} asked for on the UT60BT");
+        }
+        for id in ["hold", "rel", "range", "auto"] {
+            assert!(ut60bt.contains(&id), "{id} missing on the UT60BT");
+        }
+    }
+
+    /// The UT202BT has no dial and takes HOLD and RANGE alone of our
+    /// commands, and every mode its steps assert is one its table has.
+    #[test]
+    fn ut202bt_steps_follow_its_buttons() {
+        let proto = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
+        let steps = proto.capture_steps();
+        let ids: Vec<&str> = steps.iter().map(|s| s.id).collect();
+        for id in [
+            "rel",
+            "rel_off",
+            "minmax",
+            "minmax_off",
+            "auto",
+            "diode",
+            "dcmv",
+        ] {
+            assert!(!ids.contains(&id), "{id} asked for on the UT202BT");
+        }
+        for id in ["dcv", "ohm", "hold", "range", "lpfv", "inrush", "ncv"] {
+            assert!(ids.contains(&id), "{id} missing on the UT202BT");
+        }
+        let modes = tables::ut202bt::Ut202btTable::new();
+        for label in steps.iter().filter_map(|s| s.expect.and_then(|e| e.mode)) {
+            assert!(
+                modes.modes().iter().any(|m| m.as_static_str() == label),
+                "{label} is not a UT202BT mode"
+            );
+        }
+    }
+
+    /// Each model offers the commands its buttons take: the whole family
+    /// list on the models that have always had it, and on the UT60BT and
+    /// UT202BT what UNI-T's app sends them (family spec §6.5). A capture step
+    /// never sends one the model does not offer.
+    #[test]
+    fn each_model_offers_the_commands_its_buttons_take() {
+        let commands = |model| {
+            Ut61PlusProtocol::for_model(model)
+                .expect("known model")
+                .profile
+                .supported_commands
+        };
+        for model in ["ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d"] {
+            assert_eq!(commands(model), UT61EPLUS_COMMANDS, "{model}");
+        }
+        assert_eq!(
+            commands("ut60bt"),
+            ["hold", "range", "auto", "rel", "select"]
+        );
+        assert_eq!(commands("ut202bt"), ["hold", "range"]);
+
+        for model in ["ut61e+", "ut61b+", "ut61d+", "ut60bt", "ut202bt"] {
+            let proto = Ut61PlusProtocol::for_model(model).expect("known model");
+            for step in proto.capture_steps() {
+                if let Some(command) = step.command {
+                    assert!(commands(model).contains(&command), "{model}: {}", step.id);
+                }
+            }
+        }
+    }
+
+    /// A command the model does not take is refused before it reaches the
+    /// wire.
+    #[test]
+    fn a_command_the_model_does_not_take_is_refused() {
+        let mock = MockTransport::new(vec![]);
+        let mut ut60bt = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        assert!(matches!(
+            ut60bt.send_command(&mock, "minmax"),
+            Err(Error::UnsupportedCommand(c)) if c == "minmax"
+        ));
+        let mut ut202bt = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
+        for command in ["auto", "rel", "peak"] {
+            assert!(
+                matches!(
+                    ut202bt.send_command(&mock, command),
+                    Err(Error::UnsupportedCommand(_))
+                ),
+                "{command}"
+            );
+        }
+        assert!(mock.written.borrow().is_empty());
+    }
+
+    /// The flag settings follow the same buttons: no MAX/MIN on the UT60BT,
+    /// and on the UT202BT HOLD alone — no Peak either, though its frames can
+    /// carry the Peak bits, until the byte that starts it is known (family
+    /// spec §6.5). Its range ladder goes too: it would come with an Auto
+    /// rung, which AUTO sets.
+    #[test]
+    fn the_new_models_offer_only_the_settings_their_buttons_take() {
+        use cycle::{CycleMeter, FlagSetting};
+        let (dcv, acv) = (u16::from(Mode::DcV as u8), u16::from(Mode::AcV as u8));
+        let ut60bt = Ut61PlusProtocol::for_model("ut60bt").expect("known model");
+        assert!(ut60bt.flag_states(FlagSetting::MinMax, dcv).is_empty());
+        assert_eq!(ut60bt.flag_states(FlagSetting::Rel, dcv), [0, 1]);
+        assert_eq!(ut60bt.flag_states(FlagSetting::Hold, dcv), [0, 1]);
+        assert!(!ut60bt.range_ladder(dcv).is_empty());
+
+        let ut202bt = Ut61PlusProtocol::for_model("ut202bt").expect("known model");
+        for setting in [FlagSetting::Rel, FlagSetting::MinMax, FlagSetting::Peak] {
+            assert!(ut202bt.flag_states(setting, acv).is_empty(), "{setting:?}");
+        }
+        assert_eq!(ut202bt.flag_states(FlagSetting::Hold, acv), [0, 1]);
+        assert!(ut202bt.range_ladder(dcv).is_empty());
+
+        // The UT61E+ keeps every one of them.
+        let e_plus = Ut61PlusProtocol::new();
+        assert_eq!(e_plus.flag_states(FlagSetting::MinMax, dcv), [0, 1, 2]);
+        assert_eq!(e_plus.flag_states(FlagSetting::Peak, acv), [0, 1, 2]);
+        assert!(!e_plus.range_ladder(dcv).is_empty());
     }
     use tables::ut61e_plus::Ut61ePlusTable;
 
@@ -2390,12 +2623,69 @@ raw_payload=14"#
     #[test]
     fn an_unknown_name_falls_back_to_the_ut61eplus_tables() {
         assert_eq!(
-            recognised(&test_frame_be16(b"UT60BT")),
+            recognised(&test_frame_be16(b"UT216XD")),
             Some(Evidence::Model {
                 id: "ut61eplus",
-                reported_name: Some("UT60BT".to_string()),
+                reported_name: Some("UT216XD".to_string()),
             })
         );
+    }
+
+    /// On a meter with Bluetooth built in, a name no registry entry carries
+    /// falls back to the model its advertised name picked, and the report
+    /// says so. The unflagged case is `an_unknown_model_name_is_reported`.
+    #[test]
+    fn an_unknown_name_on_a_built_in_meter_falls_back_to_its_own_entry() {
+        let probing = Probing {
+            advertised: registry::find_device("ut60bt"),
+            ..Probing::default()
+        };
+        let (evidence, reports) = crate::protocol::capture_reports(|| {
+            (FINGERPRINT.recognise)(&test_frame_be16(b"UT216XD"), &probing)
+        });
+        assert_eq!(
+            evidence,
+            Some(Evidence::Model {
+                id: "ut60bt",
+                reported_name: Some("UT216XD".to_string()),
+            })
+        );
+        assert_eq!(
+            reports,
+            [
+                "ut61eplus: unrecognised model name: \"UT216XD\", using the UT60BT tables, the \
+              model its Bluetooth name advertises"
+            ]
+        );
+    }
+
+    /// The meters with Bluetooth built in answer Get Name with their own
+    /// names (one UT60BT's reply is on record in the family approach doc,
+    /// 2026-09-25), which pick their own tables.
+    #[test]
+    fn the_bluetooth_meters_names_pick_their_own_tables() {
+        for (name, id, model) in [
+            ("UT60BT", "ut60bt", "UNI-T UT60BT"),
+            ("UT202BT", "ut202bt", "UNI-T UT202BT"),
+        ] {
+            assert_eq!(
+                recognised(&test_frame_be16(name.as_bytes())),
+                Some(Evidence::Model {
+                    id,
+                    reported_name: Some(name.to_string()),
+                })
+            );
+            let device = registry::find_device(id).expect("registry entry");
+            assert_eq!((device.new_protocol)().profile().model_name, model);
+        }
+        // Range byte 0 of DC V is 999.9 mV on a UT60BT, 9.999 V on a UT202BT.
+        let payload = make_payload(0x02, 0, b" 12.345", (0, 0), (0, 0, 0));
+        let unit = |id| {
+            let proto = Ut61PlusProtocol::for_model(id).expect("known model");
+            proto.parse_payload(&payload).expect("parses").unit
+        };
+        assert_eq!(unit("ut60bt"), "mV");
+        assert_eq!(unit("ut202bt"), "V");
     }
 
     /// A measurement frame says which family answered, not which model: the
@@ -2696,7 +2986,8 @@ raw_payload=14"#
         );
     }
 
-    /// The UT61B+ has no Peak (family spec §4); the UT61E+ does.
+    /// The UT61B+ has no Peak (family spec §4); the UT61E+ does, and so does
+    /// the UT202BT in AC A (its manual, P11/20).
     #[test]
     fn peak_bits_on_a_model_without_peak_are_reported() {
         let payload = make_payload(0x00, 0x00, b"  0.037", (0, 0), (0, 0, F_PEAK_MAX));
@@ -2709,6 +3000,14 @@ raw_payload=14"#
 
         let (_, reports) = parse_reporting(&payload, &Ut61ePlusTable::new());
         assert!(reports.is_empty(), "{reports:?}");
+
+        let ut202bt = tables::ut202bt::Ut202btTable::new();
+        for mode in [0x11, 0x16] {
+            let payload = make_payload(mode, 0x02, b"  123  ", (0, 0), (0, 0, F_PEAK_MIN));
+            let (m, reports) = parse_reporting(&payload, &ut202bt);
+            assert!(m.unwrap().flags.peak_min, "{mode:#04x}");
+            assert!(reports.is_empty(), "{mode:#04x}: {reports:?}");
+        }
     }
 
     #[test]
@@ -2802,7 +3101,7 @@ raw_payload=14"#
 
     #[test]
     fn an_unknown_model_name_is_reported() {
-        let (evidence, reports) = capture_reports(|| recognised(&test_frame_be16(b"UT60BT")));
+        let (evidence, reports) = capture_reports(|| recognised(&test_frame_be16(b"UT216XD")));
         assert!(
             matches!(
                 evidence,
@@ -2815,7 +3114,7 @@ raw_payload=14"#
         );
         assert_eq!(
             reports,
-            ["ut61eplus: unrecognised model name: \"UT60BT\", using the UT61E+ tables"]
+            ["ut61eplus: unrecognised model name: \"UT216XD\", using the UT61E+ tables"]
         );
 
         let (_, reports) = capture_reports(|| recognised(&NAME_UT61BPLUS));

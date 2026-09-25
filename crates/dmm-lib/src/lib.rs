@@ -19,12 +19,12 @@ pub mod wall_clock;
 pub use clock::Clock;
 pub use wall_clock::WallClock;
 
-use error::{Error, Result};
+use error::{BluetoothOnlyMiss, Error, Result};
 use log::{info, warn};
 use protocol::Protocol;
 use protocol::registry::{self, SelectableDevice, Selection};
 use std::ffi::CString;
-use transport::{Transport, ble, ch9325, ch9329, cp2110};
+use transport::{BluetoothPeers, Transport, ble, ch9325, ch9329, cp2110};
 
 /// Top-level handle for communicating with the multimeter.
 pub struct Dmm<T: Transport> {
@@ -160,7 +160,8 @@ struct KnownTransport {
 }
 
 /// The links a device family is found on, most likely first: the USB cables,
-/// and the UT-D07B Bluetooth adapter for the families seen on it.
+/// and UNI-T's Bluetooth adapters for the families seen on them. A meter with
+/// the radio built in is on Bluetooth alone ([`device_links`]).
 ///
 /// Sourced from the cable table in `docs/supported-devices.md`: the CP2110
 /// UT-D09 covers UT61x+/UT161x/UT171x/UT880x, the Voltcraft meters and older
@@ -193,6 +194,44 @@ fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static st
         F::Ut181a => &["CH9329", "CP2110", BLUETOOTH],
         F::Ut80x => &["CH9325"],
         F::Mock => &[],
+    }
+}
+
+/// The links one registry entry is found on: its family's, or Bluetooth
+/// alone for a meter with the radio built in.
+fn device_links(device: &SelectableDevice) -> &'static [&'static str] {
+    if device.bluetooth_only {
+        &[BLUETOOTH]
+    } else {
+        preferred_transports(device.family)
+    }
+}
+
+/// The Bluetooth peers an open for `device` takes, by name: UNI-T's adapters
+/// for a meter behind one, a meter with the radio built in by its own names,
+/// and every one of both for a meter not named yet (`auto`, `dmm-cli list`).
+///
+/// A meter is never taken for another: a UT60BT answering an open for a
+/// UT61E+ would be decoded with the UT61E+'s range tables. An address on
+/// `--adapter` bypasses this: it opens whatever answers there.
+fn bluetooth_peers(device: Option<&SelectableDevice>) -> BluetoothPeers {
+    match device {
+        Some(device) if device.bluetooth_only => BluetoothPeers {
+            adapters: false,
+            meters: device.bluetooth_names.to_vec(),
+        },
+        Some(_) => BluetoothPeers {
+            adapters: true,
+            meters: Vec::new(),
+        },
+        None => BluetoothPeers {
+            adapters: true,
+            meters: registry::DEVICES
+                .iter()
+                .flat_map(|d| d.bluetooth_names)
+                .copied()
+                .collect(),
+        },
     }
 }
 
@@ -322,10 +361,7 @@ pub fn open_transport_by_id_auto(
             let (transport, detected) = open_detected(opts)?;
             Ok((transport, (detected.device.new_protocol)()))
         }
-        Selection::Device(entry) => {
-            let (transport, _bridge) = open_transport(preferred_transports(entry.family), opts)?;
-            Ok((transport, (entry.new_protocol)()))
-        }
+        Selection::Device(entry) => Ok((open_entry(entry, opts)?, (entry.new_protocol)())),
     }
 }
 
@@ -365,10 +401,55 @@ fn open_detected(opts: OpenOptions<'_>) -> Result<(Box<dyn Transport>, detect::D
     Ok((transport, detected))
 }
 
-/// Open a bridge and hand back the transport alone, with no protocol.
+/// Open the link one registry entry is on.
+fn open_entry(entry: &SelectableDevice, opts: OpenOptions<'_>) -> Result<Box<dyn Transport>> {
+    if entry.bluetooth_only {
+        return open_bluetooth_only(entry, opts);
+    }
+    let preferred = preferred_transports(entry.family);
+    let (transport, _bridge) = open_links(preferred, &bluetooth_peers(Some(entry)), opts)?;
+    Ok(transport)
+}
+
+/// Open a meter with the radio built in, over Bluetooth alone.
 ///
-/// `preferred` orders the links to try — [`preferred_transports`] for a known
-/// family, empty when the meter has not been identified yet. The returned name
+/// It is on no cable, so whatever the bus holds is another meter and the bus
+/// is not opened. Every way this fails is the meter's own: a stack fault
+/// ([`Error::Bluetooth`]) is passed on, and the rest name what kept the radio
+/// from being searched, or that nothing in range carried the meter's name.
+fn open_bluetooth_only(
+    entry: &SelectableDevice,
+    opts: OpenOptions<'_>,
+) -> Result<Box<dyn Transport>> {
+    let miss = if !BLUETOOTH_SUPPORTED {
+        BluetoothOnlyMiss::NotBuilt
+    } else if let Some(selector) = opts.adapter {
+        if !ble::is_bluetooth_selector(selector) {
+            BluetoothOnlyMiss::UsbAdapter
+        } else {
+            return ble::open_selected(selector);
+        }
+    } else if !opts.bluetooth {
+        BluetoothOnlyMiss::SwitchedOff
+    } else {
+        match ble::open_first(&bluetooth_peers(Some(entry))) {
+            Err(Error::NoTransportFound { .. }) => BluetoothOnlyMiss::NotInRange,
+            opened => return opened,
+        }
+    };
+    Err(Error::BluetoothOnly {
+        model: entry.display_name,
+        activation: entry.activation_instructions,
+        miss,
+    })
+}
+
+/// Open a bridge and hand back the transport alone, with no protocol, for a
+/// meter not identified yet.
+///
+/// `preferred` orders the links to try, empty when nothing is known about
+/// the meter; on the radio, any UNI-T adapter or meter is taken, since
+/// detection picks the entry afterwards. The returned name
 /// is the bridge's (`"CP2110"`, `"CH9329"`, `"CH9325"`, [`BLUETOOTH`]), which
 /// [`detect::detect_device`] needs to know which probes are worth sending.
 ///
@@ -384,6 +465,15 @@ pub fn open_transport(
     preferred: &[&'static str],
     opts: OpenOptions<'_>,
 ) -> Result<(Box<dyn Transport>, &'static str)> {
+    open_links(preferred, &bluetooth_peers(None), opts)
+}
+
+/// [`open_transport`], taking only `peers` on the radio.
+fn open_links(
+    preferred: &[&'static str],
+    peers: &BluetoothPeers,
+    opts: OpenOptions<'_>,
+) -> Result<(Box<dyn Transport>, &'static str)> {
     // An address or a peripheral UUID can only be a Bluetooth adapter, so the
     // selector alone says which opener the user meant — and asking for one by
     // name is asking for the radio, whatever the probing setting says.
@@ -396,7 +486,7 @@ pub fn open_transport(
     match hid {
         Ok(opened) => Ok(opened),
         Err(err) if radio_gets_a_turn && usb_failure_falls_through(&err) => {
-            match ble::open_first() {
+            match ble::open_first(peers) {
                 Ok(transport) => Ok((transport, BLUETOOTH)),
                 Err(bluetooth_err) => {
                     // The USB error is what the user acts on: it lists the
@@ -463,7 +553,7 @@ fn open_hid_transport(
 }
 
 /// The hardware meters reachable over `bridge`, the inverse of
-/// [`preferred_transports`].
+/// [`device_links`].
 ///
 /// What the "no meter answered" help lists: with nothing identified on a
 /// bridge, these are the meters that could have been on it, and their
@@ -472,7 +562,7 @@ pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
     registry::DEVICES
         .iter()
         .filter(|d| d.requires_hardware)
-        .filter(|d| preferred_transports(d.family).contains(&bridge))
+        .filter(|d| device_links(d).contains(&bridge))
         .collect()
 }
 
@@ -572,7 +662,7 @@ fn open_first_match(
 
 /// List all connected USB adapters (CP2110, CH9329, CH9325).
 ///
-/// USB only, and instant: the Bluetooth adapters in range come from
+/// USB only, and instant: the Bluetooth adapters and meters in range come from
 /// [`list_bluetooth_devices`], which has to scan for them.
 pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     let api = hidapi::HidApi::new().map_err(Error::Hid)?;
@@ -599,15 +689,16 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     Ok(devices)
 }
 
-/// The UT-D07B adapters in Bluetooth range, then the known ones the scan did
-/// not hear ([`DeviceInfo::not_heard`]).
+/// The UNI-T Bluetooth adapters and meters with the radio built in that are
+/// in range, then the known ones the scan did not hear
+/// ([`DeviceInfo::not_heard`]).
 ///
 /// Separate from [`list_devices`] because it scans, which takes seconds: the
 /// USB listing backs a GUI control and has to stay instant. `path` is what
 /// `--adapter` takes to pin one — its address, or the peripheral identifier
 /// on a platform that exposes no address.
 pub fn list_bluetooth_devices() -> Result<Vec<DeviceInfo>> {
-    ble::list()
+    ble::list(&bluetooth_peers(None))
 }
 
 /// Whether an `--adapter` value names a Bluetooth adapter rather than a USB
@@ -901,7 +992,7 @@ mod tests {
     #[test]
     fn preferred_transport_names_exist() {
         for device in protocol::registry::DEVICES {
-            for name in preferred_transports(device.family) {
+            for name in device_links(device) {
                 assert!(
                     *name == BLUETOOTH || KNOWN_TRANSPORTS.iter().any(|kt| kt.name == *name),
                     "device {} prefers unknown transport {name:?}",
@@ -957,7 +1048,7 @@ mod tests {
                 continue;
             }
             assert!(
-                !preferred_transports(device.family).is_empty(),
+                !device_links(device).is_empty(),
                 "device {} has no preferred transport",
                 device.id,
             );
@@ -1019,6 +1110,99 @@ mod tests {
                 .any(|d| d.family == F::Ut80x)
         );
         assert!(devices_on_bridge("no such bridge").is_empty());
+    }
+
+    /// Each entry takes only its own peers on the radio: a meter behind an
+    /// adapter the adapters, a meter with the radio built in its own names,
+    /// and a meter not named yet every one of them.
+    #[test]
+    fn each_entry_takes_only_its_own_bluetooth_peers() {
+        let peers = |id| bluetooth_peers(Some(registry::find_device(id).expect("registry entry")));
+        let adapters = BluetoothPeers {
+            adapters: true,
+            meters: Vec::new(),
+        };
+        for id in ["ut61eplus", "ut61b+", "ut161e", "ut171", "ut181a"] {
+            assert_eq!(peers(id), adapters, "{id}");
+        }
+        for (id, name) in [("ut60bt", "UT60BT"), ("ut202bt", "UT202BT")] {
+            assert_eq!(
+                peers(id),
+                BluetoothPeers {
+                    adapters: false,
+                    meters: vec![name],
+                }
+            );
+        }
+        assert_eq!(
+            bluetooth_peers(None),
+            BluetoothPeers {
+                adapters: true,
+                meters: vec!["UT60BT", "UT202BT"],
+            }
+        );
+    }
+
+    /// A meter with the radio built in never falls back to the bus, and says
+    /// what kept it from the radio rather than that no cable was found.
+    #[test]
+    fn a_bluetooth_only_meter_names_what_kept_it_off_the_radio() {
+        let ut60bt = registry::find_device("ut60bt").expect("registry entry");
+        let miss = |opts| match open_bluetooth_only(ut60bt, opts) {
+            Err(Error::BluetoothOnly {
+                model,
+                activation,
+                miss,
+                ..
+            }) => {
+                assert_eq!(model, "UT60BT");
+                assert_eq!(activation, ut60bt.activation_instructions);
+                miss
+            }
+            Err(e) => panic!("unexpected error: {e}"),
+            Ok(_) => panic!("opened a meter with no radio searched"),
+        };
+        let switched_off = OpenOptions {
+            adapter: None,
+            bluetooth: false,
+        };
+        let usb_adapter = OpenOptions {
+            adapter: Some("00C5B27A"),
+            bluetooth: true,
+        };
+        let (off, usb) = if BLUETOOTH_SUPPORTED {
+            (
+                BluetoothOnlyMiss::SwitchedOff,
+                BluetoothOnlyMiss::UsbAdapter,
+            )
+        } else {
+            (BluetoothOnlyMiss::NotBuilt, BluetoothOnlyMiss::NotBuilt)
+        };
+        assert_eq!(miss(switched_off), off);
+        assert_eq!(miss(usb_adapter), usb);
+    }
+
+    /// A meter with Bluetooth built in has no cable, so no cable's "no meter
+    /// answered" help offers its Bluetooth steps.
+    #[test]
+    fn bluetooth_only_meters_are_on_no_cable() {
+        let bluetooth_only: Vec<&str> = registry::DEVICES
+            .iter()
+            .filter(|d| d.bluetooth_only)
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(bluetooth_only, ["ut60bt", "ut202bt"]);
+        for kt in KNOWN_TRANSPORTS {
+            assert!(
+                !devices_on_bridge(kt.name).iter().any(|d| d.bluetooth_only),
+                "{}",
+                kt.name
+            );
+        }
+        let on_bluetooth: Vec<&str> = devices_on_bridge(BLUETOOTH).iter().map(|d| d.id).collect();
+        for id in bluetooth_only {
+            assert!(on_bluetooth.contains(&id), "{id}");
+        }
     }
 
     /// The CH9325 carries the UT80x family (UT803/UT804, UT71, VC9x0) and

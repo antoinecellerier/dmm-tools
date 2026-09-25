@@ -1,8 +1,11 @@
-//! Bluetooth LE transport for the UT-D07B adapter.
+//! Bluetooth LE transport for UNI-T's UT-D07 adapters and the meters with
+//! the radio built in (the UT60BT and UT202BT), called peers here.
 //!
 //! The UT-D07B is a transparent BLE-to-UART bridge: the bytes it carries are
-//! the ones the USB cable carries, so no parser or framing code knows about
-//! it. Everything Bluetooth-specific is here
+//! the ones the USB cable carries. The built-in meters send the same UT61+
+//! frames over the same ISSC service (`docs/research/new-device-candidates.md`,
+//! Bluetooth section). So no parser or framing code knows about Bluetooth.
+//! Everything Bluetooth-specific is here
 //! (`docs/research/ut-d07b/reverse-engineered-protocol.md`).
 //!
 //! There is no background thread and no channel: the struct owns a
@@ -16,7 +19,8 @@
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
-use crate::transport::Transport;
+use crate::protocol::registry::SelectableDevice;
+use crate::transport::{BluetoothPeers, Transport};
 use btleplug::api::{
     Central, CentralState, Characteristic, Manager as _, Peripheral as _,
     RetrievePeripheralsOptions, ScanFilter, ValueNotification, WriteType,
@@ -30,18 +34,22 @@ use std::pin::Pin;
 use std::time::Duration;
 
 /// ISSC transparent-UART service the UT-D07B carries
-/// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2).
+/// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2), and the
+/// meters with Bluetooth built in too.
 const UART_SERVICE: &str = "49535343-fe7d-4ae5-8fa9-9fafd205e455";
 /// UART TX, meter → host: notifications carry the meter's frames (§2).
 const UART_TX_CHARACTERISTIC: &str = "49535343-1e4d-4bd9-ba61-23c647249616";
 /// UART RX, host → meter: commands are written here (§2).
 const UART_RX_CHARACTERISTIC: &str = "49535343-8841-43f4-a8d4-ecbe34729bb3";
-/// Local name prefix the UNI-T adapters advertise (§2).
-const NAME_PREFIX: &str = "UT-D07";
+/// Local name prefix UNI-T's adapters advertise, uppercase: the UT-D07B
+/// advertises `UT-D07B` (research doc §2) and the UT-D07A a name starting
+/// `UT-D07A` (§7). A meter with the radio built in is named by the caller
+/// ([`BluetoothPeers::meters`]).
+const ADAPTER_NAME_PREFIX: &str = "UT-D07";
 
-/// How long to scan before giving up on finding an adapter.
+/// How long to scan before giving up on finding a peer.
 ///
-/// An adapter this host is already connected to is found without a scan, so
+/// A peer this host is already connected to is found without a scan, so
 /// this bounds every other open — and the GUI's reconnect loop calls the
 /// opener synchronously, so a quit during a failing reconnect waits for it.
 const SCAN_WINDOW: Duration = Duration::from_secs(3);
@@ -65,10 +73,11 @@ const DEFAULT_WRITE_CHUNK: usize = 20;
 
 /// The frame the adapter itself puts on the stream: once when a link comes
 /// up and about once a second while the meter is silent (research doc §3).
-/// It is the adapter's, not the meter's, so it never reaches a parser.
+/// It is the adapter's, not the meter's, so it never reaches a parser. A
+/// meter with the radio built in never sends it.
 const ADAPTER_HEARTBEAT: [u8; 9] = [0xAB, 0xCD, 0x06, 0xAA, 0xAA, 0x6E, 0x67, 0x03, 0xA7];
 
-/// A UT-D07B adapter, open and subscribed.
+/// A UNI-T peer, open and subscribed.
 pub(crate) struct Ble {
     /// Kept alive: dropping the manager tears the platform session down under
     /// the peripheral.
@@ -84,9 +93,12 @@ pub(crate) struct Ble {
     /// Heartbeats stripped so far, for `transport_status`: a rising count
     /// with no readings says the adapter is up and the meter is not.
     heartbeats: Cell<u32>,
-    /// What `dmm-cli list` printed for this adapter, and what `--adapter`
+    /// What `dmm-cli list` printed for this peer, and what `--adapter`
     /// takes to pin it.
     selector: String,
+    /// The registry entry of the meter with the radio built in that the
+    /// peer's name matched; `None` for an adapter.
+    built_in_meter: Option<&'static SelectableDevice>,
     /// Drives every btleplug call. Last, so it outlives every field whose
     /// destructor reaches into the stack.
     rt: tokio::runtime::Runtime,
@@ -104,18 +116,18 @@ impl Ble {
     }
 }
 
-/// Open the first UT-D07B in range.
-pub(crate) fn open_first() -> Result<Box<dyn Transport>> {
-    open(None)
+/// Open the first peer in range that `peers` takes.
+pub(crate) fn open_first(peers: &BluetoothPeers) -> Result<Box<dyn Transport>> {
+    open(Target::Named(peers))
 }
 
-/// Open the adapter `selector` names — an address, or the platform id
-/// [`list`] printed.
+/// Open the peer `selector` names — an address, or the platform id
+/// [`list`] printed — whatever its name.
 pub(crate) fn open_selected(selector: &str) -> Result<Box<dyn Transport>> {
-    open(Some(selector))
+    open(Target::At(selector))
 }
 
-/// Whether `selector` names a Bluetooth adapter rather than a HID device.
+/// Whether `selector` names a Bluetooth peer rather than a HID device.
 ///
 /// A Bluetooth address (`12:34:56:78:9A:BC`) or a CoreBluetooth peripheral
 /// UUID; no HID serial number or device path on any platform takes either
@@ -124,14 +136,14 @@ pub(crate) fn is_bluetooth_selector(selector: &str) -> bool {
     is_bd_addr(selector) || is_uuid(selector)
 }
 
-/// The UT-D07B adapters in range, for `dmm-cli list`.
+/// The peers in range that `peers` takes, for `dmm-cli list`.
 ///
 /// Scans, so this takes seconds — never call it from a render path.
-pub(crate) fn list() -> Result<Vec<DeviceInfo>> {
+pub(crate) fn list(peers: &BluetoothPeers) -> Result<Vec<DeviceInfo>> {
     let rt = runtime()?;
     rt.block_on(async {
         let (_manager, adapter) = central().await?;
-        let found = search(&adapter, None, Match::All).await?;
+        let found = search(&adapter, Target::Named(peers), Match::All).await?;
         Ok(found
             .into_iter()
             .map(|c| DeviceInfo {
@@ -169,7 +181,7 @@ impl Candidate {
         }
     }
 
-    /// The name to show, falling back to the selector for an adapter that
+    /// The name to show, falling back to the selector for a peer that
     /// advertised none.
     fn label(&self) -> String {
         self.name.clone().unwrap_or_else(|| self.selector())
@@ -190,6 +202,25 @@ enum Standing {
     Known,
 }
 
+/// Which peers a search is after.
+#[derive(Clone, Copy)]
+enum Target<'a> {
+    /// The one at this address or platform id, whatever its name.
+    At(&'a str),
+    /// Any whose name the caller takes.
+    Named(&'a BluetoothPeers),
+}
+
+impl<'a> Target<'a> {
+    /// The address or platform id named, if one was.
+    fn selector(self) -> Option<&'a str> {
+        match self {
+            Target::At(selector) => Some(selector),
+            Target::Named(_) => None,
+        }
+    }
+}
+
 /// How many matches a search wants back.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Match {
@@ -208,12 +239,13 @@ struct Opened {
     rx_char: Characteristic,
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
+    built_in_meter: Option<&'static SelectableDevice>,
 }
 
-/// Open an adapter and subscribe to its UART notifications.
-fn open(selector: Option<&str>) -> Result<Box<dyn Transport>> {
+/// Open a peer and subscribe to its UART notifications.
+fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
     let rt = runtime()?;
-    let opened = rt.block_on(connect(selector))?;
+    let opened = rt.block_on(connect(target))?;
     Ok(Box::new(Ble {
         rt,
         _manager: opened.manager,
@@ -224,6 +256,7 @@ fn open(selector: Option<&str>) -> Result<Box<dyn Transport>> {
         pending: RefCell::new(VecDeque::new()),
         heartbeats: Cell::new(0),
         selector: opened.selector,
+        built_in_meter: opened.built_in_meter,
     }))
 }
 
@@ -262,10 +295,11 @@ async fn central() -> Result<(Manager, Adapter)> {
     Ok((manager, adapter))
 }
 
-/// Find an adapter, connect to it and subscribe to the UART characteristic.
-async fn connect(selector: Option<&str>) -> Result<Opened> {
+/// Find a peer, connect to it and subscribe to the UART characteristic.
+async fn connect(target: Target<'_>) -> Result<Opened> {
+    let selector = target.selector();
     let (manager, adapter) = central().await?;
-    let mut found = search(&adapter, selector, Match::First).await?;
+    let mut found = search(&adapter, target, Match::First).await?;
     // A named address the search did not turn up may still answer a connect.
     let mut from_address = false;
     if found.is_empty()
@@ -282,18 +316,18 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
     // Nothing named and nothing heard: the scan may simply have missed an
     // awake adapter (research doc §4), so the known one is tried by address.
     let fallback = selector.is_none() && candidate.standing == Standing::Known;
-    // Either way nothing vouched for the adapter being awake, so one that
+    // Either way nothing vouched for the peer being awake, so one that
     // does not answer is not found rather than a fault.
     let unheard = fallback || from_address;
     if fallback {
         info!(
-            "Bluetooth: no adapter heard, trying the known {} ({})",
+            "Bluetooth: no device heard, trying the known {} ({})",
             candidate.label(),
             candidate.selector()
         );
     }
 
-    // A paired adapter is often already linked, and BlueZ refuses a second
+    // A paired peer is often already linked, and BlueZ refuses a second
     // connect on one.
     if !peripheral.is_connected().await.unwrap_or(false)
         && let Err(e) = peripheral.connect_with_timeout(CONNECT_TIMEOUT).await
@@ -308,7 +342,7 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
             // adapter that wakes later is linked with nobody reading it.
             disconnect(&peripheral).await;
             if unheard {
-                // An adapter nothing heard that does not answer is the asleep
+                // A peer nothing heard that does not answer is the asleep
                 // case, which is "nothing found", not a Bluetooth fault.
                 info!("Bluetooth: {} did not answer: {e}", candidate.label());
                 return Err(not_found(selector));
@@ -331,7 +365,7 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
         uart => uart,
     };
     // From here on the link is up, so a failure has to take it down again:
-    // left connected, the adapter stays awake with nobody reading it.
+    // left connected, the peer stays awake with nobody reading it.
     let (rx_char, notifications) = match uart {
         Ok(uart) => uart,
         Err(e) => {
@@ -352,10 +386,11 @@ async fn connect(selector: Option<&str>) -> Result<Opened> {
         rx_char,
         notifications,
         selector,
+        built_in_meter: built_in_meter_named(candidate.name.as_deref()),
     })
 }
 
-/// Find the UART characteristics on a connected adapter and subscribe to its
+/// Find the UART characteristics on a connected peer and subscribe to its
 /// notifications, handing back the write characteristic and the stream.
 async fn subscribe_uart(
     peripheral: &Peripheral,
@@ -406,12 +441,12 @@ async fn disconnect(peripheral: &Peripheral) {
     }
 }
 
-/// Look for adapters: the ones this host already knows, then a scan.
+/// Look for peers: the ones this host already knows, then a scan.
 ///
-/// With no address named, a UNI-T adapter is taken in [`Standing`] order: one
-/// connected to this host, found without a scan; else the first heard
-/// advertising during the scan; else a known one that was not heard, tried by
-/// address. That last step is there because the scan misses awake adapters:
+/// With no address named, a peer the caller takes is picked in [`Standing`]
+/// order: one connected to this host, found without a scan; else the first
+/// heard advertising during the scan; else a known one that was not heard,
+/// tried by address. That last step is there because the scan misses awake adapters:
 /// btleplug's BlueZ backend scans with BR/EDR and LE interleaved and offers
 /// no LE-only mode, and in that mode BlueZ rarely hears our adapter, while a
 /// connect by address listens on LE alone and reaches it (research doc §4).
@@ -419,16 +454,16 @@ async fn disconnect(peripheral: &Peripheral) {
 ///
 /// An address the user named is taken from the known devices or the scan,
 /// whatever its standing, since they asked for that one.
-async fn search(adapter: &Adapter, selector: Option<&str>, want: Match) -> Result<Vec<Candidate>> {
+async fn search(adapter: &Adapter, target: Target<'_>, want: Match) -> Result<Vec<Candidate>> {
     // A signal strength in this list is another program's discovery, not
     // ours, so only a connection lifts a known device above `Known`.
-    let known = usable(known_peripherals(adapter).await, selector, false).await;
+    let known = usable(known_peripherals(adapter).await, target, false).await;
     // Opening stops here when the known list already settles it: a connected
-    // adapter, or the named one. Listing scans regardless, so an adapter
+    // peer, or the named one. Listing scans regardless, so a peer
     // advertising in range shows up beside the known ones.
-    let settled = |found: &[Candidate]| match selector {
-        Some(_) => !found.is_empty(),
-        None => found.iter().any(|c| c.standing < Standing::Known),
+    let settled = |found: &[Candidate]| match target {
+        Target::At(_) => !found.is_empty(),
+        Target::Named(_) => found.iter().any(|c| c.standing < Standing::Known),
     };
     if want == Match::First && settled(&known) {
         return Ok(keep_matches(known, want));
@@ -445,8 +480,8 @@ async fn search(adapter: &Adapter, selector: Option<&str>, want: Match) -> Resul
         // Read while the scan runs: the signal strength that says a device
         // was heard is gone once it stops.
         let seen = adapter.peripherals().await.unwrap_or_default();
-        let scanned = usable(seen, selector, true).await;
-        // `All` keeps scanning to the end of the window: a second adapter
+        let scanned = usable(seen, target, true).await;
+        // `All` keeps scanning to the end of the window: a second peer
         // that answers late still belongs in the list.
         if (want == Match::First && settled(&scanned)) || tokio::time::Instant::now() >= deadline {
             break scanned;
@@ -474,7 +509,7 @@ async fn search(adapter: &Adapter, selector: Option<&str>, want: Match) -> Resul
 ///
 /// On BlueZ that is every device the daemon caches: paired ones, and for
 /// about half a minute any other it heard. btleplug does not pass BlueZ's
-/// `Paired` property on, so a cached UT-D07 counts as known by name alone;
+/// `Paired` property on, so a cached peer counts as known by name alone;
 /// an unpaired one is only cached shortly after it was heard, when it is
 /// likely awake anyway. CoreBluetooth has no list without identifiers to
 /// look up, and WinRT's is the connected devices, so on those the backend's
@@ -555,11 +590,11 @@ fn standing(connected: bool, heard: bool, scanning: bool) -> Standing {
     }
 }
 
-/// The peripherals the caller may use: the one `selector` names, or — with
-/// none — every UNI-T adapter, each with its standing.
+/// The peripherals the caller may use: the one an address names, or every
+/// peer the caller takes by name, each with its standing.
 async fn usable(
     peripherals: Vec<Peripheral>,
-    selector: Option<&str>,
+    target: Target<'_>,
     scanning: bool,
 ) -> Vec<Candidate> {
     let mut usable = Vec::new();
@@ -582,12 +617,12 @@ async fn usable(
         let advertised_name = properties
             .as_ref()
             .and_then(|p| p.advertisement_name.clone());
-        let wanted = match selector {
-            Some(selector) => matches_selector(selector, &id, &address),
-            None => is_ut_d07(name.as_deref(), advertised_name.as_deref()),
+        let wanted = match target {
+            Target::At(selector) => matches_selector(selector, &id, &address),
+            Target::Named(peers) => takes(peers, name.as_deref(), advertised_name.as_deref()),
         };
-        // Every device the stack reports, kept or not: when an adapter in
-        // range is not found, this line says what the platform made of it.
+        // Every device the stack reports, kept or not: when a peer in range
+        // is not found, this line says what the platform made of it.
         debug!(
             "Bluetooth: saw {address:?} id {id:?} local name {:?} advertised {:?} \
              RSSI {:?}: {}",
@@ -623,9 +658,7 @@ fn keep_matches(mut matched: Vec<Candidate>, want: Match) -> Vec<Candidate> {
     if want == Match::First {
         let tied = tied_for_best(&matched.iter().map(|c| c.standing).collect::<Vec<_>>());
         if tied > 1 {
-            warn!(
-                "Multiple Bluetooth adapters found ({tied} devices). Pass --adapter to pick one."
-            );
+            warn!("Multiple UNI-T Bluetooth devices found ({tied}). Pass --adapter to pick one.");
         }
         matched.truncate(1);
     }
@@ -645,18 +678,40 @@ fn matches_selector(selector: &str, id: &str, address: &str) -> bool {
         || (!address.is_empty() && selector.eq_ignore_ascii_case(address))
 }
 
-/// Whether a peripheral is a UNI-T Bluetooth adapter, by the name it
-/// advertises or the host's alias for it.
+/// Whether `peers` takes a peripheral, by the name it advertises or the
+/// host's alias for it: one starting with [`ADAPTER_NAME_PREFIX`] when
+/// adapters are taken, or with one of the meters' prefixes, in any case.
 ///
-/// The name alone: the adapter advertises `UT-D07B` (research doc §2) and
-/// the UT-D07A a name starting `UT-D07A` (§7). The `0000ff12` UUID it also
-/// advertises is no evidence — it is a vendor-range UUID any device may
-/// carry, and not a service on the adapter (§2).
-fn is_ut_d07(name: Option<&str>, advertised_name: Option<&str>) -> bool {
-    [name, advertised_name]
-        .into_iter()
-        .flatten()
-        .any(|n| n.trim().to_ascii_uppercase().starts_with(NAME_PREFIX))
+/// The name alone. UNI-T's iDMM2.0 app picks the meters with the radio built
+/// in by name alone, and one UT60BT advertises `UT60BTk`, hence a prefix
+/// (`docs/research/new-device-candidates.md`, Bluetooth section). The
+/// `0000ff12` UUID the adapter also advertises is no evidence — it is a
+/// vendor-range UUID any device may carry, and not a service on the adapter
+/// (§2).
+fn takes(peers: &BluetoothPeers, name: Option<&str>, advertised_name: Option<&str>) -> bool {
+    let adapter = peers.adapters.then_some(ADAPTER_NAME_PREFIX);
+    [name, advertised_name].into_iter().flatten().any(|n| {
+        let n = n.trim().to_ascii_uppercase();
+        adapter
+            .iter()
+            .chain(&peers.meters)
+            .any(|prefix| n.starts_with(&prefix.to_ascii_uppercase()))
+    })
+}
+
+/// The registry entry whose `bluetooth_names` `name` carries: the meter with
+/// the radio built in that advertises it.
+///
+/// Asked of the peer that was opened, however it was found: a peer opened by
+/// address, or one with no name heard, counts as an adapter.
+fn built_in_meter_named(name: Option<&str>) -> Option<&'static SelectableDevice> {
+    crate::protocol::registry::DEVICES.iter().find(|d| {
+        let meters = BluetoothPeers {
+            adapters: false,
+            meters: d.bluetooth_names.to_vec(),
+        };
+        takes(&meters, name, None)
+    })
 }
 
 /// A peripheral name made safe for a terminal.
@@ -737,7 +792,7 @@ fn drain_pending(pending: &mut VecDeque<u8>, buf: &mut [u8]) -> usize {
     n
 }
 
-/// Nothing answered: the adapter `selector` named, or with none, any adapter.
+/// Nothing answered: the peer `selector` named, or with none, any peer.
 fn not_found(selector: Option<&str>) -> Error {
     match selector {
         Some(selector) => Error::AdapterNotFound(selector.to_string()),
@@ -763,11 +818,11 @@ fn link_error(e: btleplug::Error) -> Error {
     }
 }
 
-/// The adapter answered but carries no transparent UART.
+/// The peer answered but carries no transparent UART.
 fn missing_characteristic(role: &str) -> Error {
     Error::Bluetooth(format!(
         "the Bluetooth device has no UART {role} characteristic — \
-         it is not a supported adapter, or its services never resolved"
+         it is not a supported adapter or meter, or its services never resolved"
     ))
 }
 
@@ -855,9 +910,9 @@ impl Transport for Ble {
     }
 
     fn transport_info(&self) -> Result<String> {
-        // The adapter's own name and identity. It cannot say which meter is
-        // behind it — its Device Information strings are empty (research doc
-        // §1) — so this is all there is to report.
+        // The peer's own name and identity. An adapter cannot say which
+        // meter is behind it — its Device Information strings are empty
+        // (research doc §1) — so this is all there is to report.
         let name = self
             .rt
             .block_on(self.peripheral.properties())
@@ -903,10 +958,14 @@ impl Transport for Ble {
     fn bluetooth_selector(&self) -> Option<&str> {
         Some(&self.selector)
     }
+
+    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
+        self.built_in_meter
+    }
 }
 
 impl Drop for Ble {
-    /// Leaving the link up would keep the adapter awake and drain its
+    /// Leaving the link up would keep the peer awake and drain its
     /// batteries long after the session ended.
     fn drop(&mut self) {
         debug!("Bluetooth: disconnecting {}", self.selector);
@@ -1021,18 +1080,87 @@ mod tests {
         ));
     }
 
-    /// Auto-detection picks the adapter by the name it advertises, which a
-    /// host alias does not hide.
-    #[test]
-    fn ut_d07_is_recognised_by_name() {
-        assert!(is_ut_d07(Some("UT-D07B"), Some("UT-D07B")));
-        assert!(is_ut_d07(Some("UT-D07A"), None));
-        assert!(is_ut_d07(Some(" ut-d07b "), None));
-        assert!(is_ut_d07(Some("Bench meter"), Some("UT-D07B")));
+    /// The peers an open for a meter behind an adapter takes, one for a
+    /// meter with the radio built in, and what `auto` takes.
+    fn adapters() -> BluetoothPeers {
+        BluetoothPeers {
+            adapters: true,
+            meters: Vec::new(),
+        }
+    }
+    fn meters(meters: &[&'static str]) -> BluetoothPeers {
+        BluetoothPeers {
+            adapters: false,
+            meters: meters.to_vec(),
+        }
+    }
 
-        assert!(!is_ut_d07(Some("UT61E+"), None));
-        assert!(!is_ut_d07(None, None));
-        assert!(!is_ut_d07(Some("Headphones"), Some("Headphones")));
+    /// An adapter is picked by the name it advertises, which a host alias
+    /// does not hide.
+    #[test]
+    fn an_adapter_is_recognised_by_name() {
+        let peers = adapters();
+        assert!(takes(&peers, Some("UT-D07B"), Some("UT-D07B")));
+        assert!(takes(&peers, Some("UT-D07A"), None));
+        assert!(takes(&peers, Some("UT-D07A-1234"), None));
+        assert!(takes(&peers, Some(" ut-d07b "), None));
+        assert!(takes(&peers, Some("Bench meter"), Some("UT-D07B")));
+
+        assert!(!takes(&peers, Some("UT61E+"), None));
+        assert!(!takes(&peers, Some(""), Some("")));
+        assert!(!takes(&peers, Some("   "), None));
+        assert!(!takes(&peers, None, None));
+        assert!(!takes(&peers, Some("Headphones"), Some("Headphones")));
+    }
+
+    /// A meter with the radio built in is taken by the prefix the caller
+    /// names, in any case and with its suffix.
+    #[test]
+    fn a_built_in_meter_is_recognised_by_its_own_prefix() {
+        let peers = meters(&["UT60BT"]);
+        assert!(takes(&peers, Some("UT60BT"), None));
+        // Advertised by one UT60BT that answers Get Name with `UT60BT`.
+        assert!(takes(&peers, Some("UT60BTk"), Some("UT60BTk")));
+        assert!(takes(&peers, None, Some(" ut60bt ")));
+        assert!(!takes(&peers, Some("UT60"), None));
+    }
+
+    /// Only the peers the caller names are taken: a meter selected behind an
+    /// adapter never lands on a meter with the radio built in, nor one of
+    /// those on an adapter or on the other one.
+    #[test]
+    fn only_the_named_peers_are_taken() {
+        assert!(!takes(&adapters(), Some("UT60BT"), None));
+        assert!(!takes(&adapters(), Some("UT202BT"), None));
+        let ut60bt = meters(&["UT60BT"]);
+        assert!(!takes(&ut60bt, Some("UT-D07B"), None));
+        assert!(!takes(&ut60bt, Some("UT202BT"), None));
+
+        let any = BluetoothPeers {
+            adapters: true,
+            meters: vec!["UT60BT", "UT202BT"],
+        };
+        for name in ["UT-D07B", "UT60BTk", "\tUT202BT \n"] {
+            assert!(takes(&any, Some(name), None), "{name:?}");
+        }
+        assert!(!takes(&any, Some("UT61E+"), None));
+    }
+
+    /// A peer is a meter with the radio built in by a registry name alone,
+    /// and that name picks its entry; an adapter, or a peer with no name
+    /// heard, is not one.
+    #[test]
+    fn a_built_in_meter_is_known_by_its_name() {
+        for (name, id) in [
+            ("UT60BT", "ut60bt"),
+            ("UT60BTk", "ut60bt"),
+            ("UT202BT", "ut202bt"),
+        ] {
+            assert_eq!(built_in_meter_named(Some(name)).map(|d| d.id), Some(id));
+        }
+        for name in [Some("UT-D07B"), Some("UT-D07A"), Some("UT61E+"), None] {
+            assert!(built_in_meter_named(name).is_none(), "{name:?}");
+        }
     }
 
     /// A connection counts wherever it is seen; a signal strength only when

@@ -1128,7 +1128,10 @@ mod tests {
 
     /// Whichever trigger went out last, expressed as the engine records it.
     fn after(family: DeviceFamily) -> Probing {
-        Probing { sent: vec![family] }
+        Probing {
+            sent: vec![family],
+            ..Probing::default()
+        }
     }
 
     fn recognised(buf: &[u8], probing: &Probing) -> Option<Evidence> {

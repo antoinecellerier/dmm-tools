@@ -9,6 +9,7 @@ pub(crate) mod ch9329;
 pub(crate) mod cp2110;
 
 use crate::error::Result;
+use crate::protocol::registry::SelectableDevice;
 
 /// Abstraction over HID transport for testability.
 ///
@@ -52,6 +53,39 @@ pub trait Transport: Send {
     fn bluetooth_selector(&self) -> Option<&str> {
         None
     }
+
+    /// The registry entry of the meter with the radio built in on the far
+    /// end, matched by the name it advertises against each entry's
+    /// `bluetooth_names`. `None` for an adapter in front of a meter, a cable,
+    /// or a peer whose name matched none.
+    ///
+    /// What detection falls back to when that meter's frames name no model
+    /// (`docs/detection-design.md`, Names and the registry).
+    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
+        None
+    }
+
+    /// Whether the far end is a meter with the radio built in, rather than
+    /// an adapter in front of one: what text about the link calls it
+    /// ([`crate::binary_help::Link::full_name`]). Derived from
+    /// [`Self::built_in_meter`]; a wrapper delegates that one instead.
+    fn built_in_radio(&self) -> bool {
+        self.built_in_meter().is_some()
+    }
+}
+
+/// The Bluetooth peers an open or a listing takes, by the name they
+/// advertise. The caller picks them from the registry (`bluetooth_peers()` in
+/// `lib.rs`), so an open for one meter never lands on another — unless
+/// `--adapter` names an address, which opens whatever answers there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BluetoothPeers {
+    /// UNI-T's Bluetooth adapters, which carry a family's meter; the
+    /// transport knows their names itself.
+    pub(crate) adapters: bool,
+    /// Name prefixes of meters with the radio built in, as the registry
+    /// lists them.
+    pub(crate) meters: Vec<&'static str>,
 }
 
 /// What a transport with no link behind it calls itself.
@@ -91,6 +125,10 @@ impl Transport for Box<dyn Transport> {
 
     fn bluetooth_selector(&self) -> Option<&str> {
         (**self).bluetooth_selector()
+    }
+
+    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
+        (**self).built_in_meter()
     }
 }
 

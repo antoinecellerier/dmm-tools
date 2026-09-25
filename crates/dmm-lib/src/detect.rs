@@ -175,7 +175,10 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
     };
 
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_RX_BUF);
-    let mut probing = Probing::default();
+    let mut probing = Probing {
+        advertised: transport.built_in_meter(),
+        ..Probing::default()
+    };
     // A frame that settles the family but not the model — a bare UT61+
     // reading, stale from an earlier session or caught mid-poll. Remember it
     // and keep probing: a name frame later in the cascade outranks it.
@@ -203,18 +206,24 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
             &probing,
             &mut family_only,
         )? {
+            // The meter's own answer wins over the name its radio advertises;
+            // a mismatch is worth a report, not a second guess.
+            if let Some(advertised) = probing.advertised.filter(|a| a.id != detected.device.id) {
+                warn!(
+                    "detect: the meter on {bridge} advertises itself as a {}, but its own reply \
+                     identifies the {model}; using the {model} tables",
+                    advertised.display_name,
+                    model = detected.device.display_name
+                );
+            }
             return Ok(announce(detected, bridge));
         }
         // The family is settled, only the model is not — the remaining
         // probes belong to other families and would go out to a meter we
         // already know the family of.
         if let Some(found) = family_only {
-            let device = pin(found.fallback);
-            warn!(
-                "detect: a {} frame arrived on {bridge} but the meter never named its model; \
-                 falling back to the {} tables",
-                found.family, device.display_name
-            );
+            let (device, why) = family_fallback(found, probing.advertised, bridge);
+            warn!("{why}");
             return Ok(announce(
                 Detected {
                     device,
@@ -226,7 +235,10 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
     }
 
     debug!("detect: nothing recognisable on {bridge}");
-    Err(Error::DeviceNotIdentified { bridge })
+    Err(Error::DeviceNotIdentified {
+        bridge,
+        built_in_radio: transport.built_in_radio(),
+    })
 }
 
 /// Log the one INFO line the whole detection produces.
@@ -398,6 +410,45 @@ fn classify(
         return None;
     }
     Some((family, evidence))
+}
+
+/// The entry a detection that settled only the family opens, and the warning
+/// that says which and why.
+///
+/// A meter with the radio built in named its model in the name it advertises
+/// (`advertised`, [`Transport::built_in_meter`]), and its ranges are not the
+/// family fallback's: a UT60BT's V position starts at 999.9mV, the UT61E+'s
+/// at 2.2V (ut61-family spec §9). Every other link — an adapter, a cable —
+/// gets the fingerprint's fallback.
+fn family_fallback(
+    found: FamilyEvidence,
+    advertised: Option<&'static SelectableDevice>,
+    bridge: &str,
+) -> (&'static SelectableDevice, String) {
+    let unnamed = format!(
+        "detect: a {} frame arrived on {bridge} but the meter never named its model",
+        found.family
+    );
+    match advertised.filter(|d| d.family == found.family) {
+        Some(device) => (
+            device,
+            format!(
+                "{unnamed}; falling back to the {} tables, the model its Bluetooth name \
+                 advertises",
+                device.display_name
+            ),
+        ),
+        None => {
+            let device = pin(found.fallback);
+            (
+                device,
+                format!(
+                    "{unnamed}; falling back to the {} tables",
+                    device.display_name
+                ),
+            )
+        }
+    }
 }
 
 /// The registry entry a fingerprint's fallback id names.
@@ -632,6 +683,99 @@ mod tests {
         );
     }
 
+    /// A Bluetooth peer whose advertised name matched a meter with the radio
+    /// built in, as `Ble` reports one.
+    struct Advertising {
+        inner: MockTransport,
+        meter: &'static SelectableDevice,
+    }
+
+    impl Advertising {
+        fn ut60bt(responses: Vec<Vec<u8>>) -> Self {
+            Self {
+                inner: MockTransport::new(responses),
+                meter: registry::find_device("ut60bt").unwrap(),
+            }
+        }
+    }
+
+    impl Transport for Advertising {
+        fn write(&self, data: &[u8]) -> Result<()> {
+            self.inner.write(data)
+        }
+
+        fn read_timeout(&self, buf: &mut [u8], timeout_ms: i32) -> Result<usize> {
+            self.inner.read_timeout(buf, timeout_ms)
+        }
+
+        fn send_feature_report(&self, data: &[u8]) -> Result<()> {
+            self.inner.send_feature_report(data)
+        }
+
+        fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
+            Some(self.meter)
+        }
+    }
+
+    /// A UT60BT whose name reply went missing still reads with its own
+    /// tables: the name it advertises already picked the model.
+    #[test]
+    fn a_built_in_meter_that_never_names_itself_falls_back_to_its_own_entry() {
+        let meter = Advertising::ut60bt(vec![ut61plus_reading()]);
+        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        assert_eq!(detected.device.id, "ut60bt");
+        assert_eq!(detected.reported_name, None);
+    }
+
+    /// The meter's own name reply outranks the name its radio advertises.
+    #[test]
+    fn a_name_reply_outranks_the_advertised_name() {
+        let meter = Advertising::ut60bt(vec![ack_frame(), name_frame()]);
+        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        assert_eq!(detected.device.id, "ut61eplus");
+        assert_eq!(detected.reported_name.as_deref(), Some("UT61E+"));
+    }
+
+    /// A name reply no registry entry carries opens the advertised model on a
+    /// meter with Bluetooth built in, and the UT61E+ everywhere else.
+    #[test]
+    fn an_unknown_name_falls_back_to_the_advertised_model() {
+        let unknown = || vec![ack_frame(), test_frame_be16(b"UT216XD")];
+        let meter = Advertising::ut60bt(unknown());
+        let detected = detect_device(&meter, crate::BLUETOOTH).unwrap();
+        assert_eq!(detected.device.id, "ut60bt");
+        assert_eq!(detected.reported_name.as_deref(), Some("UT216XD"));
+
+        let detected = detect(&MockTransport::new(unknown())).unwrap();
+        assert_eq!(detected.device.id, "ut61eplus");
+        assert_eq!(detected.reported_name.as_deref(), Some("UT216XD"));
+    }
+
+    /// The warning names the entry fallen back to and why; an adapter or a
+    /// cable keeps the family fallback and its wording.
+    #[test]
+    fn the_family_fallback_says_which_tables_and_why() {
+        let found = FamilyEvidence {
+            family: DeviceFamily::Ut61EPlus,
+            fallback: "ut61eplus",
+        };
+        let (device, why) = family_fallback(found, None, "CP2110");
+        assert_eq!(device.id, "ut61eplus");
+        assert_eq!(
+            why,
+            "detect: a ut61eplus frame arrived on CP2110 but the meter never named its model; \
+             falling back to the UT61E+ tables"
+        );
+        let ut60bt = registry::find_device("ut60bt");
+        let (device, why) = family_fallback(found, ut60bt, crate::BLUETOOTH);
+        assert_eq!(device.id, "ut60bt");
+        assert_eq!(
+            why,
+            "detect: a ut61eplus frame arrived on Bluetooth but the meter never named its model; \
+             falling back to the UT60BT tables, the model its Bluetooth name advertises"
+        );
+    }
+
     /// Real UT181A frames, the ones `ut181a::parse` pins: 32 and 57 payload
     /// bytes, both well past the length only a UT181A reaches. They arrive
     /// only after SET_MONITOR, as the meter does on the bench.
@@ -729,7 +873,10 @@ mod tests {
         let err = detect(&mock).unwrap_err();
         assert!(matches!(
             err,
-            Error::DeviceNotIdentified { bridge: "CP2110" }
+            Error::DeviceNotIdentified {
+                bridge: "CP2110",
+                built_in_radio: false
+            }
         ));
     }
 

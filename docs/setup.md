@@ -89,7 +89,7 @@ If the device is not detected, check **System Settings > Privacy & Security > In
 
 > **macOS Intel note:** macOS ARM (Apple Silicon) has been confirmed working against real hardware. Intel Mac builds are provided but have not been tested yet — if you have an Intel Mac, please [report your experience](https://github.com/antoinecellerier/dmm-tools/issues/2).
 
-### Bluetooth — UT-D07B and UT-D07A
+### Bluetooth
 
 For the UT-D07B adapter, turn on Bluetooth on the computer, put batteries in
 the adapter and fit it to the meter, turn the meter on and switch its data
@@ -100,6 +100,13 @@ adapter, `auto` finds it when no USB cable is plugged in, and
 
 The UT-D07A takes the same steps and has not been run on this tool — please
 [report what it does](https://github.com/antoinecellerier/dmm-tools/issues/25).
+
+The UT60BT and UT202BT have Bluetooth built in and take the same steps
+without the adapter: turn the meter on, then long-press SEL on the UT60BT,
+or short-press the Bluetooth button on the UT202BT, until the Bluetooth
+symbol shows. The UT202BT switches Bluetooth off after 5 minutes without a
+connection. For either, keep **Look for Bluetooth adapters** ticked and
+leave out `--no-bluetooth`.
 
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 

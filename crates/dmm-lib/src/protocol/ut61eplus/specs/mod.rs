@@ -32,6 +32,11 @@ pub(crate) enum SpecModel {
     Ut161e,
     Ut161b,
     Ut161d,
+    /// A model whose manual tables are not transcribed yet: the UT60BT and
+    /// UT202BT, which wait for a first real meter
+    /// (docs/verification-backlog.md). Its Specifications panel shows the
+    /// manual link alone.
+    Untranscribed,
 }
 
 impl SpecModel {
@@ -41,6 +46,7 @@ impl SpecModel {
             SpecModel::Ut61ePlus | SpecModel::Ut161e => ut61e_plus::ALL,
             SpecModel::Ut61bPlus | SpecModel::Ut161b => ut61bd_plus::UT61B_PLUS,
             SpecModel::Ut61dPlus | SpecModel::Ut161d => ut61bd_plus::UT61D_PLUS,
+            SpecModel::Untranscribed => &[],
         };
         all.iter().map(move |&table| self.own(table))
     }
@@ -53,6 +59,7 @@ impl SpecModel {
             SpecModel::Ut61ePlus | SpecModel::Ut161e => ut61e_plus::table(mode),
             SpecModel::Ut61bPlus | SpecModel::Ut161b => ut61bd_plus::ut61b_plus(mode),
             SpecModel::Ut61dPlus | SpecModel::Ut161d => ut61bd_plus::ut61d_plus(mode),
+            SpecModel::Untranscribed => None,
         }?;
         Some(self.own(table))
     }
@@ -73,7 +80,10 @@ impl SpecModel {
     fn own(self, table: &'static ModeSpecs) -> &'static ModeSpecs {
         match self {
             SpecModel::Ut161e | SpecModel::Ut161b | SpecModel::Ut161d => ut161(table),
-            SpecModel::Ut61ePlus | SpecModel::Ut61bPlus | SpecModel::Ut61dPlus => table,
+            SpecModel::Ut61ePlus
+            | SpecModel::Ut61bPlus
+            | SpecModel::Ut61dPlus
+            | SpecModel::Untranscribed => table,
         }
     }
 }

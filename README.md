@@ -6,7 +6,7 @@ USB and Bluetooth multimeter logger and remote control for UNI-T and Voltcraft d
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 and the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT60BT, UT202BT, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 and the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960 — see [supported devices](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
@@ -91,6 +91,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | Family | Models | Status |
 |--------|--------|--------|
 | UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+, UT61B+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
+| UT61+ with Bluetooth built in | UT60BT, UT202BT | 🧪 Experimental |
 | UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UT181A | UT181A | [🟡 Partly verified](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | UT803/UT804 | UT803, UT804 | ✅ Verified (UT804; [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)), 🧪 Experimental (UT803; [#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) |

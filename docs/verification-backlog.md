@@ -47,6 +47,7 @@ is probed with, and how well that probe is backed:
 | UT61E+ | `AB CD 03 5F 01 DA` (Get Name) | ack `AB CD 04 FF 00 02 7B`, then an ASCII name frame | **Verified through the detector** 2026-09-11 on our UT61E+ (CP2110): identified in under a second, ack at 85 ms and name at 193 ms in the capture's `init_frames`; with the meter off the cascade ends in 2.7 s with the not-identified help |
 | UT61B+ | same | same, the name being `UT61B+` | Verified over CH9329 ([issue #19](https://github.com/antoinecellerier/dmm-tools/issues/19)) |
 | UT61D+, UT161B/D/E | same | same, the name being the model | Unverified — no report has named one of these meters |
+| UT60BT, UT202BT | same, over their built-in Bluetooth | same, the name being `UT60BT` or `UT202BT` | Unverified — one UT60BT's `UT60BT` reply is on record from community sources (ut61-family approach doc, 2026-09-25); nothing for the UT202BT |
 | UT181A | `AB CD 04 00 05 01 0A 00` (SET_MONITOR) | 2-byte-LE frames, type `0x02`, payload ≥ 31 bytes | The reply is verified on hardware ([PR #8](https://github.com/antoinecellerier/dmm-tools/pull/8), [issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5)), never through the detector |
 | UT171 | `AB CD 04 00 0A 01 0F 00` (connect) | 2-byte-LE frames, type `0x02`, 16- or 22-byte payload | Deduced from the vendor traces, unverified |
 | UT8802 | nothing — the meter streams | two `0xAC` frames exactly 8 bytes apart | Deduced from the vendor traces, unverified |
@@ -572,8 +573,8 @@ These protocols are implemented from reverse engineering (vendor software
 decompilation, community implementations), and anything known on hardware
 comes from a reporter's meter. One has been: the UT804 is `Verified`
 (issue #16, its block below). The VC-880, VC650BT, VC-890, UT803, UT8802,
-UT8803, UT171, UT71A–E and Voltcraft VC920/VC940/VC960 are `Experimental` and
-have **never been tested against real hardware** — every aspect needs
+UT8803, UT171, UT71A–E, Voltcraft VC920/VC940/VC960, UT60BT and UT202BT are
+`Experimental` and have **never been tested against real hardware** — every aspect needs
 end-to-end verification. The UT181A, partly verified, has
 [its own section](#ut181a--confirmed-on-hardware-formats-still-open).
 
@@ -1043,6 +1044,48 @@ manuals and UNI-T's UT71 apps, and no packet has been seen
   power and duty-cycle decimal points; 10 A range code 0; overload and LO
   patterns beyond the two sigrok accepts
 - Spec tables for the three models, after a first hardware confirmation
+
+#### UT60BT / UT202BT (Bluetooth built in)
+
+UT61+ frames over the ISSC service (ut61-family spec §1, tables §9). Their
+own verification issues are still to be opened. The UT60BT has community
+frames on record; the UT202BT has no capture anywhere.
+
+- **Range tables.** Every rung is the iDMM2.0 asset's, the labels the
+  manuals'; none is confirmed. Where they disagree (§9 notes): UT60BT Hz
+  labels (the asset's fifth digit and "mHz"), Hz rungs 0 and 7 and
+  capacitance rung 7 outside the manual, Ω rung 4 "9.99MΩ"; UT202BT
+  capacitance top 99.9mF against 105mF, inrush rung 0, continuity rung 1,
+  the °F bounds, and Hz rungs with no manual table at all.
+- **UT202BT AC A code.** The app names 0x11 and 0x16 "ACA"; the table
+  answers to both. The `aca` capture step asserts neither.
+- **UT202BT sparse rows.** LPF V and LPF A are listed at range byte 2 only,
+  °C at byte 1 only; a frame at another byte reports an unrecognised range.
+- **UT202BT secondary display** (mode byte bit 7): frequency in AC V and AC
+  A, °F beside °C. Such a frame is rejected as an unknown mode byte today.
+- **UT202BT peak.** Peak modes are AC V and AC A (both codes), from the
+  manual (P8/13, P8/14, P11/20). Which flag bits the meter sets is
+  unconfirmed; the `peak` capture step shows the bits.
+- **Remote commands.** Each meter is offered only the bytes UNI-T's app
+  sends it (ut61-family spec §6.5): HOLD, RANGE, AUTO, REL and SELECT on the
+  UT60BT, HOLD and RANGE on the UT202BT. Open, each settled by a meter's
+  answer to the byte:
+  - 0x41 MIN/MAX on the UT60BT: a community client sends it, the app
+    disables it. Offered once a UT60BT sets the MIN or MAX flag on it.
+  - Peak on the UT202BT: the app long-presses 0x37, the family peaks with
+    0x4D. Peak is not offered until one of them sets the flag bits.
+  - 0x47 AUTO on the UT202BT, which the app never sends. Without it the
+    UT202BT has no range ladder, whose Auto rung would send 0x47.
+- **Remote mode selection.** Neither table describes a dial or button ring,
+  so no mode switching is offered. It needs the button codes and cycle
+  order confirmed on a meter: the UT60BT's SELECT, the UT202BT's
+  0x31/0x33/0x35.
+- **Handshake order.** Community sources say the meter ignores 0x5D until it
+  has answered 0x5F. `auto` sends 0x5F first; a named `--device ut60bt` or
+  `ut202bt` opens with 0x5D alone, and falls back to polling with 0x5E
+  after a silent read. Check both paths on a meter.
+- **Spec tables.** None until a meter confirms the range tables; the
+  manuals' spec pages are the source then.
 
 #### UT8802 / UT8802N
 
@@ -1755,7 +1798,21 @@ the following needs someone's hardware.
   their own names, so the transport needs only to accept those names, plus a
   range table each (`docs/research/new-device-candidates.md`, Bluetooth
   section). The `0000ff01`/`ff02`/`ff12` set the app also carries is the
-  UT513C's older firmware only.
+  UT513C's older firmware only. Since 2026-09-25 both meters have registry
+  entries, each opened by its own name prefix (`UT60BT`, `UT202BT`); an
+  entry behind an adapter takes only `UT-D07*`, and `auto` takes all of
+  them. A real meter has yet to confirm either (their block under
+  [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)).
+- **Design questions the next Bluetooth meter settles.** Left as they are
+  until a meter needs otherwise:
+  - One GATT layout for every peer (ISSC service and characteristics, write
+    type, the UT-D07's heartbeat strip); the first non-ISSC meter settles
+    whether it becomes a per-entry profile.
+  - UT61+ streams whenever the link is Bluetooth: link, peer or family
+    property? Settled by the UT117C/UT197/UT219PV group or a UT171/UT181A
+    behind a UT-D07A.
+  - `bluetooth_only: bool` or a per-entry links list: settled by a meter
+    with both a radio and a cable.
 - **The UT202S registry entry.** UNI-T's UT61+ protocol deck specifies the
   UT202S clamp meter with a full range table, and it is a Bluetooth meter —
   now reachable. Adding it means a `SelectableDevice` entry with its own

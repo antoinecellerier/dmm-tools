@@ -2,9 +2,10 @@
 
 <!-- Keep this file updated when adding support for new models. -->
 
-Every supported meter talks over a USB HID-to-UART cable; the UT-D07
-Bluetooth adapters serve the meters listed for them below. The tool works out
-which link and which meter are attached from the bytes the meter sends
+Most supported meters talk over a USB HID-to-UART cable; the UT-D07
+Bluetooth adapters serve the meters listed for them below, and the UT60BT and
+UT202BT have Bluetooth built in. The tool works out which link and which
+meter are attached from the bytes the meter sends
 ([how](detection-design.md)), so the default `auto` device needs no setup
 beyond switching the meter's data transmission on, as listed per family below.
 
@@ -31,8 +32,8 @@ warning on connect. The per-family research is under
 ## UT61+ / UT161
 
 Handheld. Cable: UT-D09 (either chip), or the UT-D07B Bluetooth adapter
-([setup](setup.md#bluetooth--ut-d07b-and-ut-d07a)). Switch on: insert the USB
-module, turn the meter on, long-press USB/Hz until the S icon shows.
+([setup](setup.md#bluetooth)). Switch on: insert the USB module, turn the
+meter on, long-press USB/Hz until the S icon shows.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
@@ -46,6 +47,21 @@ module, turn the meter on, long-press USB/Hz until the S icon shows.
 All six share one protocol and differ only in their mode and range tables.
 The UT61D+ and UT161 tables come from the manuals; [#7](https://github.com/antoinecellerier/dmm-tools/issues/7)
 lists the modes that need a capture.
+
+## UT60BT / UT202BT
+
+Handheld (UT60BT) and clamp meter (UT202BT). Bluetooth built in, no cable
+([setup](setup.md#bluetooth)). Switch on: long-press SEL on the UT60BT, or
+short-press the Bluetooth button on the UT202BT, until the Bluetooth symbol
+shows.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| UT60BT | 9999 | 🧪 Experimental | |
+| UT202BT | 9999 | 🧪 Experimental | clamp: 600 A AC, inrush, LPF |
+
+Neither has been run on a meter yet: the range tables come from UNI-T's
+iDMM2.0 app and the manuals ([backlog](verification-backlog.md)).
 
 ## UT8802 / UT8803
 
@@ -105,7 +121,7 @@ auto-detection: name both the model and the adapter
 ## UT171 / UT181A
 
 Handheld. Cable: UT-D09 (either chip), or the UT-D07B or UT-D07A (untested)
-Bluetooth adapter ([setup](setup.md#bluetooth--ut-d07b-and-ut-d07a)). Switch on: SETUP →
+Bluetooth adapter ([setup](setup.md#bluetooth)). Switch on: SETUP →
 Communication → ON; the UT181A forgets this at power-off.
 
 | Model | Counts | Status | Notes |
@@ -133,7 +149,7 @@ the manuals and the remote commands from the vendor software.
 
 ## Not supported yet
 
-Meters with a Bluetooth radio built in (UT60BT, EEVBlog 121GW, OWON) and
+Other meters with a Bluetooth radio built in (EEVBlog 121GW, OWON) and
 serial meters (Fluke 28x, UT805A) are not supported yet.
 Candidates, their protocols and what each would take are researched in
 [new-device-candidates.md](research/new-device-candidates.md). Your model is

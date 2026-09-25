@@ -1,3 +1,4 @@
+use dmm_lib::binary_help::BLUETOOTH_SETTING;
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::registry;
 use eframe::egui::{self, RichText, Ui};
@@ -697,9 +698,9 @@ impl App {
 
         ui.horizontal_wrapped(|ui| {
             let label = if self.settings.overrides.has_bluetooth() {
-                "Look for Bluetooth adapters (--no-bluetooth)"
+                format!("{BLUETOOTH_SETTING} (--no-bluetooth)")
             } else {
-                "Look for Bluetooth adapters"
+                BLUETOOTH_SETTING.to_string()
             };
             // No reconnect: a session already running over an adapter would
             // be dropped by one, and the setting only decides what the next
@@ -707,7 +708,7 @@ impl App {
             if setting_checkbox(
                 ui,
                 &mut self.settings.shared.bluetooth,
-                label,
+                &label,
                 "Look for an adapter in Bluetooth range when no USB cable answers. \
                  Takes effect on the next connect.",
             ) {

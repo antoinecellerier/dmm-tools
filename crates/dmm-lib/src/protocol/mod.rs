@@ -305,13 +305,18 @@ pub(crate) enum Evidence {
     },
 }
 
-/// Which triggers have gone out so far, for the rules that depend on it: the
-/// UT181A and the UT171 stream the same frame shape, and only what elicited
-/// one tells the two apart.
+/// Which triggers have gone out so far, and what the link already says about
+/// the meter, for the rules that depend on it: the UT181A and the UT171
+/// stream the same frame shape, and only what elicited one tells the two
+/// apart.
 #[derive(Default)]
 pub(crate) struct Probing {
     /// The families whose trigger has been sent, in the order they went out.
     pub(crate) sent: Vec<DeviceFamily>,
+    /// The meter with the radio built in that the peer's advertised name
+    /// picked ([`Transport::built_in_meter`]); `None` on an adapter or a
+    /// cable.
+    pub(crate) advertised: Option<&'static registry::SelectableDevice>,
 }
 
 impl Probing {

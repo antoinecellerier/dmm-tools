@@ -4,6 +4,7 @@
 //! layer rejected, so a step that decoded nothing still carries evidence.
 
 use dmm_lib::error::Result;
+use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::transport::Transport;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -182,6 +183,10 @@ impl Transport for RecordingTransport {
 
     fn transport_name(&self) -> &'static str {
         self.inner.transport_name()
+    }
+
+    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
+        self.inner.built_in_meter()
     }
 }
 

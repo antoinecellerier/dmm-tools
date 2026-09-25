@@ -964,6 +964,7 @@ raw_payload=15"#
         let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
         let probing = Probing {
             sent: vec![DeviceFamily::Ut171],
+            ..Probing::default()
         };
         assert_eq!(
             recognised(&frame, &probing),
@@ -999,6 +1000,7 @@ raw_payload=15"#
             Probing::default(),
             Probing {
                 sent: vec![DeviceFamily::Ut171],
+                ..Probing::default()
             },
         ] {
             assert_eq!(recognised(&frame, &probing), None);
@@ -1012,6 +1014,7 @@ raw_payload=15"#
         let frame = framing::test_frame_le16(&make_payload(0x01, 0x01, 1.0, 0x00));
         let probing = Probing {
             sent: vec![DeviceFamily::Ut181a],
+            ..Probing::default()
         };
         assert_eq!(recognised(&frame, &probing), None);
     }

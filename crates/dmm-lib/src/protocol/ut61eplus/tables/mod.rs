@@ -1,8 +1,11 @@
+pub mod ut202bt;
+pub mod ut60bt;
 pub mod ut61b_plus;
 pub mod ut61d_plus;
 pub mod ut61e_plus;
 
 use super::mode::Mode;
+use crate::protocol::CaptureStep;
 use crate::protocol::cycle::{self, DialPosition};
 use std::borrow::Cow;
 
@@ -21,6 +24,18 @@ pub(crate) const fn r(label: &'static str, unit: &'static str) -> RangeInfo {
     RangeInfo { label, unit }
 }
 
+/// A range byte the model's table skips: the rungs above it exist, this one
+/// does not. The UT202BT's LPF modes are listed at range byte 2 only, its °C
+/// at byte 1. A gap reads as no range at all, and a table with one offers no
+/// RANGE ladder.
+pub(crate) const GAP: RangeInfo = r("", "");
+
+impl RangeInfo {
+    fn is_gap(&self) -> bool {
+        self.label.is_empty()
+    }
+}
+
 /// A [`Mode`] as the `mode_raw` value the dial tables are written in.
 pub(crate) const fn m(mode: Mode) -> u16 {
     mode as u16
@@ -28,7 +43,7 @@ pub(crate) const fn m(mode: Mode) -> u16 {
 
 /// Look up a range entry by index. Shared by all device table implementations.
 fn lookup_range(table: &[RangeInfo], range: u8) -> Option<&RangeInfo> {
-    table.get(range as usize)
+    table.get(range as usize).filter(|r| !r.is_gap())
 }
 
 /// Trait for device-specific range/unit lookup tables.
@@ -45,8 +60,15 @@ pub trait DeviceTable: Send {
         &[]
     }
 
-    /// The range labels this model lists for `mode`, in range-byte order.
+    /// The range labels this model lists for `mode`, in range-byte order;
+    /// a skipped range byte is a [`GAP`].
     fn ranges(&self, _mode: Mode) -> &[RangeInfo] {
+        &[]
+    }
+
+    /// Every mode the model reaches, for a model whose dial is not described
+    /// ([`DeviceTable::dial_positions`] empty); empty for one whose dial is.
+    fn modes(&self) -> &'static [Mode] {
         &[]
     }
 
@@ -65,7 +87,27 @@ pub trait DeviceTable: Send {
     fn peak_modes(&self) -> &'static [Mode] {
         &[]
     }
+
+    /// The commands this model's buttons take, by the names `send_command`
+    /// answers. Default: the family's whole list.
+    fn commands(&self) -> &'static [&'static str] {
+        super::UT61EPLUS_COMMANDS
+    }
+
+    /// What the capture asks for the duty-cycle step.
+    fn duty_instruction(&self) -> &'static str {
+        FAMILY_DUTY_INSTRUCTION
+    }
+
+    /// The model's own capture steps, for one whose buttons the family list
+    /// does not describe; `None`, the default, for the family list.
+    fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
+        None
+    }
 }
+
+/// The duty-cycle step on a UT61+: its USB/Hz button.
+const FAMILY_DUTY_INSTRUCTION: &str = "Hz/% position: short-press the USB button for Duty %.";
 
 /// Modes where the RANGE button (0x46) does nothing on any model of the family.
 ///
@@ -90,11 +132,11 @@ pub(crate) const AC_PEAK_MODES: &[Mode] =
 ///
 /// The table is the ladder: the meter reports the range byte as an index
 /// into it, so rung `n` of the choice list is entry `n - 1`. Two table
-/// shapes are not ladders and [`cycle::usable_ladder`] drops both, and a
-/// model can say outright that RANGE does nothing in a mode
-/// ([`DeviceTable::range_is_fixed`]).
+/// shapes are not ladders and [`cycle::usable_ladder`] drops both, a table
+/// with a [`GAP`] is not one either, and a model can say outright that RANGE
+/// does nothing in a mode ([`DeviceTable::range_is_fixed`]).
 pub(crate) fn range_ladder(table: &dyn DeviceTable, mode: Mode) -> Vec<Cow<'static, str>> {
-    if table.range_is_fixed(mode) {
+    if table.range_is_fixed(mode) || table.ranges(mode).iter().any(RangeInfo::is_gap) {
         return Vec::new();
     }
     cycle::usable_ladder(
@@ -117,6 +159,10 @@ pub(crate) trait ModeTables: Send {
     /// Dial table returned by `DeviceTable::dial_positions`.
     const DIAL_POSITIONS: &'static [DialPosition];
 
+    /// Modes returned by `DeviceTable::modes`: set by a table whose
+    /// `DIAL_POSITIONS` is empty, and only by one.
+    const MODES: &'static [Mode] = &[];
+
     /// The range table for `mode`, in range-byte order; `None` for a mode
     /// this model does not have, or that has no ranges (NCV).
     fn entry(&self, mode: Mode) -> Option<&[RangeInfo]>;
@@ -131,6 +177,18 @@ pub(crate) trait ModeTables: Send {
     /// Modes where Peak works on this model. Default: none.
     fn peak_modes(&self) -> &'static [Mode] {
         &[]
+    }
+
+    /// Commands returned by `DeviceTable::commands`: set by a model whose
+    /// buttons are known to take fewer.
+    const COMMANDS: &'static [&'static str] = super::UT61EPLUS_COMMANDS;
+
+    /// Returned by `DeviceTable::duty_instruction`.
+    const DUTY_INSTRUCTION: &'static str = FAMILY_DUTY_INSTRUCTION;
+
+    /// Returned by `DeviceTable::capture_steps`. Default: the family list.
+    fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
+        None
     }
 }
 
@@ -152,12 +210,28 @@ impl<T: ModeTables> DeviceTable for T {
         self.entry(mode).unwrap_or(&[])
     }
 
+    fn modes(&self) -> &'static [Mode] {
+        T::MODES
+    }
+
     fn range_is_fixed(&self, mode: Mode) -> bool {
         ModeTables::range_is_fixed(self, mode)
     }
 
     fn peak_modes(&self) -> &'static [Mode] {
         ModeTables::peak_modes(self)
+    }
+
+    fn commands(&self) -> &'static [&'static str] {
+        T::COMMANDS
+    }
+
+    fn duty_instruction(&self) -> &'static str {
+        T::DUTY_INSTRUCTION
+    }
+
+    fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
+        ModeTables::capture_steps(self)
     }
 }
 
@@ -312,6 +386,50 @@ mod tests {
         }
     }
 
+    /// A table without a dial lists its modes instead: each one it has
+    /// ranges for, and NCV, which has none. A table with a dial leaves the
+    /// list empty.
+    #[test]
+    fn dial_less_tables_list_exactly_their_modes() {
+        let dial_less: [&dyn DeviceTable; 2] = [
+            &super::ut60bt::Ut60btTable::new(),
+            &super::ut202bt::Ut202btTable::new(),
+        ];
+        for table in dial_less {
+            assert!(table.dial_positions().is_empty());
+            for &mode in Mode::ALL {
+                let listed = table.modes().contains(&mode);
+                let has = mode == Mode::Ncv || !table.ranges(mode).is_empty();
+                assert_eq!(listed, has, "{}: {mode:?}", table.model_name());
+            }
+        }
+        let dialled: [&dyn DeviceTable; 3] = [
+            &Ut61ePlusTable::new(),
+            &Ut61bPlusTable::new(),
+            &Ut61dPlusTable::new(),
+        ];
+        for table in dialled {
+            assert!(table.modes().is_empty(), "{}", table.model_name());
+        }
+    }
+
+    /// A gap is no range: it has no label to show and no rung to press to.
+    #[test]
+    fn a_gap_reads_as_no_range_and_breaks_the_ladder() {
+        struct Sparse;
+        impl ModeTables for Sparse {
+            const MODEL_NAME: &'static str = "sparse";
+            const DIAL_POSITIONS: &'static [DialPosition] = &[];
+            fn entry(&self, mode: Mode) -> Option<&[RangeInfo]> {
+                const ROW: [RangeInfo; 3] = [GAP, r("2V", "V"), r("20V", "V")];
+                (mode == Mode::DcV).then_some(&ROW[..])
+            }
+        }
+        assert!(Sparse.range_info(Mode::DcV, 0).is_none());
+        assert_eq!(Sparse.range_info(Mode::DcV, 1).map(|r| r.label), Some("2V"));
+        assert!(range_ladder(&Sparse, Mode::DcV).is_empty());
+    }
+
     /// UT161B has no table of its own — `Ut61PlusProtocol::for_model` hands it
     /// the UT61B+'s, so these are the ranges a UT161B reports.
     #[test]
@@ -385,6 +503,8 @@ mod spec_tables {
             "ut61e_plus.rs" => Box::new(ut61e_plus::Ut61ePlusTable::new()),
             "ut61b_plus.rs" => Box::new(ut61b_plus::Ut61bPlusTable::new()),
             "ut61d_plus.rs" => Box::new(ut61d_plus::Ut61dPlusTable::new()),
+            "ut60bt.rs" => Box::new(ut60bt::Ut60btTable::new()),
+            "ut202bt.rs" => Box::new(ut202bt::Ut202btTable::new()),
             other => panic!("spec section 9 names an unknown source file: {other}"),
         }
     }
@@ -395,7 +515,7 @@ mod spec_tables {
             "../../../../../../docs/research/ut61-family/reverse-engineered-protocol.md"
         );
         let sections = sections(spec);
-        assert_eq!(sections.len(), 3, "expected one section per model");
+        assert_eq!(sections.len(), 5, "expected one section per model");
 
         for (source, rows) in sections {
             let table = table_for(&source);
@@ -414,8 +534,11 @@ mod spec_tables {
                 }
             }
             // The other direction: a rung added in code must reach the spec.
+            // A gap is no rung, so it has no row.
             for &mode in Mode::ALL {
-                let want: BTreeSet<u8> = (0..table.ranges(mode).len() as u8).collect();
+                let want: BTreeSet<u8> = (0..table.ranges(mode).len() as u8)
+                    .filter(|&idx| table.range_info(mode, idx).is_some())
+                    .collect();
                 if want.is_empty() {
                     continue;
                 }

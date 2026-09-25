@@ -48,7 +48,7 @@ pub enum Error {
     LinkLost,
 
     /// The Bluetooth stack cannot do what was asked: no adapter, powered off,
-    /// permission denied, the device is not a UT-D07B. Retrying never helps —
+    /// permission denied, the device carries no UART. Retrying never helps —
     /// the message carries what the user has to change.
     #[error("Bluetooth: {0}")]
     Bluetooth(String),
@@ -60,9 +60,17 @@ pub enum Error {
     /// in a USB cable or switched a Bluetooth adapter on, and has no reason to
     /// know whether it carries a CP2110, a CH9329 or a CH9325. `bridge` is
     /// carried for the logs and for help text that lists the meters reachable
-    /// over that bridge.
-    #[error("no meter answered over the {}", crate::binary_help::bridge_link_name(.bridge))]
-    DeviceNotIdentified { bridge: &'static str },
+    /// over that bridge. `built_in_radio` is the transport's
+    /// [`crate::transport::Transport::built_in_radio`]: a meter with the radio
+    /// built in has no adapter for the message to name.
+    #[error(
+        "no meter answered over the {}",
+        crate::binary_help::bridge_link_name(.bridge, *.built_in_radio)
+    )]
+    DeviceNotIdentified {
+        bridge: &'static str,
+        built_in_radio: bool,
+    },
 
     /// The IDs come from the transport modules themselves rather than being
     /// spelled out here, so a corrected PID or a fourth bridge can't leave
@@ -83,6 +91,48 @@ pub enum Error {
         bluetooth_clause(.bluetooth_searched)
     )]
     NoTransportFound { bluetooth_searched: bool },
+
+    /// A meter with the radio built in, which has no cable, was not opened:
+    /// nothing in range carried its name, or the radio was not searched.
+    ///
+    /// `model` and `activation` are the registry entry's display name and
+    /// activation steps, which the binaries' help is built from.
+    #[error("{}", bluetooth_only_message(.model, .miss))]
+    BluetoothOnly {
+        model: &'static str,
+        activation: &'static str,
+        miss: BluetoothOnlyMiss,
+    },
+}
+
+/// Why a meter with the radio built in was not opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BluetoothOnlyMiss {
+    /// The radio was searched and nothing in range carried the meter's name.
+    NotInRange,
+    /// The Bluetooth setting is off, or `--no-bluetooth` was given.
+    SwitchedOff,
+    /// This build has no Bluetooth support.
+    NotBuilt,
+    /// `--adapter` names a USB device, which this meter cannot be behind.
+    UsbAdapter,
+}
+
+/// The sentence both binaries print for a [`Error::BluetoothOnly`].
+///
+/// Switched off, it names no remedy: the switch is each binary's own
+/// (`binary_help::cli_bluetooth_off_hint`, `gui_bluetooth_off_hint`).
+fn bluetooth_only_message(model: &str, miss: &BluetoothOnlyMiss) -> String {
+    let why = match miss {
+        BluetoothOnlyMiss::NotInRange => return format!("no {model} found in Bluetooth range"),
+        BluetoothOnlyMiss::SwitchedOff => "and Bluetooth is switched off",
+        BluetoothOnlyMiss::NotBuilt => "and this build has no Bluetooth support",
+        BluetoothOnlyMiss::UsbAdapter => {
+            "and --adapter names a USB device: pass the meter's Bluetooth address, \
+             or leave --adapter out"
+        }
+    };
+    format!("{model} connects over Bluetooth only, {why}")
 }
 
 /// The rest of the "nothing found" message when the radio was searched too.
@@ -159,7 +209,11 @@ impl Error {
             return ErrorKind::Interrupted;
         }
         match self {
-            Self::NoTransportFound { .. } => ErrorKind::DeviceNotFound,
+            Self::NoTransportFound { .. }
+            | Self::BluetoothOnly {
+                miss: BluetoothOnlyMiss::NotInRange,
+                ..
+            } => ErrorKind::DeviceNotFound,
             // A lost link is the Bluetooth spelling of a pulled cable.
             Self::Hid(_) | Self::LinkLost => ErrorKind::Transport,
             // Nothing answered the probes — the same shape as a timeout, and
@@ -173,6 +227,7 @@ impl Error {
             | Self::UnsupportedCommand(_)
             | Self::CommandRejected(_)
             | Self::Bluetooth(_)
+            | Self::BluetoothOnly { .. }
             | Self::Replay(_) => ErrorKind::Configuration,
         }
     }
@@ -193,7 +248,10 @@ mod tests {
     /// stay chip-free — the user plugged in a cable, not a CH9329.
     #[test]
     fn kind_maps_not_identified() {
-        let err = Error::DeviceNotIdentified { bridge: "CH9329" };
+        let err = Error::DeviceNotIdentified {
+            bridge: "CH9329",
+            built_in_radio: false,
+        };
         assert_eq!(err.kind(), ErrorKind::Timeout);
         let msg = err.to_string();
         assert!(msg.contains("USB cable"), "got {msg}");
@@ -204,12 +262,15 @@ mod tests {
     /// adapter on, so the message must not send them looking at a cable.
     #[test]
     fn not_identified_names_the_link_it_happened_on() {
-        let err = Error::DeviceNotIdentified {
+        let err = |built_in_radio| Error::DeviceNotIdentified {
             bridge: crate::BLUETOOTH,
+            built_in_radio,
         };
-        let msg = err.to_string();
-        assert!(msg.contains("Bluetooth adapter"), "got {msg}");
-        assert!(!msg.contains("USB"), "got {msg}");
+        let msg = err(false).to_string();
+        assert_eq!(msg, "no meter answered over the Bluetooth adapter");
+        // A meter with the radio built in is no adapter.
+        let msg = err(true).to_string();
+        assert_eq!(msg, "no meter answered over the Bluetooth link");
     }
 
     /// The error a failed open carries, with `bluetooth_searched` as the
@@ -234,6 +295,44 @@ mod tests {
             Error::Bluetooth("turned off on this computer".into()).kind(),
             ErrorKind::Configuration
         );
+    }
+
+    /// A meter with the radio built in says what kept it from the radio, and
+    /// only a meter out of range is the not-found the GUI waits out.
+    #[test]
+    fn a_bluetooth_only_meter_says_why_it_was_not_opened() {
+        let err = |miss| Error::BluetoothOnly {
+            model: "UT60BT",
+            activation: "",
+            miss,
+        };
+        assert_eq!(
+            err(BluetoothOnlyMiss::NotInRange).to_string(),
+            "no UT60BT found in Bluetooth range"
+        );
+        assert_eq!(
+            err(BluetoothOnlyMiss::NotInRange).kind(),
+            ErrorKind::DeviceNotFound
+        );
+        // No remedy: each binary adds its own switch.
+        assert_eq!(
+            err(BluetoothOnlyMiss::SwitchedOff).to_string(),
+            "UT60BT connects over Bluetooth only, and Bluetooth is switched off"
+        );
+        for (miss, names) in [
+            (BluetoothOnlyMiss::SwitchedOff, "switched off"),
+            (BluetoothOnlyMiss::NotBuilt, "no Bluetooth support"),
+            (BluetoothOnlyMiss::UsbAdapter, "--adapter"),
+        ] {
+            let msg = err(miss).to_string();
+            assert!(
+                msg.starts_with("UT60BT connects over Bluetooth only, and "),
+                "{msg}"
+            );
+            assert!(msg.contains(names), "{msg}");
+            assert!(!msg.contains("USB cable"), "{msg}");
+            assert_eq!(err(miss).kind(), ErrorKind::Configuration);
+        }
     }
 
     /// The GUI hands whole errors from the acquisition thread to the UI

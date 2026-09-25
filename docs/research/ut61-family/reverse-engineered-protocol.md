@@ -1,6 +1,7 @@
 # UT61+/UT161 Protocol Family: Reverse-Engineered Specification
 
-Covers: **UT61B+**, **UT61D+**, **UT61E+**, **UT161B**, **UT161D**, **UT161E**
+Covers: **UT61B+**, **UT61D+**, **UT61E+**, **UT161B**, **UT161D**, **UT161E**,
+and the **UT60BT** and **UT202BT**, which have Bluetooth built in
 
 UNI-T's protocol deck (below) also covers the **UT202S** clamp meter, which
 dmm-tools does not support.
@@ -13,6 +14,8 @@ Based on:
 - UNI-T protocol deck "UT61+系列通讯协议" (UT161/UT61+/UT202S), published on
   the UT61E+ product page of meters.uni-trend.com.cn — see
   `reverse-engineering-approach.md`
+- UNI-T's iDMM2.0 Android app, its UT60BT and UT202BT range assets, and the
+  UT60BT and UT202T/UT202BT manuals (§9)
 
 Confidence levels:
 - **[KNOWN]** — from official Silicon Labs documentation
@@ -41,6 +44,12 @@ The protocol deck says the same outright: it is one "Bluetooth
 communication protocol" for the UT161 series, the UT61+ series and the
 UT202S, with one mode table spanning meters and clamps (§3) and a range
 table per model (§5). The same bytes travel over the USB cable.
+
+The UT60BT and UT202BT send the same frames with the radio built in, over
+the ISSC service the UT-D07B carries (`docs/research/ut-d07b/`). UNI-T's
+iDMM2.0 app decodes them with the parser it uses for the UT61+ behind a
+UT-D07B, after the same 0x5F then 0x5D handshake, and a range table each
+(§9) [VENDOR].
 
 | Aspect | Value | All 6 models |
 |--------|-------|:------------:|
@@ -863,3 +872,126 @@ Source: `ut61d_plus.rs` (52 ranges).
 
 The `dc_a`/`ac_a` rows are the manual's values in the UT61B+'s order; the
 deck gives 10A at index 1, and no UT61D+ has confirmed either (§5.5).
+
+### UT60BT (9,999 counts)
+
+Source: `ut60bt.rs` (45 ranges).
+
+**VENDOR + MANUAL**, unconfirmed on hardware. Which modes and rungs exist,
+their order and units are the iDMM2.0 asset `funOl1_UT60BT.json`; the labels
+are the UT60BT manual's printed ranges (§X, P2) where it prints the rung, the
+asset's otherwise. The full-scale columns are the asset's bounds as it gives
+them.
+
+| Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
+|---|---|---|---|---|---|---|
+| `dc_v` | DcV | 0 | 999.9mV | mV | 999.9 | -999.9 |
+| `dc_v` | DcV | 1 | 9.999V | V | 9.999 | -9.999 |
+| `dc_v` | DcV | 2 | 99.99V | V | 99.99 | -99.99 |
+| `dc_v` | DcV | 3 | 999.9V | V | 999.9 | -999.9 |
+| `ac_v` | AcV | 0 | 999.9mV | mV | 999.9 | — |
+| `ac_v` | AcV | 1 | 9.999V | V | 9.999 | — |
+| `ac_v` | AcV | 2 | 99.99V | V | 99.99 | — |
+| `ac_v` | AcV | 3 | 999.9V | V | 999.9 | — |
+| `dc_mv` | DcMv | 0 | 9.999mV | mV | 9.999 | -9.999 |
+| `dc_mv` | DcMv | 1 | 99.99mV | mV | 99.99 | -99.99 |
+| `ac_mv` | AcMv | 0 | 9.999mV | mV | 9.999 | — |
+| `ac_mv` | AcMv | 1 | 99.99mV | mV | 99.99 | — |
+| `ohm` | Ohm | 0 | 999.9Ω | Ω | 999.9 | — |
+| `ohm` | Ohm | 1 | 9.999kΩ | kΩ | 9.999 | — |
+| `ohm` | Ohm | 2 | 99.99kΩ | kΩ | 99.99 | — |
+| `ohm` | Ohm | 3 | 999.9kΩ | kΩ | 999.9 | — |
+| `ohm` | Ohm | 4 | 9.999MΩ | MΩ | 9.999 | — |
+| `ohm` | Ohm | 5 | 99.99MΩ | MΩ | 99.99 | — |
+| `capacitance` | Capacitance | 0 | 9.999nF | nF | 9.999 | — |
+| `capacitance` | Capacitance | 1 | 99.99nF | nF | 99.99 | — |
+| `capacitance` | Capacitance | 2 | 999.9nF | nF | 999.9 | — |
+| `capacitance` | Capacitance | 3 | 9.999µF | µF | 9.999 | — |
+| `capacitance` | Capacitance | 4 | 99.99µF | µF | 99.99 | — |
+| `capacitance` | Capacitance | 5 | 999.9µF | µF | 999.9 | — |
+| `capacitance` | Capacitance | 6 | 9.999mF | mF | 9.999 | — |
+| `capacitance` | Capacitance | 7 | 99.99mF | mF | 99.99 | — |
+| `hz` | Hz | 0 | 9.999Hz | Hz | 9.999 | — |
+| `hz` | Hz | 1 | 99.99Hz | Hz | 99.99 | — |
+| `hz` | Hz | 2 | 999.9Hz | Hz | 999.9 | — |
+| `hz` | Hz | 3 | 9.999kHz | kHz | 9.999 | — |
+| `hz` | Hz | 4 | 99.99kHz | kHz | 99.99 | — |
+| `hz` | Hz | 5 | 999.9kHz | kHz | 999.9 | — |
+| `hz` | Hz | 6 | 9.999MHz | MHz | 9.999 | — |
+| `hz` | Hz | 7 | 99.99MHz | MHz | 99.99 | — |
+| `duty_cycle` | DutyCycle | 0 | Duty | % | 99.9 | 0 |
+| `temp_c` | TempC | 0 | -40~1000°C | °C | 1000 | -40 |
+| `temp_f` | TempF | 0 | -40~1832°F | °F | 1832 | -40 |
+| `diode` | Diode | 0 | Diode | V | 9.999 | 0 |
+| `continuity` | Continuity | 0 | Cont | Ω | 999.9 | — |
+| `dc_ua` | DcUa | 0 | 999.9µA | µA | 999.9 | -999.9 |
+| `ac_ua` | AcUa | 0 | 999.9µA | µA | 999.9 | — |
+| `dc_ma` | DcMa | 0 | 999.9mA | mA | 999.9 | -999.9 |
+| `dc_ma` | DcMa | 1 | 9.999A | A | 9.999 | -9.999 |
+| `ac_ma` | AcMa | 0 | 999.9mA | mA | 999.9 | — |
+| `ac_ma` | AcMa | 1 | 9.999A | A | 9.999 | — |
+
+Capacitance rung 7 and Hz rungs 0 and 7 are the asset's alone: the manual
+stops at 9.999mF and prints frequency as one "99.99Hz~9.999MHz" row. The
+asset labels its Hz rungs with a fifth digit ("9.9990Hz") and MHz as "mHz";
+the labels above follow its bounds. Ω rung 4 is "9.99MΩ" in the asset, over
+a 9.999 bound. The A rung is range byte 1 of the mA modes: the manual's A
+mA position reads past 999.9mA on the same terminal. The asset lists DC A and
+AC A with no rungs.
+
+### UT202BT (9,999 counts)
+
+Source: `ut202bt.rs` (38 ranges).
+
+**VENDOR + MANUAL**, unconfirmed on hardware, as for the UT60BT: the asset
+is `funOl1_UT202BT.json`, the labels are the UT202T/UT202BT manual's (spec
+tables, P14/26 to P17/31) where it prints the rung.
+
+| Table | Modes | Idx | Label | Unit | Full scale (+) | Full scale (−) |
+|---|---|---|---|---|---|---|
+| `dc_v` | DcV | 0 | 9.999V | V | 9.999 | -9.999 |
+| `dc_v` | DcV | 1 | 99.99V | V | 99.99 | -99.99 |
+| `dc_v` | DcV | 2 | 600.0V | V | 610 | -610 |
+| `ac_v` | AcV | 0 | 9.999V | V | 9.999 | -9.999 |
+| `ac_v` | AcV | 1 | 99.99V | V | 99.99 | -99.99 |
+| `ac_v` | AcV | 2 | 600.0V | V | 610 | -610 |
+| `lpf_v` | LpfV | 2 | 600.0V | V | 610 | -610 |
+| `ac_a` | AcA, ClampAcA | 0 | 9.999A | A | 9.999 | -9.999 |
+| `ac_a` | AcA, ClampAcA | 1 | 99.99A | A | 99.99 | -99.99 |
+| `ac_a` | AcA, ClampAcA | 2 | 600.0A | A | 610 | -610 |
+| `lpf_a` | ClampLpfA | 2 | 600.0A | A | 610 | -610 |
+| `inrush` | Inrush | 0 | 9.999A | A | 9.999 | -9.999 |
+| `inrush` | Inrush | 1 | 99.99A | A | 99.99 | -99.99 |
+| `inrush` | Inrush | 2 | 600.0A | A | 610 | -610 |
+| `ohm` | Ohm | 0 | 99.99Ω | Ω | 99.99 | — |
+| `ohm` | Ohm | 1 | 999.9Ω | Ω | 999.9 | — |
+| `ohm` | Ohm | 2 | 9.999kΩ | kΩ | 9.999 | — |
+| `ohm` | Ohm | 3 | 99.99kΩ | kΩ | 99.99 | — |
+| `ohm` | Ohm | 4 | 999.9kΩ | kΩ | 999.9 | — |
+| `ohm` | Ohm | 5 | 9.999MΩ | MΩ | 9.999 | — |
+| `ohm` | Ohm | 6 | 99.99MΩ | MΩ | 99.99 | — |
+| `capacitance` | Capacitance | 0 | 99.99nF | nF | 99.99 | — |
+| `capacitance` | Capacitance | 1 | 999.9nF | nF | 999.9 | — |
+| `capacitance` | Capacitance | 2 | 9.999µF | µF | 9.999 | — |
+| `capacitance` | Capacitance | 3 | 99.99µF | µF | 99.99 | — |
+| `capacitance` | Capacitance | 4 | 999.9µF | µF | 999.9 | — |
+| `capacitance` | Capacitance | 5 | 9.999mF | mF | 9.999 | — |
+| `capacitance` | Capacitance | 6 | 99.9mF | mF | 105 | — |
+| `hz` | Hz | 0 | 99.99Hz | Hz | 100 | -100 |
+| `hz` | Hz | 1 | 999.9Hz | Hz | 1000 | -1000 |
+| `hz` | Hz | 2 | 9.999kHz | kHz | 10 | -10 |
+| `hz` | Hz | 3 | 99.99kHz | kHz | 100 | -100 |
+| `hz` | Hz | 4 | 999.9kHz | kHz | 1000 | -1000 |
+| `hz` | Hz | 5 | 9.999MHz | MHz | 10 | -10 |
+| `continuity` | Continuity | 0 | 999.9Ω | Ω | 999.9 | — |
+| `continuity` | Continuity | 1 | 999.9Ω | Ω | 999.9 | — |
+| `temp_c` | TempC | 1 | -40~1000°C | °C | 1010 | -50 |
+| `temp_f` | TempF | 0 | -40~1832°F | °F | 590 | -58 |
+
+LPF V, LPF A and °C are listed at the range bytes shown and no others. AC A
+is under both 0x11 and 0x16, the two codes the app names "ACA"; which one the
+meter sends is unknown. Inrush rung 0 and continuity rung 1 are the asset's
+alone. The capacitance top rung is printed "99.9mF" in the manual and "105mF"
+in the asset. The manual has no frequency table: frequency shows on the
+auxiliary display in AC V and AC A. The asset's °F bounds (590, −58) do not
+match its own label.

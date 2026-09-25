@@ -53,8 +53,8 @@ struct Cli {
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
-    /// Turn off Bluetooth scanning for this run: nothing scans for adapters and
-    /// 'list' shows cables only. Overrides the saved 'bluetooth' setting.
+    /// Turn off Bluetooth scanning for this run: nothing scans for adapters or
+    /// meters and 'list' shows cables only. Overrides the saved 'bluetooth' setting.
     /// An address given to --adapter is still opened.
     #[arg(long)]
     no_bluetooth: bool,
@@ -65,7 +65,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// List connected USB cables and Bluetooth adapters in range
+    /// List connected USB cables, and Bluetooth adapters and meters in range
     List,
     /// Connect and print device info
     Info,
@@ -561,6 +561,19 @@ fn main() {
             eprintln!("{} {msg}", style("Error:").red().bold());
             if let Some(address) = unreachable_adapter(&*e, cli.adapter.as_deref()) {
                 print_setup_sections(LinksSearched::BluetoothAt(address));
+            } else if let Some(device) = unreachable_bluetooth_only(&*e, selection) {
+                print_setup_sections(LinksSearched::BluetoothOnly {
+                    model: device.display_name,
+                    activation: device.activation_instructions,
+                });
+            } else if bluetooth_switched_off(&*e) {
+                eprintln!(
+                    "{}",
+                    style(dmm_lib::binary_help::cli_bluetooth_off_hint(
+                        cli.no_bluetooth
+                    ))
+                    .yellow()
+                );
             }
         }
         std::process::exit(1);
@@ -579,6 +592,35 @@ fn unreachable_adapter<'a>(
         Some(dmm_lib::error::Error::Bluetooth(_))
     );
     adapter.filter(|a| stack_failed && dmm_lib::is_bluetooth_selector(a))
+}
+
+/// The meter with the radio built in that `selection` named, when `error` is
+/// the stack failing to reach it: the steps that switch its radio on follow
+/// the stack's own words.
+fn unreachable_bluetooth_only(
+    error: &(dyn std::error::Error + 'static),
+    selection: Selection,
+) -> Option<&'static SelectableDevice> {
+    let stack_failed = matches!(
+        error.downcast_ref::<dmm_lib::error::Error>(),
+        Some(dmm_lib::error::Error::Bluetooth(_))
+    );
+    match selection {
+        Selection::Device(device) if stack_failed && device.bluetooth_only => Some(device),
+        _ => None,
+    }
+}
+
+/// Whether `error` is a meter with the radio built in that was not looked
+/// for because the search was switched off: the switch is ours to name.
+fn bluetooth_switched_off(error: &(dyn std::error::Error + 'static)) -> bool {
+    matches!(
+        error.downcast_ref::<dmm_lib::error::Error>(),
+        Some(dmm_lib::error::Error::BluetoothOnly {
+            miss: dmm_lib::error::BluetoothOnlyMiss::SwitchedOff,
+            ..
+        })
+    )
 }
 
 /// Build long help text for --device from the registry.
@@ -938,6 +980,31 @@ fn activation_groups(
     groups
 }
 
+/// The paragraph that closes the "nothing found" help for a meter short of
+/// verified. Nothing is known about the meter when it was never named and the
+/// cable it would have been identified through never opened.
+fn print_experimental_note(selection: Selection) {
+    let Selection::Device(device) = selection else {
+        return;
+    };
+    let proto = (device.new_protocol)();
+    let profile = proto.profile();
+    if !profile.stability.is_verified() {
+        // Its own paragraph: the sections above end in a step, and
+        // this is about the meter rather than the link.
+        eprintln!();
+        eprintln!(
+            "{}",
+            style(format!(
+                "{} Report feedback: {}",
+                dmm_lib::binary_help::experimental_warning(profile.model_name, profile.stability),
+                profile.feedback_url()
+            ))
+            .yellow()
+        );
+    }
+}
+
 /// Print setup help for the failures a user can act on, and return the error
 /// to report.
 fn open_error_help(
@@ -949,39 +1016,31 @@ fn open_error_help(
             bluetooth_searched, ..
         } => {
             print_not_found_help(LinksSearched::from_usb_failure(bluetooth_searched));
-            // Nothing is known about the meter when it was never named and the
-            // cable it would have been identified through never opened.
-            if let Selection::Device(device) = selection {
-                let proto = (device.new_protocol)();
-                let profile = proto.profile();
-                if !profile.stability.is_verified() {
-                    // Its own paragraph: the sections above end in a step, and
-                    // this is about the meter rather than the link.
-                    eprintln!();
-                    eprintln!(
-                        "{}",
-                        style(format!(
-                            "{} Report feedback: {}",
-                            dmm_lib::binary_help::experimental_warning(
-                                profile.model_name,
-                                profile.stability
-                            ),
-                            profile.feedback_url()
-                        ))
-                        .yellow()
-                    );
-                }
-            }
+            print_experimental_note(selection);
+            "device not found".into()
+        }
+        // A meter with the radio built in, out of range or asleep: its own
+        // steps, not a cable's.
+        dmm_lib::error::Error::BluetoothOnly {
+            model,
+            activation,
+            miss: dmm_lib::error::BluetoothOnlyMiss::NotInRange,
+        } => {
+            print_not_found_help(LinksSearched::BluetoothOnly { model, activation });
+            print_experimental_note(selection);
             "device not found".into()
         }
         // The cable is there and nothing on it spoke. Every meter it could
         // carry has something the user has to switch on, so list them.
-        dmm_lib::error::Error::DeviceNotIdentified { bridge } => {
+        dmm_lib::error::Error::DeviceNotIdentified {
+            bridge,
+            built_in_radio,
+        } => {
             eprintln!(
                 "{}",
                 style(format!(
                     "No meter answered over the {}.",
-                    dmm_lib::binary_help::bridge_link_name(bridge)
+                    dmm_lib::binary_help::bridge_link_name(bridge, built_in_radio)
                 ))
                 .yellow()
                 .bold()
@@ -1037,8 +1096,8 @@ fn open_error_help(
     }
 }
 
-/// List what is reachable: the cables on the bus, and the adapters in range
-/// when `bluetooth` says the radio may be searched.
+/// List what is reachable: the cables on the bus, and the adapters and meters
+/// in range when `bluetooth` says the radio may be searched.
 fn cmd_list(bluetooth: bool) -> Result<(), Box<dyn std::error::Error>> {
     // A HID API that cannot enumerate is no reason to skip the radio: the
     // error goes out now and the scan still runs.
@@ -2647,6 +2706,30 @@ mod tests {
         assert!(!bluetooth_probing(true, Some(&saved(false))));
     }
 
+    /// Only a search switched off gets the CLI's switch after the error; a
+    /// meter out of range or a build without the radio has nothing to tick.
+    #[test]
+    fn only_a_switched_off_search_gets_the_switch() {
+        use dmm_lib::error::{BluetoothOnlyMiss, Error};
+        let err = |miss| -> Box<dyn std::error::Error> {
+            Box::new(Error::BluetoothOnly {
+                model: "UT60BT",
+                activation: "",
+                miss,
+            })
+        };
+        assert!(bluetooth_switched_off(&*err(
+            BluetoothOnlyMiss::SwitchedOff
+        )));
+        for miss in [
+            BluetoothOnlyMiss::NotInRange,
+            BluetoothOnlyMiss::NotBuilt,
+            BluetoothOnlyMiss::UsbAdapter,
+        ] {
+            assert!(!bluetooth_switched_off(&*err(miss)), "{miss:?}");
+        }
+    }
+
     /// With the radio out of the picture, the help that follows an empty
     /// listing must not offer steps for it.
     #[test]
@@ -3969,5 +4052,20 @@ mod tests {
         assert_eq!(unreachable_adapter(&stack, None), None);
         assert_eq!(unreachable_adapter(&stack, Some("00C5B27A")), None);
         assert_eq!(unreachable_adapter(&Error::LinkLost, Some(address)), None);
+    }
+
+    /// A meter with the radio built in that the stack could not reach gets
+    /// its own steps; a meter behind an adapter keeps the bare error, as it
+    /// always has.
+    #[test]
+    fn an_unreachable_bluetooth_only_meter_gets_its_own_steps() {
+        use dmm_lib::error::Error;
+        let stack = Error::Bluetooth("Bluetooth is turned off on this computer".to_string());
+        let device = |id| Selection::Device(registry::find_device(id).expect("registry entry"));
+        let found = unreachable_bluetooth_only(&stack, device("ut60bt")).map(|d| d.id);
+        assert_eq!(found, Some("ut60bt"));
+        assert!(unreachable_bluetooth_only(&stack, device("ut61eplus")).is_none());
+        assert!(unreachable_bluetooth_only(&stack, Selection::Auto).is_none());
+        assert!(unreachable_bluetooth_only(&Error::LinkLost, device("ut60bt")).is_none());
     }
 }

@@ -177,7 +177,14 @@ impl App {
                 // find it and a screenshot cannot.
                 let mut hover: Vec<String> = Vec::new();
                 if self.connection.state == ConnectionState::Connected {
-                    hover.push(link_tooltip(self.connection.link, self.replay.is_some()));
+                    // The connected entry, live or recorded: a meter with the
+                    // radio built in is on no adapter.
+                    let built_in_radio = self.connection.detected.is_some_and(|d| d.bluetooth_only);
+                    hover.push(link_tooltip(
+                        self.connection.link,
+                        built_in_radio,
+                        self.replay.is_some(),
+                    ));
                 }
                 if let Some(source) = &self.replay {
                     hover.push(format!("Replaying {}", source.path.display()));
@@ -387,11 +394,12 @@ fn fits_with_link(row: f32, link: f32, available: f32) -> bool {
 /// The bar has the short name, and a narrow window has none at all, so this
 /// is the one place the link is always named. `replayed` distinguishes a live
 /// link from the one a recording was made over — the rest of the window is
-/// deliberately identical for the two.
-fn link_tooltip(link: Option<Link>, replayed: bool) -> String {
+/// deliberately identical for the two. `built_in_radio` as for
+/// [`Link::full_name`].
+fn link_tooltip(link: Option<Link>, built_in_radio: bool, replayed: bool) -> String {
     match (link, replayed) {
-        (Some(link), false) => format!("Connected over the {}", link.full_name()),
-        (Some(link), true) => format!("Recorded over the {}", link.full_name()),
+        (Some(link), false) => format!("Connected over the {}", link.full_name(built_in_radio)),
+        (Some(link), true) => format!("Recorded over the {}", link.full_name(built_in_radio)),
         // Nothing is on the far end of a mock session, and a recording whose
         // file names a link this build does not know says only that much.
         (None, false) => "Mock meter, no link".to_string(),
@@ -436,18 +444,30 @@ mod tests {
     #[test]
     fn the_hover_spells_the_link_out() {
         assert_eq!(
-            link_tooltip(Some(Link::UsbCable), false),
+            link_tooltip(Some(Link::UsbCable), false, false),
             "Connected over the USB cable"
         );
         assert_eq!(
-            link_tooltip(Some(Link::Bluetooth), false),
+            link_tooltip(Some(Link::Bluetooth), false, false),
             "Connected over the Bluetooth adapter"
         );
         assert_eq!(
-            link_tooltip(Some(Link::UsbCable), true),
+            link_tooltip(Some(Link::UsbCable), false, true),
             "Recorded over the USB cable"
         );
-        assert_eq!(link_tooltip(None, false), "Mock meter, no link");
-        assert_eq!(link_tooltip(None, true), "Recorded over an unnamed link");
+        assert_eq!(link_tooltip(None, false, false), "Mock meter, no link");
+        assert_eq!(
+            link_tooltip(None, false, true),
+            "Recorded over an unnamed link"
+        );
+        // A meter with the radio built in, live or recorded, has no adapter.
+        assert_eq!(
+            link_tooltip(Some(Link::Bluetooth), true, false),
+            "Connected over the Bluetooth link"
+        );
+        assert_eq!(
+            link_tooltip(Some(Link::Bluetooth), true, true),
+            "Recorded over the Bluetooth link"
+        );
     }
 }

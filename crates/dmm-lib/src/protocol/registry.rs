@@ -38,6 +38,13 @@ pub struct SelectableDevice {
     pub(crate) fingerprint: Option<&'static Fingerprint>,
     /// URL to manufacturer's product page (for "Manual" hyperlink in GUI).
     pub manual_url: Option<&'static str>,
+    /// The meter has Bluetooth built in and no cable, so it is looked for
+    /// over Bluetooth alone rather than on its family's links.
+    pub bluetooth_only: bool,
+    /// The name prefixes a `bluetooth_only` meter advertises, which is how
+    /// an open for it tells it from an adapter or another meter in range;
+    /// empty for every other entry.
+    pub(crate) bluetooth_names: &'static [&'static str],
 }
 
 /// Generic factory for protocols that implement `Default`.
@@ -68,12 +75,28 @@ ut61_family_factory!(new_ut61dplus, "ut61d+");
 ut61_family_factory!(new_ut161e, "ut161e");
 ut61_family_factory!(new_ut161b, "ut161b");
 ut61_family_factory!(new_ut161d, "ut161d");
+ut61_family_factory!(new_ut60bt, "ut60bt");
+ut61_family_factory!(new_ut202bt, "ut202bt");
 
 const ACTIVATION_UT61EPLUS: &str = "\
 1. Insert the USB module into the meter
 2. Turn the meter on
 3. Long press the USB/Hz button
 4. The S icon appears on the LCD";
+
+/// UT60BT manual §VIII and §11: long-pressing SEL switches the radio on and
+/// shows the Bluetooth symbol, which flashes once an app has connected.
+const ACTIVATION_UT60BT: &str = "\
+1. Turn the meter on
+2. Long press SEL until the Bluetooth symbol shows";
+
+/// UT202T/UT202BT manual P13/24 and P14/25: the symbol flashes until an app
+/// connects, then stays on; the radio switches itself off after 5 minutes
+/// without a connection.
+const ACTIVATION_UT202BT: &str = "\
+1. Turn the meter on
+2. Short press the Bluetooth button; the Bluetooth symbol flashes
+Note: Bluetooth turns itself off after 5 minutes without a connection.";
 
 const ACTIVATION_UT8803: &str = "\
 1. Connect the USB cable to the meter
@@ -136,6 +159,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: new_ut61eplus,
         fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut61b+",
@@ -147,6 +172,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: new_ut61bplus,
         fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut61d+",
@@ -158,6 +185,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: new_ut61dplus,
         fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut161b",
@@ -169,6 +198,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: new_ut161b, // same table as UT61B+
         fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut161d",
@@ -180,6 +211,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: new_ut161d, // same table as UT61D+
         fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut161e",
@@ -191,6 +224,36 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: new_ut161e, // same table as UT61E+
         fingerprint: Some(&ut61eplus::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
+    },
+    // Bluetooth built in, no cable
+    SelectableDevice {
+        id: "ut60bt",
+        display_name: "UT60BT",
+        aliases: &[],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT60BT,
+        family: DeviceFamily::Ut61EPlus,
+        new_protocol: new_ut60bt,
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
+        manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
+        bluetooth_only: true,
+        // One UT60BT advertises `UT60BTk` (docs/research/new-device-candidates.md).
+        bluetooth_names: &["UT60BT"],
+    },
+    SelectableDevice {
+        id: "ut202bt",
+        display_name: "UT202BT",
+        aliases: &[],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_UT202BT,
+        family: DeviceFamily::Ut61EPlus,
+        new_protocol: new_ut202bt,
+        fingerprint: Some(&ut61eplus::FINGERPRINT),
+        manual_url: Some("https://meters.uni-trend.com.cn/content/1341.html"),
+        bluetooth_only: true,
+        bluetooth_names: &["UT202BT"],
     },
     // Other families
     SelectableDevice {
@@ -203,6 +266,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: factory::<Ut8802Protocol>,
         fingerprint: Some(&ut8802::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8802"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut8803",
@@ -214,6 +279,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: factory::<Ut8803Protocol>,
         fingerprint: Some(&ut8803::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut803",
@@ -225,6 +292,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: || Box::new(Ut80xProtocol::new_ut803()),
         fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut804",
@@ -236,6 +305,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: || Box::new(Ut80xProtocol::new_ut804()),
         fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut71ab",
@@ -247,6 +318,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: || Box::new(Ut80xProtocol::new_ut71ab()),
         fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut71cde",
@@ -258,6 +331,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: || Box::new(Ut80xProtocol::new_ut71cde()),
         fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut171",
@@ -269,6 +344,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: factory::<Ut171Protocol>,
         fingerprint: Some(&ut171::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut171-series/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "ut181a",
@@ -280,6 +357,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: factory::<Ut181aProtocol>,
         fingerprint: Some(&ut181a::FINGERPRINT),
         manual_url: Some("https://meters.uni-trend.com/product/ut181a/"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     // Voltcraft
     SelectableDevice {
@@ -294,6 +373,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc880-handheld-multimeter-digital-calibrated-to-manufacturers-standards-no-certificate-data-logger-cat-iii-124609",
         ),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "vc650bt",
@@ -307,6 +388,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
         ),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "vc890",
@@ -320,6 +403,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some(
             "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
         ),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     SelectableDevice {
         id: "vc920",
@@ -331,6 +416,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         new_protocol: || Box::new(Ut80xProtocol::new_vc920()),
         fingerprint: Some(&ut80x::FINGERPRINT),
         manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
     // Mock
     SelectableDevice {
@@ -345,6 +432,8 @@ pub static DEVICES: &[SelectableDevice] = &[
         manual_url: Some(
             "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#mock-modes",
         ),
+        bluetooth_only: false,
+        bluetooth_names: &[],
     },
 ];
 
@@ -635,6 +724,8 @@ mod tests {
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        // Experimental, with their verification issues still to be opened.
+        const ISSUE_TO_OPEN: &[&str] = &["ut60bt", "ut202bt"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -653,7 +744,7 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if !expected.is_verified() {
+            if !expected.is_verified() && !ISSUE_TO_OPEN.contains(&device.id) {
                 assert!(
                     profile.verification_issue.is_some(),
                     "{} device {} must link to a verification issue",
@@ -711,5 +802,20 @@ mod tests {
     #[test]
     fn the_mock_carries_no_fingerprint() {
         assert!(find_device("mock").unwrap().fingerprint.is_none());
+    }
+
+    /// A meter with the radio built in is found by its names alone, so it
+    /// needs some; any other entry reaches the radio through an adapter and
+    /// has none of its own.
+    #[test]
+    fn only_bluetooth_only_meters_carry_bluetooth_names() {
+        for device in DEVICES {
+            assert_eq!(
+                device.bluetooth_only,
+                !device.bluetooth_names.is_empty(),
+                "{}",
+                device.id
+            );
+        }
     }
 }

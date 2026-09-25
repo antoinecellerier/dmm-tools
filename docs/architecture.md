@@ -23,7 +23,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200) |
-| `transport/ble.rs` | Bluetooth LE transport for the UT-D07B adapter: finds and connects it, subscribes to its UART characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
+| `transport/ble.rs` | Bluetooth LE transport for a UART-over-BLE peer, an adapter or a meter with the radio built in: finds one by its advertised name and connects it, subscribes to its UART characteristic, and turns notifications and writes into the byte stream the cables carry. Behind the default-on `bluetooth` feature; `ble_disabled.rs` stands in without it |
 | `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |
@@ -98,14 +98,20 @@ types directly. That opener returns a `Box<dyn Transport>`, trying the cable the
 `DeviceFamily` ships with first (`preferred_transports()` in `lib.rs`, sourced from the cable table
 in `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
-CP2110 and time out on every read — and the fallback keeps unusual cable pairings working.
+CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. An
+entry marked `bluetooth_only`, a meter with the radio built in, is looked for over Bluetooth alone,
+and fails with its own error (`Error::BluetoothOnly`): not in range, or the radio not searched.
 
 The same opener reaches Bluetooth. `OpenOptions` carries the `--adapter` selector and whether
 Bluetooth may be scanned: the `bluetooth` setting, which `--no-bluetooth` overrides. A selector
 shaped like a Bluetooth address or peripheral identifier goes straight to `transport/ble.rs`.
 Otherwise the USB bus is tried first. If nothing answers there, scanning is allowed and the family
-lists Bluetooth among its links, the transport looks for an adapter: one already connected, else
-one heard in a short scan, else a paired one by address. Every step has a time limit. When that
+lists Bluetooth among its links, the transport looks for an adapter or a Bluetooth meter: one
+already connected, else one heard in a short scan, else a paired one by address. The caller names
+the peers it takes, by advertised name (`bluetooth_peers()` in `lib.rs`): an entry behind an
+adapter takes adapters only, a `bluetooth_only` entry its own `bluetooth_names`, and `"auto"` and
+`list` all of them, so an open for one meter never lands on another unless `--adapter` names an
+address, which opens whatever answers there. Every step has a time limit. When that
 finds nothing, the caller gets the USB error, marked with whether Bluetooth was searched; both
 binaries title their help from that mark. The GUI reconnects a lost Bluetooth link to the same
 adapter by address, without scanning; switching adapters is an explicit Disconnect and Connect.
@@ -124,7 +130,7 @@ ranking what they answer by how strong the evidence is. The cascade and its fail
 caller can name the meter it picked; `open_transport()` is its split half — a bridge and its name,
 no protocol chosen — for a caller that must wrap the transport before the probe bytes flow, and
 pairs with `detect::detect_device()`. `devices_on_bridge()` inverts
-`preferred_transports()` to list the meters that could have been on a bridge nothing answered on,
+those links to list the meters that could have been on a bridge nothing answered on,
 and `find_by_model_name()` maps an open session's `model_name` back to its entry.
 Adding a new device requires only a registry entry, a `Protocol` implementation and — to be found
 by `"auto"` — a `Fingerprint` the entry points at; nothing in `detect.rs`, zero app code changes.

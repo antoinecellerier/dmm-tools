@@ -117,9 +117,15 @@ impl Link {
 
     /// The name for text with the room to spell it out — an error, or a
     /// hover where the bar had to shorten or drop it.
-    pub fn full_name(self) -> &'static str {
+    ///
+    /// `built_in_radio` is a meter with Bluetooth built in on the far end
+    /// (a `bluetooth_only` registry entry, or
+    /// [`crate::transport::Transport::built_in_radio`]): there is no adapter
+    /// to name.
+    pub fn full_name(self, built_in_radio: bool) -> &'static str {
         match self {
             Self::UsbCable => USB_CABLE,
+            Self::Bluetooth if built_in_radio => BLUETOOTH_BUILT_IN,
             Self::Bluetooth => BLUETOOTH_ADAPTER,
         }
     }
@@ -137,9 +143,10 @@ impl Link {
 }
 
 /// The full name of the link `bridge` is on, and "link" for a transport with
-/// none — an error about it still reads as a sentence.
-pub fn bridge_link_name(bridge: &str) -> &'static str {
-    Link::from_bridge(bridge).map_or("link", Link::full_name)
+/// none — an error about it still reads as a sentence. `built_in_radio` as
+/// for [`Link::full_name`].
+pub fn bridge_link_name(bridge: &str, built_in_radio: bool) -> &'static str {
+    Link::from_bridge(bridge).map_or("link", |link| link.full_name(built_in_radio))
 }
 
 /// The cable link, in both the long and the short form.
@@ -150,6 +157,9 @@ const BLUETOOTH_LINK: &str = "Bluetooth";
 
 /// The radio link where they don't.
 const BLUETOOTH_ADAPTER: &str = "Bluetooth adapter";
+
+/// The same, for a meter with the radio built in, which has no adapter.
+const BLUETOOTH_BUILT_IN: &str = "Bluetooth link";
 
 /// What a recording with no link recorded is played back as.
 ///
@@ -194,11 +204,34 @@ const USB_STEPS: &[&str] = &[
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 const USB_STEPS: &[&str] = &[];
 
-/// The Bluetooth steps every platform gets. The adapter stops advertising
-/// in standby, and its own power switch wakes it
+/// The GUI setting that lets an open search the radio, as its checkbox
+/// reads. The CLI reads the same saved setting, so its help names it too.
+pub const BLUETOOTH_SETTING: &str = "Look for Bluetooth adapters";
+
+/// What turns the radio search back on in the CLI, for a meter with the
+/// radio built in that was not looked for: `flag_given` when
+/// `--no-bluetooth` switched it off, else the saved setting did.
+pub fn cli_bluetooth_off_hint(flag_given: bool) -> String {
+    if flag_given {
+        "Leave out --no-bluetooth.".to_string()
+    } else {
+        format!("Tick \"{BLUETOOTH_SETTING}\" in dmm-gui's settings, which dmm-cli reads too.")
+    }
+}
+
+/// The same in the GUI, where ticking the setting also clears a
+/// `--no-bluetooth` given at start.
+pub fn gui_bluetooth_off_hint() -> String {
+    format!("Tick \"{BLUETOOTH_SETTING}\" in Settings (\u{2699}).")
+}
+
+/// The step that wakes an adapter: it stops advertising in standby, and its
+/// own power switch wakes it
 /// (docs/research/ut-d07b/reverse-engineered-protocol.md §4).
-const BLUETOOTH_STEPS: &[&str] = &[
-    "If both are on, switch the adapter off and on.",
+const BLUETOOTH_ADAPTER_STEPS: &[&str] = &["If both are on, switch the adapter off and on."];
+
+/// What this computer's radio may need, adapter or not.
+const BLUETOOTH_HOST_STEPS: &[&str] = &[
     #[cfg(target_os = "macos")]
     "Allow Bluetooth in System Settings > Privacy & Security.",
 ];
@@ -262,6 +295,12 @@ pub enum LinksSearched<'a> {
     UsbAndBluetooth,
     /// One Bluetooth adapter, named by address or peripheral id.
     BluetoothAt(&'a str),
+    /// The radio alone, for a meter with Bluetooth built in: its display
+    /// name and the registry's steps that switch its radio on.
+    BluetoothOnly {
+        model: &'a str,
+        activation: &'static str,
+    },
 }
 
 impl LinksSearched<'_> {
@@ -283,6 +322,7 @@ impl LinksSearched<'_> {
             Self::Usb => "No USB cable found".to_string(),
             Self::UsbAndBluetooth => "No meter found over USB or Bluetooth".to_string(),
             Self::BluetoothAt(address) => format!("No Bluetooth device found at {address}"),
+            Self::BluetoothOnly { model, .. } => format!("No {model} found over Bluetooth"),
         }
     }
 
@@ -295,6 +335,16 @@ impl LinksSearched<'_> {
             // the address the user typed is the only thing that did not
             // answer.
             Self::BluetoothAt(_) => vec![bluetooth_section(BLUETOOTH_SCAN)],
+            // No adapter to wake, and the meter named: its own steps say how
+            // to switch its radio on.
+            Self::BluetoothOnly { activation, .. } => vec![SetupSection {
+                link: BLUETOOTH_LINK,
+                check: BLUETOOTH_CHECK,
+                steps: activation
+                    .lines()
+                    .chain(BLUETOOTH_HOST_STEPS.iter().copied())
+                    .collect(),
+            }],
         }
     }
 }
@@ -311,7 +361,12 @@ fn bluetooth_section(closing: &'static [&'static str]) -> SetupSection {
     SetupSection {
         link: BLUETOOTH_LINK,
         check: BLUETOOTH_CHECK,
-        steps: BLUETOOTH_STEPS.iter().chain(closing).copied().collect(),
+        steps: BLUETOOTH_ADAPTER_STEPS
+            .iter()
+            .chain(BLUETOOTH_HOST_STEPS)
+            .chain(closing)
+            .copied()
+            .collect(),
     }
 }
 
@@ -523,6 +578,7 @@ mod tests {
             LinksSearched::Usb,
             LinksSearched::UsbAndBluetooth,
             LinksSearched::BluetoothAt("12:34:56:78:9A:BC"),
+            ut60bt(),
         ] {
             for section in links.sections() {
                 assert!(!section.link.is_empty());
@@ -546,6 +602,35 @@ mod tests {
             ["USB cable", "Bluetooth"]
         );
         assert_eq!(links(LinksSearched::BluetoothAt("4C:3C")), ["Bluetooth"]);
+        assert_eq!(links(ut60bt()), ["Bluetooth"]);
+    }
+
+    /// A meter with the radio built in, as the binaries build its help from
+    /// its registry entry.
+    fn ut60bt() -> LinksSearched<'static> {
+        let device = registry::find_device("ut60bt").expect("registry entry");
+        LinksSearched::BluetoothOnly {
+            model: device.display_name,
+            activation: device.activation_instructions,
+        }
+    }
+
+    /// A meter with the radio built in is sent to its own switch, not to an
+    /// adapter's, and not to the catalog: the user already named it.
+    #[test]
+    fn a_bluetooth_only_meter_gets_its_own_steps() {
+        let links = ut60bt();
+        assert_eq!(links.not_found_title(), "No UT60BT found over Bluetooth");
+        let text = links.sections()[0].text();
+        assert!(
+            text.starts_with(
+                "Bluetooth: turn on Bluetooth on this computer and data transmission on the meter.\n  \
+                 1. Turn the meter on\n  2. Long press SEL"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("adapter"), "{text}");
+        assert!(!text.contains("supported-devices.md"), "{text}");
     }
 
     /// The titles are the user's first line of both binaries' help, and the
@@ -592,6 +677,7 @@ mod tests {
             LinksSearched::Usb,
             LinksSearched::UsbAndBluetooth,
             LinksSearched::BluetoothAt("4C:3C"),
+            ut60bt(),
         ] {
             for section in links.sections() {
                 let text = section.text();
@@ -604,11 +690,38 @@ mod tests {
     /// bridge chip must stay out of what they read.
     #[test]
     fn a_link_is_named_cable_or_adapter_never_the_chip() {
-        assert_eq!(bridge_link_name(crate::BLUETOOTH), "Bluetooth adapter");
+        assert_eq!(
+            bridge_link_name(crate::BLUETOOTH, false),
+            "Bluetooth adapter"
+        );
         for bridge in ["CP2110", "CH9329", "CH9325"] {
             assert_eq!(Link::from_bridge(bridge), Some(Link::UsbCable));
-            assert_eq!(bridge_link_name(bridge), "USB cable");
+            for built_in in [false, true] {
+                assert_eq!(bridge_link_name(bridge, built_in), "USB cable");
+            }
         }
+    }
+
+    /// A meter with the radio built in has no adapter for the text to name.
+    #[test]
+    fn a_built_in_radio_is_no_adapter() {
+        assert_eq!(bridge_link_name(crate::BLUETOOTH, true), "Bluetooth link");
+        assert_eq!(Link::Bluetooth.full_name(true), "Bluetooth link");
+    }
+
+    /// Each binary names its own way to turn the search back on, and the
+    /// GUI's checkbox by the label it draws.
+    #[test]
+    fn each_binary_names_its_own_bluetooth_switch() {
+        assert_eq!(cli_bluetooth_off_hint(true), "Leave out --no-bluetooth.");
+        assert_eq!(
+            cli_bluetooth_off_hint(false),
+            "Tick \"Look for Bluetooth adapters\" in dmm-gui's settings, which dmm-cli reads too."
+        );
+        assert_eq!(
+            gui_bluetooth_off_hint(),
+            "Tick \"Look for Bluetooth adapters\" in Settings (\u{2699})."
+        );
     }
 
     /// A transport with nothing on the far end, such as the mock's, is on no
@@ -618,7 +731,7 @@ mod tests {
         use crate::transport::Transport;
         let bridge = crate::transport::NullTransport.transport_name();
         assert_eq!(Link::from_bridge(bridge), None);
-        assert_eq!(bridge_link_name(bridge), "link");
+        assert_eq!(bridge_link_name(bridge, false), "link");
     }
 
     /// The short form drops the word the status line no longer needs; the
@@ -626,9 +739,9 @@ mod tests {
     #[test]
     fn the_two_forms_of_a_link_name() {
         assert_eq!(Link::Bluetooth.short_name(), "Bluetooth");
-        assert_eq!(Link::Bluetooth.full_name(), "Bluetooth adapter");
+        assert_eq!(Link::Bluetooth.full_name(false), "Bluetooth adapter");
         assert_eq!(Link::UsbCable.short_name(), "USB cable");
-        assert_eq!(Link::UsbCable.full_name(), "USB cable");
+        assert_eq!(Link::UsbCable.full_name(false), "USB cable");
     }
 
     /// A replay file records the short name, so reading it back must give
