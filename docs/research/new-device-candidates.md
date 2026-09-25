@@ -422,24 +422,28 @@ The 47-star Windows-only app is abandoned.
 
 ---
 
-### Aneng / BSIDE / ZOYI BLE Meters (AN9002, ZT-300AB, ZT-5B, etc.)
+### ZOTEK BLE Meters: ZOYI / ZOTEK / BSIDE / ANENG (ZT-300AB = AN9002, ZT-5B, ZT-5BQ, ZT-5566)
+
+**One OEM, one protocol, four packet layouts. Specified 2026-09-25 from
+ZOTEK's apps and manuals: [research/zotek](zotek/reverse-engineered-protocol.md).
+Research only; not implemented.**
 
 | Aspect | Details |
 |--------|---------|
-| Price | $15-40 (very cheap) |
-| Connection | BLE |
-| Protocol | 10/11-byte packets, 7-segment LCD encoding, well reverse-engineered |
-| BLE UUID | `0000fff4-0000-1000-8000-00805f9b34fb` |
+| Models | ZT-300AB, ZT-5B, ZT-5BQ (clamp), ZT-5566/5566S/5566SE (19999-count desktop meter with a Bluetooth speaker), ZT-6S — made by Shenzhen ZOTEK, sold as ZOYI/ZOTEK and BSIDE. ANENG rebrands, by matching specs and keys: AN9002 = ZT-300AB, V05B = ZT-5B, ST207 = ZT-5BQ, AN999S ≈ ZT-5566S/SE |
+| Connection | BLE, service `FFF0`; ZOTEK's older apps notify and write on characteristic `FFF4`. The apps and manuals list the meter as "Bluetooth DMM" |
+| Protocol | Streamed unprompted. Each notification is XORed with a fixed 20-byte key; descrambled it starts `5A A5 <type>`, and the type byte (1-4) selects one of four layouts of LCD segments and annunciator bits. No checksum; the apps read 10, 10, 11 or 19 bytes by type, and the actual length is unverified. Remote key presses and a clock set go back as `AB CD` frames with a 16-bit sum |
+| Apps | e-Bull V2 1.1.2 (`com.zoyi.bleapp`, uni-app, ZOTEK's current app); e-Bull V1.0.12 (`com.yscoco.multimeter`) and its white-label twin Bluetooth DMM 1.0.13 (`com.yscoco.wyboem`), which the AN9002 manual points to |
 
-All rebrands from the same manufacturer (ZOTEK/Zoyi), shared protocol.
+Which model sends which type byte is inferred from the layout names alone
+(`AB_300`/`300ab` for the ZT-300AB, type 3, the priority); none of the apps
+ties a type to a model. The ZT-5566 manuals document the Bluetooth speaker,
+and the SE manual's app section names only other models. Every open question is in the
+[backlog](../verification-backlog.md#zotek-zoyi--aneng--bside-open-questions-before-an-implementation).
 
-**GitHub:** [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM)
-(43 stars) documents protocol variants.
-[Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows)
-(47 stars) is the main GUI tool but Windows-only and inactive.
-
-**Gap: moderate.** No cross-platform desktop tool. But these are
-extremely cheap meters — users may not invest in tooling.
+**Gap: moderate.** No cross-platform desktop tool; Bluetooth-DMM-For-Windows
+is Windows-only and inactive. The ZT-300AB/AN9002 pair ranks first of the
+family in our listing survey.
 
 ---
 
@@ -694,13 +698,13 @@ the same transport.
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
+| **ZOTEK BLE (ZOYI/BSIDE/ANENG)** | BLE (built in) | Specified from ZOTEK's own apps ([research/zotek](zotek/reverse-engineered-protocol.md)): one streamed protocol in ZOTEK's apps, which serve ZOYI/ZOTEK meters and their BSIDE and ANENG rebrands, led by the ZT-300AB/AN9002; no cross-platform desktop tool | Moderate: a per-device GATT profile (`FFF0`/`FFF4`) on the Bluetooth transport we have, and a new protocol family; which model sends which layout needs a hardware report |
 | **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Moderate: a network transport (the HID-shaped `Transport` trait must fit or change), a SCPI protocol family, address-based open and `*IDN?` identification; USB TMC deferred behind the dependency decision |
 
 ### Tier 3: Lower priority
 
 | Candidate | Transport | Why excluded or deprioritized |
 |-----------|-----------|-------------------------------|
-| Aneng/BSIDE/ZOYI BLE | BLE | Very cheap meters, users may not invest in tooling |
 | Mooshimeter | BLE | Discontinued, shrinking user base |
 | OWON XDM series | USB serial SCPI | Already well-served by rusty_meter (100 stars, Rust/egui) |
 | Pokit Pro | BLE | Already well-served by dokit (63 stars) |
@@ -716,10 +720,12 @@ the same transport.
   tech stack dmm-tools uses. Proves community demand for native desktop
   multimeter apps.
 - **Other brands' BLE meters need more than names and tables.** The 121GW,
-  OWON B35T+/B41T+ and the ZOTEK rebrands (Aneng/BSIDE/ZOYI) are not known to
-  use the ISSC service (the ZOTEK ones use `fff4`), so each needs its own GATT
-  path, and their protocols are documented only in community code, so each
-  needs a clean-room source decision before work starts.
+  OWON B35T+/B41T+ and ZOTEK meters (ZOYI/BSIDE/ANENG) are not known to use
+  the ISSC service (the ZOTEK apps use service `FFF0`, characteristic `FFF4`),
+  so each needs its own GATT path. The 121GW and OWON protocols are documented
+  only in community code, so each needs a clean-room source decision before
+  work starts; the ZOTEK protocol is specified from ZOTEK's own apps
+  ([research/zotek](zotek/reverse-engineered-protocol.md)).
 - **Bluetooth-DMM-For-Windows** (47 stars, now abandoned) proves demand
   for a multi-device BLE desktop app. Its Windows-only nature and
   inactivity leave the gap wide open.
@@ -754,12 +760,12 @@ the same transport.
 - [tpwrules/121gw-re](https://github.com/tpwrules/121gw-re) — 121GW reverse engineering
 - [DeanCording/owonb35](https://github.com/DeanCording/owonb35) — OWON B35 Linux client
 - [sercona/Owon-Multimeters](https://github.com/sercona/Owon-Multimeters) — OWON multi-model support
-- [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM) — Aneng/BSIDE protocol docs
+- [ludwich66/Bluetooth-DMM](https://github.com/ludwich66/Bluetooth-DMM) — Aneng/BSIDE protocol docs (outside the ZOTEK clean-room boundary; not used for its spec)
 - [Bluetooth-DMM-For-Windows](https://github.com/webspiderteam/Bluetooth-DMM-For-Windows) — Windows BLE DMM app
 - [pcolby/dokit](https://github.com/pcolby/dokit) — Pokit cross-platform tools
 - [mooshim/Mooshimeter-PythonAPI](https://github.com/mooshim/Mooshimeter-PythonAPI)
 - [sigrok Bluetooth support](https://sigrok.org/wiki/Bluetooth)
-- [AN9002 BLE protocol analysis](https://justanotherelectronicsblog.com/?p=930)
+- [AN9002 BLE protocol analysis](https://justanotherelectronicsblog.com/?p=930) (outside the ZOTEK clean-room boundary; not used for its spec)
 
 ### USB serial / IR
 - [markusdd/rusty_meter](https://github.com/markusdd/rusty_meter) — Rust/egui OWON XDM tool (100 stars)

@@ -29,6 +29,12 @@ other programs.
 - [VC890](research/vc890/reverse-engineered-protocol.md)
 - VC920 / VC940 / VC960 — UT71 rebrands, in the [UT71 spec](research/ut71/reverse-engineered-protocol.md)
 
+## ZOTEK (ZOYI / BSIDE / ANENG)
+
+- [ZT-300AB, ZT-5B, ZT-5BQ, ZT-5566 family — Bluetooth LE, one protocol with four packet layouts](research/zotek/reverse-engineered-protocol.md)
+  — research only, not implemented. The ANENG AN9002, V05B, ST207 and AN999S
+  are sold as rebrands (matched by specs and keys; AN999S ≈ ZT-5566S/SE).
+
 ## Shared infrastructure
 
 Families that use a `0xAB 0xCD` header share a framing skeleton but
@@ -39,7 +45,9 @@ checksum) plus a 16-bit **little-endian** sum. UT8802 uses a `0xAC`
 single-byte header with BCD frames and no checksum, and UT803/UT804 —
 and the UT71 and VC920/VC940/VC960 with them — send proprietary
 structured data in 11-byte packets ending CR LF — see the per-family
-docs for the exact wire format.
+docs for the exact wire format. The ZOTEK meters (research only) stream
+XOR-scrambled `5A A5` packets with no checksum and take `AB CD` commands
+with no length byte and a 16-bit big-endian sum.
 
 The UART byte stream is transport-agnostic within each family. Three
 HID bridge chips and one Bluetooth adapter appear across the supported

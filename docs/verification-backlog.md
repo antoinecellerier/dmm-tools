@@ -23,6 +23,7 @@ Items that need real components or specific setups to verify.
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
+  - [ZOTEK (ZOYI / ANENG / BSIDE): open questions before an implementation](#zotek-zoyi--aneng--bside-open-questions-before-an-implementation)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
@@ -1681,6 +1682,48 @@ port scan** (80, 111, 5025, 49152 by firmware version).
   the UT8805A's `READ?` sign quirk; open-circuit replies for continuity and
   diode; the reading-memory size. The range ladders and NPLC lists per
   model, which gate the spec tables.
+
+### ZOTEK (ZOYI / ANENG / BSIDE): open questions before an implementation
+
+Specified 2026-09-25 from ZOTEK's three apps and six manuals
+(`docs/research/zotek/reverse-engineered-protocol.md`, §10). Not implemented;
+nobody on the project owns one, and the clean-room boundary is still closed.
+One capture settles the most at once: **the name a meter advertises and a few
+seconds of its raw FFF4 notifications**, with the model, the function shown
+and the LCD reading noted.
+
+- **Model ↔ type byte.** Inferred from the layout names only: ZT-5BQ → 1,
+  ZT-5B → 2, ZT-300AB → 3, ZT-5566 family → 4. Unconfirmed for every model,
+  and for each rebrand separately: ANENG AN9002, V05B, ST207, AN999S, and
+  BSIDE's ZT-300AB, ZT-5B, ZT-5BQ and ZT5566. The ZT-6S has no evidence of
+  any kind.
+- **ZT-5566 readings.** Both ZT-5566 manuals document a Bluetooth speaker,
+  and the SE manual's app section names only other models; whether any
+  ZT-5566 variant streams readings at all.
+- **Advertised name.** "Bluetooth DMM" per the apps and manuals; which
+  models, if any, advertise the "ZY" the older apps also accept; whether the
+  name sits in the advertisement or the scan response.
+- **Notification length** per type. The apps read at least 10, 10, 11 and
+  19 bytes; whether the meter sends more.
+- **Write characteristic.** The older apps notify and write on FFF4; the
+  current one picks by property. Whether FFF4 takes writes on a real meter,
+  and whether write without response, write with response or both (V1
+  writes without response; V2's runtime uses the characteristic's default).
+- **Replies.** Whether a key press draws an `AB`-led notification (the older
+  app logs and drops those of 10 bytes or more as replies), and its format.
+- **Keys.** Which of the key codes each type honours; what `C8`-`CB` each
+  select (the apps disagree on the AC codes); whether the ZT-300AB, a rotary-dial meter, acts on any.
+- **Clock set.** Whether a type-4 meter needs or acts on cmd `04`; only the
+  older apps send it, after the first type-4 packet and then every half hour.
+- **Unread bits.** Type 3 byte 10 bits 7-4 (TRUE RMS, the one ZT-300AB legend
+  item with no bit?); type 4 bytes 14-15 (the bar graph?), byte 3 bit 0, byte
+  13 bits 5 and 0, byte 16 bits 3-0, byte 17 bits 7-4, byte 18 except bit 4. Unnamed:
+  `power` (types 1, 2), `vfc` and `l1_power` (type 4).
+- **Special displays.** Which digit positions each word uses (the two apps'
+  rules differ); what the number of dashes
+  means in NCV; whether a type-4 meter shows words; what a packet with two DP
+  bits means; the type-4 colon.
+- **Rate.** Notifications per second against the LCD's 3 updates a second.
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 
