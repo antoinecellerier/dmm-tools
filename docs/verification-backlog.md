@@ -1081,9 +1081,10 @@ frames on record; the UT202BT has no capture anywhere.
   order confirmed on a meter: the UT60BT's SELECT, the UT202BT's
   0x31/0x33/0x35.
 - **Handshake order.** Community sources say the meter ignores 0x5D until it
-  has answered 0x5F. `auto` sends 0x5F first; a named `--device ut60bt` or
-  `ut202bt` opens with 0x5D alone, and falls back to polling with 0x5E
-  after a silent read. Check both paths on a meter.
+  has answered 0x5F (ut61-family spec §6.4). The UT60BT and UT202BT are
+  sent 0x5F, waited for, then 0x5D; a meter with no name reply is started
+  anyway, and a silent stream falls back to polling with 0x5E. Check on a
+  UT60BT or UT202BT that readings start, named and `auto`.
 - **Spec tables.** None until a meter confirms the range tables; the
   manuals' spec pages are the source then.
 

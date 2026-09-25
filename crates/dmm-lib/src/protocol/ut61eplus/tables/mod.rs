@@ -94,6 +94,12 @@ pub trait DeviceTable: Send {
         super::UT61EPLUS_COMMANDS
     }
 
+    /// Whether the meter wants Get Name answered before it starts streaming
+    /// over Bluetooth (family spec §6.4). Default: no.
+    fn name_before_stream(&self) -> bool {
+        false
+    }
+
     /// What the capture asks for the duty-cycle step.
     fn duty_instruction(&self) -> &'static str {
         FAMILY_DUTY_INSTRUCTION
@@ -186,6 +192,9 @@ pub(crate) trait ModeTables: Send {
     /// Returned by `DeviceTable::duty_instruction`.
     const DUTY_INSTRUCTION: &'static str = FAMILY_DUTY_INSTRUCTION;
 
+    /// Returned by `DeviceTable::name_before_stream`.
+    const NAME_BEFORE_STREAM: bool = false;
+
     /// Returned by `DeviceTable::capture_steps`. Default: the family list.
     fn capture_steps(&self) -> Option<Vec<CaptureStep>> {
         None
@@ -228,6 +237,10 @@ impl<T: ModeTables> DeviceTable for T {
 
     fn duty_instruction(&self) -> &'static str {
         T::DUTY_INSTRUCTION
+    }
+
+    fn name_before_stream(&self) -> bool {
+        T::NAME_BEFORE_STREAM
     }
 
     fn capture_steps(&self) -> Option<Vec<CaptureStep>> {

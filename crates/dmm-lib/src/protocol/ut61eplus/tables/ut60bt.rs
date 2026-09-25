@@ -128,6 +128,9 @@ impl ModeTables for Ut60btTable {
     const COMMANDS: &'static [&'static str] = &["hold", "range", "auto", "rel", "select"];
     /// Its Hz/% position takes SELECT (manual §VIII).
     const DUTY_INSTRUCTION: &'static str = "Hz/% position: press SELECT for Duty %.";
+    /// UNI-T's app asks the name first, and a UT60BT is reported to need it
+    /// (family spec §6.4).
+    const NAME_BEFORE_STREAM: bool = true;
     const MODES: &'static [Mode] = &[
         Mode::AcV,
         Mode::AcMv,

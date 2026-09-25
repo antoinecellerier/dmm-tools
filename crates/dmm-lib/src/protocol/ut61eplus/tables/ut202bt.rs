@@ -115,6 +115,9 @@ impl ModeTables for Ut202btTable {
     /// (family spec §6.5). Its other bytes, 0x31-0x37, have no command here;
     /// Peak stays off until 0x37 or 0x4D is known to start it.
     const COMMANDS: &'static [&'static str] = &["hold", "range"];
+    /// UNI-T's app asks the name first, and a UT60BT is reported to need it
+    /// (family spec §6.4).
+    const NAME_BEFORE_STREAM: bool = true;
     const MODES: &'static [Mode] = &[
         Mode::AcV,
         Mode::DcV,

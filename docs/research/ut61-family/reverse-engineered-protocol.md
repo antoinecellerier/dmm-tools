@@ -22,6 +22,8 @@ Confidence levels:
 - **[VENDOR]** — confirmed by decompiling UNI-T's official software
 - **[VENDOR-DOC]** — stated in UNI-T's published protocol deck
 - **[MANUAL]** — stated in UNI-T's official user manual
+- **[COMMUNITY]** — reported by a community source; the sources are in a
+  cross-reference section
 - **[DEDUCED]** — logical inferences not yet verified against hardware
 - **[UNVERIFIED]** — requires real device testing
 
@@ -604,6 +606,20 @@ Our UT61E+ over CP2110, leads open: `dmm-cli set hold on`, one raw
   with HOLD lit, and the owner found the buttons ignored by hand. Section 3.1
   gives that position a Hz/% ring and no SELECT ring. Range and Auto under
   HOLD are unasked on the B+.
+
+### 6.4 Start order over Bluetooth — [VENDOR]
+
+UNI-T's iDMM2.0 app opens every Bluetooth link to the family the same way:
+Get Name (0x5F), then, once the name frame is back, 0x5D once. It never
+polls with 0x5E. That holds for the UT60BT and UT202BT and for the UT61+ and
+UT161 behind a UT-D07B.
+
+- **A UT60BT ignores 0x5D until it has answered 0x5F** — [COMMUNITY], a live
+  capture (UT61E+ spec §7). [UNVERIFIED] here: no UT60BT or UT202BT has been
+  connected.
+- **Behind a UT-D07B the order does not matter** — [VERIFIED] on our UT61E+:
+  0x5D alone starts the readings, the adapter acting on it itself
+  (`../ut-d07b/reverse-engineered-protocol.md` §3).
 
 ---
 
