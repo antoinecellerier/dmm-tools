@@ -119,3 +119,18 @@ fn a_named_device_is_not_detected() {
     assert!(!stderr.contains("Detected"), "got {stderr}");
     assert!(!stderr.contains("Auto-detecting"), "got {stderr}");
 }
+
+/// The ZT-5B mock opens as itself: its own keys, its AUTO word, and a
+/// refusal the ZOTEK driver makes rather than the UT61E+ mock's.
+#[test]
+fn the_zt5b_mock_opens_as_its_own_device() {
+    let (stdout, _) = run(&["--device", "mock-zt5b", "read", "--count", "1"]);
+    assert_eq!(stdout.trim(), "Auto", "got {stdout}");
+    let (stdout, _) = run(&["--device", "mock-zt5b", "command", "volts"]);
+    assert_eq!(stdout.trim(), "Sent volts");
+    let (_, stderr) = run(&["--device", "mock-zt5b", "command", "zero"]);
+    assert!(
+        stderr.contains("ZERO works in capacitance only"),
+        "got {stderr}"
+    );
+}

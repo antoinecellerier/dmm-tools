@@ -18,10 +18,12 @@ use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::cycle::{self, CycleButton, CycleMeter, FlagSetting};
+use crate::protocol::registry::SelectableDevice;
 use crate::protocol::ut61eplus::mode::Mode;
 use crate::protocol::ut61eplus::specs::SpecModel;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use crate::protocol::ut61eplus::tables::{self, DeviceTable};
+use crate::protocol::zotek;
 use crate::protocol::{Choice, DeviceProfile, Protocol, Setting, Stability, unsupported_setting};
 use crate::transport::{NullTransport, Transport};
 use scenarios::{AuxSpec, Scenario, scenarios};
@@ -834,6 +836,28 @@ pub fn open_mock_clocked(mode: Option<MockMode>, clock: Clock) -> Result<Dmm<Nul
     Ok(dmm.with_clock(clock))
 }
 
+/// Open the simulated registry entry `device` on `clock`: the UT61E+ mock,
+/// pinned to `mode` when one is given, or the ZT-5B one, which has no
+/// scenarios and ignores `mode`, as `--mock-mode` documents for every
+/// device but `mock`.
+///
+/// What both binaries open for an entry that needs no hardware, so a new
+/// simulated device needs no change in either.
+pub fn open_simulated(
+    device: &SelectableDevice,
+    mode: Option<MockMode>,
+    clock: Clock,
+) -> Result<Dmm<NullTransport>> {
+    match device.id {
+        "mock" => open_mock_clocked(mode, clock),
+        zotek::sim::MOCK_ID => {
+            let protocol = zotek::sim::MockZt5b::new(clock.clone());
+            Ok(Dmm::new(NullTransport, Box::new(protocol))?.with_clock(clock))
+        }
+        other => Err(Error::UnknownDevice(format!("{other} is not simulated"))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -870,6 +894,28 @@ mod tests {
             assert_eq!(info.mode.label(), info.label);
             assert_eq!(info.mode.to_string(), info.label);
         }
+    }
+
+    /// Each entry that needs no hardware opens as the device it names, on
+    /// the clock it is given.
+    #[test]
+    fn open_simulated_opens_each_mock_by_its_entry() {
+        use crate::protocol::registry;
+        let clock = Clock::manual();
+        for device in registry::DEVICES.iter().filter(|d| !d.requires_hardware) {
+            let mut dmm = open_simulated(device, None, clock.clone()).unwrap();
+            let expected = (device.new_protocol)().profile().model_name;
+            assert_eq!(dmm.profile().model_name, expected, "{}", device.id);
+            assert_eq!(dmm.request_measurement().unwrap().timestamp, clock.now());
+        }
+        let ohm = open_simulated(
+            registry::find_device("mock").unwrap(),
+            Some(MockMode::Ohm),
+            clock,
+        );
+        assert_eq!(ohm.unwrap().request_measurement().unwrap().mode, "Ω");
+        let meter = registry::find_device("ut61eplus").unwrap();
+        assert!(open_simulated(meter, None, Clock::real()).is_err());
     }
 
     #[test]

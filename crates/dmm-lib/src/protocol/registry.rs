@@ -7,6 +7,7 @@ use super::ut8803::Ut8803Protocol;
 use super::vc8x0::vc880::Vc880Protocol;
 use super::vc8x0::vc890::Vc890Protocol;
 use super::zotek::ZotekProtocol;
+use super::zotek::sim::MockZt5b;
 use super::{
     DeviceFamily, Fingerprint, Protocol, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0,
     zotek,
@@ -526,6 +527,23 @@ pub static DEVICES: &[SelectableDevice] = &[
         bluetooth_only: false,
         bluetooth_names: &[],
     },
+    // A ZT-5B for trying the ZOTEK driver and its remote keys on; never
+    // detected and never looked for over Bluetooth.
+    SelectableDevice {
+        id: zotek::sim::MOCK_ID,
+        display_name: "Mock ZT-5B / V05B (simulated)",
+        aliases: &[],
+        requires_hardware: false,
+        activation_instructions: ACTIVATION_MOCK,
+        family: DeviceFamily::Mock,
+        new_protocol: factory::<MockZt5b>,
+        fingerprint: None,
+        manual_url: Some(
+            "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#zotek-mock",
+        ),
+        bluetooth_only: false,
+        bluetooth_names: &[],
+    },
 ];
 
 /// The `--device` / `device_family` value that names no meter and asks for
@@ -912,10 +930,25 @@ mod tests {
         }
     }
 
-    /// The mock is on no cable, so nothing can identify it from the wire.
+    /// The mocks are on no cable or radio, so nothing can identify them from
+    /// the wire, and no Bluetooth search looks for them.
     #[test]
-    fn the_mock_carries_no_fingerprint() {
-        assert!(find_device("mock").unwrap().fingerprint.is_none());
+    fn the_mocks_carry_no_fingerprint_and_no_radio() {
+        let mocks: Vec<&str> = DEVICES
+            .iter()
+            .filter(|d| !d.requires_hardware)
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(mocks, ["mock", "mock-zt5b"]);
+        for id in mocks {
+            let device = find_device(id).unwrap();
+            assert!(device.fingerprint.is_none(), "{id}");
+            assert!(
+                !device.bluetooth_only && device.bluetooth_names.is_empty(),
+                "{id}"
+            );
+            assert_eq!(device.family, DeviceFamily::Mock, "{id}");
+        }
     }
 
     /// A peer's name finds the meters that advertise it, by prefix and in

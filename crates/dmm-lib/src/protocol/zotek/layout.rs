@@ -771,6 +771,49 @@ impl Layout {
             unrecognised.report("annunciator bits");
         }
     }
+
+    /// A descrambled packet of a types 1-3 layout showing `cells`, most
+    /// significant first, with the minus if `negative`, and each of `lit`
+    /// lit: the inverse of [`decode`], for the simulated meter. A prefix is
+    /// found by the prefix alone, whatever units it attaches to. `None` for
+    /// type 4's digits, or a meaning the layout has no bit for; a silent bit
+    /// is never looked up, as several share the meaning.
+    pub(super) fn draw(
+        &self,
+        cells: &[Cell; 4],
+        negative: bool,
+        lit: &[Meaning],
+    ) -> Option<Vec<u8>> {
+        if self.digits != Digits::Split {
+            return None;
+        }
+        let mut packet = vec![0u8; frame::packet_len(self.type_byte)?];
+        packet[..HEADER.len()].copy_from_slice(&HEADER);
+        packet[TYPE_AT] = self.type_byte;
+        // Digit i's high nibble in byte 3+i and its low nibble in byte 4+i;
+        // byte 3 bit 4 is the minus and bytes 4-6 bit 4 the points
+        // (spec §6.2).
+        for (i, cell) in cells.iter().enumerate() {
+            let segments = cell.glyph.segments();
+            packet[3 + i] |= segments & 0xF0;
+            packet[4 + i] |= segments & 0x0F;
+            if cell.dp && i > 0 {
+                packet[3 + i] |= glyph::DP;
+            }
+        }
+        if negative {
+            packet[3] |= glyph::DP;
+        }
+        for &meaning in lit {
+            let bit = self.bits.iter().find(|b| match (b.meaning, meaning) {
+                (_, Meaning::Silent) => false,
+                (Meaning::Prefix(have, _), Meaning::Prefix(want, _)) => have == want,
+                (have, want) => have == want,
+            })?;
+            packet[bit.byte] |= bit.mask;
+        }
+        Some(packet)
+    }
 }
 
 /// The secondary display as a sub-value, where its unit is lit (spec
@@ -1734,6 +1777,47 @@ mod tests {
         let m = quiet(&t2(" 0L ", Some(1), &[(8, 0x22)]));
         assert!(matches!(m.value, MeasuredValue::Overload));
         assert_eq!(m.mode, "Diode");
+    }
+
+    /// `draw` is `t2`'s packet, and what `decode` reads back.
+    #[test]
+    fn type2_draw_is_the_inverse_of_decode() {
+        let cells = |glyphs: &str, dp_at: Option<usize>| -> [Cell; 4] {
+            let mut out = [BLANK; 4];
+            for (i, c) in glyphs.chars().enumerate() {
+                out[i] = Cell {
+                    glyph: Glyph::from_segments(segments(c)),
+                    dp: dp_at == Some(i),
+                };
+            }
+            out
+        };
+        let lit = [
+            Meaning::Unit(Unit::Ohm),
+            Meaning::Prefix(Prefix::Kilo, &[]),
+            Meaning::Hold,
+        ];
+        let packet = ZT5B.draw(&cells("4700", Some(1)), false, &lit).unwrap();
+        assert_eq!(packet, t2("4700", Some(1), &[(9, 0x03), (3, 0x02)]));
+        let m = quiet(&packet);
+        assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("Ω", "kΩ"));
+        assert_eq!(flags_set(&m), ["hold"]);
+
+        let negative = ZT5B.draw(&cells("1234", Some(2)), true, &[Meaning::Dc]);
+        assert_eq!(
+            negative.unwrap(),
+            split_packet(2, "1234", Some(2), true, &[(8, 0x04)])
+        );
+        // No REL bit on type 2, no split digits on type 4, no silent lookups.
+        assert!(
+            ZT5B.draw(&cells("1234", None), false, &[Meaning::Rel])
+                .is_none()
+        );
+        assert!(ZT5566SE.draw(&cells("1234", None), false, &[]).is_none());
+        assert!(
+            ZT5B.draw(&cells("1234", None), false, &[Meaning::Silent])
+                .is_none()
+        );
     }
 
     // --- Every layout -----------------------------------------------------

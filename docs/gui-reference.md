@@ -30,8 +30,10 @@ default, works out which meter is connected from its replies
 a UT61+/UT161 beep once.
 
 The other choices are every supported model (see [supported
-devices](supported-devices.md)) and **Mock (simulated)**, which generates
-synthetic measurements without hardware; picking one skips detection. The
+devices](supported-devices.md)), **Mock (simulated)**, which generates
+synthetic measurements without hardware, and **Mock ZT-5B / V05B
+(simulated)**, which simulates a ZOTEK meter ([what its keys
+do](cli-reference.md#zotek-mock)); picking one skips detection. The
 selection persists across sessions and requires a reconnect to take effect.
 When the connected protocol is not fully verified, an orange
 **EXPERIMENTAL** badge appears in the top bar; hovering it says how far the

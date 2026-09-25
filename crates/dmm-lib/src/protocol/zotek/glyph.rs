@@ -36,33 +36,52 @@ pub(super) enum Glyph {
     Unknown(u8),
 }
 
+/// Each glyph §6.1 lists, with the segment byte that draws it.
+const TABLE: [(u8, Glyph); 22] = [
+    (0xEB, Glyph::Digit(0)),
+    (0x0A, Glyph::Digit(1)),
+    (0xAD, Glyph::Digit(2)),
+    (0x8F, Glyph::Digit(3)),
+    (0x4E, Glyph::Digit(4)),
+    (0xC7, Glyph::Digit(5)),
+    (0xE7, Glyph::Digit(6)),
+    (0x8A, Glyph::Digit(7)),
+    (0xEF, Glyph::Digit(8)),
+    (0xCF, Glyph::Digit(9)),
+    (0xEE, Glyph::A),
+    (0xE5, Glyph::E),
+    (0xE4, Glyph::F),
+    (0x61, Glyph::L),
+    (0x27, Glyph::O),
+    (0x23, Glyph::U),
+    (0x65, Glyph::T),
+    (0x04, Glyph::Dash),
+    (0x67, Glyph::B),
+    (0xE1, Glyph::C),
+    (0x2F, Glyph::D),
+    (0x00, Glyph::Blank),
+];
+
 impl Glyph {
     /// The glyph a segment byte draws, its DP bit ignored (spec §6.1).
     pub(super) fn from_segments(code: u8) -> Self {
-        match code & !DP {
-            0xEB => Glyph::Digit(0),
-            0x0A => Glyph::Digit(1),
-            0xAD => Glyph::Digit(2),
-            0x8F => Glyph::Digit(3),
-            0x4E => Glyph::Digit(4),
-            0xC7 => Glyph::Digit(5),
-            0xE7 => Glyph::Digit(6),
-            0x8A => Glyph::Digit(7),
-            0xEF => Glyph::Digit(8),
-            0xCF => Glyph::Digit(9),
-            0xEE => Glyph::A,
-            0xE5 => Glyph::E,
-            0xE4 => Glyph::F,
-            0x61 => Glyph::L,
-            0x27 => Glyph::O,
-            0x23 => Glyph::U,
-            0x65 => Glyph::T,
-            0x04 => Glyph::Dash,
-            0x67 => Glyph::B,
-            0xE1 => Glyph::C,
-            0x2F => Glyph::D,
-            0x00 => Glyph::Blank,
-            other => Glyph::Unknown(other),
+        let code = code & !DP;
+        TABLE
+            .iter()
+            .find(|(c, _)| *c == code)
+            .map_or(Glyph::Unknown(code), |(_, glyph)| *glyph)
+    }
+
+    /// The segment byte that draws the glyph, DP clear: the inverse of
+    /// [`Glyph::from_segments`], for the simulated meter. A digit past 9
+    /// draws a blank.
+    pub(super) fn segments(self) -> u8 {
+        match self {
+            Glyph::Unknown(code) => code,
+            glyph => TABLE
+                .iter()
+                .find(|(_, g)| *g == glyph)
+                .map_or(0, |(code, _)| *code),
         }
     }
 
@@ -271,6 +290,16 @@ pub(super) mod tests {
         assert_eq!(Glyph::from_segments(0x10), Glyph::Blank);
         assert_eq!(Glyph::from_segments(0x01), Glyph::Unknown(0x01));
         assert_eq!(Glyph::from_segments(0x11), Glyph::Unknown(0x01));
+    }
+
+    /// `segments` draws what `from_segments` reads, for every glyph.
+    #[test]
+    fn segments_is_the_inverse_of_from_segments() {
+        for c in "0123456789AEFLout-bCd ".chars() {
+            let glyph = Glyph::from_segments(segments(c));
+            assert_eq!(glyph.segments(), segments(c), "{c:?}");
+        }
+        assert_eq!(Glyph::Unknown(0x01).segments(), 0x01);
     }
 
     #[test]

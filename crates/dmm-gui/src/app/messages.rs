@@ -487,7 +487,7 @@ impl App {
                     handle_thread_panic(panic, &panic_tx, &panic_ctx);
                 }
             });
-        } else if device_entry.is_some_and(|d| !d.requires_hardware) {
+        } else if let Some(device) = device_entry.filter(|d| !d.requires_hardware) {
             let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
                 None
             } else {
@@ -521,7 +521,7 @@ impl App {
                         // `Dmm` it opens. Nothing to detect — the mock is
                         // what it says it is.
                         move |_| {
-                            dmm_lib::mock::open_mock_clocked(mock_mode, clock.clone())
+                            dmm_lib::mock::open_simulated(device, mock_mode, clock.clone())
                                 .map(|dmm| (dmm, None))
                         },
                         ThreadContext {

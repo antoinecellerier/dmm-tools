@@ -76,6 +76,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
 | `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
+| `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->
 
 **Experimental** families were reverse-engineered from vendor software and
@@ -88,6 +89,10 @@ verification issue on GitHub. Please report findings there.
 The `mock` device generates synthetic measurements without hardware, cycling
 through the scenarios listed under [Mock modes](#mock-modes); `--mock-mode`
 pins one. It supports `read`, `command`, `get` and `set`.
+
+The `mock-zt5b` device simulates a ZT-5B / V05B, to try the ZOTEK remote keys
+without a meter. It supports `read` and `command`, and starts on the `Auto`
+word each run; [ZOTEK mock](#zotek-mock) lists what its keys do.
 
 **Examples:**
 
@@ -649,6 +654,28 @@ dmm-cli completions powershell >> $PROFILE
 
 ```bash
 dmm-cli --device mock read --mock-mode dcv
+```
+
+### ZOTEK mock
+
+What each key does on `--device mock-zt5b`. The keys do what ZOTEK's app
+intends; no meter has confirmed them.
+
+| Key | The simulated meter shows |
+|---|---|
+| `auto_function` | The `Auto` word, then a 9 V battery (DC V), a 4.7 kΩ resistor, open (OL) now and then, and the mains (AC V, `[HV!]`), the word between each; where it starts |
+| `volts` | The battery and the mains in turn |
+| `capacitance` | The open leads' stray capacitance, then a 100 nF capacitor |
+| `zero` | In capacitance, the reading taken as zero |
+| `hz` | The mains frequency |
+| `diode_continuity` | A diode, reversed (OL) now and then; pressed again, swaps diode and continuity |
+| `ncv` | `EF`, then one to four dashes as a live wire nears, and back |
+| `current` | A DC mA current |
+| `temp_unit` | °C; pressed again, °F |
+| `hold` | The display frozen until pressed again or a function key |
+
+```bash
+dmm-cli --device mock-zt5b read
 ```
 
 ### Capture plan files

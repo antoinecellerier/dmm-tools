@@ -14,12 +14,14 @@
 //! - `layout.rs`: each layout's bit table, and packet → `Measurement`
 //! - `keys.rs`: the remote keys each layout offers, and their frames
 //! - `capture.rs`: the capture steps per layout
+//! - `sim.rs`: a simulated ZT-5B, the `mock-zt5b` device
 
 mod capture;
 mod frame;
 mod glyph;
 mod keys;
 mod layout;
+pub(crate) mod sim;
 
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;

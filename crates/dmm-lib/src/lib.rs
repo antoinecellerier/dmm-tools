@@ -1439,13 +1439,17 @@ mod tests {
         );
     }
 
-    /// The mock needs no cable, and offering it as a candidate on a bridge
-    /// that answered nothing would send the user looking for a meter that
-    /// does not exist.
+    /// The mocks need no cable or radio, and offering one as a candidate on
+    /// a link that answered nothing would send the user looking for a meter
+    /// that does not exist.
     #[test]
-    fn no_bridge_lists_the_mock() {
-        for kt in KNOWN_TRANSPORTS {
-            assert!(devices_on_bridge(kt.name).iter().all(|d| d.id != "mock"));
+    fn no_link_lists_a_mock() {
+        let links = KNOWN_TRANSPORTS.iter().map(|kt| kt.name).chain([BLUETOOTH]);
+        for link in links {
+            assert!(
+                devices_on_bridge(link).iter().all(|d| d.requires_hardware),
+                "{link}"
+            );
         }
     }
 

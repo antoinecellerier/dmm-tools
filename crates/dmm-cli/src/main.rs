@@ -1271,7 +1271,7 @@ fn cmd_read(
             transform,
         )
     } else {
-        let mut dmm = open_mock_device(mock_mode, clock)?;
+        let mut dmm = open_mock_device(selection, mock_mode, clock)?;
         info!("mock device connected, starting measurement loop");
         // Mock returns instantly — use 100ms floor to simulate ~10 Hz
         let interval_ms = if interval_ms == 0 { 100 } else { interval_ms };
@@ -1485,13 +1485,15 @@ fn refuse_clock_on_hardware(
     Ok(())
 }
 
-/// Open the mock on `clock`, pinned to `mock_mode` when one was given.
+/// Open the simulated device `selection` names on `clock`, the UT61E+ mock
+/// pinned to `mock_mode` when one was given.
 ///
-/// Shared by every subcommand that takes `--mock-mode`, so an unknown mode
-/// name is rejected with the same message (and the same list of valid names)
-/// wherever it is passed. Only `read` has clock flags; the others pass
-/// [`dmm_lib::Clock::real`].
+/// Shared by every subcommand that opens a device needing no hardware, so an
+/// unknown mode name is rejected with the same message (and the same list of
+/// valid names) wherever it is passed. Only `read` has clock flags; the
+/// others pass [`dmm_lib::Clock::real`].
 fn open_mock_device(
+    selection: Selection,
     mock_mode: Option<String>,
     clock: dmm_lib::Clock,
 ) -> Result<dmm_lib::Dmm<dmm_lib::transport::NullTransport>, Box<dyn std::error::Error>> {
@@ -1503,7 +1505,11 @@ fn open_mock_device(
         ),
         None => None,
     };
-    Ok(dmm_lib::mock::open_mock_clocked(mode, clock)?)
+    // Auto is a cable to open and never lands here.
+    let Selection::Device(device) = selection else {
+        return Err(format!("--device {} is not simulated", selection_id(selection)).into());
+    };
+    Ok(dmm_lib::mock::open_simulated(device, mode, clock)?)
 }
 
 /// Shared measurement loop for both real and mock devices.
@@ -1729,7 +1735,7 @@ fn cmd_command(
         let (mut dmm, _device) = open_with_help(selection, opts)?;
         dmm.send_command(&action)?;
     } else {
-        let mut dmm = dmm_lib::mock::open_mock()?;
+        let mut dmm = open_mock_device(selection, None, dmm_lib::Clock::real())?;
         dmm.send_command(&action)?;
     }
     println!("{} {action}", style("Sent").green());
@@ -1890,7 +1896,7 @@ fn cmd_get(
         let (mut dmm, _device) = open_with_help(selection, opts)?;
         run_get(&mut dmm, setting, format)
     } else {
-        let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
+        let mut dmm = open_mock_device(selection, mock_mode, dmm_lib::Clock::real())?;
         run_get(&mut dmm, setting, format)
     }
 }
@@ -1908,7 +1914,7 @@ fn cmd_set(
         let (mut dmm, _device) = open_with_help(selection, opts)?;
         run_set(&mut dmm, setting, choice)
     } else {
-        let mut dmm = open_mock_device(mock_mode, dmm_lib::Clock::real())?;
+        let mut dmm = open_mock_device(selection, mock_mode, dmm_lib::Clock::real())?;
         run_set(&mut dmm, setting, choice)
     }
 }
