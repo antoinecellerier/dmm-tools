@@ -92,12 +92,24 @@ struct FamilyEvidence {
 /// where its frames cannot arrive — without this module knowing either bridge
 /// by name. A family has one fingerprint and several entries point at it, so
 /// the list is deduplicated by identity.
-fn fingerprints_on(bridge: &str) -> Vec<&'static Fingerprint> {
+///
+/// `named` narrows it further: the meters the peer's advertised name belongs
+/// to ([`crate::built_in_meters`]). Such a meter's name already says which
+/// families it can be, so the other families' probes stay off it. Empty —
+/// an adapter, a cable, a peer no name was heard from — leaves the bridge's
+/// whole set.
+fn fingerprints_on(bridge: &str, named: &[&'static SelectableDevice]) -> Vec<&'static Fingerprint> {
+    let entries = if named.is_empty() {
+        crate::devices_on_bridge(bridge)
+    } else {
+        named
+            .iter()
+            .copied()
+            .filter(|d| crate::is_on_bridge(d, bridge))
+            .collect()
+    };
     let mut carried: Vec<&'static Fingerprint> = Vec::new();
-    for fp in crate::devices_on_bridge(bridge)
-        .iter()
-        .filter_map(|d| d.fingerprint)
-    {
+    for fp in entries.iter().filter_map(|d| d.fingerprint) {
         if !carried.iter().any(|seen| std::ptr::eq(*seen, fp)) {
             carried.push(fp);
         }
@@ -163,7 +175,19 @@ fn probe_order(carried: &[&'static Fingerprint]) -> Vec<&'static Fingerprint> {
 /// back; the receive buffer persists across steps, so a meter that speaks
 /// slowly still gets the whole cascade's worth of time.
 pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<Detected> {
-    let carried = fingerprints_on(bridge);
+    detect_among(transport, bridge, &crate::built_in_meters(transport))
+}
+
+/// [`detect_device`], `named` being the meters the peer's advertised name
+/// belongs to: their fingerprints alone run, and when the name is one
+/// meter's alone, that meter is what a frame naming no model falls back to.
+/// Several meters sharing a name leave the fallback to the frames.
+fn detect_among(
+    transport: &dyn Transport,
+    bridge: &'static str,
+    named: &[&'static SelectableDevice],
+) -> Result<Detected> {
+    let carried = fingerprints_on(bridge, named);
     let probes = probe_order(&carried);
     // A bridge no probe belongs to gets one listen window per family it
     // carries instead: those meters stream on their own, and the window
@@ -176,7 +200,10 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
 
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_RX_BUF);
     let mut probing = Probing {
-        advertised: transport.built_in_meter(),
+        advertised: match named {
+            [one] => Some(*one),
+            _ => None,
+        },
         ..Probing::default()
     };
     // A frame that settles the family but not the model — a bare UT61+
@@ -237,7 +264,7 @@ pub fn detect_device(transport: &dyn Transport, bridge: &'static str) -> Result<
     debug!("detect: nothing recognisable on {bridge}");
     Err(Error::DeviceNotIdentified {
         bridge,
-        built_in_radio: transport.built_in_radio(),
+        built_in_radio: !named.is_empty(),
     })
 }
 
@@ -416,7 +443,7 @@ fn classify(
 /// that says which and why.
 ///
 /// A meter with the radio built in named its model in the name it advertises
-/// (`advertised`, [`Transport::built_in_meter`]), and its ranges are not the
+/// (`advertised`, when that name is its alone), and its ranges are not the
 /// family fallback's: a UT60BT's V position starts at 999.9mV, the UT61E+'s
 /// at 2.2V (ut61-family spec §9). Every other link — an adapter, a cable —
 /// gets the fingerprint's fallback.
@@ -683,19 +710,23 @@ mod tests {
         );
     }
 
-    /// A Bluetooth peer whose advertised name matched a meter with the radio
-    /// built in, as `Ble` reports one.
+    /// A Bluetooth peer that advertises `name`, as `Ble` reports one.
     struct Advertising {
         inner: MockTransport,
-        meter: &'static SelectableDevice,
+        name: &'static str,
     }
 
     impl Advertising {
-        fn ut60bt(responses: Vec<Vec<u8>>) -> Self {
+        fn new(name: &'static str, responses: Vec<Vec<u8>>) -> Self {
             Self {
                 inner: MockTransport::new(responses),
-                meter: registry::find_device("ut60bt").unwrap(),
+                name,
             }
+        }
+
+        /// The name one UT60BT advertises.
+        fn ut60bt(responses: Vec<Vec<u8>>) -> Self {
+            Self::new("UT60BTk", responses)
         }
     }
 
@@ -712,9 +743,117 @@ mod tests {
             self.inner.send_feature_report(data)
         }
 
-        fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
-            Some(self.meter)
+        fn advertised_name(&self) -> Option<&str> {
+            Some(self.name)
         }
+    }
+
+    /// What a silent peer on the radio, whose writes land in `mock`, was sent
+    /// before detection gave up on it, and whether the error called the link
+    /// a meter's own radio.
+    fn probes_to_silent(transport: &dyn Transport, mock: &MockTransport) -> (Vec<Vec<u8>>, bool) {
+        match detect_device(transport, crate::BLUETOOTH) {
+            Err(Error::DeviceNotIdentified { built_in_radio, .. }) => {
+                (mock.written.take(), built_in_radio)
+            }
+            other => panic!("silence identified as {other:?}"),
+        }
+    }
+
+    /// Every probe the Bluetooth link carries, in the order they go out.
+    fn every_bluetooth_probe() -> Vec<Vec<u8>> {
+        vec![
+            Command::GetName.encode().to_vec(),
+            set_monitor_frame(),
+            UT171_CMD_CONNECT.to_vec(),
+        ]
+    }
+
+    /// A meter's own name says which families it can be: a UT60BT gets the
+    /// UT61+ Get Name alone, never the UT181A's or the UT171's probes, and
+    /// the error calls the link its own radio.
+    #[test]
+    fn a_meters_own_name_keeps_the_other_families_probes_off_it() {
+        let meter = Advertising::ut60bt(vec![]);
+        let (sent, built_in_radio) = probes_to_silent(&meter, &meter.inner);
+        assert_eq!(sent, [Command::GetName.encode().to_vec()]);
+        assert!(built_in_radio);
+    }
+
+    /// An adapter's name belongs to no meter, and neither does a peer opened
+    /// by address with no name heard: both get every probe the link carries.
+    #[test]
+    fn a_peer_no_meter_advertises_gets_every_probe() {
+        let adapter = Advertising::new("UT-D07B", vec![]);
+        let (sent, built_in_radio) = probes_to_silent(&adapter, &adapter.inner);
+        assert_eq!(sent, every_bluetooth_probe());
+        assert!(!built_in_radio);
+
+        let unnamed = MockTransport::new(vec![]);
+        let (sent, built_in_radio) = probes_to_silent(&unnamed, &unnamed);
+        assert_eq!(sent, every_bluetooth_probe());
+        assert!(!built_in_radio);
+    }
+
+    /// Two made-up meters with the radio built in that advertise one name,
+    /// on the fingerprints of `families`' first registry entries.
+    fn sharing_a_name(families: [DeviceFamily; 2]) -> Vec<&'static SelectableDevice> {
+        families
+            .into_iter()
+            .zip(["first", "second"])
+            .map(|(family, id)| {
+                let base = registry::DEVICES
+                    .iter()
+                    .find(|d| d.family == family)
+                    .unwrap();
+                &*Box::leak(Box::new(SelectableDevice {
+                    id,
+                    bluetooth_only: true,
+                    bluetooth_names: &["Shared DMM"],
+                    ..*base
+                }))
+            })
+            .collect()
+    }
+
+    /// A name several meters share runs the fingerprints of those meters
+    /// alone, each family's once, and none of the others'.
+    #[test]
+    fn a_shared_name_runs_the_fingerprints_of_the_meters_sharing_it() {
+        let meter = Advertising::new("Shared DMM", vec![]);
+        let named = sharing_a_name([DeviceFamily::Ut171, DeviceFamily::Ut181a]);
+        let err = detect_among(&meter, crate::BLUETOOTH, &named).unwrap_err();
+        assert!(matches!(
+            err,
+            Error::DeviceNotIdentified {
+                built_in_radio: true,
+                ..
+            }
+        ));
+        // The UT181A goes first, as its constraint with the UT171 says.
+        assert_eq!(
+            meter.inner.written.take(),
+            [set_monitor_frame(), UT171_CMD_CONNECT.to_vec()]
+        );
+
+        let meter = Advertising::new("Shared DMM", vec![]);
+        let named = sharing_a_name([DeviceFamily::Ut61EPlus, DeviceFamily::Ut61EPlus]);
+        assert!(detect_among(&meter, crate::BLUETOOTH, &named).is_err());
+        assert_eq!(
+            meter.inner.written.take(),
+            [Command::GetName.encode().to_vec()]
+        );
+    }
+
+    /// A name several meters share names none of them: a frame that names no
+    /// model gets the family's fallback, not one of the sharers.
+    #[test]
+    fn a_shared_name_picks_no_model() {
+        let meter = Advertising::new("Shared DMM", vec![ut61plus_reading()]);
+        let named = sharing_a_name([DeviceFamily::Ut61EPlus, DeviceFamily::Ut61EPlus]);
+        let detected = detect_among(&meter, crate::BLUETOOTH, &named).unwrap();
+        assert_eq!(detected.device.id, "ut61eplus");
+        assert_eq!(detected.reported_name, None);
     }
 
     /// A UT60BT whose name reply went missing still reads with its own
@@ -944,7 +1083,10 @@ mod tests {
     #[test]
     fn the_registry_decides_which_fingerprints_a_bridge_gets() {
         let families = |bridge: &str| -> Vec<DeviceFamily> {
-            fingerprints_on(bridge).iter().map(|fp| fp.family).collect()
+            fingerprints_on(bridge, &[])
+                .iter()
+                .map(|fp| fp.family)
+                .collect()
         };
         // The CH9325 carries the UT80x family (UT803/UT804, UT71, VC9x0)
         // and nothing else.
@@ -987,7 +1129,7 @@ mod tests {
         for bridge in ["CP2110", "CH9329"] {
             assert!(!families(bridge).contains(&DeviceFamily::Ut80x), "{bridge}");
         }
-        assert!(fingerprints_on("no such bridge").is_empty());
+        assert!(fingerprints_on("no such bridge", &[]).is_empty());
     }
 
     /// The `0x0A` constraint, derived: whatever the registry order, the
@@ -996,7 +1138,7 @@ mod tests {
     #[test]
     fn the_ut181a_is_probed_before_the_ut171() {
         for bridge in ["CP2110", "CH9329"] {
-            let order: Vec<DeviceFamily> = probe_order(&fingerprints_on(bridge))
+            let order: Vec<DeviceFamily> = probe_order(&fingerprints_on(bridge, &[]))
                 .iter()
                 .map(|fp| fp.family)
                 .collect();

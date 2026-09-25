@@ -314,8 +314,9 @@ pub(crate) struct Probing {
     /// The families whose trigger has been sent, in the order they went out.
     pub(crate) sent: Vec<DeviceFamily>,
     /// The meter with the radio built in that the peer's advertised name
-    /// picked ([`Transport::built_in_meter`]); `None` on an adapter or a
-    /// cable.
+    /// picked, when that name is one registry entry's alone
+    /// ([`crate::built_in_meters`]); `None` on an adapter or a cable, and
+    /// when several meters share the name.
     pub(crate) advertised: Option<&'static registry::SelectableDevice>,
 }
 

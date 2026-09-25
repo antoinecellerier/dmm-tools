@@ -515,6 +515,29 @@ pub fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice>
         .or_else(|| family().find(|d| d.aliases.iter().any(|a| a.to_lowercase() == wanted)))
 }
 
+/// The entries of the meters with the radio built in that advertise `name`,
+/// in registry order: those whose `bluetooth_names` it carries, by the rule
+/// the Bluetooth search takes a peer with ([`crate::transport::name_matches`]).
+///
+/// Empty for an adapter's name or one no entry lists; several when meters of
+/// different packet layouts share one name, and only their frames can tell
+/// them apart.
+pub(crate) fn advertising(name: &str) -> Vec<&'static SelectableDevice> {
+    advertising_in(DEVICES, name)
+}
+
+/// [`advertising`] over any table, for the shapes today's registry lacks.
+fn advertising_in<'a>(devices: &'a [SelectableDevice], name: &str) -> Vec<&'a SelectableDevice> {
+    devices
+        .iter()
+        .filter(|d| {
+            d.bluetooth_names
+                .iter()
+                .any(|prefix| crate::transport::name_matches(prefix, name))
+        })
+        .collect()
+}
+
 /// Returns the default device entry ("ut61eplus").
 pub fn default_device() -> &'static SelectableDevice {
     find_device("ut61eplus").expect("ut61eplus must be in DEVICES")
@@ -800,6 +823,56 @@ mod tests {
     #[test]
     fn the_mock_carries_no_fingerprint() {
         assert!(find_device("mock").unwrap().fingerprint.is_none());
+    }
+
+    /// A peer's name finds the meters that advertise it, by prefix and in
+    /// any case; an adapter's name, or one no entry lists, finds none.
+    #[test]
+    fn an_advertised_name_finds_the_meters_that_carry_it() {
+        let ids = |name| advertising(name).iter().map(|d| d.id).collect::<Vec<_>>();
+        for (name, id) in [
+            ("UT60BT", "ut60bt"),
+            ("UT60BTk", "ut60bt"),
+            (" ut202bt ", "ut202bt"),
+        ] {
+            assert_eq!(ids(name), [id], "{name:?}");
+        }
+        for name in ["UT-D07B", "UT-D07A", "UT61E+", "UT60", ""] {
+            assert!(ids(name).is_empty(), "{name:?}");
+        }
+    }
+
+    /// A name several entries advertise finds each of them, in table order,
+    /// and only them.
+    #[test]
+    fn a_shared_name_finds_every_meter_that_advertises_it() {
+        let ut60bt = find_device("ut60bt").unwrap();
+        let table = [
+            SelectableDevice {
+                id: "first",
+                bluetooth_names: &["Shared DMM"],
+                ..*ut60bt
+            },
+            SelectableDevice {
+                id: "own",
+                bluetooth_names: &["Own DMM"],
+                ..*ut60bt
+            },
+            SelectableDevice {
+                id: "second",
+                bluetooth_names: &["Own DMM", "Shared DMM"],
+                ..*ut60bt
+            },
+        ];
+        let ids = |name| {
+            advertising_in(&table, name)
+                .iter()
+                .map(|d| d.id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids("shared dmm"), ["first", "second"]);
+        assert_eq!(ids("Own DMM"), ["own", "second"]);
+        assert!(ids("Other DMM").is_empty());
     }
 
     /// A meter with the radio built in is found by its names alone, so it

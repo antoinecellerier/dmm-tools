@@ -27,7 +27,6 @@ mod search;
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
-use crate::protocol::registry::SelectableDevice;
 use crate::transport::{BluetoothPeers, Transport};
 use btleplug::api::{
     Central, CentralState, CharPropFlags, Characteristic, Manager as _, Peripheral as _,
@@ -38,10 +37,7 @@ use fff0::FFF0;
 use futures::stream::{Stream, StreamExt};
 use issc::{ISSC_UART, strip_heartbeats};
 use log::{debug, info, trace};
-use search::{
-    Match, Standing, Target, built_in_meter_named, by_address, is_bd_addr, is_uuid, printable,
-    search,
-};
+use search::{Match, Standing, Target, by_address, is_bd_addr, is_uuid, printable, search};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, VecDeque};
 use std::pin::Pin;
@@ -107,9 +103,9 @@ pub(crate) struct Ble {
     /// What `dmm-cli list` printed for this peer, and what `--adapter`
     /// takes to pin it.
     selector: String,
-    /// The registry entry of the meter with the radio built in that the
-    /// peer's name matched; `None` for an adapter.
-    built_in_meter: Option<&'static SelectableDevice>,
+    /// The name the peer goes by, as the search found it; `None` for one
+    /// opened by address with no name heard.
+    advertised_name: Option<String>,
     /// Drives every btleplug call. Last, so it outlives every field whose
     /// destructor reaches into the stack.
     rt: tokio::runtime::Runtime,
@@ -178,7 +174,7 @@ struct Opened {
     write_char: Characteristic,
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
     selector: String,
-    built_in_meter: Option<&'static SelectableDevice>,
+    advertised_name: Option<String>,
 }
 
 /// Open a peer and subscribe to its notifications.
@@ -196,7 +192,7 @@ fn open(target: Target<'_>) -> Result<Box<dyn Transport>> {
         pending: RefCell::new(VecDeque::new()),
         heartbeats: Cell::new(0),
         selector: opened.selector,
-        built_in_meter: opened.built_in_meter,
+        advertised_name: opened.advertised_name,
     }))
 }
 
@@ -328,7 +324,7 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         write_char,
         notifications,
         selector,
-        built_in_meter: built_in_meter_named(candidate.name.as_deref()),
+        advertised_name: candidate.taken_by,
     })
 }
 
@@ -666,8 +662,8 @@ impl Transport for Ble {
         Some(&self.selector)
     }
 
-    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
-        self.built_in_meter
+    fn advertised_name(&self) -> Option<&str> {
+        self.advertised_name.as_deref()
     }
 }
 

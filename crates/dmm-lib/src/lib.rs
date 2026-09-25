@@ -273,15 +273,35 @@ fn bluetooth_peers(device: Option<&SelectableDevice>) -> BluetoothPeers {
             adapters: true,
             meters: Vec::new(),
         },
-        None => BluetoothPeers {
-            adapters: true,
-            meters: registry::DEVICES
-                .iter()
-                .flat_map(|d| d.bluetooth_names)
-                .copied()
-                .collect(),
-        },
+        None => {
+            // Several meters may advertise one name; the search needs it once.
+            let mut meters: Vec<&'static str> = Vec::new();
+            for name in registry::DEVICES.iter().flat_map(|d| d.bluetooth_names) {
+                if !meters.contains(name) {
+                    meters.push(name);
+                }
+            }
+            BluetoothPeers {
+                adapters: true,
+                meters,
+            }
+        }
     }
+}
+
+/// The entries of the meters with the radio built in whose name the peer on
+/// `transport` advertises ([`registry::advertising`]): what the meter on the
+/// far end can be, before any frame. Empty for an adapter, a cable, or a
+/// peer no name was heard from.
+///
+/// Non-empty is what makes the link a meter's own radio rather than an
+/// adapter in front of one (`built_in_radio`, [`binary_help::Link::full_name`]).
+/// Kept out of the transport, which reports the name alone: which meters
+/// advertise it is the registry's business, and several may.
+pub(crate) fn built_in_meters(transport: &dyn Transport) -> Vec<&'static SelectableDevice> {
+    transport
+        .advertised_name()
+        .map_or_else(Vec::new, registry::advertising)
 }
 
 /// The Bluetooth link, as `--adapter`, `dmm-cli list` and the detection
@@ -602,9 +622,15 @@ fn open_hid_transport(
 pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
     registry::DEVICES
         .iter()
-        .filter(|d| d.requires_hardware)
-        .filter(|d| device_links(d).contains(&bridge))
+        .filter(|d| is_on_bridge(d, bridge))
         .collect()
+}
+
+/// Whether `device` is a hardware meter reachable over `bridge`: the test
+/// [`devices_on_bridge`] applies to the whole registry, for a caller holding
+/// only some of its entries.
+pub(crate) fn is_on_bridge(device: &SelectableDevice, bridge: &str) -> bool {
+    device.requires_hardware && device_links(device).contains(&bridge)
 }
 
 /// Open a specific adapter identified by serial number or HID path.

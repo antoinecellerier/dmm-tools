@@ -135,13 +135,18 @@ unrecognised name falls back to `ut61eplus`, keeps the reported name on `Detecte
 a UT61D+ or a UT161x still reads, with UT61E+ tables, and the user is told which name to
 report so an alias can absorb it.
 
-A meter with Bluetooth built in names its model before any frame: `Ble` matches the name it
-advertises against each entry's `bluetooth_names` and reports that entry as
-`Transport::built_in_meter()`. On such a peer a `FamilyOnly` fallback, and an unrecognised name
-frame too, opens that entry rather than `ut61eplus`, since a UT60BT's V position starts at
-999.9mV where the UT61E+'s starts at 2.2V; the WARN says the tables came from the advertised
-name. A name frame that resolves still outranks the advertised name; if the two disagree, a WARN
-names both and the name frame's entry opens.
+A meter with Bluetooth built in names itself before any frame. `Ble` reports the name the peer
+advertised (`Transport::advertised_name()`), and `built_in_meters()` in `lib.rs` looks it up in
+each entry's `bluetooth_names` (`registry::advertising()`, the prefix rule the search takes the
+peer by). When entries match, detection runs only their fingerprints: a UT60BT gets Get Name and
+never the UT181A's or the UT171's probes. An adapter's name, or a peer opened by address with no
+name heard, matches none and gets the bridge's whole cascade. When exactly one entry matches, a
+`FamilyOnly` fallback, and an unrecognised name frame too, opens that entry rather than
+`ut61eplus`, since a UT60BT's V position starts at 999.9mV where the UT61E+'s starts at 2.2V;
+the WARN says the tables came from the advertised name. A name frame that resolves still
+outranks the advertised name; if the two disagree, a WARN names both and the name frame's entry
+opens. A name several entries share narrows the probes to theirs but picks no model: the frames
+decide, and a frame naming none gets the fingerprint's own fallback.
 
 With nothing identified, `detect_device` returns `Error::DeviceNotIdentified { bridge }`, whose
 `kind()` is `ErrorKind::Timeout` — reconnecting after enabling transmission on the meter does

@@ -4,8 +4,7 @@
 use super::issc::ADAPTER_NAME_PREFIX;
 use super::{SCAN_POLL, SCAN_WINDOW, stack_error};
 use crate::error::Result;
-use crate::protocol::registry::SelectableDevice;
-use crate::transport::BluetoothPeers;
+use crate::transport::{BluetoothPeers, name_matches};
 use btleplug::api::{Central, Peripheral as _, RetrievePeripheralsOptions, ScanFilter};
 use btleplug::platform::{Adapter, Peripheral};
 #[cfg(windows)]
@@ -21,6 +20,10 @@ pub(super) struct Candidate {
     address: String,
     /// The name to show: the host's alias for the device where it has one.
     pub(super) name: Option<String>,
+    /// The name the search took the peer by, for the registry to look up
+    /// (`name_matches`); for a peer picked by address, the name it
+    /// advertises, else [`Candidate::name`].
+    pub(super) taken_by: Option<String>,
     /// How sure we are that it can answer, which orders the candidates.
     pub(super) standing: Standing,
 }
@@ -209,6 +212,7 @@ pub(super) async fn by_address(adapter: &Adapter, selector: Option<&str>) -> Opt
         id: peripheral.id().to_string(),
         address: address.to_string(),
         name: None,
+        taken_by: None,
         standing: Standing::Known,
         peripheral,
     })
@@ -265,10 +269,17 @@ async fn usable(
         let advertised_name = properties
             .as_ref()
             .and_then(|p| p.advertisement_name.clone());
-        let wanted = match target {
-            Target::At(selector) => matches_selector(selector, &id, &address),
-            Target::Named(peers) => takes(peers, name.as_deref(), advertised_name.as_deref()),
+        let (wanted, taken_by) = match target {
+            Target::At(selector) => (
+                matches_selector(selector, &id, &address),
+                advertised_name.as_deref().or(name.as_deref()),
+            ),
+            Target::Named(peers) => {
+                let taken_by = takes(peers, name.as_deref(), advertised_name.as_deref());
+                (taken_by.is_some(), taken_by)
+            }
         };
+        let taken_by = taken_by.map(str::to_string);
         // Every device the stack reports, kept or not: when a peer in range
         // is not found, this line says what the platform made of it.
         debug!(
@@ -293,6 +304,7 @@ async fn usable(
             address,
             // Printed by `list` and `info`: a radio neighbour chooses it.
             name: name.as_deref().map(printable),
+            taken_by,
         });
     }
     usable
@@ -326,39 +338,28 @@ fn matches_selector(selector: &str, id: &str, address: &str) -> bool {
         || (!address.is_empty() && selector.eq_ignore_ascii_case(address))
 }
 
-/// Whether `peers` takes a peripheral, by the name it advertises or the
-/// host's alias for it: one starting with [`ADAPTER_NAME_PREFIX`] when
-/// adapters are taken, or with one of the meters' prefixes, in any case.
+/// The name `peers` takes a peripheral by, of the host's alias for it and
+/// the name it advertises: one carrying [`ADAPTER_NAME_PREFIX`] when adapters
+/// are taken, or one of the meters' prefixes ([`name_matches`]). `None` when
+/// neither is taken.
 ///
 /// The name alone. UNI-T's iDMM2.0 app picks the meters with the radio built
-/// in by name alone, and one UT60BT advertises `UT60BTk`, hence a prefix
-/// (`docs/research/new-device-candidates.md`, Bluetooth section). The
+/// in by name alone (`docs/research/new-device-candidates.md`, Bluetooth
+/// section). The
 /// `0000ff12` UUID the adapter also advertises is no evidence — it is a
 /// vendor-range UUID any device may carry, and not a service on the adapter
 /// (§2).
-fn takes(peers: &BluetoothPeers, name: Option<&str>, advertised_name: Option<&str>) -> bool {
+fn takes<'n>(
+    peers: &BluetoothPeers,
+    name: Option<&'n str>,
+    advertised_name: Option<&'n str>,
+) -> Option<&'n str> {
     let adapter = peers.adapters.then_some(ADAPTER_NAME_PREFIX);
-    [name, advertised_name].into_iter().flatten().any(|n| {
-        let n = n.trim().to_ascii_uppercase();
+    [name, advertised_name].into_iter().flatten().find(|n| {
         adapter
             .iter()
             .chain(&peers.meters)
-            .any(|prefix| n.starts_with(&prefix.to_ascii_uppercase()))
-    })
-}
-
-/// The registry entry whose `bluetooth_names` `name` carries: the meter with
-/// the radio built in that advertises it.
-///
-/// Asked of the peer that was opened, however it was found: a peer opened by
-/// address, or one with no name heard, counts as an adapter.
-pub(super) fn built_in_meter_named(name: Option<&str>) -> Option<&'static SelectableDevice> {
-    crate::protocol::registry::DEVICES.iter().find(|d| {
-        let meters = BluetoothPeers {
-            adapters: false,
-            meters: d.bluetooth_names.to_vec(),
-        };
-        takes(&meters, name, None)
+            .any(|prefix| name_matches(prefix, n))
     })
 }
 
@@ -463,17 +464,21 @@ mod tests {
     #[test]
     fn an_adapter_is_recognised_by_name() {
         let peers = adapters();
-        assert!(takes(&peers, Some("UT-D07B"), Some("UT-D07B")));
-        assert!(takes(&peers, Some("UT-D07A"), None));
-        assert!(takes(&peers, Some("UT-D07A-1234"), None));
-        assert!(takes(&peers, Some(" ut-d07b "), None));
-        assert!(takes(&peers, Some("Bench meter"), Some("UT-D07B")));
+        assert!(takes(&peers, Some("UT-D07B"), Some("UT-D07B")).is_some());
+        assert!(takes(&peers, Some("UT-D07A"), None).is_some());
+        assert!(takes(&peers, Some("UT-D07A-1234"), None).is_some());
+        assert!(takes(&peers, Some(" ut-d07b "), None).is_some());
+        assert_eq!(
+            takes(&peers, Some("Bench meter"), Some("UT-D07B")),
+            Some("UT-D07B"),
+            "taken by the advertised name"
+        );
 
-        assert!(!takes(&peers, Some("UT61E+"), None));
-        assert!(!takes(&peers, Some(""), Some("")));
-        assert!(!takes(&peers, Some("   "), None));
-        assert!(!takes(&peers, None, None));
-        assert!(!takes(&peers, Some("Headphones"), Some("Headphones")));
+        assert!(takes(&peers, Some("UT61E+"), None).is_none());
+        assert!(takes(&peers, Some(""), Some("")).is_none());
+        assert!(takes(&peers, Some("   "), None).is_none());
+        assert!(takes(&peers, None, None).is_none());
+        assert!(takes(&peers, Some("Headphones"), Some("Headphones")).is_none());
     }
 
     /// A meter with the radio built in is taken by the prefix the caller
@@ -481,11 +486,20 @@ mod tests {
     #[test]
     fn a_built_in_meter_is_recognised_by_its_own_prefix() {
         let peers = meters(&["UT60BT"]);
-        assert!(takes(&peers, Some("UT60BT"), None));
+        assert!(takes(&peers, Some("UT60BT"), None).is_some());
         // Advertised by one UT60BT that answers Get Name with `UT60BT`.
-        assert!(takes(&peers, Some("UT60BTk"), Some("UT60BTk")));
-        assert!(takes(&peers, None, Some(" ut60bt ")));
-        assert!(!takes(&peers, Some("UT60"), None));
+        assert!(takes(&peers, Some("UT60BTk"), Some("UT60BTk")).is_some());
+        assert!(takes(&peers, None, Some(" ut60bt ")).is_some());
+        assert!(takes(&peers, Some("UT60"), None).is_none());
+    }
+
+    /// A meter renamed on the host is taken by the name it advertises, and
+    /// that is the name the registry is asked about, so it finds the meter.
+    #[test]
+    fn a_renamed_meter_is_taken_by_its_advertised_name() {
+        let taken = takes(&meters(&["UT60BT"]), Some("Bench meter"), Some("UT60BTk"));
+        assert_eq!(taken, Some("UT60BTk"));
+        assert!(!crate::protocol::registry::advertising("UT60BTk").is_empty());
     }
 
     /// Only the peers the caller names are taken: a meter selected behind an
@@ -493,37 +507,20 @@ mod tests {
     /// those on an adapter or on the other one.
     #[test]
     fn only_the_named_peers_are_taken() {
-        assert!(!takes(&adapters(), Some("UT60BT"), None));
-        assert!(!takes(&adapters(), Some("UT202BT"), None));
+        assert!(takes(&adapters(), Some("UT60BT"), None).is_none());
+        assert!(takes(&adapters(), Some("UT202BT"), None).is_none());
         let ut60bt = meters(&["UT60BT"]);
-        assert!(!takes(&ut60bt, Some("UT-D07B"), None));
-        assert!(!takes(&ut60bt, Some("UT202BT"), None));
+        assert!(takes(&ut60bt, Some("UT-D07B"), None).is_none());
+        assert!(takes(&ut60bt, Some("UT202BT"), None).is_none());
 
         let any = BluetoothPeers {
             adapters: true,
             meters: vec!["UT60BT", "UT202BT"],
         };
         for name in ["UT-D07B", "UT60BTk", "\tUT202BT \n"] {
-            assert!(takes(&any, Some(name), None), "{name:?}");
+            assert!(takes(&any, Some(name), None).is_some(), "{name:?}");
         }
-        assert!(!takes(&any, Some("UT61E+"), None));
-    }
-
-    /// A peer is a meter with the radio built in by a registry name alone,
-    /// and that name picks its entry; an adapter, or a peer with no name
-    /// heard, is not one.
-    #[test]
-    fn a_built_in_meter_is_known_by_its_name() {
-        for (name, id) in [
-            ("UT60BT", "ut60bt"),
-            ("UT60BTk", "ut60bt"),
-            ("UT202BT", "ut202bt"),
-        ] {
-            assert_eq!(built_in_meter_named(Some(name)).map(|d| d.id), Some(id));
-        }
-        for name in [Some("UT-D07B"), Some("UT-D07A"), Some("UT61E+"), None] {
-            assert!(built_in_meter_named(name).is_none(), "{name:?}");
-        }
+        assert!(takes(&any, Some("UT61E+"), None).is_none());
     }
 
     /// A connection counts wherever it is seen; a signal strength only when

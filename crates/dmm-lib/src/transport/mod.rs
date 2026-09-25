@@ -9,7 +9,6 @@ pub(crate) mod ch9329;
 pub(crate) mod cp2110;
 
 use crate::error::Result;
-use crate::protocol::registry::SelectableDevice;
 
 /// Abstraction over HID transport for testability.
 ///
@@ -54,23 +53,17 @@ pub trait Transport: Send {
         None
     }
 
-    /// The registry entry of the meter with the radio built in on the far
-    /// end, matched by the name it advertises against each entry's
-    /// `bluetooth_names`. `None` for an adapter in front of a meter, a cable,
-    /// or a peer whose name matched none.
+    /// For a Bluetooth link, the name the peer goes by, as the open found
+    /// it: what it advertises, or the host's alias for it. `None` for every
+    /// other link, and for a peer opened by address that no name was heard
+    /// from.
     ///
-    /// What detection falls back to when that meter's frames name no model
-    /// (`docs/detection-design.md`, Names and the registry).
-    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
+    /// A fact about the link, not a model: which meters advertise it is the
+    /// registry's to say (`crate::built_in_meters`), and when any does,
+    /// detection runs only their fingerprints (`docs/detection-design.md`,
+    /// Names and the registry).
+    fn advertised_name(&self) -> Option<&str> {
         None
-    }
-
-    /// Whether the far end is a meter with the radio built in, rather than
-    /// an adapter in front of one: what text about the link calls it
-    /// ([`crate::binary_help::Link::full_name`]). Derived from
-    /// [`Self::built_in_meter`]; a wrapper delegates that one instead.
-    fn built_in_radio(&self) -> bool {
-        self.built_in_meter().is_some()
     }
 }
 
@@ -86,6 +79,19 @@ pub(crate) struct BluetoothPeers {
     /// Name prefixes of meters with the radio built in, as the registry
     /// lists them.
     pub(crate) meters: Vec<&'static str>,
+}
+
+/// Whether a peer that goes by `name` carries `prefix`: the name starts with
+/// it once trimmed, in any case.
+///
+/// A prefix because one UT60BT advertises `UT60BTk`
+/// (`docs/research/new-device-candidates.md`, Bluetooth section). The one rule
+/// both the search and the registry lookup of a peer's name apply
+/// (`registry::advertising`), so a peer the search took is found there too.
+pub(crate) fn name_matches(prefix: &str, name: &str) -> bool {
+    name.trim()
+        .to_ascii_uppercase()
+        .starts_with(&prefix.to_ascii_uppercase())
 }
 
 /// What a transport with no link behind it calls itself.
@@ -127,8 +133,8 @@ impl Transport for Box<dyn Transport> {
         (**self).bluetooth_selector()
     }
 
-    fn built_in_meter(&self) -> Option<&'static SelectableDevice> {
-        (**self).built_in_meter()
+    fn advertised_name(&self) -> Option<&str> {
+        (**self).advertised_name()
     }
 }
 

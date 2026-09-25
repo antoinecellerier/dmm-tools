@@ -60,9 +60,9 @@ pub enum Error {
     /// in a USB cable or switched a Bluetooth adapter on, and has no reason to
     /// know whether it carries a CP2110, a CH9329 or a CH9325. `bridge` is
     /// carried for the logs and for help text that lists the meters reachable
-    /// over that bridge. `built_in_radio` is the transport's
-    /// [`crate::transport::Transport::built_in_radio`]: a meter with the radio
-    /// built in has no adapter for the message to name.
+    /// over that bridge. `built_in_radio` says the peer's advertised name is
+    /// a registry meter's (`built_in_meters()` in `lib.rs`): a meter with the
+    /// radio built in has no adapter for the message to name.
     #[error(
         "no meter answered over the {}",
         crate::binary_help::bridge_link_name(.bridge, *.built_in_radio)
