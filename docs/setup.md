@@ -155,6 +155,9 @@ on their own once it transmits again.
   two every 1.5 s is connected, off is standby after 5 minutes without a
   connection or data. From standby, switch the adapter off and on to wake
   it.
+- Blinking its waiting pattern and listed as paired, yet it never connects:
+  remove (forget) it in the system's Bluetooth settings and connect again.
+  Seen after the same dual-boot computer paired it under Windows.
 - A phone app connected to the adapter keeps it off the air — the adapter takes
   one connection at a time. Disconnect it there first.
 - A USB cable wins over Bluetooth: with a cable plugged in, `auto` uses it even

@@ -162,6 +162,14 @@ the meter back on resumes the meter's replies on the same link. Whether the
 heartbeat counts as data for the 5-minute rule, or the link ends in standby
 5 minutes after the meter goes quiet, is not measured [UNVERIFIED].
 
+An awake adapter with stale pairing keys does not connect [HARDWARE]. On
+2026-09-25, after the same dual-boot laptop had paired it under Windows 11,
+the Linux side still listed it as paired: BlueZ never reported it advertising,
+and every connect by address ended in "Service discovery timed out", with
+this tool and with an older build alike. Removing it in GNOME's Bluetooth
+settings and connecting again fixed it. Keys replaced by the other OS's
+pairing are the likely cause [UNVERIFIED].
+
 An awake adapter is not always heard by a scan [HARDWARE]. With the adapter
 blinking its waiting pattern, paired to this host and after its first
 disconnect of the session, BlueZ 5.87's default discovery — BR/EDR and LE

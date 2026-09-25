@@ -1804,6 +1804,14 @@ the following needs someone's hardware.
   link survives that with the meter switched off — the adapter's heartbeat
   may or may not count as data — is unverified: connect, switch the meter
   off, and watch the link and the blue LED past 5 minutes.
+- **A switched-off paired adapter listed as heard.** On 2026-09-25, a
+  paired UT-D07B switched off by its power switch still came back from
+  every scan with its last RSSI (-74 dBm) while `bluetoothctl scan le`
+  heard nothing, so `dmm-cli list` showed it as heard rather than "paired
+  but not heard", and the doc-screenshot guard refused to run. BlueZ keeps
+  a paired device's last RSSI; telling a fresh advertisement from that
+  cached value needs another signal, e.g. only counting RSSI changes seen
+  during our own scan.
 - **The UT60BT and UT202BT.** Read from the iDMM2.0 app 2026-09-25: they speak
   the UT61+ protocol over the same ISSC service as the UT-D07B and advertise
   their own names, so the transport needs only to accept those names, plus a
