@@ -163,6 +163,13 @@ const ACTIVATION_ZT5566SE: &str = "\
 2. Press POWER to turn Bluetooth on; the Bluetooth symbol flashes
 Note: the manual documents Bluetooth for its speaker only; readings over it are unverified.";
 
+/// ZT-5BQ manual p.2 panel 7: Power and Hz together switch Bluetooth on;
+/// the same panel gives the auto power-off.
+const ACTIVATION_ZT5BQ: &str = "\
+1. Turn the meter on
+2. Press Power and Hz together; the Bluetooth symbol shows
+Note: the meter switches off after 15 minutes idle; hold Hz/NCV while turning it on to disable that.";
+
 const ACTIVATION_MOCK: &str = "No setup required \u{2014} this is a simulated device.";
 
 /// All selectable devices, in GUI display order.
@@ -465,6 +472,19 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_ZT5566SE,
         family: DeviceFamily::Zotek,
         new_protocol: || Box::new(ZotekProtocol::new_zt5566se()),
+        fingerprint: Some(&zotek::FINGERPRINT),
+        manual_url: Some(ZOTEK_SUPPORT_URL),
+        bluetooth_only: true,
+        bluetooth_names: &["Bluetooth DMM"],
+    },
+    SelectableDevice {
+        id: "zt5bq",
+        display_name: "ZT-5BQ / ST207",
+        aliases: &["zt-5bq", "st207"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_ZT5BQ,
+        family: DeviceFamily::Zotek,
+        new_protocol: || Box::new(ZotekProtocol::new_zt5bq()),
         fingerprint: Some(&zotek::FINGERPRINT),
         manual_url: Some(ZOTEK_SUPPORT_URL),
         bluetooth_only: true,
@@ -799,7 +819,7 @@ mod tests {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
         // Experimental, with their verification issues still to be opened.
-        const ISSUE_TO_OPEN: &[&str] = &["zt300ab", "zt5566se"];
+        const ISSUE_TO_OPEN: &[&str] = &["zt300ab", "zt5566se", "zt5bq"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

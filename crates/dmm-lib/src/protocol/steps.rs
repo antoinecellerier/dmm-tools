@@ -54,6 +54,9 @@ pub(crate) enum Ohms {
     Symbol,
     /// "Resistance mode: …"
     Word,
+    /// "At Auto: …", for a meter that picks resistance by what the leads
+    /// touch and has no resistance mode to set.
+    Auto,
 }
 
 impl Ohms {
@@ -67,6 +70,10 @@ impl Ohms {
                 "Resistance mode: hold one probe tip between the fingers of each \
                  hand (body resistance, hundreds of kΩ)."
             }
+            Ohms::Auto => {
+                "At Auto: hold one probe tip between the fingers of each hand \
+                 (body resistance, hundreds of kΩ)."
+            }
         }
     }
 
@@ -74,6 +81,7 @@ impl Ohms {
         match self {
             Ohms::Symbol => "\u{03A9} mode: touch the two probe tips together.",
             Ohms::Word => "Resistance mode: touch the two probe tips together.",
+            Ohms::Auto => "At Auto: touch the two probe tips together.",
         }
     }
 }

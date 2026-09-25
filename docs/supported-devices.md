@@ -149,15 +149,17 @@ the manuals and the remote commands from the vendor software.
 
 ## ZOTEK / ZOYI / BSIDE / ANENG
 
-Handheld (ZT-300AB) and desktop (ZT-5566SE). Bluetooth built in, no cable;
-the meter shows up as "Bluetooth DMM" ([setup](setup.md#bluetooth)). Switch
-on: hold Hz% for 2 s on the ZT-300AB, or press POWER on the ZT-5566SE, until
-the Bluetooth symbol shows.
+Handheld (ZT-300AB), desktop (ZT-5566SE) and clamp meter (ZT-5BQ). Bluetooth
+built in, no cable; the meter shows up as "Bluetooth DMM"
+([setup](setup.md#bluetooth)). Switch on: hold Hz% for 2 s on the ZT-300AB,
+press POWER on the ZT-5566SE, or press Power and Hz together on the ZT-5BQ,
+until the Bluetooth symbol shows.
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
 | ZT-300AB / AN9002 | 6000 | 🧪 Experimental | rotary dial; also sold by BSIDE |
 | ZT-5566SE / AN999S | 19999 | 🧪 Experimental | Bluetooth speaker; second display as a sub-value |
+| ZT-5BQ / ST207 | 6000 | 🧪 Experimental | clamp: 600 A AC, inrush, peak hold |
 
 Not run on a meter yet: the decoding comes from ZOTEK's apps and manuals,
 whose ZT-5566SE pages document Bluetooth for the speaker only ([backlog](verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)).

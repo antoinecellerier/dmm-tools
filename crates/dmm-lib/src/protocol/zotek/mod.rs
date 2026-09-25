@@ -84,6 +84,10 @@ impl ZotekProtocol {
         Self::new(&layout::ZT5566SE)
     }
 
+    pub(crate) fn new_zt5bq() -> Self {
+        Self::new(&layout::ZT5BQ)
+    }
+
     /// The layout a packet of `type_byte` is in, the first time it is not
     /// the entry's on this connection; `None` every other time.
     fn other_layout(&mut self, type_byte: u8) -> Option<&'static Layout> {
@@ -199,7 +203,7 @@ mod tests {
     /// Each worked example is recognised as its layout's entry.
     #[test]
     fn the_worked_examples_are_recognised_as_their_layouts() {
-        for (example, id) in [(0, "zt300ab"), (3, "zt5566se")] {
+        for (example, id) in [(0, "zt300ab"), (1, "zt5bq"), (3, "zt5566se")] {
             let (raw, _) = EXAMPLES[example];
             assert_eq!(
                 recognise(raw, &Probing::default()),
@@ -275,7 +279,7 @@ mod tests {
     #[test]
     fn a_layout_not_implemented_yet_is_skipped() {
         let (raw, plain) = EXAMPLES[0];
-        let (other, _) = EXAMPLES[1];
+        let (other, _) = EXAMPLES[2];
         let mut stream = other.to_vec();
         stream.extend_from_slice(raw);
         let mock = MockTransport::new(vec![stream]);

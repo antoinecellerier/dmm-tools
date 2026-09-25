@@ -7,12 +7,13 @@
 use super::layout::Layout;
 use crate::flags::Flag;
 use crate::protocol::steps::{self, Ohms, Volts};
-use crate::protocol::{CaptureStep, Expect, Need};
+use crate::protocol::{CaptureStep, Expect, Need, ValueExpect};
 
 pub(super) fn steps(layout: &Layout) -> Vec<CaptureStep> {
     match layout.type_byte {
         3 => zt300ab(),
         4 => zt5566se(),
+        1 => zt5bq(),
         _ => Vec::new(),
     }
 }
@@ -276,6 +277,127 @@ fn zt5566se() -> Vec<CaptureStep> {
         .expect(Expect::mode("DC mA")),
         CaptureStep::basic("acma", "Press the A~/⎓ mA~/⎓ button until AC mA shows")
             .expect(Expect::mode("AC mA")),
+    ]
+}
+
+/// The ZT-5BQ clamp is auto-ranging: with open leads it shows Auto, and it
+/// takes V above 0.8 V and Ω or continuity by what the leads touch; its
+/// panel legend lists continuity under AUTO (ZT-5BQ manual p.1/-1-, -4-,
+/// p.2/-5-). Its jaw is the only current input, AC only (p.2/-5-).
+/// Power/Select steps continuity/diode, then capacitance (p.2/-5-); the
+/// temperature section says one press, then one more for °F (p.2/-6-), so
+/// that step presses until °C shows. The manual never says how to get back
+/// to Auto from these, so they run together and the Auto steps start "back
+/// at Auto". Hz/NCV gives frequency, and held over 2 s NCV, which one page
+/// ends on release and the other toggles (p.1/-4-, p.2/-6-); in NCV the
+/// red probe tells the live wire from neutral (p.2/-6-), which no step asks
+/// for: it means touching a mains conductor. The side button
+/// gives HOLD, then INRUSH, and PEAK HOLD with the leads in, on one press
+/// or two as the pages disagree (p.1/-4-, p.2/-6-). The layout's REL and %
+/// have no documented key.
+///
+/// Shorted leads read as continuity and open leads as Auto, so the gate
+/// keeps DC V, the reversed source and the body resistance, and takes its
+/// OL from the diode with open leads.
+fn zt5bq() -> Vec<CaptureStep> {
+    let [dcv, _dcv_short, dcv_negative, _ohm_ol, ohm_body, _ohm_short] = steps::gate_steps(
+        Volts::DcV,
+        CaptureStep::basic(
+            "dcv",
+            "Hold the leads on a battery or any DC source above 0.8 V (DC V shows)",
+        ),
+        Ohms::Auto,
+        CaptureStep::basic("ohm_ol", "unused"),
+    );
+    vec![
+        dcv,
+        dcv_negative,
+        ohm_body,
+        CaptureStep::basic(
+            "diode_ol",
+            "Press Power/Select once for continuity/diode, leads open (should show 0L)",
+        )
+        .gate()
+        .expect(Expect::new().value(ValueExpect::Overload)),
+        CaptureStep::basic(
+            "cont",
+            "Continuity/diode (Power/Select once from Auto): touch the probe tips together",
+        )
+        .needs(&[Need::ShortedLeads]),
+        CaptureStep::basic(
+            "cap",
+            "Press Power/Select once more for capacitance (twice from Auto), leads open",
+        )
+        .expect(Expect::mode("Capacitance")),
+        CaptureStep::basic(
+            "temp",
+            "Press Power/Select until °C shows (temperature; K-type thermocouple, if available)",
+        )
+        .needs(&[Need::Thermocouple])
+        .expect(Expect::mode("°C")),
+        CaptureStep::basic(
+            "temp_f",
+            "Temperature: press Power/Select for °F (K-type thermocouple, if available)",
+        )
+        .needs(&[Need::Thermocouple])
+        .expect(Expect::mode("°F")),
+        CaptureStep::basic(
+            "auto_idle",
+            "Leads open, back at Auto: the display shows Auto",
+        )
+        .expect(Expect::new().value(ValueExpect::NoReading)),
+        // The legend is the only source for this, and too coarse a print
+        // to pin the annunciators on.
+        CaptureStep::basic(
+            "auto_cont",
+            "At Auto: touch the probe tips together (continuity is picked by itself)",
+        )
+        .needs(&[Need::ShortedLeads]),
+        CaptureStep::basic(
+            "acv",
+            "Hold the leads on a low-voltage AC source above 0.8 V, such as a transformer's \
+             output (AC V shows)",
+        )
+        .expect(Expect::mode("AC V")),
+        CaptureStep::basic(
+            "hz",
+            "Leads on the AC source: press Hz/NCV once for its frequency",
+        )
+        .expect(Expect::mode("Hz")),
+        CaptureStep::basic(
+            "ncv",
+            "Leads off the source: hold Hz/NCV down over 2 s for NCV and keep holding it \
+             near a live mains wire",
+        )
+        .needs(&[Need::LiveWire])
+        .expect(Expect::mode("NCV").value(ValueExpect::NcvDetected)),
+        CaptureStep::basic(
+            "aca",
+            "Leads out: clamp the jaw around one wire carrying AC current",
+        )
+        .expect(Expect::mode("AC A")),
+        CaptureStep::basic(
+            "hz_a",
+            "Jaw on the AC current, leads out: press Hz/NCV once for its frequency",
+        )
+        .expect(Expect::mode("Hz")),
+        CaptureStep::basic("hold", "AC A: press the side HOLD button once, then Enter.")
+            .wait_for_enter()
+            .expect(Expect::new().flags(HOLD_ON)),
+        CaptureStep::basic(
+            "inrush",
+            "Press the side HOLD button again for INRUSH, leads out (dashes until a motor \
+             starts), then Enter.",
+        )
+        .wait_for_enter()
+        .expect(Expect::mode("Inrush")),
+        CaptureStep::basic(
+            "peak",
+            "Leads on a DC source above 0.8 V: press the side HOLD button until PEAK HOLD \
+             shows, then Enter. Press it until PEAK HOLD clears afterwards.",
+        )
+        .wait_for_enter()
+        .expect(Expect::mode("DC V peak")),
     ]
 }
 

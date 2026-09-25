@@ -225,7 +225,7 @@ pub(super) mod tests {
     /// false header, skipped.
     #[test]
     fn unlisted_glyphs_are_the_meters_only_at_the_start() {
-        let (raw, plain) = EXAMPLES[0];
+        let (raw, plain) = EXAMPLES[1];
         let mut odd = raw.to_vec();
         odd[4] ^= 0x01;
         let (packet, _) = extract_packet(&odd).unwrap().unwrap();

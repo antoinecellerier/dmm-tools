@@ -426,7 +426,8 @@ The 47-star Windows-only app is abandoned.
 
 **One OEM, one protocol, four packet layouts. Specified 2026-09-25 from
 ZOTEK's apps and manuals: [research/zotek](zotek/reverse-engineered-protocol.md).
-Implemented 2026-09-26, experimental: the ZT-300AB and ZT-5566SE layouts.**
+Implemented 2026-09-26, experimental: the ZT-300AB, ZT-5566SE and ZT-5BQ
+layouts.**
 
 | Aspect | Details |
 |--------|---------|
@@ -699,7 +700,7 @@ the same transport.
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
 | **UNI-T UT117C, UT197/UT197PV, UT219PV** | BLE (built in) | Three models on one polled frame over the Bluetooth transport we have; vendor-sourced from the iDMM2.0 app | Moderate: a new protocol family with a field layout per model |
-| **ZOTEK BLE (ZOYI/BSIDE/ANENG)** — implemented 2026-09-26 | BLE (built in) | Specified from ZOTEK's own apps ([research/zotek](zotek/reverse-engineered-protocol.md)): one streamed protocol in ZOTEK's apps, which serve ZOYI/ZOTEK meters and their BSIDE and ANENG rebrands, led by the ZT-300AB/AN9002; no cross-platform desktop tool | Done, experimental: `zt300ab` and `zt5566se` await a hardware report; the other two layouts are specified |
+| **ZOTEK BLE (ZOYI/BSIDE/ANENG)** — implemented 2026-09-26 | BLE (built in) | Specified from ZOTEK's own apps ([research/zotek](zotek/reverse-engineered-protocol.md)): one streamed protocol in ZOTEK's apps, which serve ZOYI/ZOTEK meters and their BSIDE and ANENG rebrands, led by the ZT-300AB/AN9002; no cross-platform desktop tool | Done, experimental: `zt300ab`, `zt5566se` and `zt5bq` await a hardware report; the ZT-5B layout is specified |
 | **UNI-T UT8805/UT8806** | LAN (VXI-11, socket 5025); USB TMC; RS-232 | Specified ([research/ut8805](ut8805/reverse-engineered-protocol.md)); plain SCPI query/response that the poll-based `Protocol` trait already fits; a `std::net` VXI-11 transport reaches every model with no dependency change and opens a SCPI family for Rigol/Siglent maps; no cross-platform VISA-free GUI logger exists over LAN or USB (TestController covers RS-232) | Moderate: a network transport (the HID-shaped `Transport` trait must fit or change), a SCPI protocol family, address-based open and `*IDN?` identification; USB TMC deferred behind the dependency decision |
 
 ### Tier 3: Lower priority

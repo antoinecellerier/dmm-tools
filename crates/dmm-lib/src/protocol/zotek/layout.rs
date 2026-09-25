@@ -105,6 +105,8 @@ pub(super) enum Meaning {
     /// PEAK: the meter does not say whether it holds the maximum or the
     /// minimum.
     Peak,
+    /// INRUSH, on the clamp (spec §7.2).
+    Inrush,
     /// Type 4's secondary display units (spec §7.4).
     SecondaryPercent,
     SecondaryHertz,
@@ -396,8 +398,48 @@ pub(crate) static ZT5566SE: Layout = Layout {
     max_aux_values: 1,
 };
 
+/// Type 1, named for the ZT-5BQ clamp (spec §7.2).
+pub(crate) static ZT5BQ: Layout = Layout {
+    type_byte: 1,
+    id: "zt5bq",
+    name: "ZT-5BQ / ST207",
+    digits: Digits::Split,
+    bits: &[
+        bit(3, 3, Meaning::Continuity),
+        // The Bluetooth icon: set in every community notification, 0 V
+        // included, so not a high-voltage mark (§11.3 D6).
+        bit(3, 2, Meaning::Silent),
+        bit(3, 1, Meaning::Hold),
+        bit(3, 0, Meaning::LowBattery),
+        bit(7, 7, Meaning::Ac),
+        bit(7, 6, Meaning::Dc),
+        bit(7, 5, Meaning::Unit(Unit::Volt)),
+        bit(7, 4, Meaning::Prefix(Prefix::Nano, VOLT_AMP_FARAD)),
+        bit(8, 7, Meaning::Prefix(Prefix::Mega, OHM_HZ)),
+        bit(8, 6, Meaning::Prefix(Prefix::Milli, VOLT_AMP_FARAD)),
+        bit(8, 5, Meaning::Prefix(Prefix::Kilo, OHM_HZ)),
+        bit(8, 4, Meaning::Unit(Unit::Ohm)),
+        bit(8, 3, Meaning::Prefix(Prefix::Micro, VOLT_AMP_FARAD)),
+        bit(8, 2, Meaning::Unit(Unit::Amp)),
+        bit(8, 1, Meaning::Diode),
+        bit(8, 0, Meaning::Unit(Unit::Farad)),
+        // `power`, set in every community notification (§11.4).
+        bit(9, 7, Meaning::Silent),
+        bit(9, 6, Meaning::Peak),
+        bit(9, 5, Meaning::Unit(Unit::Percent)),
+        bit(9, 4, Meaning::Inrush),
+        bit(9, 3, Meaning::Unit(Unit::Celsius)),
+        bit(9, 2, Meaning::Unit(Unit::Fahrenheit)),
+        bit(9, 1, Meaning::Unit(Unit::Hertz)),
+        bit(9, 0, Meaning::Rel),
+    ],
+    // An auto-ranging clamp: a prefix is a range step (spec §1).
+    prefix_names_position: false,
+    max_aux_values: 0,
+};
+
 /// Every layout implemented, by type byte.
-pub(super) static LAYOUTS: &[&Layout] = &[&ZT300AB, &ZT5566SE];
+pub(super) static LAYOUTS: &[&Layout] = &[&ZT300AB, &ZT5566SE, &ZT5BQ];
 
 /// The layout a type byte selects, where it is implemented.
 pub(super) fn for_type(type_byte: u8) -> Option<&'static Layout> {
@@ -488,6 +530,7 @@ pub(super) enum Function {
     Celsius = 0x0C,
     Fahrenheit = 0x0D,
     Ncv = 0x0E,
+    Inrush = 0x0F,
 }
 
 impl Function {
@@ -515,6 +558,7 @@ impl Function {
             Function::Celsius => "°C",
             Function::Fahrenheit => "°F",
             Function::Ncv => "NCV",
+            Function::Inrush => "Inrush",
         }
     }
 
@@ -558,6 +602,7 @@ struct Lit {
     max: bool,
     low_battery: bool,
     peak: bool,
+    inrush: bool,
     secondary_percent: bool,
     secondary_hertz: bool,
     secondary_kilo: bool,
@@ -591,6 +636,7 @@ impl Lit {
                 Meaning::Max => lit.max = true,
                 Meaning::LowBattery => lit.low_battery = true,
                 Meaning::Peak => lit.peak = true,
+                Meaning::Inrush => lit.inrush = true,
                 Meaning::SecondaryPercent => lit.secondary_percent = true,
                 Meaning::SecondaryHertz => lit.secondary_hertz = true,
                 Meaning::SecondaryKilo => lit.secondary_kilo = true,
@@ -645,6 +691,8 @@ impl Lit {
             None
         };
         match unit {
+            // The clamp's INRUSH, whatever else is lit (spec §7.2).
+            _ if self.inrush => Function::Inrush,
             Some(Unit::Celsius) => Function::Celsius,
             Some(Unit::Fahrenheit) => Function::Fahrenheit,
             _ if self.diode => Function::Diode,
@@ -739,6 +787,16 @@ fn secondary(
     })
 }
 
+/// The word `n` dashes spell.
+fn dashes(n: u8) -> &'static str {
+    match n {
+        1 => "-",
+        2 => "--",
+        3 => "---",
+        _ => "----",
+    }
+}
+
 /// Whether the main display of a whole descrambled packet has a digit lit:
 /// one with none has no reading, and [`decode`] refuses it. No section of
 /// the spec shows a blank main display, so one is reported.
@@ -798,6 +856,11 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
         Shown::Ef => {
             unrecognised.report("display text");
             (MeasuredValue::Overload, shown_function)
+        }
+        // With INRUSH lit, the dashes are the wait for a current to catch
+        // (spec §11.3 D3).
+        Shown::Dashes(n) if shown_function == Function::Inrush => {
+            (MeasuredValue::NoReading(dashes(n)), shown_function)
         }
         // NCV fills one to four dashes from the left (spec §11.4), taken
         // while no function is lit, as EF is (spec §6.4).
@@ -1404,6 +1467,118 @@ mod tests {
             let (_, reports) = reported(&packet);
             assert_eq!(reports.len(), 1, "{packet:02X?}: {reports:?}");
         }
+    }
+
+    // --- Type 1 (ZT-5BQ) --------------------------------------------------
+
+    fn t1(glyphs: &str, dp_at: Option<usize>, flags: &[(usize, u8)]) -> Vec<u8> {
+        split_packet(1, glyphs, dp_at, false, flags)
+    }
+
+    /// Spec §9: 230.5 V AC, HOLD, the Bluetooth icon lit.
+    #[test]
+    fn type1_worked_example() {
+        let m = quiet(EXAMPLES[1].1);
+        assert_eq!(m.mode, "AC V");
+        assert_eq!(m.mode_raw, 0x21);
+        assert_eq!(m.unit, "V");
+        assert_eq!(m.display_raw.as_deref(), Some("230.5"));
+        assert_eq!(value(&m), 230.5);
+        assert_eq!(flags_set(&m), ["hold"]);
+    }
+
+    /// Every §7.2 bit, one at a time over a function where it needs one:
+    /// (bits, mode, mode_raw, unit, flags set).
+    #[test]
+    fn type1_every_annunciator() {
+        type Case = (
+            &'static [(usize, u8)],
+            &'static str,
+            u16,
+            &'static str,
+            &'static [&'static str],
+        );
+        let cases: &[Case] = &[
+            (&[(3, 0x08), (8, 0x10)], "Continuity", 0x07, "Ω", &[]),
+            (&[(3, 0x04), (7, 0x60)], "DC V", 0x11, "V", &["dc"]),
+            (&[(3, 0x02), (7, 0x60)], "DC V", 0x11, "V", &["hold", "dc"]),
+            (
+                &[(3, 0x01), (7, 0x60)],
+                "DC V",
+                0x11,
+                "V",
+                &["low_battery", "dc"],
+            ),
+            (&[(7, 0xA0)], "AC V", 0x21, "V", &[]),
+            (&[(7, 0x70)], "DC V", 0x11, "nV", &["dc"]),
+            (&[(8, 0x90)], "Ω", 0x06, "MΩ", &[]),
+            (&[(7, 0x60), (8, 0x40)], "DC V", 0x11, "mV", &["dc"]),
+            (&[(8, 0x30)], "Ω", 0x06, "kΩ", &[]),
+            (&[(8, 0x0C), (7, 0x80)], "AC A", 0x23, "µA", &[]),
+            (&[(8, 0x44), (7, 0x80)], "AC A", 0x23, "mA", &[]),
+            (&[(8, 0x04), (7, 0x80)], "AC A", 0x23, "A", &[]),
+            (&[(8, 0x02), (7, 0x20)], "Diode", 0x08, "V", &[]),
+            (&[(8, 0x01)], "Capacitance", 0x09, "F", &[]),
+            (&[(8, 0x09)], "Capacitance", 0x09, "µF", &[]),
+            (&[(9, 0x80), (7, 0x60)], "DC V", 0x11, "V", &["dc"]),
+            (&[(9, 0x40), (7, 0x60)], "DC V peak", 0x51, "V", &["dc"]),
+            (&[(9, 0x20)], "Duty %", 0x0B, "%", &[]),
+            (&[(9, 0x10), (8, 0x04), (7, 0x80)], "Inrush", 0x0F, "A", &[]),
+            (&[(9, 0x08)], "°C", 0x0C, "°C", &[]),
+            (&[(9, 0x04)], "°F", 0x0D, "°F", &[]),
+            (&[(9, 0x02)], "Hz", 0x0A, "Hz", &[]),
+            (&[(9, 0x02), (8, 0x20)], "Hz", 0x0A, "kHz", &[]),
+            (&[(9, 0x01), (7, 0x60)], "DC V", 0x11, "V", &["rel", "dc"]),
+        ];
+        for &(flags, mode, mode_raw, unit, set) in cases {
+            let m = quiet(&t1("1234", Some(2), flags));
+            assert_eq!(m.mode, mode, "{flags:02X?}");
+            assert_eq!(m.mode_raw, mode_raw, "{flags:02X?}");
+            assert_eq!(m.unit, unit, "{flags:02X?}");
+            assert_eq!(flags_set(&m), set, "{flags:02X?}");
+            assert_eq!(value(&m), 12.34);
+        }
+    }
+
+    /// The community ST207 log's inrush wait: `----` with AC, A and INRUSH
+    /// (spec §11.3 D3) is no reading, not an NCV level; the same dashes
+    /// without INRUSH stay NCV.
+    #[test]
+    fn dashes_with_inrush_are_the_inrush_wait() {
+        for (row, word) in [("-   ", "-"), ("--  ", "--"), ("----", "----")] {
+            let m = quiet(&t1(row, None, &[(7, 0x80), (8, 0x04), (9, 0x90)]));
+            assert!(
+                matches!(m.value, MeasuredValue::NoReading(w) if w == word),
+                "{row:?}: {:?}",
+                m.value
+            );
+            assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("Inrush", "A"));
+        }
+        let m = quiet(&t1("----", None, &[]));
+        assert!(matches!(m.value, MeasuredValue::NcvLevel(4)));
+
+        let m = quiet(&t1("1234", Some(1), &[(7, 0x80), (8, 0x04), (9, 0x90)]));
+        assert_eq!(m.mode, "Inrush");
+        assert_eq!(value(&m), 1.234);
+    }
+
+    /// An auto-ranging clamp's prefix is a range step, so the mode stays
+    /// the base unit's.
+    #[test]
+    fn type1_prefixes_do_not_name_the_mode() {
+        let m = quiet(&t1("1234", Some(1), &[(7, 0x60), (8, 0x40)]));
+        assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("DC V", "mV"));
+    }
+
+    #[test]
+    fn type1_words() {
+        let m = quiet(&t1("Auto", None, &[(3, 0x04), (9, 0x80)]));
+        assert!(matches!(m.value, MeasuredValue::NoReading("Auto")));
+        assert_eq!(m.mode, "Auto");
+        let m = quiet(&t1(" EF ", None, &[(3, 0x04), (9, 0x80)]));
+        assert!(matches!(m.value, MeasuredValue::NcvLevel(0)));
+        let m = quiet(&t1(" 0L ", Some(2), &[(8, 0x90)]));
+        assert!(matches!(m.value, MeasuredValue::Overload));
     }
 
     // --- Every layout -----------------------------------------------------

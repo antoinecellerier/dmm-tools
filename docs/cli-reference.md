@@ -73,6 +73,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `vc920` | `vc-920`, `vc940`, `vc-940`, `vc960`, `vc-960` | Voltcraft VC920/VC940/VC960 (experimental) |
 | `zt300ab` | `zt-300ab`, `an9002`, `an-9002` | ZT-300AB / AN9002 (experimental) |
 | `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s`, `an999s`, `an-999s` | ZT-5566SE / AN999S (experimental) |
+| `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 <!-- devices:end -->
 

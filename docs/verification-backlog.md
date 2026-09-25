@@ -57,7 +57,7 @@ is probed with, and how well that probe is backed:
 | UT71A–E, VC920/VC940/VC960 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, claimed as a UT804 — the packet does not name its model, so the user names the meter | Never seen: no UT71 or VC9x0 packet has been captured ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
-| ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
+| ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207 | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
 
 Open questions, each needing a meter:
 
@@ -1693,7 +1693,7 @@ port scan** (80, 111, 5025, 49152 by firmware version).
 Specified 2026-09-25 from ZOTEK's three apps and six manuals
 (`docs/research/zotek/reverse-engineered-protocol.md`, §10). Implemented
 2026-09-26 as the `zotek` family, experimental, one registry entry per
-packet layout: `zt300ab` (type 3), `zt5566se` (type 4). Nobody on the project owns one, so where
+packet layout: `zt300ab` (type 3), `zt5566se` (type 4), `zt5bq` (type 1). Nobody on the project owns one, so where
 an item below is open the driver's choice is noted with it. Spec tables wait
 for a first real-device confirmation, as for every new meter; the ZOTEK
 manuals carry them. The clean-room boundary was opened the same
@@ -1784,7 +1784,8 @@ function shown and the LCD reading noted.
   reporter's capture; what a packet with two DP bits means (never seen);
   whether a blank digit ever carries the sign or DP bit (`10`, spec §10).
   The driver reads any `L` as OL, `E F` with no function lit as NCV level 0,
-  one to four dashes as the NCV level, `A u t o` as a no-reading word, two
+  one to four dashes as the NCV level (with INRUSH lit, as the inrush wait,
+  a no-reading word), `A u t o` as a no-reading word, two
   DP bits as the leftmost (reported), and a blank carrying a sign or point
   as a blank with it.
 - **Rate.** Notifications per second against the LCD's 3 updates a second:
