@@ -107,9 +107,10 @@ pub trait DeviceTable: Send {
         false
     }
 
-    /// What the capture asks for the duty-cycle step.
-    fn duty_instruction(&self) -> &'static str {
-        FAMILY_DUTY_INSTRUCTION
+    /// Capture instructions this model words differently from the family
+    /// list, as (step id, instruction). Default: none.
+    fn step_instructions(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
     }
 
     /// The model's own capture steps, for one whose buttons the family list
@@ -118,9 +119,6 @@ pub trait DeviceTable: Send {
         None
     }
 }
-
-/// The duty-cycle step on a UT61+: its USB/Hz button.
-const FAMILY_DUTY_INSTRUCTION: &str = "Hz/% position: short-press the USB button for Duty %.";
 
 /// Modes where the RANGE button (0x46) does nothing on any model of the family.
 ///
@@ -196,8 +194,8 @@ pub(crate) trait ModeTables: Send {
     /// buttons are known to take fewer.
     const COMMANDS: &'static [&'static str] = super::UT61EPLUS_COMMANDS;
 
-    /// Returned by `DeviceTable::duty_instruction`.
-    const DUTY_INSTRUCTION: &'static str = FAMILY_DUTY_INSTRUCTION;
+    /// Returned by `DeviceTable::step_instructions`.
+    const STEP_INSTRUCTIONS: &'static [(&'static str, &'static str)] = &[];
 
     /// Returned by `DeviceTable::name_before_stream`.
     const NAME_BEFORE_STREAM: bool = false;
@@ -245,8 +243,8 @@ impl<T: ModeTables> DeviceTable for T {
         T::COMMANDS
     }
 
-    fn duty_instruction(&self) -> &'static str {
-        T::DUTY_INSTRUCTION
+    fn step_instructions(&self) -> &'static [(&'static str, &'static str)] {
+        T::STEP_INSTRUCTIONS
     }
 
     fn name_before_stream(&self) -> bool {

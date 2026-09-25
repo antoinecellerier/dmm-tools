@@ -126,8 +126,21 @@ impl ModeTables for Ut60btTable {
     /// RANGE and its long press, REL and SELECT. It disables MAX/MIN, and
     /// sends no Peak, SELECT2 or backlight.
     const COMMANDS: &'static [&'static str] = &["hold", "range", "auto", "rel", "select"];
-    /// Its Hz/% position takes SELECT (manual §VIII).
-    const DUTY_INSTRUCTION: &'static str = "Hz/% position: press SELECT for Duty %.";
+    /// Its dial (manual P1, Figure 1): one V position, DC with AC on
+    /// SELECT; the Ω position starts on continuity; the Hz/% position takes
+    /// SELECT, not the USB button (§VIII).
+    const STEP_INSTRUCTIONS: &'static [(&'static str, &'static str)] = &[
+        (
+            "ohm",
+            "Set meter to the \u{03A9} position and press SELECT for \u{03A9}. \
+             Leave leads open (should show OL).",
+        ),
+        (
+            "acv",
+            "Set meter to V and press SELECT for AC V. Leave leads open.",
+        ),
+        ("duty", "Hz/% position: press SELECT for Duty %."),
+    ];
     /// UNI-T's app asks the name first, and a UT60BT is reported to need it
     /// (family spec §6.4).
     const NAME_BEFORE_STREAM: bool = true;

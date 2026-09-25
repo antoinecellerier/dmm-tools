@@ -528,7 +528,6 @@ impl Protocol for Ut61PlusProtocol {
             range,
             auto,
         ] = command_steps(hw);
-        let duty = self.table.duty_instruction();
 
         let mut steps = vec![
             // The six gate steps first, both trios, so the gate is decided by
@@ -625,10 +624,13 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .verified_if(hw)
                 .expect(Expect::mode("Hz")),
-            CaptureStep::basic("duty", duty)
-                .samples(3)
-                .verified_if(hw)
-                .expect(Expect::mode("Duty %")),
+            CaptureStep::basic(
+                "duty",
+                "Hz/% position: short-press the USB button for Duty %.",
+            )
+            .samples(3)
+            .verified_if(hw)
+            .expect(Expect::mode("Duty %")),
             CaptureStep::basic("ncv", "Set meter to NCV. Hold near a live wire.")
                 .samples(3)
                 .verified_if(hw)
@@ -676,6 +678,12 @@ impl Protocol for Ut61PlusProtocol {
                 .samples(3)
                 .expect(Expect::mode("LoZ V")),
         ];
+        // A model whose dial differs words those steps its own way.
+        for (id, instruction) in self.table.step_instructions() {
+            if let Some(step) = steps.iter_mut().find(|s| s.id == *id) {
+                step.instruction = instruction;
+            }
+        }
         // The list names every mode in the family; a model's dial table says
         // which it reaches (spec §2.1: temperature and LoZ are UT61D+/UT161D
         // positions), so the others are not asked for. A table without a
@@ -1590,6 +1598,46 @@ mod tests {
         for id in ["hold", "rel", "range", "auto"] {
             assert!(ut60bt.contains(&id), "{id} missing on the UT60BT");
         }
+    }
+
+    /// The UT60BT's dial words three steps its own way; the E+ keeps the
+    /// family text.
+    #[test]
+    fn ut60bt_steps_follow_its_dial() {
+        let text = |model: &str, id: &str| -> &'static str {
+            Ut61PlusProtocol::for_model(model)
+                .expect("known model")
+                .capture_steps()
+                .iter()
+                .find(|s| s.id == id)
+                .unwrap_or_else(|| panic!("{id} missing on {model}"))
+                .instruction
+        };
+        assert_eq!(
+            text("ut60bt", "acv"),
+            "Set meter to V and press SELECT for AC V. Leave leads open."
+        );
+        assert_eq!(
+            text("ut60bt", "ohm"),
+            "Set meter to the \u{03A9} position and press SELECT for \u{03A9}. \
+             Leave leads open (should show OL)."
+        );
+        assert_eq!(
+            text("ut60bt", "duty"),
+            "Hz/% position: press SELECT for Duty %."
+        );
+        assert_eq!(
+            text("ut61e+", "acv"),
+            "Set meter to AC V (V~). Leave leads open."
+        );
+        assert_eq!(
+            text("ut61e+", "ohm"),
+            "Set meter to \u{03A9}. Leave leads open (should show OL)."
+        );
+        assert_eq!(
+            text("ut61e+", "duty"),
+            "Hz/% position: short-press the USB button for Duty %."
+        );
     }
 
     /// The UT202BT has no dial and takes HOLD and RANGE alone of our
