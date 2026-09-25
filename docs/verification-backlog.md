@@ -579,7 +579,7 @@ end-to-end verification. The UT181A, partly verified, has
 [its own section](#ut181a--confirmed-on-hardware-formats-still-open).
 
 The ask in every family's issue (#3, #4, #5, #7, #12, #13, #14, #15, #16,
-#22, #23) is
+#22, #23, #26, #27) is
 the same: `dmm-cli --device <id> capture --unverified`, attach the report.
 The issue's checklist is `dmm-cli --device <id> capture --list-steps
 --format md`, so a step a report confirms flips `.verified()` in code, is
@@ -1045,11 +1045,10 @@ manuals and UNI-T's UT71 apps, and no packet has been seen
   patterns beyond the two sigrok accepts
 - Spec tables for the three models, after a first hardware confirmation
 
-#### UT60BT / UT202BT (Bluetooth built in)
+#### UT60BT / UT202BT, Bluetooth built in (issues [#26](https://github.com/antoinecellerier/dmm-tools/issues/26), [#27](https://github.com/antoinecellerier/dmm-tools/issues/27))
 
-UT61+ frames over the ISSC service (ut61-family spec §1, tables §9). Their
-own verification issues are still to be opened. The UT60BT has community
-frames on record; the UT202BT has no capture anywhere.
+UT61+ frames over the ISSC service (ut61-family spec §1, tables §9). The
+UT60BT has community frames on record; the UT202BT has no capture anywhere.
 
 - **Range tables.** Every rung is the iDMM2.0 asset's, the labels the
   manuals'; none is confirmed. Where they disagree (§9 notes): UT60BT Hz

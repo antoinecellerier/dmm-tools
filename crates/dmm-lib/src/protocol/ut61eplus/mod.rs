@@ -169,10 +169,11 @@ impl Ut61PlusProtocol {
         // The family issue stays on every model but the UT61E+, verified or
         // not: the UT61B+ is decoded correctly everywhere it was looked at,
         // and its range rungs above the ones auto-ranging reached are still
-        // open there. The UT60BT and UT202BT get issues of their own, not yet
-        // opened.
+        // open there. The UT60BT and UT202BT have issues of their own.
         let verification_issue = match model_name {
-            "UNI-T UT61E+" | "UNI-T UT60BT" | "UNI-T UT202BT" => None,
+            "UNI-T UT61E+" => None,
+            "UNI-T UT60BT" => Some(26),
+            "UNI-T UT202BT" => Some(27),
             _ => Some(7),
         };
         let supported_commands = table.commands();

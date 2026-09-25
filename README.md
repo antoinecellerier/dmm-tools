@@ -91,7 +91,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | Family | Models | Status |
 |--------|--------|--------|
 | UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+, UT61B+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
-| UT61+ with Bluetooth built in | UT60BT, UT202BT | 🧪 Experimental |
+| UT61+ with Bluetooth built in | UT60BT, UT202BT | 🧪 Experimental (UT60BT [#26](https://github.com/antoinecellerier/dmm-tools/issues/26), UT202BT [#27](https://github.com/antoinecellerier/dmm-tools/issues/27)) |
 | UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
 | UT181A | UT181A | [🟡 Partly verified](https://github.com/antoinecellerier/dmm-tools/issues/5) |
 | UT803/UT804 | UT803, UT804 | ✅ Verified (UT804; [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)), 🧪 Experimental (UT803; [#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) |
