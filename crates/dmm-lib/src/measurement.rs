@@ -12,6 +12,13 @@ pub enum MeasuredValue {
     Overload,
     /// NCV (non-contact voltage) detection level (0-4 typically).
     NcvLevel(u8),
+    /// The meter shows a word in place of a reading (e.g. "Auto" while idle
+    /// in auto mode, "----" while a clamp waits for inrush).
+    ///
+    /// Neither an overload nor a gap in the stream: the meter is alive and
+    /// says there is nothing to measure yet. Carries no number, so it starts
+    /// no series, feeds no statistics and exports an empty value cell.
+    NoReading(&'static str),
 }
 
 /// The parsed value's canonical string — the form the capture report and the
@@ -28,6 +35,7 @@ impl std::fmt::Display for MeasuredValue {
             MeasuredValue::Normal(v) => write!(f, "{v}"),
             MeasuredValue::Overload => write!(f, "OL"),
             MeasuredValue::NcvLevel(level) => write!(f, "NCV:{level}"),
+            MeasuredValue::NoReading(word) => f.write_str(word),
         }
     }
 }
@@ -38,7 +46,8 @@ impl std::fmt::Display for MeasuredValue {
 /// the main reading and its sub-values cannot drift apart: the parsed value
 /// decides OL/NCV first, the meter's own digits are preferred over the
 /// re-formatted float, and any space the meter puts between the sign and the
-/// digits is removed.
+/// digits is removed. A [`MeasuredValue::NoReading`] exports empty: the word
+/// is not a value, and the mode column already carries it.
 fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) -> Cow<'a, str> {
     match value {
         MeasuredValue::Normal(_) => match display_raw {
@@ -54,6 +63,7 @@ fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) 
         },
         MeasuredValue::Overload => Cow::Borrowed("OL"),
         MeasuredValue::NcvLevel(_) => Cow::Owned(value.to_string()),
+        MeasuredValue::NoReading(_) => Cow::Borrowed(""),
     }
 }
 
@@ -119,7 +129,19 @@ pub struct AuxValue {
 pub const AUX_EXPORT_COLUMNS: [&str; 3] = ["label", "value", "unit"];
 
 impl AuxValue {
-    /// The sub-value formatted for display and export.
+    /// The sub-value formatted for display.
+    ///
+    /// The export form ([`AuxValue::value_export_str`]) except for a
+    /// [`MeasuredValue::NoReading`], which shows its word where the export
+    /// leaves the cell empty.
+    pub fn value_str(&self) -> Cow<'_, str> {
+        match self.value {
+            MeasuredValue::NoReading(word) => Cow::Borrowed(word),
+            _ => self.value_export_str(),
+        }
+    }
+
+    /// The sub-value formatted for export.
     ///
     /// Applies the same rules as [`Measurement::value_export_str`], through
     /// the same helper: the parsed value decides first, so an overloaded
@@ -128,7 +150,7 @@ impl AuxValue {
     /// float; and spaces are stripped — including one between the sign and
     /// the digits — so the string reads back as a number in the CSV column
     /// the sub-value is exported to.
-    pub fn value_str(&self) -> Cow<'_, str> {
+    pub fn value_export_str(&self) -> Cow<'_, str> {
         export_value_str(&self.value, self.display_raw.as_deref())
     }
 
@@ -157,7 +179,7 @@ impl AuxValue {
     ) -> [Cow<'a, str>; AUX_EXPORT_COLUMNS.len()] {
         [
             Cow::Borrowed(self.label.as_ref()),
-            self.value_str(),
+            self.value_export_str(),
             Cow::Borrowed(self.unit_or(main_unit)),
         ]
     }
@@ -401,6 +423,36 @@ mod tests {
         assert_eq!(MeasuredValue::Normal(5.678).to_string(), "5.678");
         assert_eq!(MeasuredValue::Overload.to_string(), "OL");
         assert_eq!(MeasuredValue::NcvLevel(3).to_string(), "NCV:3");
+        assert_eq!(MeasuredValue::NoReading("Auto").to_string(), "Auto");
+    }
+
+    /// The word shows wherever the reading is shown, and exports empty: it is
+    /// not a value, and the mode column carries it already.
+    #[test]
+    fn a_no_reading_shows_its_word_and_exports_empty() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::NoReading("----"),
+            "A",
+            StatusFlags::default(),
+        );
+        // Whatever the display field held, the parsed value decides.
+        m.display_raw = Some("   ----".to_string());
+        assert_eq!(m.value_display_str(), "----");
+        assert_eq!(m.value_export_str(), "");
+        assert_eq!(m.to_string(), "---- A");
+    }
+
+    #[test]
+    fn an_aux_no_reading_shows_its_word_and_exports_empty() {
+        let mut a = aux("Max", "9.999", "");
+        a.value = MeasuredValue::NoReading("Auto");
+        assert_eq!(a.value_str(), "Auto");
+        assert_eq!(a.value_export_str(), "");
+        assert_eq!(a.export_cells("V"), ["Max", "", "V"]);
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.0), "V", StatusFlags::default());
+        m.aux_values = vec![a];
+        assert_eq!(m.aux_summary(), "Max Auto V");
     }
 
     /// The display form keeps the UT61E+'s sign space, the export form drops

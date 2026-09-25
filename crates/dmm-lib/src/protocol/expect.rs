@@ -178,11 +178,7 @@ impl Expect {
         if let Some(want) = self.value
             && !want.matches(&m.value)
         {
-            return Err(format!(
-                "value is {}, want {}",
-                m.value_export_str(),
-                want.describe()
-            ));
+            return Err(format!("value is {}, want {}", shown(m), want.describe()));
         }
 
         if let Some(min) = self.at_least {
@@ -193,12 +189,22 @@ impl Expect {
             if !big_enough {
                 return Err(format!(
                     "value is {}, want at least {min} either way",
-                    m.value_export_str()
+                    shown(m)
                 ));
             }
         }
 
         Ok(())
+    }
+}
+
+/// The value as a failed check names it: the export form, which reads back
+/// as the number the parser produced, or the word a meter shows instead of a
+/// reading, whose export form is empty.
+fn shown(m: &Measurement) -> std::borrow::Cow<'_, str> {
+    match m.value {
+        MeasuredValue::NoReading(word) => std::borrow::Cow::Borrowed(word),
+        _ => m.value_export_str(),
     }
 }
 
@@ -330,6 +336,13 @@ mod tests {
         assert_eq!(
             Expect::new().value(ValueExpect::Finite).check(&overload),
             Err("value is OL, want a numeric reading".to_string())
+        );
+
+        let mut idle = finite.clone();
+        idle.value = MeasuredValue::NoReading("Auto");
+        assert_eq!(
+            Expect::new().value(ValueExpect::Finite).check(&idle),
+            Err("value is Auto, want a numeric reading".to_string())
         );
     }
 

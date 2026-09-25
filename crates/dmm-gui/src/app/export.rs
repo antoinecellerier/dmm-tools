@@ -5,6 +5,7 @@
 
 use chrono::{DateTime, Local};
 use dmm_lib::export::CsvLayout;
+use dmm_lib::measurement::MeasuredValue;
 use log::{error, info, warn};
 use std::collections::VecDeque;
 use std::path::Path;
@@ -58,12 +59,17 @@ impl ExportFormat {
 ///
 /// `None` once a recording crossed a function switch: naming that file after
 /// the mode it started in would credit every later reading to it.
+///
+/// A word the meter shows instead of a reading ("Auto" with the probes
+/// lifted) comes under a mode of its own but is no switch, so it is left out
+/// — as `dmm-cli read -o` leaves it out of the name it picks.
 fn single_mode(samples: &VecDeque<Sample>) -> Option<&str> {
-    let first = samples.front()?.measurement.mode.as_ref();
-    samples
+    let mut modes = samples
         .iter()
-        .all(|s| s.measurement.mode == first)
-        .then_some(first)
+        .filter(|s| !matches!(s.measurement.value, MeasuredValue::NoReading(_)))
+        .map(|s| s.measurement.mode.as_ref());
+    let first = modes.next()?;
+    modes.all(|mode| mode == first).then_some(first)
 }
 
 /// Result of an export, sent from the writer thread to the UI.
@@ -456,6 +462,16 @@ mod tests {
         assert_eq!(single_mode(&app.recording.samples), Some("DC V"));
         app.recording.samples[1].measurement.mode = "AC V".into();
         assert_eq!(single_mode(&app.recording.samples), None);
+    }
+
+    /// A no-reading word between two readings of one mode is no switch.
+    #[test]
+    fn a_no_reading_leaves_the_mode_in_the_name() {
+        let mut app = app_holding(0, 0, &[0, 0, 0]);
+        let idle = &mut app.recording.samples[1].measurement;
+        idle.mode = "Auto".into();
+        idle.value = MeasuredValue::NoReading("Auto");
+        assert_eq!(single_mode(&app.recording.samples), Some("DC V"));
     }
 
     /// Record works with nothing connected, and `disconnect()` puts the

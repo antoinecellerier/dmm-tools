@@ -133,8 +133,15 @@ impl Integrator {
     /// Record an overload reading. Breaks the integration (clears the previous
     /// sample) so the next normal reading starts a fresh interval.
     pub fn push_overload(&mut self) {
-        self.prev = None;
+        self.push_gap();
         self.overload_gaps += 1;
+    }
+
+    /// Break the integration without counting an overload: the next normal
+    /// reading starts a fresh interval instead of bridging this one with a
+    /// trapezoid, which would integrate a value nobody measured.
+    pub(crate) fn push_gap(&mut self) {
+        self.prev = None;
     }
 
     /// Raw accumulated integral in unit·seconds (e.g. A·s or V·s).
@@ -248,7 +255,21 @@ impl SeriesStats {
     /// The first reading only stores the series — it starts one rather than
     /// changing it. When both mode and unit moved, the mode is reported: it
     /// names the change the user made.
+    ///
+    /// A [`MeasuredValue::NoReading`] neither continues nor starts a series:
+    /// its mode is the word the meter shows ("Auto" while the probes are
+    /// lifted), so treating it as one would reset MIN/MAX/AVG on every lift.
+    /// It leaves the series and min/max/avg alone and only breaks the
+    /// integration interval, as an overload does: the time the meter
+    /// measured nothing has no value to integrate, and bridging it with a
+    /// trapezoid between the readings either side would make one up.
     pub fn push(&mut self, m: &Measurement) -> Option<SeriesChange> {
+        if let MeasuredValue::NoReading(_) = m.value {
+            if self.integrate {
+                self.integrator.push_gap();
+            }
+            return None;
+        }
         let change = self.series.as_ref().and_then(|(prev_mode, prev_unit)| {
             if prev_mode.as_str() != m.mode.as_ref() {
                 Some(SeriesChange::Mode {
@@ -288,8 +309,9 @@ impl SeriesStats {
                 }
             }
             // A detection level is not a measured quantity — neither
-            // accumulator has anything to do with it.
-            MeasuredValue::NcvLevel(_) => {}
+            // accumulator has anything to do with it. A no-reading word
+            // returned above and never gets here.
+            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => {}
         }
         change
     }
@@ -660,6 +682,57 @@ mod tests {
         // Overload is not a number: it never reaches min/max/avg.
         assert_eq!(s.stats.count, 2);
         assert_eq!(s.unit(), Some("A"));
+    }
+
+    /// A ZOTEK meter shows "Auto" under a mode of that name whenever the
+    /// probes are lifted. Taken as a series, every lift would reset MIN/MAX/AVG.
+    #[test]
+    fn a_no_reading_neither_continues_nor_starts_a_series() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        assert_eq!(s.push(&reading("DC V", "V", 1.0, t0)), None);
+
+        let mut idle = Measurement::test_fixture(
+            MeasuredValue::NoReading("Auto"),
+            "",
+            crate::flags::StatusFlags::default(),
+        );
+        idle.mode = "Auto".into();
+        idle.timestamp = t0 + Duration::from_millis(100);
+        assert_eq!(s.push(&idle), None);
+        assert_eq!(s.mode(), Some("DC V"));
+        assert_eq!(s.unit(), Some("V"));
+
+        assert_eq!(
+            s.push(&reading("DC V", "V", 3.0, t0 + Duration::from_millis(200))),
+            None
+        );
+        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.stats.min, Some(1.0));
+        assert_eq!(s.stats.max, Some(3.0));
+        assert_eq!(s.stats.avg(), Some(2.0));
+        // The stretch with no reading is not bridged: nothing is integrated
+        // across it, and it is not counted as an overload.
+        assert_eq!(s.integrator.count, 2);
+        assert_eq!(s.integrator.value(), 0.0);
+        assert_eq!(s.integrator.overload_gaps, 0);
+    }
+
+    /// A no-reading word ahead of the first reading leaves the series for
+    /// that reading to start.
+    #[test]
+    fn a_no_reading_before_the_first_reading_starts_nothing() {
+        let mut s = SeriesStats::new(false);
+        let mut idle = Measurement::test_fixture(
+            MeasuredValue::NoReading("Auto"),
+            "",
+            crate::flags::StatusFlags::default(),
+        );
+        idle.mode = "Auto".into();
+        assert_eq!(s.push(&idle), None);
+        assert_eq!(s.mode(), None);
+        assert_eq!(s.push(&reading("DC V", "V", 1.0, Instant::now())), None);
+        assert_eq!(s.mode(), Some("DC V"));
     }
 
     #[test]

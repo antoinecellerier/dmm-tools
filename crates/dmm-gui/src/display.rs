@@ -80,6 +80,9 @@ fn format_value_display(m: &Measurement) -> String {
         },
         MeasuredValue::Overload => format!("{:>7}", "OL"),
         MeasuredValue::NcvLevel(l) => format!("NCV {l}"),
+        // Where the digits would be, like OL: never "OL", which would claim
+        // an overload the meter is not showing.
+        MeasuredValue::NoReading(word) => format!("{word:>7}"),
     }
 }
 
@@ -98,6 +101,7 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
             let value = match &m.value {
                 MeasuredValue::Overload => "overload".to_string(),
                 MeasuredValue::NcvLevel(l) => format!("NCV level {l}"),
+                MeasuredValue::NoReading(word) => spoken_no_reading(word),
                 MeasuredValue::Normal(_) => format_value_display(m).trim().to_string(),
             };
             let mut parts = String::with_capacity(96);
@@ -157,8 +161,15 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
 fn spoken_aux_value(aux: &AuxValue) -> Cow<'_, str> {
     match &aux.value {
         MeasuredValue::Overload => Cow::Borrowed("overload"),
+        MeasuredValue::NoReading(word) => Cow::Owned(spoken_no_reading(word)),
         _ => aux.value_str(),
     }
+}
+
+/// Spoken form of a word the meter shows instead of a reading: said to be no
+/// reading first, since "----" alone reads as four dashes or as nothing.
+fn spoken_no_reading(word: &str) -> String {
+    format!("no reading ({word})")
 }
 
 /// Spoken form of a unit string.
@@ -293,6 +304,10 @@ fn live_region_fingerprint(
                     2u8.hash(&mut h);
                     l.hash(&mut h);
                 }
+                MeasuredValue::NoReading(word) => {
+                    3u8.hash(&mut h);
+                    word.hash(&mut h);
+                }
             }
             m.unit.hash(&mut h);
             m.mode.hash(&mut h);
@@ -313,6 +328,10 @@ fn live_region_fingerprint(
                     MeasuredValue::NcvLevel(l) => {
                         2u8.hash(&mut h);
                         l.hash(&mut h);
+                    }
+                    MeasuredValue::NoReading(word) => {
+                        3u8.hash(&mut h);
+                        word.hash(&mut h);
                     }
                 }
                 aux.unit.hash(&mut h);
@@ -430,7 +449,9 @@ fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32
     match &m.value {
         MeasuredValue::Normal(_) => (format_value_display(m), ui.visuals().text_color()),
         MeasuredValue::Overload => (format_value_display(m), tc.status_error()),
-        MeasuredValue::NcvLevel(_) => (format_value_display(m), ui.visuals().text_color()),
+        MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => {
+            (format_value_display(m), ui.visuals().text_color())
+        }
     }
 }
 
@@ -1397,6 +1418,34 @@ mod tests {
         m.display_raw = Some("    0".to_string());
         assert_eq!(format_value_display(&m).trim(), "OL");
         assert!(live_region_label(Some(&m), false, NO_READING_TITLE).starts_with("overload"));
+    }
+
+    /// A word the meter shows instead of a reading sits where the digits do,
+    /// right-aligned like OL, and is never shown or spoken as an overload.
+    #[test]
+    fn a_no_reading_shows_its_word_not_ol() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::NoReading("Auto"), "", StatusFlags::default());
+        m.mode = "Auto".into();
+        m.display_raw = Some("   Auto".to_string());
+        assert_eq!(format_value_display(&m), "   Auto");
+        assert_eq!(
+            live_region_label(Some(&m), false, NO_READING_TITLE),
+            "no reading (Auto), Auto"
+        );
+
+        let mut over = m.clone();
+        over.value = MeasuredValue::Overload;
+        assert_ne!(
+            live_region_fingerprint(Some(&m), false, NO_READING_TITLE),
+            live_region_fingerprint(Some(&over), false, NO_READING_TITLE)
+        );
+        let mut dashes = m.clone();
+        dashes.value = MeasuredValue::NoReading("----");
+        assert_ne!(
+            live_region_fingerprint(Some(&m), false, NO_READING_TITLE),
+            live_region_fingerprint(Some(&dashes), false, NO_READING_TITLE)
+        );
     }
 
     #[test]

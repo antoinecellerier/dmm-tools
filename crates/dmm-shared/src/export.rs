@@ -30,6 +30,10 @@ pub fn measurement_json(
         MeasuredValue::Normal(v) => json!(v),
         MeasuredValue::Overload => json!("OL"),
         MeasuredValue::NcvLevel(l) => json!({"ncv_level": l}),
+        // Null rather than a missing key or the word: every line keeps its
+        // "value" key, as `display_raw` and `progress` stay present as null
+        // when absent, and "mode" already carries the word.
+        MeasuredValue::NoReading(_) => Value::Null,
     };
     // Built from StatusFlags::as_pairs rather than a hand-written list: the
     // old list had drifted and was missing `loz` and `void`, so a VC-890
@@ -60,9 +64,14 @@ pub fn measurement_json(
                 .iter()
                 .map(|aux| {
                     let unit = aux.unit_or(&m.unit);
+                    // Null for a no-reading word, as for the main value.
+                    let value = match aux.value {
+                        MeasuredValue::NoReading(_) => Value::Null,
+                        _ => json!(aux.value_export_str()),
+                    };
                     json!({
                         "label": aux.label,
-                        "value": aux.value_str(),
+                        "value": value,
                         "unit": unit,
                         "elapsed_secs": aux.elapsed_secs,
                     })
@@ -164,6 +173,34 @@ mod tests {
             metadata_line("UNI-T UT61E+"),
             "{\"_metadata\":{\"device\":\"UNI-T UT61E+\"}}"
         );
+    }
+
+    /// A word the meter shows instead of a reading exports a null value, the
+    /// key kept, and the word in "mode"; a sub-value showing one likewise.
+    #[test]
+    fn a_no_reading_exports_a_null_value() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::NoReading("Auto"), "", StatusFlags::default());
+        m.mode = "Auto".into();
+        m.display_raw = None;
+        m.aux_values = vec![dmm_lib::measurement::AuxValue {
+            label: "Raw".into(),
+            value: MeasuredValue::NoReading("Auto"),
+            unit: "".into(),
+            display_raw: None,
+            elapsed_secs: None,
+        }];
+        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None).to_string();
+        assert!(
+            line.starts_with(
+                "{\"timestamp\":\"2026-09-15T14:30:05+02:00\",\"mode\":\"Auto\",\
+                 \"value\":null,\"unit\":\"\","
+            ),
+            "got {line}"
+        );
+        let v: Value = serde_json::from_str(&line).expect("valid JSON");
+        assert_eq!(v["aux"][0]["value"], Value::Null);
+        assert_eq!(v["aux"][0]["label"], json!("Raw"));
     }
 
     /// A model or mode name goes into the file name as one word: the dialog

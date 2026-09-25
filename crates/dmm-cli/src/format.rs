@@ -282,6 +282,22 @@ mod tests {
         ];
     }
 
+    /// A word the meter shows instead of a reading prints as the word, never
+    /// as OL, and leaves the CSV value cell empty.
+    #[test]
+    fn a_no_reading_prints_its_word() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::NoReading("----"),
+            "A",
+            StatusFlags::default(),
+        );
+        m.mode = "AC A".into();
+        assert_eq!(text_for(&m), "---- A\n");
+        let csv = rendered(Output::Csv(CsvLayout::default()), &m, None);
+        let cells: Vec<&str> = csv.trim_end().split(',').collect();
+        assert_eq!(&cells[1..4], ["AC A", "", "A"]);
+    }
+
     /// UT181A REL/MIN-MAX sub-values were parsed and then discarded by every
     /// output format.
     #[test]

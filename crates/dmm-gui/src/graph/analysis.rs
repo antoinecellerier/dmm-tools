@@ -238,7 +238,12 @@ impl Graph {
         if self.pending_break != Some(GapKind::Overload) {
             return None;
         }
-        let start = self.history.back().map(|p| self.elapsed_secs(p.time))?;
+        let trace_end = self.history.back().map(|p| self.elapsed_secs(p.time))?;
+        // After a word shown instead of a reading, the band starts at the
+        // first OL sample instead (`push_break`).
+        let start = self
+            .pending_band_from
+            .map_or(trace_end, |t| self.elapsed_secs(t));
         let end = self
             .pending_break_since
             .map(|t| self.elapsed_secs(t))

@@ -2,6 +2,7 @@
 //! both the session and the visible graph window, pre-formatted once and
 //! rendered in either the wide stacked rows or the compact single-line form.
 
+use dmm_lib::measurement::MeasuredValue;
 use dmm_lib::stats::{self, RunningStats};
 use eframe::egui::{self, Color32, RichText, Ui};
 
@@ -105,11 +106,16 @@ fn show_stat_rows(
 
 impl App {
     pub(super) fn show_stats_section(&mut self, ui: &mut Ui, compact: bool, scale: f32) {
-        let unit = self
-            .last_measurement
-            .as_ref()
-            .map(|m| &*m.unit)
-            .unwrap_or("");
+        let unit = match self.last_measurement.as_ref() {
+            // A word the meter shows instead of a reading has no unit of its
+            // own and leaves the series alone, so the figures still belong
+            // to the reading before it.
+            Some(m) if matches!(m.value, MeasuredValue::NoReading(_)) => {
+                self.session.unit().unwrap_or("")
+            }
+            Some(m) => &*m.unit,
+            None => "",
+        };
         // Keyed on the caption unit rather than the session's: `clear_session`
         // drops `last_measurement` but `SeriesStats::reset` keeps its series,
         // and the row should vanish with the reading it describes.

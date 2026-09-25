@@ -65,11 +65,21 @@ pub(crate) enum Wrote {
 struct Named {
     path: PathBuf,
     start: DateTime<Local>,
-    /// The mode the name carries, and whether every reading since has stayed
-    /// in it — a run that crossed a function switch is no one mode's, so the
-    /// name loses that segment when the run ends.
-    mode: String,
+    /// The mode `path` carries: `None` when the run opened on a word the
+    /// meter shows instead of a reading, which names no mode.
+    in_name: Option<String>,
+    /// The mode of the first reading, and whether every reading since has
+    /// stayed in it — a run that crossed a function switch is no one mode's,
+    /// so the name loses that segment when the run ends.
+    mode: Option<String>,
     one_mode: bool,
+}
+
+impl Named {
+    /// The mode the finished file should be named after.
+    fn final_mode(&self) -> Option<&str> {
+        self.mode.as_deref().filter(|_| self.one_mode)
+    }
 }
 
 impl Writer {
@@ -93,14 +103,19 @@ impl Writer {
 
     /// Take in a reading before it is written: the first one names a bare
     /// `-o`'s file, and a later one in another mode drops the mode from it.
-    pub(crate) fn saw(&mut self, mode: &str, at: DateTime<Local>) -> io::Result<()> {
+    ///
+    /// `mode` is `None` for a word the meter shows instead of a reading
+    /// ("Auto" with the probes lifted): its mode is that word, not a
+    /// function switch, so it neither names the file nor unnames it — as the
+    /// GUI's export leaves it out of the name it picks.
+    pub(crate) fn saw(&mut self, mode: Option<&str>, at: DateTime<Local>) -> io::Result<()> {
         let Some(auto) = &mut self.auto else {
             return Ok(());
         };
         let Some(named) = &mut auto.named else {
             let (path, file) = create_new(&PathBuf::from(dmm_shared::export::default_name(
                 &auto.meter,
-                Some(mode),
+                mode,
                 at,
                 auto.extension,
             )))?;
@@ -112,12 +127,19 @@ impl Writer {
             auto.named = Some(Named {
                 path,
                 start: at,
-                mode: mode.to_string(),
+                in_name: mode.map(str::to_string),
+                mode: mode.map(str::to_string),
                 one_mode: true,
             });
             return Ok(());
         };
-        named.one_mode &= named.mode == mode;
+        let Some(mode) = mode else {
+            return Ok(());
+        };
+        match &named.mode {
+            Some(first) => named.one_mode &= first == mode,
+            None => named.mode = Some(mode.to_string()),
+        }
         Ok(())
     }
 
@@ -141,12 +163,13 @@ impl Writer {
         else {
             return Ok(Wrote::Nothing);
         };
-        if named.one_mode {
+        let mode = named.final_mode();
+        if mode == named.in_name.as_deref() {
             return Ok(Wrote::Named(named.path));
         }
         let target = PathBuf::from(dmm_shared::export::default_name(
             &meter,
-            None,
+            mode,
             named.start,
             extension,
         ));
@@ -259,6 +282,53 @@ mod tests {
             writer.finish().expect("the run closes"),
             Wrote::AsAsked
         ));
+    }
+
+    /// A writer whose file is already named after `in_name`, without
+    /// touching the disk.
+    fn named(in_name: Option<&str>) -> Writer {
+        Writer {
+            sink: Sink::Unnamed(Vec::new()),
+            auto: Some(Auto {
+                meter: "UT61E+".to_string(),
+                extension: "csv",
+                named: Some(Named {
+                    path: PathBuf::from("unused.csv"),
+                    start: Local::now(),
+                    in_name: in_name.map(str::to_string),
+                    mode: in_name.map(str::to_string),
+                    one_mode: true,
+                }),
+            }),
+        }
+    }
+
+    fn final_mode(writer: &Writer) -> Option<&str> {
+        writer.auto.as_ref()?.named.as_ref()?.final_mode()
+    }
+
+    /// A word the meter shows instead of a reading ("Auto" with the probes
+    /// lifted) is no function switch: the file keeps the mode either side.
+    #[test]
+    fn a_no_reading_keeps_the_mode_in_the_name() {
+        let mut writer = named(Some("DC V"));
+        let at = Local::now();
+        writer.saw(None, at).expect("no disk access");
+        writer.saw(Some("DC V"), at).expect("no disk access");
+        assert_eq!(final_mode(&writer), Some("DC V"));
+        writer.saw(Some("AC V"), at).expect("no disk access");
+        assert_eq!(final_mode(&writer), None);
+    }
+
+    /// A run that opened on a word takes its mode from the first reading.
+    #[test]
+    fn a_run_opened_on_a_no_reading_takes_the_first_readings_mode() {
+        let mut writer = named(None);
+        let at = Local::now();
+        assert_eq!(final_mode(&writer), None);
+        writer.saw(Some("DC V"), at).expect("no disk access");
+        writer.saw(None, at).expect("no disk access");
+        assert_eq!(final_mode(&writer), Some("DC V"));
     }
 
     /// The names a taken one steps aside to, in order.

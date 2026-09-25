@@ -828,6 +828,7 @@ impl App {
                             display_raw,
                             series,
                             overlays,
+                            ..
                         }) => self.graph.push_sample(PlotSample {
                             value: v,
                             timestamp: m.timestamp,
@@ -837,6 +838,15 @@ impl App {
                             series,
                             overlays: &overlays,
                         }),
+                        // A word instead of a reading ("Auto" with the probes
+                        // lifted): a break too, but not an over-range one.
+                        // It never reaches `push_sample`, so its mode and unit
+                        // cannot restart the trace either.
+                        Some(PlotInput {
+                            value: None,
+                            no_reading: true,
+                            ..
+                        }) => self.graph.push_no_reading(m.timestamp),
                         // The plotted series is over range: no point, but the
                         // trace has to break so it isn't drawn straight
                         // through the excursion.
@@ -1873,6 +1883,24 @@ mod tests {
             app.recording.samples[1].measurement.value_export_str(),
             "OL"
         );
+    }
+
+    /// "Auto" with the probes lifted comes under a mode of its own, but it is
+    /// no dial turn: the graph, the history and the statistics carry on.
+    #[test]
+    fn a_no_reading_between_readings_restarts_nothing() {
+        let mut app = connected_app();
+        deliver_readings(&mut app, &[DC]);
+        let first = app.graph.first_point_time();
+        let mut idle = reading("Auto", MeasuredValue::NoReading("Auto"), Instant::now());
+        idle.unit = "".into();
+        deliver(&mut app, DmmMessage::Measurement(idle));
+        deliver_readings(&mut app, &[DC]);
+        assert_eq!(modes(&app), ["DC V", "Auto", "DC V"]);
+        assert!(first.is_some());
+        assert_eq!(app.graph.first_point_time(), first);
+        assert_eq!(app.session.stats.count, 2);
+        assert_eq!(app.recording.samples[1].measurement.value_export_str(), "");
     }
 
     /// NCV readings are never plotted: an empty graph cuts nothing.

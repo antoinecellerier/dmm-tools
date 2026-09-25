@@ -195,13 +195,13 @@ impl Transform {
                 m.value = MeasuredValue::Normal(value);
                 m.display_raw = Some(display);
             }
-            // Overload and NCV have no digits to scale (`display_raw` is only
-            // meaningful for `Normal`), so the reading passes through with its
-            // own display string restored. The Raw sub-value is still appended
-            // below: a sub-value count that stays constant across an overload
-            // keeps the GUI's series bookkeeping and the CSV's aux columns
-            // stable.
-            MeasuredValue::Overload | MeasuredValue::NcvLevel(_) => {
+            // Overload, NCV and a no-reading word have no digits to scale
+            // (`display_raw` is only meaningful for `Normal`), so the reading
+            // passes through with its own display string restored. The Raw
+            // sub-value is still appended below: a sub-value count that stays
+            // constant across an overload keeps the GUI's series bookkeeping
+            // and the CSV's aux columns stable.
+            MeasuredValue::Overload | MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => {
                 m.display_raw = raw_display.clone();
             }
         }

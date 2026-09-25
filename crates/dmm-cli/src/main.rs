@@ -1599,7 +1599,11 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
                 // Before the write: a file the run names itself is named after
                 // the first reading, and later readings say whether the mode
                 // in that name still describes the run.
-                writer.saw(&m.mode, wall_clock.wall_time_for(m.timestamp).into())?;
+                let mode = match m.value {
+                    dmm_lib::measurement::MeasuredValue::NoReading(_) => None,
+                    _ => Some(m.mode.as_ref()),
+                };
+                writer.saw(mode, wall_clock.wall_time_for(m.timestamp).into())?;
                 out.write(&mut writer, &m, &wall_clock, integral_display)?;
                 writer.flush()?;
                 i += 1;

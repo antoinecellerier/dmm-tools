@@ -10,8 +10,13 @@ use crate::graph::MAX_OVERLAYS;
 /// The graph never sees `dmm_lib` measurement types; this is where the
 /// selected series and its same-unit companions are picked out.
 pub(super) struct PlotInput<'a> {
-    /// The plotted series' value, or `None` when it is over range.
+    /// The plotted series' value, or `None` when it is over range or the
+    /// meter shows a word instead of a reading.
     pub value: Option<f64>,
+    /// `value` is `None` because the plotted series shows a word instead of
+    /// a reading ([`MeasuredValue::NoReading`]), not because it is over
+    /// range: the graph draws that stretch as a gap, not an over-range band.
+    pub no_reading: bool,
     /// Unit of the plotted series — the meter's, or the sub-value's own.
     pub unit: &'a str,
     pub display_raw: Option<&'a str>,
@@ -22,12 +27,13 @@ pub(super) struct PlotInput<'a> {
 }
 
 /// What a measured value contributes to a plot: `Some(Some(v))` for a
-/// reading, `Some(None)` for an over-range one (a break in the trace, but
-/// still a measurement), `None` for something with no place on a value axis.
+/// reading, `Some(None)` for an over-range one or a word the meter shows
+/// instead of a reading (a break in the trace, but still a measurement),
+/// `None` for something with no place on a value axis.
 fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
     match v {
         MeasuredValue::Normal(v) => Some(Some(*v)),
-        MeasuredValue::Overload => Some(None),
+        MeasuredValue::Overload | MeasuredValue::NoReading(_) => Some(None),
         // NCV is a bar-graph level, not a quantity — plotting it against a
         // volt axis would be meaningless.
         MeasuredValue::NcvLevel(_) => None,
@@ -60,6 +66,8 @@ pub(super) fn resolve_plot_input<'a>(
         None => None,
     };
 
+    let plotted_value = plotted.map_or(&m.value, |aux| &aux.value);
+    let no_reading = matches!(plotted_value, MeasuredValue::NoReading(_));
     let (value, unit, display_raw, series) = match plotted {
         Some(aux) => (
             plottable_value(&aux.value)?,
@@ -102,6 +110,7 @@ pub(super) fn resolve_plot_input<'a>(
 
     Some(PlotInput {
         value,
+        no_reading,
         unit,
         display_raw,
         series,
@@ -323,6 +332,18 @@ mod tests {
         assert_eq!(raw.unit, "mV");
         assert_eq!(raw.value, Some(123.4));
         assert!(raw.overlays.is_empty(), "got {:?}", raw.overlays);
+    }
+
+    /// "Auto" with the probes lifted breaks the trace like an overload,
+    /// rather than being skipped and drawn straight through.
+    #[test]
+    fn a_no_reading_word_is_a_gap() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::NoReading("Auto"), "", StatusFlags::default());
+        m.mode = "Auto".into();
+        let plot = resolve_plot_input(&m, None).expect("a break is still plotted");
+        assert_eq!(plot.value, None);
+        assert!(plot.no_reading, "drawn as a gap, not an over-range band");
     }
 
     /// NCV is a bar-graph level, not a quantity on a value axis.

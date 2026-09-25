@@ -263,8 +263,9 @@ impl StateWatcher {
 ///
 /// Open probes wander, and a wobble is not the action: -0.0013 V of lead
 /// noise satisfied "DC V, negative" before the battery was connected. The one
-/// exception is OL turning into a reading — Ω open to Ω across the body —
-/// which open leads cannot fake, so that step waits for it. So does a step
+/// exception is OL, or a word shown instead of a reading, turning into a
+/// reading — Ω open to Ω across the body — which open leads cannot fake, so
+/// that step waits for it. So does a step
 /// with a magnitude floor (`at_least`): that floor is what tells the source
 /// from the noise.
 pub(crate) fn enter_only(expect: Option<Expect>, previous: Option<&Measurement>) -> bool {
@@ -279,7 +280,10 @@ pub(crate) fn enter_only(expect: Option<Expect>, previous: Option<&Measurement>)
     if !matches!(expect.mode, Some(mode) if m.mode == mode) {
         return false;
     }
-    !(matches!(m.value, MeasuredValue::Overload) && expect.value == Some(ValueExpect::Finite))
+    !(matches!(
+        m.value,
+        MeasuredValue::Overload | MeasuredValue::NoReading(_)
+    ) && expect.value == Some(ValueExpect::Finite))
 }
 
 #[cfg(test)]
@@ -500,6 +504,11 @@ mod tests {
         assert!(!enter_only(Some(finite_ohm), Some(&ohm(b"     OL"))));
         // ohm_body → ohm_short: both finite, so it asks.
         assert!(enter_only(Some(finite_ohm), Some(&ohm(b"  1.234"))));
+        // A word shown instead of a reading ("Auto" with the leads open)
+        // turning into a reading is the same kind of change.
+        let mut idle = ohm(b"  1.234");
+        idle.value = MeasuredValue::NoReading("Auto");
+        assert!(!enter_only(Some(finite_ohm), Some(&idle)));
 
         // A different mode still has to be watched for, as do the first step
         // of a run and any raw-diff step.

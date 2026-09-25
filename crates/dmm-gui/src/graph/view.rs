@@ -139,14 +139,14 @@ impl Graph {
             .back()
             .map(|p| self.elapsed_secs(p.time))
             .unwrap_or(0.0);
-        // Overload samples carry timestamps but no plottable value, so they
-        // never enter `history` — yet they are the newest thing the meter
-        // sent. Extending the range here rather than at each call site means
+        // Overload samples, and words shown instead of a reading, carry
+        // timestamps but no plottable value, so they never enter `history` —
+        // yet they are the newest thing the meter sent. Extending the range here rather than at each call site means
         // every consumer follows them: the live window, the minimap's time
         // mapping and its drag clamping. Otherwise time visibly freezes for
         // the duration of the excursion, which is exactly when the band being
         // drawn needs somewhere to grow into.
-        let x_max = match self.pending_break_since {
+        let x_max = match self.pending_heard_until {
             Some(t) => x_max.max(self.elapsed_secs(t)),
             None => x_max,
         };

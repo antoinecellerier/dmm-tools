@@ -252,6 +252,98 @@ fn a_brief_dropout_without_an_overload_still_shows() {
     assert_eq!(kinds, vec![GapKind::NoData]);
 }
 
+/// A meter showing "Auto" with the probes lifted is neither over range nor
+/// silent: the trace breaks, the stretch is a gap rather than a band, and the
+/// live view still follows the samples arriving.
+#[test]
+fn a_no_reading_stretch_is_a_gap_not_a_band() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    for i in 1..=3 {
+        g.push_no_reading(t0 + Duration::from_millis(i * 100));
+    }
+    assert!(
+        (g.data_time_range().1 - 0.3).abs() < 1e-9,
+        "the view follows the meter"
+    );
+    g.push(2.0, t0 + Duration::from_millis(400), "DC V", "V", None);
+
+    let kinds: Vec<GapKind> = g.visible_gaps().iter().map(|&(_, _, k)| k).collect();
+    assert_eq!(kinds, vec![GapKind::NoData]);
+}
+
+/// After an overload the band ends at the last OL sample: the word that
+/// follows is not over range.
+#[test]
+fn a_no_reading_after_an_overload_closes_the_band() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push_break(t0 + Duration::from_millis(500));
+    g.push_no_reading(t0 + Duration::from_millis(600));
+    g.push(2.0, t0 + Duration::from_secs(1), "DC V", "V", None);
+
+    let gaps = g.visible_gaps();
+    let kinds: Vec<GapKind> = gaps.iter().map(|&(_, _, k)| k).collect();
+    assert_eq!(kinds, vec![GapKind::Overload, GapKind::NoData]);
+    assert!((gaps[0].1 - 0.5).abs() < 1e-9, "band ends at the last OL");
+}
+
+/// The word that follows an overload still moves the live view, though the
+/// band stays at the last OL sample.
+#[test]
+fn a_no_reading_after_an_overload_keeps_the_view_moving() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "DC V", "V", None);
+    g.push_break(t0 + Duration::from_millis(500));
+    g.push_no_reading(t0 + Duration::from_millis(600));
+    g.push_no_reading(t0 + Duration::from_millis(700));
+
+    let live_edge = g.data_time_range().1;
+    assert!(
+        (live_edge - 0.7).abs() < 1e-9,
+        "the view follows the meter, got {live_edge}"
+    );
+    let (_, band_end) = g.pending_overload_span().expect("the band is still open");
+    assert!(
+        (band_end - 0.5).abs() < 1e-9,
+        "band ends at the last OL, got {band_end}"
+    );
+}
+
+/// An overload after a word (dashes while an inrush is awaited, then OL):
+/// the word's stretch stays a gap and the band starts at the first OL
+/// sample, both while the overload lasts and once a reading closes it.
+#[test]
+fn an_overload_after_a_no_reading_starts_the_band_at_the_first_ol() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(1.0, t0, "Inrush", "A", None);
+    g.push_no_reading(t0 + Duration::from_millis(200));
+    g.push_break(t0 + Duration::from_millis(500));
+    g.push_break(t0 + Duration::from_millis(700));
+
+    let (start, end) = g.pending_overload_span().expect("over range now");
+    assert!(
+        (start - 0.5).abs() < 1e-9,
+        "band starts at the first OL, got {start}"
+    );
+    assert!((end - 0.7).abs() < 1e-9, "got {end}");
+
+    g.push(2.0, t0 + Duration::from_secs(1), "Inrush", "A", None);
+    let gaps = g.visible_gaps();
+    let kinds: Vec<GapKind> = gaps.iter().map(|&(_, _, k)| k).collect();
+    assert_eq!(kinds, vec![GapKind::NoData, GapKind::Overload]);
+    assert!((gaps[0].1 - 0.5).abs() < 1e-9, "gap ends at the first OL");
+    assert!(
+        (gaps[1].0 - 0.5).abs() < 1e-9,
+        "band starts at the first OL"
+    );
+    assert!((gaps[1].1 - 1.0).abs() < 1e-9, "band ends at the reading");
+}
+
 /// While the link is up, OL samples keep arriving, so a long overload is
 /// all band and no dropout — the case that must not regress.
 #[test]

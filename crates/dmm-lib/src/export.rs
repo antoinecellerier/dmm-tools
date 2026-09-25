@@ -242,6 +242,20 @@ mod tests {
         assert_eq!(&row[18..21], ["", "", ""]);
     }
 
+    /// A word the meter shows instead of a reading leaves the value cell
+    /// empty: the mode column carries the word, and the value column stays
+    /// numeric.
+    #[test]
+    fn a_no_reading_row_has_an_empty_value() {
+        let mut m = reading();
+        m.mode = "Auto".into();
+        m.value = MeasuredValue::NoReading("Auto");
+        m.unit = "".into();
+        m.range_label = "".into();
+        let row = layout(0, 0, false).row(&m, "ts", None, 0);
+        assert_eq!(row, ["ts", "Auto", "", "", "", ""]);
+    }
+
     #[test]
     fn integral_cells_follow_the_flags_column() {
         let m = reading();

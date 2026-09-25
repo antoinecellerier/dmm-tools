@@ -79,7 +79,8 @@ struct DataPoint {
     /// even though the two neighbouring samples are adjacent in time.
     /// `None` when this point continues the previous one.
     break_before: Option<GapKind>,
-    /// Timestamp of the last non-plottable sample in that interruption.
+    /// Timestamp of the last non-plottable sample in that interruption, or
+    /// with `break_band_late` the first OL sample.
     ///
     /// Bounds what we actually observed. If the meter goes over range and
     /// then the link drops, OL samples stop arriving and this stays at the
@@ -88,6 +89,10 @@ struct DataPoint {
     /// The interruption included a genuine loss of data, as reported by the
     /// App — not merely a quiet meter. See `push_data_loss`.
     break_had_data_loss: bool,
+    /// The meter showed a word instead of a reading before going over range:
+    /// the band starts at `break_last_sample`, a gap before it. See
+    /// `push_break`.
+    break_band_late: bool,
 }
 
 /// One sub-value trace drawn beside the plotted series.
@@ -187,13 +192,20 @@ pub struct Graph {
     /// went down, or acquisition was stopped. Distinct from the meter simply
     /// not sending — see `push_data_loss`.
     pending_data_loss: bool,
-    /// Timestamp of the newest overload sample while a break is open.
-    ///
-    /// Overload measurements carry a timestamp like any other; they just have
-    /// no plottable value. Keeping the newest one lets the live view follow
-    /// the present while the meter is over range, instead of freezing at the
-    /// last plotted point.
+    /// Timestamp of the newest overload sample while a break is open: where
+    /// the over-range band ends.
     pending_break_since: Option<Instant>,
+    /// Timestamp of the newest sample while a break is open, an overload or
+    /// a word shown instead of a reading.
+    ///
+    /// These carry a timestamp like any other; they just have no plottable
+    /// value. Keeping the newest one lets the live view follow the present
+    /// while the meter sends them, instead of freezing at the last plotted
+    /// point.
+    pending_heard_until: Option<Instant>,
+    /// Timestamp of the first overload sample of a break that began with a
+    /// word shown instead of a reading: where the band starts.
+    pending_band_from: Option<Instant>,
     /// When true, Y axis uses fixed min/max instead of auto-scaling.
     pub y_axis_fixed: bool,
     /// Fixed Y-axis bounds, as typed and as parsed.
@@ -272,6 +284,8 @@ impl Graph {
             pending_break: None,
             pending_data_loss: false,
             pending_break_since: None,
+            pending_heard_until: None,
+            pending_band_from: None,
             y_axis_fixed: false,
             y_min: NumberField::new("-1", -1.0),
             y_max: NumberField::new("1", 1.0),
@@ -476,13 +490,17 @@ impl Graph {
             });
         }
 
+        let band_from = self.pending_band_from.take();
+        let last_overload = self.pending_break_since.take();
         let point = DataPoint {
             time: now,
             value,
             break_before: self.pending_break.take(),
-            break_last_sample: self.pending_break_since.take(),
+            break_last_sample: band_from.or(last_overload),
             break_had_data_loss: std::mem::take(&mut self.pending_data_loss),
+            break_band_late: band_from.is_some(),
         };
+        self.pending_heard_until = None;
         // Everything the minimap's level needs, decided against the point
         // before this one exactly as `build_segments_for_range` decides it for
         // a consecutive pair — so appending and rebuilding cannot disagree.
@@ -582,14 +600,44 @@ impl Graph {
     /// history position, and an over-range plotted series adds no position.
     /// They resume at the next plotted point, split by this break like the
     /// main trace.
+    ///
+    /// Arriving after a word shown instead of a reading, it starts the band
+    /// here and leaves the word's stretch a gap (`gap_entries`). A word
+    /// after that band is drawn into it: one interruption splits in two, not
+    /// three.
     pub fn push_break(&mut self, timestamp: Instant) {
-        // Updated on every overload sample, not just the first: it is what
-        // advances the live view for as long as the meter stays over range.
+        // Updated on every overload sample, not just the first: they close
+        // the band and advance the live view for as long as the meter stays
+        // over range.
         self.pending_break_since = Some(timestamp);
-        if self.pending_break.is_some() {
+        self.pending_heard_until = Some(timestamp);
+        match self.pending_break {
+            None => self.pending_break = Some(GapKind::Overload),
+            // Only `push_data_loss` marks a loss, so this gap is the word's.
+            Some(GapKind::NoData) if !self.pending_data_loss => {
+                self.pending_break = Some(GapKind::Overload);
+                self.pending_band_from = Some(timestamp);
+            }
+            Some(_) => {}
+        }
+    }
+
+    /// Record that the meter showed a word instead of a reading ("Auto" with
+    /// the probes lifted): the trace breaks as for an overload, but the
+    /// stretch is drawn as a gap rather than an over-range band, since the
+    /// meter was not over range.
+    ///
+    /// Keeps the live view moving the way an overload does — the meter is
+    /// still sending. Arriving during an overload, it closes the band at the
+    /// last OL sample and leaves the rest a gap, through the same split a
+    /// dropout mid-overload takes (`gap_entries`).
+    pub fn push_no_reading(&mut self, timestamp: Instant) {
+        self.pending_heard_until = Some(timestamp);
+        if self.pending_break == Some(GapKind::Overload) {
+            self.pending_data_loss = true;
             return;
         }
-        self.pending_break = Some(GapKind::Overload);
+        self.pending_break = Some(GapKind::NoData);
     }
 
     /// Record that data was genuinely lost — the link dropped, or
@@ -619,6 +667,8 @@ impl Graph {
         self.pending_break = None;
         self.pending_data_loss = false;
         self.pending_break_since = None;
+        self.pending_heard_until = None;
+        self.pending_band_from = None;
         self.current_mode = None;
         self.current_unit.clear();
         self.last_display_raw = None;
@@ -752,6 +802,14 @@ impl Graph {
         let start = self.elapsed_secs(prev);
         let end = self.elapsed_secs(point.time);
         match (kind, point.break_last_sample) {
+            // A word shown instead of a reading, then over range.
+            (GapKind::Overload, Some(first)) if point.break_band_late => {
+                let band_from = self.elapsed_secs(first);
+                [
+                    Some((start, band_from, GapKind::NoData)),
+                    Some((band_from, end, GapKind::Overload)),
+                ]
+            }
             (GapKind::Overload, Some(last)) if point.break_had_data_loss => {
                 let heard_until = self.elapsed_secs(last);
                 [
