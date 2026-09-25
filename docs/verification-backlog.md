@@ -57,7 +57,7 @@ is probed with, and how well that probe is backed:
 | UT71A–E, VC920/VC940/VC960 | nothing beyond the CH9325 init's `0x5A` | any 11-byte CR LF packet, claimed as a UT804 — the packet does not name its model, so the user names the meter | Never seen: no UT71 or VC9x0 packet has been captured ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)) |
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
-| ZOTEK ZT-300AB / AN9002 | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
+| ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
 
 Open questions, each needing a meter:
 
@@ -1693,7 +1693,7 @@ port scan** (80, 111, 5025, 49152 by firmware version).
 Specified 2026-09-25 from ZOTEK's three apps and six manuals
 (`docs/research/zotek/reverse-engineered-protocol.md`, §10). Implemented
 2026-09-26 as the `zotek` family, experimental, one registry entry per
-packet layout: `zt300ab` (type 3). Nobody on the project owns one, so where
+packet layout: `zt300ab` (type 3), `zt5566se` (type 4). Nobody on the project owns one, so where
 an item below is open the driver's choice is noted with it. Spec tables wait
 for a first real-device confirmation, as for every new meter; the ZOTEK
 manuals carry them. The clean-room boundary was opened the same
@@ -1715,6 +1715,7 @@ function shown and the LCD reading noted.
   and the SE manual's app section names only other models. A community log
   shows a ZT-5566SE streaming type-4 packets; confirm with a reporter's
   capture, and whether the plain ZT-5566 and the ZT-5566S stream at all.
+  The `zt5566se` entry rests on that log; the plain ZT-5566 gets no alias.
 - **Advertised name.** "Bluetooth DMM" per the apps and manuals, and in every
   community scan (AN9002 / ZT-300AB); community clients that filter on the
   FFF0 UUID find a V05B and an AN9002, so it is advertised. Open: which
@@ -1757,11 +1758,14 @@ function shown and the LCD reading noted.
   (bytes 14-15, byte 16 bits 3-0, byte 17 bits 7-4, byte 18 bits 6, 5, 3-0)
   rising with the reading like an analog bar (spec §11.3 D1). Confirm on a
   ZT-5566/SE by counting bar segments against the bits near 4 % of range,
-  and whether the colon, in clock mode, uses the same bit.
+  and whether the colon, in clock mode, uses the same bit. The driver keeps
+  these bits silent and draws no bar graph.
 - **Type-4 HOLD and AC.** A community report says HOLD on a ZT-5566SE does
   not freeze the stream, and the community log never shows AC mode or the
   secondary display (byte 4 bits 7-5, bytes 5-8 always 0). Needs a capture
-  with HOLD on, and one in V AC and in Hz.
+  with HOLD on, and one in V AC and in Hz. The driver shows the secondary
+  display as a sub-value while its Hz or % is lit, and reports digits there
+  with neither; PEAK (never seen) adds "peak" to the mode.
 - **Unread bits.** Type 3 byte 10 bits 7-4 (TRUE RMS, the one ZT-300AB legend
   item with no bit?): never set in community captures, an AC TRUE RMS frame
   included, so likely no separate bit. Type 4 bytes 14-15, byte 16 bits 3-0,

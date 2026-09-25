@@ -12,6 +12,7 @@ use crate::protocol::{CaptureStep, Expect, Need};
 pub(super) fn steps(layout: &Layout) -> Vec<CaptureStep> {
     match layout.type_byte {
         3 => zt300ab(),
+        4 => zt5566se(),
         _ => Vec::new(),
     }
 }
@@ -177,4 +178,120 @@ fn zt300ab() -> Vec<CaptureStep> {
         .expect(Expect::mode("DC µA")),
         CaptureStep::basic("acua", "µA position: press SEL for AC").expect(Expect::mode("AC µA")),
     ]
+}
+
+/// The ZT-5566SE has a button per function rather than a dial: V~/⎓ Hz,
+/// mV~/⎓ Hz, Ω, capacitance, diode/continuity and A~/⎓ mA~/⎓, then HOLD,
+/// MAX/MIN, REL and VOL/RANGE, whose knob picks a range (ZT-5566SE manual
+/// p.11-12). Its secondary display shows the frequency in V and the duty
+/// cycle in Hz; the V button reaches frequency for AC above 36 V, the mV
+/// button below it (p.11, p.21). MAX/MIN records both, and a long press
+/// leaves it; no way to show MIN alone is documented (p.12). It has no
+/// temperature, NCV or peak key, though the layout has a PEAK bit (spec
+/// §7.4); its °C/°F button is for the knob's room temperature (p.13).
+fn zt5566se() -> Vec<CaptureStep> {
+    let [dcv, dcv_short, dcv_negative, ohm_ol, ohm_body, ohm_short] = steps::gate_steps(
+        Volts::DcV,
+        CaptureStep::basic("dcv", "Press the V~/⎓ Hz button until DC V shows"),
+        Ohms::Word,
+        CaptureStep::basic(
+            "ohm_ol",
+            "Press the Ω button with open leads (should show 0L)",
+        ),
+    );
+    vec![
+        dcv,
+        dcv_short,
+        dcv_negative,
+        ohm_ol,
+        ohm_body,
+        ohm_short,
+        CaptureStep::basic(
+            "acv",
+            "Press the V~/⎓ Hz button until AC V shows; the secondary display shows the frequency",
+        )
+        .expect(Expect::mode("AC V")),
+        CaptureStep::basic(
+            "hz",
+            "Press the V~/⎓ Hz button until Hz shows; the secondary display shows the duty cycle",
+        )
+        .expect(Expect::mode("Hz")),
+        CaptureStep::basic(
+            "rel",
+            "Press the V~/⎓ Hz button until DC V shows, then press REL, then Enter. Press \
+             REL again afterwards.",
+        )
+        .wait_for_enter()
+        .expect(Expect::new().flags(REL_ON)),
+        CaptureStep::basic(
+            "max_min",
+            "DC V: press MAX/MIN, then Enter. Long-press MAX/MIN afterwards.",
+        )
+        .wait_for_enter(),
+        CaptureStep::basic(
+            "hold",
+            "DC V: press HOLD, then Enter. Press HOLD again afterwards.",
+        )
+        .wait_for_enter()
+        .expect(Expect::new().flags(HOLD_ON)),
+        CaptureStep::basic(
+            "manual_range",
+            "DC V: press VOL/RANGE and turn the knob one step, then Enter.",
+        )
+        .wait_for_enter(),
+        CaptureStep::basic("dcmv", "Press the mV~/⎓ Hz button until DC mV shows")
+            .expect(Expect::mode("DC mV")),
+        CaptureStep::basic("acmv", "Press the mV~/⎓ Hz button until AC mV shows")
+            .expect(Expect::mode("AC mV")),
+        CaptureStep::basic(
+            "hz_mv",
+            "Press the mV~/⎓ Hz button until Hz shows (for AC below 36 V); the secondary \
+             display shows the duty cycle",
+        )
+        .expect(Expect::mode("Hz")),
+        CaptureStep::basic(
+            "cont",
+            "Press the diode/continuity button for continuity; touch the probe tips together",
+        )
+        .needs(&[Need::ShortedLeads])
+        .expect(Expect::mode("Continuity")),
+        CaptureStep::basic(
+            "diode",
+            "Press the diode/continuity button again for diode, leads open",
+        )
+        .expect(Expect::mode("Diode")),
+        CaptureStep::basic("cap", "Press the capacitance button")
+            .expect(Expect::mode("Capacitance")),
+        CaptureStep::basic(
+            "dca",
+            "Press the A~/⎓ mA~/⎓ button until DC A shows (leads in the A jack)",
+        )
+        .expect(Expect::mode("DC A")),
+        CaptureStep::basic("aca", "Press the A~/⎓ mA~/⎓ button until AC A shows")
+            .expect(Expect::mode("AC A")),
+        CaptureStep::basic(
+            "dcma",
+            "Press the A~/⎓ mA~/⎓ button until DC mA shows (leads in the mA jack)",
+        )
+        .expect(Expect::mode("DC mA")),
+        CaptureStep::basic("acma", "Press the A~/⎓ mA~/⎓ button until AC mA shows")
+            .expect(Expect::mode("AC mA")),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::zotek::layout::LAYOUTS;
+
+    /// Every layout has its steps, a gate among them, and none claims a
+    /// hardware run.
+    #[test]
+    fn every_layout_has_steps_in_its_own_modes() {
+        for layout in LAYOUTS {
+            let steps = steps(layout);
+            assert!(steps.iter().any(|s| s.gate), "{}", layout.id);
+            assert!(steps.iter().all(|s| !s.verified), "{}", layout.id);
+        }
+    }
 }

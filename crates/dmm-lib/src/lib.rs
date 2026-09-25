@@ -1327,6 +1327,7 @@ mod tests {
             ("ut60bt", "UT60BT"),
             ("ut202bt", "UT202BT"),
             ("zt300ab", "Bluetooth DMM"),
+            ("zt5566se", "Bluetooth DMM"),
         ] {
             assert_eq!(
                 peers(id),
@@ -1393,7 +1394,7 @@ mod tests {
             .filter(|d| d.bluetooth_only)
             .map(|d| d.id)
             .collect();
-        assert_eq!(bluetooth_only, ["ut60bt", "ut202bt", "zt300ab"]);
+        assert_eq!(bluetooth_only, ["ut60bt", "ut202bt", "zt300ab", "zt5566se"]);
         for kt in KNOWN_TRANSPORTS {
             assert!(
                 !devices_on_bridge(kt.name).iter().any(|d| d.bluetooth_only),

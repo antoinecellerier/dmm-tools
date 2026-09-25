@@ -156,6 +156,13 @@ const ACTIVATION_ZT300AB: &str = "\
 2. Hold the Hz% button for 2 seconds; the Bluetooth symbol shows
 Note: the meter switches off after 15 minutes idle; hold SEL while turning it on to disable that.";
 
+/// ZT-5566SE manual p.22: POWER switches Bluetooth on for the speaker; the
+/// manual gives no steps for an app link.
+const ACTIVATION_ZT5566SE: &str = "\
+1. Turn the meter on
+2. Press POWER to turn Bluetooth on; the Bluetooth symbol flashes
+Note: the manual documents Bluetooth for its speaker only; readings over it are unverified.";
+
 const ACTIVATION_MOCK: &str = "No setup required \u{2014} this is a simulated device.";
 
 /// All selectable devices, in GUI display order.
@@ -443,6 +450,21 @@ pub static DEVICES: &[SelectableDevice] = &[
         activation_instructions: ACTIVATION_ZT300AB,
         family: DeviceFamily::Zotek,
         new_protocol: || Box::new(ZotekProtocol::new_zt300ab()),
+        fingerprint: Some(&zotek::FINGERPRINT),
+        manual_url: Some(ZOTEK_SUPPORT_URL),
+        bluetooth_only: true,
+        bluetooth_names: &["Bluetooth DMM"],
+    },
+    SelectableDevice {
+        id: "zt5566se",
+        display_name: "ZT-5566SE / AN999S",
+        // Not the plain ZT-5566: its manual documents Bluetooth only as a
+        // speaker.
+        aliases: &["zt-5566se", "zt5566s", "zt-5566s", "an999s", "an-999s"],
+        requires_hardware: true,
+        activation_instructions: ACTIVATION_ZT5566SE,
+        family: DeviceFamily::Zotek,
+        new_protocol: || Box::new(ZotekProtocol::new_zt5566se()),
         fingerprint: Some(&zotek::FINGERPRINT),
         manual_url: Some(ZOTEK_SUPPORT_URL),
         bluetooth_only: true,
@@ -777,7 +799,7 @@ mod tests {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
         // Experimental, with their verification issues still to be opened.
-        const ISSUE_TO_OPEN: &[&str] = &["zt300ab"];
+        const ISSUE_TO_OPEN: &[&str] = &["zt300ab", "zt5566se"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;

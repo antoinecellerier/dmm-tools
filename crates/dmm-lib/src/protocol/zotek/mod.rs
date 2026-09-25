@@ -80,6 +80,10 @@ impl ZotekProtocol {
         Self::new(&layout::ZT300AB)
     }
 
+    pub(crate) fn new_zt5566se() -> Self {
+        Self::new(&layout::ZT5566SE)
+    }
+
     /// The layout a packet of `type_byte` is in, the first time it is not
     /// the entry's on this connection; `None` every other time.
     fn other_layout(&mut self, type_byte: u8) -> Option<&'static Layout> {
@@ -192,17 +196,39 @@ mod tests {
         raw
     }
 
+    /// Each worked example is recognised as its layout's entry.
     #[test]
-    fn the_worked_example_is_recognised_as_its_layout() {
-        let (raw, _) = EXAMPLES[0];
-        let evidence = recognise(raw, &Probing::default());
-        assert_eq!(
-            evidence,
-            Some(Evidence::Model {
-                id: "zt300ab",
-                reported_name: None
-            })
-        );
+    fn the_worked_examples_are_recognised_as_their_layouts() {
+        for (example, id) in [(0, "zt300ab"), (3, "zt5566se")] {
+            let (raw, _) = EXAMPLES[example];
+            assert_eq!(
+                recognise(raw, &Probing::default()),
+                Some(Evidence::Model {
+                    id,
+                    reported_name: None
+                })
+            );
+        }
+    }
+
+    /// An entry opened on a meter that sends another layout decodes it by
+    /// its own type byte, and says so once per connection.
+    #[test]
+    fn another_layout_is_decoded_and_named_once() {
+        let (raw, plain) = EXAMPLES[3];
+        let mock = MockTransport::new(vec![raw.to_vec(), raw.to_vec()]);
+        let mut proto = ZotekProtocol::new_zt300ab();
+        assert!(proto.other_layout(3).is_none());
+        let m = proto.request_measurement(&mock).unwrap();
+        assert_eq!(m.raw_payload, plain);
+        assert_eq!(m.aux_values.len(), 1, "decoded as type 4");
+        assert!(proto.warned_layout);
+        assert!(proto.other_layout(4).is_none(), "warned once");
+        assert!(proto.request_measurement(&mock).is_ok());
+
+        let mut fresh = ZotekProtocol::new_zt300ab();
+        assert_eq!(fresh.other_layout(4).map(|l| l.id), Some("zt5566se"));
+        assert!(fresh.other_layout(4).is_none());
     }
 
     /// Detection scans every offset: a false header in front of a real
@@ -249,7 +275,7 @@ mod tests {
     #[test]
     fn a_layout_not_implemented_yet_is_skipped() {
         let (raw, plain) = EXAMPLES[0];
-        let (other, _) = EXAMPLES[3];
+        let (other, _) = EXAMPLES[1];
         let mut stream = other.to_vec();
         stream.extend_from_slice(raw);
         let mock = MockTransport::new(vec![stream]);

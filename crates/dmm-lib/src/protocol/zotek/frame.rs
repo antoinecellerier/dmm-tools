@@ -172,7 +172,7 @@ pub(super) mod tests {
     /// read whole.
     #[test]
     fn resyncs_after_a_partial_packet() {
-        let (raw, plain) = EXAMPLES[0];
+        let (raw, plain) = EXAMPLES[3];
         let mut buf = raw[5..].to_vec();
         buf.extend_from_slice(raw);
         let (packet, consumed) = extract_packet(&buf).unwrap().unwrap();

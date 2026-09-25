@@ -6,7 +6,7 @@ USB and Bluetooth multimeter logger and remote control for UNI-T, Voltcraft and 
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT60BT, UT202BT, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960, and the ZOTEK ZT-300AB (ANENG AN9002) — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT60BT, UT202BT, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960, and the ZOTEK ZT-300AB and ZT-5566SE (ANENG AN9002, AN999S) — see [supported devices](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
@@ -101,7 +101,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 | VC920/VC940/VC960 | Voltcraft VC920, VC940, VC960 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/23) |
-| ZOTEK (ZOYI, BSIDE, ANENG), Bluetooth built in | ZT-300AB / AN9002 | 🧪 Experimental |
+| ZOTEK (ZOYI, BSIDE, ANENG), Bluetooth built in | ZT-300AB / AN9002, ZT-5566SE / AN999S | 🧪 Experimental |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware. Click either to help verify.

@@ -11,7 +11,7 @@ use super::frame::{self, HEADER, TYPE_AT};
 use super::glyph::{self, Cell, Glyph, Shown};
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MeasuredValue, Measurement};
 use crate::protocol::unknown_mode;
 use std::borrow::Cow;
 
@@ -102,6 +102,13 @@ pub(super) enum Meaning {
     Min,
     Max,
     LowBattery,
+    /// PEAK: the meter does not say whether it holds the maximum or the
+    /// minimum.
+    Peak,
+    /// Type 4's secondary display units (spec §7.4).
+    SecondaryPercent,
+    SecondaryHertz,
+    SecondaryKilo,
     /// Documented, and deliberately not decoded: the Bluetooth icon, the
     /// unnamed bits, and bits community captures show to be something the
     /// reading does not carry (each named where the layout lists it).
@@ -137,6 +144,7 @@ const FARAD: &[Unit] = &[Unit::Farad];
 const VOLT: &[Unit] = &[Unit::Volt];
 const AMP: &[Unit] = &[Unit::Amp];
 const OHM_HZ: &[Unit] = &[Unit::Ohm, Unit::Hertz];
+const VOLT_AMP_FARAD: &[Unit] = &[Unit::Volt, Unit::Amp, Unit::Farad];
 
 /// Where the digits sit.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -145,6 +153,11 @@ pub(super) enum Digits {
     /// nibble from one byte and its low nibble from the next; byte 3 bit 4
     /// is the minus and bytes 4-6 bit 4 the decimal points (spec §6.2).
     Split,
+    /// Type 4: one glyph byte per digit, least significant first. Main in
+    /// bytes 9-12 with a leading "1" from byte 13 bits 3 and 2 and the minus
+    /// in bit 7; secondary in bytes 5-8, its minus in byte 8 bit 4
+    /// (spec §6.3).
+    Wide,
 }
 
 /// A row of up to five cells, most significant first, and its sign.
@@ -177,6 +190,8 @@ impl Digits {
             (Digits::Split, 3) => 0xF0,
             (Digits::Split, 4..=6) => 0xFF,
             (Digits::Split, 7) => 0x0F,
+            (Digits::Wide, 5..=12) => 0xFF,
+            (Digits::Wide, 13) => MINUS_BIG | LEADING_ONE,
             _ => 0,
         }
     }
@@ -201,14 +216,66 @@ impl Digits {
                     negative: packet[3] & glyph::DP != 0,
                 }
             }
+            Digits::Wide => {
+                // A half digit, drawn with segments b and g (spec §6.3).
+                if packet[13] & LEADING_ONE == LEADING_ONE {
+                    cells[0].glyph = Glyph::Digit(1);
+                }
+                for (cell, &byte) in cells[1..].iter_mut().zip(packet[9..=12].iter().rev()) {
+                    *cell = Cell {
+                        glyph: Glyph::from_segments(byte),
+                        dp: byte & glyph::DP != 0,
+                    };
+                }
+                Row {
+                    cells,
+                    len: 5,
+                    negative: packet[13] & MINUS_BIG != 0,
+                }
+            }
+        }
+    }
+
+    /// The secondary display's row, on a layout that has one.
+    fn secondary(self, packet: &[u8]) -> Option<Row> {
+        match self {
+            Digits::Split => None,
+            Digits::Wide => {
+                let mut cells = [BLANK; 5];
+                let bytes = packet[5..=8].iter().rev();
+                for (i, (cell, &byte)) in cells.iter_mut().zip(bytes).enumerate() {
+                    *cell = Cell {
+                        glyph: Glyph::from_segments(byte),
+                        // Byte 8 bit 4 is the sign, not a point.
+                        dp: i > 0 && byte & glyph::DP != 0,
+                    };
+                }
+                Some(Row {
+                    cells,
+                    len: 4,
+                    negative: packet[8] & glyph::DP != 0,
+                })
+            }
         }
     }
 
     /// Every row the layout carries.
     fn rows(self, packet: &[u8]) -> impl Iterator<Item = Row> {
-        std::iter::once(self.main(packet))
+        std::iter::once(self.main(packet)).chain(self.secondary(packet))
+    }
+
+    /// Report a leading "1" drawn with one of its two segments: the apps
+    /// take it only with both (spec §6.3).
+    fn check(self, unrecognised: Unrecognised, packet: &[u8]) {
+        if self == Digits::Wide && !matches!(packet[13] & LEADING_ONE, 0 | LEADING_ONE) {
+            unrecognised.report("leading digit");
+        }
     }
 }
+
+/// Type 4 byte 13: the main minus, and the leading "1" (spec §6.3).
+const MINUS_BIG: u8 = 0x80;
+const LEADING_ONE: u8 = 0x0C;
 
 /// One packet layout: a type byte, and what its bytes carry.
 pub(crate) struct Layout {
@@ -221,7 +288,9 @@ pub(crate) struct Layout {
     bits: &'static [Bit],
     /// Whether a prefix picks the reading's mode, as on a meter whose mV,
     /// mA and µA are positions of their own: the ZT-300AB's dial has them
-    /// (spec §7.5, its "mV" and "µ/m A" groups). Where the prefix is only an
+    /// (spec §7.5, its "mV" and "µ/m A" groups), and the ZT-5566SE's mV and
+    /// mA buttons select ranges of their own (ZT-5566SE manual p.11-12).
+    /// Where the prefix is only an
     /// auto-ranging step, the mode stays the base unit's, so an auto-ranging
     /// current does not start a new series at each step.
     prefix_names_position: bool,
@@ -275,8 +344,60 @@ pub(crate) static ZT300AB: Layout = Layout {
     max_aux_values: 0,
 };
 
+/// Type 4, named for the ZT-5566 family (spec §7.4).
+pub(crate) static ZT5566SE: Layout = Layout {
+    type_byte: 4,
+    id: "zt5566se",
+    name: "ZT-5566SE / AN999S",
+    digits: Digits::Wide,
+    bits: &[
+        // `vfc`, never set in the community log (§11.4).
+        bit(3, 7, Meaning::Silent),
+        bit(3, 6, Meaning::Diode),
+        bit(3, 5, Meaning::Continuity),
+        bit(3, 4, Meaning::Rel),
+        // `l1_power`, toggling in long V DC runs (§11.4).
+        bit(3, 3, Meaning::Silent),
+        bit(3, 2, Meaning::AutoRange),
+        // MANU: AUTO clearing is what says the range is manual.
+        bit(3, 1, Meaning::Silent),
+        bit(4, 7, Meaning::SecondaryPercent),
+        bit(4, 6, Meaning::SecondaryHertz),
+        bit(4, 5, Meaning::SecondaryKilo),
+        bit(4, 4, Meaning::Unit(Unit::Volt)),
+        bit(4, 3, Meaning::Hold),
+        bit(4, 2, Meaning::Peak),
+        bit(4, 1, Meaning::Max),
+        bit(4, 0, Meaning::Min),
+        bit(13, 6, Meaning::Ac),
+        // Bit 5 is set but at exactly zero (§11.4) and bit 4 (the colon to
+        // the apps) is the bar graph's first segment (§11.3 D1). Bit 0 is
+        // used by neither app and open (§7.4, §10.10): reported.
+        silent(13, 0x30),
+        bit(13, 1, Meaning::Dc),
+        // The analog bar graph, and byte 18 bit 7 always set (§11.3 D1,
+        // §11.4).
+        silent(14, 0xFF),
+        silent(15, 0xFF),
+        bit(16, 7, Meaning::Unit(Unit::Hertz)),
+        bit(16, 6, Meaning::Unit(Unit::Ohm)),
+        bit(16, 5, Meaning::Prefix(Prefix::Kilo, OHM_HZ)),
+        bit(16, 4, Meaning::Prefix(Prefix::Mega, OHM_HZ)),
+        silent(16, 0x0F),
+        silent(17, 0xF0),
+        bit(17, 3, Meaning::Prefix(Prefix::Nano, VOLT_AMP_FARAD)),
+        bit(17, 2, Meaning::Prefix(Prefix::Milli, VOLT_AMP_FARAD)),
+        bit(17, 1, Meaning::Prefix(Prefix::Micro, VOLT_AMP_FARAD)),
+        bit(17, 0, Meaning::Unit(Unit::Farad)),
+        silent(18, 0xEF),
+        bit(18, 4, Meaning::Unit(Unit::Amp)),
+    ],
+    prefix_names_position: true,
+    max_aux_values: 1,
+};
+
 /// Every layout implemented, by type byte.
-pub(super) static LAYOUTS: &[&Layout] = &[&ZT300AB];
+pub(super) static LAYOUTS: &[&Layout] = &[&ZT300AB, &ZT5566SE];
 
 /// The layout a type byte selects, where it is implemented.
 pub(super) fn for_type(type_byte: u8) -> Option<&'static Layout> {
@@ -347,8 +468,8 @@ enum Coupling {
 /// [`Measurement::mode_raw`] carries for it.
 ///
 /// `mode_raw` is this code, plus `0x10` for DC and `0x20` for AC on the
-/// volt and amp functions — an internal number, stable for bug reports, not
-/// a byte the meter sends.
+/// volt and amp functions and `0x40` for PEAK — an internal number, stable
+/// for bug reports, not a byte the meter sends.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) enum Function {
     /// No function annunciator lit.
@@ -436,6 +557,10 @@ struct Lit {
     min: bool,
     max: bool,
     low_battery: bool,
+    peak: bool,
+    secondary_percent: bool,
+    secondary_hertz: bool,
+    secondary_kilo: bool,
 }
 
 impl Lit {
@@ -465,6 +590,10 @@ impl Lit {
                 Meaning::Min => lit.min = true,
                 Meaning::Max => lit.max = true,
                 Meaning::LowBattery => lit.low_battery = true,
+                Meaning::Peak => lit.peak = true,
+                Meaning::SecondaryPercent => lit.secondary_percent = true,
+                Meaning::SecondaryHertz => lit.secondary_hertz = true,
+                Meaning::SecondaryKilo => lit.secondary_kilo = true,
                 Meaning::Silent => {}
             }
         }
@@ -556,6 +685,60 @@ impl Layout {
     }
 }
 
+/// The secondary display as a sub-value, where its unit is lit (spec
+/// §6.3, §7.4): the frequency in V, the duty cycle in frequency.
+fn secondary(
+    layout: &Layout,
+    lit: &Lit,
+    unrecognised: Unrecognised,
+    packet: &[u8],
+) -> Option<AuxValue> {
+    let row = layout.digits.secondary(packet)?;
+    let (label, unit) = match (lit.secondary_hertz, lit.secondary_percent) {
+        (false, false) => {
+            // Nothing to label: blank, as community captures show it.
+            let drawn = row.negative || row.cells().iter().any(|c| c.glyph != Glyph::Blank);
+            if drawn || lit.secondary_kilo {
+                unrecognised.report("secondary display");
+            }
+            return None;
+        }
+        (true, percent) => {
+            if percent {
+                unrecognised.report("secondary annunciators");
+            }
+            let unit = if lit.secondary_kilo { "kHz" } else { "Hz" };
+            ("Frequency", unit)
+        }
+        (false, true) => {
+            if lit.secondary_kilo {
+                unrecognised.report("secondary annunciators");
+            }
+            ("Duty", "%")
+        }
+    };
+    // Nothing drawn: no sub-value, whatever unit is lit.
+    if row.blank() {
+        return None;
+    }
+    let readout = glyph::read(unrecognised, row.cells(), row.negative);
+    let value = match readout.shown {
+        Shown::Number(v) => MeasuredValue::Normal(v),
+        Shown::Overload | Shown::Unrecognised => MeasuredValue::Overload,
+        Shown::Auto | Shown::Ef | Shown::Dashes(_) => {
+            unrecognised.report("secondary display text");
+            MeasuredValue::Overload
+        }
+    };
+    Some(AuxValue {
+        label: Cow::Borrowed(label),
+        value,
+        unit: Cow::Borrowed(unit),
+        display_raw: Some(readout.text),
+        elapsed_secs: None,
+    })
+}
+
 /// Whether the main display of a whole descrambled packet has a digit lit:
 /// one with none has no reading, and [`decode`] refuses it. No section of
 /// the spec shows a blank main display, so one is reported.
@@ -596,6 +779,7 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
         ));
     }
     layout.report_stray_bits(unrecognised, packet);
+    layout.digits.check(unrecognised, packet);
 
     let lit = Lit::read(layout, packet);
     let readout = glyph::read(unrecognised, row.cells(), row.negative);
@@ -638,8 +822,14 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
             unrecognised.report("function annunciators");
             unknown_mode(Function::None as u8)
         }
+        // PEAK says the reading is a held peak, not whether a maximum or a
+        // minimum (spec §7.2, §11.2).
+        _ if lit.peak && function != Function::Ncv => {
+            Cow::Owned(format!("{} peak", function.mode(coupling)))
+        }
         _ => Cow::Borrowed(function.mode(coupling)),
     };
+    let peak_bit = if lit.peak { 0x40 } else { 0 };
     let unit = match (function, unit) {
         (Function::Ncv, _) | (_, None) => "",
         (_, Some(unit)) => unit_str(prefix, unit),
@@ -658,11 +848,14 @@ pub(super) fn decode(packet: &[u8]) -> Result<Measurement> {
 
     Ok(Measurement {
         mode,
-        mode_raw: function.mode_raw(coupling),
+        mode_raw: function.mode_raw(coupling) | peak_bit,
         value,
         unit: Cow::Borrowed(unit),
         display_raw: Some(readout.text),
         flags,
+        aux_values: secondary(layout, &lit, unrecognised, packet)
+            .into_iter()
+            .collect(),
         ..Measurement::from_payload(packet)
     })
 }
@@ -960,6 +1153,261 @@ mod tests {
         assert_eq!(reports.len(), 1, "{reports:?}");
     }
 
+    // --- Type 4 (ZT-5566SE) ----------------------------------------------
+
+    /// A descrambled type-4 packet: the main row's four glyphs (bytes 12 to
+    /// 9) with the point before cell `dp_at`, a leading "1" and the minus;
+    /// the secondary row's (bytes 8 to 5) likewise; `flags` ORed in.
+    fn t4(
+        main: &str,
+        dp_at: Option<usize>,
+        lead: bool,
+        negative: bool,
+        secondary: Option<(&str, Option<usize>, bool)>,
+        flags: &[(usize, u8)],
+    ) -> Vec<u8> {
+        let mut packet = vec![0u8; 19];
+        packet[..3].copy_from_slice(&[0x5A, 0xA5, 4]);
+        for (i, c) in main.chars().enumerate() {
+            let dp = if dp_at == Some(i) { glyph::DP } else { 0 };
+            packet[12 - i] = segments(c) | dp;
+        }
+        if lead {
+            packet[13] |= LEADING_ONE;
+        }
+        if negative {
+            packet[13] |= MINUS_BIG;
+        }
+        if let Some((glyphs, dp_at, negative)) = secondary {
+            for (i, c) in glyphs.chars().enumerate() {
+                let dp = if dp_at == Some(i) { glyph::DP } else { 0 };
+                packet[8 - i] = segments(c) | dp;
+            }
+            if negative {
+                packet[8] |= glyph::DP;
+            }
+        }
+        for &(byte, bits) in flags {
+            packet[byte] |= bits;
+        }
+        packet
+    }
+
+    /// DC and V lit.
+    const T4_DCV: &[(usize, u8)] = &[(4, 0x10), (13, 0x02)];
+
+    /// Spec §9: main 1.2345 V DC, AUTO; secondary 50.00 Hz.
+    #[test]
+    fn type4_worked_example() {
+        let m = quiet(EXAMPLES[3].1);
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(m.mode_raw, 0x11);
+        assert_eq!(m.unit, "V");
+        assert_eq!(m.display_raw.as_deref(), Some("1.2345"));
+        assert!((value(&m) - 1.2345).abs() < 1e-9);
+        assert_eq!(flags_set(&m), ["auto_range", "dc"]);
+        assert_eq!(m.aux_values.len(), 1);
+        let aux = &m.aux_values[0];
+        assert_eq!(aux.label, "Frequency");
+        assert_eq!(aux.unit, "Hz");
+        assert_eq!(aux.display_raw.as_deref(), Some("50.00"));
+        assert!(matches!(aux.value, MeasuredValue::Normal(v) if v == 50.0));
+    }
+
+    /// Every §7.4 bit, one at a time over a function where it needs one:
+    /// (bits, mode, mode_raw, unit, flags set).
+    #[test]
+    fn type4_every_annunciator() {
+        type Case = (
+            &'static [(usize, u8)],
+            &'static str,
+            u16,
+            &'static str,
+            &'static [&'static str],
+        );
+        let cases: &[Case] = &[
+            (
+                &[(3, 0x80), (4, 0x10), (13, 0x02)],
+                "DC V",
+                0x11,
+                "V",
+                &["dc"],
+            ),
+            (&[(3, 0x40), (4, 0x10)], "Diode", 0x08, "V", &[]),
+            (&[(3, 0x20), (16, 0x40)], "Continuity", 0x07, "Ω", &[]),
+            (
+                &[(3, 0x10), (4, 0x10), (13, 0x02)],
+                "DC V",
+                0x11,
+                "V",
+                &["rel", "dc"],
+            ),
+            (
+                &[(3, 0x08), (4, 0x10), (13, 0x02)],
+                "DC V",
+                0x11,
+                "V",
+                &["dc"],
+            ),
+            (
+                &[(3, 0x04), (4, 0x10), (13, 0x02)],
+                "DC V",
+                0x11,
+                "V",
+                &["auto_range", "dc"],
+            ),
+            (
+                &[(3, 0x02), (4, 0x10), (13, 0x02)],
+                "DC V",
+                0x11,
+                "V",
+                &["dc"],
+            ),
+            (&[(4, 0x18), (13, 0x02)], "DC V", 0x11, "V", &["hold", "dc"]),
+            (&[(4, 0x14), (13, 0x40)], "AC V peak", 0x61, "V", &[]),
+            (&[(4, 0x12), (13, 0x02)], "DC V", 0x11, "V", &["max", "dc"]),
+            (&[(4, 0x11), (13, 0x02)], "DC V", 0x11, "V", &["min", "dc"]),
+            (&[(4, 0x10), (13, 0x40)], "AC V", 0x21, "V", &[]),
+            (&[(4, 0x10), (13, 0x32)], "DC V", 0x11, "V", &["dc"]),
+            (
+                &[(4, 0x10), (13, 0x02), (14, 0xFF), (15, 0xFF)],
+                "DC V",
+                0x11,
+                "V",
+                &["dc"],
+            ),
+            (
+                &[(4, 0x10), (13, 0x02), (16, 0x0F), (17, 0xF0), (18, 0xEF)],
+                "DC V",
+                0x11,
+                "V",
+                &["dc"],
+            ),
+            (&[(16, 0x80)], "Hz", 0x0A, "Hz", &[]),
+            (&[(16, 0xA0)], "Hz", 0x0A, "kHz", &[]),
+            (&[(16, 0x40)], "Ω", 0x06, "Ω", &[]),
+            (&[(16, 0x60)], "Ω", 0x06, "kΩ", &[]),
+            (&[(16, 0x50)], "Ω", 0x06, "MΩ", &[]),
+            (&[(17, 0x09)], "Capacitance", 0x09, "nF", &[]),
+            (&[(17, 0x05)], "Capacitance", 0x09, "mF", &[]),
+            (&[(17, 0x03)], "Capacitance", 0x09, "µF", &[]),
+            (&[(17, 0x01)], "Capacitance", 0x09, "F", &[]),
+            (
+                &[(4, 0x10), (13, 0x02), (17, 0x04)],
+                "DC mV",
+                0x12,
+                "mV",
+                &["dc"],
+            ),
+            (&[(18, 0x10), (13, 0x02)], "DC A", 0x13, "A", &["dc"]),
+            (
+                &[(18, 0x10), (13, 0x40), (17, 0x04)],
+                "AC mA",
+                0x24,
+                "mA",
+                &[],
+            ),
+        ];
+        for &(flags, mode, mode_raw, unit, set) in cases {
+            let m = quiet(&t4("2345", Some(1), false, false, None, flags));
+            assert_eq!(m.mode, mode, "{flags:02X?}");
+            assert_eq!(m.mode_raw, mode_raw, "{flags:02X?}");
+            assert_eq!(m.unit, unit, "{flags:02X?}");
+            assert_eq!(flags_set(&m), set, "{flags:02X?}");
+            assert_eq!(m.display_raw.as_deref(), Some(" 2.345"));
+            assert_eq!(value(&m), 2.345);
+            assert!(m.aux_values.is_empty(), "{flags:02X?}");
+        }
+    }
+
+    /// The leading "1" adds 10000 counts: 19999 on the ZT-5566 (spec §6.3).
+    #[test]
+    fn type4_leading_one_and_sign() {
+        let m = quiet(&t4("9999", Some(2), true, true, None, T4_DCV));
+        assert_eq!(m.display_raw.as_deref(), Some("-199.99"));
+        assert!((value(&m) + 199.99).abs() < 1e-9);
+        let m = quiet(&t4("0000", None, false, false, None, T4_DCV));
+        assert_eq!(m.display_raw.as_deref(), Some(" 0000"));
+    }
+
+    /// The secondary display's frequency and duty, and its own minus.
+    #[test]
+    fn type4_secondary_display() {
+        let cases = [
+            (0x40, "Frequency", "Hz"),
+            (0x60, "Frequency", "kHz"),
+            (0x80, "Duty", "%"),
+        ];
+        for (bits, label, unit) in cases {
+            let m = quiet(&t4(
+                "2345",
+                Some(1),
+                false,
+                false,
+                Some(("1234", Some(3), false)),
+                &[(4, 0x10 | bits), (13, 0x40)],
+            ));
+            assert_eq!(m.aux_values.len(), 1);
+            let aux = &m.aux_values[0];
+            assert_eq!((aux.label.as_ref(), aux.unit.as_ref()), (label, unit));
+            assert_eq!(aux.display_raw.as_deref(), Some("123.4"));
+        }
+        let m = quiet(&t4(
+            "2345",
+            None,
+            false,
+            false,
+            Some(("0012", Some(2), true)),
+            &[(4, 0x50), (13, 0x40)],
+        ));
+        assert_eq!(m.aux_values[0].display_raw.as_deref(), Some("-00.12"));
+        assert!(matches!(m.aux_values[0].value, MeasuredValue::Normal(v) if v == -0.12));
+    }
+
+    #[test]
+    fn type4_ol_and_auto() {
+        let m = quiet(&t4(" 0L ", Some(2), false, false, None, &[(16, 0x40)]));
+        assert!(matches!(m.value, MeasuredValue::Overload));
+        assert_eq!(m.display_raw.as_deref(), Some("  0.L "));
+        let m = quiet(&t4("Auto", None, false, false, None, &[]));
+        assert!(matches!(m.value, MeasuredValue::NoReading("Auto")));
+        assert_eq!(m.mode, "Auto");
+    }
+
+    /// Byte 3 bit 0 and byte 13 bit 0, used by neither app (spec §7.4,
+    /// §10.10); a leading "1" with one segment; secondary digits with no
+    /// unit; `k` on the duty cycle.
+    #[test]
+    fn type4_undocumented_patterns_are_reported() {
+        let packets = [
+            t4("2345", None, false, false, None, &[(3, 0x01), (4, 0x10)]),
+            t4("2345", None, false, false, None, &[(13, 0x03), (4, 0x10)]),
+            t4("2345", None, false, false, None, &[(13, 0x08), (4, 0x10)]),
+            t4(
+                "2345",
+                None,
+                false,
+                false,
+                Some(("1234", None, false)),
+                T4_DCV,
+            ),
+            t4(
+                "2345",
+                None,
+                false,
+                false,
+                Some(("1234", None, false)),
+                &[(4, 0xB0)],
+            ),
+        ];
+        for packet in packets {
+            let (_, reports) = reported(&packet);
+            assert_eq!(reports.len(), 1, "{packet:02X?}: {reports:?}");
+        }
+    }
+
+    // --- Every layout -----------------------------------------------------
+
     /// No digit lit on the main display: no reading to give, so the packet
     /// is reported and refused, a sign or a point on the blanks included.
     #[test]
@@ -967,11 +1415,26 @@ mod tests {
         for packet in [
             t3("    ", None, T3_DCV),
             split_packet(3, "    ", Some(2), true, T3_DCV),
+            t4("    ", None, false, false, None, T4_DCV),
         ] {
             let (m, reports) = capture_reports(|| decode(&packet));
             assert!(m.is_err(), "{packet:02X?}: {m:?}");
             assert_eq!(reports.len(), 1, "{packet:02X?}: {reports:?}");
         }
+    }
+
+    /// A blank secondary display carries no sub-value, its unit lit or not.
+    #[test]
+    fn a_blank_secondary_display_carries_no_sub_value() {
+        let m = quiet(&t4(
+            "2345",
+            Some(1),
+            false,
+            false,
+            Some(("    ", None, false)),
+            &[(4, 0x50), (13, 0x40)],
+        ));
+        assert!(m.aux_values.is_empty(), "{:?}", m.aux_values);
     }
 
     #[test]
