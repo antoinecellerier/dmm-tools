@@ -2097,6 +2097,12 @@ the following needs someone's hardware.
     heartbeat strip runs on ISSC peers only; writes go without response
     except to a non-ISSC characteristic that lists only writes with
     response.
+  - **Settled 2026-09-26 by the Brymen BM78xBT:** a meter that streams only
+    after an application login gets it from the transport, between
+    discovery and the subscribe, for its GATT profile alone
+    (`transport/ble/brymen.rs`): the connection password 0000 goes out before
+    detection or `Protocol::init` run, bounded by its own timeout. No
+    Transport method and no profile field carry it.
   - UT61+ streams whenever the link is Bluetooth: link, peer or family
     property? Settled by the UT117C/UT197/UT219PV group or a UT171/UT181A
     behind a UT-D07A.

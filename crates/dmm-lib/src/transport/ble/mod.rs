@@ -1,6 +1,6 @@
 //! Bluetooth LE transport for UNI-T's UT-D07 adapters and the meters with
-//! the radio built in (the UT60BT, UT202BT, ZOTEK's meters and the EEVblog
-//! 121GW), called peers here.
+//! the radio built in (the UT60BT, UT202BT, ZOTEK's meters, the EEVblog
+//! 121GW and the Brymen BM78xBT), called peers here.
 //!
 //! The UT-D07B is a transparent BLE-to-UART bridge: the bytes it carries are
 //! the ones the USB cable carries. The UT60BT and UT202BT send the same UT61+
@@ -9,10 +9,11 @@
 //! Everything Bluetooth-specific is here
 //! (`docs/research/ut-d07b/reverse-engineered-protocol.md`).
 //!
-//! A peer carries its byte stream over one of three GATT profiles, picked
+//! A peer carries its byte stream over one of four GATT profiles, picked
 //! from the services it offers once connected: ISSC's transparent UART
-//! (`issc.rs`), the EEVblog 121GW's own (`eevblog121gw.rs`), or the FFF0/FFF4
-//! one (`fff0.rs`).
+//! (`issc.rs`), the EEVblog 121GW's own (`eevblog121gw.rs`), Brymen's own
+//! (`brymen.rs`), or the FFF0/FFF4 one (`fff0.rs`). Brymen's alone has a
+//! login, which runs between discovery and the subscribe.
 //!
 //! There is no background thread and no channel: the struct owns a
 //! current-thread tokio runtime and every btleplug call runs inside
@@ -23,6 +24,7 @@
 //! hidraw, to be taken off at the next read. The framing layer resyncs on the
 //! next header, so no pump task is needed.
 
+mod brymen;
 mod eevblog121gw;
 mod fff0;
 mod issc;
@@ -31,6 +33,7 @@ mod search;
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
 use crate::transport::{BluetoothPeers, Transport};
+use brymen::BRYMEN;
 use btleplug::api::{
     Central, CentralState, CharPropFlags, Characteristic, Manager as _, Peripheral as _,
     ValueNotification, WriteType,
@@ -40,7 +43,7 @@ use eevblog121gw::EEVBLOG_121GW;
 use fff0::FFF0;
 use futures::stream::{Stream, StreamExt};
 use issc::{ISSC_UART, strip_heartbeats};
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use search::{Match, Standing, Target, by_address, is_bd_addr, is_uuid, printable, search};
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, VecDeque};
@@ -60,6 +63,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long GATT service discovery and the subscribe may take, the one retry
 /// included.
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a profile's login may take: at least this long from its start,
+/// and never later than this long after the discovery bound, so both tries
+/// of the setup share one login bound.
+const LOGIN_TIMEOUT: Duration = Duration::from_secs(8);
 /// The pause before retrying a link setup that failed.
 const SETUP_RETRY_PAUSE: Duration = Duration::from_millis(500);
 /// How often to look again while the service tree is still filling in.
@@ -299,9 +306,10 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
     // An adapter just switched on can refuse the first setup on a link that
     // is up (an ATT error), and answer the next one: try once more on the
     // same link before giving it up. Both tries share one discovery bound.
+    // A refused login is final.
     let deadline = tokio::time::Instant::now() + DISCOVERY_TIMEOUT;
     let subscribed = match subscribe_profile(&peripheral, deadline).await {
-        Err(e) => {
+        Err(SetupFailure::Other(e)) => {
             debug!("Bluetooth: link setup failed, trying once more: {e}");
             tokio::time::sleep_until(deadline.min(tokio::time::Instant::now() + SETUP_RETRY_PAUSE))
                 .await;
@@ -313,7 +321,7 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
     // left connected, the peer stays awake with nobody reading it.
     let (profile, write_char, notifications) = match subscribed {
         Ok(subscribed) => subscribed,
-        Err(e) => {
+        Err(SetupFailure::Refused(e) | SetupFailure::Other(e)) => {
             disconnect(&peripheral).await;
             return Err(e);
         }
@@ -323,6 +331,9 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         disconnect(&peripheral).await;
         return Err(Error::LinkLost);
     };
+    if profile == &BRYMEN {
+        brymen::check_mtu(mtu);
+    }
 
     let selector = candidate.selector();
     info!(
@@ -361,8 +372,9 @@ fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
     }
 }
 
-/// Find a profile on a connected peer and subscribe to its notifications,
-/// handing back the profile, the write characteristic and the stream.
+/// Find a profile on a connected peer, log in where the profile has a login,
+/// and subscribe to its notifications, handing back the profile, the write
+/// characteristic and the stream.
 ///
 /// The service tree fills in as the platform resolves it, so it is looked
 /// at again until a profile is there or the deadline passes. What one look
@@ -383,14 +395,20 @@ fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
 /// taken once two looks in a row saw the same tree — one that stopped
 /// changing, so a service that outranks it still resolving had its chance —
 /// or at the deadline.
+///
+/// The login has a bound of its own ([`LOGIN_TIMEOUT`]), so one that starts
+/// near `deadline` still gets its time.
 async fn subscribe_profile(
     peripheral: &Peripheral,
     deadline: tokio::time::Instant,
-) -> Result<(
-    &'static GattProfile,
-    Characteristic,
-    Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
-)> {
+) -> std::result::Result<
+    (
+        &'static GattProfile,
+        Characteristic,
+        Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
+    ),
+    SetupFailure,
+> {
     let mut last_look = None;
     let chosen = loop {
         peripheral.discover_services().await.map_err(link_error)?;
@@ -401,7 +419,7 @@ async fn subscribe_profile(
             Ok(chosen) if past_deadline || last_look.as_ref() == Some(&characteristics) => {
                 break chosen;
             }
-            Err(role) if past_deadline => return Err(missing_characteristic(role)),
+            Err(role) if past_deadline => return Err(missing_characteristic(role).into()),
             _ => {}
         }
         last_look = Some(characteristics);
@@ -409,16 +427,55 @@ async fn subscribe_profile(
     };
     debug!("Bluetooth: {} profile", chosen.profile.name);
 
-    // Bring-up is subscribe and go on every profile: nothing is written to
-    // any other characteristic first (research doc §3;
+    // Bring-up is subscribe and go on every profile but Brymen's: nothing is
+    // written to any other characteristic first (research doc §3;
     // `docs/research/zotek/reverse-engineered-protocol.md` §3;
-    // `docs/research/121gw/reverse-engineered-protocol.md` §3).
+    // `docs/research/121gw/reverse-engineered-protocol.md` §3). A BM78xBT
+    // streams only once logged in, which comes first in r4's order
+    // (`docs/research/bm78xbt/reverse-engineered-protocol.md` §3.1).
+    if chosen.profile == &BRYMEN {
+        let now = tokio::time::Instant::now();
+        let login_deadline = deadline
+            .max(now + LOGIN_TIMEOUT)
+            .min(deadline + LOGIN_TIMEOUT);
+        if login_deadline <= now {
+            // The first try's login spent the bound; the stream shows
+            // whether the meter took it.
+            debug!("Bluetooth: no time left for the login; waiting for readings");
+        } else {
+            match tokio::time::timeout_at(login_deadline, brymen::log_in(peripheral, &chosen.write))
+                .await
+            {
+                Ok(logged_in) => logged_in?,
+                // The stream shows whether the meter took it.
+                Err(_) => warn!(
+                    "Bluetooth: the meter did not answer the login in time; waiting for readings"
+                ),
+            }
+            tokio::time::sleep(brymen::SETTLE).await;
+        }
+    }
     peripheral
         .subscribe(&chosen.notify)
         .await
         .map_err(link_error)?;
     let notifications = peripheral.notifications().await.map_err(link_error)?;
     Ok((chosen.profile, chosen.write, notifications))
+}
+
+/// Why a link setup failed, for the opener's one retry.
+#[derive(Debug)]
+enum SetupFailure {
+    /// The meter refused the login: final, never sent again.
+    Refused(Error),
+    /// Anything else, which a second try on the same link may get past.
+    Other(Error),
+}
+
+impl From<Error> for SetupFailure {
+    fn from(e: Error) -> Self {
+        SetupFailure::Other(e)
+    }
 }
 
 /// A profile's characteristics, as one look at a peer's services found them.
@@ -435,13 +492,17 @@ struct Chosen {
 /// second profile. Then the 121GW, whose one characteristic only has to
 /// notify or indicate: its service UUID is the meter's own, so the stream
 /// alone says it is the meter
-/// (`docs/research/121gw/reverse-engineered-protocol.md` §2). Then FFF0,
-/// whose one characteristic has to both notify and take a write: FFF0 is a
-/// common service on generic modules, so it is held to what the stream
-/// needs, and a peer that also carries the 121GW's service is read as a
-/// 121GW. No known ISSC peer has an FFF0 or a 121GW service
-/// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2); one that
-/// carried either would be read over ISSC.
+/// (`docs/research/121gw/reverse-engineered-protocol.md` §2). Then Brymen's,
+/// whose reading characteristic has to notify and whose command one has to
+/// take an acknowledged write, the only kind the login sends; whether the
+/// command one reads, for the login's reply, is left to the login
+/// (`docs/research/bm78xbt/reverse-engineered-protocol.md` §2, §3.2). Then
+/// FFF0, whose one characteristic has to both notify and take a write: FFF0
+/// is a common service on generic modules, so it is held to what the stream
+/// needs, and a peer that also carries the 121GW's or Brymen's service is
+/// read over that. No known ISSC peer has an FFF0, a 121GW or a Brymen
+/// service (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2); one
+/// that carried any would be read over ISSC.
 fn choose_profile(
     characteristics: &BTreeSet<Characteristic>,
 ) -> std::result::Result<Chosen, &'static str> {
@@ -470,6 +531,15 @@ fn choose_profile(
         return Ok(chosen(&EEVBLOG_121GW, data, data));
     }
 
+    let brymen_notify = find(BRYMEN.service, BRYMEN.notify);
+    let brymen_write = find(BRYMEN.service, BRYMEN.write);
+    if let (Some(notify), Some(write)) = (
+        brymen_notify.filter(|c| c.properties.contains(CharPropFlags::NOTIFY)),
+        brymen_write.filter(|c| c.properties.contains(CharPropFlags::WRITE)),
+    ) {
+        return Ok(chosen(&BRYMEN, notify, write));
+    }
+
     let fff0_notify = find(FFF0.service, FFF0.notify).filter(|c| {
         // Indications carry the stream as well: btleplug's subscribe takes
         // whichever the characteristic offers, as ZOTEK's current app does
@@ -488,12 +558,15 @@ fn choose_profile(
     // Name what the closer profile lacks; ISSC when none has anything,
     // which is what a peer with no known profile always heard. A 121GW
     // characteristic that got this far cannot stream.
-    if gw.is_some() && issc_notify.is_none() && issc_write.is_none() {
+    let no_issc = issc_notify.is_none() && issc_write.is_none();
+    if gw.is_some() && no_issc {
         return Err("notify");
     }
-    let fff0_closer = issc_notify.is_none()
-        && issc_write.is_none()
-        && (fff0_notify.is_some() || fff0_write.is_some());
+    if (brymen_notify.is_some() || brymen_write.is_some()) && no_issc {
+        let writable = brymen_write.is_some_and(|c| c.properties.contains(CharPropFlags::WRITE));
+        return Err(if writable { "notify" } else { "write" });
+    }
+    let fff0_closer = no_issc && (fff0_notify.is_some() || fff0_write.is_some());
     let write = if fff0_closer { fff0_write } else { issc_write };
     Err(if write.is_none() { "write" } else { "notify" })
 }
@@ -817,6 +890,19 @@ mod tests {
         characteristic(EEVBLOG_121GW.service, EEVBLOG_121GW.notify, properties)
     }
 
+    /// Brymen's reading and command characteristics with the properties r4
+    /// lists (`docs/research/bm78xbt/reverse-engineered-protocol.md` §2).
+    fn brymen() -> [Characteristic; 2] {
+        [
+            characteristic(BRYMEN.service, BRYMEN.notify, CharPropFlags::NOTIFY),
+            characteristic(
+                BRYMEN.service,
+                BRYMEN.write,
+                CharPropFlags::READ | CharPropFlags::WRITE,
+            ),
+        ]
+    }
+
     /// The name of the profile `characteristics` pick, or the missing role.
     fn choose(
         characteristics: impl IntoIterator<Item = Characteristic>,
@@ -1003,6 +1089,76 @@ mod tests {
         );
     }
 
+    /// A peer with Brymen's service is read on its reading characteristic
+    /// and written on its command one.
+    #[test]
+    fn brymens_service_is_chosen_without_issc() {
+        assert_eq!(choose(brymen()), Ok(BRYMEN.name));
+
+        let chosen = choose_profile(&brymen().into_iter().collect()).unwrap();
+        assert_eq!(chosen.notify.uuid.to_string(), BRYMEN.notify);
+        assert_eq!(chosen.write.uuid.to_string(), BRYMEN.write);
+    }
+
+    /// The command characteristic has to take an acknowledged write, the
+    /// only kind the login sends; being readable is left to the login.
+    #[test]
+    fn brymens_command_characteristic_needs_an_acknowledged_write() {
+        let [notify, _] = brymen();
+        let write_only = characteristic(BRYMEN.service, BRYMEN.write, CharPropFlags::WRITE);
+        assert_eq!(choose([notify.clone(), write_only]), Ok(BRYMEN.name));
+
+        let unacknowledged = characteristic(
+            BRYMEN.service,
+            BRYMEN.write,
+            CharPropFlags::READ | CharPropFlags::WRITE_WITHOUT_RESPONSE,
+        );
+        assert_eq!(choose([notify, unacknowledged]), Err("write"));
+    }
+
+    /// The readings come by notification (spec §2); a reading
+    /// characteristic that cannot notify carries no stream.
+    #[test]
+    fn brymens_reading_characteristic_has_to_notify() {
+        let [_, write] = brymen();
+        let indicates = characteristic(BRYMEN.service, BRYMEN.notify, CharPropFlags::INDICATE);
+        assert_eq!(choose([indicates, write]), Err("notify"));
+    }
+
+    /// Half of Brymen's service is no profile, and the error names the half
+    /// that is missing.
+    #[test]
+    fn half_of_brymens_service_is_refused() {
+        let [notify, write] = brymen();
+        assert_eq!(choose([notify]), Err("write"));
+        assert_eq!(choose([write]), Err("notify"));
+    }
+
+    /// ISSC and the 121GW still come first beside Brymen's service; the
+    /// order among the meters' own services never meets a real peer.
+    #[test]
+    fn issc_and_the_121gw_outrank_brymen() {
+        assert_eq!(
+            choose(issc().into_iter().chain(brymen())),
+            Ok(ISSC_UART.name)
+        );
+        let data = gw(CharPropFlags::WRITE | CharPropFlags::INDICATE);
+        assert_eq!(
+            choose(brymen().into_iter().chain([data])),
+            Ok(EEVBLOG_121GW.name)
+        );
+    }
+
+    /// Brymen's service is the meter's own and FFF0 is generic, so a peer
+    /// with both is read as a BM78xBT.
+    #[test]
+    fn brymen_outranks_fff0() {
+        assert_eq!(
+            choose(brymen().into_iter().chain([fff4_as_listed()])),
+            Ok(BRYMEN.name)
+        );
+    }
+
     /// An over-MTU write is rejected by the peer, so the chunk size has to
     /// follow whatever the platform negotiated.
     #[test]
@@ -1050,14 +1206,15 @@ mod tests {
     }
 
     /// The opener's bounds have to keep the GUI's synchronous reconnect loop
-    /// responsive: worst case is one scan, one connect, one discovery and
-    /// the disconnect after it fails. The setup retry sits inside the
-    /// discovery bound.
+    /// responsive: worst case is one scan, one connect, one discovery, one
+    /// login and the disconnect after it fails. The setup retry sits inside
+    /// the discovery bound, and both tries' logins inside one login bound.
     #[test]
     fn open_is_bounded() {
         assert!(SCAN_POLL < SCAN_WINDOW);
         assert!(SETUP_RETRY_PAUSE < DISCOVERY_TIMEOUT);
-        let worst_case = SCAN_WINDOW + CONNECT_TIMEOUT + DISCOVERY_TIMEOUT + DISCONNECT_TIMEOUT;
-        assert!(worst_case <= Duration::from_secs(30), "{worst_case:?}");
+        let worst_case =
+            SCAN_WINDOW + CONNECT_TIMEOUT + DISCOVERY_TIMEOUT + LOGIN_TIMEOUT + DISCONNECT_TIMEOUT;
+        assert!(worst_case <= Duration::from_secs(40), "{worst_case:?}");
     }
 }

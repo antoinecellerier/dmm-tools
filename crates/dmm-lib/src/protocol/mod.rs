@@ -1,3 +1,4 @@
+pub(crate) mod bm78xbt;
 pub(crate) mod cycle;
 pub(crate) mod eevblog121gw;
 mod expect;
