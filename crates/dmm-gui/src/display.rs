@@ -110,6 +110,12 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
                 MeasuredValue::Absent => String::new(),
             };
             let mut parts = String::with_capacity(96);
+            // Spoken where it is drawn, ahead of the digits — and, as there,
+            // not for a frame without its main reading.
+            if let Some(label) = m.main_label.filter(|_| m.has_main_reading()) {
+                parts.push_str(label.as_str());
+                parts.push(' ');
+            }
             if !value.is_empty() {
                 parts.push_str(&value);
                 if !m.unit.is_empty() {
@@ -328,6 +334,7 @@ fn live_region_fingerprint(
             }
             m.unit.hash(&mut h);
             m.mode.hash(&mut h);
+            m.main_label.hash(&mut h);
             // Sub-values are part of both the spoken label and the visible
             // rows, so a MIN/MAX extreme moving (or its timestamp advancing)
             // has to invalidate the cached announcement even though the live
@@ -460,6 +467,56 @@ fn show_aux_rows(
             }
         });
     rects
+}
+
+/// The reading's digits, led by its own name when it has one ("DC" beside an
+/// "AC" row): muted and at `caption_size`, the sub-value labels' size, so it
+/// reads as the first of those labels rather than as part of the value. Every
+/// meter but the UT61E+ in AC+DC V gets the digits alone.
+///
+/// One galley rather than two labels: a horizontal row centres each widget on
+/// the height it has reached so far, so a small label placed before the
+/// digits sat at the top of the row. Within one job each section is centred
+/// on the line instead.
+fn value_label(
+    ui: &Ui,
+    m: &Measurement,
+    value_text: &str,
+    font: FontId,
+    color: Color32,
+    caption_size: f32,
+) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    let mut gap = 0.0;
+    // Not over blank digits: a frame shown without its main reading (the
+    // first after a connect, or HOLD on the AC component) has no DC to name.
+    if let Some(label) = m.main_label.filter(|_| m.has_main_reading()) {
+        let size = caption_size.max(MIN_AUX_FONT_SIZE);
+        job.append(
+            label.as_str(),
+            0.0,
+            TextFormat {
+                font_id: FontId::proportional(size),
+                color: ui.visuals().weak_text_color(),
+                valign: eframe::egui::Align::Center,
+                ..Default::default()
+            },
+        );
+        // The gap the sub-value grid leaves between its label and value
+        // columns.
+        gap = (size * 0.5).max(4.0);
+    }
+    job.append(
+        value_text,
+        gap,
+        TextFormat {
+            font_id: font,
+            color,
+            valign: eframe::egui::Align::Center,
+            ..Default::default()
+        },
+    );
+    job
 }
 
 /// Prepare the value text and color from a measurement.
@@ -1107,11 +1164,14 @@ fn show_reading_sized(
                 || live_region_label(Some(m), scaled, NO_READING_TITLE),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 2.0;
-                    ui.label(
-                        RichText::new(&value_text)
-                            .font(FontId::monospace(value_size))
-                            .color(value_color),
-                    );
+                    ui.label(value_label(
+                        ui,
+                        m,
+                        &value_text,
+                        FontId::monospace(value_size),
+                        value_color,
+                        mode_size,
+                    ));
                     ui.label(
                         RichText::new(&*m.unit)
                             .font(FontId::monospace(unit_size))
@@ -1173,11 +1233,14 @@ fn show_reading_inline(
         Some(m) => {
             let (value_text, value_color) = value_display(ui, m, tc);
             let draw_value = |ui: &mut Ui| {
-                ui.label(
-                    RichText::new(&value_text)
-                        .font(FontId::monospace(value_size))
-                        .color(value_color),
-                );
+                ui.label(value_label(
+                    ui,
+                    m,
+                    &value_text,
+                    FontId::monospace(value_size),
+                    value_color,
+                    mode_size,
+                ));
                 ui.label(
                     RichText::new(&*m.unit)
                         .font(FontId::monospace(unit_size))
@@ -1378,9 +1441,15 @@ pub fn show_reading_compact(
         Some(m) => {
             let value_text = format_value_display(m);
             let draw_value = |ui: &mut Ui| {
-                ui.label(
-                    RichText::new(&value_text).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
-                );
+                let color = ui.visuals().text_color();
+                ui.label(value_label(
+                    ui,
+                    m,
+                    &value_text,
+                    FontId::monospace(COMPACT_READING_FONT_SIZE),
+                    color,
+                    MIN_AUX_FONT_SIZE,
+                ));
                 ui.label(
                     RichText::new(&*m.unit).font(FontId::monospace(COMPACT_READING_FONT_SIZE)),
                 );
@@ -1865,6 +1934,20 @@ mod tests {
     /// A frame carrying only the AC component of an AC+DC reading: blank
     /// digits at the usual width, and a spoken label that opens on the mode
     /// rather than on a lone unit, with no word for a `Raw` that has nothing.
+    /// The UT61E+ names its AC+DC V reading DC beside the AC row; a screen
+    /// reader hears the name where it is drawn, ahead of the digits.
+    #[test]
+    fn a_named_reading_is_spoken_with_its_name() {
+        let mut m =
+            Measurement::test_fixture(MeasuredValue::Normal(1.6112), "V", StatusFlags::default());
+        m.mode = "AC+DC V".into();
+        m.display_raw = Some(" 1.6112".to_string());
+        m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
+        m.aux_values = vec![aux("AC", " 0.0123", "")];
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
+        assert_eq!(label, "DC 1.6112 V, AC+DC V, AC 0.0123 V");
+    }
+
     #[test]
     fn a_frame_without_a_main_reading_shows_blank_digits() {
         let mut m = Measurement::test_fixture(MeasuredValue::Absent, "V", StatusFlags::default());
@@ -1876,6 +1959,12 @@ mod tests {
         m.aux_values = vec![aux("AC", " 0.0123", ""), raw];
 
         assert_eq!(format_value_display(&m), "       ");
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
+        assert_eq!(label, "AC+DC V, AC 0.0123 V");
+
+        // As the decoder sends it, named DC on both kinds of frame: with no
+        // DC value there is nothing for the name to name.
+        m.main_label = Some(dmm_lib::measurement::MainLabel::Dc);
         let label = live_region_label(Some(&m), false, NO_READING_TITLE);
         assert_eq!(label, "AC+DC V, AC 0.0123 V");
     }

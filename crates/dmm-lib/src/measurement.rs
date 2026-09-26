@@ -200,7 +200,7 @@ impl AuxValue {
 ///
 /// An enum rather than a string: it is carried on every reading, and one
 /// byte fits in padding the struct already has.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MainLabel {
     /// The DC component, beside an "AC" one.
     Dc,
@@ -358,9 +358,15 @@ impl Measurement {
         }))
     }
 
+    /// Whether this frame carries the main reading — false for one that
+    /// carries only sub-values ([`MeasuredValue::Absent`]).
+    pub fn has_main_reading(&self) -> bool {
+        !matches!(self.value, MeasuredValue::Absent)
+    }
+
     /// The sub-values that carry something, [`MeasuredValue::Absent`] ones
     /// left out.
-    fn present_aux(&self) -> impl Iterator<Item = &AuxValue> {
+    pub fn present_aux(&self) -> impl Iterator<Item = &AuxValue> {
         self.aux_values
             .iter()
             .filter(|aux| !matches!(aux.value, MeasuredValue::Absent))

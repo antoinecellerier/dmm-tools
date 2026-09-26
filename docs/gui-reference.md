@@ -92,7 +92,7 @@ top-right corner in every layout and expire on their own.
 - Sub-value rows under the reading for meters that send them (UT181A, UT171,
   and the UT61E+'s AC component in AC+DC V): label, value and unit, plus
   `@Ns` for the MIN/MAX timestamps. The narrow layout condenses them to one
-  line.
+  line. In AC+DC V the reading itself is captioned **DC**.
 - Mode and range label below in smaller text
 - On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
   VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
