@@ -89,9 +89,10 @@ top-right corner in every layout and expire on their own.
 
 - Primary value in large monospace font, as the meter displays it
 - Unit shown adjacent (e.g. "V", "mV", "kΩ")
-- Sub-value rows under the reading for meters that send them (UT181A, UT171):
-  label, value and unit, plus `@Ns` for the MIN/MAX timestamps. The narrow
-  layout condenses them to one line.
+- Sub-value rows under the reading for meters that send them (UT181A, UT171,
+  and the UT61E+'s AC component in AC+DC V): label, value and unit, plus
+  `@Ns` for the MIN/MAX timestamps. The narrow layout condenses them to one
+  line.
 - Mode and range label below in smaller text
 - On meters that can switch function over USB (UT61+/UT161, UT181A, VC-880,
   VC650BT, VC-890, and the mock), the mode and range labels are dropdowns of
@@ -152,7 +153,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **LIVE** | Auto-scroll to latest data (filled when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171) and while a software [scale](#scale) is active, which adds **Raw**. Switching restarts the graph; if the meter stops sending the chosen sub-value, the graph returns to **Main**. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching restarts the graph; if the meter stops sending the chosen sub-value, the graph returns to **Main**. |
 | **Show:** | One chip per sub-value in the plotted series' unit: click to draw or hide its trace beside the plotted series. Hidden traces are still recorded. Session-only. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
@@ -248,8 +249,8 @@ A thin strip below the main plot showing the full capture history.
 
 ```
 # device: UT61E+
-timestamp,mode,value,unit,range,flags
-2026-03-19T10:15:30.123+01:00,DC V,3.3042,V,22V,AUTO
+timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit
+2026-03-19T10:15:30.123+01:00,DC V,3.3042,V,22V,AUTO,,,
 ```
 
 Meters that report sub-values add `auxN_label,auxN_value,auxN_unit` columns,

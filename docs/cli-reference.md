@@ -191,10 +191,10 @@ Meters with more than one display (the UT181A's second thermocouple,
 frequency and period, REL, MIN/MAX and Peak; the UT171's frequency) report
 those **sub-values** indented under the reading in text output and in an `aux`
 array in JSON. CSV adds one `auxN_label,auxN_value,auxN_unit` group per
-sub-value the meter family can send (four for the UT181A, one for the UT171),
-left empty when a reading uses fewer, so every row lines up. Single-display
-meters keep the six base columns. With `--integrate`, the `integral` columns
-come before the aux groups.
+sub-value the meter family can send (four for the UT181A, one for the UT171
+and the UT61E+), left empty when a reading uses fewer, so every row lines up.
+Single-display meters keep the six base columns. With `--integrate`, the
+`integral` columns come before the aux groups.
 
 <!-- snippet via=ut181a-vac-hz.replay
 dmm-cli read --format csv --count 1
@@ -206,6 +206,28 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label
 2026-09-02T00:00:00+00:00,V AC Hz,239.22,VAC,600V,AUTO HV!,Frequency,50.01,Hz,Period,20.00,ms,,,,,,
 
 --- 1 samples | Min: 239.2200 VAC | Max: 239.2200 VAC | Avg: 239.2200 VAC
+```
+<!-- /snippet -->
+
+A UT61E+ in AC+DC V sends its DC and AC components in turn, each in a frame of
+its own. A DC frame is the reading; an AC frame carries only the `AC`
+sub-value, printed where the reading goes, with an empty CSV value cell and a
+`null` JSON value. `--count` counts frames, while the summary covers the DC
+readings.
+
+<!-- snippet via=acdcv-cell.replay
+dmm-cli read --count 6
+-->
+```
+$ dmm-cli read --count 6
+1.6112 V [AUTO]
+AC 0.0000 V [AUTO]
+0.2045 V [AUTO]
+AC 0.4406 V [AUTO]
+0.0264 V [AUTO]
+AC 0.3376 V [AUTO]
+
+--- 3 samples | Min: 0.0264 V | Max: 1.6112 V | Avg: 0.6140 V
 ```
 <!-- /snippet -->
 

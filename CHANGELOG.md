@@ -14,6 +14,10 @@
 
 - **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
 
+### Bug fixes
+
+- **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; AC now fills the `aux1` CSV columns.
+
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 
 The GUI and CLI auto-detect the connected meter and switch mode and range on meters that take commands, the graph keeps hours of readings instead of minutes, and usability fixes land throughout. The UT804 now decodes readings and the UT61B+ reads volts correctly, both verified through the redesigned `capture` workflow; the UT181A is partly verified and shows its sub-values.

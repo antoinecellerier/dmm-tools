@@ -917,19 +917,12 @@ mod tests {
         assert!(summary.contains("HOLD"));
     }
 
-    /// A frame carrying only the AC component of an AC+DC reading is
-    /// confirmed against the component, not a blank value and a lone unit.
+    /// A UT61E+ AC+DC V frame carrying only the AC component is confirmed
+    /// against the component, not a blank value and a lone unit.
     #[test]
     fn summary_of_a_frame_without_a_main_reading() {
-        let mut m = make_test_measurement(0x19, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x00, 0x08));
-        m.value = MeasuredValue::Absent;
-        m.aux_values = vec![dmm_lib::measurement::AuxValue {
-            label: "AC".into(),
-            value: MeasuredValue::Normal(0.0),
-            unit: "".into(),
-            display_raw: m.display_raw.take(),
-            elapsed_secs: None,
-        }];
+        let m = make_test_measurement(0x19, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x00, 0x08));
+        assert!(matches!(m.value, MeasuredValue::Absent));
         let s = SampleData::from_measurement(&m);
         assert_eq!(s.summary(), "AC 0.0000 V [AUTO]");
     }

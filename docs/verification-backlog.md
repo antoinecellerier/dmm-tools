@@ -20,6 +20,7 @@ Items that need real components or specific setups to verify.
   - [UT61+ Hz and Duty % off the Hz/% position take its specs](#ut61-hz-and-duty--off-the-hz-position-take-its-specs)
   - [UT61+ spec data leftovers](#ut61-spec-data-leftovers)
   - [UT61E+ auto power-off while polled over USB](#ut61e-auto-power-off-while-polled-over-usb)
+  - [UT61E+ AC+DC V: the components as separate readings](#ut61e-acdc-v-the-components-as-separate-readings)
   - [UT216XD: the UT61+ deck specifies a clamp meter we do not list](#ut216xd-the-ut61-deck-specifies-a-clamp-meter-we-do-not-list)
   - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
@@ -1619,6 +1620,35 @@ run that tells them apart, one step at a time on the meter:
 
 A frame taken while the symbol is lit would also confirm bit 3 (the spec's
 "Must Verify" item 1).
+
+### UT61E+ AC+DC V: the components as separate readings
+
+Landed 2026-09-26: a DC frame is the reading, an AC frame carries its component
+as the `AC` sub-value with no main reading (`MeasuredValue::Absent`), so each
+keeps its own time. Checked on our UT61E+ over the CP2110 against a 1.6 V cell
+(`assets/replays/acdcv-cell.replay`, one lead lifted twice): CLI text, CSV and
+JSON, and the GUI's two traces, steady reading and **Plot:** AC. Component
+timing, HOLD and MIN/MAX are in the ut61eplus spec §2.7 (flag3 bit 3).
+
+Open:
+
+- **UT-D07B.** `newest_streamed` keeps only the newest frame, so a reader
+  slower than the stream may see one component far more often than the other,
+  as a slow CP2110 poll does. Not yet run with the adapter.
+- **Components on different rungs.** Both sat on the 2.2V rung here; a DC
+  offset with an AC signal on top would show whether autorange can put them
+  on different ones. The display keeps the DC frame's range either way.
+- **HOLD on the AC component** sends AC frames only: the reading shows blank
+  digits beside the AC row, and the Main view's minimap, cursors and
+  statistics stay empty. **Plot:** AC draws it.
+- **Slow intervals.** At `--interval-ms` 1000 or more the DC readings can be
+  over 2 s apart, past the CLI integrator's limit, so `--integrate` skips them.
+- **Graph span.** The graph bounds DC points and AC points separately, so it
+  can reach back about twice as far as the History buffer before either drops.
+- **A software offset** is applied to the AC component as to any same-unit
+  sub-value, which means nothing for an RMS value.
+- **Key label.** The DC trace is named "Main" in the plot key and chips;
+  naming it "DC" needs a main-series label on the reading.
 
 ### UT216XD: the UT61+ deck specifies a clamp meter we do not list
 

@@ -1,7 +1,7 @@
 # AC+DC V across a 1.6 V cell, the AC component (flag3 bit 3 set), captured 2026-09-19 from a UT61E+ (dmm-cli debug)
 raw_hex: "19 30 20 30 2E 30 30 30 30 00 00 30 30 39"
 mode: "AC+DC V"
-value: "0"
+value: ""
 unit: "V"
 range_label: "2.2V"
 resolution: "0.1mV"
@@ -16,3 +16,7 @@ flags:
   dc: false
   peak_min: false
   peak_max: false
+aux:
+  - label: "AC"
+    value: "0.0000"
+    unit: "V"

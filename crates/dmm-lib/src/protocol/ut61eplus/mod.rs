@@ -165,8 +165,11 @@ impl Ut61PlusProtocol {
         } else {
             Stability::Experimental
         };
-        // One sub-value: a model's secondary display (family spec §2.3).
-        let max_aux_values = usize::from(table.has_secondary_display());
+        // One sub-value each: a model's secondary display (family spec §2.3),
+        // and the AC component of AC+DC V on a model whose dial reaches it
+        // (see `parse_measurement`).
+        let max_aux_values = usize::from(table.has_secondary_display())
+            + usize::from(table.range_info(Mode::AcDcV, 0).is_some());
         // The family issue stays on every model but the UT61E+, verified or
         // not: the UT61B+ is decoded correctly everywhere it was looked at,
         // and its range rungs above the ones auto-ranging reached are still
@@ -1382,8 +1385,7 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     let range_label = range_info.map(|r| r.label).unwrap_or("");
 
     let value = display_value(mode, &display_raw);
-
-    Ok(Measurement {
+    let m = Measurement {
         mode: Cow::Borrowed(mode.as_static_str()),
         mode_raw: mode_byte as u16,
         range_raw: range_byte,
@@ -1394,8 +1396,35 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
         display_raw: Some(display_raw),
         flags,
         ..Measurement::from_payload(&payload[..UT61EPLUS_MEASUREMENT_PAYLOAD_LEN])
-    })
+    };
+
+    // §2.7: in AC+DC V the meter sends its DC and AC components in frames of
+    // their own, in turn, flag3 bit 3 set on the AC one. The DC frame is the
+    // reading; the AC frame carries its component as a sub-value in the
+    // reading's unit and no main reading, so each keeps its own time and
+    // frame. Only where the model's dial reaches the mode: the deck's AC+DC
+    // current modes have no ranges, and nothing has shown how they send.
+    if mode == Mode::AcDcV && range_info.is_some() && !m.flags.dc {
+        let ac = AuxValue {
+            label: Cow::Borrowed(AC_COMPONENT_LABEL),
+            value: m.value,
+            unit: Cow::Borrowed(""),
+            display_raw: m.display_raw,
+            elapsed_secs: None,
+        };
+        return Ok(Measurement {
+            value: MeasuredValue::Absent,
+            display_raw: None,
+            aux_values: vec![ac],
+            ..m
+        });
+    }
+    Ok(m)
 }
+
+/// Label of the AC component an AC+DC V frame carries (see
+/// `parse_measurement`).
+const AC_COMPONENT_LABEL: &str = "AC";
 
 /// The value a 7-char display field shows in `mode`, the same for a main
 /// and a secondary display (UT61E+ spec §2.4).
@@ -2009,14 +2038,58 @@ mod tests {
     /// Only the UT202BT has a secondary display, so only it has a sub-value
     /// slot in an export.
     #[test]
-    fn only_the_ut202bt_has_a_sub_value_slot() {
+    fn a_sub_value_slot_for_a_secondary_display_or_ac_dc_v() {
         for model in [
             "ut61e+", "ut161e", "ut61b+", "ut161b", "ut61d+", "ut161d", "ut60bt", "ut202bt",
         ] {
             let p = Ut61PlusProtocol::for_model(model).expect("known model");
-            let want = usize::from(model == "ut202bt");
+            let want = usize::from(matches!(model, "ut202bt" | "ut61e+" | "ut161e"));
             assert_eq!(p.profile().max_aux_values, want, "{model}");
         }
+    }
+
+    /// The captured pair across a 1.6 V cell: the DC frame is the reading,
+    /// the AC frame carries only its component.
+    #[test]
+    fn ac_dc_v_splits_its_components() {
+        let table = super::tables::ut61e_plus::Ut61ePlusTable::new();
+        let dc = [
+            0x19, 0x30, 0x20, 0x31, 0x2E, 0x36, 0x31, 0x31, 0x33, 0x00, 0x00, 0x30, 0x30, 0x31,
+        ];
+        let m = parse_measurement(&dc, &table).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 1.6113));
+        assert!(m.flags.dc);
+        assert!(m.aux_values.is_empty());
+
+        let ac = [
+            0x19, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x39,
+        ];
+        let m = parse_measurement(&ac, &table).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Absent));
+        assert_eq!(m.display_raw, None);
+        assert_eq!((m.mode.as_ref(), m.unit.as_ref()), ("AC+DC V", "V"));
+        assert_eq!(m.range_label, "2.2V");
+        assert!(!m.flags.dc);
+        assert_eq!(m.raw_payload, ac, "the frame stays the AC frame's own");
+        assert_eq!(m.aux_values.len(), 1);
+        let aux = &m.aux_values[0];
+        assert_eq!((aux.label.as_ref(), aux.unit.as_ref()), ("AC", ""));
+        assert!(matches!(aux.value, MeasuredValue::Normal(v) if v == 0.0));
+        assert_eq!(aux.display_raw.as_deref(), Some(" 0.0000"));
+        assert_eq!(m.to_string(), "AC 0.0000 V [AUTO]");
+    }
+
+    /// An AC component over range is an over-range sub-value, not an
+    /// over-range reading.
+    #[test]
+    fn an_over_range_ac_component_is_an_over_range_sub_value() {
+        let table = super::tables::ut61e_plus::Ut61ePlusTable::new();
+        let ac_ol = [
+            0x19, 0x30, 0x20, 0x20, 0x20, 0x4F, 0x4C, 0x20, 0x20, 0x00, 0x00, 0x30, 0x30, 0x38,
+        ];
+        let m = parse_measurement(&ac_ol, &table).unwrap();
+        assert!(matches!(m.value, MeasuredValue::Absent));
+        assert!(matches!(m.aux_values[0].value, MeasuredValue::Overload));
     }
 
     /// Frequency beside AC V, as the UT202BT manual describes (P8/14): one
@@ -3230,7 +3303,8 @@ raw_payload=14"#
         [
             0x19, 0x30, 0x2D, 0x30, 0x2E, 0x30, 0x31, 0x33, 0x33, 0x00, 0x00, 0x30, 0x30, 0x30,
         ],
-        // AC+DC V with the DC bit, AC V with P-MAX, DC V under MAX, REL and HOLD.
+        // AC+DC V's AC component (flag3 bit 3), AC V with P-MAX, DC V under
+        // MAX, REL and HOLD.
         [
             0x19, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x33, 0x36, 0x37, 0x00, 0x00, 0x30, 0x30, 0x38,
         ],

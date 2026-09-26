@@ -13,6 +13,12 @@
 //! - Numeric: `"5.678"`, `"-12.345"`
 //! - Overload: `"OL"`
 //! - NCV: `"NCV:3"`
+//! - No main reading in this frame, only sub-values: `""`
+//!
+//! `aux`, when present, lists the sub-values the reading must carry — no more,
+//! so `aux: []` checks there are none — as the capture report stores them:
+//! `label`, `value` (the display form), and `unit` resolved against the
+//! reading's.
 //!
 //! `resolution`, when present, is the resolution of the manual row
 //! [`Protocol::spec_info`] finds for the reading.
@@ -45,6 +51,17 @@ struct GoldenTestCase {
     /// Resolution of the reading's spec row, checked when given.
     #[serde(default)]
     resolution: Option<String>,
+    /// The reading's sub-values, checked when given.
+    #[serde(default)]
+    aux: Option<Vec<GoldenAux>>,
+}
+
+/// One expected sub-value, in the capture report's shape.
+#[derive(Debug, Deserialize, PartialEq)]
+struct GoldenAux {
+    label: String,
+    value: String,
+    unit: String,
 }
 
 fn golden_root() -> PathBuf {
@@ -165,6 +182,18 @@ fn check_reading(protocol: &dyn Protocol, stem: &str, case: &GoldenTestCase) -> 
         );
     }
     assert_known_flag_names(stem, &case.flags);
+    if let Some(aux) = &case.aux {
+        let got: Vec<GoldenAux> = measurement
+            .aux_values
+            .iter()
+            .map(|a| GoldenAux {
+                label: a.label.to_string(),
+                value: a.value_str().into_owned(),
+                unit: a.unit_or(&measurement.unit).to_string(),
+            })
+            .collect();
+        assert_eq!(&got, aux, "golden {stem}: aux mismatch");
+    }
     measurement
 }
 
