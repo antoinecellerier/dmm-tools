@@ -5,9 +5,10 @@ packet: 19 binary bytes, starting `F2` and ending in an XOR checksum, that
 carries the main display (mode, range, an 18-bit value), the secondary
 display, the bar graph and the annunciators. Commands to the meter are short
 ASCII-hex frames led by `F4` (key presses) or `F8` (clock set). No 121GW has
-been on our bench: every fact below comes from EEVblog's packet-format
-documents, EEVblog's app, UEi's app and the user manual. The approach doc
-beside it records the sources, the method and the clean-room boundary.
+been on our bench: every fact in §1-14 comes from EEVblog's packet-format
+documents, EEVblog's app, UEi's app and the user manual, and §15 compares
+them with community sources. The approach doc beside it records the sources,
+the method and the clean-room boundary.
 
 Based on:
 - EEVblog's "BLE Packet Format" documents, V1 (2018-03-22) and V2
@@ -34,6 +35,9 @@ Citation keys:
   **master `path:line`** — its checked-out `master` working tree
 - **UEi `File.java:line`** — `references/121gw/uei-app/jadx/sources/kr/co/finest/eevblog/`;
   **UEi strings.xml** = `uei-app/jadx/resources/res/values/strings.xml`
+- **Community sources**, §15 only — paths under `references/121gw/community/`;
+  **fw 1.02** = `121gw-re/database/EEVBlog-102.c`, tpwrules' IDA export of
+  firmware 1.02
 
 Byte and bit numbering: byte 0 is the `F2` start byte; bit 7 is the most
 significant bit, as the documents' b7..b0 columns.
@@ -46,6 +50,8 @@ Confidence levels:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter (all in §14)
 - **[HARDWARE]** — seen on a real meter: none yet
+- **[COMMUNITY]** — stated or captured by a community source, §15; not a
+  vendor fact
 
 ---
 
@@ -84,12 +90,12 @@ V2 p.1 table, 2026-09-26 [INFERRED from the V2 p.1 table].
 | Characteristic | `e7add780-b042-4876-aae1-112855353cc1` (UEi `BLEService.java:40`), the only one UEi's app uses: fetched at `:92`, subscribed at `:93-96`, written at `:186-191` | UEi | [VENDOR] |
 | Subscribe | `setCharacteristicNotification(true)`, then `ENABLE_INDICATION_VALUE` written to each descriptor of that characteristic, one per callback (UEi `BLEService.java:93-96`, `:103-107`, `:193-201`); the constant's value is `02 00` | UEi | [VENDOR]; the byte value [INFERRED from the Android `BluetoothGattDescriptor` API and the Bluetooth Core Specification's CCCD values, general platform references] |
 | EEVblog's app | names no UUID in any revision. It subscribes to every characteristic of every service that can update (Android: `StartUpdatesAsync` when `CanUpdate`, PPR `App 112GW/App_112GW.Android/Peripherals/Bluetooth/Characteristic.cs:49-50`; UWP: only characteristics with the Indicate property, writing the CCCD for Indicate, PPR `App 112GW/App_112GW.UWP/Peripherals/Bluetooth/Characteristic.cs:25-35`), feeds all of them into one packet assembler (Multimeter:148) and writes key codes to every characteristic (Multimeter:205-210) | EEVblog | [VENDOR]; consistent with one characteristic. The UWP path working at all implies the data characteristic has Indicate [INFERRED] |
-| Notify | whether the characteristic also offers notifications | — | [UNVERIFIED] |
-| Write type | neither app sets one: UEi calls `writeCharacteristic` with the characteristic's default type (`BLEService.java:186-191`); EEVblog calls `WriteAsync`/`WriteValueAsync` with no option (PPR Android `Characteristic.cs:22-33`, UWP `Characteristic.cs:17`) | apps | [VENDOR]; which types the characteristic takes [UNVERIFIED] |
+| Notify | whether the characteristic also offers notifications (community: see §15.4) | — | [UNVERIFIED] |
+| Write type | neither app sets one: UEi calls `writeCharacteristic` with the characteristic's default type (`BLEService.java:186-191`); EEVblog calls `WriteAsync`/`WriteValueAsync` with no option (PPR Android `Characteristic.cs:22-33`, UWP `Characteristic.cs:17`) | apps | [VENDOR]; which types the characteristic takes [UNVERIFIED] (no community answer, §15.4) |
 | MTU | neither app requests one | apps | [VENDOR] |
 | Discovery, UEi | no name filter: the app walks the raw scan record and compares the first UUID of the first AD structure of type `0x07` (Complete List of 128-bit Service UUIDs), byte-reversed, with the service UUID (`BLEService.java:55-56`, `:213-239`) | UEi | [VENDOR]; so the meter advertises the service UUID in an AD type 0x07 [INFERRED] |
 | Discovery, EEVblog | accepts any device whose name contains `121GW` or `Bluegiga` (PPR `121GW.Core/Controls/Multimeter/Settings.cs:19`, applied at PPR `121GW.Core/Peripherals/Bluetooth/Client.cs:68-69`); unnamed devices are dropped (the same line; Android `DeviceWatcher_Added`, PPR `App 112GW/App_112GW.Android/Peripherals/Bluetooth/Client.cs:24`) | EEVblog | [VENDOR] |
-| Advertised name | the exact name: none found in the two apps or the manual (p.55 is the Bluetooth section), 2026-09-26; the EEVblog filter admits two spellings | — | [UNVERIFIED] |
+| Advertised name | the exact name: none found in the two apps or the manual (p.55 is the Bluetooth section), 2026-09-26; the EEVblog filter admits two spellings (community: see §15.4) | — | [UNVERIFIED] |
 | Pairing | bonding or pairing calls: none found in the UEi jadx sources (no `createBond`) or in EEVblog's connect paths (PPR Android `Client.cs:43-63`, UWP `Client.cs:31-52`, which only connect), 2026-09-26; a PIN: none found in the manual (p.55), 2026-09-26 | apps, manual | [VENDOR], [KNOWN] |
 
 ## 3. Bring-up
@@ -113,12 +119,13 @@ app never sends it [VENDOR].
 
 **Rate.** The display updates "5 times per second nominal" (manual p.15)
 [KNOWN]. The packet rate: none found in the documents, the two apps or the
-manual, 2026-09-26 [UNVERIFIED].
+manual, 2026-09-26 [UNVERIFIED]. Community: see §15.4.
 
 **Auto power-off.** The meter powers off after 30 minutes unless APO is set
 off; APO is disabled while logging to SD (manual p.61) [KNOWN]. How APO
 treats a Bluetooth connection: not found in the manual, 2026-09-26
-[UNVERIFIED]. The APO annunciator is byte 15 bit 1 (§9).
+[UNVERIFIED]; community: see §15.4. The APO annunciator is byte 15 bit 1
+(§9).
 
 ## 4. Framing
 
@@ -152,7 +159,8 @@ buffer, drops bytes before the first `F2` and cuts 19 bytes at a time
 (PPR `121GW.Core/Packet/PacketProcessor.cs:30-55`); UEi's parser keeps its
 state across indications (UEi `Protocol.java:111-321`) [VENDOR]. A 2017-12
 commit message speaks of "packet cutoff which is caused by connection
-interval" on Windows, in the ASCII era (`0cca1b3`) [VENDOR].
+interval" on Windows, in the ASCII era (`0cca1b3`) [VENDOR]. Community: see
+§15.4.
 
 **V1 and V2.** Every bit V2 adds was a fixed `0` in V1 (V1 p.1, V2 p.1)
 [KNOWN], so a V1 packet reads under V2 as "value bits 17-16 = 0, no °C/℉"
@@ -226,7 +234,7 @@ on the meter from the manual [INFERRED: by name].
 | 10 | `Continuity` | Continuity | Ω position, one press (p.45) |
 | 11 | `Diode` | Diode | Ω position, diode (p.44, p.51) |
 | 12 | `Capacitor` | Capacitor | Ω position, three presses (p.47) |
-| 13 | `ACuVA` | ACuVA | µA position's µVA label (p.31); how it is selected: none found in the manual, 2026-09-26 |
+| 13 | `ACuVA` | ACuVA | µA position's µVA label (p.31); how it is selected: none found in the manual, 2026-09-26 (community: see §15.4) |
 | 14 | `ACmVA` | ACmVA | mVA/VA position (p.53) |
 | 15 | `ACVA` | ACVA | mVA/VA position (p.53) |
 | 16 | `ACuA` | ACuA | µA position, AC (p.41) |
@@ -251,7 +259,7 @@ on the meter from the manual [INFERRED: by name].
 - **DC+AC V has no code.** The V position's MODE cycles DC → AC → DC+AC
   (manual p.36), and AC+DC V has its own spec rows (p.17); a code for it: none
   found in the two apps, 2026-09-26. Byte 15 bits 4-3 can say "DC + AC" (§9); how the meter
-  reports this function is [UNVERIFIED].
+  reports this function is [UNVERIFIED]; community: see §15.4.
 - Byte 5 bit 5 is `0` in both documents [KNOWN] and read by neither app
   [VENDOR].
 
@@ -343,7 +351,7 @@ Notes:
 - **Where the sources disagree.** Only two rows remain open (§14): the diode
   3 V resolution, where both apps give 0.1 mV and the manual 1 mV, and the
   top capacitance range, where the manual gives 10.00 mF on p.71 and 9999 µF
-  on p.19 [UNVERIFIED]. In modes 7, 13/22, 14/23 and 16/17 the two apps' LCDs
+  on p.19 [UNVERIFIED] (community: see §15.2, §15.3). In modes 7, 13/22, 14/23 and 16/17 the two apps' LCDs
   and the manual agree (ms, µVA, mVA, µA) [VENDOR]; the manual rows [KNOWN];
   the range mapping for modes 14/23 ranges 2-3 [INFERRED], §14 "VA range
   index". The difference there lies inside EEVblog's app, between its LCD and
@@ -368,6 +376,7 @@ Notes:
   show the manual's rows. EEVblog's chart multiplier for modes 14/23 ranges
   2-3 gives 250.00 and 2500.0 VA: 2500.0 VA would exceed the meter's 500 VA
   maximum, and 250.00 VA is not a row of the p.22 table [INFERRED].
+  Community: see §15.2.
 - **Counts.** The display is "4 ⅘ digits 55,000 counts" (p.15, p.13); p.32
   still says "50,000 count" [KNOWN]. How far above the range's full scale a
   reading goes before the meter changes range or shows OFL: none found in the
@@ -392,7 +401,7 @@ Notes:
 - **Overload:** byte 6 bit 7, "OFL" (V2 p.1). Both apps then show "OFL"
   instead of the digits (Screen:498-500; UEi `Protocol.java:358-360`)
   [VENDOR]; the manual calls the display OFL (p.9, firmware 1.15) [KNOWN].
-  What the value bytes hold during OFL is [UNVERIFIED].
+  What the value bytes hold during OFL is [UNVERIFIED]; community: see §15.5.
 
 ### 6.4 Temperature
 
@@ -453,7 +462,8 @@ manual shows for that setting [KNOWN].
 
 - What tells the paired and tripled codes apart (101 from 100, 136/137 from
   135, …): none found in the two apps or the manual, 2026-09-26; that they are the same setting in another state
-  (for example while it is being edited) is a guess [UNVERIFIED].
+  (for example while it is being edited) is a guess [UNVERIFIED]. Community:
+  see §15.4 (continuity codes 170-173).
 - Units the apps disagree on: burden voltage is mV in UEi's table but lights
   "V" in EEVblog's (Screen:659-661); the logging interval lights "m" "S" in
   EEVblog's (Screen:677-680), while the manual sets it in seconds (p.63)
@@ -461,7 +471,7 @@ manual shows for that setting [KNOWN].
 - The buzzer setting ("b-ON"/"b-OFF", p.61) and the Multimeter ID ("XXXXX",
   p.63): a code for either, none found in the two apps, 2026-09-26 [VENDOR].
 - What bytes 9-12 hold while the secondary display is blank is
-  [UNVERIFIED].
+  [UNVERIFIED]; community: see §15.4.
 
 ### 7.2 Sub range, byte 10
 
@@ -476,7 +486,7 @@ manual shows for that setting [KNOWN].
 
 When the secondary display shows a frequency (the k/Hz bits): none found in
 the manual, 2026-09-26; firmware 1.51's "AC mode frequency persistence issue resolved"
-(p.9) is the only hint [UNVERIFIED].
+(p.9) is the only hint [UNVERIFIED]. Community: see §15.4.
 
 ### 7.3 Sub value, bytes 11-12
 
@@ -492,11 +502,11 @@ the two bytes as two numbers (§7.1) [VENDOR].
 | Byte | Bit | V2 p.1 | EEVblog's reading | Tag |
 |---|---|---|---|---|
 | 13 | 7-5 | `0` | not read | [KNOWN] |
-| 13 | 4 | USE | bar shown when the bit is **clear** (`BarOn`, Packet:219) | label [KNOWN]; polarity [VENDOR] |
-| 13 | 3 | 0~150 | picks one of two tick-label sets (Packet:220; Screen:737-753) | [VENDOR]; meaning [UNVERIFIED] |
-| 13 | 2 | +/- | bar sign (Packet:221), polarity disputed — below | [UNVERIFIED] |
+| 13 | 4 | USE | bar shown when the bit is **clear** (`BarOn`, Packet:219); community: see §15.2 | label [KNOWN]; polarity [VENDOR] |
+| 13 | 3 | 0~150 | picks one of two tick-label sets (Packet:220; Screen:737-753); community: see §15.4 | [VENDOR]; meaning [UNVERIFIED] |
+| 13 | 2 | +/- | bar sign; EEVblog's app draws a minus when the bit is set — below | [VENDOR]; the meter's use [INFERRED] |
 | 13 | 1-0 | 1000 / 500 | bar scale 0 = 5, 1 = 50, 2 = 500, 3 = 1000 (Packet:85-91, :222) | [VENDOR] |
-| 14 | 7-5 | `0` | masked off (Packet:223) | [KNOWN] |
+| 14 | 7-5 | `0` | masked off (Packet:223); community: bit 5 seen set, see §15.3 | [KNOWN] |
 | 14 | 4-0 | BAR GRAPH 0 ~ 25 | segment count; the screen lights value + 1 segments (Packet:223; Screen:783) | [KNOWN], [VENDOR] |
 
 The LCD drawing shows the bar with a ± sign, tick labels 0, 12, 24, 36, 48,
@@ -505,12 +515,19 @@ is "A fast updating bargraph" (p.32) that keeps updating under HOLD (p.56)
 [KNOWN]. UEi's
 app skips both bytes (`Protocol.java:222-226`) [VENDOR].
 
-**Sign polarity is open.** The documents give no polarity (V1/V2 p.1).
-EEVblog's app first read bit 2 set as negative and then inverted it in commit
-`c111f7e` (2018-04-04, "Inverted bargraph sign (packet has error)") to
-**clear = negative** (Packet:221); its screen also maps the minus layer to a
-layer named "Bar+" and the plus layer to "BarTick-" (Screen:318-319)
-[VENDOR]. Which way the meter sets the bit is [UNVERIFIED].
+**Sign polarity.** The documents give no polarity (V1/V2 p.1). EEVblog's
+code reads bit 2 **clear** as negative (Packet:221) since commit `c111f7e`
+(2018-04-04, "Inverted bargraph sign (packet has error)"), but its screen
+swaps the two sign layers: `BarTick_Minus` loads the layer "Bar+" and
+`BarTick_Plus` the layer "BarTick-" (Screen:318-319), a swap older than
+`c111f7e` (`git:c111f7e^:App 112GW/App_112GW/Controls/Multimeter/MultimeterScreen.cs:309-310`).
+`Bar+.svg` draws a plus sign and `BarTick-.svg` a minus bar (PPR
+`121GW.Core/Image/Layer Resources/Bar+.svg`, `BarTick-.svg`). So at `aab403d`
+a set bit decodes as positive, selects `BarTick_Plus` and draws the minus bar
+(Screen:778-781): as drawn, EEVblog's app shows a minus when the bit is set,
+and `c111f7e` cancelled the layer swap rather than a packet error [VENDOR].
+That the meter sets the bit for a negative bar is [INFERRED] from that
+drawing; community: see §15.3.
 
 ## 9. Annunciators, bytes 15-17
 
@@ -527,15 +544,15 @@ Labels exactly as V2 p.1; meanings from the apps and the manual.
 | 15 | 0 | BAT | low battery, below about 4.2 V (manual p.16) | Packet:233; UEi `:233` | [VENDOR], [KNOWN] |
 | 16 | 7 | ℉ | V2 only; not read by the apps | V2 p.1 | [KNOWN]; see §6.4 |
 | 16 | 6 | BT | Bluetooth on (manual p.55) | Packet:235, Screen:881 | [VENDOR] |
-| 16 | 5 | ↙ | meaning: none found in V1/V2 or the manual, 2026-09-26; EEVblog names it `StatusArrow` and never uses it | Packet:236 | [UNVERIFIED] |
+| 16 | 5 | ↙ | meaning: none found in V1/V2 or the manual, 2026-09-26; EEVblog names it `StatusArrow` and never uses it; community: see §15.4 | Packet:236 | [UNVERIFIED] |
 | 16 | 4 | REL | relative mode (manual p.57) | Packet:237; UEi `:237` | [VENDOR] |
 | 16 | 3 | dBm | dBm | Packet:238, Screen:822 | [VENDOR] |
-| 16 | 2-0 | MIN/MAX | 1 MAX, 2 MIN, 3 AVG, 4 MAX+MIN+AVG | Screen:840-858 (its comment: "UNKONWN MIN/MAX bits config", :824); UEi `:238`, `:476-489` | [VENDOR]; 5-7 [UNVERIFIED] |
+| 16 | 2-0 | MIN/MAX | 1 MAX, 2 MIN, 3 AVG, 4 MAX+MIN+AVG | Screen:840-858 (its comment: "UNKONWN MIN/MAX bits config", :824); UEi `:238`, `:476-489` | [VENDOR]; 5-7 [UNVERIFIED] (community: see §15.4) |
 | 17 | 7 | `0` | — | V2 p.1 | [KNOWN] |
-| 17 | 6 | TEST | EEVblog lights a TEST icon; its meaning: none found in the manual, 2026-09-26 | Packet:241, Screen:825 | [VENDOR]; meaning [UNVERIFIED] |
-| 17 | 5-4 | MEM | non-zero lights MEM | Packet:242, Screen:826; UEi `:244` | [VENDOR]; the values [UNVERIFIED] |
+| 17 | 6 | TEST | EEVblog lights a TEST icon; its meaning: none found in the manual, 2026-09-26; community: see §15.4 | Packet:241, Screen:825 | [VENDOR]; meaning [UNVERIFIED] |
+| 17 | 5-4 | MEM | non-zero lights MEM | Packet:242, Screen:826; UEi `:244` | [VENDOR]; the values [UNVERIFIED] (community: see §15.4) |
 | 17 | 3-2 | A-HOLD | 1 = A-HOLD, 2 = HOLD | Screen:828-839; UEi `:242`, `:491-500` | [VENDOR]; the manual's "A-" and "HOLD" (p.56) [KNOWN] |
-| 17 | 1 | AC | UEi: bits 1-0 are the secondary display's AC/DC, coded as bits 4-3 of byte 15 | UEi `:243`, `:300` | [VENDOR]; EEVblog reads, never uses (Packet:244-245) |
+| 17 | 1 | AC | UEi: bits 1-0 are the secondary display's AC/DC, coded as bits 4-3 of byte 15 | UEi `:243`, `:300` | [VENDOR]; EEVblog reads, never uses (Packet:244-245); community: see §15.4 |
 | 17 | 0 | DC | as above | | |
 
 The manual names MIN, MAX, AVG and all three together (p.33, p.58) but gives
@@ -550,13 +567,15 @@ five-digit number, Digit 4 the most significant (Packet:139-144), and shows
 it as the tab title "121GW " + serial (assigned at Multimeter:121; title set
 at PPR `121GW.Core/Controls/Multimeter/MultimeterPage.cs:14-25`) [VENDOR]. It reads byte 1 as a binary
 year after 2000 (Packet:137) and byte 2's high nibble as a month
-(Packet:138) [VENDOR]. How the documents' "Year ( 4 … 0 )" and
+(Packet:138) [VENDOR]. Both community captures contradict the binary year:
+they carry `0x17`, which reads 2023 that way, later than either capture
+(§15.3, §15.5). How the documents' "Year ( 4 … 0 )" and
 "Month (1 … 0)" are encoded: none found in V1/V2, 2026-09-26.
 
 The manual's Multimeter ID is a user-set five-digit number ("XXXXX") that
 "appears in the App" to tell several 121GWs apart (p.63) [KNOWN]. That the
 serial digits carry it is [INFERRED] from the app showing them; what the year
-and month record is [UNVERIFIED].
+and month record is [UNVERIFIED]. Community: see §15.4.
 
 ---
 
@@ -608,10 +627,12 @@ A long press sets bit 7 of the code.
   `git:0f10ac7^`). EEVblog's final branch (2018-09-04), six months after the
   switch to the binary packet, still sends them unchanged (Packet:314-329):
   evidence that the command format did not change with the packet [INFERRED].
+  Community (firmware 1.02 only): see §15.4.
 - **Replies.** UEi's parser accepts an `F4`-led packet: `F4`, nine raw bytes,
   the key code and its checksum, as ASCII hex (`Protocol.java:117-162`)
   [VENDOR code; the frame shape INFERRED]. Whether the meter replies to a key,
-  and in which format under the binary packet, is [UNVERIFIED].
+  and in which format under the binary packet, is [UNVERIFIED]; community
+  (firmware 1.02 only): see §15.4.
 
 ### 11.2 Clock set, `F8` (UEi's app only)
 
@@ -629,7 +650,7 @@ and never again after that [VENDOR]. EEVblog's app never sends it [VENDOR].
 The manual sets the date and time by hand in SETUP (p.62) and uses them for
 logged files' metadata (firmware 1.51, p.9) [KNOWN]; setting them over
 Bluetooth: none found in the manual, 2026-09-26. Whether the meter acts on `F8` or replies is
-[UNVERIFIED].
+[UNVERIFIED]; community (firmware 1.02 only): see §15.4.
 
 ---
 
@@ -667,7 +688,8 @@ apps recognised them.
 - Which firmware versions sent which format: none found in the documents,
   the apps or the manual's changelog (p.9-10), 2026-09-26 [UNVERIFIED]. The
   binary packet dates from 2018-03-22 by the V1 document and EEVblog's commit
-  `43b3e94`; firmware 1.21 and 1.22 (§1) came after [INFERRED].
+  `43b3e94`; firmware 1.21 and 1.22 (§1) came after [INFERRED]. Community:
+  the firmware 1.02 frame, see §15.4.
 - EEVblog's `master` accepts `F2` plus 52 alphanumeric characters only
   (`Packet121GW.cs:255-266`), so it cannot read the binary packet; UEi's 1.0.6
   cannot either, since it hex-decodes every byte after the ninth [INFERRED].
@@ -720,6 +742,7 @@ F2 12 61 23 45 09 86 00 00 00 00 00 00 00 00 04 40 00 2C
 
 Byte 5 = `09`: Resistor. Byte 6 = `86`: OFL (bit 7), range 6 (50.000 MΩ).
 Value bytes zero (their content under OFL is open, §6.3). Checksum `2C`.
+A community capture of the same reading is in §15.5.
 
 **4. −12.345 mV DC, AUTO**
 
@@ -765,45 +788,236 @@ What the wire requires of any decoder:
 
 ## 14. Open questions — [UNVERIFIED]
 
+Each item says whether the community sources (§15) answer it, narrow it or
+leave it open. An answer from firmware 1.02 is the ASCII-era firmware, carried
+over by V1 p.1's "identical" statement; none replaces a check on a current
+meter.
+
 1. **Advertised name** — what the meter advertises; EEVblog's filter admits
-   "121GW" and "Bluegiga" (§2).
+   "121GW" and "Bluegiga" (§2). **Answered** [COMMUNITY]: "121GW", seen on a
+   meter; see §15.4.
 2. **Notify or indicate, write type** — whether `e7add780-…` also notifies,
-   and whether it takes write with or without response (§2).
+   and whether it takes write with or without response (§2). **Narrowed**:
+   indications seen and a notify-only client works; the write type stays open;
+   see §15.4.
 3. **Packet rate and chunking** — packets per second against the display's 5
    updates a second, and whether one indication is always one packet (§3, §4).
+   **Narrowed**: about 2 packets a second, and 18-byte values without `F2`,
+   seen on a 2022 meter; see §15.4.
 4. **Firmware ↔ format** — which firmware first sent the binary packet and
-   which sent each ASCII format (§1, §12).
-5. **Commands on current firmware** — whether the ASCII `F4` key frames,
-   code `09` and the `F8` clock set are honoured, and whether the meter
-   replies (§11).
-6. **Diode 3 V resolution** — 0.1 mV (both apps) or 1 mV (manual p.20)
-   (§6.2).
+   which sent each ASCII format (§1, §12). **Narrowed**: firmware 1.02 sends
+   the ASCII frame; the first binary firmware stays open; see §15.4.
+5. **Commands on current firmware** — whether the ASCII `F4` key frames, code
+   `09` and the `F8` clock set are honoured, and whether the meter replies
+   (§11). **Narrowed** for firmware 1.02 only (accepted and echoed); current
+   firmware open; see §15.4.
+6. **Diode 3 V resolution** — 0.1 mV (both apps) or 1 mV (manual p.20) (§6.2).
+   **Narrowed**: firmware 1.02 gives 0.1 mV; see §15.2.
 7. **Top capacitance range** — 9999 µF (p.19) or 10.00 mF (p.71) (§6.2).
-8. **VA range index** — whether ranges 0-3 are the current × voltage
-   products of §6.2's note; both apps' LCDs and the manual's VA table (p.22)
-   fit it, including mVA for modes 14/23 ranges 2-3 (§6.2).
-9. **DC+AC V** — which mode code and flags the meter sends in the V
-   position's third MODE step (§6.1).
+   **Narrowed**: firmware 1.02 gives 1 µF per count (9999 µF); see §15.3.
+8. **VA range index** — whether ranges 0-3 are the current × voltage products
+   of §6.2's note; both apps' LCDs and the manual's VA table (p.22) fit it,
+   including mVA for modes 14/23 ranges 2-3 (§6.2). **Narrowed**: firmware
+   1.02 composes the ranges this way; see §15.4.
+9. **DC+AC V** — which mode code and flags the meter sends in the V position's
+   third MODE step (§6.1). **Narrowed**: firmware 1.02 keeps mode 2 with AC/DC
+   code 3; see §15.4.
 10. **µVA on the µA position** — how codes 13/22 are selected on the meter
-    (§6.1).
+    (§6.1). **Narrowed**: MODE on the µA position, per firmware 1.02; see
+    §15.4.
 11. **Over-range counts and OFL value** — how far past full scale a range
     reads before OFL or a range change, and what the value bytes carry during
-    OFL (§6.2, §6.3).
+    OFL (§6.2, §6.3). **Narrowed**: one capture has value `00 00` under OFL;
+    the thresholds stay open; see §15.5.
 12. **V2 temperature bits** — whether byte 15/16 bit 7 duplicate byte 6 bits
-    5/4 (§6.4).
-13. **Special sub codes** — what separates the paired and tripled codes,
-    which continuity code is which threshold, the burden-voltage and interval
-    units (§7.1).
+    5/4 (§6.4). **Open**: no community answer.
+13. **Special sub codes** — what separates the paired and tripled codes, which
+    continuity code is which threshold, the burden-voltage and interval units
+    (§7.1). **Narrowed**: the continuity thresholds are settled; the paired
+    codes and the units stay open; see §15.4.
 14. **Blank secondary display** — what bytes 9-12 hold when the secondary
-    display is off (§7.1).
-15. **Sub k/Hz flags** — when the secondary display shows a frequency
-    (§7.2).
+    display is off (§7.1). **Narrowed**: all zeros in firmware 1.02; see
+    §15.4.
+15. **Sub k/Hz flags** — when the secondary display shows a frequency (§7.2).
+    **Narrowed**: frequency with Hz (and k from range 2) in AC V and mV, seen
+    on a meter; see §15.4.
 16. **Bar graph** — the USE polarity, the 0~150 bit, the 0-25 scale against
-    the range, and the sign polarity (§8).
-17. **Unnamed and multi-state annunciators** — ↙ (byte 16 bit 5), TEST
-    (byte 17 bit 6), the MEM values, MIN/MAX values 5-7, byte 17 bits 1-0 as
-    the secondary display's AC/DC (§9).
+    the range, and the sign polarity (§8). **Narrowed**: USE and 0~150 by
+    firmware 1.02, the sign by EEVblog's drawing (§8) and firmware 1.02; the
+    scale stays open; see §15.2-15.4.
+17. **Unnamed and multi-state annunciators** — ↙ (byte 16 bit 5), TEST (byte
+    17 bit 6), the MEM values, MIN/MAX values 5-7, byte 17 bits 1-0 as the
+    secondary display's AC/DC (§9). **Narrowed** by firmware 1.02 (↙ = danger
+    icon, and the values it uses); see §15.4.
 18. **Identity bytes** — what the year and month record, and whether the
-    serial digits are the Multimeter ID (§10).
+    serial digits are the Multimeter ID (§10). **Narrowed**: year BCD in both
+    captures; calibration year-month and Meter ID per firmware 1.02; see
+    §15.3, §15.4.
 19. **Auto power-off and Bluetooth** — whether a connection holds off APO
-    (§3).
+    (§3). **Narrowed**: firmware 1.02 does not hold off APO for Bluetooth; see
+    §15.4.
+
+---
+
+## 15. Cross-reference with community sources [COMMUNITY]
+
+Read 2026-09-26, after §1-14 were written from the vendor sources and
+grounding-checked; nothing here was merged into §1-14 beyond pointers. The
+boundary covered
+code repositories and sigrok only, no forum posts
+(`reverse-engineering-approach.md`). Every point a community source disputes
+was re-read in the vendor sources alone; where that re-read changed a verdict
+(the bar sign, §8; the year byte, §10), the body says so and points here.
+Working notes: `references/121gw/analysis/findings/cross-reference.md`.
+
+How the sources were made matters more than how many agree:
+
+- **evotronix** is AI-generated from EEVblog's app: each README says "made
+  with Grok AI" or "generated with Grok AI" (e.g.
+  `evotronix/121GW-Android-port/README.md:1`), and its Swift decoder says it
+  "matches official Packet121GW.cs"
+  (`evotronix/121GW-port-for-iphone-and-macos/121GW_swift/PacketV2.swift:3`).
+  It holds no captures, so where it matches §1-14 it restates EEVblog's app;
+  it is not independent evidence.
+- **121gwcli**'s `src/` is copied from 121gw-qt5 ("This file is originally
+  from the project: https://github.com/zonque/121gw-qt5",
+  `121gwcli/src/packetparser.cpp:1-4`), but its own scripts,
+  `121gwcli.sh` and `parse121gw.pl`, were run on a real meter: the README
+  shows their timestamped output (`121gwcli/README.md:46-48`), `o.log` holds a
+  run, and "Tested on Debian 11 bullseye" (`README.md:17`).
+- **121gw-re** (tpwrules) is a disassembly of **firmware 1.02** (added
+  2018-01-22), which sends the older ASCII frame (§12). Its facts carry over to
+  the binary packet only through V1 p.1's "The actual data format is identical,
+  except for the way serial number is formatted" [INFERRED], less what later
+  firmware changed (the 1.21/1.22 bits, §1). Symbol names are tpwrules'
+  guesses. Every fw 1.02 fact below is scoped that way; none is a statement
+  about current firmware.
+- **sigrok** and **121gw-qt5** are independent decoders of the binary packet,
+  written against the V2 document's field layout; sigrok quotes one packet a
+  meter sent.
+
+### 15.1 Sources
+
+| Source | Covers | Hardware captures | Licence |
+|---|---|---|---|
+| [tpwrules/121gw-re](https://github.com/tpwrules/121gw-re) `38f558d` (2018-08-14) | IDA export of firmware 1.02: the ASCII packet builder, the `F4`/`F8` receiver, key mapping, packet timer, APO, annunciator logic | none; disassembly | none in the repository (it also redistributes the vendor firmware and PDFs) |
+| [zonque/121gw-qt5](https://github.com/zonque/121gw-qt5) `02f0d15` (2019-03-10; first commit 2018-08-14) | Qt client: scan filter on the service UUID, CCCD write, an 18-byte packet struct, mode enum, icons, bar | none in the repository; a working client implies live data | GPL-2.0 (`LICENSE.GPL2`) |
+| [chlordk/121gwcli](https://github.com/chlordk/121gwcli) `d543790` (2022-12-30) | gatttool + Perl logger: name, ATT handles, indications, 18-byte values, rate; `src/` copied from qt5 | yes: one gatttool line (`parse121gw.pl:159`), timestamped output and a JSON record (`README.md:46-48`, `:166-179`), `o.log` | GPL-3.0 |
+| [evotronix](https://github.com/evotronix) Android, Chrome, iOS/macOS and Windows ports (2026-08/09; the store page's "Open source ports") | full decoder, key frames, both UUIDs | none | MIT © 2026 evotronix |
+| libsigrok `src/dmm/eev121gw.c` (© 2018 Gerhard Sittig; last change `d66940a`, 2022-08-21), `src/serial_bt.c`, `src/hardware/serial-dmm/api.c` | full decoder, range tables from the manual's calibration table ("page 69 in the 2018-09-24 manual", `eev121gw.c:317-320`), BLE handles, scan name | one packet (`eev121gw.c:86`) and remarks on what was "seen" | `eev121gw.c` GPL-2.0-or-later; `serial_bt.c`, `api.c` GPL-3.0-or-later |
+
+Community paths below are relative to `references/121gw/community/`.
+
+### 15.2 Agree
+
+| Spec § | What the community sources show | Evidence |
+|---|---|---|
+| §2 service, characteristic | Service `0bd51666-…` (qt5 `multimeter.cpp:24`, evotronix Chrome `js/ble.js:2`); characteristic `e7add780-…` in evotronix only (`121GW_swift/BLEManager.swift:8`, `js/ble.js:1`) | code; evotronix not independent |
+| §2 advertised service UUID | qt5 lists only devices advertising the service UUID (`mainwindow.cpp:22`) | a working client |
+| §3 no start command, no keep-alive | sigrok never writes (write handle 0, `serial_bt.c:265-273`; "no further request is needed", `eev121gw.c:69-76`); 121gwcli writes only the CCCD (`121gwcli.sh:10`) | a meter (121gwcli) |
+| §4 framing | 19 bytes from `F2`; XOR of bytes 0-17 = byte 18; big-endian values (sigrok `eev121gw.c:146-230`; qt5 `packetparser.cpp:26-47`); both 2018/2022 packets of §15.5 pass the check | captures |
+| §5 layout | Every field position of bytes 5-17 (sigrok `eev121gw.c:159-227`; qt5 `packetparser.h:56-103`); fw 1.02 builds the same fields in the same order (`EEVBlog-102.c:7259-7451`) | code, disassembly |
+| §6.1, §7.1 mode codes | 0-24 and the sub codes 100-190 (sigrok `eev121gw.c:235-279`; qt5 `packetparser.h:16-54`; fw 1.02 enum, `121gw-re/database/EEVBlog-102 - enumerations.txt:26-66`, which also has an internal 25 `MM_BURDEN`) | code, disassembly |
+| §6.2 ranges per mode | fw 1.02 `ranges_in_mode = {1,4,4,2,2,1,5,3,1,7,1,1,6,4,4,4,2,2,2,2,3,3,4,4,4}` (`EEVBlog-102.c:1729`) matches §6.2's row counts; diode 15 V goes out as range 1 (`:7276`) | disassembly |
+| §6.2 count weights | fw 1.02's decimal places per mode and range (`EEVBlog-102.c:8284-8480`) match for capacitance, diode (4 decimals at 3 V, 3 at 15 V, `:8341-8346`, answering §14.6 for fw 1.02), µVA/mVA/VA and A; sigrok's tables match except §15.3 D2-D3 | disassembly, code |
+| §7.2 point and k | point = decimals, k = ×1000 (sigrok `eev121gw.c:521-582`, `:1084-1087`) | code |
+| §8 USE, scale | Bar shown when USE is clear, scale codes 0-3 = 5/50/500/1000 (sigrok `eev121gw.c:1178`, `:292-297`; qt5 `multimeter.cpp:471-484`); fw 1.02 sets USE in Hz, pulse width, duty, capacitance and temperature (`EEVBlog-102.c:7334-7337`), and the 2018 duty packet (§15.5) has it set | disassembly, a capture |
+| §9 byte 15 bits 4-3 | 0/1/2/3 = none/DC/AC/DC+AC (sigrok `eev121gw.c:300-305`; fw 1.02 `:7346-7372`) | code, disassembly |
+| §9 hold, MIN/MAX | fw 1.02 `hold_get_status` returns 2 for manual hold, 1 for auto hold (`EEVBlog-102.c:4792-4811`), shifted into bits 3-2 (`:7405`); the MIN/MAX mode is added into bits 2-0 (`:7399-7402`) | disassembly |
+| §11 command frames | fw 1.02 accepts `F4` plus two equal hex pairs (`EEVBlog-102.c:7176-7186`) and `F8` plus seven hex pairs whose XOR checks (`:7137-7174`); its key codes 1-8 and 0x81-0x88 map to RANGE, HOLD, REL, PEAK, MODE, MIN/MAX, MEM, SETUP as §11.1 (`:15090-15190`); evotronix builds the same `F4` frames (`BLEManager.swift:65-79`) | disassembly |
+| §12 54-byte ASCII packet | fw 1.02 writes `F2`, 9 identity digits, 22 hex pairs and CR LF, 56 bytes (`EEVBlog-102.c:7259-7451`): V1's "54 bytes" plus CR LF, and UEi's reader | disassembly |
+| §7.1 internal temperature | Sub code 100/105 with one decimal (fw 1.02 `EEVBlog-102.c:7472-7500`); both packets of §15.5 carry it | captures |
+
+### 15.3 Disagree
+
+| # | Spec § | Community | Vendor re-check | Verdict |
+|---|---|---|---|---|
+| D1 | §8 bar sign, byte 13 bit 2 | set = negative: sigrok `eev121gw.c:1185`, qt5 `multimeter.cpp:487` and `display.cpp:396-400`, evotronix `PacketV2.swift:381`; fw 1.02 adds the bit when the bar reading is negative (`EEVBlog-102.c:7338-7339`) | EEVblog's app reads clear as negative but swaps its sign layers, so as drawn it shows a minus when the bit is set (§8) | the vendor drawing and fw 1.02 agree on set = negative; no negative-bar capture exists |
+| D2 | §6.2 capacitance range 5 | sigrok: 10 µF per count, "10.00m" (`eev121gw.c:428`), from the manual's calibration table (its comment, `:317-320`) | both apps: 1 µF per count; the manual disagrees with itself (p.19 9999 µF, p.71 10.00 mF) | fw 1.02 gives range 5 zero decimals (`EEVBlog-102.c:8319-8323`) and logs capacitance ranges 2-5 in "uF" (`:13391-13399`): the apps and p.19 are supported; sigrok's value is manual-derived |
+| D3 | §6.2 VA range 2 | sigrok labels it "25.000VA" (`eev121gw.c:437`), with the same 0.001 VA weight | 50.000 VA (p.22) | a label slip in sigrok; the weight agrees |
+| D4 | §5, §8 byte 14 bits 7-5 = `0` (V2 p.1) | bit 5 is set on real meters: sigrok "Bit 5 of "bar value" was seen with value 1" (`eev121gw.c:85-87`), and both packets of §15.5 (`37`, `21`) | EEVblog masks bits 7-5 (Packet:223) | the document is wrong for real meters; the bit's meaning is unknown |
+| D5 | §10 year byte | both captures carry `0x17` in byte 1 | EEVblog reads binary + 2000 (Packet:137): 2023 | binary gives a year later than either capture (sigrok's file last changed 2022-08, 121gwcli 2022-12); as BCD `17` reads 2017, and fw 1.02 sends these as decimal digits (`EEVBlog-102.c:7235-7250`); EEVblog's reading is contradicted, the V2 document is silent |
+| D6 | §9 MIN/MAX | qt5 reads bits 0, 1, 2 as independent AVG, MAX, MIN flags (`packetparser.h:74-76`) | both apps enumerate 1-4 | fw 1.02 adds the mode value (`EEVBlog-102.c:7399-7402`): the spec's enumeration holds; qt5 is wrong |
+| D7 | §9 hold | qt5: bit 2 HOLD, bit 3 "A-" (`packetparser.h:85-86`); evotronix: 1 = HOLD, 2 = A-HOLD (`PacketV2.swift:615-619`) | both apps: 1 = A-HOLD, 2 = HOLD | fw 1.02 `hold_get_status` (`EEVBlog-102.c:4792-4811`): the spec holds |
+| D8 | §7.1 sub codes 101, 170-175 | evotronix: 101 = buzzer, 170/175 = "Calibration" (`PacketV2.swift:305-306`, `:328-329`) | UEi: 101 = Temp. ℃, 170-173 = continuity | 170-173 = continuity thresholds is supported (§15.4); 101 undecided: fw 1.02 never sends it and evotronix gives no evidence |
+
+### 15.4 New
+
+Facts §1-14 lack or mark [UNVERIFIED]. "Seen" is a meter observation; fw
+1.02 is the ASCII-era disassembly, scoped as above.
+
+| Topic (§) | Finding | Source |
+|---|---|---|
+| Name (§2, §14.1) | "121GW": `bt-device --list` shows a meter under that name (`121gwcli/README.md:221`, which also prints its address), and 121gwcli selects the first device matching it (`121gwcli.sh:5`); sigrok's scan table matches the name exactly (`sigrok/serial_bt.c:82`, `strcmp` at `:103`). "Bluegiga" was not seen | seen |
+| ATT handles, CCCD (§2, §14.2) | Value handle `0x0008`, CCCD handle `0x0009`; writing `03 00` to the CCCD starts the stream (`121gwcli.sh:10`; sigrok `serial_bt.c:265-273`, CCCD value `0x0003`) | seen |
+| Indications (§2, §14.2) | gatttool prints "Indication handle = 0x0008" (`parse121gw.pl:159-160`); qt5 writes only `01 00` (notify) to every CCCD and decodes packets (`multimeter.cpp:36-44`), which implies notifications work too | seen; implied |
+| Write type (§2, §14.2) | no community answer: sigrok, 121gwcli and qt5 never write commands (qt5 `TODO.md`: "Implement logic to send button codes to the device") | — |
+| Chunking (§4, §14.3) | GATT values are 18 bytes, bytes 1-18 of the packet without `F2`: 121gwcli matches exactly 18 bytes and checks that their XOR is `F2` (`parse121gw.pl:160-162`); qt5 requires `sizeof(PacketV2)` = 18 and seeds its checksum with `0xF2` (`packetparser.cpp:5-41`). So a packet spans more than one indication; no source shows the indication carrying `F2` | seen |
+| Rate (§3, §14.3) | About 2 packets a second, 495 ms apart, on a 2022 meter (`121gwcli/README.md:46-48`, `o.log:1-4`). fw 1.02 sent one every 250 ms (a 25 × 10 ms counter, `EEVBlog-102.c:26580-26585`, sent at `:26868-26873`) | seen; fw 1.02 |
+| Module profile (§2) | evotronix calls the service Bluegiga's "BLE112 Cable Replacement profile" (`121GW-Chrome-extension/README.md:6`), without evidence | evotronix only |
+| fw 1.02 frame (§12, §14.4) | `F2`; 4 digits of the last calibration year-month and 5 digits of the Meter ID (`EEVBlog-102.c:7235-7250`); hex pairs for mode, range, value, sub mode/range/value, bar status/value, icons 1-3; a SUB1 group (frequency in AC modes, or the VA volts operand) and a SUB2 group (the VA amps operand) (`:7410-7445`); an XOR of the field bytes, excluding `F2` and the identity digits (`:7446`); CR LF (`:7447-7448`). Binary packets were decoded by qt5 by 2018-08; which firmware first sent them: no community answer | fw 1.02 |
+| fw 1.02 receive side (§11, §14.5) | The receiver syncs on the first byte: `F4` → 5 bytes, `F8` → 15 bytes, anything else dropped (`EEVBlog-102.c:26688-26722`). A valid frame is echoed back as received (`bt_echo_rx_msg`, `:7101-7107`, called at `:7158`, `:7182`). Code 9 maps to no key (`:15090-15190`). `F8` sets the clock once per Bluetooth power-on (`bt_set_the_time`, `:7159-7168`, cleared at `:16371`). The echo is shorter than the reply UEi's parser expects (§11.2) [INFERRED]. Current firmware: no community observation | fw 1.02 |
+| VA ranges (§6.2, §14.8) | `calc_power_ranges`: range 0 = low volts × low amps, 1 = high volts × low amps, 2 = low volts × high amps, 3 = high volts × high amps, the high amps range being 10 A in ACVA/DCVA (`EEVBlog-102.c:14944-14986`); the danger check treats VA ranges 1 and 3 as the volts range where 30000 counts = 30 V (`:8997-9004`), which fits 50 V there and 5 V in ranges 0 and 2 [INFERRED] | fw 1.02 |
+| DC+AC V (§6.1, §14.9) | MODE from ACV sets a DC+AC flag and leaves the mode at 2 (`meter_enable_acv_dcv_mode`, `EEVBlog-102.c:14863-14890`); byte 15 bits 4-3 = 3 (`:7352-7354`); no frequency in SUB1 then (`:7413`) | fw 1.02 |
+| µVA (§6.1, §14.10) | MODE cycles DCµA → ACµA → DCµVA → ACµVA on the µA position (tpwrules' comment, `EEVBlog-102.c:14679-14690`) | fw 1.02 |
+| Special sub codes (§7.1, §14.13) | 170-173 are the continuity settings: 170 = 30 Ω beep below, 171 = 30 Ω above (break), 172 = 300 Ω below, 173 = 300 Ω above; sigrok: "only seen during setup" (`eev121gw.c:1107-1139`); fw 1.02 writes the setting as the code (`EEVBlog-102.c:7605`). In diode, sub code 11 carries the test voltage, 3 or 15 (`:7612-7616`; sigrok `:1140-1143`). Code 155 (burden display enabled) or 156 (not enabled), point 3, value 0, is sent in the burden setup (`:7730-7744`, called at `:7634` and `:7708` with `burden_enabled_for_current_ranges` / `burden_enabled_for_power_ranges`); neither app names them. fw 1.02 never sends 101, 106, 121, 126, 131, 136, 137, 141, 142; its enum names 190 `MM_SUB_mS` (`enumerations.txt:64`). The paired codes and the burden and interval units stay open | seen (setup); fw 1.02 |
+| VA secondary (§7.1) | The secondary display alternates between volts (sub mode 1 or 2) and amps (16-21) in the VA modes (`EEVBlog-102.c:26859`, `:7784-7870`) | fw 1.02 |
+| Blank secondary (§7.1, §14.14) | All zeros: mode, range and value `00` (`bt_write_no_sub`, `EEVBlog-102.c:7898-7907`), which decodes as Low-Z 0 (§13). No capture shows one: both packets of §15.5 carry internal temperature | fw 1.02 |
+| Secondary frequency (§7.2, §14.15) | In AC mV a meter sends sub mode 6 with sub range `0x12` (Hz, point 2): 62.97 Hz beside 1.638 mV AC (`121gwcli/README.md:166-179`). fw 1.02 sets Hz with any frequency and k from frequency range 2 (`EEVBlog-102.c:7749-7781`) | seen; fw 1.02 |
+| Continuity (§6.2) | Mode 10 carries the resistance, not the beeper state (sigrok `eev121gw.c:872-886`) | code comment |
+| Bar 0~150 (§8, §14.16) | Set only when the bar scale is 1000 (`EEVBlog-102.c:7340-7341`), the scale for which EEVblog draws the other tick set | fw 1.02 |
+| ↙ (§9, §14.17) | fw 1.02 sets byte 16 bit 5 from `meter_danger_icon` (`EEVBlog-102.c:7386-7387`), which drives the LCD's `S0H_ICON_DANGER` segment (`:4941-4947`), e.g. above 300 counts in Low Z (`:8995`); the manual's LCD has a hazardous-voltage bolt (p.31) [INFERRED match]. Sigrok ("20mA loop current?", `eev121gw.c:213`), qt5 ("Down") and evotronix ("Peak / continuity arrow", `PacketV2.swift:597`) only guess | fw 1.02 |
+| Other annunciators (§9, §14.17) | fw 1.02 never sets TEST, byte 17 bits 1-0, or byte 15/16 bit 7; MEM is 1 while logging or in playback (`:7406-7407`); MIN/MAX is 1-4 only, 1 ms PEAK sending 1 or 2 (`:7392-7402`); dBm (byte 16 bit 3) is set in ACV while the secondary display shows dBm (`:7390-7391`). Both packets of §15.5 have byte 17 = `00` | fw 1.02; captures |
+| Identity (§10, §14.18) | The year-month is the last calibration date, and the five digits are the user's Meter ID (fw 1.02 `last_cal_year_month`, `curr_meter_serial`, `EEVBlog-102.c:7234-7244`); sigrok: "It certainly is not the current date", "a user adjustable device identification number" (`eev121gw.c:739-757`). Two meters show year `17`, month 8, IDs 42121 and 54321 (§15.5); how months 10-12 are coded stays open | fw 1.02; captures |
+| APO (§3, §14.19) | The countdown stops only when APO is off or logging is on, with no Bluetooth check (`EEVBlog-102.c:26606-26613`, the check at `:26609`); a beep resets it (`:9282-9287`); Bluetooth key frames take the same key path (`:16539`). APO is 60 min instead of 30 in MIN/MAX (`:9219-9225`) | fw 1.02 |
+
+No community source answers §14.12 (the V2 temperature bits).
+
+### 15.5 Captured packets
+
+Two complete packets exist in the community sources, both passing the §4
+checksum; `F2` is prepended to the 121gwcli line, whose indication carried
+bytes 1-18 (§15.4). Community-captured, not ours.
+
+**The packet quoted in sigrok**, `sigrok/eev121gw.c:86` (the driver is
+© 2018):
+
+```
+F2 17 84 21 21 08 00 00 00 64 01 01 17 12 37 02 40 00 7D
+```
+
+| Bytes | Decode (§5-10) |
+|---|---|
+| 1-4 `17 84 21 21` | year `17`, month 8, ID 42121 |
+| 5-8 `08 00 00 00` | mode 8 (Duty), range 0, 0.0 % |
+| 9-12 `64 01 01 17` | sub 100 (internal °C), point 1, 0x0117 = 279 → 27.9 |
+| 13-14 `12 37` | bar: USE set (off), scale 500; value `37`: bit 5 set (D4), 23 |
+| 15-17 `02 40 00` | APO; BT |
+| 18 `7D` | checksum, valid |
+
+The comment says the bit-5 case was "seen … in FREQ and OHM", but this
+packet's mode is 8, Duty.
+
+**121gwcli's capture**, a gatttool line quoted in a comment,
+`121gwcli/parse121gw.pl:159` (2022), `F2` prepended:
+
+```
+F2 17 85 43 21 09 86 00 00 64 01 01 02 01 21 06 40 00 8D
+```
+
+| Bytes | Decode (§5-10) |
+|---|---|
+| 1-4 `17 85 43 21` | year `17`, month 8, ID 54321 |
+| 5-8 `09 86 00 00` | mode 9 (Resistor), OFL, range 6 (50 MΩ), value 0 |
+| 9-12 `64 01 01 02` | sub 100, point 1, 0x0102 = 258 → 25.8 |
+| 13-14 `01 21` | bar shown, positive, scale 50; value `21`: bit 5 set (D4), 1 |
+| 15-17 `06 40 00` | AUTO, APO; BT |
+| 18 `8D` | checksum, valid |
+
+This is the reading of §13 example 3 with a real identity, secondary display
+and bar. The same README also gives one reading as decoded fields, without
+raw bytes or checksum: mode 4, range 0, value 1638 (1.638 mV AC); sub mode 6,
+sub range `0x12`, 6297 (62.97 Hz); bar status `01`, value `00`; icons
+`14 40 00`, AC and AUTO, BT — its printed "0x0e2800" is those hex strings
+passed through `%02x` as decimals (`121gwcli/README.md:166-179`,
+`parse121gw.pl:176-178`, `:184`).

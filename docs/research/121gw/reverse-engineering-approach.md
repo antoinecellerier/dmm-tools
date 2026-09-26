@@ -3,7 +3,8 @@
 Scope: the EEVblog 121GW multimeter and its Bluetooth LE link, from the
 meter's advertisement to the packets it sends and the commands it accepts.
 Nothing is implemented yet; this pair of documents records what the meter
-does on the wire, from vendor sources only.
+does on the wire. §1-14 of the spec come from vendor sources only; §15
+compares them with community sources, read after the boundary was opened.
 
 The question was which of the formats in the vendor sources the meter sends
 today. The answer is the **binary 19-byte packet** of EEVblog's "BLE Packet
@@ -82,10 +83,9 @@ the eevblog.com files from a browser on 2026-09-26.
 | UEi app 1.0.6 | `uei-app/EEVBlog_121GW_1.0.6_APKPure.apk` | `3f63c3ab593448b25e2aad3fa4fd189a75d94d9dd3eb01453150baa114311ef1` | signer `CN=Finest Co., O=Finest, L=Songdo, ST=Incheon, C=KO`, cert SHA-256 `b3610e35c9c269401cf7501e0acef0784e80e1a295d6a6d61151ffb5a904193d` |
 | EEVblog app | `official-app/` (git) | — | HEAD `48cd0fbfb8a51f82f47a3c1cb76cc65bc0b4de9e`; final protocol on `origin/PrivatePostRelease` @ `aab403d` |
 
-### Avoided
+### Avoided during the vendor analysis
 
-Not opened while the spec was written (closed until a later cross-reference
-pass):
+Not opened while §1-14 of the spec were written:
 
 - github.com/evotronix (the store page's "Open source ports")
 - tpwrules/121gw-re and 121gw-88mph
@@ -97,6 +97,34 @@ pass):
 - `docs/research/new-device-candidates.md` §"EEVBlog 121GW": it held
   community-derived notes on this meter written before this work, and was
   kept out of every reader's brief and out of the drafting of both documents
+
+### Cross-referenced (clean-room boundary opened 2026-09-26)
+
+The user opened the boundary on **2026-09-26**, after §1-14 were written and
+grounding-checked, for code repositories and sigrok only ("Open, but skip
+forums"). The findings are §15 of the spec, marked [COMMUNITY]; nothing was
+merged into §1-14 beyond pointers, and the two verdicts the vendor re-check
+changed (the bar sign, §8; the year byte, §10). Provenance is in
+`references/121gw/community/SOURCE.txt` (gitignored); the working notes are
+`findings/cross-reference.md`. No community code was copied.
+
+Read on 2026-09-26:
+
+| Source | Commit | Licence | Notes |
+|---|---|---|---|
+| [tpwrules/121gw-re](https://github.com/tpwrules/121gw-re) | `38f558d` (2018-08-14), `clone --depth 50` | none in the repository | IDA export of firmware 1.02 (added 2018-01-22), which sends the ASCII frame; the repository also redistributes the vendor firmware and PDFs |
+| [zonque/121gw-qt5](https://github.com/zonque/121gw-qt5) | `02f0d15` (2019-03-10), `clone --depth 50` | GPL-2.0 | independent decoder of the binary packet |
+| [chlordk/121gwcli](https://github.com/chlordk/121gwcli) | `d543790` (2022-12-30), `clone --depth 50` | GPL-3.0 | `src/` copied from 121gw-qt5; its shell and Perl scripts were run on a meter |
+| [evotronix](https://github.com/evotronix) `121GW-Android-port`, `121GW-Chrome-extension`, `121GW-port-for-iphone-and-macos`, `121GW-Windows-port` | `5954008`, `05935c1`, `9899f82`, `7e183f6` (2026-08-30 to 2026-09-06), `clone --depth 20` | MIT © 2026 evotronix | the store page's "Open source ports"; "made with Grok AI" from EEVblog's app, so not independent evidence |
+| libsigrok `src/dmm/eev121gw.c`, `src/serial_bt.c`, `src/hardware/serial-dmm/api.c` (master, raw files) | `eev121gw.c` last changed in `d66940a` (2022-08-21) | `eev121gw.c` GPL-2.0-or-later; the other two GPL-3.0-or-later | independent decoder; quotes one packet a meter sent |
+
+Still not opened: forum posts of any kind, and **121gw-88mph** (tpwrules'
+firmware), which the approval did not name. Two sources point outside the
+boundary and were not followed: 121gw-re's history credits the "EEVBlog forum
+user Iagash" for calibration data (commit `b606062`), and evotronix cites
+"lygte-info" (`121GW-port-for-iphone-and-macos/121GW_swift/PacketV2.swift:262`).
+121gwcli's README prints a meter's Bluetooth address (`README.md:221`); the
+spec cites the line and does not copy it.
 
 ### Model-recall disclosure
 
@@ -143,6 +171,20 @@ recognition.
    special sub codes, what the zero bytes of the worked examples decode to,
    tags on deduced statements, and absences rephrased as dated search
    results.
+7. **Community cross-reference** (boundary opened 2026-09-26, above). Each
+   claim of spec §1-14 compared with the community sources, noting for each
+   source how it was made — AI-generated from EEVblog's app (evotronix),
+   copied (121gwcli's `src/`), run on a meter (121gwcli's scripts, sigrok's
+   quoted packet) or disassembled from ASCII-era firmware 1.02 (121gw-re) —
+   and scoping every firmware 1.02 fact through V1 p.1's "identical, except
+   for the way serial number is formatted" (`findings/cross-reference.md`).
+   Each disputed point was then re-read in the vendor sources alone. The
+   re-read changed two verdicts: EEVblog's app swaps its bar-sign layers, so
+   as drawn it shows a minus when byte 13 bit 2 is set (spec §8), and both
+   captured packets contradict its binary reading of the year byte (spec §10).
+   When §15 was written, every carried-over fact was checked again in the
+   community file and, where one was named, the vendor source; the two
+   captured packets' checksums were recomputed.
 
 Resolved disagreements:
 
@@ -174,7 +216,8 @@ Resolved disagreements:
    draft set against UEi are only its chart multiplier, an inconsistency inside
    that app. The diode 3 V resolution and the top capacitance range stay open.
 7. **Bar-graph sign polarity**: left open; EEVblog's app inverted it in 2018
-   and the documents state none.
+   and the documents state none. Revised after step 7: EEVblog's drawing
+   shows a minus for a set bit (spec §8).
 8. **Commands**: both apps agree on key codes 01-08 and 81-88; the buzzer
    code 09 and the `F8` clock set are UEi's only. Whether current firmware
    honours these ASCII-framed commands is [UNVERIFIED]; EEVblog's final
@@ -193,3 +236,5 @@ As used in `reverse-engineered-protocol.md`:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter
 - **[HARDWARE]** — seen on a real meter: none yet
+- **[COMMUNITY]** — stated or captured by a community source, §15; not a
+  vendor fact

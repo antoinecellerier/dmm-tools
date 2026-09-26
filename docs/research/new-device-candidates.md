@@ -356,7 +356,7 @@ phone-only — no desktop logging tool exists for BLE mode.
 | Aspect | Details |
 |--------|---------|
 | Price | ~$221 (currently sold out on official store) |
-| Connection | BLE 4.0 via BLE122 module (UART bridge) |
+| Connection | BLE 4.0 via BLE112 module (UART bridge) |
 | Protocol | 19-byte binary packets, partially documented |
 | Sigrok driver | Supported (Linux only, "slow ~2 samples/sec, occasionally flaky") |
 
