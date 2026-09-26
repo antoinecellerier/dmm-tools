@@ -185,6 +185,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
   visible-window statistics follow the plotted series
 
+![A UT61E+ in AC+DC V across a 1.6 V cell with one lead lifted: the DC reading plotted, its AC component dashed beside it, named in the key, and the Plot: and Show: chips above](../assets/gui-graph-series.png)
+
 Two cases the graph does not draw faithfully: a connection loss entirely
 inside a continuing overload is absorbed into the band instead of splitting
 it, and several dropouts between the same two readings collapse into one gap.

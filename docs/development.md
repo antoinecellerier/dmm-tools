@@ -207,7 +207,8 @@ ranging — 22 ↔ 220 mA hops and an OL blip at each boot and refresh) and
 `ut181a-temp-t1-t2.replay` (a UT181A frame carrying two temperature
 sub-values) are kept for future use. `acdcv-cell.replay` is 141 s of a UT61E+
 in AC+DC V across a 1.6 V cell, DC and AC frames in turn, with one lead lifted
-at 1–5 s and 65–76 s, behind the AC+DC block in `docs/cli-reference.md`.
+at 1–5 s and 65–76 s, behind the AC+DC block in `docs/cli-reference.md` and
+the graph series picture.
 
 ## Shell Completions
 
