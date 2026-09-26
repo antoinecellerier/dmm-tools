@@ -16,6 +16,8 @@ paths:
 - Reference implementations to cross-check when in doubt: [ljakob/unit_ut61eplus](https://github.com/ljakob/unit_ut61eplus) (Python, UT61E+), [mwuertinger/ut61ep](https://github.com/mwuertinger/ut61ep) (Go, UT61E+), [pylablib](https://github.com/AlexShkarin/pyLabLib) (Python, VC-880).
 - Session time comes from `Dmm::clock()` — `Dmm::request_measurement` stamps every reading with it, so anything that reads elapsed session time takes it from there instead of `Instant::now()`. Hardware timeouts, settle delays and transport bring-up sleeps stay on `Instant` / `thread::sleep`: they pace physical USB, which no clock speeds up.
 - Mocks must match real-device behavior: no impossible flag combinations (e.g. MIN+MAX simultaneously), correct data types for stored vs live values. Mocks that diverge create false confidence.
+- A model offers the remote keys and commands its vendor app or manual sends, with the codes they use, and nothing more; its mock offers the same set.
+- New per-model behaviour keys on the registry entry or a profile field, not on display-name strings, and runs only for the models that need it. A change that reaches already-supported meters must fix a problem they share, on purpose.
 
 ## Logging
 

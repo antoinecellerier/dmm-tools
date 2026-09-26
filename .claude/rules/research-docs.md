@@ -23,3 +23,5 @@ describes our code for every meter at once.
   sources avoided, with the date a boundary was opened.
 - Community sources are cited only in a labelled cross-reference section.
 - A value no source confirms is marked `[UNVERIFIED]`.
+- Absence is what a search found: "none found in <sources>, <date>", never
+  "none exists" or "no one rebrands it".

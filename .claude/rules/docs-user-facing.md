@@ -46,6 +46,14 @@ in that list.
 - A cross-reference to another command appears once per section.
 - A list (mock modes, devices, shortcuts) appears once per file.
 
+## Claims about meters
+
+- A figure measured on one meter — a reading rate, a delay — names that
+  meter. A claim about every meter needs evidence from every meter.
+- Which meters an accessory serves, or which models are rebrands of which,
+  cites the manufacturer's page. Without one, name the models confirmed;
+  never write that it serves nothing else.
+
 ## Order
 
 - Sections follow the reader's path: confirm the meter is recognised, read,
