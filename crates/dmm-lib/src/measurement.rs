@@ -459,7 +459,7 @@ impl Measurement {
 /// `"AC 0.0000 V [AUTO]"`.
 impl std::fmt::Display for Measurement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if matches!(self.value, MeasuredValue::Absent) {
+        if !self.has_main_reading() {
             f.write_str(&self.aux_summary())?;
         } else {
             if let Some(label) = self.main_label {

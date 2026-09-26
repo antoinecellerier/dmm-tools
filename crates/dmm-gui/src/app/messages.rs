@@ -3,7 +3,7 @@
 //! nothing to show into the help text the reading column renders.
 
 use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
-use dmm_lib::measurement::{MainLabel, MeasuredValue, Measurement};
+use dmm_lib::measurement::{MainLabel, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{MeterKeys, registry};
 use eframe::egui::{self, RichText, Ui};
@@ -815,9 +815,7 @@ impl App {
                     // frame (a scale's Raw beside the UT61E+'s AC+DC V AC
                     // component) is not offered.
                     let options: Vec<(&str, &str)> = m
-                        .aux_values
-                        .iter()
-                        .filter(|aux| !matches!(aux.value, MeasuredValue::Absent))
+                        .present_aux()
                         .map(|aux| (aux.label.as_ref(), aux.unit_or(&m.unit)))
                         .collect();
                     self.graph.set_series_options(&options, m.timestamp);

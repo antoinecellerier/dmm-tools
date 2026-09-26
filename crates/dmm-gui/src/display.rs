@@ -138,10 +138,7 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
             // the mode/flags line. Without them a UT181A user in MIN/MAX
             // hears only the live value and never the extremes the meter is
             // actually displaying.
-            for aux in &m.aux_values {
-                if matches!(aux.value, MeasuredValue::Absent) {
-                    continue;
-                }
+            for aux in m.present_aux() {
                 parts.push_str(", ");
                 parts.push_str(&aux.label);
                 parts.push(' ');

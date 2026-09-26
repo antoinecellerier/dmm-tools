@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::export::CsvLayout;
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::Measurement;
 use std::io::Write;
 use std::time::Instant;
 
@@ -139,7 +139,7 @@ fn format_text(
     // with timestamps) and peak modes, and the UT171 for the AC frequency
     // aux; before this they were parsed and discarded. A frame without a main
     // reading already printed its sub-values in the value's place.
-    if matches!(m.value, MeasuredValue::Absent) {
+    if !m.has_main_reading() {
         return Ok(());
     }
     let label_w = m

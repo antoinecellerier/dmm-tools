@@ -2411,7 +2411,7 @@ fn cmd_debug(
             Ok(StreamEvent::Measurement(m)) => {
                 // A frame without a main reading has its digits on the
                 // sub-value it carries instead.
-                let absent = matches!(m.value, dmm_lib::measurement::MeasuredValue::Absent);
+                let absent = !m.has_main_reading();
                 let display = m
                     .display_raw
                     .as_deref()

@@ -72,7 +72,7 @@ impl HeldReading {
     /// is cloned for it.
     pub(super) fn fill_in(&mut self, shown: Option<&Measurement>, m: Measurement) -> Measurement {
         let now = m.timestamp;
-        let absent = matches!(m.value, MeasuredValue::Absent);
+        let absent = !m.has_main_reading();
         if !absent && self.parts.is_empty() {
             self.main = Some(Seen::new(now));
             return m;
@@ -112,9 +112,7 @@ impl HeldReading {
         }
 
         let base = match shown {
-            Some(s)
-                if absent && self.main.is_some() && !matches!(s.value, MeasuredValue::Absent) =>
-            {
+            Some(s) if absent && self.main.is_some() && s.has_main_reading() => {
                 let mut out = s.clone();
                 out.flags = m.flags;
                 out
