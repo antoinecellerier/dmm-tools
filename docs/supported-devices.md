@@ -4,10 +4,11 @@
 
 Most supported meters talk over a USB HID-to-UART cable; the UT-D07
 Bluetooth adapters serve the meters listed for them below, and the UT60BT,
-UT202BT, ZOTEK meters and EEVblog 121GW have Bluetooth built in. The tool
-works out which link and which meter are attached from the bytes the meter
-sends ([how](detection-design.md)), so the default `auto` device needs no setup
-beyond switching the meter's data transmission on, as listed per family below.
+UT202BT, ZOTEK meters, EEVblog 121GW and Brymen BM788BT/BM787BT have
+Bluetooth built in. The tool works out which link and which meter are
+attached from the bytes the meter sends ([how](detection-design.md)), so the
+default `auto` device needs no setup beyond switching the meter's data
+transmission on, as listed per family below.
 
 **✅ Verified** means the model's protocol tables have been confirmed on real
 hardware. **🟡 Partly verified** means connection and the main modes are
@@ -180,6 +181,23 @@ Handheld. Bluetooth built in, no cable; the meter shows up as "121GW"
 Not run on a meter yet: the decoding comes from EEVblog's packet-format
 documents, EEVblog's and UEi's apps and the manual, and the remote keys from
 the apps ([backlog](verification-backlog.md#eevblog-121gw-experimental-awaiting-a-hardware-report)).
+
+## Brymen
+
+Handheld. Bluetooth built in, no cable; the meter shows up as "BM78xBT"
+([setup](setup.md#bluetooth)). Switch on: disconnect any phone app, turn the
+dial to any function but Auto V/LoZ, and hold Δ for one second or more until
+((D)) shows.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| BM788BT | 60000 | 🧪 Experimental | — |
+| BM787BT | 60000 | 🧪 Experimental | sold by [EEVblog](https://eevblog.store/products/eevblog-bm787bt-bluetooth-multimeter); no T2, T1-T2 or %4-20mA |
+
+Not run on a meter yet: the decoding comes from Brymen's protocol document,
+Brymen's app and the two manuals. Nothing the meter sends tells the two
+models apart, so both open as one entry, `bm78xbt`
+([backlog](verification-backlog.md#brymen-bm78xbt-experimental-awaiting-a-hardware-report)).
 
 ## Not supported yet
 

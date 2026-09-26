@@ -1094,7 +1094,7 @@ mod tests {
         assert_eq!(families("CH9325"), vec![DeviceFamily::Ut80x]);
         // The UT-D07B gets the probes of the families UNI-T lists for it, and
         // not the UT80x's — the UT71 is on the UT-D07A, a different adapter.
-        // The ZOTEK meters and the 121GW have the radio built in.
+        // The ZOTEK meters, the 121GW and the BM78xBT have the radio built in.
         assert_eq!(
             families(crate::BLUETOOTH),
             vec![
@@ -1103,6 +1103,7 @@ mod tests {
                 DeviceFamily::Ut181a,
                 DeviceFamily::Zotek,
                 DeviceFamily::Eevblog121gw,
+                DeviceFamily::Bm78xbt,
             ],
             "the registry places these families on the UT-D07B"
         );

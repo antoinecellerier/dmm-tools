@@ -76,6 +76,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
 | `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (experimental) |
 | `121gw` | `eevblog121gw`, `eevblog-121gw` | EEVblog 121GW (experimental) |
+| `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | Brymen BM788BT/BM787BT (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->
@@ -510,7 +511,7 @@ what a key did.
 | `light` | Long MODE: toggle backlight |
 | `lpf` | Long REL: 1 kHz low-pass filter; AC modes only |
 
-#### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960
+#### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960 / BM788BT / BM787BT
 
 No remote commands — the meters stream continuously once their output is on
 ([supported devices](supported-devices.md)).

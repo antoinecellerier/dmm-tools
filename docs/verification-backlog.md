@@ -26,6 +26,7 @@ Items that need real components or specific setups to verify.
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
   - [ZOTEK (ZOYI / ANENG / BSIDE): experimental, awaiting a hardware report](#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)
   - [EEVblog 121GW: experimental, awaiting a hardware report](#eevblog-121gw-experimental-awaiting-a-hardware-report)
+  - [Brymen BM78xBT: experimental, awaiting a hardware report](#brymen-bm78xbt-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
@@ -61,6 +62,7 @@ is probed with, and how well that probe is backed:
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
 | ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
 | EEVblog 121GW | nothing — the meter streams over its built-in Bluetooth | one packet: 18 bytes whose XOR is `F2`, with or without the `F2` before them, a mode and range in the tables, no reserved bit set | Deduced from EEVblog's documents and apps, unverified; both community-captured packets pass (121GW spec §15.5) |
+| Brymen BM788BT, BM787BT | nothing — the meter streams over its built-in Bluetooth once the transport has logged in | one 32-byte reading packet: `FF 02 20 05`, a CRC-16/MODBUS over bytes 2-27, `FF 03`, device type `01` | Deduced from Brymen's protocol document and app, unverified; no packet a meter sent is on record (bm78xbt spec §12) |
 
 Open questions, each needing a meter:
 
@@ -98,6 +100,12 @@ Open questions, each needing a meter:
   own rule alone. Firmware 1.02's receiver drops every frame not led by `F4`
   or `F8` (121GW spec §15.4), which none of the probes is; current firmware
   has not been watched.
+- **What the UT61+, UT181A and UT171 probes do to a BM78xBT.** Only one
+  opened by address with no name heard gets them (a renamed meter, `auto`
+  with `--adapter`); one advertising "BM78xBT" runs its own rule alone. They
+  are written to its command characteristic, CDD4, as 6- and 8-byte writes;
+  r4 knows only 32-byte commands (bm78xbt spec §5), and what the meter does
+  with a short one is unknown.
 - **Opening after detection runs the family's `init` again**, so a UT181A
   receives SET_MONITOR twice and a UT171 its connect frame twice per auto
   open. Harmless on paper — both are what the meter was already sent — but
@@ -1933,6 +1941,84 @@ boot.
 - **SD-card logs.** The meter logs to its micro SD card as CSV — sample,
   then the main and the secondary function, value and unit (manual p.54).
   Importing such a file as a session is an idea, not planned.
+
+### Brymen BM78xBT: experimental, awaiting a hardware report
+
+Specified 2026-09-26 from Brymen's protocol document (r2, r4), Brymen's app
+and the BM788BT and BM787BT manuals
+(`docs/research/bm78xbt/reverse-engineered-protocol.md`, §11 for the open
+questions); the community cross-reference (spec §12) came after and narrows
+several items below without being our verification. Implemented 2026-09-26
+as the `bm78xbt` family, experimental, one registry entry `bm78xbt` for
+both models; its verification issue is still to be opened. Nobody on the
+project owns one, so each item notes the driver's choice. Spec tables wait
+for a first real-device confirmation, as for every new meter; both manuals
+carry them, and the BM787BT's AC V and AC+DC V accuracy is lower outside
+50-60 Hz (BM787BT manual p.23-24), with nothing on the wire to pick a
+per-model table by. One capture settles the most at once:
+**`RUST_LOG=dmm_lib=trace dmm-cli --device bm78xbt debug`** for a few
+seconds in DC V with a negative reading (leads reversed on a battery), then
+in Ω with the leads open.
+
+- **Login (§11.3-11.8, §11.21, §11.23-24).** The transport logs in before
+  subscribing, r4's order. It sends 0000 as four zero bytes, Password
+  Identification `01`, and the platform's address least significant octet
+  first (GetBLEAddress's reply on macOS, zeros when neither answers), every
+  write acknowledged; nothing else outside r4 is sent. It reads CDD4 at
+  once, as Brymen's app does: if the meter has not updated it yet, the read
+  returns the command itself, which is reported once while the stream still
+  works, and a trace settles whether a pause is needed. A refusal is not
+  retried; codes 3 and 4 give the reset gesture, which a real meter has yet
+  to confirm, as it has the BM787BT's 0000 default. The login's time bound
+  is 8 s against the app's 3 s read timeout; lower it once reporters' traces
+  show how long a login takes.
+- **Framing (§11.1-11.2).** CRC low byte first; only `FF 02 20 05` starts a
+  reading. Either wrong loses every reading to a timeout; a CRC mismatch
+  shows at DEBUG.
+- **Sign** (§11.9). Negative when Flag1 bit 6 is set or the count is below
+  zero; a negative count with the flag clear, the case r4's two definitions
+  contradict, is reported.
+- **Scaling fields per range** (§11.10). Digits after the point are [27] −
+  [24], none when [24] is 0; the value is in the prefixed unit. [27]
+  outside 3-6 and a point at or past [27] are reported; the range label
+  stays empty.
+- **%4~20mA unit** (§11.11). `4F` reads as "%".
+- **AutoCheck sub** (§11.12). Both decode silently: `03` as Auto V (r4),
+  `02` as LoZ Ω (the app).
+- **Line frequency** (§11.13). Main `23` and the struck `03` subs of V, µA,
+  mA and A all read as Line Hz, silently; the app's `04`/`03` (mV) is
+  reported.
+- **Silent and reported fields (§11.14-11.18).** r4's "x" bits, the
+  reserved bytes, the Power Source Flag and the RTC are silent (the RTC is
+  never set; the host stamps readings). The other fields r4 prints as fixed
+  values, battery values other than 00/02 and ASCII codes outside r4 are
+  reported, and so are EF-H and EF-L outside EF detection.
+- **MTU (§11.26).** No MTU is requested; the transport warns under 155; the
+  extractor joins a split reading, but a cut one never arrives.
+- **Rate and detection windows (§11.20, §11.27).** A read waits 2 s for a
+  reading, and `auto` listens once: DC+AC in REC, at 1 a second, fits;
+  capacitance, whose rate depends on the value (§9.4), may not, and a longer
+  gap ends the read in a timeout. So does the pause on a function or range
+  change; the next reading resumes the stream, and `--device bm78xbt` skips
+  detection.
+- **APO** (§11.22). The activation text gives 15 to 30 minutes and the
+  SELECT-at-power-on way to disable it; whether Bluetooth stays on across
+  power-off, and whether the Δ long press works in AutoV, are open.
+- **Model identity** (§11.25). One entry, `bm78xbt`, for both; its tables
+  hold every r4 function, and a BM787BT never sends T2, T1-T2 or %4-20mA.
+- **Renamed meter (§11.17, §11.19).** The search goes by the advertised name
+  "BM78xBT" alone, so it misses a renamed meter: `--device bm78xbt
+  --adapter <address>` opens it, while `auto` with `--adapter` sends it the
+  UNI-T probes (see [Device auto-detection](#device-auto-detection)).
+- **A cached BM78xBT and a known UT-D07B.** Before, with no meter named,
+  the known-peer fallback took UT-D07 adapters and the "UT60BT", "UT202BT",
+  "Bluetooth DMM" and "121GW" meters; after, "BM78xBT" too. A cached
+  BM78xBT now competes with a known UT-D07B as a cached 121GW does: an
+  asleep one costs a ~10 s connect, then "not found".
+- **Detection on the Bluetooth link.** Before, the UT61+, UT171, UT181A,
+  ZOTEK and 121GW rules ran there; after, the BM78xBT's rank-3 rule too,
+  sending nothing. It declines AB CD frames, 121GW and ZOTEK packets and
+  the adapter heartbeat (tests).
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 

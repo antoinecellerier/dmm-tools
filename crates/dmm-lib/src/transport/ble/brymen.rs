@@ -9,7 +9,7 @@
 use super::{GattProfile, SetupFailure, link_error};
 use crate::error::{Error, Result};
 use crate::protocol::bm78xbt::packet::{framed, seal};
-use crate::protocol::bm78xbt::{ID, RESET_GESTURE};
+use crate::protocol::bm78xbt::{ID, reset_gesture};
 use crate::protocol::unrecognised::report_unknown;
 use btleplug::api::{BDAddr, Characteristic, Peripheral as _, WriteType};
 use btleplug::platform::Peripheral;
@@ -141,9 +141,13 @@ fn wire_mac(address: BDAddr) -> Mac {
 fn refused(code: u16) -> Error {
     let reason = match code {
         3 | 4 => {
-            return Error::Bluetooth(format!(
-                "the meter refused the connection password 0000 — to reset it, {RESET_GESTURE}"
-            ));
+            return Error::Bluetooth(
+                concat!(
+                    "the meter refused the connection password 0000 — to reset it, ",
+                    reset_gesture!()
+                )
+                .to_string(),
+            );
         }
         0 => "checksum error",
         1 => "invalid channel ID",
@@ -418,7 +422,7 @@ mod tests {
     fn refusals_say_what_went_wrong() {
         for code in [3, 4] {
             let message = refused(code).to_string();
-            assert!(message.contains(RESET_GESTURE), "{message}");
+            assert!(message.contains(reset_gesture!()), "{message}");
         }
         let message = refused(0).to_string();
         assert!(message.contains("checksum error (code 0)"), "{message}");

@@ -8,7 +8,8 @@ three all-zero 32-byte blocks. The reading is numeric (a signed 24-bit count,
 a decimal-point position, a power-of-ten prefix, a unit code and two function
 IDs), not LCD segments. Commands are 32-byte packets written to a second
 characteristic. Every framed packet runs `FF 01` or `FF 02` … `FF 03` and
-carries a CRC-16/MODBUS. It is not implemented, and no BM78xBT has been on our
+carries a CRC-16/MODBUS. It is implemented, experimentally
+(`crates/dmm-lib/src/protocol/bm78xbt/`), and no BM78xBT has been on our
 bench: every fact in §1-11 comes from Brymen's protocol document (two
 revisions), Brymen's app and the two user manuals, and §12 compares them with
 community sources. The approach doc beside it records the sources, the method

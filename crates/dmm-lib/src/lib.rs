@@ -1234,7 +1234,7 @@ mod tests {
             );
         }
         // The families UNI-T's accessory page names for the UT-D07B, and the
-        // meters with the radio built in (ZOTEK's, the 121GW): that is what
+        // meters with the radio built in (ZOTEK's, the 121GW, the BM78xBT): that is what
         // detection probes for over it and what the help it prints offers.
         // The UT80x is not among them — the UT71 is listed for the UT-D07A,
         // a different adapter.
@@ -1246,7 +1246,7 @@ mod tests {
             .filter(|d| {
                 matches!(
                     d.family,
-                    F::Ut61EPlus | F::Ut171 | F::Ut181a | F::Zotek | F::Eevblog121gw
+                    F::Ut61EPlus | F::Ut171 | F::Ut181a | F::Zotek | F::Eevblog121gw | F::Bm78xbt
                 )
             })
             .map(|d| d.id)
@@ -1282,6 +1282,7 @@ mod tests {
             ("zt5bq", "Bluetooth DMM"),
             ("zt5b", "Bluetooth DMM"),
             ("121gw", "121GW"),
+            ("bm78xbt", "BM78xBT"),
         ] {
             assert_eq!(
                 peers(id),
@@ -1295,7 +1296,7 @@ mod tests {
             bluetooth_peers(None),
             BluetoothPeers {
                 adapters: true,
-                meters: vec!["UT60BT", "UT202BT", "Bluetooth DMM", "121GW"],
+                meters: vec!["UT60BT", "UT202BT", "Bluetooth DMM", "121GW", "BM78xBT"],
             }
         );
     }
@@ -1351,7 +1352,7 @@ mod tests {
         assert_eq!(
             bluetooth_only,
             [
-                "ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b", "121gw"
+                "ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b", "121gw", "bm78xbt"
             ]
         );
         for kt in KNOWN_TRANSPORTS {

@@ -389,13 +389,16 @@ Xamarin) but has limited logging. No polished native desktop app with
 real-time graphing. The community is large but software solutions are
 fragmented.
 
-**Brymen rebrands on the same store (a future candidate, not researched).**
+**Brymen rebrands on the same store.**
 [EEVblog's store](https://eevblog.store/collections/multimeters) sells the
 BM787BT, BM2257, BM786, BM235 and BM036, which are Brymen meters under
 EEVblog's name; the
 [BM787BT](https://eevblog.store/products/eevblog-bm787bt-bluetooth-multimeter)
 has Bluetooth, and a BLE protocol document for it is published (noted
-2026-09-26).
+2026-09-26). The BM787BT and the BM788BT were specified 2026-09-26 from
+Brymen's protocol document, app and manuals
+([research/bm78xbt](bm78xbt/reverse-engineered-protocol.md)) and implemented
+2026-09-26, experimental, as `bm78xbt`.
 
 ---
 
@@ -707,6 +710,7 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **EEVblog 121GW** — implemented 2026-09-26 | BLE (built in) | Largest enthusiast community (292-page thread), fragmented software; specified from EEVblog's and UEi's apps and EEVblog's packet-format documents ([research/121gw](121gw/reverse-engineered-protocol.md)) | Done, experimental: `121gw` awaits a hardware report |
+| **Brymen BM788BT / BM787BT** — implemented 2026-09-26 | BLE (built in) | Brymen publishes the BLE protocol; the BM787BT is EEVblog's edition; specified from Brymen's protocol document, app and manuals ([research/bm78xbt](bm78xbt/reverse-engineered-protocol.md)) | Done, experimental: `bm78xbt` awaits a hardware report |
 | **OWON B35T+/B41T+** | BLE | Popular budget BLE meters, no cross-platform GUI, proprietary dongle required for PC | High |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |

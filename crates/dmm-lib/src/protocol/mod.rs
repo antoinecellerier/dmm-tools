@@ -282,6 +282,8 @@ pub enum DeviceFamily {
     Zotek,
     /// EEVblog 121GW
     Eevblog121gw,
+    /// Brymen BM788BT / BM787BT
+    Bm78xbt,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -299,6 +301,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Vc890 => write!(f, "vc890"),
             DeviceFamily::Zotek => write!(f, "ZOTEK"),
             DeviceFamily::Eevblog121gw => write!(f, "EEVblog 121GW"),
+            DeviceFamily::Bm78xbt => write!(f, "Brymen BM78xBT"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }
@@ -859,9 +862,9 @@ mod tests {
     fn need_keyword(need: Need) -> &'static str {
         match need {
             Need::ShortedLeads => "together",
-            Need::DcSource => "revers",
+            Need::DcSource => "dc source",
             Need::Thermocouple => "temperature",
-            Need::LiveWire => "ncv",
+            Need::LiveWire => "live",
             Need::PowerAdapter => "adapter",
             Need::Transistor => "transistor",
             Need::Scr => "thyristor",

@@ -117,6 +117,13 @@ The EEVblog 121GW has Bluetooth built in and needs no pairing either: hold
 1ms PEAK until BT shows, and it shows up as "121GW". It switches off after
 30 minutes; set APO.oF in its SETUP menu to disable that.
 
+The Brymen BM788BT and BM787BT have Bluetooth built in and need no pairing
+either: disconnect any phone app, then, on any function but Auto V/LoZ, hold
+Δ for one second or more until ((D)) shows, and it shows up as "BM78xBT". It
+switches off after 15 to 30 minutes idle; hold SELECT while turning it on to
+disable that. A renamed meter opens with
+`--device bm78xbt --adapter <address>`.
+
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
 Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second
