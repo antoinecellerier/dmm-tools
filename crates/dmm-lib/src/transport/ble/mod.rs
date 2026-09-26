@@ -8,9 +8,10 @@
 //! Everything Bluetooth-specific is here
 //! (`docs/research/ut-d07b/reverse-engineered-protocol.md`).
 //!
-//! A peer carries its byte stream over one of two GATT profiles, picked from
-//! the services it offers once connected: ISSC's transparent UART
-//! (`issc.rs`), or the FFF0/FFF4 one (`fff0.rs`).
+//! A peer carries its byte stream over one of three GATT profiles, picked
+//! from the services it offers once connected: ISSC's transparent UART
+//! (`issc.rs`), the EEVblog 121GW's own (`eevblog121gw.rs`), or the FFF0/FFF4
+//! one (`fff0.rs`).
 //!
 //! There is no background thread and no channel: the struct owns a
 //! current-thread tokio runtime and every btleplug call runs inside
@@ -21,6 +22,7 @@
 //! hidraw, to be taken off at the next read. The framing layer resyncs on the
 //! next header, so no pump task is needed.
 
+mod eevblog121gw;
 mod fff0;
 mod issc;
 mod search;
@@ -33,6 +35,7 @@ use btleplug::api::{
     ValueNotification, WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
+use eevblog121gw::EEVBLOG_121GW;
 use fff0::FFF0;
 use futures::stream::{Stream, StreamExt};
 use issc::{ISSC_UART, strip_heartbeats};
@@ -375,10 +378,10 @@ fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
 ///
 /// So one look can miss a service the peer has. ISSC is taken the moment it
 /// is complete, as before there was a second profile: it comes first, so
-/// nothing that arrives later can change the choice. FFF0 is the fallback,
+/// nothing that arrives later can change the choice. Any other profile is
 /// taken once two looks in a row saw the same tree — one that stopped
-/// changing, so an ISSC service still resolving had its chance — or at the
-/// deadline.
+/// changing, so a service that outranks it still resolving had its chance —
+/// or at the deadline.
 async fn subscribe_profile(
     peripheral: &Peripheral,
     deadline: tokio::time::Instant,
@@ -405,9 +408,10 @@ async fn subscribe_profile(
     };
     debug!("Bluetooth: {} profile", chosen.profile.name);
 
-    // Bring-up is subscribe and go on either profile: nothing is written to
+    // Bring-up is subscribe and go on every profile: nothing is written to
     // any other characteristic first (research doc §3;
-    // `docs/research/zotek/reverse-engineered-protocol.md` §3).
+    // `docs/research/zotek/reverse-engineered-protocol.md` §3;
+    // `docs/research/121gw/reverse-engineered-protocol.md` §3).
     peripheral
         .subscribe(&chosen.notify)
         .await
@@ -427,11 +431,16 @@ struct Chosen {
 /// (`"write"` or `"notify"`) that is missing.
 ///
 /// ISSC first, by its two characteristics alone, as before there was a
-/// second profile. Then FFF0, whose one characteristic has to both notify
-/// and take a write: FFF0 is a common service on generic modules, so it is
-/// held to what the stream needs. No known ISSC peer has an FFF0 service
+/// second profile. Then the 121GW, whose one characteristic only has to
+/// notify or indicate: its service UUID is the meter's own, so the stream
+/// alone says it is the meter
+/// (`docs/research/121gw/reverse-engineered-protocol.md` §2). Then FFF0,
+/// whose one characteristic has to both notify and take a write: FFF0 is a
+/// common service on generic modules, so it is held to what the stream
+/// needs, and a peer that also carries the 121GW's service is read as a
+/// 121GW. No known ISSC peer has an FFF0 or a 121GW service
 /// (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2); one that
-/// carried both would be read over ISSC.
+/// carried either would be read over ISSC.
 fn choose_profile(
     characteristics: &BTreeSet<Characteristic>,
 ) -> std::result::Result<Chosen, &'static str> {
@@ -452,6 +461,14 @@ fn choose_profile(
         return Ok(chosen(&ISSC_UART, notify, write));
     }
 
+    let gw = find(EEVBLOG_121GW.service, EEVBLOG_121GW.notify);
+    if let Some(data) = gw.filter(|c| {
+        c.properties
+            .intersects(CharPropFlags::NOTIFY | CharPropFlags::INDICATE)
+    }) {
+        return Ok(chosen(&EEVBLOG_121GW, data, data));
+    }
+
     let fff0_notify = find(FFF0.service, FFF0.notify).filter(|c| {
         // Indications carry the stream as well: btleplug's subscribe takes
         // whichever the characteristic offers, as ZOTEK's current app does
@@ -467,8 +484,12 @@ fn choose_profile(
         return Ok(chosen(&FFF0, notify, write));
     }
 
-    // Name what the closer profile lacks; ISSC when neither has anything,
-    // which is what a peer with no known profile always heard.
+    // Name what the closer profile lacks; ISSC when none has anything,
+    // which is what a peer with no known profile always heard. A 121GW
+    // characteristic that got this far cannot stream.
+    if gw.is_some() && issc_notify.is_none() && issc_write.is_none() {
+        return Err("notify");
+    }
     let fff0_closer = issc_notify.is_none()
         && issc_write.is_none()
         && (fff0_notify.is_some() || fff0_write.is_some());
@@ -535,9 +556,13 @@ fn link_error(e: btleplug::Error) -> Error {
 ///
 /// An acknowledged write costs a round trip per poll (0.8 s against 0.63 s
 /// per reading on our adapter), and a dead link is caught by `read_timeout`
-/// instead. ISSC peers are always written that way. An FFF4 that lists only
-/// acknowledged writes gets those, as ZOTEK's current app writes with the
-/// characteristic's own type (`docs/research/zotek/reverse-engineered-protocol.md` §2).
+/// instead. ISSC peers are always written that way. Any other characteristic
+/// that lists only acknowledged writes gets those, as ZOTEK's current app and
+/// both 121GW apps write with the characteristic's own type
+/// (`docs/research/zotek/reverse-engineered-protocol.md` §2;
+/// `docs/research/121gw/reverse-engineered-protocol.md` §2). One that lists
+/// no write at all is still sent an unacknowledged one, for the platform or
+/// the peer to refuse.
 fn write_type(profile: &GattProfile, write_char: &Characteristic) -> WriteType {
     let props = write_char.properties;
     if *profile == ISSC_UART
@@ -550,7 +575,7 @@ fn write_type(profile: &GattProfile, write_char: &Characteristic) -> WriteType {
     }
 }
 
-/// The peer answered but carries neither profile.
+/// The peer answered but carries no profile we know.
 fn missing_characteristic(role: &str) -> Error {
     Error::Bluetooth(format!(
         "the Bluetooth device has no data {role} characteristic we recognise — \
@@ -786,6 +811,11 @@ mod tests {
         fff4(CharPropFlags::READ | CharPropFlags::WRITE_WITHOUT_RESPONSE | CharPropFlags::NOTIFY)
     }
 
+    /// The 121GW's data characteristic with `properties`.
+    fn gw(properties: CharPropFlags) -> Characteristic {
+        characteristic(EEVBLOG_121GW.service, EEVBLOG_121GW.notify, properties)
+    }
+
     /// The name of the profile `characteristics` pick, or the missing role.
     fn choose(
         characteristics: impl IntoIterator<Item = Characteristic>,
@@ -887,6 +917,89 @@ mod tests {
         let [notify, write] = issc();
         assert_eq!(choose([notify]), Err("write"));
         assert_eq!(choose([write]), Err("notify"));
+    }
+
+    /// A peer with the 121GW's service is read over its one characteristic
+    /// both ways.
+    #[test]
+    fn the_121gw_service_is_chosen_without_issc() {
+        let data = gw(CharPropFlags::WRITE | CharPropFlags::INDICATE);
+        assert_eq!(choose([data.clone()]), Ok(EEVBLOG_121GW.name));
+
+        let chosen = choose_profile(&[data].into_iter().collect()).unwrap();
+        assert_eq!(chosen.notify.uuid.to_string(), EEVBLOG_121GW.notify);
+        assert_eq!(chosen.write, chosen.notify);
+    }
+
+    /// The stream is what the 121GW's characteristic has to carry, by
+    /// indication or notification; which one the meter offers and which
+    /// write it takes are not known (spec §2), so neither decides.
+    #[test]
+    fn the_121gw_may_notify_or_indicate() {
+        for properties in [
+            CharPropFlags::INDICATE,
+            CharPropFlags::NOTIFY,
+            CharPropFlags::WRITE | CharPropFlags::INDICATE,
+            CharPropFlags::WRITE_WITHOUT_RESPONSE | CharPropFlags::NOTIFY,
+        ] {
+            assert_eq!(
+                choose([gw(properties)]),
+                Ok(EEVBLOG_121GW.name),
+                "{properties:?}"
+            );
+        }
+    }
+
+    /// ISSC still comes first beside the 121GW's service.
+    #[test]
+    fn issc_outranks_the_121gw() {
+        let data = gw(CharPropFlags::WRITE | CharPropFlags::INDICATE);
+        assert_eq!(choose(issc().into_iter().chain([data])), Ok(ISSC_UART.name));
+    }
+
+    /// The 121GW's service is the meter's own and FFF0 is generic, so a peer
+    /// with both is read as a 121GW.
+    #[test]
+    fn the_121gw_outranks_fff0() {
+        let data = gw(CharPropFlags::WRITE | CharPropFlags::INDICATE);
+        assert_eq!(choose([fff4_as_listed(), data]), Ok(EEVBLOG_121GW.name));
+    }
+
+    /// A 121GW characteristic that can neither notify nor indicate carries
+    /// no stream, and the error says so.
+    #[test]
+    fn a_121gw_characteristic_that_cannot_stream_is_refused() {
+        assert_eq!(
+            choose([gw(CharPropFlags::READ | CharPropFlags::WRITE)]),
+            Err("notify")
+        );
+    }
+
+    /// The 121GW's characteristic is written the way it takes, as FFF4 is:
+    /// unacknowledged unless it lists acknowledged writes alone.
+    #[test]
+    fn write_type_follows_what_the_121gw_characteristic_takes() {
+        assert_eq!(
+            write_type(
+                &EEVBLOG_121GW,
+                &gw(CharPropFlags::WRITE | CharPropFlags::INDICATE)
+            ),
+            WriteType::WithResponse
+        );
+        assert_eq!(
+            write_type(
+                &EEVBLOG_121GW,
+                &gw(CharPropFlags::WRITE_WITHOUT_RESPONSE
+                    | CharPropFlags::WRITE
+                    | CharPropFlags::INDICATE)
+            ),
+            WriteType::WithoutResponse
+        );
+        // No write listed: the write goes out unacknowledged and is refused.
+        assert_eq!(
+            write_type(&EEVBLOG_121GW, &gw(CharPropFlags::INDICATE)),
+            WriteType::WithoutResponse
+        );
     }
 
     /// An over-MTU write is rejected by the peer, so the chunk size has to

@@ -1988,10 +1988,13 @@ the following needs someone's hardware.
   [Protocol families we have no meter for](#protocol-families-we-have-no-meter-for)).
 - **Design questions the next Bluetooth meter settles.** Left as they are
   until a meter needs otherwise:
-  - The GATT layout is picked from the peer's services, not per entry:
-    ISSC first, else FFF0/FFF4 (since 2026-09-25, `transport/ble/`). The
-    UT-D07's heartbeat strip runs on ISSC peers only; writes go without
-    response except to an FFF4 that lists only writes with response.
+  - **Settled 2026-09-26 by the EEVblog 121GW:** the GATT layout stays
+    picked from the services the peer exposes, not per entry: ISSC first,
+    then the 121GW's own service, else FFF0/FFF4 (`transport/ble/`). A
+    meter's own service UUID needs no entry to name it. The UT-D07's
+    heartbeat strip runs on ISSC peers only; writes go without response
+    except to a non-ISSC characteristic that lists only writes with
+    response.
   - UT61+ streams whenever the link is Bluetooth: link, peer or family
     property? Settled by the UT117C/UT197/UT219PV group or a UT171/UT181A
     behind a UT-D07A.
