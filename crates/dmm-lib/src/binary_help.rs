@@ -11,6 +11,7 @@
 
 use crate::list_devices;
 use crate::mock::MockMode;
+use crate::protocol::registry::SelectableDevice;
 use crate::protocol::{Stability, registry};
 
 /// Version text for `--version`, with the git hash appended on dev builds.
@@ -146,6 +147,29 @@ impl Link {
 /// for [`Link::full_name`].
 pub fn bridge_link_name(bridge: &str, built_in_radio: bool) -> &'static str {
     Link::from_bridge(bridge).map_or("link", |link| link.full_name(built_in_radio))
+}
+
+/// The meters on a bridge, grouped by the steps that switch their
+/// transmission on.
+///
+/// Several entries share one instruction block — every UT61+/UT161 model, the
+/// UT8802 and the UT8803 — so a list per device would print the same four
+/// lines six times over. Registry order is kept, and a group is named by the
+/// display names that share it.
+pub fn activation_groups(
+    devices: &[&'static SelectableDevice],
+) -> Vec<(&'static str, Vec<&'static str>)> {
+    let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
+    for device in devices {
+        match groups
+            .iter_mut()
+            .find(|(instructions, _)| *instructions == device.activation_instructions)
+        {
+            Some((_, names)) => names.push(device.display_name),
+            None => groups.push((device.activation_instructions, vec![device.display_name])),
+        }
+    }
+    groups
 }
 
 /// The cable link, in both the long and the short form.
@@ -752,6 +776,33 @@ mod tests {
         }
         assert_eq!(Link::from_short_name("Bluetooth adapter"), None);
         assert_eq!(Link::from_short_name("carrier pigeon"), None);
+    }
+
+    /// The "no meter answered" help lists what to switch on, once per set of
+    /// steps: every UT61+/UT161 model shares one block, and so do the UT8802
+    /// and the UT8803.
+    #[test]
+    fn activation_help_lists_each_set_of_steps_once() {
+        let devices = crate::devices_on_bridge("CP2110");
+        assert!(devices.len() > 1, "CP2110 carries several meters");
+        let groups = activation_groups(&devices);
+        assert!(groups.len() < devices.len(), "nothing was grouped");
+
+        let instructions: Vec<&str> = groups.iter().map(|(i, _)| *i).collect();
+        let mut unique = instructions.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), instructions.len(), "a block is listed twice");
+
+        // Every meter is named exactly once, under its own block.
+        let named: Vec<&str> = groups.iter().flat_map(|(_, names)| names.clone()).collect();
+        assert_eq!(named.len(), devices.len());
+        let ut61 = groups
+            .iter()
+            .find(|(_, names)| names.contains(&"UT61E+"))
+            .expect("the UT61E+ is on the CP2110");
+        assert!(ut61.1.contains(&"UT61B+"), "{:?}", ut61.1);
+        assert!(ut61.0.contains("USB/Hz"), "{}", ut61.0);
     }
 
     #[test]

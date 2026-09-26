@@ -55,7 +55,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `detect.rs` | `detect_device()`: the probe cascade behind `"auto"` — runs the families' `Fingerprint`s on an opened transport and ranks what answers (see below and `docs/detection-design.md`) |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |
-| `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the per-link sections of the "nothing found" help and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
+| `binary_help.rs` | `--version` / `--device` / `--mock-mode` help text, the per-link sections of the "nothing found" help, the "no meter answered" grouping and the experimental-protocol warning, shared by both binaries. Lives here because the lists come from the registry and `MockMode::ALL`, so a new device or mock scenario reaches both `--help` outputs automatically. Build values (`CARGO_PKG_VERSION`, `GIT_HASH`) are passed in by the caller. |
 | `docs_tables.rs` | Renders the `--device` table in `docs/cli-reference.md` from the registry; a `dmm-cli` test keeps the file's `devices:start`/`devices:end` block in sync and rewrites it under `UPDATE_DOCS=1` (see `docs/development.md`) |
 | `lib.rs` | `Dmm` struct: top-level API tying everything together |
 

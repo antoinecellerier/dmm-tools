@@ -249,9 +249,8 @@ fn adapter_not_found_help(selector: &str) -> String {
 /// Build the "nothing answered" help: what the user can switch on, for every
 /// meter that could have been behind that bridge.
 ///
-/// Families share activation steps — the whole UT61+ line is one instruction —
-/// so the meters are grouped by the instruction text rather than listed one by
-/// one, which would repeat the same four steps six times over.
+/// The meters come grouped by their steps, as the CLI lists them
+/// ([`dmm_lib::binary_help::activation_groups`]).
 fn not_identified_help(bridge: &str, built_in_radio: bool) -> String {
     let mut msg = format!(
         "The {} is connected but no meter identified itself.\n\n\
@@ -259,17 +258,9 @@ fn not_identified_help(bridge: &str, built_in_radio: bool) -> String {
          Settings (\u{2699}):\n",
         dmm_lib::binary_help::bridge_link_name(bridge, built_in_radio)
     );
-    let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
-    for device in dmm_lib::devices_on_bridge(bridge) {
-        match groups
-            .iter_mut()
-            .find(|(steps, _)| *steps == device.activation_instructions)
-        {
-            Some((_, names)) => names.push(device.display_name),
-            None => groups.push((device.activation_instructions, vec![device.display_name])),
-        }
-    }
-    for (steps, names) in groups {
+    for (steps, names) in
+        dmm_lib::binary_help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
+    {
         msg.push('\n');
         msg.push_str(&names.join(", "));
         msg.push('\n');

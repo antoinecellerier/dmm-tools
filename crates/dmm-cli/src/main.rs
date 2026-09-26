@@ -955,29 +955,6 @@ fn warn_if_experimental(
     );
 }
 
-/// The meters on a bridge, grouped by the steps that switch their
-/// transmission on.
-///
-/// Several entries share one instruction block — every UT61+/UT161 model, the
-/// UT8802 and the UT8803 — so a list per device would print the same four
-/// lines six times over. Registry order is kept, and a group is named by the
-/// display names that share it.
-fn activation_groups(
-    devices: &[&'static SelectableDevice],
-) -> Vec<(&'static str, Vec<&'static str>)> {
-    let mut groups: Vec<(&'static str, Vec<&'static str>)> = Vec::new();
-    for device in devices {
-        match groups
-            .iter_mut()
-            .find(|(instructions, _)| *instructions == device.activation_instructions)
-        {
-            Some((_, names)) => names.push(device.display_name),
-            None => groups.push((device.activation_instructions, vec![device.display_name])),
-        }
-    }
-    groups
-}
-
 /// The paragraph that closes the "nothing found" help for a meter short of
 /// verified. Nothing is known about the meter when it was never named and the
 /// cable it would have been identified through never opened.
@@ -1043,7 +1020,9 @@ fn open_error_help(
                 .yellow()
                 .bold()
             );
-            for (instructions, names) in activation_groups(&dmm_lib::devices_on_bridge(bridge)) {
+            for (instructions, names) in
+                dmm_lib::binary_help::activation_groups(&dmm_lib::devices_on_bridge(bridge))
+            {
                 eprintln!("\n{}", style(names.join(", ")).yellow());
                 for line in instructions.lines() {
                     eprintln!("{}", style(format!("  {line}")).dim());
@@ -2765,33 +2744,6 @@ mod tests {
             build_after_long_help().contains("3. auto \u{2014} detect the connected meter"),
             "the precedence list still names a model as the fallback"
         );
-    }
-
-    /// The "no meter answered" help lists what to switch on, once per set of
-    /// steps: every UT61+/UT161 model shares one block, and so do the UT8802
-    /// and the UT8803.
-    #[test]
-    fn activation_help_lists_each_set_of_steps_once() {
-        let devices = dmm_lib::devices_on_bridge("CP2110");
-        assert!(devices.len() > 1, "CP2110 carries several meters");
-        let groups = activation_groups(&devices);
-        assert!(groups.len() < devices.len(), "nothing was grouped");
-
-        let instructions: Vec<&str> = groups.iter().map(|(i, _)| *i).collect();
-        let mut unique = instructions.clone();
-        unique.sort_unstable();
-        unique.dedup();
-        assert_eq!(unique.len(), instructions.len(), "a block is listed twice");
-
-        // Every meter is named exactly once, under its own block.
-        let named: Vec<&str> = groups.iter().flat_map(|(_, names)| names.clone()).collect();
-        assert_eq!(named.len(), devices.len());
-        let ut61 = groups
-            .iter()
-            .find(|(_, names)| names.contains(&"UT61E+"))
-            .expect("the UT61E+ is on the CP2110");
-        assert!(ut61.1.contains(&"UT61B+"), "{:?}", ut61.1);
-        assert!(ut61.0.contains("USB/Hz"), "{}", ut61.0);
     }
 
     fn read_transform(args: &[&str]) -> Transform {
