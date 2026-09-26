@@ -13,6 +13,7 @@ mod appearance;
 mod connection;
 mod controls;
 mod export;
+mod held_reading;
 mod layout;
 mod messages;
 mod meter_fit;
@@ -349,6 +350,9 @@ pub struct App {
 
     pub(super) connection: Connection,
     pub(super) last_measurement: Option<Measurement>,
+    /// Parts of the reading on screen that came in frames of their own; see
+    /// `held_reading`.
+    held: held_reading::HeldReading,
     /// Software transform applied to every incoming reading. Session-only:
     /// see [`transform_ui`] for why it is never written to settings.
     transform: Transform,
@@ -474,6 +478,7 @@ impl App {
             settings_open: false,
             connection: Connection::default(),
             last_measurement: None,
+            held: held_reading::HeldReading::default(),
             transform: Transform::default(),
             transform_editor: TransformEditor::default(),
             graph,
@@ -525,6 +530,7 @@ impl App {
             // stretch never exist — a data gap the graph should show even if
             // the pause is shorter than its elapsed-time threshold.
             self.graph.push_data_loss();
+            self.held.clear();
         }
         if let Some(tx) = &self.connection.ctrl_tx {
             let _ = tx.send(ThreadControl::SetPaused(paused));

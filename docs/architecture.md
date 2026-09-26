@@ -219,6 +219,7 @@ methods to it, so no panel owns state of its own.
 | `app/connection.rs` | The background acquisition thread: open, poll, reconnect, the per-setting choice lists (re-listed only when the reading they are keyed on moves), and the `DmmMessage`/`ThreadControl` channel types |
 | `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and the connection-help text |
 | `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and same-unit overlays |
+| `app/held_reading.rs` | Keeping the reading on screen whole when a meter sends its parts in frames of their own: the last main reading and sub-values stand in for the ones a frame lacks, for the display only |
 | `app/top_bar.rs` | Device label, connection buttons, status landmark, and the version/Help/shortcuts/settings group |
 | `app/toast.rs` | The transient status message, floated over the window's top-right corner in every layout |
 | `app/controls.rs` | The settings panel and the meter's remote-command buttons |

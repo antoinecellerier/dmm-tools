@@ -627,6 +627,7 @@ impl App {
         self.recording.clear_history();
         self.session.reset();
         self.last_measurement = None;
+        self.held.clear();
     }
 
     /// Keep a reading in the sample buffer: the recording's next sample, or
@@ -713,6 +714,7 @@ impl App {
                     max_aux_values,
                 } => {
                     self.connection.state = ConnectionState::Connected;
+                    self.held.clear();
                     // Which meter this actually is. Under Auto-detect it is
                     // the only thing that knows — nothing named one.
                     self.connection.detected =
@@ -876,11 +878,15 @@ impl App {
 
                     // Specs are attached to each measurement by `Dmm::request_measurement`;
                     // last_measurement.spec / .mode_spec is what render code reads.
-                    self.last_measurement = Some(m);
+                    // Filled in from the frames before it when the meter sends
+                    // a reading's parts in frames of their own.
+                    let shown = self.held.fill_in(self.last_measurement.as_ref(), m);
+                    self.last_measurement = Some(shown);
                 }
                 DmmMessage::Disconnected(err) => {
                     info!("UI: disconnected: {err} ({:?})", err.kind());
                     self.connection.state = ConnectionState::Reconnecting;
+                    self.held.clear();
                     // Tell the graph this was a real loss of data. It can't
                     // infer that from timestamps — the meter goes quiet for
                     // over a second while auto-ranging, which looks the same
