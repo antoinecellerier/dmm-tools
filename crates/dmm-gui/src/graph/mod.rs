@@ -37,8 +37,9 @@ use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 /// the ceiling the wire imposes rather than a display choice.
 pub(crate) const MAX_OVERLAYS: usize = 4;
 
-/// Consecutive frames without the selected sub-value before the selection is
-/// dropped.
+/// Consecutive frames without a sub-value before it is no longer offered —
+/// and, if it was selected, before the selection is dropped. The gap
+/// threshold has to pass too: see [`Graph::set_series_options`].
 ///
 /// A single short or bit-clear frame from the UT181A isn't a mode change: it
 /// gates its sub-values on both a status bit and the frame being long enough,
@@ -95,16 +96,48 @@ struct DataPoint {
     break_band_late: bool,
 }
 
+/// One point of a sub-value trace, at the time of the frame that carried it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct OverlayPoint {
+    time: Instant,
+    /// `None` breaks the trace here: the sub-value was over range, or the
+    /// link was lost (`push_data_loss`).
+    value: Option<f64>,
+}
+
 /// One sub-value trace drawn beside the plotted series.
 ///
-/// `values` runs in lockstep with `history`: index `i` holds the sub-value
-/// that arrived with `history[i]`, or `None` when that frame carried no such
-/// sub-value or reported it over range. Keeping them parallel rather than
-/// widening `DataPoint` costs nothing for the single-display meters that make
-/// up most of the device table, and lets `visible_index_range` index both.
+/// Its points keep their own times rather than riding on the plotted
+/// series' points: a meter that sends the parts of one reading in frames of
+/// their own (the UT61E+'s AC+DC V) puts each at its own moment, and a frame
+/// without the plotted series still carries them. A point is appended only
+/// for frames that carry the label, so the single-display meters that make up
+/// most of the device table pay nothing.
 struct OverlaySeries {
     label: String,
-    values: VecDeque<Option<f64>>,
+    points: VecDeque<OverlayPoint>,
+}
+
+impl OverlaySeries {
+    /// Append a point, dropping the oldest once `max_points` are held — the
+    /// bound that keeps a stream carrying only this sub-value, which never
+    /// grows the history, from growing without limit.
+    fn push(&mut self, point: OverlayPoint, max_points: usize) {
+        while self.points.len() >= max_points.max(1) {
+            self.points.pop_front();
+        }
+        self.points.push_back(point);
+    }
+}
+
+/// A sub-value the meter has offered for plotting, kept while it is sent.
+struct SeriesOption {
+    label: String,
+    unit: String,
+    /// Consecutive offers that did not include it.
+    missing_frames: u32,
+    /// Timestamp of the last frame that did.
+    last_seen: Instant,
 }
 
 /// One measurement as the graph should plot it.
@@ -113,7 +146,9 @@ struct OverlaySeries {
 /// sub-values share its unit; the graph never sees `dmm_lib` measurement
 /// types.
 pub struct PlotSample<'a> {
-    pub value: f64,
+    /// The plotted series' value, or `None` for a frame that carries only
+    /// sub-values: its overlays are recorded and nothing else is touched.
+    pub value: Option<f64>,
     pub timestamp: Instant,
     pub mode: &'a str,
     pub unit: &'a str,
@@ -145,7 +180,7 @@ pub struct Graph {
     /// the recording buffer through the Buffer size setting, and changed
     /// under a running session by [`Graph::set_max_points`].
     max_points: usize,
-    /// Same-unit sub-value traces, in lockstep with `history`.
+    /// Same-unit sub-value traces, each point at its own frame's time.
     overlays: Vec<OverlaySeries>,
     current_mode: Option<String>,
     current_unit: String,
@@ -155,20 +190,18 @@ pub struct Graph {
     current_series: Option<String>,
     /// Which series the toolbar is asking for. Session-only — a selection is
     /// about the meter's current mode, so persisting it across restarts would
-    /// silently plot a sub-value the next session may not even have.
+    /// silently plot a sub-value the next session may not even have. Dropped
+    /// with its option, see [`Graph::set_series_options`].
     selected_series: Option<String>,
-    /// Consecutive offers that did not include `selected_series`. Debounces
-    /// the drop, see [`SERIES_DROP_FRAMES`].
-    series_missing_frames: u32,
     /// Sub-value labels the user has switched off in the toolbar's **Show:**
     /// group. Session-only, and deliberately keyed by label rather than by
     /// index so a choice survives `clear()`, a change of plotted series and a
     /// sub-value that disappears and comes back. Hidden overlays are still
     /// recorded in lockstep — re-showing one brings its history with it.
     hidden_overlays: HashSet<String>,
-    /// Sub-values the latest sample offered, as (label, resolved unit).
-    /// Drives the toolbar's selector.
-    series_options: Vec<(String, String)>,
+    /// Sub-values the meter is sending, with their resolved units, in the
+    /// order first offered. Drives the toolbar's selector.
+    series_options: Vec<SeriesOption>,
     /// Last `display_raw` string from the latest pushed measurement, kept
     /// for the a11y plot summary so screen readers hear the same digits the
     /// sighted user sees (e.g. "1.234 mV" instead of the raw f64 value
@@ -183,6 +216,20 @@ pub struct Graph {
     view_center: f64,
     /// Gap detection threshold in seconds.
     gap_threshold_secs: f64,
+    /// Stretches longer than [`GAP_MINIMUM_SECS`] in which no frame of any
+    /// kind arrived, oldest first, as (last frame before, first frame after).
+    ///
+    /// A trace breaks for want of data only across one of these longer than
+    /// the gap threshold — not merely because two of its own points are far
+    /// apart. A meter that sends a reading's parts in turn (the UT61E+'s
+    /// AC+DC V, answering every 0.67 s) spaces each part's points wider than
+    /// the threshold while it never goes quiet at all. Kept down to the
+    /// minimum threshold so a threshold change is only a new question asked of
+    /// them; there are only as many as the meter had real silences.
+    silences: VecDeque<(Instant, Instant)>,
+    /// Timestamp of the newest frame of any kind: a point, a frame of
+    /// sub-values only, an overload or a word shown instead of a reading.
+    last_heard: Option<Instant>,
     /// A non-plottable sample arrived since the last plotted point, so the
     /// next one starts a new segment. Time-based gap detection can't see
     /// this: an over-range excursion shorter than the threshold leaves no
@@ -272,7 +319,6 @@ impl Graph {
             current_unit: String::new(),
             current_series: None,
             selected_series: None,
-            series_missing_frames: 0,
             hidden_overlays: HashSet::new(),
             series_options: Vec::new(),
             last_display_raw: None,
@@ -281,6 +327,8 @@ impl Graph {
             live: true,
             view_center: 0.0,
             gap_threshold_secs: GAP_MINIMUM_SECS,
+            silences: VecDeque::new(),
+            last_heard: None,
             pending_break: None,
             pending_data_loss: false,
             pending_break_since: None,
@@ -332,6 +380,12 @@ impl Graph {
     /// which `pop_front` alone never does.
     pub fn set_max_points(&mut self, n: usize) {
         self.max_points = n;
+        for o in &mut self.overlays {
+            if o.points.len() > n {
+                o.points.drain(..o.points.len() - n);
+                o.points.shrink_to_fit();
+            }
+        }
         if self.history.len() <= n {
             return;
         }
@@ -344,12 +398,16 @@ impl Graph {
         self.evict_to(n);
         self.history.shrink_to_fit();
         for o in &mut self.overlays {
-            o.values.shrink_to_fit();
+            o.points.shrink_to_fit();
         }
     }
 
-    /// Drop the oldest points until at most `keep` are left, taking each
-    /// overlay's matching value and the minimap's bucket with them.
+    /// Drop the oldest points until at most `keep` are left, taking the
+    /// overlay points no newer than each and the minimap's bucket with them.
+    ///
+    /// Only an evicted point takes overlay points with it: a point of a frame
+    /// that carried only sub-values, older than the whole history, stays
+    /// until the history moves past it.
     ///
     /// `push_sample` asks for one below the bound — it is about to add a
     /// point — while `set_max_points` asks for the bound itself, after
@@ -361,7 +419,16 @@ impl Graph {
                 break;
             };
             for o in &mut self.overlays {
-                o.values.pop_front();
+                while o.points.front().is_some_and(|p| p.time <= oldest.time) {
+                    o.points.pop_front();
+                }
+            }
+            while self
+                .silences
+                .front()
+                .is_some_and(|&(_, end)| end <= oldest.time)
+            {
+                self.silences.pop_front();
             }
             let first_seq = self.pushed_total.saturating_sub(self.history.len() as u64);
             if let Some(level) = &mut self.minimap_level {
@@ -396,7 +463,7 @@ impl Graph {
         display_raw: Option<&str>,
     ) {
         self.push_sample(PlotSample {
-            value,
+            value: Some(value),
             timestamp,
             mode,
             unit,
@@ -407,6 +474,11 @@ impl Graph {
     }
 
     /// Push a sample together with the sub-values drawn beside it.
+    ///
+    /// A sample without a value (a frame carrying only sub-values) records
+    /// its overlay points and restarts the trace on a change of mode, unit or
+    /// series like any other, but leaves the history, the minimap, an open
+    /// break and the spoken last reading alone.
     pub fn push_sample(&mut self, sample: PlotSample<'_>) {
         let (value, timestamp, mode, unit, display_raw) = (
             sample.value,
@@ -416,6 +488,9 @@ impl Graph {
             sample.display_raw,
         );
         let now = timestamp;
+        if value.is_none() && sample.overlays.is_empty() {
+            return;
+        }
 
         if self.origin.is_none() {
             self.origin = Some(now);
@@ -456,7 +531,75 @@ impl Graph {
             self.minimap_level = None;
             self.pushed_total = 0;
             self.last_display_raw = None;
+            self.silences.clear();
         }
+        self.heard(now);
+        self.register_overlays(sample.overlays);
+        if let Some(value) = value {
+            self.push_point(value, now, display_raw);
+        }
+        for o in &mut self.overlays {
+            if let Some(&(_, v)) = sample.overlays.iter().find(|(label, _)| *label == o.label) {
+                o.push(
+                    OverlayPoint {
+                        time: now,
+                        value: v,
+                    },
+                    self.max_points,
+                );
+            }
+        }
+    }
+
+    /// Note that a frame arrived at `t`, recording the silence before it if
+    /// there was one worth remembering (see `silences`).
+    fn heard(&mut self, t: Instant) {
+        if let Some(last) = self.last_heard
+            && t.checked_duration_since(last)
+                .is_some_and(|d| d.as_secs_f64() > GAP_MINIMUM_SECS)
+        {
+            // A stream that never grows the history is never evicted from;
+            // the bound keeps it from growing without limit all the same.
+            while self.silences.len() >= self.max_points.max(1) {
+                self.silences.pop_front();
+            }
+            self.silences.push_back((last, t));
+        }
+        self.last_heard = Some(t);
+    }
+
+    /// Whether no frame at all arrived for longer than the gap threshold
+    /// somewhere between the frames at `from` and `to`.
+    fn silent_between(&self, from: Instant, to: Instant) -> bool {
+        let first = self.silences.partition_point(|&(start, _)| start < from);
+        self.silences
+            .range(first..)
+            .take_while(|&&(_, end)| end <= to)
+            .any(|&(start, end)| {
+                end.checked_duration_since(start)
+                    .is_some_and(|d| d.as_secs_f64() > self.gap_threshold_secs)
+            })
+    }
+
+    /// Start a trace for each sub-value seen for the first time, up to
+    /// [`MAX_OVERLAYS`]. It begins at its first point: nothing is back-filled.
+    fn register_overlays(&mut self, overlays: &[(&str, Option<f64>)]) {
+        for &(label, _) in overlays {
+            if self.overlays.len() >= MAX_OVERLAYS {
+                break;
+            }
+            if self.overlays.iter().any(|o| o.label == label) {
+                continue;
+            }
+            self.overlays.push(OverlaySeries {
+                label: label.to_string(),
+                points: VecDeque::new(),
+            });
+        }
+    }
+
+    /// Append one point of the plotted series.
+    fn push_point(&mut self, value: f64, now: Instant, display_raw: Option<&str>) {
         // Track the most recent raw display string so the a11y plot
         // summary can speak it verbatim. We update it in-place to avoid
         // allocating per push when the underlying `Cow<'static, str>` is a
@@ -472,23 +615,6 @@ impl Graph {
 
         // One short of the bound: this sample is about to take the last slot.
         self.evict_to(self.max_points.saturating_sub(1));
-
-        // Register sub-values seen for the first time, back-filled with
-        // `None` for every point already in history — a COMP High/Low that
-        // appears mid-session must line up with the trace it accompanies, not
-        // start at index 0.
-        for &(label, _) in sample.overlays {
-            if self.overlays.len() >= MAX_OVERLAYS {
-                break;
-            }
-            if self.overlays.iter().any(|o| o.label == label) {
-                continue;
-            }
-            self.overlays.push(OverlaySeries {
-                label: label.to_string(),
-                values: vec![None; self.history.len()].into(),
-            });
-        }
 
         let band_from = self.pending_band_from.take();
         let last_overload = self.pending_break_since.take();
@@ -520,63 +646,77 @@ impl Graph {
             }
         }
         self.pushed_total += 1;
-        for o in &mut self.overlays {
-            let v = sample
-                .overlays
-                .iter()
-                .find(|(label, _)| *label == o.label)
-                .and_then(|(_, v)| *v);
-            o.values.push_back(v);
-        }
-        debug_assert!(
-            self.overlays
-                .iter()
-                .all(|o| o.values.len() == self.history.len()),
-            "overlay series out of lockstep with history"
-        );
     }
 
-    /// Offer the sub-values the meter is currently sending, as
-    /// (label, resolved unit), for the toolbar's series selector.
+    /// Offer the sub-values this frame carries, as (label, resolved unit),
+    /// for the toolbar's series selector. `now` is the frame's timestamp.
     ///
-    /// A selection whose label stops being offered for [`SERIES_DROP_FRAMES`]
-    /// consecutive frames falls back to the main reading — the meter left the
-    /// mode that produced it. Dropping it on the first frame instead would
-    /// throw the trace away every time one reply arrives short or with the
-    /// sub-value bit clear; a single such frame is skipped rather than
-    /// plotted, so nothing is lost while the count runs.
-    pub fn set_series_options(&mut self, options: &[(&str, &str)]) {
-        if let Some(sel) = &self.selected_series {
-            if options.iter().any(|(label, _)| *label == sel.as_str()) {
-                self.series_missing_frames = 0;
-            } else {
-                self.series_missing_frames += 1;
-                if self.series_missing_frames >= SERIES_DROP_FRAMES {
-                    self.selected_series = None;
-                    self.series_missing_frames = 0;
+    /// An option outlives frames that lack it: it is dropped only once
+    /// [`SERIES_DROP_FRAMES`] consecutive frames went without it *and* it has
+    /// not been seen for longer than the gap threshold. The frame count alone
+    /// would drop a sub-value the meter sends every other frame (the UT61E+'s
+    /// AC+DC V) or less; the time alone would drop every option across a
+    /// pause. A selection whose option is dropped falls back to the main
+    /// reading — the meter left the mode that produced it. Dropping it on the
+    /// first frame instead would throw the trace away every time one reply
+    /// arrives short or with the sub-value bit clear.
+    pub fn set_series_options(&mut self, options: &[(&str, &str)], now: Instant) {
+        for o in &mut self.series_options {
+            match options.iter().find(|(label, _)| *label == o.label) {
+                Some(&(_, unit)) => {
+                    o.missing_frames = 0;
+                    o.last_seen = now;
+                    if o.unit != unit {
+                        o.unit = unit.to_string();
+                    }
                 }
+                None => o.missing_frames += 1,
             }
         }
-        // Called on every sample; only pay for the strings when the offer
-        // actually changed.
-        let unchanged = self.series_options.len() == options.len()
-            && self
-                .series_options
-                .iter()
-                .zip(options)
-                .all(|((l, u), (nl, nu))| l.as_str() == *nl && u.as_str() == *nu);
-        if !unchanged {
-            self.series_options = options
-                .iter()
-                .map(|(l, u)| ((*l).to_string(), (*u).to_string()))
-                .collect();
+        let threshold = self.gap_threshold_secs;
+        self.series_options.retain(|o| {
+            let unseen = now
+                .checked_duration_since(o.last_seen)
+                .is_some_and(|d| d.as_secs_f64() > threshold);
+            o.missing_frames < SERIES_DROP_FRAMES || !unseen
+        });
+        for &(label, unit) in options {
+            if !self.series_options.iter().any(|o| o.label == label) {
+                self.series_options.push(SeriesOption {
+                    label: label.to_string(),
+                    unit: unit.to_string(),
+                    missing_frames: 0,
+                    last_seen: now,
+                });
+            }
+        }
+        if let Some(sel) = &self.selected_series
+            && !self.series_options.iter().any(|o| &o.label == sel)
+        {
+            self.selected_series = None;
         }
     }
 
     /// The sub-value label currently selected for plotting, or `None` for the
     /// meter's main reading.
+    #[cfg(test)]
     pub fn selected_series(&self) -> Option<&str> {
         self.selected_series.as_deref()
+    }
+
+    /// The selected sub-value with the unit it was last offered in, or
+    /// `None` while the main reading is plotted.
+    pub fn selected_series_offer(&self) -> Option<(&str, &str)> {
+        let sel = self.selected_series.as_deref()?;
+        self.series_options
+            .iter()
+            .find(|o| o.label == sel)
+            .map(|o| (o.label.as_str(), o.unit.as_str()))
+    }
+
+    /// Mode of the trace being drawn, or `None` before the first sample.
+    pub fn plotted_mode(&self) -> Option<&str> {
+        self.current_mode.as_deref()
     }
 
     /// Unit of the series being plotted. The stats panel captions its
@@ -596,16 +736,16 @@ impl Graph {
     /// the visible-range stats and integral would run across a value the
     /// meter never measured.
     ///
-    /// The frame's sub-values are dropped with it: overlays are indexed by
-    /// history position, and an over-range plotted series adds no position.
-    /// They resume at the next plotted point, split by this break like the
-    /// main trace.
+    /// Sub-value traces are not split by it: each point keeps its own time,
+    /// and an over-range sub-value breaks its own trace. The App records the
+    /// frame's sub-values after this, as a sample without a value.
     ///
     /// Arriving after a word shown instead of a reading, it starts the band
     /// here and leaves the word's stretch a gap (`gap_entries`). A word
     /// after that band is drawn into it: one interruption splits in two, not
     /// three.
     pub fn push_break(&mut self, timestamp: Instant) {
+        self.heard(timestamp);
         // Updated on every overload sample, not just the first: they close
         // the band and advance the live view for as long as the meter stays
         // over range.
@@ -632,6 +772,7 @@ impl Graph {
     /// last OL sample and leaves the rest a gap, through the same split a
     /// dropout mid-overload takes (`gap_entries`).
     pub fn push_no_reading(&mut self, timestamp: Instant) {
+        self.heard(timestamp);
         self.pending_heard_until = Some(timestamp);
         if self.pending_break == Some(GapKind::Overload) {
             self.pending_data_loss = true;
@@ -649,10 +790,23 @@ impl Graph {
     /// cadence), which by elapsed time alone is indistinguishable from an
     /// unplugged cable. The App receives the disconnect and drives pause, so
     /// it states what happened instead of leaving the graph to infer it.
+    ///
+    /// Every sub-value trace breaks here too, with a `None` at its own last
+    /// time: a loss says nothing about when the next point comes, and with no
+    /// timestamp of its own the call has no other time to put it at.
     pub fn push_data_loss(&mut self) {
         self.pending_data_loss = true;
         if self.pending_break.is_none() {
             self.pending_break = Some(GapKind::NoData);
+        }
+        for o in &mut self.overlays {
+            if let Some(&OverlayPoint {
+                time,
+                value: Some(_),
+            }) = o.points.back()
+            {
+                o.push(OverlayPoint { time, value: None }, self.max_points);
+            }
         }
     }
 
@@ -669,6 +823,8 @@ impl Graph {
         self.pending_break_since = None;
         self.pending_heard_until = None;
         self.pending_band_from = None;
+        self.silences.clear();
+        self.last_heard = None;
         self.current_mode = None;
         self.current_unit.clear();
         self.last_display_raw = None;
@@ -687,10 +843,35 @@ impl Graph {
         self.pushed_total = 0;
     }
 
-    /// When the oldest point still in the history was sampled, or `None`
-    /// while there is none: where what the graph holds begins.
+    /// When the oldest point still in the history or a sub-value trace was
+    /// sampled, or `None` while there is none: where what the graph holds
+    /// begins.
     pub fn first_point_time(&self) -> Option<Instant> {
-        self.history.front().map(|p| p.time)
+        self.history
+            .front()
+            .map(|p| p.time)
+            .into_iter()
+            .chain(
+                self.overlays
+                    .iter()
+                    .filter_map(|o| o.points.front().map(|p| p.time)),
+            )
+            .min()
+    }
+
+    /// When the newest point in the history or a sub-value trace was
+    /// sampled.
+    fn last_point_time(&self) -> Option<Instant> {
+        self.history
+            .back()
+            .map(|p| p.time)
+            .into_iter()
+            .chain(
+                self.overlays
+                    .iter()
+                    .filter_map(|o| o.points.back().map(|p| p.time)),
+            )
+            .max()
     }
 
     /// Cut the minimap's level to `width`, keeping the one already cut when
@@ -739,48 +920,57 @@ impl Graph {
 
     /// Return the half-open index range `[start, end)` of history points
     /// whose elapsed time falls within `[x_min, x_max]`.
-    ///
-    /// `self.history` is time-ordered (push_back only, pop_front on eviction),
-    /// so we can binary-search via `partition_point`. `VecDeque` doesn't expose
-    /// a single contiguous slice, but its two halves from `as_slices()` are
-    /// each sorted, so we search both and combine the results.
     fn visible_index_range(&self, x_min: f64, x_max: f64) -> (usize, usize) {
-        let (a, b) = self.history.as_slices();
+        self.time_index_range(&self.history, |p| p.time, x_min, x_max)
+    }
+
+    /// The half-open index range `[start, end)` of `points` whose elapsed
+    /// time falls within `[x_min, x_max]`.
+    ///
+    /// The history and every overlay are time-ordered (push_back only,
+    /// pop_front on eviction), so we can binary-search via `partition_point`.
+    /// `VecDeque` doesn't expose a single contiguous slice, but its two halves
+    /// from `as_slices()` are each sorted, so we search both and combine the
+    /// results.
+    fn time_index_range<T>(
+        &self,
+        points: &VecDeque<T>,
+        time: impl Fn(&T) -> Instant,
+        x_min: f64,
+        x_max: f64,
+    ) -> (usize, usize) {
+        let (a, b) = points.as_slices();
         let a_len = a.len();
 
         // Find first index with elapsed_secs >= x_min.
-        let start_a = a.partition_point(|p| self.elapsed_secs(p.time) < x_min);
+        let start_a = a.partition_point(|p| self.elapsed_secs(time(p)) < x_min);
         let start = if start_a < a_len {
             start_a
         } else {
-            a_len + b.partition_point(|p| self.elapsed_secs(p.time) < x_min)
+            a_len + b.partition_point(|p| self.elapsed_secs(time(p)) < x_min)
         };
 
         // Find first index with elapsed_secs > x_max (i.e. one past the last visible).
-        let end_a = a.partition_point(|p| self.elapsed_secs(p.time) <= x_max);
+        let end_a = a.partition_point(|p| self.elapsed_secs(time(p)) <= x_max);
         let end = if end_a < a_len {
             end_a
         } else {
-            a_len + b.partition_point(|p| self.elapsed_secs(p.time) <= x_max)
+            a_len + b.partition_point(|p| self.elapsed_secs(time(p)) <= x_max)
         };
 
         (start, end)
     }
 
     /// Why the line breaks between `prev` and `point`, or `None` if it
-    /// doesn't. A recorded break wins over the elapsed-time test: an overload
+    /// doesn't. A recorded break wins over the silence test: an overload
     /// that lasted less than the gap threshold is still an overload, not a
     /// dropout.
     fn breaks_before(&self, prev: Instant, point: &DataPoint) -> Option<GapKind> {
         if let Some(kind) = point.break_before {
             return Some(kind);
         }
-        let elapsed = point
-            .time
-            .checked_duration_since(prev)
-            .map(|d| d.as_secs_f64())
-            .unwrap_or(0.0);
-        (elapsed > self.gap_threshold_secs).then_some(GapKind::NoData)
+        self.silent_between(prev, point.time)
+            .then_some(GapKind::NoData)
     }
 
     /// The band(s) one interruption draws, between `prev` and `point`.
@@ -862,23 +1052,38 @@ impl Graph {
     /// main graph renders from.
     #[cfg(test)]
     fn overlay_segments(&self, label: &str) -> Vec<Vec<[f64; 2]>> {
-        let o = self
-            .overlays
-            .iter()
-            .find(|o| o.label == label)
-            .unwrap_or_else(|| panic!("no overlay {label:?}"));
-        self.build_overlay_segments_for_range(o, 0, self.history.len())
+        self.build_overlay_segments_for_range(self.overlay(label), f64::NEG_INFINITY, f64::INFINITY)
     }
 
     #[cfg(test)]
     fn overlay_values(&self, label: &str) -> Vec<Option<f64>> {
+        self.overlay(label).points.iter().map(|p| p.value).collect()
+    }
+
+    /// An overlay's points as (seconds from origin, value).
+    #[cfg(test)]
+    fn overlay_points(&self, label: &str) -> Vec<(f64, Option<f64>)> {
+        self.overlay(label)
+            .points
+            .iter()
+            .map(|p| (self.elapsed_secs(p.time), p.value))
+            .collect()
+    }
+
+    #[cfg(test)]
+    fn overlay(&self, label: &str) -> &OverlaySeries {
         self.overlays
             .iter()
             .find(|o| o.label == label)
             .unwrap_or_else(|| panic!("no overlay {label:?}"))
-            .values
+    }
+
+    /// Labels the series selector offers, in order.
+    #[cfg(test)]
+    fn series_option_labels(&self) -> Vec<&str> {
+        self.series_options
             .iter()
-            .copied()
+            .map(|o| o.label.as_str())
             .collect()
     }
 

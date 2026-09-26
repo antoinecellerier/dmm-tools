@@ -1237,7 +1237,7 @@ fn push_aux(
     overlays: &[(&str, Option<f64>)],
 ) {
     g.push_sample(PlotSample {
-        value,
+        value: Some(value),
         timestamp: t,
         mode: "Temp",
         unit: "\u{00B0}C",
@@ -1247,11 +1247,25 @@ fn push_aux(
     });
 }
 
-/// The overlay buffers are indexed by history position, so every push has
-/// to extend them by exactly one — including the pushes that arrive
-/// before the sub-value is first seen.
+/// A UT61E+ AC+DC V frame: the DC component as the plotted value, or
+/// `None` for a frame carrying only its AC component beside it.
+fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
+    let overlays = [("AC", ac)];
+    g.push_sample(PlotSample {
+        value: dc,
+        timestamp: t,
+        mode: "AC+DC V",
+        unit: "V",
+        display_raw: None,
+        series: None,
+        overlays: if ac.is_some() { &overlays } else { &[] },
+    });
+}
+
+/// Every point of a sub-value trace sits at the time of the frame that
+/// carried it.
 #[test]
-fn overlays_stay_in_lockstep_with_history() {
+fn overlay_points_keep_their_frame_times() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     for i in 0..3 {
@@ -1265,9 +1279,131 @@ fn overlays_stay_in_lockstep_with_history() {
     }
     assert_eq!(g.len(), 3);
     assert_eq!(
-        g.overlay_values("T2"),
-        vec![Some(30.0), Some(31.0), Some(32.0)]
+        g.overlay_points("T2"),
+        vec![(0.0, Some(30.0)), (1.0, Some(31.0)), (2.0, Some(32.0))]
     );
+}
+
+/// The UT61E+ in AC+DC V sends its DC and AC components in turn. Each has
+/// to be drawn at its own frame's time as a trace of its own, unbroken by
+/// the frames of the other.
+#[test]
+fn alternating_component_frames_draw_two_unbroken_traces() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_acdc(&mut g, at(0), Some(1.6112), None);
+    push_acdc(&mut g, at(667), None, Some(0.0));
+    push_acdc(&mut g, at(1334), Some(1.6111), None);
+    push_acdc(&mut g, at(2000), None, Some(0.0022));
+
+    assert_eq!(
+        g.len(),
+        2,
+        "only the DC frames are points of the plotted series"
+    );
+    assert_eq!(g.all_segments(), vec![vec![[0.0, 1.6112], [1.334, 1.6111]]]);
+    assert_eq!(
+        g.overlay_segments("AC"),
+        vec![vec![[0.667, 0.0], [2.0, 0.0022]]]
+    );
+    assert!(g.visible_gaps().is_empty());
+    assert_eq!(key_names(&g), vec!["Main", "AC"]);
+}
+
+/// A held meter sends one component only. The AC trace is drawn alone and
+/// keeps the live window moving, and the key names only what is drawn.
+#[test]
+fn a_stream_of_overlay_only_frames_is_drawn_and_followed() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..4 {
+        push_acdc(&mut g, t0 + Duration::from_secs(i), None, Some(0.0092));
+    }
+    assert!(g.is_empty());
+    assert_eq!(g.overlay_segments("AC").len(), 1);
+    assert_eq!(g.data_time_range(), (0.0, 3.0));
+    assert_eq!(g.first_point_time(), Some(t0));
+    assert_eq!(key_names(&g), vec!["AC"]);
+    assert_eq!(
+        g.y_min_max_padded(0.0, 3.0, true),
+        Some(pad_range(0.0092, 0.0092))
+    );
+}
+
+/// An overlay-only stream never grows the history, so the history's
+/// eviction never trims it: it has a bound of its own.
+#[test]
+fn an_overlay_only_stream_is_bounded() {
+    const KEEP: usize = 50;
+    let mut g = Graph::new();
+    g.set_max_points(KEEP);
+    let t0 = Instant::now();
+    for i in 0..KEEP as u64 * 3 {
+        push_acdc(
+            &mut g,
+            t0 + Duration::from_millis(i * 10),
+            None,
+            Some(i as f64),
+        );
+    }
+    let values = g.overlay_values("AC");
+    assert_eq!(values.len(), KEEP);
+    assert_eq!(values.first().copied().flatten(), Some(100.0));
+}
+
+/// A frame carrying only sub-values in a new mode is as much a restart as a
+/// point of the plotted series would be, and an overlay point that came
+/// before the first plotted one survives that one being pushed.
+#[test]
+fn an_overlay_only_frame_restarts_a_new_mode_and_keeps_its_point() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(5.0, t0, "DC V", "V", None);
+    push_acdc(&mut g, t0 + Duration::from_secs(1), None, Some(0.0));
+    assert!(g.is_empty(), "the DC V trace is gone");
+    assert_eq!(g.current_mode.as_deref(), Some("AC+DC V"));
+
+    push_acdc(&mut g, t0 + Duration::from_secs(2), Some(1.6), None);
+    assert_eq!(g.overlay_points("AC"), vec![(0.0, Some(0.0))]);
+    assert_eq!(g.first_point_time(), Some(t0 + Duration::from_secs(1)));
+}
+
+/// A frame carrying only sub-values leaves an open over-range band on the
+/// plotted series alone: the band closes at the next plotted point, not at
+/// the other component's frame.
+#[test]
+fn an_overlay_only_frame_leaves_an_open_break_alone() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_acdc(&mut g, at(0), Some(1.0), None);
+    g.push_break(at(500));
+    push_acdc(&mut g, at(700), None, Some(0.1));
+    assert_eq!(g.pending_break, Some(GapKind::Overload));
+    push_acdc(&mut g, at(900), Some(1.0), None);
+    assert_eq!(g.visible_gaps(), vec![(0.0, 0.9, GapKind::Overload)]);
+}
+
+/// An overlay breaks where it has no points for longer than the gap
+/// threshold, as the plotted series does.
+#[test]
+fn an_overlay_breaks_across_a_long_silence() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    push_acdc(&mut g, t0, None, Some(0.1));
+    push_acdc(&mut g, t0 + Duration::from_millis(500), None, Some(0.2));
+    push_acdc(&mut g, t0 + Duration::from_secs(5), None, Some(0.3));
+    assert_eq!(
+        g.overlay_segments("AC"),
+        vec![vec![[0.0, 0.1], [0.5, 0.2]], vec![[5.0, 0.3]]]
+    );
+}
+
+/// The Buffer size estimate charges this much per overlay point.
+#[test]
+fn an_overlay_point_fits_its_memory_estimate() {
+    assert!(std::mem::size_of::<OverlayPoint>() <= crate::settings::GRAPH_BYTES_PER_OVERLAY_POINT);
 }
 
 /// Eviction has to drop the overlay's oldest value with the point it
@@ -1294,11 +1430,11 @@ fn max_points_evicts_overlay_values_too() {
     assert_eq!(values.first().copied().flatten(), Some(100.5));
 }
 
-/// A COMP High/Low or a MIN/MAX sub-value can start mid-session. Without
-/// the back-fill its first value would land at index 0 and the whole
-/// trace would be drawn shifted back in time.
+/// A COMP High/Low or a MIN/MAX sub-value can start mid-session. Its trace
+/// begins at its first point, at that frame's time — not back at the start
+/// of the plotted series.
 #[test]
-fn a_late_overlay_is_back_filled_with_nothing() {
+fn a_late_overlay_starts_at_its_first_point() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     push_aux(&mut g, 20.0, t0, None, &[]);
@@ -1310,7 +1446,7 @@ fn a_late_overlay_is_back_filled_with_nothing() {
         None,
         &[("Max", Some(22.0))],
     );
-    assert_eq!(g.overlay_values("Max"), vec![None, None, Some(22.0)]);
+    assert_eq!(g.overlay_points("Max"), vec![(2.0, Some(22.0))]);
     assert_eq!(g.overlay_segments("Max"), vec![vec![[2.0, 22.0]]]);
 }
 
@@ -1344,24 +1480,39 @@ fn a_missing_overlay_value_splits_only_that_overlay() {
     assert!(g.visible_gaps().is_empty());
 }
 
-/// Overlays have to split wherever the main trace splits, or they would
-/// be drawn straight across an overload the meter reported.
+/// An over-range plotted series says nothing about a sub-value beside it:
+/// the plotted trace breaks, the sub-value's carries on. A lost link breaks
+/// both — nothing is known about either across it.
 #[test]
-fn a_break_in_the_plotted_series_splits_the_overlays() {
+fn only_a_lost_link_splits_the_overlays_with_the_plotted_series() {
     let mut g = Graph::new();
     let t0 = Instant::now();
-    push_aux(&mut g, 20.0, t0, None, &[("T2", Some(30.0))]);
-    g.push_break(t0 + Duration::from_millis(500));
-    push_aux(
-        &mut g,
-        22.0,
-        t0 + Duration::from_secs(1),
-        None,
-        &[("T2", Some(32.0))],
-    );
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_aux(&mut g, 20.0, at(0), None, &[("T2", Some(30.0))]);
+    g.push_break(at(300));
+    push_aux(&mut g, 22.0, at(600), None, &[("T2", Some(32.0))]);
+    assert_eq!(g.all_segments().len(), 2);
     assert_eq!(
         g.overlay_segments("T2"),
-        vec![vec![[0.0, 30.0]], vec![[1.0, 32.0]]]
+        vec![vec![[0.0, 30.0], [0.6, 32.0]]]
+    );
+
+    g.push_data_loss();
+    push_aux(&mut g, 23.0, at(900), None, &[("T2", Some(33.0))]);
+    assert_eq!(g.all_segments().len(), 3);
+    assert_eq!(
+        g.overlay_segments("T2"),
+        vec![vec![[0.0, 30.0], [0.6, 32.0]], vec![[0.9, 33.0]]]
+    );
+    g.push_data_loss();
+    g.push_data_loss();
+    assert_eq!(
+        g.overlay_values("T2")
+            .iter()
+            .filter(|v| v.is_none())
+            .count(),
+        2,
+        "one break per loss, however often it is reported"
     );
 }
 
@@ -1410,20 +1561,24 @@ fn a_steady_series_keeps_its_history() {
 #[test]
 fn a_selection_is_dropped_once_its_label_stays_unoffered() {
     let mut g = Graph::new();
-    g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")]);
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")], at(0));
     g.selected_series = Some("T2".to_string());
 
-    g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")]);
+    g.set_series_options(&[("T1", "\u{00B0}C"), ("T2", "\u{00B0}C")], at(100));
     assert_eq!(g.selected_series(), Some("T2"));
 
     // A short or bit-clear frame is not a mode change: the selection has
-    // to outlast one on its own.
-    for i in 1..SERIES_DROP_FRAMES {
-        g.set_series_options(&[("Frequency", "Hz")]);
+    // to outlast one on its own, and a run of them shorter than the gap
+    // threshold too.
+    for i in 1..=SERIES_DROP_FRAMES as u64 {
+        g.set_series_options(&[("Frequency", "Hz")], at(100 + i * 100));
         assert_eq!(g.selected_series(), Some("T2"), "dropped after {i} frames");
     }
-    g.set_series_options(&[("Frequency", "Hz")]);
+    g.set_series_options(&[("Frequency", "Hz")], at(1200));
     assert_eq!(g.selected_series(), None);
+    assert_eq!(g.series_option_labels(), vec!["Frequency"]);
 }
 
 /// The count is of *consecutive* frames: one frame that offers the label
@@ -1431,22 +1586,42 @@ fn a_selection_is_dropped_once_its_label_stays_unoffered() {
 #[test]
 fn a_reoffered_label_restarts_the_drop_count() {
     let mut g = Graph::new();
-    g.set_series_options(&[("T2", "\u{00B0}C")]);
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    g.set_series_options(&[("T2", "\u{00B0}C")], at(0));
     g.selected_series = Some("T2".to_string());
 
-    for _ in 1..SERIES_DROP_FRAMES {
-        g.set_series_options(&[("Frequency", "Hz")]);
+    for i in 1..SERIES_DROP_FRAMES as u64 {
+        g.set_series_options(&[("Frequency", "Hz")], at(i * 1000));
     }
-    g.set_series_options(&[("T2", "\u{00B0}C")]);
+    g.set_series_options(&[("T2", "\u{00B0}C")], at(3000));
     assert_eq!(g.selected_series(), Some("T2"));
 
     // Back to a full run: the near-miss above must not count towards it.
-    for i in 1..SERIES_DROP_FRAMES {
-        g.set_series_options(&[("Frequency", "Hz")]);
+    for i in 1..SERIES_DROP_FRAMES as u64 {
+        g.set_series_options(&[("Frequency", "Hz")], at(3000 + i * 1000));
         assert_eq!(g.selected_series(), Some("T2"), "dropped after {i} frames");
     }
-    g.set_series_options(&[("Frequency", "Hz")]);
+    g.set_series_options(&[("Frequency", "Hz")], at(6000));
     assert_eq!(g.selected_series(), None);
+}
+
+/// The UT61E+ in AC+DC V sends its AC component every other frame, and
+/// slower polling can put several DC frames in a row between two. The
+/// option — and a selection of it — has to outlast those frames, or the
+/// chips would come and go and the selection would be dropped.
+#[test]
+fn an_option_sent_every_other_frame_or_less_stays_offered() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    g.set_series_options(&[("AC", "V")], at(0));
+    g.selected_series = Some("AC".to_string());
+    for i in 1..=6 {
+        g.set_series_options(&[], at(i * 150));
+        assert_eq!(g.series_option_labels(), vec!["AC"], "frame {i}");
+    }
+    assert_eq!(g.selected_series_offer(), Some(("AC", "V")));
 }
 
 /// A single-display meter keeps the two-row toolbar: the series row only
@@ -1459,7 +1634,7 @@ fn the_series_row_appears_only_once_there_is_something_in_it() {
     assert!(!g.has_series_row());
 
     // A selectable sub-value alone is enough...
-    g.set_series_options(&[("Frequency", "Hz")]);
+    g.set_series_options(&[("Frequency", "Hz")], t0);
     assert!(g.has_series_row());
 
     // ...and so is a same-unit trace with nothing to select.
@@ -1551,8 +1726,8 @@ fn chip_labels_name_their_group() {
 
 /// Names in the key, in the order they are painted.
 fn key_names(g: &Graph) -> Vec<String> {
-    let drawn = g.visible_overlay_traces(0, g.len());
-    g.key_entries(&drawn)
+    let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
+    g.key_entries(&drawn, !g.all_segments().is_empty())
         .into_iter()
         .map(|(name, _)| name)
         .collect()
@@ -1560,7 +1735,7 @@ fn key_names(g: &Graph) -> Vec<String> {
 
 /// Labels of the traces that are actually drawn.
 fn drawn_overlay_labels(g: &Graph) -> Vec<String> {
-    g.visible_overlay_traces(0, g.len())
+    g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY)
         .into_iter()
         .map(|(_, label, _)| label)
         .collect()
@@ -1601,9 +1776,9 @@ fn the_key_names_the_plotted_series_then_its_overlays() {
     let g = graph_with_two_overlays();
     assert_eq!(key_names(&g), vec!["Main", "T2", "T3"]);
 
-    let drawn = g.visible_overlay_traces(0, g.len());
+    let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
     let styles: Vec<KeyStyle> = g
-        .key_entries(&drawn)
+        .key_entries(&drawn, true)
         .into_iter()
         .map(|(_, style)| style)
         .collect();
@@ -1727,7 +1902,7 @@ fn a_label_that_vanishes_and_returns_is_still_hidden() {
 #[test]
 fn clear_drops_the_overlays_but_keeps_the_selection() {
     let mut g = Graph::new();
-    g.set_series_options(&[("T2", "\u{00B0}C")]);
+    g.set_series_options(&[("T2", "\u{00B0}C")], Instant::now());
     g.selected_series = Some("T2".to_string());
     push_aux(
         &mut g,
@@ -2333,11 +2508,10 @@ fn eviction_trims_buckets_and_gaps_exactly() {
 }
 
 /// Lowering the Buffer size setting has to take the graph down to it at once,
-/// and take everything that indexes the history with it — the overlay traces
-/// and the minimap's buckets both, or the strip would draw points the plot no
-/// longer has.
+/// and the overlay traces and the minimap's buckets with it, or the strip
+/// would draw points the plot no longer has.
 #[test]
-fn graph_set_max_points_evicts_down_and_keeps_overlays_in_lockstep() {
+fn graph_set_max_points_evicts_down_and_takes_the_overlays_with_it() {
     const WIDTH: f64 = 0.05;
     let mut g = Graph::new();
     let t0 = Instant::now();

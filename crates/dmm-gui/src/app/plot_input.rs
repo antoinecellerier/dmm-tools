@@ -5,18 +5,27 @@ use dmm_lib::measurement::{MeasuredValue, Measurement};
 
 use crate::graph::MAX_OVERLAYS;
 
+/// What a frame holds for the plotted series.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Plotted {
+    /// A value to plot.
+    Point(f64),
+    /// Over range: the trace breaks through an over-range band.
+    OverRange,
+    /// The meter shows a word instead of a reading
+    /// ([`MeasuredValue::NoReading`]): the trace breaks through a gap.
+    NoReading,
+    /// Nothing for the plotted series in this frame, only the sub-values
+    /// beside it: the trace is left as it is.
+    Absent,
+}
+
 /// One measurement reduced to what the graph should plot.
 ///
 /// The graph never sees `dmm_lib` measurement types; this is where the
 /// selected series and its same-unit companions are picked out.
 pub(super) struct PlotInput<'a> {
-    /// The plotted series' value, or `None` when it is over range or the
-    /// meter shows a word instead of a reading.
-    pub value: Option<f64>,
-    /// `value` is `None` because the plotted series shows a word instead of
-    /// a reading ([`MeasuredValue::NoReading`]), not because it is over
-    /// range: the graph draws that stretch as a gap, not an over-range band.
-    pub no_reading: bool,
+    pub plotted: Plotted,
     /// Unit of the plotted series — the meter's, or the sub-value's own.
     pub unit: &'a str,
     pub display_raw: Option<&'a str>,
@@ -26,25 +35,34 @@ pub(super) struct PlotInput<'a> {
     pub overlays: Vec<(&'a str, Option<f64>)>,
 }
 
-/// What a measured value contributes to a plot: `Some(Some(v))` for a
-/// reading, `Some(None)` for an over-range one or a word the meter shows
-/// instead of a reading (a break in the trace, but still a measurement),
-/// `None` for something with no place on a value axis or no value at all.
-fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
+/// What a measured value contributes to the plotted series, or `None` for
+/// something with no place on a value axis.
+fn plotted_value(v: &MeasuredValue) -> Option<Plotted> {
     match v {
-        MeasuredValue::Normal(v) => Some(Some(*v)),
-        MeasuredValue::Overload | MeasuredValue::NoReading(_) => Some(None),
+        MeasuredValue::Normal(v) => Some(Plotted::Point(*v)),
+        MeasuredValue::Overload => Some(Plotted::OverRange),
+        MeasuredValue::NoReading(_) => Some(Plotted::NoReading),
+        MeasuredValue::Absent => Some(Plotted::Absent),
         // NCV is a bar-graph level, not a quantity — plotting it against a
         // volt axis would be meaningless.
         MeasuredValue::NcvLevel(_) => None,
-        // Nothing in this frame for that series: the frame is skipped, and
-        // the trace carries on from its neighbours.
-        MeasuredValue::Absent => None,
+    }
+}
+
+/// What a measured value contributes to a trace drawn beside the plotted
+/// series: `Some(Some(v))` for a reading, `Some(None)` for an over-range one
+/// or a word the meter shows instead of a reading (a break in that trace),
+/// `None` for something with no place on a value axis or no value at all.
+fn overlay_value(v: &MeasuredValue) -> Option<Option<f64>> {
+    match v {
+        MeasuredValue::Normal(v) => Some(Some(*v)),
+        MeasuredValue::Overload | MeasuredValue::NoReading(_) => Some(None),
+        MeasuredValue::NcvLevel(_) | MeasuredValue::Absent => None,
     }
 }
 
 /// Decide what the graph plots for this measurement, given the toolbar's
-/// series selection.
+/// series selection as (label, unit) and the mode the graph is plotting.
 ///
 /// Only sub-values sharing the plotted series' unit become overlays. A
 /// frequency in Hz beside an AC voltage measures something else entirely, and
@@ -52,36 +70,37 @@ fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
 /// it stays reachable through the selector instead.
 pub(super) fn resolve_plot_input<'a>(
     m: &'a Measurement,
-    selected: Option<&str>,
+    selected: Option<(&'a str, &'a str)>,
+    plotted_mode: Option<&str>,
 ) -> Option<PlotInput<'a>> {
     let main_unit: &str = &m.unit;
-    // A frame that omits the selected sub-value is skipped, not plotted:
-    // falling back to the main reading would hand `push_sample` a `series` of
-    // `None`, which it reads as a change of plotted series and answers by
-    // clearing the history, the cursors and the pinned Y range. A short or
-    // bit-clear frame must not do that. Gap detection is time-based, so
-    // dropping one frame at the normal cadence leaves no visible hole, and
-    // once the graph has given the selection up for good (`selected` is
-    // `None`) the main reading is plotted and that restart is the intended
-    // "the meter left the mode" behaviour.
-    let plotted = match selected {
-        Some(sel) => Some(m.aux_values.iter().find(|a| a.label.as_ref() == sel)?),
-        None => None,
-    };
-
-    let plotted_value = plotted.map_or(&m.value, |aux| &aux.value);
-    let no_reading = matches!(plotted_value, MeasuredValue::NoReading(_));
-    let (value, unit, display_raw, series) = match plotted {
-        Some(aux) => (
-            plottable_value(&aux.value)?,
-            aux.unit_or(main_unit),
-            aux.display_raw.as_deref(),
-            // Borrowed from the aux rather than from `selected`, so the
-            // caller's borrow of the graph ends at the call.
-            Some(aux.label.as_ref()),
-        ),
+    let (plotted, unit, display_raw, series) = match selected {
+        Some((sel, sel_unit)) => match m.aux_values.iter().find(|a| a.label.as_ref() == sel) {
+            Some(aux) => (
+                plotted_value(&aux.value)?,
+                aux.unit_or(main_unit),
+                aux.display_raw.as_deref(),
+                // Borrowed from the aux, the one borrow that is surely
+                // `'a`; `sel` is the same label.
+                Some(aux.label.as_ref()),
+            ),
+            // A frame of the plotted mode without the selected sub-value
+            // still has what is drawn beside it: a UT61E+ DC frame while its
+            // AC component is plotted, or a UT181A frame short of T2. Nothing
+            // for the plotted series, then, and the trace is left alone.
+            None if plotted_mode == Some(m.mode.as_ref()) => {
+                (Plotted::Absent, sel_unit, None, Some(sel))
+            }
+            // Another mode's frame is skipped rather than plotted: plotting
+            // the main reading would hand `push_sample` a `series` of `None`,
+            // which it reads as a change of plotted series and answers by
+            // clearing the history, the cursors and the pinned Y range — and
+            // then again once the graph gives the selection up for good, a
+            // moment later, and the main reading is plotted.
+            None => return None,
+        },
         None => (
-            plottable_value(&m.value)?,
+            plotted_value(&m.value)?,
             main_unit,
             m.display_raw.as_deref(),
             None,
@@ -96,7 +115,7 @@ pub(super) fn resolve_plot_input<'a>(
         if Some(aux.label.as_ref()) == series || aux.unit_or(main_unit) != unit {
             continue;
         }
-        if let Some(v) = plottable_value(&aux.value) {
+        if let Some(v) = overlay_value(&aux.value) {
             overlays.push((aux.label.as_ref(), v));
         }
     }
@@ -106,14 +125,16 @@ pub(super) fn resolve_plot_input<'a>(
     if series.is_some()
         && main_unit == unit
         && overlays.len() < MAX_OVERLAYS
-        && let Some(v) = plottable_value(&m.value)
+        && let Some(v) = overlay_value(&m.value)
     {
         overlays.push(("Main", v));
     }
 
+    if plotted == Plotted::Absent && overlays.is_empty() {
+        return None;
+    }
     Some(PlotInput {
-        value,
-        no_reading,
+        plotted,
         unit,
         display_raw,
         series,
@@ -139,6 +160,12 @@ mod tests {
         }
     }
 
+    /// Resolve with `sel` offered in the frame's own unit, the graph plotting
+    /// the frame's mode.
+    fn resolve<'a>(m: &'a Measurement, sel: Option<&'a str>) -> Option<PlotInput<'a>> {
+        resolve_plot_input(m, sel.map(|s| (s, m.unit.as_ref())), Some(m.mode.as_ref()))
+    }
+
     fn meter(value: f64, unit: &'static str, aux_values: Vec<AuxValue>) -> Measurement {
         let mut m =
             Measurement::test_fixture(MeasuredValue::Normal(value), unit, StatusFlags::default());
@@ -160,8 +187,8 @@ mod tests {
                 aux("Max", "VAC", MeasuredValue::Normal(240.5)),
             ],
         );
-        let plot = resolve_plot_input(&m, None).expect("main reading is plottable");
-        assert_eq!(plot.value, Some(239.22));
+        let plot = resolve(&m, None).expect("main reading is plottable");
+        assert_eq!(plot.plotted, Plotted::Point(239.22));
         assert_eq!(plot.unit, "VAC");
         assert_eq!(plot.series, None);
         assert_eq!(plot.overlays, vec![("Max", Some(240.5))]);
@@ -177,7 +204,7 @@ mod tests {
             "V",
             vec![aux("Max", "", MeasuredValue::Normal(5.0123))],
         );
-        let plot = resolve_plot_input(&m, None).expect("plottable");
+        let plot = resolve(&m, None).expect("plottable");
         assert_eq!(plot.overlays, vec![("Max", Some(5.0123))]);
     }
 
@@ -193,8 +220,8 @@ mod tests {
                 aux("Period", "ms", MeasuredValue::Normal(20.0)),
             ],
         );
-        let plot = resolve_plot_input(&m, Some("Frequency")).expect("plottable");
-        assert_eq!(plot.value, Some(50.01));
+        let plot = resolve(&m, Some("Frequency")).expect("plottable");
+        assert_eq!(plot.plotted, Plotted::Point(50.01));
         assert_eq!(plot.unit, "Hz");
         assert_eq!(plot.series, Some("Frequency"));
         assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
@@ -209,8 +236,8 @@ mod tests {
             "\u{00B0}C",
             vec![aux("T2", "\u{00B0}C", MeasuredValue::Normal(24.1))],
         );
-        let plot = resolve_plot_input(&m, Some("T2")).expect("plottable");
-        assert_eq!(plot.value, Some(24.1));
+        let plot = resolve(&m, Some("T2")).expect("plottable");
+        assert_eq!(plot.plotted, Plotted::Point(24.1));
         assert_eq!(plot.series, Some("T2"));
         assert_eq!(plot.overlays, vec![("Main", Some(23.5))]);
     }
@@ -231,7 +258,7 @@ mod tests {
             "fixture overfills the cap"
         );
         let m = meter(4.9, "V", aux_values);
-        let plot = resolve_plot_input(&m, None).expect("plottable");
+        let plot = resolve(&m, None).expect("plottable");
         assert_eq!(plot.overlays.len(), MAX_OVERLAYS, "got {:?}", plot.overlays);
     }
 
@@ -251,7 +278,7 @@ mod tests {
             "fixture must fill the cap without the main reading"
         );
         let m = meter(4.9, "V", aux_values);
-        let plot = resolve_plot_input(&m, Some("Sel")).expect("plottable");
+        let plot = resolve(&m, Some("Sel")).expect("plottable");
         assert_eq!(plot.series, Some("Sel"));
         assert_eq!(plot.overlays.len(), MAX_OVERLAYS, "got {:?}", plot.overlays);
         assert!(
@@ -261,13 +288,64 @@ mod tests {
         );
     }
 
-    /// A frame that omits the selected sub-value is skipped, not plotted as
-    /// the main reading: the graph reads a change of series as a restart and
-    /// would throw the trace away over one short frame.
+    /// A frame of the plotted mode that omits the selected sub-value is not
+    /// plotted as the main reading — the graph reads a change of series as a
+    /// restart and would throw the trace away over one short frame — but its
+    /// main reading still feeds the "Main" trace beside the plotted one: a
+    /// UT61E+ DC frame while its AC component is plotted.
     #[test]
-    fn a_frame_without_the_selected_sub_value_plots_nothing() {
+    fn a_frame_without_the_selected_sub_value_feeds_only_main() {
+        let m = meter(1.6112, "V", vec![]);
+        let plot = resolve(&m, Some("AC")).expect("Main is still drawn");
+        assert_eq!(plot.plotted, Plotted::Absent);
+        assert_eq!(plot.series, Some("AC"));
+        assert_eq!(plot.unit, "V");
+        assert_eq!(plot.overlays, vec![("Main", Some(1.6112))]);
+
+        // With nothing in the plotted unit beside it, there is nothing to do.
+        let plot = resolve_plot_input(&m, Some(("Frequency", "Hz")), Some("DC V"));
+        assert!(plot.is_none());
+    }
+
+    /// Another mode's frame without the selection is skipped: the graph gives
+    /// the selection up a moment later and restarts on the main reading then,
+    /// once, rather than on this frame and again then.
+    #[test]
+    fn another_modes_frame_without_the_selected_sub_value_plots_nothing() {
         let m = meter(4.9, "V", vec![]);
-        assert!(resolve_plot_input(&m, Some("T2")).is_none());
+        assert!(resolve_plot_input(&m, Some(("T2", "V")), Some("Temp")).is_none());
+    }
+
+    /// An AC+DC V frame carrying only the AC component: nothing for the main
+    /// reading, the component beside it — and a transform's `Raw`, which has
+    /// nothing either, not drawn at all.
+    #[test]
+    fn a_frame_without_a_main_reading_plots_only_its_overlays() {
+        let mut m = meter(0.0, "V", vec![aux("AC", "", MeasuredValue::Normal(0.0123))]);
+        m.value = MeasuredValue::Absent;
+        let plot = resolve(&m, None).expect("the AC trace is drawn");
+        assert_eq!(plot.plotted, Plotted::Absent);
+        assert_eq!(plot.series, None);
+        assert_eq!(plot.overlays, vec![("AC", Some(0.0123))]);
+
+        m.aux_values
+            .push(aux(RAW_LABEL, "V", MeasuredValue::Absent));
+        let plot = resolve(&m, None).expect("the AC trace is drawn");
+        assert_eq!(plot.overlays, vec![("AC", Some(0.0123))]);
+
+        m.aux_values.clear();
+        assert!(resolve(&m, None).is_none(), "nothing to draw");
+    }
+
+    /// With the AC component plotted, its frame is a point like any other.
+    #[test]
+    fn a_selected_component_of_a_frame_without_a_main_reading_is_plotted() {
+        let mut m = meter(0.0, "V", vec![aux("AC", "", MeasuredValue::Normal(0.0123))]);
+        m.value = MeasuredValue::Absent;
+        let plot = resolve(&m, Some("AC")).expect("plottable");
+        assert_eq!(plot.plotted, Plotted::Point(0.0123));
+        assert_eq!(plot.series, Some("AC"));
+        assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
     }
 
     /// Once the graph has given the selection up, the main reading is plotted
@@ -276,8 +354,8 @@ mod tests {
     #[test]
     fn a_dropped_selection_plots_the_main_reading() {
         let m = meter(4.9, "V", vec![]);
-        let plot = resolve_plot_input(&m, None).expect("plottable");
-        assert_eq!(plot.value, Some(4.9));
+        let plot = resolve(&m, None).expect("plottable");
+        assert_eq!(plot.plotted, Plotted::Point(4.9));
         assert_eq!(plot.series, None);
     }
 
@@ -286,7 +364,7 @@ mod tests {
     #[test]
     fn an_overloaded_sub_value_overlays_as_a_break() {
         let m = meter(4.9871, "V", vec![aux("Max", "", MeasuredValue::Overload)]);
-        let plot = resolve_plot_input(&m, None).expect("plottable");
+        let plot = resolve(&m, None).expect("plottable");
         assert_eq!(plot.overlays, vec![("Max", None)]);
     }
 
@@ -295,8 +373,8 @@ mod tests {
     #[test]
     fn an_overloaded_selected_series_has_no_value() {
         let m = meter(4.9871, "V", vec![aux("Max", "", MeasuredValue::Overload)]);
-        let plot = resolve_plot_input(&m, Some("Max")).expect("still a series");
-        assert_eq!(plot.value, None);
+        let plot = resolve(&m, Some("Max")).expect("still a series");
+        assert_eq!(plot.plotted, Plotted::OverRange);
         assert_eq!(plot.series, Some("Max"));
     }
 
@@ -309,9 +387,9 @@ mod tests {
         Transform::linear(0.1, 0.0, None).apply(&mut m);
         assert_eq!(m.unit, "V");
 
-        let plot = resolve_plot_input(&m, Some(RAW_LABEL)).expect("plottable");
+        let plot = resolve(&m, Some(RAW_LABEL)).expect("plottable");
         assert_eq!(plot.series, Some(RAW_LABEL));
-        assert_eq!(plot.value, Some(5.678));
+        assert_eq!(plot.plotted, Plotted::Point(5.678));
         assert_eq!(plot.overlays.len(), 1, "got {:?}", plot.overlays);
         assert_eq!(plot.overlays[0].0, "Main");
         let main = plot.overlays[0].1.expect("the scaled reading is plottable");
@@ -326,14 +404,14 @@ mod tests {
         Transform::linear(100.0, 0.0, Some("A".to_string())).apply(&mut m);
         assert_eq!(m.unit, "A");
 
-        let plot = resolve_plot_input(&m, None).expect("plottable");
+        let plot = resolve(&m, None).expect("plottable");
         assert_eq!(plot.unit, "A");
         assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
 
-        let raw = resolve_plot_input(&m, Some(RAW_LABEL)).expect("Raw is a series");
+        let raw = resolve(&m, Some(RAW_LABEL)).expect("Raw is a series");
         assert_eq!(raw.series, Some(RAW_LABEL));
         assert_eq!(raw.unit, "mV");
-        assert_eq!(raw.value, Some(123.4));
+        assert_eq!(raw.plotted, Plotted::Point(123.4));
         assert!(raw.overlays.is_empty(), "got {:?}", raw.overlays);
     }
 
@@ -344,15 +422,18 @@ mod tests {
         let mut m =
             Measurement::test_fixture(MeasuredValue::NoReading("Auto"), "", StatusFlags::default());
         m.mode = "Auto".into();
-        let plot = resolve_plot_input(&m, None).expect("a break is still plotted");
-        assert_eq!(plot.value, None);
-        assert!(plot.no_reading, "drawn as a gap, not an over-range band");
+        let plot = resolve(&m, None).expect("a break is still plotted");
+        assert_eq!(
+            plot.plotted,
+            Plotted::NoReading,
+            "drawn as a gap, not an over-range band"
+        );
     }
 
     /// NCV is a bar-graph level, not a quantity on a value axis.
     #[test]
     fn an_ncv_reading_is_not_plotted() {
         let m = Measurement::test_fixture(MeasuredValue::NcvLevel(3), "", StatusFlags::default());
-        assert!(resolve_plot_input(&m, None).is_none());
+        assert!(resolve(&m, None).is_none());
     }
 }

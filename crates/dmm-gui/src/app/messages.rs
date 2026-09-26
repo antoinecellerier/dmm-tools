@@ -3,7 +3,7 @@
 //! nothing to show into the help text the reading column renders.
 
 use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
-use dmm_lib::measurement::Measurement;
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{MeterKeys, registry};
 use eframe::egui::{self, RichText, Ui};
@@ -16,7 +16,7 @@ use super::connection::{
     self, DmmMessage, RemoteCommand, ThreadContext, ThreadControl, handle_thread_panic,
     run_device_thread,
 };
-use super::plot_input::{PlotInput, resolve_plot_input};
+use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
 use super::{App, ConnectionState, named_device};
 use crate::graph::PlotSample;
 use crate::recording::BufferRole;
@@ -809,43 +809,65 @@ impl App {
                     // reading again, not the one after it. Until then a frame
                     // missing the selected sub-value resolves to nothing and
                     // is skipped, leaving the trace intact.
+                    // A sub-value frame without the main reading (the UT61E+'s
+                    // AC+DC V AC component) carries nothing to offer for it.
                     let options: Vec<(&str, &str)> = m
                         .aux_values
                         .iter()
+                        .filter(|aux| !matches!(aux.value, MeasuredValue::Absent))
                         .map(|aux| (aux.label.as_ref(), aux.unit_or(&m.unit)))
                         .collect();
-                    self.graph.set_series_options(&options);
-                    match resolve_plot_input(&m, self.graph.selected_series()) {
-                        Some(PlotInput {
-                            value: Some(v),
-                            unit,
-                            display_raw,
-                            series,
-                            overlays,
-                            ..
-                        }) => self.graph.push_sample(PlotSample {
-                            value: v,
+                    self.graph.set_series_options(&options, m.timestamp);
+                    // Owned, so the plot input doesn't hold the graph borrowed
+                    // while it is pushed into. Only while a sub-value is
+                    // selected — the common case allocates nothing.
+                    let selected = self
+                        .graph
+                        .selected_series_offer()
+                        .map(|(label, unit)| (label.to_string(), unit.to_string()));
+                    let plotted_mode = selected
+                        .as_ref()
+                        .and_then(|_| self.graph.plotted_mode().map(str::to_string));
+                    let input = resolve_plot_input(
+                        &m,
+                        selected.as_ref().map(|(l, u)| (l.as_str(), u.as_str())),
+                        plotted_mode.as_deref(),
+                    );
+                    if let Some(PlotInput {
+                        plotted,
+                        unit,
+                        display_raw,
+                        series,
+                        overlays,
+                    }) = input
+                    {
+                        let sample = |value| PlotSample {
+                            value,
                             timestamp: m.timestamp,
                             mode: &m.mode,
                             unit,
                             display_raw,
                             series,
                             overlays: &overlays,
-                        }),
-                        // A word instead of a reading ("Auto" with the probes
-                        // lifted): a break too, but not an over-range one.
-                        // It never reaches `push_sample`, so its mode and unit
-                        // cannot restart the trace either.
-                        Some(PlotInput {
-                            value: None,
-                            no_reading: true,
-                            ..
-                        }) => self.graph.push_no_reading(m.timestamp),
-                        // The plotted series is over range: no point, but the
-                        // trace has to break so it isn't drawn straight
-                        // through the excursion.
-                        Some(PlotInput { value: None, .. }) => self.graph.push_break(m.timestamp),
-                        None => {}
+                        };
+                        match plotted {
+                            Plotted::Point(v) => self.graph.push_sample(sample(Some(v))),
+                            // A word instead of a reading ("Auto" with the
+                            // probes lifted): a break too, but not an
+                            // over-range one. It never reaches `push_sample`,
+                            // so its mode and unit cannot restart the trace
+                            // either.
+                            Plotted::NoReading => self.graph.push_no_reading(m.timestamp),
+                            // The plotted series is over range: no point, but
+                            // the trace has to break so it isn't drawn
+                            // straight through the excursion. The sub-values
+                            // beside it are not over range and keep theirs.
+                            Plotted::OverRange => {
+                                self.graph.push_break(m.timestamp);
+                                self.graph.push_sample(sample(None));
+                            }
+                            Plotted::Absent => self.graph.push_sample(sample(None)),
+                        }
                     }
 
                     // `m` has already been through the transform, so the
@@ -1896,6 +1918,38 @@ mod tests {
         assert_eq!(app.graph.first_point_time(), first);
         assert_eq!(app.session.stats.count, 2);
         assert_eq!(app.recording.samples[1].measurement.value_export_str(), "");
+    }
+
+    /// A UT61E+ in AC+DC V sends its DC and AC components in turn, the AC
+    /// frames without a main reading. Every frame is kept, the AC component
+    /// becomes a trace beside the DC one, and the statistics follow DC alone.
+    #[test]
+    fn alternating_component_frames_keep_both_and_plot_ac_beside_dc() {
+        let mut app = connected_app();
+        let t0 = Instant::now();
+        for i in 0..4u64 {
+            let at = t0 + std::time::Duration::from_millis(i * 667);
+            let m = if i % 2 == 0 {
+                reading("AC+DC V", MeasuredValue::Normal(1.6112), at)
+            } else {
+                let mut ac = reading("AC+DC V", MeasuredValue::Absent, at);
+                ac.display_raw = None;
+                ac.aux_values = vec![dmm_lib::measurement::AuxValue {
+                    label: "AC".into(),
+                    value: MeasuredValue::Normal(0.0),
+                    unit: "".into(),
+                    display_raw: Some(" 0.0000".to_string()),
+                    elapsed_secs: None,
+                }];
+                ac
+            };
+            deliver(&mut app, DmmMessage::Measurement(m));
+        }
+        assert_eq!(modes(&app), ["AC+DC V"; 4]);
+        assert_eq!(app.graph.overlays_len(), 1, "AC drawn beside DC");
+        assert_eq!(app.graph.first_point_time(), Some(t0));
+        assert_eq!(app.session.stats.count, 2);
+        assert_eq!(app.session.stats.min, Some(1.6112));
     }
 
     /// NCV readings are never plotted: an empty graph cuts nothing.

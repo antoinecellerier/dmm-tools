@@ -2,6 +2,7 @@
 //! the min/max envelope, reference-line crossings and cursor readouts.
 
 use std::collections::VecDeque;
+use std::time::Instant;
 
 use dmm_lib::stats::RunningStats;
 
@@ -191,8 +192,8 @@ impl Graph {
 
     /// Compute the time-integral between two cursor positions using the trapezoidal
     /// rule. Returns the raw integral in unit·seconds, or `None` if fewer than 2
-    /// data points exist in the range. Skips intervals exceeding
-    /// `gap_threshold_secs`, and intervals interrupted by an overload.
+    /// data points exist in the range. Skips intervals the trace breaks
+    /// across: a silence past the gap threshold, or an overload.
     ///
     /// Deliberately not `dmm_lib::stats::Integrator`: this recomputes from
     /// scratch every frame over an arbitrary window, and the integrator warns
@@ -201,7 +202,7 @@ impl Graph {
         let (t_start, t_end) = if ta <= tb { (ta, tb) } else { (tb, ta) };
         let (start, end) = self.visible_index_range(t_start, t_end);
         let mut integral = 0.0;
-        let mut prev: Option<(f64, f64)> = None; // (time, value)
+        let mut prev: Option<(Instant, f64, f64)> = None; // (time, secs, value)
         let mut has_pair = false;
 
         for i in start..end {
@@ -210,14 +211,13 @@ impl Graph {
             // An overload breaks the series even when the samples either side
             // of it are adjacent in time — integrating across it would credit
             // the area under a value the meter never measured.
-            if let Some((pt, pv)) = prev {
-                let dt = t - pt;
-                if dt <= self.gap_threshold_secs && point.break_before.is_none() {
-                    integral += (pv + point.value) / 2.0 * dt;
-                    has_pair = true;
-                }
+            if let Some((prev_time, pt, pv)) = prev
+                && self.breaks_before(prev_time, point).is_none()
+            {
+                integral += (pv + point.value) / 2.0 * (t - pt);
+                has_pair = true;
             }
-            prev = Some((t, point.value));
+            prev = Some((point.time, t, point.value));
         }
 
         has_pair.then_some(integral)

@@ -196,35 +196,42 @@ impl Graph {
         (segments, gaps)
     }
 
-    /// Build the drawable segments of one overlay over `[start, end)`.
+    /// Build the drawable segments of one overlay whose points fall within
+    /// `[x_min, x_max]`, plus one point either side so a line reaching the
+    /// edge of the view is not clipped to nothing.
     ///
     /// Deliberately separate from `build_segments_for_range` rather than
     /// generalising it: that one also derives the gap ranges the bands and
     /// dropout markers are drawn from, and its data-loss split is subtle and
-    /// tested. Overlays draw no bands and no markers — they only need to stop
-    /// wherever the main trace stops (time gap, overload, data loss) plus
-    /// wherever the sub-value itself is missing.
+    /// tested. Overlays draw no bands and no markers. Their points keep their
+    /// own times, so they break on their own: at a point with no value (over
+    /// range, or a lost link) and across a silence longer than the gap
+    /// threshold, as the plotted series does. Where the plotted series is over
+    /// range says nothing about a sub-value beside it.
     pub(super) fn build_overlay_segments_for_range(
         &self,
         o: &OverlaySeries,
-        start: usize,
-        end: usize,
+        x_min: f64,
+        x_max: f64,
     ) -> Vec<Vec<[f64; 2]>> {
+        let (start, end) = self.time_index_range(&o.points, |p| p.time, x_min, x_max);
+        let start = start.saturating_sub(1);
+        let end = (end + 1).min(o.points.len());
         let mut segments: Vec<Vec<[f64; 2]>> = Vec::new();
         let mut current: Vec<[f64; 2]> = Vec::new();
         let mut prev_time: Option<Instant> = None;
 
         for i in start..end {
-            let point = &self.history[i];
+            let point = o.points[i];
             if let Some(prev) = prev_time
-                && self.breaks_before(prev, point).is_some()
+                && self.silent_between(prev, point.time)
                 && !current.is_empty()
             {
                 segments.push(std::mem::take(&mut current));
             }
             prev_time = Some(point.time);
 
-            match o.values.get(i).copied().flatten() {
+            match point.value {
                 Some(v) => current.push([self.elapsed_secs(point.time), v]),
                 None if !current.is_empty() => segments.push(std::mem::take(&mut current)),
                 None => {}
@@ -249,15 +256,15 @@ impl Graph {
             .filter(|(_, o)| !self.hidden_overlays.contains(&o.label))
     }
 
-    /// The sub-value traces actually drawn over `[start, end)`.
+    /// The sub-value traces actually drawn over `[x_min, x_max]`.
     ///
     /// Leaves out the ones the user switched off, and the ones with no points
     /// in this window — an overlay that isn't drawn must not appear in the key
     /// either.
-    pub(super) fn visible_overlay_traces(&self, start: usize, end: usize) -> Vec<OverlayTrace> {
+    pub(super) fn visible_overlay_traces(&self, x_min: f64, x_max: f64) -> Vec<OverlayTrace> {
         self.shown_overlays()
             .filter_map(|(k, o)| {
-                let segments = self.build_overlay_segments_for_range(o, start, end);
+                let segments = self.build_overlay_segments_for_range(o, x_min, x_max);
                 (!segments.is_empty()).then(|| (k, o.label.clone(), segments))
             })
             .collect()
@@ -289,19 +296,26 @@ impl Graph {
             .unwrap_or_else(|| "Main".to_string())
     }
 
-    /// Rows of the plot key: the plotted series, then each drawn overlay in
-    /// `self.overlays` order.
+    /// Rows of the plot key: the plotted series when it is drawn, then each
+    /// drawn overlay in `self.overlays` order.
     ///
     /// Empty when nothing is overlaid — a single-series graph gets no key, and
     /// looks exactly as it did before sub-values existed. Takes the traces
     /// `show_main` is about to draw rather than recomputing them, so the key
-    /// cannot list a line that isn't there.
-    pub(super) fn key_entries(&self, drawn: &[OverlayTrace]) -> Vec<(String, KeyStyle)> {
+    /// cannot list a line that isn't there — the plotted series included,
+    /// which has no line while a held meter sends only a sub-value.
+    pub(super) fn key_entries(
+        &self,
+        drawn: &[OverlayTrace],
+        plotted_drawn: bool,
+    ) -> Vec<(String, KeyStyle)> {
         if drawn.is_empty() {
             return Vec::new();
         }
         let mut entries = Vec::with_capacity(drawn.len() + 1);
-        entries.push((self.plotted_series_name(), KeyStyle::Plotted));
+        if plotted_drawn {
+            entries.push((self.plotted_series_name(), KeyStyle::Plotted));
+        }
         entries.extend(
             drawn
                 .iter()
@@ -415,10 +429,10 @@ impl Graph {
         let cursor_color_dim = tc.graph_cursor_dim();
         let env_color = tc.graph_envelope();
 
-        // Sub-value traces over the same visible slice as the main series,
-        // minus any the user switched off in the toolbar's Show: group.
-        let overlay_traces = self.visible_overlay_traces(ext_start, ext_end);
-        let key_entries = self.key_entries(&overlay_traces);
+        // Sub-value traces over the same window as the main series, minus
+        // any the user switched off in the toolbar's Show: group.
+        let overlay_traces = self.visible_overlay_traces(view_min, view_max);
+        let key_entries = self.key_entries(&overlay_traces, !visible_segments.is_empty());
         let multi_series = !overlay_traces.is_empty();
         // Every drawn line carries the name of its series, which is what the
         // hover label reports; every helper item is named "" and falls through

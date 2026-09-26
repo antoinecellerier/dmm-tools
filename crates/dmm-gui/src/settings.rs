@@ -29,9 +29,9 @@ fn default_max_samples() -> usize {
 /// Bytes one point costs in the graph's history: a `DataPoint` plus the
 /// `VecDeque` slack it sits in.
 const GRAPH_BYTES_PER_POINT: usize = 48;
-/// Bytes one point costs per sub-value trace drawn beside the plotted one
-/// (`Option<f64>`, kept in lockstep with the history).
-const GRAPH_BYTES_PER_OVERLAY_POINT: usize = 16;
+/// Bytes one point costs per sub-value trace drawn beside the plotted one: its
+/// frame's time and its value (`OverlayPoint`).
+pub(crate) const GRAPH_BYTES_PER_OVERLAY_POINT: usize = 32;
 /// Bytes one buffered sample costs for the meter's main reading: about 240
 /// inline, plus its `display_raw` heap string and the meter's own frame — 14
 /// to 57 bytes across the families, kept so a recording can be exported as a

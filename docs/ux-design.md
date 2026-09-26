@@ -226,7 +226,7 @@ Three components stacked vertically:
 - Clicking near the latest data re-enables LIVE mode
 - Time axis labels with smart interval selection
 
-**History:** up to the configured buffer size, default 500K points (VecDeque, oldest dropped). Mode *or* unit *or* plotted-series changes clear the graph (incompatible scales) — auto-range crossing a decade changes the unit while the mode stays put, and two sub-values can share both mode and unit (T1/T2). Overlay buffers run in lockstep with the history, back-filled when a sub-value first appears mid-session.
+**History:** up to the configured buffer size, default 500K points (VecDeque, oldest dropped). Mode *or* unit *or* plotted-series changes clear the graph (incompatible scales) — auto-range crossing a decade changes the unit while the mode stays put, and two sub-values can share both mode and unit (T1/T2). Overlay traces keep each point at its own frame's time and break only on their own over-range values, a silence or a lost link — not where the plotted series goes over range.
 
 ### Statistics Panel
 

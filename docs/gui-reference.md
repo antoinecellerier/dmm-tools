@@ -178,8 +178,9 @@ Three components stacked vertically: toolbar, main plot, and minimap.
   including auto-range crossing a decade (Ω→kΩ)
 - Sub-values in the plotted series' unit are drawn beside it as dashed or
   dotted lines, named in a key in the plot's top-left corner; the toolbar's
-  **Show:** chips pick which. Sub-values in another unit are reached through
-  **Plot:** instead
+  **Show:** chips pick which. Each keeps going where the plotted series is
+  over range. Sub-values in another unit are reached through **Plot:**
+  instead
 - The minimap, the cursors, the Mean/Min/Max/Ref overlays and the
   visible-window statistics follow the plotted series
 

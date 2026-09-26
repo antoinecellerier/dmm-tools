@@ -129,15 +129,16 @@ impl Graph {
     }
 
     pub(super) fn data_time_range(&self) -> (f64, f64) {
+        // Sub-value points count as data: a held meter sending only a
+        // sub-value has to keep the live window moving and the minimap's
+        // time mapping reaching it.
         let x_min = self
-            .history
-            .front()
-            .map(|p| self.elapsed_secs(p.time))
+            .first_point_time()
+            .map(|t| self.elapsed_secs(t))
             .unwrap_or(0.0);
         let x_max = self
-            .history
-            .back()
-            .map(|p| self.elapsed_secs(p.time))
+            .last_point_time()
+            .map(|t| self.elapsed_secs(t))
             .unwrap_or(0.0);
         // Overload samples, and words shown instead of a reading, carry
         // timestamps but no plottable value, so they never enter `history` —
@@ -199,11 +200,10 @@ impl Graph {
             // Hidden overlays are excluded: an axis stretched to frame a trace
             // the user switched off would flatten the one they are looking at.
             for o in self.shown_overlays().map(|(_, o)| o) {
-                for i in start..end {
-                    if let Some(v) = o.values.get(i).copied().flatten() {
-                        y_min = y_min.min(v);
-                        y_max = y_max.max(v);
-                    }
+                let (start, end) = self.time_index_range(&o.points, |p| p.time, x_min, x_max);
+                for v in o.points.range(start..end).filter_map(|p| p.value) {
+                    y_min = y_min.min(v);
+                    y_max = y_max.max(v);
                 }
             }
         }

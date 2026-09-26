@@ -3,7 +3,7 @@
 
 use eframe::egui::{self, Ui};
 
-use super::{Graph, TIME_WINDOWS};
+use super::{Graph, SeriesOption, TIME_WINDOWS};
 use crate::a11y::ResponseA11yExt;
 use crate::theme::ThemeColors;
 
@@ -414,7 +414,7 @@ impl Graph {
                 choice = Some(None);
             }
 
-            for (i, (label, unit)) in self.series_options.iter().enumerate() {
+            for (i, SeriesOption { label, unit, .. }) in self.series_options.iter().enumerate() {
                 let selected = self.selected_series.as_deref() == Some(label.as_str());
                 if ui
                     .selectable_label(selected, label.as_str())
@@ -434,14 +434,8 @@ impl Graph {
         // new series and clears through the same branch a mode change uses,
         // releasing the pinned Y range, the cursors and any bbox state.
         match choice {
-            Some(None) => {
-                self.selected_series = None;
-                self.series_missing_frames = 0;
-            }
-            Some(Some(i)) => {
-                self.selected_series = Some(self.series_options[i].0.clone());
-                self.series_missing_frames = 0;
-            }
+            Some(None) => self.selected_series = None,
+            Some(Some(i)) => self.selected_series = Some(self.series_options[i].label.clone()),
             None => {}
         }
 
