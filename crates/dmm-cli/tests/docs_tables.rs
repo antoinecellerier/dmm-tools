@@ -78,9 +78,9 @@ fn cli_reference_device_table_matches_the_registry() {
 }
 
 /// The README's table is hand-written on purpose — it abbreviates runs of
-/// models ("UT161B/D/E"), spells families the way a reader would
-/// ("VC-880/VC650BT" rather than "VC880"), and carries status wording no enum
-/// holds — so this checks only that nothing is *missing*.
+/// models ("UT161B/D/E"), prefixes the brand a reader would search for, and
+/// gives each link a status no enum holds — so this checks only that nothing
+/// is *missing*, and that each row links one verification issue at most.
 ///
 /// The rule is per protocol family, not per device, because those abbreviations
 /// mean a model need not appear under its own display name: a family counts as
@@ -106,6 +106,12 @@ fn readme_device_table_names_every_family_and_issue() {
             block.contains(&format!("/issues/{issue})")),
             "README device table has no link to verification issue #{issue} ({})",
             device.id
+        );
+    }
+    for row in block.lines() {
+        assert!(
+            row.matches("/issues/").count() <= 1,
+            "README device table row links more than one issue: {row}"
         );
     }
 }

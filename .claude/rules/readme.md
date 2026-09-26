@@ -27,5 +27,8 @@ point, not a fourth reference. The general rules are in
 - The device table is hand-written and guarded by a test; keep its status
   words those of `Stability::label()`, capitalised, with the emoji
   `device-catalog.md` gives them.
+- One device row per verification issue, brand first in the Meter cell;
+  columns Meter, USB, Bluetooth, Issue. A Bluetooth status says "(adapter)"
+  or "(built in)"; `—` marks a link the meter is not supported over.
 - The screenshot is refreshed at a release whose changelog changes what the
   picture shows.

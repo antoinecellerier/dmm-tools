@@ -156,7 +156,7 @@ rendered from the registry: after changing an entry or the `DEVICES` order run
 `UPDATE_DOCS=1 cargo test -p dmm-cli` to rewrite it rather than editing it by
 hand, or the test fails with a diff. The one in `README.md` is hand-written on
 purpose — the test only checks that every protocol family and every
-verification issue still appears in it.
+verification issue still appears in it, one issue per row at most.
 
 ## Doc screenshots and snippets
 

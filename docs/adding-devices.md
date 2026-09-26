@@ -224,7 +224,7 @@ Once verified:
 Update these in the same commit as the code (the `/add-device` skill defers
 to this list):
 
-- `README.md` — hand-edit the supported-devices table: it is editorial (abbreviated model runs, per-family status wording), and the `dmm-cli` test only checks that no family and no verification issue is missing from it
+- `README.md` — hand-edit the supported-devices table: it is editorial (one row per verification issue, abbreviated model runs, a USB and a Bluetooth status), and the `dmm-cli` test only checks that no family and no verification issue is missing from it and that no row links two issues
 - `docs/cli-reference.md` — the `--device` table is generated, not hand-edited: run `UPDATE_DOCS=1 cargo test -p dmm-cli` once the registry entry lands, and hand-edit the surrounding prose and anything the device adds to the CLI
 - `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
 - `docs/protocol.md` — index entry pointing at the new family's spec

@@ -6,7 +6,7 @@ USB and Bluetooth multimeter logger and remote control for UNI-T, Voltcraft and 
 [![Release](https://img.shields.io/github/v/release/antoinecellerier/dmm-tools)](https://github.com/antoinecellerier/dmm-tools/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/github/license/antoinecellerier/dmm-tools)](LICENSE)
 
-Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT60BT, UT202BT, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803 the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960, and the ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ and ZT-5B (ANENG AN9002, AN999S, ST207, V05B) — see [supported devices](#supported-devices).
+Read, record and remote-control a digital multimeter over its USB cable, or wirelessly over Bluetooth. Supports the UNI-T UT61E+, UT61B+, UT61D+, UT161, UT60BT, UT202BT, UT71, UT171, UT181A, UT803, UT804, UT8802 and UT8803, the Voltcraft VC-880, VC650BT, VC-890, VC920, VC940 and VC960, and the ZOTEK ZT-300AB, ZT-5566SE, ZT-5BQ and ZT-5B (ANENG AN9002, AN999S, ST207, V05B) — see [supported devices](#supported-devices).
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
@@ -88,23 +88,32 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 ## Supported devices
 
 <!-- devices:start -->
-| Family | Models | Status |
-|--------|--------|--------|
-| UT61+/UT161 | UT61E+, UT61B+, UT61D+, UT161B/D/E | ✅ Verified (UT61E+, UT61B+; [other models](https://github.com/antoinecellerier/dmm-tools/issues/7)) |
-| UT61+ with Bluetooth built in | UT60BT, UT202BT | 🧪 Experimental (UT60BT [#26](https://github.com/antoinecellerier/dmm-tools/issues/26), UT202BT [#27](https://github.com/antoinecellerier/dmm-tools/issues/27)) |
-| UT171 | UT171A/B/C | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/4) |
-| UT181A | UT181A | [🟡 Partly verified](https://github.com/antoinecellerier/dmm-tools/issues/5) |
-| UT803/UT804 | UT803, UT804 | ✅ Verified (UT804; [#16](https://github.com/antoinecellerier/dmm-tools/issues/16)), 🧪 Experimental (UT803; [#15](https://github.com/antoinecellerier/dmm-tools/issues/15)) |
-| UT71 | UT71A/B, UT71C/D/E | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/22) |
-| UT8802 | UT8802, UT8802N | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/12) |
-| UT8803 | UT8803, UT8803E | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/3) |
-| VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
-| VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
-| VC920/VC940/VC960 | Voltcraft VC920, VC940, VC960 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/23) |
-| ZOTEK (ZOYI, BSIDE, ANENG), Bluetooth built in | ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | 🧪 Experimental (ZT-300AB [#28](https://github.com/antoinecellerier/dmm-tools/issues/28), ZT-5566SE [#29](https://github.com/antoinecellerier/dmm-tools/issues/29), ZT-5BQ [#30](https://github.com/antoinecellerier/dmm-tools/issues/30), ZT-5B [#31](https://github.com/antoinecellerier/dmm-tools/issues/31)) |
+| Meter | USB | Bluetooth | Issue |
+|---|---|---|---|
+| UNI-T UT61E+ | ✅ Verified | ✅ Verified (adapter) | — |
+| UNI-T UT61B+ | ✅ Verified | 🧪 Experimental (adapter) | [#19](https://github.com/antoinecellerier/dmm-tools/issues/19) |
+| UNI-T UT61D+, UT161B/D/E | 🧪 Experimental | 🧪 Experimental (adapter) | [#7](https://github.com/antoinecellerier/dmm-tools/issues/7) |
+| UNI-T UT60BT | — | 🧪 Experimental (built in) | [#26](https://github.com/antoinecellerier/dmm-tools/issues/26) |
+| UNI-T UT202BT | — | 🧪 Experimental (built in) | [#27](https://github.com/antoinecellerier/dmm-tools/issues/27) |
+| UNI-T UT171A/B/C | 🧪 Experimental | 🧪 Experimental (adapter) | [#4](https://github.com/antoinecellerier/dmm-tools/issues/4) |
+| UNI-T UT181A | 🟡 Partly verified | 🧪 Experimental (adapter) | [#5](https://github.com/antoinecellerier/dmm-tools/issues/5) |
+| UNI-T UT71A/B, UT71C/D/E | 🧪 Experimental | 🧪 Experimental (adapter) | [#22](https://github.com/antoinecellerier/dmm-tools/issues/22) |
+| UNI-T UT803 | 🧪 Experimental | — | [#15](https://github.com/antoinecellerier/dmm-tools/issues/15) |
+| UNI-T UT804 | ✅ Verified | — | [#16](https://github.com/antoinecellerier/dmm-tools/issues/16) |
+| UNI-T UT8802, UT8802N | 🧪 Experimental | — | [#12](https://github.com/antoinecellerier/dmm-tools/issues/12) |
+| UNI-T UT8803, UT8803E | 🧪 Experimental | — | [#3](https://github.com/antoinecellerier/dmm-tools/issues/3) |
+| Voltcraft VC-880, VC650BT | 🧪 Experimental | — | [#13](https://github.com/antoinecellerier/dmm-tools/issues/13) |
+| Voltcraft VC-890 | 🧪 Experimental | — | [#14](https://github.com/antoinecellerier/dmm-tools/issues/14) |
+| Voltcraft VC920/VC940/VC960 | 🧪 Experimental | — | [#23](https://github.com/antoinecellerier/dmm-tools/issues/23) |
+| ZOTEK ZT-300AB (ANENG AN9002) | — | 🧪 Experimental (built in) | [#28](https://github.com/antoinecellerier/dmm-tools/issues/28) |
+| ZOTEK ZT-5566SE (ANENG AN999S) | — | 🧪 Experimental (built in) | [#29](https://github.com/antoinecellerier/dmm-tools/issues/29) |
+| ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 Experimental (built in) | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
+| ZOTEK ZT-5B (ANENG V05B) | — | 🧪 Experimental (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
 <!-- devices:end -->
 
-✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware. Click either to help verify.
+✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
+
+Bluetooth "adapter" is UNI-T's UT-D07A/B add-on; "built in" needs no adapter. Each issue collects hardware reports for its row; reports on the adapter itself go to [#25](https://github.com/antoinecellerier/dmm-tools/issues/25).
 
 Cables, Bluetooth adapters, what to switch on and what each model has confirmed are in [supported devices](docs/supported-devices.md). Your model is not listed? [Open an issue](https://github.com/antoinecellerier/dmm-tools/issues) with its details.
 
