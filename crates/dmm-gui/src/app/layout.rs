@@ -54,18 +54,18 @@ impl App {
                 self.last_measurement.as_ref(),
                 &tc,
                 !self.transform.is_identity(),
-                self.connection.choices.readouts(),
+                self.connection.readouts(),
             ),
             ContentLayout::Narrow => display::show_reading_compact(
                 ui,
                 self.last_measurement.as_ref(),
                 &tc,
                 !self.transform.is_identity(),
-                self.connection.choices.readouts(),
+                self.connection.readouts(),
             ),
         };
-        if let Some((setting, id)) = picked {
-            self.select(setting, id);
+        if let Some(pick) = picked {
+            self.apply_pick(pick);
         }
         let controls_top = ui.cursor().top();
         self.show_remote_controls(ui, 1.0, Self::big_meter_toggle_width(ui));

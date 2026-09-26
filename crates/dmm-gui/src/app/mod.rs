@@ -28,7 +28,7 @@ mod whats_new;
 
 use dmm_lib::measurement::Measurement;
 use dmm_lib::mock::MockMode;
-use dmm_lib::protocol::{Choice, Setting, registry};
+use dmm_lib::protocol::{Choice, MeterKeys, Setting, registry};
 use dmm_lib::transform::Transform;
 use eframe::egui;
 use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
@@ -231,22 +231,10 @@ impl SettingChoices {
         self.range.clear();
     }
 
-    pub(super) fn readouts(&self) -> display::ReadoutChoices<'_> {
-        display::ReadoutChoices {
-            mode: &self.mode,
-            range: &self.range,
-        }
-    }
-
     /// Whether the range readout is drawn as a dropdown, which is taller than
     /// the label it replaces and so changes the big meter's fitted font.
     pub(super) fn range_offered(&self) -> bool {
         display::mode_switch_offered(&self.range)
-    }
-
-    /// The same, for the mode readout.
-    pub(super) fn mode_offered(&self) -> bool {
-        display::mode_switch_offered(&self.mode)
     }
 }
 
@@ -289,6 +277,9 @@ pub(super) struct Connection {
     pub(super) link: Option<dmm_lib::binary_help::Link>,
     /// Commands supported by the connected protocol.
     pub(super) supported_commands: Vec<String>,
+    /// The function and context keys the connected protocol lists, drawn
+    /// as the mode readout's list and as chips beside HOLD.
+    pub(super) meter_keys: MeterKeys,
     /// Values the meter can be switched to for each setting the readout
     /// draws, as last listed by the acquisition thread.
     pub(super) choices: SettingChoices,
@@ -324,6 +315,7 @@ impl Default for Connection {
             feedback_url: String::new(),
             link: None,
             supported_commands: Vec::new(),
+            meter_keys: MeterKeys::NONE,
             choices: SettingChoices::default(),
             paused: false,
             last_error: None,
@@ -335,6 +327,18 @@ impl Default for Connection {
             stop_flag: None,
             cmd_tx: None,
             needs_reconnect: false,
+        }
+    }
+}
+
+impl Connection {
+    /// What the readout dropdowns offer: the listed choices, and the
+    /// meter's function keys.
+    pub(super) fn readouts(&self) -> display::ReadoutChoices<'_> {
+        display::ReadoutChoices {
+            mode: &self.choices.mode,
+            range: &self.choices.range,
+            keys: self.meter_keys.functions,
         }
     }
 }
@@ -533,6 +537,15 @@ impl App {
         }
     }
 
+    /// Act on a readout dropdown's pick: a switch, or a key press. Either
+    /// one's refusal comes back as a toast; the stream shows the outcome.
+    pub(super) fn apply_pick(&mut self, pick: display::ReadoutPick) {
+        match pick {
+            display::ReadoutPick::Select(setting, id) => self.select(setting, id),
+            display::ReadoutPick::Press(command) => self.send_command(command),
+        }
+    }
+
     /// Ask the meter to switch `setting` to one of the values
     /// `connection.choices` listed. A refusal comes back as a toast.
     pub(super) fn select(&mut self, setting: Setting, id: u16) {
@@ -655,7 +668,7 @@ impl App {
                     .last_measurement
                     .as_ref()
                     .map_or(0, |m| m.aux_values.len()),
-                mode_offered: self.connection.choices.mode_offered(),
+                mode_offered: self.connection.readouts().mode_offered(),
                 range_offered: self.connection.choices.range_offered(),
                 show_stats: self.settings.show_stats,
                 show_specs: self.settings.show_specs,
@@ -696,11 +709,11 @@ impl App {
                         },
                         &tc,
                         !self.transform.is_identity(),
-                        self.connection.choices.readouts(),
+                        self.connection.readouts(),
                         no_reading,
                     );
-                    if let Some((setting, id)) = picked {
-                        self.select(setting, id);
+                    if let Some(pick) = picked {
+                        self.apply_pick(pick);
                     }
                     let after_reading = ui.cursor().top();
 

@@ -10,8 +10,8 @@ use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_P
 use crate::protocol::registry;
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Setting,
-    Stability, check_len, cycle, unknown_mode, unknown_mode16, unsupported_setting,
+    Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
+    Setting, Stability, check_len, cycle, unknown_mode, unknown_mode16, unsupported_setting,
 };
 use crate::transport::Transport;
 use command::Command;
@@ -191,6 +191,7 @@ impl Ut61PlusProtocol {
                 supported_commands,
                 max_aux_values,
                 verification_issue,
+                meter_keys: MeterKeys::NONE,
             },
         }
     }

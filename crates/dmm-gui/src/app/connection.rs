@@ -3,7 +3,7 @@ use dmm_lib::detect::Detected;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
-use dmm_lib::protocol::{Choice, Setting, Stability};
+use dmm_lib::protocol::{Choice, MeterKeys, Setting, Stability};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Transport;
 use eframe::egui;
@@ -119,6 +119,8 @@ pub(crate) enum DmmMessage {
         /// on no link at all.
         link: Option<Link>,
         supported_commands: Vec<String>,
+        /// Function and context keys, from the profile.
+        meter_keys: MeterKeys,
         /// Sub-value slots this meter family can report, from its profile.
         /// Fixes the CSV export's aux column count for the whole recording.
         max_aux_values: usize,
@@ -183,6 +185,7 @@ fn establish_connection<T: Transport>(
         .collect();
     // Read before `get_name`, which borrows the device mutably.
     let max_aux_values = profile.max_aux_values;
+    let meter_keys = profile.meter_keys;
     let model_name = profile.model_name.to_string();
     let link = recorded_link.or_else(|| Link::from_bridge(dmm.transport().transport_name()));
     let device_id = detected
@@ -206,6 +209,7 @@ fn establish_connection<T: Transport>(
         feedback_url,
         link,
         supported_commands: cmds,
+        meter_keys,
         max_aux_values,
     });
     ctx.request_repaint();

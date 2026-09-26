@@ -24,7 +24,9 @@ use crate::protocol::ut61eplus::specs::SpecModel;
 use crate::protocol::ut61eplus::tables::ut61e_plus::Ut61ePlusTable;
 use crate::protocol::ut61eplus::tables::{self, DeviceTable};
 use crate::protocol::zotek;
-use crate::protocol::{Choice, DeviceProfile, Protocol, Setting, Stability, unsupported_setting};
+use crate::protocol::{
+    Choice, DeviceProfile, MeterKeys, Protocol, Setting, Stability, unsupported_setting,
+};
 use crate::transport::{NullTransport, Transport};
 use scenarios::{AuxSpec, Scenario, scenarios};
 use state::MeterState;
@@ -318,6 +320,7 @@ impl MockProtocol {
                 supported_commands: MOCK_COMMANDS,
                 max_aux_values: 2,
                 verification_issue: None,
+                meter_keys: MeterKeys::NONE,
             },
             table: Ut61ePlusTable::new(),
         }

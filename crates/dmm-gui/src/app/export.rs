@@ -504,6 +504,7 @@ mod tests {
             feedback_url: String::new(),
             link: None,
             supported_commands: Vec::new(),
+            meter_keys: dmm_lib::protocol::MeterKeys::NONE,
             max_aux_values: 0,
         })
         .expect("the channel is open");

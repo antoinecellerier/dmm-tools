@@ -3194,6 +3194,7 @@ mod tests {
         supported_commands: &[],
         max_aux_values: 0,
         verification_issue: None,
+        meter_keys: dmm_lib::protocol::MeterKeys::NONE,
     };
 
     /// The ids a family gives a setting's choices. Mode ids are the family's

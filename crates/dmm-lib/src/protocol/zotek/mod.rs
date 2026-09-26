@@ -77,6 +77,7 @@ impl ZotekProtocol {
                 supported_commands: keys::commands(layout),
                 max_aux_values: layout.max_aux_values,
                 verification_issue: None,
+                meter_keys: keys::meter_keys(layout),
             },
             warned_layout: false,
             showing: None,

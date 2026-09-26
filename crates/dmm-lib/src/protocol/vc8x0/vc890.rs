@@ -27,7 +27,7 @@ use crate::flags::StatusFlags;
 use crate::protocol::cycle::{CycleButton, DialPosition, Ring, Settle};
 use crate::protocol::framing;
 use crate::protocol::unrecognised::report_unknown;
-use crate::protocol::{CaptureStep, DeviceProfile, Stability};
+use crate::protocol::{CaptureStep, DeviceProfile, MeterKeys, Stability};
 use crate::transport::Transport;
 use std::thread;
 use std::time::Duration;
@@ -332,6 +332,7 @@ impl Vc8x0Model for Vc890Model {
             supported_commands: COMMANDS,
             max_aux_values: 0,
             verification_issue: Some(14),
+            meter_keys: MeterKeys::NONE,
         }
     }
 

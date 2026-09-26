@@ -5,7 +5,7 @@
 use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use dmm_lib::measurement::Measurement;
 use dmm_lib::mock::MockMode;
-use dmm_lib::protocol::registry;
+use dmm_lib::protocol::{MeterKeys, registry};
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -612,6 +612,7 @@ impl App {
         self.connection.feedback_url.clear();
         self.connection.link = None;
         self.connection.supported_commands.clear();
+        self.connection.meter_keys = MeterKeys::NONE;
         self.connection.choices.clear();
         self.connection.paused = false;
         self.connection.reconnect_attempt = 0;
@@ -717,6 +718,7 @@ impl App {
                     feedback_url,
                     link,
                     supported_commands: cmds,
+                    meter_keys,
                     max_aux_values,
                 } => {
                     self.connection.state = ConnectionState::Connected;
@@ -743,6 +745,7 @@ impl App {
                     self.connection.feedback_url = feedback_url;
                     self.connection.link = link;
                     self.connection.supported_commands = cmds;
+                    self.connection.meter_keys = meter_keys;
                     // A reconnect may find the dial elsewhere; the thread
                     // re-lists the choices with its first reading.
                     self.connection.choices.clear();
@@ -1832,6 +1835,7 @@ mod tests {
             feedback_url: String::new(),
             link: None,
             supported_commands: Vec::new(),
+            meter_keys: MeterKeys::NONE,
             max_aux_values,
         }
     }

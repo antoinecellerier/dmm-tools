@@ -173,6 +173,12 @@ fn settings_scroll_cap(window_h: f32, top: f32) -> f32 {
         .floor()
 }
 
+/// A context key's tooltip: like every remote button's, it promises a press
+/// and nothing more.
+fn context_key_hover(label: &str) -> String {
+    format!("Press the meter's {label} key")
+}
+
 /// Width of the rule between the meter's buttons and the Scale chip, in
 /// points before zoom: egui's own separator spacing.
 pub(super) const SCALE_RULE_WIDTH: f32 = 6.0;
@@ -306,6 +312,24 @@ impl App {
                         self.send_command(exit_cmd);
                     }
                 }
+            }
+
+            // The meter's context keys (ZOTEK's ZERO in capacitance), each
+            // only while the reading is one it applies to.
+            let reading = self.last_measurement.as_ref();
+            for key in self.connection.meter_keys.context {
+                if !reading.is_some_and(|m| (key.applies)(m)) {
+                    continue;
+                }
+                let text = RichText::new(key.label).font(egui::FontId::proportional(font_size));
+                if ui
+                    .add(egui::Button::new(text))
+                    .on_hover_text(context_key_hover(key.label))
+                    .clicked()
+                {
+                    self.send_command(key.command);
+                }
+                placed = true;
             }
 
             // Non-toggle commands
@@ -1531,5 +1555,63 @@ mod tests {
         let frame = settings_panel(400.0, 220.0);
         let right = frame.scrolled.inner_rect.right();
         assert!(right >= 400.0 - 24.0, "scroller ends at {right} pt of 400");
+    }
+
+    /// A context key offered in farads only.
+    const ZERO_IN_FARADS: &[dmm_lib::protocol::MeterKey] = &[dmm_lib::protocol::MeterKey {
+        command: "zero",
+        label: "ZERO",
+        applies: |m| m.unit.ends_with('F'),
+    }];
+
+    /// The labels of the buttons the connected reading column draws for a
+    /// reading in `unit`, on a meter with HOLD and [`ZERO_IN_FARADS`].
+    fn chips_for(unit: &'static str) -> Vec<String> {
+        let settings = Settings {
+            // No acquisition thread: the connected state is set by hand.
+            auto_connect: false,
+            ..Settings::default()
+        };
+        let mut app = App::from_settings(settings, dmm_lib::Clock::real());
+        app.connection.state = super::super::ConnectionState::Connected;
+        app.connection.supported_commands = vec!["hold".to_string(), "zero".to_string()];
+        app.connection.meter_keys = dmm_lib::protocol::MeterKeys {
+            functions: &[],
+            context: ZERO_IN_FARADS,
+        };
+        app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
+            dmm_lib::measurement::MeasuredValue::Normal(1.234),
+            unit,
+            dmm_lib::flags::StatusFlags::default(),
+        ));
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                app.show_reading_column(ui, super::super::layout::ContentLayout::Wide);
+            });
+        });
+        // This harness renders without a painter.
+        out.textures_delta.clear();
+        out.platform_output
+            .accesskit_update
+            .map(|update| update.nodes)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(_, n)| n.role() == egui::accesskit::Role::Button)
+            .filter_map(|(_, n)| n.label().map(str::to_string))
+            .collect()
+    }
+
+    /// A context key joins the meter's buttons only while it applies to the
+    /// reading: ZERO in capacitance, and nowhere else.
+    #[test]
+    fn a_context_key_shows_only_while_it_applies() {
+        let farads = chips_for("nF");
+        assert!(farads.iter().any(|l| l == "HOLD"), "{farads:?}");
+        assert!(farads.iter().any(|l| l == "ZERO"), "{farads:?}");
+        let volts = chips_for("V");
+        assert!(volts.iter().any(|l| l == "HOLD"), "{volts:?}");
+        assert!(!volts.iter().any(|l| l == "ZERO"), "{volts:?}");
     }
 }

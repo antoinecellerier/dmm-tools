@@ -18,8 +18,8 @@ use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability, check_len,
-    unknown_mode,
+    DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol, Stability,
+    check_len, unknown_mode,
 };
 use crate::transport::Transport;
 use log::debug;
@@ -116,6 +116,7 @@ impl Ut8802Protocol {
                 supported_commands: UT8802_COMMANDS,
                 max_aux_values: 0,
                 verification_issue: Some(12),
+                meter_keys: MeterKeys::NONE,
             },
         }
     }

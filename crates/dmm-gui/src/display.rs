@@ -1,6 +1,6 @@
 use dmm_lib::flags::{Flag, StatusFlags};
 use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
-use dmm_lib::protocol::{Choice, Setting};
+use dmm_lib::protocol::{Choice, MeterKey, Setting};
 use eframe::egui::text::LayoutJob;
 use eframe::egui::{
     Color32, ComboBox, Context, EventFilter, FocusDirection, FontId, Grid, IdSalt, Key, Modifiers,
@@ -468,6 +468,9 @@ pub struct ReadoutChoices<'a> {
     pub mode: &'a [Choice],
     /// `Auto` plus the rungs of the current mode's ladder.
     pub range: &'a [Choice],
+    /// The meter's function keys, from its profile: the mode readout lists
+    /// them when `mode` has nothing to pick.
+    pub keys: &'a [MeterKey],
 }
 
 impl ReadoutChoices<'_> {
@@ -475,8 +478,22 @@ impl ReadoutChoices<'_> {
     /// draw plain labels inside the live region when neither does, and the
     /// selector row when one does.
     fn any_offered(&self) -> bool {
-        mode_switch_offered(self.mode) || mode_switch_offered(self.range)
+        self.mode_offered() || mode_switch_offered(self.range)
     }
+
+    /// Whether the mode readout is a dropdown: of modes, or of keys.
+    pub(crate) fn mode_offered(&self) -> bool {
+        mode_switch_offered(self.mode) || !self.keys.is_empty()
+    }
+}
+
+/// What a pick in a readout dropdown asks of the meter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadoutPick {
+    /// Switch a setting to one of the ids `Dmm::choices` listed.
+    Select(Setting, u16),
+    /// Press one of the meter's keys, by its command.
+    Press(&'static str),
 }
 
 /// Whether a readout is a selector rather than a plain label.
@@ -488,32 +505,79 @@ pub(crate) fn mode_switch_offered(choices: &[Choice]) -> bool {
     choices.len() > 1
 }
 
-/// One readout dropdown's wording: which setting it drives, the widget id it
-/// keys its popup and focus state under — two dropdowns on the same line must
-/// not share one — the hover text, and the name a screen reader gives it.
-struct ChoiceReadout {
-    setting: Setting,
+/// One readout dropdown's wording: the widget id it keys its popup and focus
+/// state under — two dropdowns on the same line must not share one — the
+/// hover text, the name a screen reader gives it, and the caption over its
+/// list, if any.
+struct Dropdown {
     id_salt: &'static str,
     hover: &'static str,
     a11y: &'static str,
+    heading: Option<&'static str>,
+}
+
+/// A dropdown over one setting's choices, and the setting a pick switches.
+struct ChoiceReadout {
+    setting: Setting,
+    dropdown: Dropdown,
 }
 
 /// The mode readout: which mode of the current dial position the meter is in.
 const MODE_READOUT: ChoiceReadout = ChoiceReadout {
     setting: Setting::Mode,
-    id_salt: "mode_select",
-    hover: "Switch the meter to another mode of the current dial position",
-    a11y: "Mode",
+    dropdown: Dropdown {
+        id_salt: "mode_select",
+        hover: "Switch the meter to another mode of the current dial position",
+        a11y: "Mode",
+        heading: None,
+    },
 };
 
 /// The range readout beside it: which rung of the current mode's ladder the
 /// meter is on, or `Auto` while it picks the rung itself.
 const RANGE_READOUT: ChoiceReadout = ChoiceReadout {
     setting: Setting::Range,
-    id_salt: "range_select",
-    hover: "Switch the meter to another range of the current mode",
-    a11y: "Range",
+    dropdown: Dropdown {
+        id_salt: "range_select",
+        hover: "Switch the meter to another range of the current mode",
+        a11y: "Range",
+        heading: None,
+    },
 };
+
+/// The mode readout on a meter that lists function keys instead of modes.
+/// A screen reader still calls it "Mode"; the caption says the entries are
+/// key presses, not modes the meter is sure to land on.
+const KEYS_READOUT: Dropdown = Dropdown {
+    id_salt: "mode_keys",
+    hover: "Press one of the meter's function keys",
+    a11y: "Mode",
+    heading: Some("Meter keys"),
+};
+
+/// The mode readout: a dropdown of the modes the meter can be switched to,
+/// else of its function keys, else the plain label.
+///
+/// In the key list the marked entry is the key whose function the reading
+/// shows, and every pick is a press — the marked one too, as a key can
+/// cycle within its function (diode and continuity, °C and °F).
+fn show_mode_readout(
+    ui: &mut Ui,
+    m: &Measurement,
+    size: f32,
+    choices: ReadoutChoices<'_>,
+) -> Option<ReadoutPick> {
+    if mode_switch_offered(choices.mode) || choices.keys.is_empty() {
+        return show_choice_readout(ui, &MODE_READOUT, &m.mode, size, choices.mode);
+    }
+    let entries: Vec<(&str, bool)> = choices
+        .keys
+        .iter()
+        .map(|k| (k.label, (k.applies)(m)))
+        .collect();
+    show_dropdown(ui, &KEYS_READOUT, &m.mode, size, &entries)
+        .map(|i| ReadoutPick::Press(choices.keys[i].command))
+}
 
 /// What the range readout leaves behind on a meter with no rung to pick.
 ///
@@ -538,7 +602,7 @@ fn show_range_readout(
     size: f32,
     choices: &[Choice],
     at_rest: RangeAtRest,
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     // A meter that reports no range at all has nothing to label, in any
     // layout — the UT61E+ temperature and NCV positions, for two.
     if m.range_label.is_empty() {
@@ -556,25 +620,13 @@ fn show_range_readout(
 ///
 /// Returns the setting and the id of a value the user picked that differs
 /// from the live one.
-///
-/// The dropdown is drawn at the label's size and with no frame at rest, so
-/// it reads as the readout it replaces; hover and the open state keep egui's
-/// own highlight so it still answers as a control. Its popup is capped at
-/// [`MAX_CHOICE_POPUP_FONT_SIZE`].
-///
-/// The open list behaves as a native listbox: focus lands on the live entry
-/// as it opens, Up/Down (Home/End) move it, Enter/Space or a click picks,
-/// Esc or Tab closes without a pick, and focus returns to the readout on
-/// every close. The mechanisms are the ones `color_edit` uses for its
-/// picker: a was-open flag to see the open and close transitions, consumed
-/// keys plus a cancelled focus move, and a focus lock filter on the entry.
 fn show_choice_readout(
     ui: &mut Ui,
     readout: &ChoiceReadout,
     label: &str,
     size: f32,
     choices: &[Choice],
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     if !mode_switch_offered(choices) {
         ui.label(
             RichText::new(label)
@@ -583,8 +635,36 @@ fn show_choice_readout(
         );
         return None;
     }
-    let current = choices.iter().find(|c| c.current).map(|c| c.id);
-    let mut picked = current;
+    let entries: Vec<(&str, bool)> = choices.iter().map(|c| (&*c.label, c.current)).collect();
+    let picked = &choices[show_dropdown(ui, &readout.dropdown, label, size, &entries)?];
+    (!picked.current).then_some(ReadoutPick::Select(readout.setting, picked.id))
+}
+
+/// A readout drawn as a dropdown over `entries`, each a label and whether it
+/// is the live one, which the list marks. Returns the index of the entry
+/// picked this frame, the live one included.
+///
+/// The dropdown is drawn at the label's size and with no frame at rest, so
+/// it reads as the readout it replaces; hover and the open state keep egui's
+/// own highlight so it still answers as a control. Its popup is capped at
+/// [`MAX_CHOICE_POPUP_FONT_SIZE`], under the dropdown's caption if it has one.
+///
+/// The open list behaves as a native listbox: focus lands on the live entry
+/// as it opens (the first when none is live), Up/Down (Home/End) move it,
+/// Enter/Space or a click picks, Esc or Tab closes without a pick, and focus
+/// returns to the readout on every close. The mechanisms are the ones
+/// `color_edit` uses for its picker: a was-open flag to see the open and
+/// close transitions, consumed keys plus a cancelled focus move, and a focus
+/// lock filter on the entry.
+fn show_dropdown(
+    ui: &mut Ui,
+    dropdown: &Dropdown,
+    label: &str,
+    size: f32,
+    entries: &[(&str, bool)],
+) -> Option<usize> {
+    let mut picked = None;
+    let focus_on_open = entries.iter().position(|&(_, live)| live).unwrap_or(0);
     let popup_size = size.clamp(MIN_AUX_FONT_SIZE, MAX_CHOICE_POPUP_FONT_SIZE);
     let ctx = ui.ctx().clone();
     let row_height = ctx.fonts_mut(|f| f.row_height(&FontId::proportional(size)));
@@ -614,7 +694,7 @@ fn show_choice_readout(
             // so the list's state can be read before the box is drawn. The
             // salt is wrapped in `IdSalt::new` the way `from_id_salt` wraps
             // it: hashing the bare string, or an `Id`, gives a different id.
-            let button_id = ui.make_persistent_id(IdSalt::new(readout.id_salt));
+            let button_id = ui.make_persistent_id(IdSalt::new(dropdown.id_salt));
             let was_open_key = button_id.with("was_open");
             let was_open: bool = ctx.data(|d| d.get_temp(was_open_key)).unwrap_or(false);
 
@@ -635,9 +715,11 @@ fn show_choice_readout(
                 }
             }
 
-            let mut activated = false;
-            let inner = ComboBox::from_id_salt(readout.id_salt)
+            let inner = ComboBox::from_id_salt(dropdown.id_salt)
                 .width(0.0)
+                // egui's default cap scrolls a list of ten keys; let it grow
+                // to the window, scrolling only when the window is shorter.
+                .height(ctx.content_rect().height())
                 .selected_text(
                     RichText::new(label)
                         .font(FontId::proportional(size))
@@ -649,36 +731,45 @@ fn show_choice_readout(
                     // layer outlives the list by a frame, in which egui
                     // surrenders the focus just handed back to the readout
                     // (`Context::create_widget` on a layer below the modal).
-                    let mut entries = Vec::with_capacity(choices.len());
-                    for c in choices {
+                    if let Some(heading) = dropdown.heading {
+                        ui.label(
+                            RichText::new(heading)
+                                .font(FontId::proportional(popup_size))
+                                .color(ui.visuals().weak_text_color()),
+                        );
+                    }
+                    let mut responses = Vec::with_capacity(entries.len());
+                    for (i, &(text, live)) in entries.iter().enumerate() {
                         // Three spaces sit close enough under the mark to
                         // keep the entries aligned without a figure space
                         // the bundled fonts may not have.
-                        let text = if c.current {
-                            format!("{LIVE_CHOICE_MARK} {}", c.label)
+                        let text = if live {
+                            format!("{LIVE_CHOICE_MARK} {text}")
                         } else {
-                            format!("   {}", c.label)
+                            format!("   {text}")
                         };
-                        let entry = ui.selectable_value(
-                            &mut picked,
-                            Some(c.id),
+                        let entry = ui.selectable_label(
+                            live,
                             RichText::new(text).font(FontId::proportional(popup_size)),
                         );
                         // Focus lands on the live entry as the list opens —
                         // by click, or by Enter/Space on the readout — so a
                         // screen reader announces it and Enter picks it.
-                        if !was_open && c.current {
+                        if !was_open && i == focus_on_open {
                             entry.request_focus();
                         }
-                        activated |= entry.clicked();
-                        entries.push(entry);
+                        if entry.clicked() {
+                            picked = Some(i);
+                        }
+                        responses.push(entry);
                     }
-                    navigate_choice_entries(&ctx, &entries);
+                    navigate_choice_entries(&ctx, &responses);
                 });
 
             // Enter/Space "clicks" the focused entry without a pointer
             // click, which is the only thing a menu popup closes on by
             // itself.
+            let activated = picked.is_some();
             if activated {
                 Popup::close_all(&ctx);
             }
@@ -698,13 +789,9 @@ fn show_choice_readout(
         })
         .inner;
     response
-        .on_hover_text(readout.hover)
-        .a11y_label(readout.a11y);
-    if picked == current {
-        None
-    } else {
-        picked.map(|id| (readout.setting, id))
-    }
+        .on_hover_text(dropdown.hover)
+        .a11y_label(dropdown.a11y);
+    picked
 }
 
 /// Keyboard navigation inside an open readout list: ArrowDown/ArrowUp move
@@ -764,7 +851,7 @@ fn show_reading_line_with_selector(
     mode_size: f32,
     choices: ReadoutChoices<'_>,
     tc: &ThemeColors,
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     ui.horizontal(|ui| {
         ui.live_region_horizontal(
             live_region_fingerprint(Some(m), scaled, NO_READING_TITLE),
@@ -775,7 +862,7 @@ fn show_reading_line_with_selector(
             },
         );
         ui.separator();
-        let mode = show_choice_readout(ui, &MODE_READOUT, &m.mode, mode_size, choices.mode);
+        let mode = show_mode_readout(ui, m, mode_size, choices);
         // This line has never carried a range label, so a meter with no rung
         // to pick keeps the line it has: mode, then the badges.
         let range = show_range_readout(ui, m, mode_size, choices.range, RangeAtRest::Nothing);
@@ -993,7 +1080,7 @@ fn show_reading_sized(
     scaled: bool,
     choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     let unit_size = value_size;
     let mode_size = value_size * MODE_SIZE_RATIO;
 
@@ -1023,7 +1110,7 @@ fn show_reading_sized(
 
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = (mode_size * 0.5).max(2.0);
-                let mode = show_choice_readout(ui, &MODE_READOUT, &m.mode, mode_size, choices.mode);
+                let mode = show_mode_readout(ui, m, mode_size, choices);
                 // The range has always been a label on this line, so it stays
                 // one on a meter that lists no rung to pick.
                 let range = show_range_readout(ui, m, mode_size, choices.range, RangeAtRest::Label);
@@ -1064,7 +1151,7 @@ fn show_reading_inline(
     scaled: bool,
     choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     let unit_size = value_size;
     let mode_size = value_size * MODE_SIZE_RATIO;
 
@@ -1133,7 +1220,7 @@ pub fn show_reading(
     tc: &ThemeColors,
     scaled: bool,
     choices: ReadoutChoices<'_>,
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     show_reading_sized(
         ui,
         measurement,
@@ -1200,7 +1287,7 @@ pub fn show_reading_large(
     scaled: bool,
     choices: ReadoutChoices<'_>,
     no_reading: NoReadingText<'_>,
-) -> (f32, ReadingRatios, Option<(Setting, u16)>) {
+) -> (f32, ReadingRatios, Option<ReadoutPick>) {
     let ReadingFit {
         base_content_height,
         ratios,
@@ -1272,7 +1359,7 @@ pub fn show_reading_compact(
     tc: &ThemeColors,
     scaled: bool,
     choices: ReadoutChoices<'_>,
-) -> Option<(Setting, u16)> {
+) -> Option<ReadoutPick> {
     match measurement {
         Some(m) => {
             let value_text = format_value_display(m);
@@ -2108,6 +2195,7 @@ mod tests {
         ReadoutChoices {
             mode: choices,
             range: &[],
+            keys: &[],
         }
     }
 
@@ -2116,6 +2204,7 @@ mod tests {
         ReadoutChoices {
             mode: &[],
             range: choices,
+            keys: &[],
         }
     }
 
@@ -2142,7 +2231,7 @@ mod tests {
         layout: &str,
         m: &Measurement,
         choices: ReadoutChoices<'_>,
-    ) -> Option<(Setting, u16)> {
+    ) -> Option<ReadoutPick> {
         let tc = crate::settings::Settings::default().theme_colors(true);
         match layout {
             "two-line" => show_reading_sized(
@@ -2172,7 +2261,7 @@ mod tests {
     /// test can see which widgets were drawn, what they are called, where
     /// they are, and which has the keyboard.
     struct Frame {
-        picked: Option<(Setting, u16)>,
+        picked: Option<ReadoutPick>,
         nodes: Vec<(NodeId, Node)>,
         focus: Option<NodeId>,
     }
@@ -2180,7 +2269,7 @@ mod tests {
     fn run_frame(
         ctx: &egui::Context,
         events: Vec<egui::Event>,
-        mut draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
+        mut draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) -> Frame {
         ctx.enable_accesskit();
         let mut picked = None;
@@ -2277,7 +2366,7 @@ mod tests {
     fn click(
         ctx: &egui::Context,
         pos: egui::Pos2,
-        mut draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
+        mut draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) -> Frame {
         run_frame(ctx, pointer(pos, None), &mut draw);
         run_frame(ctx, pointer(pos, Some(true)), &mut draw);
@@ -2421,7 +2510,7 @@ mod tests {
         );
 
         let f = click(&ctx, centre(other), &mut draw);
-        assert_eq!(f.picked, Some((Setting::Mode, 0x1121)));
+        assert_eq!(f.picked, Some(ReadoutPick::Select(Setting::Mode, 0x1121)));
     }
 
     /// Re-picking the live mode sends nothing to the meter.
@@ -2539,6 +2628,7 @@ mod tests {
         let both = ReadoutChoices {
             mode: &modes,
             range: &ranges,
+            keys: &[],
         };
         for layout in LAYOUTS {
             let ctx = egui::Context::default();
@@ -2560,6 +2650,7 @@ mod tests {
         let both = ReadoutChoices {
             mode: &modes,
             range: &ranges,
+            keys: &[],
         };
         let ctx = egui::Context::default();
         let mut draw = |ui: &mut Ui| draw_reading(ui, "two-line", &m, both);
@@ -2591,7 +2682,7 @@ mod tests {
         let rung = node_labelled(&f.nodes, "   22V").expect("rung entry");
 
         let f = click(&ctx, centre(rung), &mut draw);
-        assert_eq!(f.picked, Some((Setting::Range, 2)));
+        assert_eq!(f.picked, Some(ReadoutPick::Select(Setting::Range, 2)));
     }
 
     /// Re-picking the marked entry sends nothing to the meter.
@@ -2621,7 +2712,7 @@ mod tests {
     /// reading — and Enter opens the list. Returns the frame after opening.
     fn open_with_keyboard(
         ctx: &egui::Context,
-        mut draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
+        mut draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) -> Frame {
         run_frame(ctx, vec![], &mut draw);
         let f = run_frame(ctx, key(egui::Key::Tab, egui::Modifiers::NONE), &mut draw);
@@ -2636,7 +2727,7 @@ mod tests {
     /// The list is gone and the readout has the keyboard again.
     fn assert_closed_on_the_readout(
         ctx: &egui::Context,
-        draw: impl FnMut(&mut Ui) -> Option<(Setting, u16)>,
+        draw: impl FnMut(&mut Ui) -> Option<ReadoutPick>,
     ) {
         let f = run_frame(ctx, vec![], draw);
         assert!(
@@ -2738,7 +2829,7 @@ mod tests {
             key(egui::Key::Enter, egui::Modifiers::NONE),
             &mut draw,
         );
-        assert_eq!(f.picked, Some((Setting::Mode, 0x1121)));
+        assert_eq!(f.picked, Some(ReadoutPick::Select(Setting::Mode, 0x1121)));
         assert_closed_on_the_readout(&ctx, &mut draw);
     }
 
@@ -2837,5 +2928,100 @@ mod tests {
             assert_eq!(f.picked, None, "{modifiers:?}");
             assert_closed_on_the_readout(&ctx, &mut draw);
         }
+    }
+
+    // ---- the key list -----------------------------------------------------
+
+    /// Two function keys: V applies to a volt reading, Ω to none here.
+    const KEYS: &[MeterKey] = &[
+        MeterKey {
+            command: "volts",
+            label: "V",
+            applies: |m| m.unit == "V",
+        },
+        MeterKey {
+            command: "ohms",
+            label: "Ω",
+            applies: |m| m.unit == "Ω",
+        },
+    ];
+
+    fn keys(keys: &[MeterKey]) -> ReadoutChoices<'_> {
+        ReadoutChoices {
+            mode: &[],
+            range: &[],
+            keys,
+        }
+    }
+
+    /// Draw a reading in `unit` with [`KEYS`] on the mode readout.
+    fn draw_with_keys(unit: &'static str) -> impl FnMut(&mut Ui) -> Option<ReadoutPick> {
+        let tc = crate::settings::Settings::default().theme_colors(true);
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), unit, StatusFlags::default());
+        move |ui: &mut Ui| {
+            show_reading_sized(
+                ui,
+                Some(&m),
+                BASE_READING_FONT_SIZE,
+                &tc,
+                false,
+                keys(KEYS),
+                NoReadingText::Plain,
+            )
+        }
+    }
+
+    /// With function keys and no modes the readout is a combo box a screen
+    /// reader still calls "Mode", valued the live mode, in every layout.
+    #[test]
+    fn the_mode_readout_lists_keys_as_a_named_combo() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        for layout in LAYOUTS {
+            let ctx = egui::Context::default();
+            let f = run_frame(&ctx, vec![], |ui| draw_reading(ui, layout, &m, keys(KEYS)));
+            assert_eq!(f.picked, None, "{layout}: drawing is not picking");
+            let (_, combo) = node_with_role(&f.nodes, Role::ComboBox)
+                .unwrap_or_else(|| panic!("{layout}: no combo box"));
+            assert_eq!(combo.label(), Some("Mode"), "{layout}");
+            assert_eq!(combo.value(), Some("DC V"), "{layout}");
+        }
+    }
+
+    /// The open list is captioned, marks the key the reading shows, and a
+    /// pick is a press — of the marked key too, which can cycle within its
+    /// function.
+    #[test]
+    fn picking_a_key_presses_it_even_the_marked_one() {
+        let mut draw = draw_with_keys("V");
+        let marked = format!("{LIVE_CHOICE_MARK} V");
+        for (entry, command) in [(marked.as_str(), "volts"), ("   Ω", "ohms")] {
+            let ctx = egui::Context::default();
+            let f = run_frame(&ctx, vec![], &mut draw);
+            let combo = centre(&node_with_role(&f.nodes, Role::ComboBox).expect("combo").1);
+            click(&ctx, combo, &mut draw);
+            let f = run_frame(&ctx, vec![], &mut draw);
+            assert!(
+                f.nodes
+                    .iter()
+                    .any(|(_, n)| n.role() == Role::Label && n.value() == Some("Meter keys")),
+                "the list has its caption"
+            );
+            let node = node_labelled(&f.nodes, entry).unwrap_or_else(|| panic!("{entry:?}"));
+            let f = click(&ctx, centre(node), &mut draw);
+            assert_eq!(f.picked, Some(ReadoutPick::Press(command)), "{entry:?}");
+        }
+    }
+
+    /// With no key applying — a function no key picks — focus still lands
+    /// in the list as it opens, on the first entry.
+    #[test]
+    fn opening_the_key_list_with_no_live_key_focuses_the_first() {
+        let mut draw = draw_with_keys("A");
+        let ctx = egui::Context::default();
+        let f = open_with_keyboard(&ctx, &mut draw);
+        let first = node_id_labelled(&f.nodes, "   V").expect("first entry, unmarked");
+        assert_eq!(f.focus, Some(first));
     }
 }

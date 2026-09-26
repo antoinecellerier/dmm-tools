@@ -8,6 +8,8 @@
 use super::frame::xor_key;
 use super::layout::{Coupling, Function, Layout, Showing, Unit};
 use crate::error::{Error, Result};
+use crate::measurement::MeasuredValue;
+use crate::protocol::{MeterKey, MeterKeys};
 
 /// Every key, in the order `dmm-cli command` lists them (spec §8.2). `minmax`
 /// and `hold` keep the names the other families give those keys; AUTO picks
@@ -84,6 +86,123 @@ pub(super) fn commands(layout: &Layout) -> &'static [&'static str] {
     }
 }
 
+/// The function keys and ZERO, for the GUI's mode menu and ZERO chip: each
+/// function key applies while a function it picks shows, by the
+/// `Function` the decoder put in `mode_raw`.
+const VOLTS: MeterKey = MeterKey {
+    command: "volts",
+    label: "V",
+    applies: |m| Function::Volts.shown_in(m),
+};
+/// Marked on types 3-4 only: on the auto-ranging type 1 a millivolt reading
+/// is a range step of V, and the decoder names it V.
+const MILLIVOLTS: MeterKey = MeterKey {
+    command: "millivolts",
+    label: "mV",
+    applies: |m| Function::Millivolts.shown_in(m),
+};
+const OHMS: MeterKey = MeterKey {
+    command: "ohms",
+    label: "Ω",
+    applies: |m| Function::Ohms.shown_in(m),
+};
+const CAPACITANCE: MeterKey = MeterKey {
+    command: "capacitance",
+    label: "Capacitance",
+    applies: |m| Function::Capacitance.shown_in(m),
+};
+const HZ: MeterKey = MeterKey {
+    command: "hz",
+    label: "Hz",
+    applies: |m| Function::Frequency.shown_in(m),
+};
+const DIODE_CONTINUITY: MeterKey = MeterKey {
+    command: "diode_continuity",
+    label: "Diode / continuity",
+    applies: |m| Function::Diode.shown_in(m) || Function::Continuity.shown_in(m),
+};
+const NCV: MeterKey = MeterKey {
+    command: "ncv",
+    label: "NCV",
+    applies: |m| Function::Ncv.shown_in(m),
+};
+const CURRENT: MeterKey = MeterKey {
+    command: "current",
+    label: "Current",
+    applies: |m| {
+        [Function::Amps, Function::Milliamps, Function::Microamps]
+            .iter()
+            .any(|f| f.shown_in(m))
+    },
+};
+const TEMP_UNIT: MeterKey = MeterKey {
+    command: "temp_unit",
+    label: "°C / °F",
+    applies: |m| Function::Celsius.shown_in(m) || Function::Fahrenheit.shown_in(m),
+};
+/// AUTO's own display is the `Auto` word with no function lit (spec §6.4);
+/// once it finds a signal the reading names that function instead.
+const AUTO_FUNCTION: MeterKey = MeterKey {
+    command: "auto_function",
+    label: "Auto function",
+    applies: |m| Function::None.shown_in(m) && matches!(m.value, MeasuredValue::NoReading(_)),
+};
+/// ZERO, offered where `code` sends it: in capacitance.
+const ZERO: MeterKey = MeterKey {
+    command: "zero",
+    label: "ZERO",
+    applies: |m| Function::Capacitance.shown_in(m),
+};
+
+/// Every function key, in the order the menu lists them.
+const EVERY_FUNCTION_KEY: &[MeterKey] = &[
+    VOLTS,
+    MILLIVOLTS,
+    OHMS,
+    CAPACITANCE,
+    HZ,
+    DIODE_CONTINUITY,
+    NCV,
+    CURRENT,
+    TEMP_UNIT,
+    AUTO_FUNCTION,
+];
+
+/// Type 2's, without the Ω and mV [`TYPE2_KEYS`] leaves out.
+const TYPE2_FUNCTION_KEYS: &[MeterKey] = &[
+    VOLTS,
+    CAPACITANCE,
+    HZ,
+    DIODE_CONTINUITY,
+    NCV,
+    CURRENT,
+    TEMP_UNIT,
+    AUTO_FUNCTION,
+];
+
+/// Type 3's, without the ones [`TYPE3_KEYS`] leaves out.
+const TYPE3_FUNCTION_KEYS: &[MeterKey] = &[
+    VOLTS,
+    MILLIVOLTS,
+    OHMS,
+    DIODE_CONTINUITY,
+    CURRENT,
+    TEMP_UNIT,
+];
+
+/// The function and context keys `layout`'s registry entry lists, all of
+/// them among its [`commands`].
+pub(super) fn meter_keys(layout: &Layout) -> MeterKeys {
+    MeterKeys {
+        functions: match layout.type_byte {
+            2 => TYPE2_FUNCTION_KEYS,
+            3 => TYPE3_FUNCTION_KEYS,
+            _ => EVERY_FUNCTION_KEY,
+        },
+        context: &[ZERO],
+    }
+}
+
 /// Whether `command`'s code depends on what the meter shows.
 pub(super) fn follows_display(command: &str) -> bool {
     matches!(command, "current" | "temp_unit" | "zero")
@@ -154,7 +273,13 @@ pub(super) fn frame(key: u8) -> [u8; 10] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::zotek::layout::{LAYOUTS, ZT300AB};
+    use crate::clock::Clock;
+    use crate::measurement::Measurement;
+    use crate::protocol::Protocol;
+    use crate::protocol::zotek::layout::{LAYOUTS, ZT5B, ZT300AB};
+    use crate::protocol::zotek::sim::MockZt5b;
+    use crate::transport::NullTransport;
+    use std::time::Duration;
 
     fn showing(unit: Option<Unit>, function: Function, coupling: Coupling) -> Showing {
         Showing {
@@ -317,6 +442,144 @@ mod tests {
                     "{err:?}"
                 );
             }
+        }
+    }
+
+    /// Every key a layout offers is a function key, the ZERO context key,
+    /// or one of the buttons the GUI already draws (HOLD, MIN/MAX).
+    #[test]
+    fn meter_keys_are_the_layouts_commands() {
+        for layout in LAYOUTS {
+            let keys = meter_keys(layout);
+            let mut listed: Vec<&str> = keys
+                .functions
+                .iter()
+                .chain(keys.context)
+                .map(|k| k.command)
+                .collect();
+            let mut offered: Vec<&str> = commands(layout)
+                .iter()
+                .copied()
+                .filter(|c| !matches!(*c, "hold" | "minmax"))
+                .collect();
+            listed.sort_unstable();
+            offered.sort_unstable();
+            assert_eq!(listed, offered, "{}", layout.id);
+            assert_eq!(keys.context, [ZERO], "{}", layout.id);
+        }
+        let labels = |layout| -> Vec<&str> {
+            meter_keys(layout)
+                .functions
+                .iter()
+                .map(|k| k.label)
+                .collect()
+        };
+        assert_eq!(
+            labels(&ZT300AB),
+            ["V", "mV", "Ω", "Diode / continuity", "Current", "°C / °F"]
+        );
+        assert_eq!(
+            labels(&ZT5B),
+            [
+                "V",
+                "Capacitance",
+                "Hz",
+                "Diode / continuity",
+                "NCV",
+                "Current",
+                "°C / °F",
+                "Auto function"
+            ]
+        );
+    }
+
+    /// The commands of the function keys `m` shows the function of.
+    fn applying(m: &Measurement) -> Vec<&'static str> {
+        EVERY_FUNCTION_KEY
+            .iter()
+            .filter(|k| (k.applies)(m))
+            .map(|k| k.command)
+            .collect()
+    }
+
+    /// On the simulated ZT-5B, each function key's press leads to readings
+    /// that mark that key and no other; ZERO is offered in capacitance only.
+    #[test]
+    fn a_pressed_function_key_is_the_one_that_applies() {
+        let cases: &[(&[&str], &str, &str)] = &[
+            (&["volts"], "volts", "V"),
+            (&["capacitance"], "capacitance", "Capacitance"),
+            (&["hz"], "hz", "Hz"),
+            (&["diode_continuity"], "diode_continuity", "Diode"),
+            (
+                &["diode_continuity", "diode_continuity"],
+                "diode_continuity",
+                "Continuity",
+            ),
+            (&["ncv"], "ncv", "NCV"),
+            (&["current"], "current", "A"),
+            (&["temp_unit"], "temp_unit", "°C"),
+            (&["temp_unit", "temp_unit"], "temp_unit", "°F"),
+            (&["auto_function"], "auto_function", "Auto"),
+        ];
+        for &(presses, marked, mode) in cases {
+            let clock = Clock::manual();
+            let mut mock = MockZt5b::new(clock.clone());
+            for key in presses {
+                // A read first, as the stream does, for the keys whose code
+                // follows the display.
+                mock.request_measurement(&NullTransport).unwrap();
+                mock.send_command(&NullTransport, key).unwrap();
+            }
+            clock.advance(Duration::from_millis(500));
+            let m = mock.request_measurement(&NullTransport).unwrap();
+            assert!(m.mode.contains(mode), "{presses:?}: {}", m.mode);
+            assert_eq!(applying(&m), [marked], "{presses:?}: {}", m.mode);
+            assert_eq!(
+                (ZERO.applies)(&m),
+                marked == "capacitance",
+                "{presses:?}: {}",
+                m.mode
+            );
+        }
+    }
+
+    /// AUTO applies to its own word only: once it finds a voltage the
+    /// reading names V, and V is the key marked.
+    #[test]
+    fn auto_function_applies_to_the_auto_word_only() {
+        let clock = Clock::manual();
+        let mut mock = MockZt5b::new(clock.clone());
+        let m = mock.request_measurement(&NullTransport).unwrap();
+        assert_eq!(m.mode, "Auto");
+        assert_eq!(applying(&m), ["auto_function"]);
+        clock.advance(Duration::from_secs(8));
+        let m = mock.request_measurement(&NullTransport).unwrap();
+        assert_eq!(m.mode, "DC V");
+        assert_eq!(applying(&m), ["volts"]);
+    }
+
+    /// Coupling and PEAK ride in `mode_raw` beside the function; they do
+    /// not change which key applies. An unknown function marks none.
+    #[test]
+    fn coupling_and_peak_bits_do_not_hide_the_function() {
+        let with = |mode_raw| Measurement {
+            mode_raw,
+            ..Measurement::from_payload(&[])
+        };
+        for (mode_raw, marked) in [
+            (0x11, &["volts"][..]),
+            (0x21, &["volts"]),
+            (0x51, &["volts"]),
+            (0x62, &["millivolts"]),
+            (0x13, &["current"]),
+            (0x24, &["current"]),
+            (0x15, &["current"]),
+            (0x0B, &[]),
+            (0x0F, &[]),
+            (0x00, &[]),
+        ] {
+            assert_eq!(applying(&with(mode_raw)), marked, "{mode_raw:#04x}");
         }
     }
 

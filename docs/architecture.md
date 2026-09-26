@@ -27,7 +27,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `transport/ble/search.rs` | Finds a Bluetooth peer by its advertised name, or the one an address names |
 | `transport/ble/issc.rs` | The ISSC transparent-UART profile's UUIDs, and the adapter's name prefix and heartbeat frame |
 | `transport/ble/fff0.rs` | The FFF0 profile's UUIDs: one characteristic, FFF4, carries both directions |
-| `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection |
+| `protocol/mod.rs` | `Protocol` trait (object-safe), `DeviceFamily` enum, `DeviceProfile`, `Stability`, `Setting`/`Choice` for absolute setting selection, `MeterKeys`/`MeterKey` for key menus |
 | `protocol/registry.rs` | Device registry: `SelectableDevice` entries, factory functions, `resolve_device()` lookup. CLI and GUI use the registry for device selection — no device-specific code in app crates. |
 | `protocol/cycle.rs` | Cycle-to-target driver shared by the UT61+ and Voltcraft families: presses a ring button (SELECT, Hz/%, SHIFT/SETUP, RANGE, MIN/MAX, PEAK) and reads back until the named mode, rung or flag state shows; mode walks are planned over a per-model dial table because the meter never reports the dial |
 | `protocol/unrecognised.rs` | `report_unknown()`, what every parser calls on data its spec doesn't cover: the first call of the process warns and says how to report it, every call logs at DEBUG; `capture_reports()` lets tests (the golden fixtures among them) check that known data reports nothing |
@@ -99,6 +99,12 @@ current }`, and `select(Setting, id)` switches to one, confirmed from the stream
 answers with direct commands; the UT61+/UT161 and Voltcraft families go through
 `protocol/cycle.rs`, and so does the mock, for everything but its mode selector. Both default
 to "unsupported", and the CLI and GUI hide any setting whose list has fewer than two entries.
+A profile can also list keys for a GUI to draw by data rather than by command name:
+`DeviceProfile::meter_keys` is a `MeterKeys { functions, context }` of `MeterKey { command,
+label, applies: fn(&Measurement) -> bool }`. Function keys become the mode readout's menu,
+marked where `applies` holds, when the family lists no mode choices; context keys join the
+buttons only while `applies` holds. Every one is a `supported_commands` entry, sent through
+`send_command()`. `MeterKeys::NONE` is the default; ZOTEK lists its keys per layout.
 
 **Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
 devices. Each `SelectableDevice` entry contains an ID, display name, aliases, activation

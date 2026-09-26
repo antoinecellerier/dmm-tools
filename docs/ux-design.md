@@ -119,6 +119,11 @@ and scrolls inside its own frame rather than being clipped by it.
   dropdowns naming what the dial position and the live mode offer; everywhere
   else they stay the plain labels they read as, so nothing appears to be a
   control that cannot act as one
+- A meter whose profile lists function keys instead (ZOTEK) gets a **Meter
+  keys** dropdown on the mode label: the caption says the entries are
+  presses, not destinations; the key whose function shows is marked, and
+  every pick presses, the marked one too, since a key can cycle within its
+  function
 - Flags shown as subtle colored badges: AUTO, HOLD, REL, MIN, MAX
 - Low battery warning shown as orange "LOW BAT" badge
 - SCALE badge (same accent as AUTO/HOLD) whenever a software scale is active.
@@ -134,6 +139,8 @@ readout dropdowns' job.
 - **HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK** — highlight blue when the corresponding protocol flag is active
 - **SELECT** — cycles sub-modes (no toggle state, mode change visible in reading)
 - **LIGHT** — toggles backlight (no protocol feedback for state)
+- Context keys from the profile (ZOTEK's **ZERO**) — shown only while the
+  reading is one they act on (capacitance for ZERO)
 
 ### Scale Button
 

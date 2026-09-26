@@ -183,6 +183,54 @@ pub struct DeviceProfile {
     pub max_aux_values: usize,
     /// GitHub issue number for verification tracking (e.g. `Some(3)` → issue #3).
     pub verification_issue: Option<u16>,
+    /// Keys that pick a function or apply to one, beyond the buttons every
+    /// family names alike (HOLD, MIN/MAX, …); [`MeterKeys::NONE`] for most.
+    pub meter_keys: MeterKeys,
+}
+
+/// A key on the meter a GUI can offer without knowing the family: the
+/// command that presses it, its label, and when it applies to a reading.
+#[derive(Debug, Clone, Copy)]
+pub struct MeterKey {
+    /// The name [`Protocol::send_command`] takes; always one of the
+    /// profile's `supported_commands`.
+    pub command: &'static str,
+    /// What a menu entry or button shows.
+    pub label: &'static str,
+    /// In [`MeterKeys::functions`], whether the reading shows this key's
+    /// function; in [`MeterKeys::context`], whether the key is offered
+    /// while the reading shows.
+    pub applies: fn(&Measurement) -> bool,
+}
+
+/// Keys compare by what they press and show: function pointers have no
+/// stable identity to compare.
+impl PartialEq for MeterKey {
+    fn eq(&self, other: &Self) -> bool {
+        (self.command, self.label) == (other.command, other.label)
+    }
+}
+
+impl Eq for MeterKey {}
+
+/// The keys a family lists for a GUI to draw by data rather than by
+/// command name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MeterKeys {
+    /// Keys that each switch the meter to a function, in the order a menu
+    /// lists them. A press is a press: picking the function already shown
+    /// still sends it, as some keys cycle within their function.
+    pub functions: &'static [MeterKey],
+    /// Keys offered only while their `applies` holds for the reading.
+    pub context: &'static [MeterKey],
+}
+
+impl MeterKeys {
+    /// No keys beyond the named buttons.
+    pub const NONE: MeterKeys = MeterKeys {
+        functions: &[],
+        context: &[],
+    };
 }
 
 const REPO_ISSUES_URL: &str = "https://github.com/antoinecellerier/dmm-tools/issues";
@@ -716,6 +764,24 @@ mod tests {
                 {
                     panic!("{} advertises {command:?} but refused it: {msg}", device.id);
                 }
+            }
+        }
+    }
+
+    /// A GUI presses a listed key by its command, so every one is a command
+    /// the profile advertises; otherwise the key would draw and be refused.
+    #[test]
+    fn every_meter_key_is_an_advertised_command() {
+        for device in registry::DEVICES {
+            let profile = *(device.new_protocol)().profile();
+            let keys = profile.meter_keys;
+            for key in keys.functions.iter().chain(keys.context) {
+                assert!(
+                    profile.supported_commands.contains(&key.command),
+                    "{} lists key {:?} it does not advertise",
+                    device.id,
+                    key.command
+                );
             }
         }
     }

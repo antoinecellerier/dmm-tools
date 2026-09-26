@@ -612,6 +612,12 @@ impl Function {
         )
     }
 
+    /// Whether reading `m`, decoded here, is in this function: its
+    /// `mode_raw` with the coupling and PEAK bits masked off.
+    pub(super) fn shown_in(self, m: &Measurement) -> bool {
+        m.mode_raw & 0x0F == self as u16
+    }
+
     fn mode_raw(self, coupling: Coupling) -> u16 {
         let coupling_bits = match coupling {
             _ if !self.coupled() => 0,

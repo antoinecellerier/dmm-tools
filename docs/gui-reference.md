@@ -98,6 +98,9 @@ top-right corner in every layout and expire on their own.
   what the meter offers from the current dial position, with the live entry
   marked `●`. Picking an entry switches the meter. Dial positions with a
   single mode, modes with a fixed range, and other meters keep the plain label.
+- On ZOTEK meters the mode label is a dropdown of the meter's function keys,
+  the key for the function shown marked `●`. Picking one presses that key,
+  the marked one too, which switches between diode and continuity or °C and °F.
 - Active flags shown as colored badges, in this order:
   - **HV!** — high voltage warning (red)
   - **HOLD** — display frozen on meter
@@ -126,6 +129,7 @@ A row of buttons shown when connected and receiving data (visible in the
 | **AUTO** | Return to auto-range |
 | **MIN/MAX** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. |
 | **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. |
+| **ZERO** | Zero the capacitance reading (ZOTEK, shown in capacitance only) |
 | **SELECT** | Cycle sub-modes |
 | **LIGHT** | Toggle backlight |
 

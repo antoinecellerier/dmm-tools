@@ -50,8 +50,8 @@ use crate::measurement::{MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{
-    CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, Probing, Protocol, Stability,
-    unknown_mode,
+    CaptureStep, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
+    Stability, unknown_mode,
 };
 use crate::specs::{ModeSpecInfo, ModeSpecs, RangeSpec, SpecInfo, SpecSheetTable};
 use crate::transport::{Transport, ch9325};
@@ -880,6 +880,7 @@ impl Ut80xProtocol {
                 supported_commands: COMMANDS,
                 max_aux_values: 0,
                 verification_issue: Some(verification_issue),
+                meter_keys: MeterKeys::NONE,
             },
         }
     }
