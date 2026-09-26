@@ -1967,8 +1967,12 @@ the following needs someone's hardware.
   - UT61+ streams whenever the link is Bluetooth: link, peer or family
     property? Settled by the UT117C/UT197/UT219PV group or a UT171/UT181A
     behind a UT-D07A.
-  - `bluetooth_only: bool` or a per-entry links list: settled by a meter
-    with both a radio and a cable.
+  - A meter with both a radio and a cable: today advertising
+    `bluetooth_names` and being on Bluetooth alone are one thing
+    (`a_built_in_radio_means_bluetooth_alone`), and `bluetooth_only()`
+    reads both. Such a meter splits them: which consumers mean "own radio"
+    (the peer names, the "built-in radio" wording in both binaries) and
+    which mean "no cable" (the open path never trying USB).
 - **The UT202S registry entry.** UNI-T's UT61+ protocol deck specifies the
   UT202S clamp meter with a full range table, and it is a Bluetooth meter —
   now reachable. Adding it means a `SelectableDevice` entry with its own

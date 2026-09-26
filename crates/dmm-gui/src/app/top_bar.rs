@@ -179,7 +179,7 @@ impl App {
                 if self.connection.state == ConnectionState::Connected {
                     // The connected entry, live or recorded: a meter with the
                     // radio built in is on no adapter.
-                    let built_in_radio = self.connection.detected.is_some_and(|d| d.bluetooth_only);
+                    let built_in_radio = self.connection.detected.is_some_and(|d| d.bluetooth_only());
                     hover.push(link_tooltip(
                         self.connection.link,
                         built_in_radio,

@@ -605,7 +605,7 @@ fn unreachable_bluetooth_only(
         Some(dmm_lib::error::Error::Bluetooth(_))
     );
     match selection {
-        Selection::Device(device) if stack_failed && device.bluetooth_only => Some(device),
+        Selection::Device(device) if stack_failed && device.bluetooth_only() => Some(device),
         _ => None,
     }
 }

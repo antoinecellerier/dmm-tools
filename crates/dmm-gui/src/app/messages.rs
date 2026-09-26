@@ -190,7 +190,7 @@ impl ConnectionIssue {
             };
         }
         if let dmm_lib::error::Error::Bluetooth(_) = err
-            && let Some(device) = selected.filter(|d| d.bluetooth_only)
+            && let Some(device) = selected.filter(|d| d.bluetooth_only())
         {
             return Self::BluetoothOnlyUnreachable {
                 model: device.display_name,
@@ -1083,7 +1083,7 @@ impl App {
             // there is neither a model to name nor steps to give.
             // Name the link the session is on: "adapter" now reads as the
             // Bluetooth one, and over a cable it never was one.
-            let built_in_radio = self.active_device().is_some_and(|d| d.bluetooth_only);
+            let built_in_radio = self.active_device().is_some_and(|d| d.bluetooth_only());
             let link = self
                 .connection
                 .link

@@ -32,7 +32,6 @@ pub(crate) static VC880: SelectableDevice = SelectableDevice {
         "https://www.conrad.com/p/voltcraft-vc880-handheld-multimeter-digital-calibrated-to-manufacturers-standards-no-certificate-data-logger-cat-iii-124609",
     ),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };
 
@@ -49,7 +48,6 @@ pub(crate) static VC650BT: SelectableDevice = SelectableDevice {
         "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
     ),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };
 
@@ -66,6 +64,5 @@ pub(crate) static VC890: SelectableDevice = SelectableDevice {
         "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
     ),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };

@@ -118,7 +118,7 @@ lists first (its `links`, set in the family's `devices.rs` from the cable table 
 `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
 CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. An
-entry marked `bluetooth_only`, a meter with the radio built in, is looked for over Bluetooth alone,
+entry that advertises `bluetooth_names`, a meter with the radio built in, is looked for over Bluetooth alone,
 and fails with its own error (`Error::BluetoothOnly`): not in range, or the radio not searched.
 
 The same opener reaches Bluetooth. `OpenOptions` carries the `--adapter` selector and whether
@@ -128,7 +128,7 @@ Otherwise the USB bus is tried first. If nothing answers there, scanning is allo
 lists Bluetooth among its links, the transport looks for an adapter or a Bluetooth meter: one
 already connected, else one heard in a short scan, else a paired one by address. The caller names
 the peers it takes, by advertised name (`bluetooth_peers()` in `lib.rs`): an entry behind an
-adapter takes adapters only, a `bluetooth_only` entry its own `bluetooth_names`, and `"auto"` and
+adapter takes adapters only, a meter with the radio built in its own `bluetooth_names`, and `"auto"` and
 `list` all of them, so an open for one meter never lands on another unless `--adapter` names an
 address, which opens whatever answers there. Every step has a time limit. When that
 finds nothing, the caller gets the USB error, marked with whether Bluetooth was searched; both

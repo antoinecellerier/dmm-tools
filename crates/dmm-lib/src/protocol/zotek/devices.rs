@@ -56,7 +56,6 @@ pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
     links: LINKS,
-    bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
 
@@ -73,7 +72,6 @@ pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
     links: LINKS,
-    bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
 
@@ -88,7 +86,6 @@ pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
     links: LINKS,
-    bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
 
@@ -103,6 +100,5 @@ pub(crate) static ZT5B: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
     links: LINKS,
-    bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };

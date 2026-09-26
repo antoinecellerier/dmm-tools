@@ -26,6 +26,5 @@ pub(crate) static UT8803: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };

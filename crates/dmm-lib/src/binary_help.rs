@@ -120,8 +120,8 @@ impl Link {
     /// hover where the bar had to shorten or drop it.
     ///
     /// `built_in_radio` is a meter with Bluetooth built in on the far end
-    /// (a `bluetooth_only` registry entry, or a peer advertising the name of
-    /// one): there is no adapter to name.
+    /// (a registry entry that advertises `bluetooth_names`, or a peer
+    /// advertising the name of one): there is no adapter to name.
     pub fn full_name(self, built_in_radio: bool) -> &'static str {
         match self {
             Self::UsbCable => USB_CABLE,

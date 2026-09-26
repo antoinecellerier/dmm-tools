@@ -54,7 +54,6 @@ pub(crate) static UT803: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };
 
@@ -69,7 +68,6 @@ pub(crate) static UT804: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };
 
@@ -84,7 +82,6 @@ pub(crate) static UT71AB: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };
 
@@ -99,7 +96,6 @@ pub(crate) static UT71CDE: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };
 
@@ -114,6 +110,5 @@ pub(crate) static VC920: SelectableDevice = SelectableDevice {
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
     links: LINKS,
-    bluetooth_only: false,
     bluetooth_names: &[],
 };

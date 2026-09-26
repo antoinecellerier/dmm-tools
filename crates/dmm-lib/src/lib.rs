@@ -217,7 +217,7 @@ struct KnownTransport {
 /// `--adapter` bypasses this: it opens whatever answers there.
 fn bluetooth_peers(device: Option<&SelectableDevice>) -> BluetoothPeers {
     match device {
-        Some(device) if device.bluetooth_only => BluetoothPeers {
+        Some(device) if device.bluetooth_only() => BluetoothPeers {
             adapters: false,
             meters: device.bluetooth_names.to_vec(),
         },
@@ -380,7 +380,7 @@ pub fn open_device_transport(
     device: &SelectableDevice,
     opts: OpenOptions<'_>,
 ) -> Result<Box<dyn Transport>> {
-    if device.bluetooth_only {
+    if device.bluetooth_only() {
         return open_bluetooth_only(device, opts);
     }
     let (transport, _bridge) = open_links(device.links, &bluetooth_peers(Some(device)), opts)?;
@@ -1339,7 +1339,7 @@ mod tests {
     fn bluetooth_only_meters_are_on_no_cable() {
         let bluetooth_only: Vec<&str> = registry::DEVICES
             .iter()
-            .filter(|d| d.bluetooth_only)
+            .filter(|d| d.bluetooth_only())
             .map(|d| d.id)
             .collect();
         assert_eq!(
@@ -1348,7 +1348,9 @@ mod tests {
         );
         for kt in KNOWN_TRANSPORTS {
             assert!(
-                !devices_on_bridge(kt.name).iter().any(|d| d.bluetooth_only),
+                !devices_on_bridge(kt.name)
+                    .iter()
+                    .any(|d| d.bluetooth_only()),
                 "{}",
                 kt.name
             );

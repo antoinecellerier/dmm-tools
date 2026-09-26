@@ -57,7 +57,7 @@ pub(super) fn verify_meter(
                     // the Bluetooth one, and over a cable it never was one.
                     let link = dmm_lib::binary_help::bridge_link_name(
                         dmm.transport().transport_name(),
-                        device.bluetooth_only,
+                        device.bluetooth_only(),
                     );
                     eprintln!(
                         "{}",

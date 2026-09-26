@@ -50,13 +50,18 @@ pub struct SelectableDevice {
     /// meter with the radio built in, listed on Bluetooth alone, never
     /// opening USB.
     pub(crate) links: &'static [&'static str],
-    /// The meter has Bluetooth built in and no cable, so it is looked for
-    /// over Bluetooth alone, whatever the bus holds.
-    pub bluetooth_only: bool,
-    /// The name prefixes a `bluetooth_only` meter advertises, which is how
-    /// an open for it tells it from an adapter or another meter in range;
-    /// empty for every other entry.
+    /// The name prefixes a meter with the radio built in advertises, which
+    /// is how an open for it tells it from an adapter or another meter in
+    /// range; empty for every other entry.
     pub(crate) bluetooth_names: &'static [&'static str],
+}
+
+impl SelectableDevice {
+    /// A meter with the radio built in, looked for by its own names over
+    /// Bluetooth alone, whatever the bus holds.
+    pub fn bluetooth_only(&self) -> bool {
+        !self.bluetooth_names.is_empty()
+    }
 }
 
 /// Generic factory for protocols that implement `Default`.
@@ -505,7 +510,7 @@ mod tests {
             let device = find_device(id).unwrap();
             assert!(device.fingerprint.is_none(), "{id}");
             assert!(
-                !device.bluetooth_only && device.bluetooth_names.is_empty(),
+                !device.bluetooth_only() && device.bluetooth_names.is_empty(),
                 "{id}"
             );
             assert_eq!(device.family, DeviceFamily::Mock, "{id}");
@@ -576,15 +581,18 @@ mod tests {
         assert!(ids("Other DMM").is_empty());
     }
 
-    /// A meter with the radio built in is found by its names alone, so it
-    /// needs some; any other entry reaches the radio through an adapter and
-    /// has none of its own.
+    /// A meter that advertises names of its own is on Bluetooth alone, and a
+    /// meter on Bluetooth alone has the radio built in: the two read as one
+    /// thing today. A meter with both a radio and a cable fails this, and
+    /// has to decide what `bluetooth_only()` means for it: the open path,
+    /// which never tries USB for such a meter, and the "built-in radio"
+    /// wording in both binaries.
     #[test]
-    fn only_bluetooth_only_meters_carry_bluetooth_names() {
+    fn a_built_in_radio_means_bluetooth_alone() {
         for device in DEVICES {
             assert_eq!(
-                device.bluetooth_only,
                 !device.bluetooth_names.is_empty(),
+                device.links == [crate::BLUETOOTH],
                 "{}",
                 device.id
             );
