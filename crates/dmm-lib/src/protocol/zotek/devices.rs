@@ -7,7 +7,7 @@
 //!
 //! [`DEVICES`]: crate::protocol::registry::DEVICES
 
-use super::{FINGERPRINT, ZotekProtocol};
+use super::{FINGERPRINT, ZotekProtocol, layout};
 use crate::protocol::DeviceFamily;
 use crate::protocol::registry::SelectableDevice;
 
@@ -43,8 +43,8 @@ const ACTIVATION_ZT5B: &str = "\
 Note: the meter switches off after 15 minutes idle; press NCV before turning it on to disable that.";
 
 pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
-    id: "zt300ab",
-    display_name: "ZT-300AB / AN9002",
+    id: layout::ZT300AB.id,
+    display_name: layout::ZT300AB.name,
     aliases: &["zt-300ab", "an9002", "an-9002"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT300AB,
@@ -57,8 +57,8 @@ pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
-    id: "zt5566se",
-    display_name: "ZT-5566SE / AN999S",
+    id: layout::ZT5566SE.id,
+    display_name: layout::ZT5566SE.name,
     // Not the plain ZT-5566: its manual documents Bluetooth only as a
     // speaker.
     aliases: &["zt-5566se", "zt5566s", "zt-5566s", "an999s", "an-999s"],
@@ -73,8 +73,8 @@ pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
-    id: "zt5bq",
-    display_name: "ZT-5BQ / ST207",
+    id: layout::ZT5BQ.id,
+    display_name: layout::ZT5BQ.name,
     aliases: &["zt-5bq", "st207"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT5BQ,
@@ -87,8 +87,8 @@ pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
 };
 
 pub(crate) static ZT5B: SelectableDevice = SelectableDevice {
-    id: "zt5b",
-    display_name: "ZT-5B / V05B",
+    id: layout::ZT5B.id,
+    display_name: layout::ZT5B.name,
     aliases: &["zt-5b", "v05b"],
     requires_hardware: true,
     activation_instructions: ACTIVATION_ZT5B,

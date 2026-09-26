@@ -458,7 +458,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         }
         if matches!(framing::extract_frame_ut8803(&buf[start..]), Ok(Some(_))) {
             return Some(Evidence::Model {
-                id: "ut8803",
+                id: devices::UT8803.id,
                 reported_name: None,
             });
         }

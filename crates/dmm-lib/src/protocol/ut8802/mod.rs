@@ -465,7 +465,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
         }
         if frame_at(start) && frame_at(next) {
             return Some(Evidence::Model {
-                id: "ut8802",
+                id: devices::UT8802.id,
                 reported_name: None,
             });
         }

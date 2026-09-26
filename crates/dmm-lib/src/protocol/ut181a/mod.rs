@@ -544,7 +544,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
             || probing.last() == Some(DeviceFamily::Ut181a)
         {
             return Some(Evidence::Model {
-                id: "ut181a",
+                id: devices::UT181A.id,
                 reported_name: None,
             });
         }

@@ -852,13 +852,16 @@ pub fn open_simulated(
     mode: Option<MockMode>,
     clock: Clock,
 ) -> Result<Dmm<NullTransport>> {
-    match device.id {
-        "mock" => open_mock_clocked(mode, clock),
-        zotek::sim::MOCK_ID => {
-            let protocol = zotek::sim::MockZt5b::new(clock.clone());
-            Ok(Dmm::new(NullTransport, Box::new(protocol))?.with_clock(clock))
-        }
-        other => Err(Error::UnknownDevice(format!("{other} is not simulated"))),
+    if device.id == devices::MOCK.id {
+        open_mock_clocked(mode, clock)
+    } else if device.id == zotek::sim::MOCK_ZT5B.id {
+        let protocol = zotek::sim::MockZt5b::new(clock.clone());
+        Ok(Dmm::new(NullTransport, Box::new(protocol))?.with_clock(clock))
+    } else {
+        Err(Error::UnknownDevice(format!(
+            "{} is not simulated",
+            device.id
+        )))
     }
 }
 

@@ -274,7 +274,7 @@ impl Vc8x0Model for Vc880Model {
     const NAME: &'static str = "VC-880";
     // The VC650BT speaks the same protocol and shares this id; see
     // `Vc8x0Model::DETECTED_ID`.
-    const DETECTED_ID: &'static str = "vc880";
+    const DETECTED_ID: &'static str = super::devices::VC880.id;
     const PAYLOAD_LEN: usize = LIVE_DATA_PAYLOAD_LEN;
     const STATUS_AT: usize = 27;
     const DIAL: &'static [DialPosition] = DIAL;

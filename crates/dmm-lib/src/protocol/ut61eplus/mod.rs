@@ -914,7 +914,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
 
 /// The entry a frame that names no model opens: the tables every meter in the
 /// family reads with, even where a sibling's ranges differ.
-const FALLBACK_ID: &str = "ut61eplus";
+const FALLBACK_ID: &str = devices::UT61EPLUS.id;
 
 /// How long a press waits for the meter's ack before the next command goes
 /// out.

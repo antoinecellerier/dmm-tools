@@ -602,7 +602,7 @@ fn recognise(buf: &[u8], probing: &Probing) -> Option<Evidence> {
             );
         }
         return Some(Evidence::Model {
-            id: "ut171",
+            id: devices::UT171.id,
             reported_name: None,
         });
     }

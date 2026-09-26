@@ -306,7 +306,7 @@ pub(crate) struct Vc890Model;
 impl Vc8x0Model for Vc890Model {
     const LOG: &'static str = "vc890";
     const NAME: &'static str = "VC-890";
-    const DETECTED_ID: &'static str = "vc890";
+    const DETECTED_ID: &'static str = super::devices::VC890.id;
     const PAYLOAD_LEN: usize = LIVE_DATA_PAYLOAD_LEN;
     const STATUS_AT: usize = 53;
     const DIAL: &'static [DialPosition] = DIAL;

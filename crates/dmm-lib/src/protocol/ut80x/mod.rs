@@ -92,11 +92,11 @@ impl Model {
     /// selects the same parser.
     fn report_id(self) -> &'static str {
         match self {
-            Model::Ut803 => "ut803",
-            Model::Ut804 => "ut804",
-            Model::Ut71Ab => "ut71ab",
-            Model::Ut71Cde => "ut71cde",
-            Model::Vc920 => "vc920",
+            Model::Ut803 => devices::UT803.id,
+            Model::Ut804 => devices::UT804.id,
+            Model::Ut71Ab => devices::UT71AB.id,
+            Model::Ut71Cde => devices::UT71CDE.id,
+            Model::Vc920 => devices::VC920.id,
         }
     }
 
@@ -1462,7 +1462,7 @@ fn recognise(buf: &[u8], _probing: &Probing) -> Option<Evidence> {
     // send the UT804's packets at 2400 (ut71 spec §1, §2), so they are
     // claimed as a UT804, and have to be named too.
     extract_packet(buf).ok().flatten().map(|_| Evidence::Model {
-        id: "ut804",
+        id: devices::UT804.id,
         reported_name: None,
     })
 }
