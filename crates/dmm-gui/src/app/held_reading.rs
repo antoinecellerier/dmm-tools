@@ -1,12 +1,15 @@
 //! Keeping the reading on screen steady for a meter that sends the parts of
 //! one reading in frames of their own — the UT61E+ in AC+DC V, whose DC and
-//! AC components take turns.
+//! AC components take turns — or whose sub-values take turns beside a steady
+//! main reading, each frame marking the ones it does not carry absent.
 //!
 //! Every frame still goes to the graph, the statistics and the sample buffer
 //! as it came. Only what the reading display shows is filled in: the last main
-//! reading stays up while a frame carries only a sub-value, and the last such
-//! sub-value stays in its row while a frame carries the main reading. Without
-//! it the digits would blank every other frame and the row come and go.
+//! reading stays up while a frame carries only a sub-value, the last such
+//! sub-value stays in its row while a frame carries the main reading, and a
+//! sub-value a frame marks absent shows the last value that came under its
+//! label. Without it the digits would blank every other frame and the rows
+//! come and go.
 
 use std::time::Instant;
 
@@ -48,8 +51,8 @@ pub(super) struct HeldReading {
     /// When the main reading last came, for as long as it may stand in for
     /// one a frame lacks.
     main: Option<Seen>,
-    /// Sub-values that came in frames without the main reading, in the order
-    /// first seen.
+    /// Sub-values that came in frames without the main reading, or in frames
+    /// that mark another sub-value absent, in the order first seen.
     parts: Vec<(AuxValue, Seen)>,
 }
 
@@ -67,13 +70,17 @@ impl HeldReading {
     /// A frame without the main reading shows `shown` — digits, range,
     /// specifications and any other rows — with this frame's sub-values and
     /// flags in it. A frame with it shows itself, with the held sub-values in
-    /// rows of their own ahead of its own. A meter that never sends a frame
-    /// without the main reading never gets past the first check, and nothing
-    /// is cloned for it.
+    /// rows of their own ahead of its own, and in the rows it marks absent. A
+    /// meter that never sends a frame without the main reading, nor a
+    /// sub-value marked absent beside it, never gets past the first check,
+    /// and nothing is cloned for it.
     pub(super) fn fill_in(&mut self, shown: Option<&Measurement>, m: Measurement) -> Measurement {
         let now = m.timestamp;
         let absent = !m.has_main_reading();
-        if !absent && self.parts.is_empty() {
+        // The frame carries only some of the reading: the rest comes in the
+        // frames around it.
+        let partial = absent || m.aux_values.iter().any(is_absent);
+        if !partial && self.parts.is_empty() {
             self.main = Some(Seen::new(now));
             return m;
         }
@@ -90,17 +97,18 @@ impl HeldReading {
         }
         for (aux, seen) in &mut self.parts {
             match m.aux_values.iter().find(|a| a.label == aux.label) {
-                Some(new) if absent => {
+                // Any frame that carries the label with a value, partial or
+                // not: the held part would otherwise cover the fresher row.
+                Some(new) if !is_absent(new) => {
                     *aux = new.clone();
                     *seen = Seen::new(now);
                 }
                 _ => seen.missing += 1,
             }
         }
-        if absent {
+        if partial {
             for aux in &m.aux_values {
-                let held = matches!(aux.value, MeasuredValue::Absent)
-                    || self.parts.iter().any(|(a, _)| a.label == aux.label);
+                let held = is_absent(aux) || self.parts.iter().any(|(a, _)| a.label == aux.label);
                 if !held {
                     self.parts.push((aux.clone(), Seen::new(now)));
                 }
@@ -137,6 +145,11 @@ impl HeldReading {
         }
         m
     }
+}
+
+/// Whether `aux` has no value in its frame: the meter sends it in others.
+fn is_absent(aux: &AuxValue) -> bool {
+    matches!(aux.value, MeasuredValue::Absent)
 }
 
 /// Whether `m` continues the reading `shown` is of: the same mode, and the
@@ -195,6 +208,41 @@ mod tests {
         m.range_label = "22V".into();
         m.aux_values = vec![row("AC", value)];
         m
+    }
+
+    /// A frame of a steady reading whose two sub-values take turns: the one
+    /// it does not carry is in its slot, marked absent.
+    fn turn(main: f64, voltage: Option<f64>, current: Option<f64>, t: Instant) -> Measurement {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Normal(main),
+            "VA",
+            StatusFlags {
+                auto_range: true,
+                dc: true,
+                ..Default::default()
+            },
+        );
+        m.mode = "DC VA".into();
+        m.display_raw = Some(format!("{main:.2}"));
+        m.timestamp = t;
+        let slot = |label, value: Option<f64>| match value {
+            Some(v) => row(label, v),
+            None => AuxValue {
+                value: MeasuredValue::Absent,
+                display_raw: None,
+                ..row(label, 0.0)
+            },
+        };
+        m.aux_values = vec![slot("Voltage", voltage), slot("Current", current)];
+        m
+    }
+
+    fn aux_value(m: &Measurement, label: &str) -> MeasuredValue {
+        m.aux_values
+            .iter()
+            .find(|a| a.label == label)
+            .map(|a| a.value.clone())
+            .expect("the row is there")
     }
 
     /// Feed frames through, as the App does, returning what is shown last.
@@ -350,6 +398,115 @@ mod tests {
         let m = held.fill_in(None, t2);
         let m = held.fill_in(Some(&m), dc(23.6, at(t0, 100)));
         assert!(m.aux_values.is_empty());
+    }
+
+    /// Beside a steady reading, a sub-value marked absent shows the last one
+    /// that came, in the slot the frame gives it.
+    #[test]
+    fn a_sub_value_marked_absent_shows_the_last_one_that_came() {
+        let t0 = Instant::now();
+        let mut held = HeldReading::default();
+        let m = held.fill_in(None, turn(123.45, Some(50.2), None, at(t0, 0)));
+        assert_eq!(labels(&m), ["Voltage", "Current"]);
+        assert!(
+            matches!(aux_value(&m, "Current"), MeasuredValue::Absent),
+            "nothing came yet to stand in"
+        );
+
+        let m = held.fill_in(Some(&m), turn(123.46, None, Some(2.459), at(t0, 500)));
+        assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 123.46));
+        assert_eq!(labels(&m), ["Voltage", "Current"]);
+        assert!(matches!(aux_value(&m, "Voltage"), MeasuredValue::Normal(v) if v == 50.2));
+        assert!(matches!(aux_value(&m, "Current"), MeasuredValue::Normal(v) if v == 2.459));
+
+        let m = held.fill_in(Some(&m), turn(123.47, Some(50.3), None, at(t0, 1000)));
+        assert_eq!(labels(&m), ["Voltage", "Current"]);
+        assert!(matches!(aux_value(&m, "Voltage"), MeasuredValue::Normal(v) if v == 50.3));
+        assert!(matches!(aux_value(&m, "Current"), MeasuredValue::Normal(v) if v == 2.459));
+    }
+
+    /// A sub-value that stops coming beside the reading is let go on the
+    /// same terms as a part: several frames and a couple of seconds old.
+    #[test]
+    fn a_sub_value_marked_absent_for_long_expires() {
+        let t0 = Instant::now();
+        let mut held = HeldReading::default();
+        let mut frames = vec![turn(123.45, Some(50.2), None, at(t0, 0))];
+        frames.extend((1..=3).map(|i| turn(123.45, None, Some(2.459), at(t0, i * 667))));
+        let m = show(&mut held, frames);
+        assert!(
+            matches!(aux_value(&m, "Voltage"), MeasuredValue::Normal(_)),
+            "three frames is aliasing, not a stop"
+        );
+
+        let m = held.fill_in(Some(&m), turn(123.45, None, Some(2.459), at(t0, 4 * 667)));
+        assert!(
+            matches!(aux_value(&m, "Voltage"), MeasuredValue::Absent),
+            "gone after four and 2 s"
+        );
+        assert_eq!(labels(&m), ["Voltage", "Current"]);
+    }
+
+    /// A turn of the dial or HOLD, and the sub-value held beside the reading
+    /// no longer describes what the meter shows.
+    #[test]
+    fn a_change_of_mode_or_flags_forgets_a_sub_value_held_beside_the_reading() {
+        let t0 = Instant::now();
+        let mut held = HeldReading::default();
+        let m = show(
+            &mut held,
+            vec![
+                turn(123.45, Some(50.2), None, at(t0, 0)),
+                turn(123.46, None, Some(2.459), at(t0, 500)),
+            ],
+        );
+
+        let mut ac = turn(98.7, Some(49.9), None, at(t0, 1000));
+        ac.mode = "AC VA".into();
+        let m = held.fill_in(Some(&m), ac);
+        assert!(matches!(aux_value(&m, "Current"), MeasuredValue::Absent));
+
+        let m = held.fill_in(Some(&m), turn(98.8, None, Some(1.978), at(t0, 1500)));
+        let mut on_hold = turn(98.8, None, Some(1.978), at(t0, 2000));
+        on_hold.flags.hold = true;
+        let m = held.fill_in(Some(&m), on_hold);
+        assert!(matches!(aux_value(&m, "Voltage"), MeasuredValue::Absent));
+    }
+
+    /// A frame whose sub-values all came holds nothing: the meters that send
+    /// no absent ones keep the path that clones nothing.
+    #[test]
+    fn a_frame_with_every_sub_value_holds_nothing() {
+        let t0 = Instant::now();
+        let mut held = HeldReading::default();
+        let m = held.fill_in(None, turn(123.45, Some(50.2), Some(2.459), at(t0, 0)));
+        let m = held.fill_in(Some(&m), turn(123.46, Some(50.3), Some(2.46), at(t0, 500)));
+        assert!(held.parts.is_empty());
+        assert!(matches!(aux_value(&m, "Voltage"), MeasuredValue::Normal(v) if v == 50.3));
+    }
+
+    /// A frame that carries every sub-value after some were held shows its
+    /// own values, not the older held ones.
+    #[test]
+    fn a_whole_frame_refreshes_what_is_held() {
+        let t0 = Instant::now();
+        let mut held = HeldReading::default();
+        let m = show(
+            &mut held,
+            vec![
+                turn(123.45, Some(50.2), None, at(t0, 0)),
+                turn(123.46, None, Some(2.459), at(t0, 500)),
+                turn(123.47, Some(50.3), Some(2.46), at(t0, 1000)),
+            ],
+        );
+        assert!(matches!(aux_value(&m, "Voltage"), MeasuredValue::Normal(v) if v == 50.3));
+        assert!(matches!(aux_value(&m, "Current"), MeasuredValue::Normal(v) if v == 2.46));
+
+        let m = held.fill_in(Some(&m), turn(123.48, None, Some(2.461), at(t0, 1500)));
+        assert!(
+            matches!(aux_value(&m, "Voltage"), MeasuredValue::Normal(v) if v == 50.3),
+            "the whole frame's value is the one held"
+        );
     }
 
     #[test]
