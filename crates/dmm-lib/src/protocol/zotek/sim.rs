@@ -51,6 +51,7 @@ pub(crate) static MOCK_ZT5B: SelectableDevice = SelectableDevice {
     manual_url: Some(
         "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#zotek-mock",
     ),
+    links: &[],
     bluetooth_only: false,
     bluetooth_names: &[],
 };

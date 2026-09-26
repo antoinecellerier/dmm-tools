@@ -7,6 +7,9 @@ use log::{debug, trace};
 pub const VID: u16 = 0x1A86;
 /// CH9329 PID (HID-to-UART bridge, used in UT-D09 cable).
 pub const PID: u16 = 0xE429;
+/// The bridge's name in a registry entry's links, in `dmm-cli list` and in
+/// detection.
+pub(crate) const NAME: &str = "CH9329";
 
 /// HID report size: 1 byte report ID + 64 bytes data.
 const HID_REPORT_SIZE: usize = 65;
@@ -137,7 +140,7 @@ impl Transport for Ch9329 {
     }
 
     fn transport_name(&self) -> &'static str {
-        "CH9329"
+        NAME
     }
 }
 

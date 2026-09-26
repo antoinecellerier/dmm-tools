@@ -7,6 +7,9 @@ use log::{debug, trace};
 pub const VID: u16 = 0x10C4;
 /// UT61E+ PID (CP2110 HID-to-UART bridge).
 pub const PID: u16 = 0xEA80;
+/// The bridge's name in a registry entry's links, in `dmm-cli list` and in
+/// detection.
+pub(crate) const NAME: &str = "CP2110";
 
 /// Maximum payload size for a single CP2110 HID interrupt report (AN434 §6.1).
 const MAX_REPORT_PAYLOAD: usize = 63;
@@ -212,7 +215,7 @@ impl Transport for Cp2110 {
     }
 
     fn transport_name(&self) -> &'static str {
-        "CP2110"
+        NAME
     }
 }
 

@@ -155,9 +155,9 @@ adapter — never the bridge chip.
 
 ## Bridges and adapters
 
-Which rules a bridge gets is the registry's call, not `detect.rs`'s: `preferred_transports()` in
-`lib.rs` lists the cables each family is found on, and detection runs only the fingerprints of the
-families listed on the bridge it opened — the same list the "no meter answered" help draws on. The
+Which rules a bridge gets is the registry's call, not `detect.rs`'s: each entry's `links` list the
+cables its meter is found on, and detection runs only the fingerprints of the families whose
+entries list the bridge it opened — the same list the "no meter answered" help draws on. The
 shortcut issue #9 assumed (CH9329 means UT181A) does not hold: a UT61B+ is verified over CH9329
 and older UT181A units ship the CP2110, so CP2110 and CH9329 run the same cascade. The CH9325
 carries the UT80x family alone — the UT803/UT804, and the UT71 and Voltcraft VC920/VC940/VC960,

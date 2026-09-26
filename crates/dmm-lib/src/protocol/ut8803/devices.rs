@@ -5,6 +5,11 @@
 use super::{FINGERPRINT, Ut8803Protocol};
 use crate::protocol::DeviceFamily;
 use crate::protocol::registry::{SelectableDevice, factory};
+use crate::transport::cp2110;
+
+/// The link the UT8803 is found on: the CP2110 UT-D09 covers the UT880x
+/// (the cable table in `docs/supported-devices.md`).
+const LINKS: &[&str] = &[cp2110::NAME];
 
 pub(crate) const ACTIVATION: &str = "\
 1. Connect the USB cable to the meter
@@ -20,6 +25,7 @@ pub(crate) static UT8803: SelectableDevice = SelectableDevice {
     new_protocol: factory::<Ut8803Protocol>,
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
+    links: LINKS,
     bluetooth_only: false,
     bluetooth_names: &[],
 };

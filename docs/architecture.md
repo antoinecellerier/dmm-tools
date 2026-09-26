@@ -113,9 +113,9 @@ instructions, and a factory function that creates the correct `Protocol` instanc
 and GUI resolve user input via `resolve_selection()` — `Selection::Auto` for `AUTO_DEVICE_ID`
 (`"auto"`), `Selection::Device` for anything `resolve_device()` knows — and connect via
 `open_device_by_id_auto()`; they never match on `DeviceFamily` variants or instantiate protocol
-types directly. That opener returns a `Box<dyn Transport>`, trying the cable the selected entry's
-`DeviceFamily` ships with first (`preferred_transports()` in `lib.rs`, sourced from the cable table
-in `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
+types directly. That opener returns a `Box<dyn Transport>`, trying the cables the selected entry
+lists first (its `links`, set in the family's `devices.rs` from the cable table in
+`supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
 CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. An
 entry marked `bluetooth_only`, a meter with the radio built in, is looked for over Bluetooth alone,
@@ -124,7 +124,7 @@ and fails with its own error (`Error::BluetoothOnly`): not in range, or the radi
 The same opener reaches Bluetooth. `OpenOptions` carries the `--adapter` selector and whether
 Bluetooth may be scanned: the `bluetooth` setting, which `--no-bluetooth` overrides. A selector
 shaped like a Bluetooth address or peripheral identifier goes straight to `transport/ble/`.
-Otherwise the USB bus is tried first. If nothing answers there, scanning is allowed and the family
+Otherwise the USB bus is tried first. If nothing answers there, scanning is allowed and the entry
 lists Bluetooth among its links, the transport looks for an adapter or a Bluetooth meter: one
 already connected, else one heard in a short scan, else a paired one by address. The caller names
 the peers it takes, by advertised name (`bluetooth_peers()` in `lib.rs`): an entry behind an

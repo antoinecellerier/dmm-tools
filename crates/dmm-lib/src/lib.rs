@@ -208,57 +208,6 @@ struct KnownTransport {
     init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
 }
 
-/// The links a device family is found on, most likely first: the USB cables,
-/// and UNI-T's Bluetooth adapters for the families seen on them. A meter with
-/// the radio built in is on Bluetooth alone ([`device_links`]).
-///
-/// Sourced from the cable table in `docs/supported-devices.md`: the CP2110
-/// UT-D09 covers UT61x+/UT161x/UT171x/UT880x, the Voltcraft meters and older
-/// UT181A units; the CH9329 UT-D09 variant is sold for the UT181A and UT171
-/// series and is confirmed on a UT61B+ (issue #19); the CH9325 UT-D04 is
-/// what the UT803/UT804 use, and the UT71 and Voltcraft VC9x0, which send
-/// the UT804's packets, are taken to use it too
-/// (docs/research/ut71/reverse-engineered-protocol.md §1). The UT-D07B
-/// Bluetooth adapter names the UT61+, UT161, UT171 and UT181 series on
-/// UNI-T's accessory page (https://meters.uni-trend.com/product/ut-d-series/,
-/// read 2026-09-22); the UT71 is listed for the UT-D07A only, whose GATT
-/// layout we have not seen. The ZOTEK meters have the radio built in and no
-/// cable.
-///
-/// Two things read it. Opening only orders the candidates —
-/// [`open_first_match`] still falls back to the remaining transports, so an
-/// unusual cable keeps working; without the order, selecting a UT803 on a
-/// bench that also has a UT61E+ attached opens the UT61E+'s CP2110 and every
-/// read times out. Detection takes it literally: a bridge is probed only
-/// with the fingerprints of the families listed on it, and the "no meter
-/// answered" help lists those same families — so a cable a family is seen
-/// on belongs here, whether or not it is the likely one.
-fn preferred_transports(family: protocol::DeviceFamily) -> &'static [&'static str] {
-    use protocol::DeviceFamily as F;
-    match family {
-        F::Ut8802 | F::Ut8803 | F::Vc880 | F::Vc890 => &["CP2110"],
-        // The UT-D07B is last in each list: it is a transparent bridge, so
-        // any meter with the matching socket can sit behind it, but the cable
-        // is what is usually plugged in.
-        F::Ut61EPlus | F::Ut171 => &["CP2110", "CH9329", BLUETOOTH],
-        F::Ut181a => &["CH9329", "CP2110", BLUETOOTH],
-        F::Ut80x => &["CH9325"],
-        // Bluetooth built in, no cable.
-        F::Zotek => &[BLUETOOTH],
-        F::Mock => &[],
-    }
-}
-
-/// The links one registry entry is found on: its family's, or Bluetooth
-/// alone for a meter with the radio built in.
-fn device_links(device: &SelectableDevice) -> &'static [&'static str] {
-    if device.bluetooth_only {
-        &[BLUETOOTH]
-    } else {
-        preferred_transports(device.family)
-    }
-}
-
 /// The Bluetooth peers an open for `device` takes, by name: UNI-T's adapters
 /// for a meter behind one, a meter with the radio built in by its own names,
 /// and every one of both for a meter not named yet (`auto`, `dmm-cli list`).
@@ -312,8 +261,8 @@ pub(crate) fn built_in_meters(transport: &dyn Transport) -> Vec<&'static Selecta
 ///
 /// Not a [`KnownTransport`]: that table is the USB one, and the udev and
 /// VID:PID invariants that guard it have nothing to say about a radio. It
-/// still appears in [`preferred_transports`], which is what puts the UT61+'s
-/// fingerprint on this link for detection.
+/// still appears in the registry entries' links, which is what puts the
+/// UT61+'s fingerprint on this link for detection.
 pub const BLUETOOTH: &str = "Bluetooth";
 
 /// Whether this build can reach the Bluetooth link at all.
@@ -328,7 +277,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
     KnownTransport {
         vid: cp2110::VID,
         pid: cp2110::PID,
-        name: "CP2110",
+        name: cp2110::NAME,
         init: |dev| {
             let cp = cp2110::Cp2110::new(dev);
             cp.init_uart()?;
@@ -338,7 +287,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
     KnownTransport {
         vid: ch9329::VID,
         pid: ch9329::PID,
-        name: "CH9329",
+        name: ch9329::NAME,
         init: |dev| {
             let ch = ch9329::Ch9329::new(dev);
             ch.init()?;
@@ -348,7 +297,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
     KnownTransport {
         vid: ch9325::VID,
         pid: ch9325::PID,
-        name: "CH9325",
+        name: ch9325::NAME,
         init: |dev| {
             let mut ch = ch9325::Ch9325::new(dev);
             ch.init()?;
@@ -434,8 +383,7 @@ pub fn open_device_transport(
     if device.bluetooth_only {
         return open_bluetooth_only(device, opts);
     }
-    let preferred = preferred_transports(device.family);
-    let (transport, _bridge) = open_links(preferred, &bluetooth_peers(Some(device)), opts)?;
+    let (transport, _bridge) = open_links(device.links, &bluetooth_peers(Some(device)), opts)?;
     Ok(transport)
 }
 
@@ -616,8 +564,8 @@ fn open_hid_transport(
     Ok(((kt.init)(device)?, kt.name))
 }
 
-/// The hardware meters reachable over `bridge`, the inverse of
-/// [`device_links`].
+/// The hardware meters reachable over `bridge`, the inverse of an entry's
+/// `links`.
 ///
 /// What the "no meter answered" help lists: with nothing identified on a
 /// bridge, these are the meters that could have been on it, and their
@@ -634,7 +582,7 @@ pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
 /// [`devices_on_bridge`] applies to the whole registry, for a caller holding
 /// only some of its entries.
 pub(crate) fn is_on_bridge(device: &SelectableDevice, bridge: &str) -> bool {
-    device.requires_hardware && device_links(device).contains(&bridge)
+    device.requires_hardware && device.links.contains(&bridge)
 }
 
 /// Open a specific adapter identified by serial number or HID path.
@@ -1185,12 +1133,12 @@ mod tests {
         );
     }
 
-    /// A typo in `preferred_transports` would silently degrade to the old
-    /// fixed order rather than failing to build.
+    /// A typo in an entry's `links` would silently degrade to the old fixed
+    /// order rather than failing to build.
     #[test]
     fn preferred_transport_names_exist() {
         for device in protocol::registry::DEVICES {
-            for name in device_links(device) {
+            for name in device.links {
                 assert!(
                     *name == BLUETOOTH || KNOWN_TRANSPORTS.iter().any(|kt| kt.name == *name),
                     "device {} prefers unknown transport {name:?}",
@@ -1210,15 +1158,12 @@ mod tests {
         let opts = OpenOptions::new();
         assert_eq!(bluetooth_is_next(&[], opts), bluetooth, "the auto path");
         assert_eq!(
-            bluetooth_is_next(
-                preferred_transports(protocol::DeviceFamily::Ut61EPlus),
-                opts
-            ),
+            bluetooth_is_next(registry::find_device("ut61eplus").unwrap().links, opts),
             bluetooth,
             "a family the adapter carries"
         );
         assert!(
-            !bluetooth_is_next(preferred_transports(protocol::DeviceFamily::Ut80x), opts),
+            !bluetooth_is_next(registry::find_device("ut804").unwrap().links, opts),
             "a cable-only family"
         );
         assert!(
@@ -1246,7 +1191,7 @@ mod tests {
                 continue;
             }
             assert!(
-                !device_links(device).is_empty(),
+                !device.links.is_empty(),
                 "device {} has no preferred transport",
                 device.id,
             );
@@ -1257,7 +1202,7 @@ mod tests {
     /// unusual pairing still connects.
     #[test]
     fn preference_orders_without_excluding() {
-        let preferred = preferred_transports(protocol::DeviceFamily::Ut80x);
+        let preferred = registry::find_device("ut804").unwrap().links;
         let ordered: Vec<&str> = preferred
             .iter()
             .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))

@@ -72,10 +72,9 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 1. Create `crates/dmm-lib/src/protocol/newfamily/mod.rs`
 2. Implement the `Protocol` trait (`init`, `request_measurement`, `send_command`, `get_name`, `profile`, `capture_steps`)
 3. Add variant to `DeviceFamily` enum in `protocol/mod.rs`
-4. Name the links the family is seen on in `preferred_transports()` in `lib.rs` — its USB cables (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it
-5. Add a `SelectableDevice` entry in `protocol/newfamily/devices.rs` (`bluetooth_only` and the `bluetooth_names` it advertises, for a meter with the radio built in and no cable) and list it in `DEVICES` in `protocol/registry.rs`
-6. Create research docs in `docs/research/newfamily/`
-7. Mark as experimental until verified against real hardware (the CLI prints a warning for every model short of `Stability::Verified`)
+4. Add a `SelectableDevice` entry in `protocol/newfamily/devices.rs` and list it in `DEVICES` in `protocol/registry.rs`. Its `links` name the links the family is seen on — its USB cables by their transport's `NAME` (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it; a meter with the radio built in and no cable sets `bluetooth_only`, the `bluetooth_names` it advertises and `BLUETOOTH` alone
+5. Create research docs in `docs/research/newfamily/`
+6. Mark as experimental until verified against real hardware (the CLI prints a warning for every model short of `Stability::Verified`)
 
 The CLI and GUI automatically pick up new devices from the registry — no app code changes needed.
 

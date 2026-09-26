@@ -1824,7 +1824,7 @@ the following needs someone's hardware.
   `dmm-cli read --count 60 --interval-ms 0 --format csv`,
   `RUST_LOG=dmm_lib=trace dmm-cli debug`, and `bluetoothctl info <address>` if
   the open fails. The UT71 (family `ut80x`, 2400 baud, receive-only) is kept
-  off the Bluetooth link in `preferred_transports()` until a report says the A
+  off the Bluetooth link in the ut80x `LINKS` until a report says the A
   carries it; naming the model and the adapter address
   (`--device ut71ab --adapter <address>`) opens it over Bluetooth anyway, and
   #25 asks UT71 owners for that run. The UT171 and UT181A families are

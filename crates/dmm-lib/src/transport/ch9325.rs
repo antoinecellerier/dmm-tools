@@ -24,6 +24,9 @@ use std::cell::Cell;
 pub const VID: u16 = 0x1A86;
 /// CH9325 PID (HID-to-UART bridge, used in UT-D04 cable and bench meters).
 pub const PID: u16 = 0xE008;
+/// The bridge's name in a registry entry's links, in `dmm-cli list` and in
+/// detection.
+pub(crate) const NAME: &str = "CH9325";
 
 /// CH9325 HID reports are 8 data bytes.
 const HID_REPORT_DATA_SIZE: usize = 8;
@@ -282,7 +285,7 @@ impl Transport for Ch9325 {
     }
 
     fn transport_name(&self) -> &'static str {
-        "CH9325"
+        NAME
     }
 }
 

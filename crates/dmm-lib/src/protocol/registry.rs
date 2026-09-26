@@ -29,8 +29,29 @@ pub struct SelectableDevice {
     pub(crate) fingerprint: Option<&'static Fingerprint>,
     /// URL to manufacturer's product page (for "Manual" hyperlink in GUI).
     pub manual_url: Option<&'static str>,
+    /// The links the meter is found on, most likely first: its USB cables by
+    /// their transport's `NAME`, and [`crate::BLUETOOTH`]. Each family's
+    /// `devices` module says where its list comes from.
+    ///
+    /// Two things read it. Opening only orders the candidates —
+    /// `open_first_match` still falls back to the remaining transports, so an
+    /// unusual cable keeps working; without the order, selecting a UT803 on a
+    /// bench that also has a UT61E+ attached opens the UT61E+'s CP2110 and
+    /// every read times out. Detection takes it literally: a bridge is probed
+    /// only with the fingerprints of the meters listed on it, and the "no
+    /// meter answered" help lists those same meters — so a cable a meter is
+    /// seen on belongs here, whether or not it is the likely one.
+    ///
+    /// A link left off still opens a named meter: any USB bridge, the listed
+    /// ones tried first; the USB adapter `--adapter` names by serial or path;
+    /// and the radio at a Bluetooth address given as `--adapter`. Only three
+    /// things follow the list strictly: the automatic Bluetooth fallback when
+    /// no cable answers, `auto` detection's fingerprints on each link, and a
+    /// meter with the radio built in, listed on Bluetooth alone, never
+    /// opening USB.
+    pub(crate) links: &'static [&'static str],
     /// The meter has Bluetooth built in and no cable, so it is looked for
-    /// over Bluetooth alone rather than on its family's links.
+    /// over Bluetooth alone, whatever the bus holds.
     pub bluetooth_only: bool,
     /// The name prefixes a `bluetooth_only` meter advertises, which is how
     /// an open for it tells it from an adapter or another meter in range;

@@ -6,6 +6,16 @@
 use super::{FINGERPRINT, Ut80xProtocol};
 use crate::protocol::DeviceFamily;
 use crate::protocol::registry::SelectableDevice;
+use crate::transport::ch9325;
+
+/// The link the UT80x meters are found on. The CH9325 UT-D04 is what the
+/// UT803/UT804 use (the cable table in `docs/supported-devices.md`), and the
+/// UT71 and Voltcraft VC9x0, which send the UT804's packets, are taken to use
+/// it too (docs/research/ut71/reverse-engineered-protocol.md §1). No
+/// Bluetooth: UNI-T's accessory page lists the UT71 for the UT-D07A only
+/// (https://meters.uni-trend.com/product/ut-d-series/, read 2026-09-22),
+/// whose GATT layout we have not seen.
+const LINKS: &[&str] = &[ch9325::NAME];
 
 /// The UT803 manual's RS232 button starts and stops the data output.
 const ACTIVATION_UT803: &str = "\
@@ -43,6 +53,7 @@ pub(crate) static UT803: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(Ut80xProtocol::new_ut803()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
+    links: LINKS,
     bluetooth_only: false,
     bluetooth_names: &[],
 };
@@ -57,6 +68,7 @@ pub(crate) static UT804: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(Ut80xProtocol::new_ut804()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
+    links: LINKS,
     bluetooth_only: false,
     bluetooth_names: &[],
 };
@@ -71,6 +83,7 @@ pub(crate) static UT71AB: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(Ut80xProtocol::new_ut71ab()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    links: LINKS,
     bluetooth_only: false,
     bluetooth_names: &[],
 };
@@ -85,6 +98,7 @@ pub(crate) static UT71CDE: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(Ut80xProtocol::new_ut71cde()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    links: LINKS,
     bluetooth_only: false,
     bluetooth_names: &[],
 };
@@ -99,6 +113,7 @@ pub(crate) static VC920: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(Ut80xProtocol::new_vc920()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
+    links: LINKS,
     bluetooth_only: false,
     bluetooth_names: &[],
 };

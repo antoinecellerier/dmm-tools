@@ -11,6 +11,9 @@ use super::{FINGERPRINT, ZotekProtocol, layout};
 use crate::protocol::DeviceFamily;
 use crate::protocol::registry::SelectableDevice;
 
+/// The ZOTEK meters have the radio built in and no cable.
+const LINKS: &[&str] = &[crate::BLUETOOTH];
+
 /// ZOTEK's own download page, where each model's manual is listed; the
 /// files themselves are on Google Drive, which ZOTEK may re-upload.
 const ZOTEK_SUPPORT_URL: &str = "https://zotektools.com/?support/";
@@ -52,6 +55,7 @@ pub(crate) static ZT300AB: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(ZotekProtocol::new_zt300ab()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
+    links: LINKS,
     bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
@@ -68,6 +72,7 @@ pub(crate) static ZT5566SE: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(ZotekProtocol::new_zt5566se()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
+    links: LINKS,
     bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
@@ -82,6 +87,7 @@ pub(crate) static ZT5BQ: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(ZotekProtocol::new_zt5bq()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
+    links: LINKS,
     bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
@@ -96,6 +102,7 @@ pub(crate) static ZT5B: SelectableDevice = SelectableDevice {
     new_protocol: || Box::new(ZotekProtocol::new_zt5b()),
     fingerprint: Some(&FINGERPRINT),
     manual_url: Some(ZOTEK_SUPPORT_URL),
+    links: LINKS,
     bluetooth_only: true,
     bluetooth_names: &["Bluetooth DMM"],
 };
