@@ -151,9 +151,14 @@ cmd_run() {
 	done
 	if [ -z "$dev" ] && [ "$replay" = 0 ]; then
 		args=(--device mock ${args[@]+"${args[@]}"})
-	elif [ -n "$dev" ] && [ "$dev" != mock ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
+	elif [ -n "$dev" ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		# Real meters need the user's go-ahead (CLAUDE.md); this grant is prompt-free.
-		die "--device $dev would open real hardware; ask the user, then set VERIFY_GUI_ALLOW_HW=1"
+		# `mock` and `mock-*` are simulated: a registry test keeps any name with
+		# that prefix off every entry that needs hardware.
+		case "$dev" in
+		mock | mock-*) ;;
+		*) die "--device $dev would open real hardware; ask the user, then set VERIFY_GUI_ALLOW_HW=1" ;;
+		esac
 	fi
 	cmd_start
 	kill_gui

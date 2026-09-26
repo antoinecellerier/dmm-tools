@@ -580,6 +580,9 @@ pub fn find_device(id: &str) -> Option<&'static SelectableDevice> {
 }
 
 /// Resolve a device string: tries exact ID match, then case-insensitive alias match.
+///
+/// Matching stays exact: the verify-gui skill opens any `mock-*` name without
+/// asking, safe only while no looser match can reach a hardware entry.
 pub fn resolve_device(s: &str) -> Option<&'static SelectableDevice> {
     let lower = s.to_lowercase();
     // Try exact ID match first
@@ -948,6 +951,20 @@ mod tests {
                 "{id}"
             );
             assert_eq!(device.family, DeviceFamily::Mock, "{id}");
+        }
+    }
+
+    /// The verify-gui skill opens any `mock` or `mock-*` device without
+    /// asking, so no name with that prefix may reach a meter that needs
+    /// hardware.
+    #[test]
+    fn a_mock_name_never_names_hardware() {
+        for device in DEVICES {
+            for name in std::iter::once(&device.id).chain(device.aliases) {
+                if name.to_lowercase().starts_with("mock") {
+                    assert!(!device.requires_hardware, "{} answers {name}", device.id);
+                }
+            }
         }
     }
 
