@@ -1,13 +1,13 @@
 # Adding Device Support: End-to-End Guide
 
-This guide covers the complete lifecycle for adding a new multimeter, from initial discovery through verified support. It captures methodology and lessons learned from adding the UT61E+, UT8803, UT171, and UT181A families, but is written to apply to any USB-connected DMM — including non-UNI-T devices.
+This guide covers the complete lifecycle for adding a new multimeter, from initial discovery through verified support. It captures methodology and lessons learned from every family added so far, and applies to any DMM reached over USB or Bluetooth — including non-UNI-T devices.
 
 ## Phase 1: Discovery and Candidate Assessment
 
 **Goal:** Determine if a device is a viable candidate for support.
 
 **Minimum requirements:**
-- USB connectivity with a documented or discoverable transport (HID, CDC/ACM serial, vendor-specific)
+- USB or Bluetooth connectivity with a documented or discoverable transport (HID, CDC/ACM serial, vendor-specific, Bluetooth LE)
 - Vendor software or SDK available (needed for protocol reverse engineering)
 - User manual with measurement mode and range details
 
@@ -19,7 +19,7 @@ This guide covers the complete lifecycle for adding a new multimeter, from initi
 **Steps:**
 1. Check `docs/supported-devices.md` — the device may already be documented as a candidate or ruled out
 2. Identify the USB transport: `lsusb` to get VID:PID, then search for the chip datasheet
-3. Find the vendor software — manufacturer website, product CD, or community mirrors. For UNI-T, start at the model's page on the Chinese sites, meters.uni-trend.com.cn (handhelds) and instruments.uni-trend.com.cn (bench meters): their downloads carry protocol documents, per-model PC software and the phone app that the global site lacks. `/search?keyword=<model>` on the handheld site and `/download?keyword=<model>` on the bench site search the download centre and give each file's link. Both match titles only, so also search the family prefix (`UT61`, not `UT61E+`) and 协议 (protocol); protocol documents come as .pptx, .xls or .doc as well as PDF. File links on `admin-meters.uni-trend.com.cn` fail; the same path on `meters.uni-trend.com.cn` works. For Voltcraft, Conrad's file server holds the protocol documents (`docs/research/new-device-candidates.md`, "Conrad (Voltcraft)")
+3. Find the vendor software — manufacturer website, product CD, or community mirrors. For UNI-T, start at the model's page on the Chinese sites, meters.uni-trend.com.cn (handhelds) and instruments.uni-trend.com.cn (bench meters): their downloads carry protocol documents, per-model PC software and the phone app that the global site lacks. `/search?keyword=<model>` on the handheld site and `/download?keyword=<model>` on the bench site search the download centre and give each file's link. Both match titles only, so also search the family prefix (`UT61`, not `UT61E+`) and 协议 (protocol); protocol documents come as .pptx, .xls or .doc as well as PDF. File links on `admin-meters.uni-trend.com.cn` fail; the same path on `meters.uni-trend.com.cn` works. UNI-T's US site, uni-trendus.com, is fast for manuals and datasheets; the global uni-trend.com is slow, so note its links rather than download from it. Take phone apps from the vendor or Google Play, and a mirror only when neither has them. For Voltcraft, Conrad's file server holds the protocol documents (`docs/research/new-device-candidates.md`, "Conrad (Voltcraft)")
 4. Download the user manual
 5. Store all assets in `references/<device>/` (manual PDF, installer ZIP, extracted binaries), noting the page each file came from
 
@@ -27,7 +27,7 @@ This guide covers the complete lifecycle for adding a new multimeter, from initi
 - `SLABHIDtoUART.dll` or `CP2110.dll` → Silicon Labs CP2110 HID-to-UART bridge
 - `uci.dll` → UNI-T UCI SDK (bench DMM protocol, e.g., UT8803)
 - `CH9329DLL.dll` → WCH CH9329 HID bridge (different transport than CP2110)
-- QinHeng HID (VID `0x1A86`, PID `0xE008`) → WCH CH9325/CH9102 bridge, used by UT632/UT803/UT804; different from both CP2110 and CH9329, would need a third transport backend
+- QinHeng HID (VID `0x1A86`, PID `0xE008`) → WCH CH9325/CH9102 bridge, used by UT632/UT803/UT804; different from both CP2110 and CH9329, handled by the `Ch9325` transport
 - Direct serial port usage (`Qt5SerialPort.dll`, COM port references) → CDC/ACM or RS-232 adapter
 - If none of the above match, the vendor software itself becomes the primary source for understanding the transport
 
@@ -115,6 +115,10 @@ md5sum references/device-a/extracted/Lib/CustomDmm.dll \
        references/device-b/extracted/Lib/CustomDmm.dll
 ```
 
+**Android apps:** `jadx -d <out> app.apk` decompiles to Java; an exit code of 3 only means some classes failed, and the tree is complete. `jadx` can mis-decompile, so check a decode that matters against the smali.
+
+**Minified JavaScript** (uni-app or webpack bundles, often one line of several MB): beautify it first (`jsbeautifier`, `prettier`), prefixing each output line with its byte offset in the original so citations stay offsets into the file as shipped. Record the command in the approach doc.
+
 If the protocol libraries are byte-identical across device variants, they share the same wire protocol and differ only in mode/range tables. This is how we confirmed UT61B+/D+/E+ and UT161B/D/E all use one protocol.
 
 ### Documentation deliverables
@@ -155,7 +159,8 @@ Follow the code-level steps in `docs/development.md`:
 **Key rules:**
 - Set `Stability::Experimental` in `DeviceProfile` until verified against real hardware
 - Set `max_aux_values` in `DeviceProfile` to the most sub-values one frame can carry (0 for single-display meters) — the CLI and GUI size their fixed sub-value columns from it
-- Add a `SelectableDevice` entry in the family's `devices.rs` and list it in `DEVICES` in `protocol/registry.rs` — CLI/GUI pick it up automatically
+- Add a `SelectableDevice` entry in the family's `devices.rs` and list it in `DEVICES` in `protocol/registry.rs` — CLI/GUI pick it up automatically. Its `manual_url` points at a manufacturer-owned page, not a file-sharing mirror
+- Set `DeviceProfile.verification_issue` to the model's verification issue (see Phase 7). The issue is posted once the code has been reviewed, so until then leave the field `None` and have `only_hardware_backed_models_are_verified` in `protocol/registry.rs` skip the new ids through an `ISSUE_TO_OPEN` list; the commit that links the issue deletes the list. Never put in a number that isn't a real issue
 - Export a `Fingerprint` from the family module — what its probe sends, whether its extractor checks a checksum, which families the probe has to follow, and the rule that identifies the meter from its frames — and point every one of the family's registry entries at it, with a test beside the rule over the bytes it accepts — real ones where hardware exists, the vendor trace otherwise. Nothing is added to `crates/dmm-lib/src/detect.rs`; `docs/detection-design.md` has the evidence ranking the rule has to hold its own in
 - Implement `capture_steps()` on the `Protocol` trait — this defines the guided verification workflow for the device. Each step has an `id`, a user-facing `instruction` (e.g., "Set meter to DC V mode"), an optional remote `command` to send, and a `samples` count. The default implementation returns an empty list, so the capture tool will have nothing to walk through unless you define steps. Cover all measurement modes, flag states, and remote commands the device supports. This decouples implementation from testing — someone without the device can define exactly what needs verifying, and someone with the device can run `capture` and walk through it without needing to understand the protocol.
 - Where the parser meets data its spec doesn't cover — display text, a mode or range code, an undefined bit, a frame type — call `protocol::unrecognised::report_unknown`, which asks the user for a report once per session; documented values, benign or not, stay silent
@@ -164,7 +169,7 @@ Follow the code-level steps in `docs/development.md`:
 
 ### Specification data
 
-If the device manual includes accuracy/resolution tables per mode and range:
+Add spec tables once a first hardware capture has confirmed the model; until then the Specifications panel shows the manual link, and `docs/verification-backlog.md` carries the task. If the device manual includes accuracy/resolution tables per mode and range:
 1. Add the spec data. Spec tables sit in the family module: `ut61eplus/specs/`, `ut80x/specs_ut803.rs` and `specs_ut804.rs`, `ut181a/specs.rs`. Each manual table is a `ModeSpecs` of `RangeSpec` rows keyed by range byte and labelled as printed, listed in manual order in `ALL`, and one `table()` match picks a reading's table. Rows that need a different impedance or overload, or belong to another mode, go in a part of the same name.
 2. **Never fabricate values.** If a cell in the manual is ambiguous or you can't read it, give the row an empty accuracy list or omit the entry. Wrong specs are worse than missing specs.
 3. Watch for common manual pitfalls:
@@ -182,8 +187,9 @@ If the device manual includes accuracy/resolution tables per mode and range:
 
 1. **Unit tests** — parse known byte sequences from vendor software analysis
 2. **Golden tests** — capture-format YAML files with expected parse results
-3. **Smoke test the CLI/GUI** — build and launch to confirm the new device appears in the device selector and the app doesn't crash.
-4. **`cargo clippy --workspace -- -D warnings`** and **`cargo test --workspace`** must pass
+3. **Simulated meter** — only when the generic `mock` can't show what the meter adds (its own remote keys, a layout's display words): a `mock-<model>` entry like `protocol/zotek/sim.rs`, an arm in `mock::open_simulated`, and the mock list in the registry's tests. It offers only the keys the meter has, so a key that does nothing on the mock is a key the meter lacks
+4. **Smoke test the CLI/GUI** — build and launch to confirm the new device appears in the device selector and the app doesn't crash.
+5. **`cargo clippy --workspace --all-targets -- -D warnings`** and **`cargo test --workspace`** must pass
 
 ## Phase 6: Real Device Verification
 
@@ -198,7 +204,17 @@ If the device manual includes accuracy/resolution tables per mode and range:
 2. **Start with basic connectivity:** `cargo run --bin dmm-cli -- --device <id> debug` to confirm frames are received and parseable
 3. **Use the guided capture tool:** `cargo run --bin dmm-cli -- --device <id> capture` walks the user through each mode, flag, and command step-by-step, recording raw bytes and parsed results. Use `--steps` to filter to specific items. This is the primary verification workflow — it produces a YAML report that documents exactly what was tested and can be shared in bug reports.
 
-   The steps are whatever the device's `Protocol::capture_steps()` returns, so a new device gets its coverage by declaring them there — there is no separate table in the CLI; take the six gate steps from `protocol::steps::gate_steps` and add the family's own. If the meter has a range button, declare a step for it plus one that restores auto-ranging. Resist declaring a *sweep* of successive presses until you know what the range command does on that meter — the UT61E+'s does not step the range table (see docs/verification-backlog.md), and a sweep that doesn't sweep files data that reads as authoritative range coverage but isn't. Once the gate steps pass, capture walks the ranges and flags `select()` can drive on its own, and switches to a step's mode itself when `choices(Setting::Mode)` offers it from the dial position the run is already at, so declare only what the user must do by hand — and word the instruction for the family without `choices`, where the operator still presses the button. Tag a step with `.needs(&[Need::…])` when its instruction asks for something beyond the meter and its leads — shorted probes, a DC source, a thermocouple, a transistor — so the run can list it up front and drop the step for a reporter who hasn't got one. Order the steps so the dial turns one way through the run, lead changes are grouped, and a gate step follows the mode step it extends. The freeform pass runs afterwards for every device and needs no declaration. Steps start unverified; `--unverified` runs just those, and `--list-steps --format md` prints the checklist the device's verification issue carries — regenerate it, don't hand-edit it, whenever the steps change.
+   The steps are whatever the device's `Protocol::capture_steps()` returns, so a new device gets its coverage by declaring them there — there is no separate table in the CLI. Take the six gate steps from `protocol::steps::gate_steps` and add the family's own:
+
+   - **Cover every mode the dial or buttons reach, including AUTO** where the meter selects the function itself, plus every flag and remote command.
+   - **Word each instruction from this model's manual** — its dial labels, button names and symbols (⎓ for DC). A step copied from a sibling carries the sibling's wording and its `.verified()`; reset both. Say "if the meter has it" for a feature only some models of the entry have, and never guess a threshold the manual doesn't give.
+   - **Never direct anyone to touch mains** with the leads or probe an outlet. NCV held near a live wire is fine.
+   - **Range button:** declare a step for it plus one that restores auto-ranging. Don't declare a *sweep* of successive presses until you know what the range command does on that meter — the UT61E+'s does not step the range table (see docs/verification-backlog.md), and a sweep that doesn't sweep files data that reads as authoritative range coverage but isn't.
+   - **Declare only what the user must do by hand.** Once the gate steps pass, capture walks the ranges and flags `select()` can drive on its own, and switches to a step's mode itself when `choices(Setting::Mode)` offers it from the dial position the run is already at — so word the instruction for the family without `choices`, where the operator still presses the button.
+   - **Tag equipment** with `.needs(&[Need::…])` when an instruction asks for something beyond the meter and its leads — shorted probes, a DC source, a thermocouple, a transistor — so the run lists it up front and drops the step for a reporter who hasn't got one. The `Need`'s label has to fit the step.
+   - **Order** the steps so the dial turns one way through the run, lead changes are grouped, and a gate step follows the mode step it extends.
+
+   The freeform pass runs afterwards for every device and needs no declaration. Steps start unverified; `--unverified` runs just those, and `--list-steps --format md` prints the checklist the device's verification issue carries — regenerate it, don't hand-edit it, whenever the steps change.
 4. **Test remote commands** (if supported): the capture tool covers these, but ad-hoc testing via `cargo run --bin dmm-cli -- --device <id> command <cmd>` is useful for debugging
 5. **Capture golden test data:** copy verified samples from the capture YAML into `tests/golden/<device id>/` for regression testing — a report's `raw_hex` and parsed fields are the fixture format, so they transfer verbatim
 
@@ -224,6 +240,7 @@ Once verified:
 Update these in the same commit as the code (the `/add-device` skill defers
 to this list):
 
+- The verification issue — the exception to "same commit": it is posted after the code and linked in a commit of its own (Phase 4). One issue per model name prefix: UT71A–E share one, a rebrand under another name gets its own, and a meter that reports only its packet layout gets one per layout entry, shared by the brands that send it. Its checklist is the `--list-steps --format md` output; `DeviceProfile.verification_issue`, the README row and the catalog's Status link it
 - `README.md` — hand-edit the supported-devices table: it is editorial (one row per verification issue, abbreviated model runs, a USB and a Bluetooth status), and the `dmm-cli` test only checks that no family and no verification issue is missing from it and that no row links two issues
 - `docs/cli-reference.md` — the `--device` table is generated, not hand-edited: run `UPDATE_DOCS=1 cargo test -p dmm-cli` once the registry entry lands, and hand-edit the surrounding prose and anything the device adds to the CLI
 - `docs/supported-devices.md` — add or update the device entry. Counts, form factor, cable and VID:PID live here; the generated `--device` table links here rather than repeating them
@@ -232,6 +249,8 @@ to this list):
 - `docs/verification-backlog.md` — add pending verification items (or mark as complete), including a line under "Device auto-detection" for what detection sends this family and what it expects back
 - `docs/gui-reference.md` — if the device adds new GUI behavior
 - `docs/architecture.md` — if a new protocol family or transport changes the architecture
+- `docs/setup.md` — if the meter needs a new link or activation step (a Bluetooth adapter, a pairing quirk)
+- `docs/research/new-device-candidates.md` — mark the model's candidate entry as supported
 - `CHANGELOG.md` — one `## Unreleased` entry, in user-visible phrasing
 
 ## Quick Reference: File Locations
