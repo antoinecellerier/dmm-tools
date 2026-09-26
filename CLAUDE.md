@@ -87,7 +87,7 @@ Documentation is part of the deliverable — update affected docs in the same co
 - `docs/adding-devices.md` — end-to-end guide for new device support. **Read this before starting work on any new device.**
 - `docs/research/<family>/` — per-family RE methodology and wire-protocol spec.
 - `docs/verification-backlog.md` — update whenever items are verified or new unknowns surface. Critical for preserving state across sessions.
-- For new device support, use the `/add-device` skill (`.claude/skills/add-device/SKILL.md`) — it carries the full checklist of gates, doc touchpoints, and the verification-issue pattern.
+- For new device support, use the `/add-device` skill (`.claude/skills/add-device/SKILL.md`) — it carries the gates, the user checkpoints, the subagent briefs, the standing reviews and the verification-issue pattern.
 - For spec data (resolution, accuracy, notes from a manual), use the `/spec-data` skill (`.claude/skills/spec-data/SKILL.md`) — it carries the transcription workflow, the user checkpoints and the verification steps.
 - For issue and PR replies, use the `/issue-replies` skill (`.claude/skills/issue-replies/SKILL.md`) — it carries the reply structure, the assertion bar, the standard device-report asks, and the backlog write-back rule.
 - For GUI screenshots and visual or interaction checks, use the `/verify-gui` skill (`.claude/skills/verify-gui/SKILL.md`) — it carries the private-display script, the input commands and the scenario flags.
