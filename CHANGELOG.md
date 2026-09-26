@@ -7,9 +7,9 @@
 - **Bluetooth via the UT-D07B adapter** — tested on a UT61E+; the other meters UNI-T lists for the adapter should work too. `--no-bluetooth` or a Settings checkbox turns scanning off.
 - **The UT-D07A Bluetooth adapter is supported experimentally** — untested; UNI-T lists it for the UT171 and UT181A, and a UT71 needs both `--device` and `--adapter` ([#25](https://github.com/antoinecellerier/dmm-tools/issues/25)).
 - **The UT71A–E and Voltcraft VC920/VC940/VC960 can be picked as experimental models** — auto-detection reports them as a UT804, so name the meter ([#22](https://github.com/antoinecellerier/dmm-tools/issues/22), [#23](https://github.com/antoinecellerier/dmm-tools/issues/23)).
-- **The UT60BT and UT202BT, with Bluetooth built in, are supported experimentally** ([#26](https://github.com/antoinecellerier/dmm-tools/issues/26), [#27](https://github.com/antoinecellerier/dmm-tools/issues/27)).
+- **UNI-T's UT60BT and UT202BT Bluetooth meters are supported experimentally** ([#26](https://github.com/antoinecellerier/dmm-tools/issues/26), [#27](https://github.com/antoinecellerier/dmm-tools/issues/27)).
 - **ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG) are supported experimentally** — the ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207 and ZT-5B / V05B, with remote keys, also on the GUI's mode label, and a simulated ZT-5B to try them on ([#28](https://github.com/antoinecellerier/dmm-tools/issues/28), [#29](https://github.com/antoinecellerier/dmm-tools/issues/29), [#30](https://github.com/antoinecellerier/dmm-tools/issues/30), [#31](https://github.com/antoinecellerier/dmm-tools/issues/31)).
-- **The EEVblog 121GW, with Bluetooth built in, is supported experimentally** — with remote keys ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)).
+- **The EEVblog 121GW Bluetooth meter is supported experimentally** — with remote keys ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)).
 - **Brymen's BM788BT and BM787BT Bluetooth meters are supported experimentally**.
 
 ### GUI
