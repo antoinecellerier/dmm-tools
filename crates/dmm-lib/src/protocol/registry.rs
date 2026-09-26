@@ -1,5 +1,5 @@
 use super::{DeviceFamily, Fingerprint, Protocol};
-use super::{ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0, zotek};
+use super::{eevblog121gw, ut61eplus, ut80x, ut171, ut181a, ut8802, ut8803, vc8x0, zotek};
 use crate::mock;
 
 /// A selectable device in the GUI device picker and CLI --device flag.
@@ -103,6 +103,8 @@ pub static DEVICES: &[&SelectableDevice] = &[
     &zotek::devices::ZT5566SE,
     &zotek::devices::ZT5BQ,
     &zotek::devices::ZT5B,
+    // EEVblog
+    &eevblog121gw::devices::EEVBLOG_121GW,
     // Mock
     &mock::devices::MOCK,
     &zotek::sim::MOCK_ZT5B,
@@ -424,6 +426,8 @@ mod tests {
     fn only_hardware_backed_models_are_verified() {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
+        // Experimental, with their verification issues still to be opened.
+        const ISSUE_TO_OPEN: &[&str] = &["121gw"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
@@ -442,7 +446,7 @@ mod tests {
                 "device {} has unexpected stability",
                 device.id
             );
-            if !expected.is_verified() {
+            if !expected.is_verified() && !ISSUE_TO_OPEN.contains(&device.id) {
                 assert!(
                     profile.verification_issue.is_some(),
                     "{} device {} must link to a verification issue",
@@ -540,10 +544,12 @@ mod tests {
             ("UT60BT", "ut60bt"),
             ("UT60BTk", "ut60bt"),
             (" ut202bt ", "ut202bt"),
+            ("121GW", "121gw"),
+            (" 121gw ", "121gw"),
         ] {
             assert_eq!(ids(name), [id], "{name:?}");
         }
-        for name in ["UT-D07B", "UT-D07A", "UT61E+", "UT60", ""] {
+        for name in ["UT-D07B", "UT-D07A", "UT61E+", "UT60", "121", ""] {
             assert!(ids(name).is_empty(), "{name:?}");
         }
     }

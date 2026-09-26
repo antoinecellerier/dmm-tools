@@ -75,6 +75,7 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `zt5566se` | `zt-5566se`, `zt5566s`, `zt-5566s`, `an999s`, `an-999s` | ZT-5566SE / AN999S (experimental) |
 | `zt5bq` | `zt-5bq`, `st207` | ZT-5BQ / ST207 (experimental) |
 | `zt5b` | `zt-5b`, `v05b` | ZT-5B / V05B (experimental) |
+| `121gw` | `eevblog121gw`, `eevblog-121gw` | EEVblog 121GW (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->
@@ -491,6 +492,23 @@ ZT-5566SE offers `minmax`.
 | `current` | Current key |
 | `temp_unit` | °C/°F key |
 | `zero` | ZERO key; capacitance only |
+
+#### EEVblog 121GW commands
+
+The keys of EEVblog's and UEi's apps, not yet tried on a meter; watch the reading for
+what a key did.
+
+| Command | Description |
+|---|---|
+| `range` | RANGE button |
+| `hold` | HOLD button: HOLD, then A-HOLD |
+| `rel` | REL button |
+| `select` | MODE button: steps to the dial position's next function |
+| `minmax` | MIN/MAX button: cycles MIN, MAX and AVG |
+| `exit_minmax` | Long MIN/MAX: leaves MIN/MAX |
+| `peak` | 1ms PEAK button; AC V only |
+| `light` | Long MODE: toggle backlight |
+| `lpf` | Long REL: 1 kHz low-pass filter; AC modes only |
 
 #### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960
 

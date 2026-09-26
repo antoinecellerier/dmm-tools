@@ -1234,16 +1234,21 @@ mod tests {
             );
         }
         // The families UNI-T's accessory page names for the UT-D07B, and the
-        // ZOTEK meters with the radio built in: that is what detection
-        // probes for over it and what the help it prints offers. The UT80x
-        // is not among them — the UT71 is listed for the UT-D07A, a
-        // different adapter.
+        // meters with the radio built in (ZOTEK's, the 121GW): that is what
+        // detection probes for over it and what the help it prints offers.
+        // The UT80x is not among them — the UT71 is listed for the UT-D07A,
+        // a different adapter.
         use protocol::DeviceFamily as F;
         let on_bluetooth: Vec<&str> = devices_on_bridge(BLUETOOTH).iter().map(|d| d.id).collect();
         let listed: Vec<&str> = registry::DEVICES
             .iter()
             .filter(|d| d.requires_hardware)
-            .filter(|d| matches!(d.family, F::Ut61EPlus | F::Ut171 | F::Ut181a | F::Zotek))
+            .filter(|d| {
+                matches!(
+                    d.family,
+                    F::Ut61EPlus | F::Ut171 | F::Ut181a | F::Zotek | F::Eevblog121gw
+                )
+            })
             .map(|d| d.id)
             .collect();
         assert_eq!(on_bluetooth, listed);
@@ -1276,6 +1281,7 @@ mod tests {
             ("zt5566se", "Bluetooth DMM"),
             ("zt5bq", "Bluetooth DMM"),
             ("zt5b", "Bluetooth DMM"),
+            ("121gw", "121GW"),
         ] {
             assert_eq!(
                 peers(id),
@@ -1289,7 +1295,7 @@ mod tests {
             bluetooth_peers(None),
             BluetoothPeers {
                 adapters: true,
-                meters: vec!["UT60BT", "UT202BT", "Bluetooth DMM"],
+                meters: vec!["UT60BT", "UT202BT", "Bluetooth DMM", "121GW"],
             }
         );
     }
@@ -1344,7 +1350,9 @@ mod tests {
             .collect();
         assert_eq!(
             bluetooth_only,
-            ["ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b"]
+            [
+                "ut60bt", "ut202bt", "zt300ab", "zt5566se", "zt5bq", "zt5b", "121gw"
+            ]
         );
         for kt in KNOWN_TRANSPORTS {
             assert!(

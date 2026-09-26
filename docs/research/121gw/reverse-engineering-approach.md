@@ -2,9 +2,10 @@
 
 Scope: the EEVblog 121GW multimeter and its Bluetooth LE link, from the
 meter's advertisement to the packets it sends and the commands it accepts.
-Nothing is implemented yet; this pair of documents records what the meter
-does on the wire. §1-14 of the spec come from vendor sources only; §15
-compares them with community sources, read after the boundary was opened.
+It is implemented, experimentally; this pair of documents records what the
+meter does on the wire, which the implementation builds on. §1-14 of the
+spec come from vendor sources only; §15 compares them with community
+sources, read after the boundary was opened.
 
 The question was which of the formats in the vendor sources the meter sends
 today. The answer is the **binary 19-byte packet** of EEVblog's "BLE Packet

@@ -174,9 +174,13 @@ fn settings_scroll_cap(window_h: f32, top: f32) -> f32 {
 }
 
 /// A context key's tooltip: like every remote button's, it promises a press
-/// and nothing more.
-fn context_key_hover(label: &str) -> String {
-    format!("Press the meter's {label} key")
+/// and nothing more — the key's own words when the meter has no key of that
+/// name to press.
+fn context_key_hover(key: &dmm_lib::protocol::MeterKey) -> String {
+    key.hover.map_or_else(
+        || format!("Press the meter's {} key", key.label),
+        str::to_string,
+    )
 }
 
 /// Width of the rule between the meter's buttons and the Scale chip, in
@@ -314,8 +318,9 @@ impl App {
                 }
             }
 
-            // The meter's context keys (ZOTEK's ZERO in capacitance), each
-            // only while the reading is one it applies to.
+            // The meter's context keys (ZOTEK's ZERO in capacitance, the
+            // 121GW's 1kHz in AC), each only while the reading is one it
+            // applies to.
             let reading = self.last_measurement.as_ref();
             for key in self.connection.meter_keys.context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
@@ -324,7 +329,7 @@ impl App {
                 let text = RichText::new(key.label).font(egui::FontId::proportional(font_size));
                 if ui
                     .add(egui::Button::new(text))
-                    .on_hover_text(context_key_hover(key.label))
+                    .on_hover_text(context_key_hover(key))
                     .clicked()
                 {
                     self.send_command(key.command);
@@ -1561,6 +1566,7 @@ mod tests {
     const ZERO_IN_FARADS: &[dmm_lib::protocol::MeterKey] = &[dmm_lib::protocol::MeterKey {
         command: "zero",
         label: "ZERO",
+        hover: None,
         applies: |m| m.unit.ends_with('F'),
     }];
 
@@ -1613,5 +1619,23 @@ mod tests {
         let volts = chips_for("V");
         assert!(volts.iter().any(|l| l == "HOLD"), "{volts:?}");
         assert!(!volts.iter().any(|l| l == "ZERO"), "{volts:?}");
+    }
+
+    /// A context key's tooltip names the key to press, or says how the
+    /// meter does it when no key carries its label.
+    #[test]
+    fn a_context_key_tooltip_says_how_the_meter_does_it() {
+        assert_eq!(
+            super::context_key_hover(&ZERO_IN_FARADS[0]),
+            "Press the meter's ZERO key"
+        );
+        let long_press = dmm_lib::protocol::MeterKey {
+            hover: Some("Hold the meter's REL key"),
+            ..ZERO_IN_FARADS[0]
+        };
+        assert_eq!(
+            super::context_key_hover(&long_press),
+            "Hold the meter's REL key"
+        );
     }
 }

@@ -1,4 +1,5 @@
 pub(crate) mod cycle;
+pub(crate) mod eevblog121gw;
 mod expect;
 pub(crate) mod framing;
 pub mod registry;
@@ -202,6 +203,10 @@ pub struct MeterKey {
     pub command: &'static str,
     /// What a menu entry or button shows.
     pub label: &'static str,
+    /// How the meter's own keypad does it, when that is not a short press
+    /// of a key named `label` (a long press, or a key named otherwise), for
+    /// a tooltip; `None` when it is.
+    pub hover: Option<&'static str>,
     /// In [`MeterKeys::functions`], whether the reading shows this key's
     /// function; in [`MeterKeys::context`], whether the key is offered
     /// while the reading shows.
@@ -274,6 +279,8 @@ pub enum DeviceFamily {
     /// ZOTEK Bluetooth meters (ZOYI, ZOTEK, BSIDE, ANENG), one entry per
     /// packet layout
     Zotek,
+    /// EEVblog 121GW
+    Eevblog121gw,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -290,6 +297,7 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Vc880 => write!(f, "vc880"),
             DeviceFamily::Vc890 => write!(f, "vc890"),
             DeviceFamily::Zotek => write!(f, "ZOTEK"),
+            DeviceFamily::Eevblog121gw => write!(f, "EEVblog 121GW"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }
@@ -332,9 +340,11 @@ pub(crate) struct Fingerprint {
     /// chance to answer first. A family not on the bridge is ignored —
     /// there is nothing to protect there.
     pub(crate) send_after: &'static [DeviceFamily],
-    /// Whether the extractor this rule uses validates a checksum. Ranks its
-    /// evidence above a rule that only pattern-matches (UT8802, UT80x) when
-    /// two of them claim the same bytes.
+    /// Whether the extractor this rule uses validates a checksum strong
+    /// enough (16-bit) to outrank a checksummed `FamilyOnly`. Ranks its
+    /// evidence above a rule that only pattern-matches (UT8802, UT80x) or
+    /// checks an 8-bit XOR (the 121GW) when two of them claim the same
+    /// bytes.
     pub(crate) checksummed: bool,
     /// Classify the whole receive buffer. Called after every read, so it has
     /// to tolerate partial frames and scan every candidate offset itself: a

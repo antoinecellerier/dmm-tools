@@ -44,7 +44,7 @@ const SI_PREFIXES: &[(char, f64)] = &[
 /// milliseconds, not milli-seconds ("s" is not a base here), and "°C", "°F",
 /// "%", "dBm" and "dBV" carry no prefix at all.
 const BASE_UNITS: &[&str] = &[
-    "V", "A", "Ω", "F", "Hz", "S", "W", "VAC", "VDC", "AAC", "ADC",
+    "V", "A", "Ω", "F", "Hz", "S", "W", "VA", "VAC", "VDC", "AAC", "ADC",
 ];
 
 /// Split a meter unit into its base unit and the multiplier to that base:
@@ -864,6 +864,9 @@ mod tests {
             ("nS", "S", 1e-9),
             ("VAC", "VAC", 1.0),
             ("VDC", "VDC", 1.0),
+            ("VA", "VA", 1.0),
+            ("mVA", "VA", 1e-3),
+            ("µVA", "VA", 1e-6),
         ] {
             assert_eq!(si_prefix(unit), (base, mult), "unit {unit}");
         }

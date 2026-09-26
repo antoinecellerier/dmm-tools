@@ -11,7 +11,7 @@ Modern multimeters with PC connectivity use one of these transports:
 | Transport | Examples | Sigrok coverage |
 |-----------|----------|-----------------|
 | **USB HID** (current dmm-tools) | UNI-T (CP2110/CH9329/CH9325), Brymen (Cypress), Victor | Good on all platforms |
-| **Bluetooth LE** | 121GW, OWON B35T/B41T+, UNI-T UT-D07B, Aneng/BSIDE/ZOYI | **Linux only, experimental, flaky** |
+| **Bluetooth LE** (current dmm-tools) | 121GW, OWON B35T/B41T+, UNI-T UT-D07B, Aneng/BSIDE/ZOYI | **Linux only, experimental, flaky** |
 | **USB serial (CDC)** | OWON XDM (CH340), Fluke IR (FTDI), APPA (CP2102) | Good on all platforms |
 | **USB TMC/SCPI** | Rigol, Siglent bench instruments | Good, well-served by pyvisa/lxi-tools |
 
@@ -351,7 +351,11 @@ phone-only — no desktop logging tool exists for BLE mode.
 
 ---
 
-### EEVBlog 121GW
+### EEVblog 121GW
+
+**Specified 2026-09-26 from EEVblog's packet-format documents and app, UEi's
+app and the manual: [research/121gw](121gw/reverse-engineered-protocol.md).
+Implemented 2026-09-26, experimental.**
 
 | Aspect | Details |
 |--------|---------|
@@ -384,6 +388,14 @@ firmware: [121gw-88mph](https://github.com/tpwrules/121gw-88mph) (23 stars).
 Xamarin) but has limited logging. No polished native desktop app with
 real-time graphing. The community is large but software solutions are
 fragmented.
+
+**Brymen rebrands on the same store (a future candidate, not researched).**
+[EEVblog's store](https://eevblog.store/collections/multimeters) sells the
+BM787BT, BM2257, BM786, BM235 and BM036, which are Brymen meters under
+EEVblog's name; the
+[BM787BT](https://eevblog.store/products/eevblog-bm787bt-bluetooth-multimeter)
+has Bluetooth, and a BLE protocol document for it is published (noted
+2026-09-26).
 
 ---
 
@@ -694,7 +706,7 @@ the same transport.
 
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
-| **EEVBlog 121GW** | BLE | Largest enthusiast community (292-page thread), fragmented software | Moderate |
+| **EEVblog 121GW** — implemented 2026-09-26 | BLE (built in) | Largest enthusiast community (292-page thread), fragmented software; specified from EEVblog's and UEi's apps and EEVblog's packet-format documents ([research/121gw](121gw/reverse-engineered-protocol.md)) | Done, experimental: `121gw` awaits a hardware report |
 | **OWON B35T+/B41T+** | BLE | Popular budget BLE meters, no cross-platform GUI, proprietary dongle required for PC | High |
 | **Victor 70C/86C** | USB HID | Cheap, protocol documented, no good software | Moderate |
 | **UNI-T UT632/UT632N** | USB HID (CH9325) | Bench DMM on a bridge we already drive; the UT803 app's UT632 configuration frames its stream on a high-nibble-E byte but decodes nothing, so the payload needs a capture and the `ut80x` parsing does not carry over | Unmeasured |
@@ -715,18 +727,21 @@ the same transport.
 
 - **BLE transport is the biggest unlock.** It enables UNI-T UT-D07B
   (reuses existing parsers), 121GW, and OWON B35T/B41T+ — three of the
-  most-demanded meters. sigrok's BLE is Linux-only and experimental; no
-  competitor fills this space cross-platform.
+  most-demanded meters; the first two are implemented. sigrok's BLE is
+  Linux-only and experimental; no competitor fills this space
+  cross-platform.
 - **rusty_meter** (100 stars, Rust/egui, OWON XDM) validates the exact
   tech stack dmm-tools uses. Proves community demand for native desktop
   multimeter apps.
 - **Other brands' BLE meters need more than names and tables.** The 121GW,
   OWON B35T+/B41T+ and ZOTEK meters (ZOYI/BSIDE/ANENG) are not known to use
-  the ISSC service (the ZOTEK apps use service `FFF0`, characteristic `FFF4`),
-  so each needs its own GATT path. The 121GW and OWON protocols are documented
-  only in community code, so each needs a clean-room source decision before
-  work starts; the ZOTEK protocol is specified from ZOTEK's own apps
-  ([research/zotek](zotek/reverse-engineered-protocol.md)).
+  the ISSC service (the ZOTEK apps use service `FFF0`, characteristic `FFF4`;
+  the 121GW has a service of its own), so each needs its own GATT path. The
+  OWON protocol is documented only in community code, so it needs a
+  clean-room source decision before work starts; the ZOTEK and 121GW
+  protocols are specified from their vendors' own apps and documents
+  ([research/zotek](zotek/reverse-engineered-protocol.md),
+  [research/121gw](121gw/reverse-engineered-protocol.md)).
 - **Bluetooth-DMM-For-Windows** (47 stars, now abandoned) proves demand
   for a multi-device BLE desktop app. Its Windows-only nature and
   inactivity leave the gap wide open.

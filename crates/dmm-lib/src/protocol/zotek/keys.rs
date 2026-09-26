@@ -92,6 +92,7 @@ pub(super) fn commands(layout: &Layout) -> &'static [&'static str] {
 const VOLTS: MeterKey = MeterKey {
     command: "volts",
     label: "V",
+    hover: None,
     applies: |m| Function::Volts.shown_in(m),
 };
 /// Marked on types 3-4 only: on the auto-ranging type 1 a millivolt reading
@@ -99,36 +100,43 @@ const VOLTS: MeterKey = MeterKey {
 const MILLIVOLTS: MeterKey = MeterKey {
     command: "millivolts",
     label: "mV",
+    hover: None,
     applies: |m| Function::Millivolts.shown_in(m),
 };
 const OHMS: MeterKey = MeterKey {
     command: "ohms",
     label: "Ω",
+    hover: None,
     applies: |m| Function::Ohms.shown_in(m),
 };
 const CAPACITANCE: MeterKey = MeterKey {
     command: "capacitance",
     label: "Capacitance",
+    hover: None,
     applies: |m| Function::Capacitance.shown_in(m),
 };
 const HZ: MeterKey = MeterKey {
     command: "hz",
     label: "Hz",
+    hover: None,
     applies: |m| Function::Frequency.shown_in(m),
 };
 const DIODE_CONTINUITY: MeterKey = MeterKey {
     command: "diode_continuity",
     label: "Diode / continuity",
+    hover: None,
     applies: |m| Function::Diode.shown_in(m) || Function::Continuity.shown_in(m),
 };
 const NCV: MeterKey = MeterKey {
     command: "ncv",
     label: "NCV",
+    hover: None,
     applies: |m| Function::Ncv.shown_in(m),
 };
 const CURRENT: MeterKey = MeterKey {
     command: "current",
     label: "Current",
+    hover: None,
     applies: |m| {
         [Function::Amps, Function::Milliamps, Function::Microamps]
             .iter()
@@ -138,6 +146,7 @@ const CURRENT: MeterKey = MeterKey {
 const TEMP_UNIT: MeterKey = MeterKey {
     command: "temp_unit",
     label: "°C / °F",
+    hover: None,
     applies: |m| Function::Celsius.shown_in(m) || Function::Fahrenheit.shown_in(m),
 };
 /// AUTO's own display is the `Auto` word with no function lit (spec §6.4);
@@ -145,12 +154,14 @@ const TEMP_UNIT: MeterKey = MeterKey {
 const AUTO_FUNCTION: MeterKey = MeterKey {
     command: "auto_function",
     label: "Auto function",
+    hover: None,
     applies: |m| Function::None.shown_in(m) && matches!(m.value, MeasuredValue::NoReading(_)),
 };
 /// ZERO, offered where `code` sends it: in capacitance.
 const ZERO: MeterKey = MeterKey {
     command: "zero",
     label: "ZERO",
+    hover: None,
     applies: |m| Function::Capacitance.shown_in(m),
 };
 

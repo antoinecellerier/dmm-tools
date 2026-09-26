@@ -35,6 +35,11 @@ other programs.
   — all four layouts are implemented, experimental. The ANENG AN9002, V05B,
   ST207 and AN999S are sold as rebrands (matched by specs and keys; AN999S ≈ ZT-5566S/SE).
 
+## EEVblog
+
+- [121GW — Bluetooth LE, a 19-byte binary packet and ASCII-hex key frames](research/121gw/reverse-engineered-protocol.md)
+  — implemented, experimental.
+
 ## Shared infrastructure
 
 Families that use a `0xAB 0xCD` header share a framing skeleton but
@@ -47,7 +52,8 @@ and the UT71 and VC920/VC940/VC960 with them — send proprietary
 structured data in 11-byte packets ending CR LF — see the per-family
 docs for the exact wire format. The ZOTEK meters stream
 XOR-scrambled `5A A5` packets with no checksum and take `AB CD` commands
-with no length byte and a 16-bit big-endian sum.
+with no length byte and a 16-bit big-endian sum. The 121GW streams 19-byte
+`F2` packets closed by an 8-bit XOR and takes `F4`-led ASCII-hex key frames.
 
 The UART byte stream is transport-agnostic within each family. Three
 HID bridge chips and one Bluetooth adapter appear across the supported

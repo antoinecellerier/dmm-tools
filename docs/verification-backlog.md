@@ -25,6 +25,7 @@ Items that need real components or specific setups to verify.
   - [UT632: the vendor app frames its stream but decodes nothing](#ut632-the-vendor-app-frames-its-stream-but-decodes-nothing)
   - [UT8805/UT8806: open questions before a SCPI implementation](#ut8805ut8806-open-questions-before-a-scpi-implementation)
   - [ZOTEK (ZOYI / ANENG / BSIDE): experimental, awaiting a hardware report](#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)
+  - [EEVblog 121GW: experimental, awaiting a hardware report](#eevblog-121gw-experimental-awaiting-a-hardware-report)
   - [UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet](#ut-d07a--ut-d07b-what-the-bluetooth-transport-has-not-shown-yet)
   - [Vendor sources not yet read](#vendor-sources-not-yet-read)
   - [VC-890 VOID readings are plotted as valid](#vc-890-void-readings-are-plotted-as-valid)
@@ -59,6 +60,7 @@ is probed with, and how well that probe is backed:
 | VC-880, VC650BT | nothing — the meter streams once PC is pressed; a VC650BT is reported as a VC-880, the protocol being byte-identical | `AB CD` BE16 frame, payload `[0] == 0x01`, 34 bytes | Deduced from the vendor traces, unverified |
 | VC-890 | 3× `AB CD 04 FF 00 02 7B`, then `AB CD 03 5E 01 D9` | `AB CD` BE16 frame, payload `[0] == 0x01`, 61 bytes | Deduced from the vendor traces, unverified |
 | ZOTEK ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | nothing — the meter streams over its built-in Bluetooth | one whole packet: on-air `1B 84`, a type byte with a layout, that type's length, every digit a listed glyph; the type byte picks the entry | Deduced from ZOTEK's apps, unverified; community captures show the packets (ZOTEK spec §11) |
+| EEVblog 121GW | nothing — the meter streams over its built-in Bluetooth | one packet: 18 bytes whose XOR is `F2`, with or without the `F2` before them, a mode and range in the tables, no reserved bit set | Deduced from EEVblog's documents and apps, unverified; both community-captured packets pass (121GW spec §15.5) |
 
 Open questions, each needing a meter:
 
@@ -91,6 +93,11 @@ Open questions, each needing a meter:
   out on the Bluetooth link before its listen-only rule has heard a packet,
   and FFF4 takes writes; unscrambled, none is a frame the meter's command
   format (ZOTEK spec §8) would accept, but no meter has been watched.
+- **What the UT61+, UT181A and UT171 probes do to a 121GW.** Only one opened
+  by address with no name heard gets them; one advertising "121GW" runs its
+  own rule alone. Firmware 1.02's receiver drops every frame not led by `F4`
+  or `F8` (121GW spec §15.4), which none of the probes is; current firmware
+  has not been watched.
 - **Opening after detection runs the family's `init` again**, so a UT181A
   receives SET_MONITOR twice and a UT171 its connect frame twice per auto
   open. Harmless on paper — both are what the meter was already sent — but
@@ -1831,6 +1838,101 @@ function shown and the LCD reading noted.
   voltage. Confirm with a reporter's capture. The driver shows it as the HV
   warning flag. The capture plan has no step for it: that would put the
   leads on mains.
+
+### EEVblog 121GW: experimental, awaiting a hardware report
+
+Specified 2026-09-26 from EEVblog's packet-format documents and app, UEi's
+app and the manual (`docs/research/121gw/reverse-engineered-protocol.md`,
+§14 for the open questions); the community cross-reference (spec §15) came
+after, and answers several items below without being our verification.
+Implemented 2026-09-26 as the `eevblog121gw` family, experimental, registry
+id `121gw`; its verification issue is still to be opened. Nobody on the
+project owns one, so where an item below is open the driver's choice is
+noted with it. Spec tables wait for a first real-device confirmation, as
+for every new meter; the manual carries them (p.17-23). One capture settles
+the most at once: **`RUST_LOG=dmm_lib=trace dmm-cli --device 121gw debug`**
+for a few seconds in DC V, with the firmware version the meter shows on
+boot.
+
+- **`F2` on the air.** The two apps and the documents give a 19-byte packet
+  led by `F2`; the two community clients run on a meter take 18-byte values
+  with no `F2` (spec §15.4). The driver finds a packet by the XOR of its 18
+  body bytes, takes an `F2` before them when there is one, and stores every
+  packet as 19 bytes; the first trace says which the meter sends.
+- **Notify or indicate, and the write type.** UEi's app enables indications;
+  a community client that enables notifications works (spec §2, §15.4). The
+  write type the characteristic takes is open.
+- **Keys.** Whether current firmware acts on the `F4` key frames at all
+  (spec §11.1; firmware 1.02 does and echoes them, §15.4). The driver
+  offers range, hold, rel, select (MODE), minmax, exit_minmax (long
+  MIN/MAX), peak (short 1ms PEAK), light (long MODE) and lpf (long REL), and
+  never long 1ms PEAK, which switches Bluetooth off, nor MEM, SETUP, long
+  RANGE, long HOLD or UEi's buzzer code. It sends no clock set.
+- **Rate.** About 2 packets a second on a 2022 meter, 4 on firmware 1.02
+  (spec §15.4); read_frame's 2 s window holds several either way.
+- **Blank secondary display.** Firmware 1.02 sends bytes 9-12 all zero
+  (spec §15.4); the driver takes that as no sub-value. The `setup_blank`
+  capture step records it.
+- **Burden voltage unit.** Sub code 150 is mV in UEi's table, V in
+  EEVblog's LCD (spec §7.1); the driver follows UEi.
+- **VA operands.** In the VA modes the secondary display alternates the
+  voltage (sub code 1 or 2) and the current (16-21) (spec §15.4). The
+  driver carries both first on every VA frame, voltage then current, the one
+  not shown absent (both while the display shows something else, which
+  follows them). Units come from UEi's app, which reads an operand in its
+  mode's range 0 (spec §7.1): the voltage in V, the current in µA in µVA
+  and mA in every mVA and VA range. Firmware 1.02 [COMMUNITY] would give A
+  on the 10 A ranges 2-3 of AC/DC VA (spec §15.4), and EEVblog's app would
+  show the voltage in mV when the main range is m or µ (spec §7.1); a
+  capture in each VA range settles it.
+- **Temperature without a unit bit.** Firmware before 1.21 sets neither
+  byte 6 bit 5 (°C) nor bit 4 (°F) (spec §1, §6.4); the driver then reads °C,
+  as UEi's app does. Both bits set is reported.
+- **1 ms PEAK and MIN/MAX.** "1ms" lit (byte 15 bit 5) is the max peak
+  (manual p.33, p.36); MIN/MAX 2 beside it is taken as the min peak, from
+  firmware 1.02 only (spec §15.4). The driver shows `peak_max`, or
+  `peak_min` for MIN/MAX 2, and reports MIN/MAX 3-7 under "1ms".
+- **↙ (byte 16 bit 5).** Firmware 1.02 drives the LCD's danger segment from
+  it (spec §15.4), but no vendor source names it; the driver keeps it
+  silent rather than show a hazard warning that might be wrong.
+- **TEST (byte 17 bit 6).** Named by EEVblog's app, never set by firmware
+  1.02, meaning unknown (spec §9); the driver keeps it silent. MEM (byte 17
+  bits 5-4) sets the record flag on any non-zero value, firmware 1.02 using
+  it for logging and playback alike.
+- **Reserved bits.** Byte 14 bit 5 is set on real meters although V2 fixes
+  it at 0 (spec §15.3 D4); the driver leaves it out and reports the other
+  bits V2 fixes at 0. Detection takes no packet with one set.
+- **Returning to auto-ranging.** The manual says RANGE leaves auto but not
+  how to come back (manual p.33); the `range_auto` capture step asks
+  whether a dial turn does.
+- **µVA, and DC/AC in VA.** How codes 13/22 are reached is not in the
+  manual (firmware 1.02: MODE on the µA position, spec §15.4), nor how the
+  mVA/VA position picks DC or AC. The capture steps ask, with a skip.
+- **Older ASCII firmware.** Firmware before the binary packet sends `F2`
+  and ASCII (spec §12). The driver never reads it as a packet (byte 13's
+  top bits), and a read that times out on it says to update the firmware
+  from the SD card (manual p.72). Which firmware first sent the binary
+  packet is open (spec §14.4).
+- **Advertised name.** "121GW", seen on a meter (spec §15.4). EEVblog's app
+  also accepts "Bluegiga", which no meter was seen to send; the driver does
+  not look for it.
+- **A cached 121GW and a known UT-D07B.** Before, with no meter named, the
+  Bluetooth search's known-peer fallback (a paired or cached peer tried by
+  address when the scan misses it) took UT-D07 adapters and the "UT60BT",
+  "UT202BT" and "Bluetooth DMM" meters; after, "121GW" too. BlueZ keeps any
+  device it has heard, so a cached 121GW now competes with a known UT-D07B,
+  as a cached ZOTEK meter already did, and whichever the platform lists
+  first is tried: an asleep 121GW costs a ~10 s connect and then "not
+  found". Ordering known adapters ahead of known built-in meters would fix
+  it if a report shows it.
+- **Detection on the Bluetooth link.** Before, the UT61+, UT171, UT181A and
+  ZOTEK rules ran there; after, the 121GW's rank-1 rule too. It declines
+  AB CD frames, ZOTEK packets and the adapter heartbeat (tests); a chance
+  match stays rare (`docs/detection-design.md`). Watch a UT-D07B report
+  for a 121GW claim.
+- **SD-card logs.** The meter logs to its micro SD card as CSV — sample,
+  then the main and the secondary function, value and unit (manual p.54).
+  Importing such a file as a session is an idea, not planned.
 
 ### UT-D07A / UT-D07B: what the Bluetooth transport has not shown yet
 

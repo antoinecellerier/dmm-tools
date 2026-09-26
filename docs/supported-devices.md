@@ -4,9 +4,9 @@
 
 Most supported meters talk over a USB HID-to-UART cable; the UT-D07
 Bluetooth adapters serve the meters listed for them below, and the UT60BT,
-UT202BT and ZOTEK meters have Bluetooth built in. The tool works out which
-link and which meter are attached from the bytes the meter sends
-([how](detection-design.md)), so the default `auto` device needs no setup
+UT202BT, ZOTEK meters and EEVblog 121GW have Bluetooth built in. The tool
+works out which link and which meter are attached from the bytes the meter
+sends ([how](detection-design.md)), so the default `auto` device needs no setup
 beyond switching the meter's data transmission on, as listed per family below.
 
 **✅ Verified** means the model's protocol tables have been confirmed on real
@@ -168,9 +168,22 @@ remote keys from the apps. The meter
 names only its packet layout, so auto-detection picks the row above that
 sends it ([backlog](verification-backlog.md#zotek-zoyi--aneng--bside-experimental-awaiting-a-hardware-report)).
 
+## EEVblog
+
+Handheld. Bluetooth built in, no cable; the meter shows up as "121GW"
+([setup](setup.md#bluetooth)). Switch on: hold 1ms PEAK until BT shows.
+
+| Model | Counts | Status | Notes |
+|---|---|---|---|
+| EEVblog 121GW | 55000 | 🧪 Experimental | update the firmware from the SD card if the tool asks (manual p.72) |
+
+Not run on a meter yet: the decoding comes from EEVblog's packet-format
+documents, EEVblog's and UEi's apps and the manual, and the remote keys from
+the apps ([backlog](verification-backlog.md#eevblog-121gw-experimental-awaiting-a-hardware-report)).
+
 ## Not supported yet
 
-Other meters with a Bluetooth radio built in (EEVBlog 121GW, OWON) and
+Other meters with a Bluetooth radio built in (OWON) and
 serial meters (Fluke 28x, UT805A) are not supported yet.
 Candidates, their protocols and what each would take are researched in
 [new-device-candidates.md](research/new-device-candidates.md). Your model is

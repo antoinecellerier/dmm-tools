@@ -4,11 +4,12 @@ What the EEVblog 121GW multimeter sends and accepts over Bluetooth LE. One
 packet: 19 binary bytes, starting `F2` and ending in an XOR checksum, that
 carries the main display (mode, range, an 18-bit value), the secondary
 display, the bar graph and the annunciators. Commands to the meter are short
-ASCII-hex frames led by `F4` (key presses) or `F8` (clock set). No 121GW has
-been on our bench: every fact in §1-14 comes from EEVblog's packet-format
-documents, EEVblog's app, UEi's app and the user manual, and §15 compares
-them with community sources. The approach doc beside it records the sources,
-the method and the clean-room boundary.
+ASCII-hex frames led by `F4` (key presses) or `F8` (clock set). It is
+implemented, experimentally (`crates/dmm-lib/src/protocol/eevblog121gw/`),
+and no 121GW has been on our bench: every fact in §1-14 comes from EEVblog's
+packet-format documents, EEVblog's app, UEi's app and the user manual, and
+§15 compares them with community sources. The approach doc beside it records
+the sources, the method and the clean-room boundary.
 
 Based on:
 - EEVblog's "BLE Packet Format" documents, V1 (2018-03-22) and V2
@@ -426,7 +427,11 @@ selected" (manual p.32) [KNOWN].
 A full byte: "100 ~ 199, 0 ~ 24" (V2 p.1) [KNOWN]. Codes 0-24 are read with
 the main mode table by both apps (EEVblog casts to `eMode`, Packet:171; UEi
 looks up the same map, `Protocol.java:502-511`) [VENDOR]; that the meter
-uses them with the main mode's meaning is [INFERRED]. EEVblog's screen lights
+uses them with the main mode's meaning is [INFERRED]. UEi's app reads a sub
+mode in range 0 of its mode: it sets the sub range to 0 (`Protocol.java:193`)
+and takes that range's unit string (`:502-511`), so V for sub modes 1 and 2,
+µA for 16 and 17 and mA for 18-21, whatever the main range [VENDOR].
+EEVblog's screen lights
 unit segments on the secondary display by sub mode, e.g. V for sub modes 0-4
 and 11, A for 16-21, V and A for 15 and 22-24 (Screen:565-654). In the VA main
 modes, `Subm` adds an "m" when the main range's prefix is m, n or u, or when

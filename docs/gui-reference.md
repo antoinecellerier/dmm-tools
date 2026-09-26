@@ -131,6 +131,7 @@ A row of buttons shown when connected and receiving data (visible in the
 | **MIN/MAX** | Click to enter or cycle MAX ↔ MIN. Shows stored value. **x** exits. |
 | **PEAK** | Click to enter or cycle P-MAX ↔ P-MIN. Shows stored peak. **x** exits. |
 | **ZERO** | Zero the capacitance reading (ZOTEK, shown in capacitance only) |
+| **1kHz** | Switch the 1 kHz low-pass filter on or off (121GW, shown in AC modes only) |
 | **SELECT** | Cycle sub-modes |
 | **LIGHT** | Toggle backlight |
 

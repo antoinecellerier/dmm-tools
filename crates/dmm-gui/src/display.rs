@@ -3055,11 +3055,13 @@ mod tests {
         MeterKey {
             command: "volts",
             label: "V",
+            hover: None,
             applies: |m| m.unit == "V",
         },
         MeterKey {
             command: "ohms",
             label: "Ω",
+            hover: None,
             applies: |m| m.unit == "Ω",
         },
     ];

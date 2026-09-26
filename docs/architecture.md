@@ -43,6 +43,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `protocol/ut181a/` | UT181A: `Ut181aProtocol` in `mod.rs` (streaming driver, device-sent unit strings); `parse.rs` decodes the normal, REL, MIN/MAX, Peak and COMP payloads, `command.rs` builds the AB CD command frames and reads the OK/ER reply, `mode.rs` holds the dial families SET_MODE and SET_RANGE move within |
 | `protocol/vc8x0/` | Voltcraft VC-880/VC650BT and VC-890: `Vc8x0Protocol<M>` in `mod.rs` implements `Protocol` and `CycleMeter` once over a `Vc8x0Model`; `vc880.rs` (streaming) and `vc890.rs` (polled) hold each family's tables, dial, frame layout and the drain or ack around its I/O, and name the driver over their model `Vc880Protocol` / `Vc890Protocol` |
 | `protocol/zotek/` | ZOTEK Bluetooth meters (ZOYI, BSIDE, ANENG): `ZotekProtocol` — streaming, one registry entry per packet layout, every packet decoded by its own layout; `frame.rs` finds and descrambles packets in the notification stream, `glyph.rs` reads the seven-segment digits and the words spelled in them, `layout.rs` holds each layout's annunciator table and builds the reading from what is lit, `keys.rs` the remote keys each layout offers and their frames, sent without waiting for a reply (a key whose code follows the display uses the last packet decoded, reading one first if none has arrived), `capture.rs` the capture steps per layout, `sim.rs` the simulated ZT-5B behind `--device mock-zt5b` |
+| `protocol/eevblog121gw/` | EEVblog 121GW: `Eevblog121gwProtocol` in `mod.rs` — streaming, listen-only init, remote keys written without waiting for a reply; `packet.rs` finds packets in the byte stream, `tables.rs` holds the mode and range tables, `decode.rs` builds the reading and its sub-values, `capture.rs` the capture steps |
 | `measurement.rs` | `Measurement` struct: mode, value, unit, flags (protocol-agnostic), and a `MainLabel` naming the reading when it is one part of what the meter measures; `AuxValue` sub-values, with `AuxValue::export_cells` + `Measurement::export_aux_slots` supplying the cells and slot order `export.rs` lays out (the slot helper keeps a software-appended sub-value in a fixed column as the meter's own count changes) |
 | `export.rs` | `CsvLayout`: the CSV header and row cells shared by the CLI and GUI exporters, so the two writers cannot disagree on columns (cells only — the `csv` crate stays in the binaries) |
 | `transform.rs` | `Transform`: opt-in software scale/offset/unit-relabel over the main reading (shunt and clamp factors, °C→°F). `si_prefix()` converts to the base SI unit first so a factor survives auto-ranging; the meter's own reading is kept as the `Raw` sub-value |
@@ -78,7 +79,8 @@ Bluetooth ──► Ble (Box<dyn Transport>) ───────────�
                                            ├── Ut181aProtocol              (streaming, device-sent units)
                                            ├── Vc8x0Protocol<Vc880Model>   (streaming)
                                            ├── Vc8x0Protocol<Vc890Model>   (polled)
-                                           └── ZotekProtocol               (streaming, per-layout LCD image)
+                                           ├── ZotekProtocol               (streaming, per-layout LCD image)
+                                           └── Eevblog121gwProtocol        (streaming)
 ```
 
 `Dmm<T: Transport>` holds a `Box<dyn Protocol>`. The `Protocol` trait provides `init()`,
@@ -102,10 +104,12 @@ answers with direct commands; the UT61+/UT161 and Voltcraft families go through
 to "unsupported", and the CLI and GUI hide any setting whose list has fewer than two entries.
 A profile can also list keys for a GUI to draw by data rather than by command name:
 `DeviceProfile::meter_keys` is a `MeterKeys { functions, context }` of `MeterKey { command,
-label, applies: fn(&Measurement) -> bool }`. Function keys become the mode readout's menu,
+label, hover, applies: fn(&Measurement) -> bool }`; `hover` is a context key's tooltip when
+the meter does it by other than a press of a key of that label. Function keys become the mode readout's menu,
 marked where `applies` holds, when the family lists no mode choices; context keys join the
 buttons only while `applies` holds. Every one is a `supported_commands` entry, sent through
-`send_command()`. `MeterKeys::NONE` is the default; ZOTEK lists its keys per layout.
+`send_command()`. `MeterKeys::NONE` is the default; ZOTEK lists its keys per layout, and the
+121GW its 1 kHz filter key as a context key.
 
 **Device registry** (`protocol/registry.rs`) is the single source of truth for all selectable
 devices: each family keeps its `SelectableDevice` entries in its `devices.rs`, and `DEVICES` lists

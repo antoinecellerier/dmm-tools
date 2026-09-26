@@ -139,8 +139,9 @@ readout dropdowns' job.
 - **HOLD, REL, RANGE, AUTO, MIN/MAX, PEAK** — highlight blue when the corresponding protocol flag is active
 - **SELECT** — cycles sub-modes (no toggle state, mode change visible in reading)
 - **LIGHT** — toggles backlight (no protocol feedback for state)
-- Context keys from the profile (ZOTEK's **ZERO**) — shown only while the
-  reading is one they act on (capacitance for ZERO)
+- Context keys from the profile (ZOTEK's **ZERO**, the 121GW's **1kHz**) —
+  shown only while the reading is one they act on (capacitance for ZERO, the
+  AC modes for 1kHz)
 
 ### Scale Button
 

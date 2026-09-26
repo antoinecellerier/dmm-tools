@@ -113,6 +113,10 @@ pairing: switch Bluetooth on at the meter as
 [supported devices](supported-devices.md) lists, and it shows up as
 "Bluetooth DMM".
 
+The EEVblog 121GW has Bluetooth built in and needs no pairing either: hold
+1ms PEAK until BT shows, and it shows up as "121GW". It switches off after
+30 minutes; set APO.oF in its SETUP menu to disable that.
+
 Pair the adapter in the system's Bluetooth settings for a quicker connection.
 
 Readings arrive as fast as the link delivers: on a UT61E+, about 3 a second
