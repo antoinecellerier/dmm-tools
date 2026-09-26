@@ -625,6 +625,7 @@ fn open_hid_transport(
 pub fn devices_on_bridge(bridge: &str) -> Vec<&'static SelectableDevice> {
     registry::DEVICES
         .iter()
+        .copied()
         .filter(|d| is_on_bridge(d, bridge))
         .collect()
 }

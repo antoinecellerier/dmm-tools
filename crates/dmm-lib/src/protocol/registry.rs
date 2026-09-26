@@ -180,370 +180,400 @@ Note: the meter switches off after 15 minutes idle; press NCV before turning it 
 
 const ACTIVATION_MOCK: &str = "No setup required \u{2014} this is a simulated device.";
 
+static UT61EPLUS: SelectableDevice = SelectableDevice {
+    id: "ut61eplus",
+    display_name: "UT61E+",
+    aliases: &["ut61e+", "ut61e"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT61EPLUS,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut61eplus,
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT61BPLUS: SelectableDevice = SelectableDevice {
+    id: "ut61b+",
+    display_name: "UT61B+",
+    aliases: &["ut61bplus", "ut61b"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT61EPLUS,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut61bplus,
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT61DPLUS: SelectableDevice = SelectableDevice {
+    id: "ut61d+",
+    display_name: "UT61D+",
+    aliases: &["ut61dplus", "ut61d"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT61EPLUS,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut61dplus,
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT161B: SelectableDevice = SelectableDevice {
+    id: "ut161b",
+    display_name: "UT161B",
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT61EPLUS,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut161b, // same table as UT61B+
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT161D: SelectableDevice = SelectableDevice {
+    id: "ut161d",
+    display_name: "UT161D",
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT61EPLUS,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut161d, // same table as UT61D+
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT161E: SelectableDevice = SelectableDevice {
+    id: "ut161e",
+    display_name: "UT161E",
+    aliases: &["ut161"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT61EPLUS,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut161e, // same table as UT61E+
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT60BT: SelectableDevice = SelectableDevice {
+    id: "ut60bt",
+    display_name: "UT60BT",
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT60BT,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut60bt,
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
+    bluetooth_only: true,
+    // One UT60BT advertises `UT60BTk` (docs/research/new-device-candidates.md).
+    bluetooth_names: &["UT60BT"],
+};
+
+static UT202BT: SelectableDevice = SelectableDevice {
+    id: "ut202bt",
+    display_name: "UT202BT",
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT202BT,
+    family: DeviceFamily::Ut61EPlus,
+    new_protocol: new_ut202bt,
+    fingerprint: Some(&ut61eplus::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com.cn/content/1341.html"),
+    bluetooth_only: true,
+    bluetooth_names: &["UT202BT"],
+};
+
+static UT8802: SelectableDevice = SelectableDevice {
+    id: "ut8802",
+    display_name: "UT8802",
+    aliases: &["ut8802n"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT8803, // same setup as UT8803
+    family: DeviceFamily::Ut8802,
+    new_protocol: factory::<Ut8802Protocol>,
+    fingerprint: Some(&ut8802::FINGERPRINT),
+    manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8802"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT8803: SelectableDevice = SelectableDevice {
+    id: "ut8803",
+    display_name: "UT8803",
+    aliases: &["ut8803e"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT8803,
+    family: DeviceFamily::Ut8803,
+    new_protocol: factory::<Ut8803Protocol>,
+    fingerprint: Some(&ut8803::FINGERPRINT),
+    manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT803: SelectableDevice = SelectableDevice {
+    id: "ut803",
+    display_name: "UT803",
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT803,
+    family: DeviceFamily::Ut80x,
+    new_protocol: || Box::new(Ut80xProtocol::new_ut803()),
+    fingerprint: Some(&ut80x::FINGERPRINT),
+    manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT804: SelectableDevice = SelectableDevice {
+    id: "ut804",
+    display_name: "UT804",
+    aliases: &[],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT804,
+    family: DeviceFamily::Ut80x,
+    new_protocol: || Box::new(Ut80xProtocol::new_ut804()),
+    fingerprint: Some(&ut80x::FINGERPRINT),
+    manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT71AB: SelectableDevice = SelectableDevice {
+    id: "ut71ab",
+    display_name: "UT71A/B",
+    aliases: &["ut71a", "ut71b"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT71,
+    family: DeviceFamily::Ut80x,
+    new_protocol: || Box::new(Ut80xProtocol::new_ut71ab()),
+    fingerprint: Some(&ut80x::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT71CDE: SelectableDevice = SelectableDevice {
+    id: "ut71cde",
+    display_name: "UT71C/D/E",
+    aliases: &["ut71c", "ut71d", "ut71e"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT71,
+    family: DeviceFamily::Ut80x,
+    new_protocol: || Box::new(Ut80xProtocol::new_ut71cde()),
+    fingerprint: Some(&ut80x::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT171: SelectableDevice = SelectableDevice {
+    id: "ut171",
+    display_name: "UT171A/B/C",
+    aliases: &["ut171a", "ut171b", "ut171c"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT171,
+    family: DeviceFamily::Ut171,
+    new_protocol: factory::<Ut171Protocol>,
+    fingerprint: Some(&ut171::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut171-series/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static UT181A: SelectableDevice = SelectableDevice {
+    id: "ut181a",
+    display_name: "UT181A",
+    aliases: &["ut181"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT181A,
+    family: DeviceFamily::Ut181a,
+    new_protocol: factory::<Ut181aProtocol>,
+    fingerprint: Some(&ut181a::FINGERPRINT),
+    manual_url: Some("https://meters.uni-trend.com/product/ut181a/"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static VC880: SelectableDevice = SelectableDevice {
+    id: "vc880",
+    display_name: "Voltcraft VC-880",
+    aliases: &["vc-880"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_VC880,
+    family: DeviceFamily::Vc880,
+    new_protocol: factory::<Vc880Protocol>,
+    fingerprint: Some(&vc8x0::VC880_FINGERPRINT),
+    manual_url: Some(
+        "https://www.conrad.com/p/voltcraft-vc880-handheld-multimeter-digital-calibrated-to-manufacturers-standards-no-certificate-data-logger-cat-iii-124609",
+    ),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static VC650BT: SelectableDevice = SelectableDevice {
+    id: "vc650bt",
+    display_name: "Voltcraft VC650BT",
+    aliases: &["vc-650bt"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_VC880, // same protocol as VC-880
+    family: DeviceFamily::Vc880,
+    new_protocol: || Box::new(Vc880Protocol::for_model("Voltcraft VC650BT")),
+    fingerprint: Some(&vc8x0::VC880_FINGERPRINT),
+    manual_url: Some(
+        "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
+    ),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static VC890: SelectableDevice = SelectableDevice {
+    id: "vc890",
+    display_name: "Voltcraft VC-890",
+    aliases: &["vc-890"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_VC880, // same activation as VC-880
+    family: DeviceFamily::Vc890,
+    new_protocol: factory::<Vc890Protocol>,
+    fingerprint: Some(&vc8x0::VC890_FINGERPRINT),
+    manual_url: Some(
+        "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
+    ),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static VC920: SelectableDevice = SelectableDevice {
+    id: "vc920",
+    display_name: "Voltcraft VC920/VC940/VC960",
+    aliases: &["vc-920", "vc940", "vc-940", "vc960", "vc-960"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_UT71, // same keys as the UT71
+    family: DeviceFamily::Ut80x,
+    new_protocol: || Box::new(Ut80xProtocol::new_vc920()),
+    fingerprint: Some(&ut80x::FINGERPRINT),
+    manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static ZT300AB: SelectableDevice = SelectableDevice {
+    id: "zt300ab",
+    display_name: "ZT-300AB / AN9002",
+    aliases: &["zt-300ab", "an9002", "an-9002"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_ZT300AB,
+    family: DeviceFamily::Zotek,
+    new_protocol: || Box::new(ZotekProtocol::new_zt300ab()),
+    fingerprint: Some(&zotek::FINGERPRINT),
+    manual_url: Some(ZOTEK_SUPPORT_URL),
+    bluetooth_only: true,
+    bluetooth_names: &["Bluetooth DMM"],
+};
+
+static ZT5566SE: SelectableDevice = SelectableDevice {
+    id: "zt5566se",
+    display_name: "ZT-5566SE / AN999S",
+    // Not the plain ZT-5566: its manual documents Bluetooth only as a
+    // speaker.
+    aliases: &["zt-5566se", "zt5566s", "zt-5566s", "an999s", "an-999s"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_ZT5566SE,
+    family: DeviceFamily::Zotek,
+    new_protocol: || Box::new(ZotekProtocol::new_zt5566se()),
+    fingerprint: Some(&zotek::FINGERPRINT),
+    manual_url: Some(ZOTEK_SUPPORT_URL),
+    bluetooth_only: true,
+    bluetooth_names: &["Bluetooth DMM"],
+};
+
+static ZT5BQ: SelectableDevice = SelectableDevice {
+    id: "zt5bq",
+    display_name: "ZT-5BQ / ST207",
+    aliases: &["zt-5bq", "st207"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_ZT5BQ,
+    family: DeviceFamily::Zotek,
+    new_protocol: || Box::new(ZotekProtocol::new_zt5bq()),
+    fingerprint: Some(&zotek::FINGERPRINT),
+    manual_url: Some(ZOTEK_SUPPORT_URL),
+    bluetooth_only: true,
+    bluetooth_names: &["Bluetooth DMM"],
+};
+
+static ZT5B: SelectableDevice = SelectableDevice {
+    id: "zt5b",
+    display_name: "ZT-5B / V05B",
+    aliases: &["zt-5b", "v05b"],
+    requires_hardware: true,
+    activation_instructions: ACTIVATION_ZT5B,
+    family: DeviceFamily::Zotek,
+    new_protocol: || Box::new(ZotekProtocol::new_zt5b()),
+    fingerprint: Some(&zotek::FINGERPRINT),
+    manual_url: Some(ZOTEK_SUPPORT_URL),
+    bluetooth_only: true,
+    bluetooth_names: &["Bluetooth DMM"],
+};
+
+static MOCK: SelectableDevice = SelectableDevice {
+    id: "mock",
+    display_name: "Mock (simulated)",
+    aliases: &[],
+    requires_hardware: false,
+    activation_instructions: ACTIVATION_MOCK,
+    family: DeviceFamily::Mock,
+    new_protocol: factory::<MockProtocol>,
+    fingerprint: None,
+    manual_url: Some(
+        "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#mock-modes",
+    ),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
+static MOCK_ZT5B: SelectableDevice = SelectableDevice {
+    id: zotek::sim::MOCK_ID,
+    display_name: "Mock ZT-5B / V05B (simulated)",
+    aliases: &[],
+    requires_hardware: false,
+    activation_instructions: ACTIVATION_MOCK,
+    family: DeviceFamily::Mock,
+    new_protocol: factory::<MockZt5b>,
+    fingerprint: None,
+    manual_url: Some(
+        "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#zotek-mock",
+    ),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
+
 /// All selectable devices, in GUI display order.
-pub static DEVICES: &[SelectableDevice] = &[
+pub static DEVICES: &[&SelectableDevice] = &[
     // UT61E+ family — each model has its own DeviceTable
-    SelectableDevice {
-        id: "ut61eplus",
-        display_name: "UT61E+",
-        aliases: &["ut61e+", "ut61e"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT61EPLUS,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61eplus,
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut61b+",
-        display_name: "UT61B+",
-        aliases: &["ut61bplus", "ut61b"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT61EPLUS,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61bplus,
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut61d+",
-        display_name: "UT61D+",
-        aliases: &["ut61dplus", "ut61d"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT61EPLUS,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut61dplus,
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut61plus-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut161b",
-        display_name: "UT161B",
-        aliases: &[],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT61EPLUS,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut161b, // same table as UT61B+
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut161d",
-        display_name: "UT161D",
-        aliases: &[],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT61EPLUS,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut161d, // same table as UT61D+
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut161e",
-        display_name: "UT161E",
-        aliases: &["ut161"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT61EPLUS,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut161e, // same table as UT61E+
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut161-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
+    &UT61EPLUS, &UT61BPLUS, &UT61DPLUS, &UT161B, &UT161D, &UT161E,
     // Bluetooth built in, no cable
-    SelectableDevice {
-        id: "ut60bt",
-        display_name: "UT60BT",
-        aliases: &[],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT60BT,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut60bt,
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com.cn/content/1298.html"),
-        bluetooth_only: true,
-        // One UT60BT advertises `UT60BTk` (docs/research/new-device-candidates.md).
-        bluetooth_names: &["UT60BT"],
-    },
-    SelectableDevice {
-        id: "ut202bt",
-        display_name: "UT202BT",
-        aliases: &[],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT202BT,
-        family: DeviceFamily::Ut61EPlus,
-        new_protocol: new_ut202bt,
-        fingerprint: Some(&ut61eplus::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com.cn/content/1341.html"),
-        bluetooth_only: true,
-        bluetooth_names: &["UT202BT"],
-    },
-    // Other families
-    SelectableDevice {
-        id: "ut8802",
-        display_name: "UT8802",
-        aliases: &["ut8802n"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT8803, // same setup as UT8803
-        family: DeviceFamily::Ut8802,
-        new_protocol: factory::<Ut8802Protocol>,
-        fingerprint: Some(&ut8802::FINGERPRINT),
-        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8802"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut8803",
-        display_name: "UT8803",
-        aliases: &["ut8803e"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT8803,
-        family: DeviceFamily::Ut8803,
-        new_protocol: factory::<Ut8803Protocol>,
-        fingerprint: Some(&ut8803::FINGERPRINT),
-        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT8803E"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut803",
-        display_name: "UT803",
-        aliases: &[],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT803,
-        family: DeviceFamily::Ut80x,
-        new_protocol: || Box::new(Ut80xProtocol::new_ut803()),
-        fingerprint: Some(&ut80x::FINGERPRINT),
-        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT803"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut804",
-        display_name: "UT804",
-        aliases: &[],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT804,
-        family: DeviceFamily::Ut80x,
-        new_protocol: || Box::new(Ut80xProtocol::new_ut804()),
-        fingerprint: Some(&ut80x::FINGERPRINT),
-        manual_url: Some("https://instruments.uni-trend.com/products/digital-multimeters/UT804"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut71ab",
-        display_name: "UT71A/B",
-        aliases: &["ut71a", "ut71b"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT71,
-        family: DeviceFamily::Ut80x,
-        new_protocol: || Box::new(Ut80xProtocol::new_ut71ab()),
-        fingerprint: Some(&ut80x::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut71cde",
-        display_name: "UT71C/D/E",
-        aliases: &["ut71c", "ut71d", "ut71e"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT71,
-        family: DeviceFamily::Ut80x,
-        new_protocol: || Box::new(Ut80xProtocol::new_ut71cde()),
-        fingerprint: Some(&ut80x::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut71-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut171",
-        display_name: "UT171A/B/C",
-        aliases: &["ut171a", "ut171b", "ut171c"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT171,
-        family: DeviceFamily::Ut171,
-        new_protocol: factory::<Ut171Protocol>,
-        fingerprint: Some(&ut171::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut171-series/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "ut181a",
-        display_name: "UT181A",
-        aliases: &["ut181"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT181A,
-        family: DeviceFamily::Ut181a,
-        new_protocol: factory::<Ut181aProtocol>,
-        fingerprint: Some(&ut181a::FINGERPRINT),
-        manual_url: Some("https://meters.uni-trend.com/product/ut181a/"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    // Voltcraft
-    SelectableDevice {
-        id: "vc880",
-        display_name: "Voltcraft VC-880",
-        aliases: &["vc-880"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_VC880,
-        family: DeviceFamily::Vc880,
-        new_protocol: factory::<Vc880Protocol>,
-        fingerprint: Some(&vc8x0::VC880_FINGERPRINT),
-        manual_url: Some(
-            "https://www.conrad.com/p/voltcraft-vc880-handheld-multimeter-digital-calibrated-to-manufacturers-standards-no-certificate-data-logger-cat-iii-124609",
-        ),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "vc650bt",
-        display_name: "Voltcraft VC650BT",
-        aliases: &["vc-650bt"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_VC880, // same protocol as VC-880
-        family: DeviceFamily::Vc880,
-        new_protocol: || Box::new(Vc880Protocol::for_model("Voltcraft VC650BT")),
-        fingerprint: Some(&vc8x0::VC880_FINGERPRINT),
-        manual_url: Some(
-            "https://www.conrad.com/p/voltcraft-vc650bt-bench-multimeter-digital-cat-ii-600-v-display-counts-40000-124411",
-        ),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "vc890",
-        display_name: "Voltcraft VC-890",
-        aliases: &["vc-890"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_VC880, // same activation as VC-880
-        family: DeviceFamily::Vc890,
-        new_protocol: factory::<Vc890Protocol>,
-        fingerprint: Some(&vc8x0::VC890_FINGERPRINT),
-        manual_url: Some(
-            "https://www.conrad.com/p/voltcraft-vc890-oled-hand-multimeter-digital-oled-display-data-logger-cat-iii-1000-v-cat-iv-600-v-display-counts-60000-124600",
-        ),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
-    SelectableDevice {
-        id: "vc920",
-        display_name: "Voltcraft VC920/VC940/VC960",
-        aliases: &["vc-920", "vc940", "vc-940", "vc960", "vc-960"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_UT71, // same keys as the UT71
-        family: DeviceFamily::Ut80x,
-        new_protocol: || Box::new(Ut80xProtocol::new_vc920()),
-        fingerprint: Some(&ut80x::FINGERPRINT),
-        manual_url: Some("https://asset.conrad.com/media10/add/160267/c1/-/gl/000123296ML04"),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
+    &UT60BT, &UT202BT, // Other families
+    &UT8802, &UT8803, &UT803, &UT804, &UT71AB, &UT71CDE, &UT171, &UT181A, // Voltcraft
+    &VC880, &VC650BT, &VC890, &VC920,
     // ZOTEK, sold as ZOYI, ZOTEK, BSIDE and ANENG. A packet names its layout
     // only, never the model or brand, so there is one entry per layout, named
     // for the models the layout is known from
     // (docs/research/zotek/reverse-engineered-protocol.md §1, §11.4).
-    SelectableDevice {
-        id: "zt300ab",
-        display_name: "ZT-300AB / AN9002",
-        aliases: &["zt-300ab", "an9002", "an-9002"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_ZT300AB,
-        family: DeviceFamily::Zotek,
-        new_protocol: || Box::new(ZotekProtocol::new_zt300ab()),
-        fingerprint: Some(&zotek::FINGERPRINT),
-        manual_url: Some(ZOTEK_SUPPORT_URL),
-        bluetooth_only: true,
-        bluetooth_names: &["Bluetooth DMM"],
-    },
-    SelectableDevice {
-        id: "zt5566se",
-        display_name: "ZT-5566SE / AN999S",
-        // Not the plain ZT-5566: its manual documents Bluetooth only as a
-        // speaker.
-        aliases: &["zt-5566se", "zt5566s", "zt-5566s", "an999s", "an-999s"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_ZT5566SE,
-        family: DeviceFamily::Zotek,
-        new_protocol: || Box::new(ZotekProtocol::new_zt5566se()),
-        fingerprint: Some(&zotek::FINGERPRINT),
-        manual_url: Some(ZOTEK_SUPPORT_URL),
-        bluetooth_only: true,
-        bluetooth_names: &["Bluetooth DMM"],
-    },
-    SelectableDevice {
-        id: "zt5bq",
-        display_name: "ZT-5BQ / ST207",
-        aliases: &["zt-5bq", "st207"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_ZT5BQ,
-        family: DeviceFamily::Zotek,
-        new_protocol: || Box::new(ZotekProtocol::new_zt5bq()),
-        fingerprint: Some(&zotek::FINGERPRINT),
-        manual_url: Some(ZOTEK_SUPPORT_URL),
-        bluetooth_only: true,
-        bluetooth_names: &["Bluetooth DMM"],
-    },
-    SelectableDevice {
-        id: "zt5b",
-        display_name: "ZT-5B / V05B",
-        aliases: &["zt-5b", "v05b"],
-        requires_hardware: true,
-        activation_instructions: ACTIVATION_ZT5B,
-        family: DeviceFamily::Zotek,
-        new_protocol: || Box::new(ZotekProtocol::new_zt5b()),
-        fingerprint: Some(&zotek::FINGERPRINT),
-        manual_url: Some(ZOTEK_SUPPORT_URL),
-        bluetooth_only: true,
-        bluetooth_names: &["Bluetooth DMM"],
-    },
-    // Mock
-    SelectableDevice {
-        id: "mock",
-        display_name: "Mock (simulated)",
-        aliases: &[],
-        requires_hardware: false,
-        activation_instructions: ACTIVATION_MOCK,
-        family: DeviceFamily::Mock,
-        new_protocol: factory::<MockProtocol>,
-        fingerprint: None,
-        manual_url: Some(
-            "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#mock-modes",
-        ),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
+    &ZT300AB, &ZT5566SE, &ZT5BQ, &ZT5B, // Mock
+    &MOCK,
     // A ZT-5B for trying the ZOTEK driver and its remote keys on; never
     // detected and never looked for over Bluetooth.
-    SelectableDevice {
-        id: zotek::sim::MOCK_ID,
-        display_name: "Mock ZT-5B / V05B (simulated)",
-        aliases: &[],
-        requires_hardware: false,
-        activation_instructions: ACTIVATION_MOCK,
-        family: DeviceFamily::Mock,
-        new_protocol: factory::<MockZt5b>,
-        fingerprint: None,
-        manual_url: Some(
-            "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#zotek-mock",
-        ),
-        bluetooth_only: false,
-        bluetooth_names: &[],
-    },
+    &MOCK_ZT5B,
 ];
 
 /// The `--device` / `device_family` value that names no meter and asks for
@@ -576,7 +606,7 @@ impl std::fmt::Debug for Selection {
 
 /// Find a device by exact ID match.
 pub fn find_device(id: &str) -> Option<&'static SelectableDevice> {
-    DEVICES.iter().find(|d| d.id == id)
+    DEVICES.iter().copied().find(|d| d.id == id)
 }
 
 /// Resolve a device string: tries exact ID match, then case-insensitive alias match.
@@ -586,12 +616,13 @@ pub fn find_device(id: &str) -> Option<&'static SelectableDevice> {
 pub fn resolve_device(s: &str) -> Option<&'static SelectableDevice> {
     let lower = s.to_lowercase();
     // Try exact ID match first
-    if let Some(d) = DEVICES.iter().find(|d| d.id == lower) {
+    if let Some(d) = DEVICES.iter().copied().find(|d| d.id == lower) {
         return Some(d);
     }
     // Try aliases (case-insensitive)
     DEVICES
         .iter()
+        .copied()
         .find(|d| d.aliases.iter().any(|a| a.to_lowercase() == lower))
 }
 
@@ -620,6 +651,7 @@ pub fn device_for_reported_name(name: &str) -> Option<&'static SelectableDevice>
     let family = || {
         DEVICES
             .iter()
+            .copied()
             .filter(|d| d.family == DeviceFamily::Ut61EPlus)
     };
     family()
@@ -639,9 +671,10 @@ pub(crate) fn advertising(name: &str) -> Vec<&'static SelectableDevice> {
 }
 
 /// [`advertising`] over any table, for the shapes today's registry lacks.
-fn advertising_in<'a>(devices: &'a [SelectableDevice], name: &str) -> Vec<&'a SelectableDevice> {
+fn advertising_in<'a>(devices: &[&'a SelectableDevice], name: &str) -> Vec<&'a SelectableDevice> {
     devices
         .iter()
+        .copied()
         .filter(|d| {
             d.bluetooth_names
                 .iter()
@@ -989,17 +1022,17 @@ mod tests {
     fn a_shared_name_finds_every_meter_that_advertises_it() {
         let ut60bt = find_device("ut60bt").unwrap();
         let table = [
-            SelectableDevice {
+            &SelectableDevice {
                 id: "first",
                 bluetooth_names: &["Shared DMM"],
                 ..*ut60bt
             },
-            SelectableDevice {
+            &SelectableDevice {
                 id: "own",
                 bluetooth_names: &["Own DMM"],
                 ..*ut60bt
             },
-            SelectableDevice {
+            &SelectableDevice {
                 id: "second",
                 bluetooth_names: &["Own DMM", "Shared DMM"],
                 ..*ut60bt

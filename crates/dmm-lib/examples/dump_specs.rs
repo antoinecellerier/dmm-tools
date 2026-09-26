@@ -96,7 +96,7 @@ fn run() -> Result<(), String> {
             .map(|id| registry::resolve_device(id).ok_or_else(|| format!("unknown device {id:?}")))
             .collect::<Result<_, _>>()?
     } else {
-        registry::DEVICES.iter().collect()
+        registry::DEVICES.to_vec()
     };
 
     if o.format == Format::Text {

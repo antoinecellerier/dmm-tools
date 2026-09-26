@@ -804,6 +804,7 @@ mod tests {
             .map(|(family, id)| {
                 let base = registry::DEVICES
                     .iter()
+                    .copied()
                     .find(|d| d.family == family)
                     .unwrap();
                 &*Box::leak(Box::new(SelectableDevice {
