@@ -113,7 +113,7 @@ Delegate to an Opus agent, one meter per commit (`lib: <model> readings carry th
   - the resolution unit (`protocol::test_support::unit_family`);
   - golden `resolution` fields;
   - one replay through `Dmm::request_measurement`.
-- **Docs:** the coverage lines in `docs/gui-reference.md` and `docs/ux-design.md`, the sources in the research approach doc, and a CHANGELOG GUI entry ("The Specifications panel covers the …"). Manual spec data doesn't wait for hardware confirmation: `.claude/rules/protocol.md` exempts it.
+- **Docs:** the coverage lines in `docs/gui-reference.md` and `docs/ux-design.md`, the sources in the research approach doc, and a CHANGELOG GUI entry ("The Specifications panel covers the …"). The tables need no hardware check of their own (`.claude/rules/protocol.md` exempts them), but a newly added meter gets them only after its first hardware capture (`docs/adding-devices.md`, Specification data).
 
 ## 7. Verify
 

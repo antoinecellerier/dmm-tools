@@ -71,7 +71,7 @@ The tracker holds pre-seeded `Help wanted:` threads (per-family protocol verific
 ## Citations must be clickable
 
 - This repo's commits: full unquoted SHA (backticks suppress the auto-link). Cite the fix commit when telling a reporter a single fix landed, and confirm it's pushed first.
-- Dev builds: `[dev-<sha>](https://github.com/antoinecellerier/dmm-tools/releases/tag/dev-<sha>)`, naming the archive for the reporter's platform when known ("linux-x86_64 archive"). For a list of several changes, the dev-build link stands in for the commits.
+- Dev builds: `[dev-<sha>](https://github.com/antoinecellerier/dmm-tools/releases/tag/dev-<sha>)`, naming the archive for the reporter's platform when known ("linux-x86_64 archive"). For a list of several changes, the dev-build link stands in for the commits. A verification issue's body links the dev build listing instead (`/add-device`, `verification-issue.md`).
 - This repo's files: full `https://github.com/antoinecellerier/dmm-tools/blob/main/<path>` URL plus `#heading-anchor` where one exists — relative paths don't link from a comment. Issues and PRs: `#N`.
 - External sources: explicit markdown URL that opens without auth or anti-bot walls.
 - Never `references/` paths or decompile line numbers.
@@ -112,7 +112,7 @@ Link `CONTRIBUTING.md` for generic instructions; ask only for what the thread la
 ## Write results back (same commit as the change)
 
 - Reporter-verified item → strike and credit in `docs/verification-backlog.md`: `~~item~~ — **VERIFIED** YYYY-MM-DD by @user on real <meter> (<cable>). <evidence>. See PR #N.` Community-sourced but unrun → `per <source>`, no VERIFIED.
-- Verification issue body → updated in the same round as the reply: regenerate the checklist (`dmm-cli --device <id> capture --list-steps --format md`, never hand-edited — a verified item flips the step's `.verified()` in the code), and update the summary and the dev-build line. Show it, then `gh issue edit` on a go-ahead.
+- Verification issue body → updated in the same round as the reply: regenerate the checklist (`dmm-cli --device <id> capture --list-steps --format md`, never hand-edited — a verified item flips the step's `.verified()` in the code), and update the summary, and the dev-build line where it names a `dev-<sha>`. Show it, then `gh issue edit` on a go-ahead.
 - A `CHANGELOG.md` entry saying a model works or is verified, with credit, lands in the commit that records the reporter's confirmation, not before; a targeted fix with credible evidence gets its entry with the fix (`.claude/rules/changelog.md`).
 - Family fully verified → follow the sign-off in `docs/adding-devices.md` (Stability flip, golden tests, `docs/supported-devices.md`).
 - New unknown from the thread → backlog. Doc gap the reporter hit → fix it in the same commit and link it from the reply.
