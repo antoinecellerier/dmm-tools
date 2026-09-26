@@ -33,6 +33,10 @@ A pre-commit hook (`git-hooks/pre-commit`) runs fmt, clippy, and the test suite 
 - When a request is ambiguous about scope, ask before implementing.
 - For multi-step work, persist progress in durable files (e.g. `docs/verification-backlog.md`) — sessions can run out of context.
 
+### Plans and background agents
+- Before presenting a plan, have a subagent critique it and fold in the fixes.
+- While background agents run, end the turn; their notification wakes you. Don't poll.
+
 ### Tool usage
 - Prefer Read/Grep/Glob/Write/Edit over Bash to reduce permission prompts.
 - Run git commands directly — cwd is the repo. Don't use `git -C`.
