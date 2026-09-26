@@ -1694,7 +1694,8 @@ Specified 2026-09-25 from ZOTEK's three apps and six manuals
 (`docs/research/zotek/reverse-engineered-protocol.md`, §10). Implemented
 2026-09-26 as the `zotek` family, experimental, one registry entry per
 packet layout: `zt300ab` (type 3), `zt5566se` (type 4), `zt5bq` (type 1),
-`zt5b` (type 2). Nobody on the project owns one, so where an item below is
+`zt5b` (type 2), with verification issues [#28](https://github.com/antoinecellerier/dmm-tools/issues/28), [#29](https://github.com/antoinecellerier/dmm-tools/issues/29),
+[#30](https://github.com/antoinecellerier/dmm-tools/issues/30) and [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) in that order. Nobody on the project owns one, so where an item below is
 open the driver's choice is noted with it. Spec tables wait for a first
 real-device confirmation, as for every new meter; the ZOTEK manuals carry
 them. The clean-room boundary was opened the same day as the spec, after

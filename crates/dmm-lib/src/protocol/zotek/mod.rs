@@ -66,7 +66,8 @@ pub(crate) struct ZotekProtocol {
 }
 
 impl ZotekProtocol {
-    fn new(layout: &'static Layout) -> Self {
+    /// `issue` is the entry's verification issue, one per layout.
+    fn new(layout: &'static Layout, issue: u16) -> Self {
         Self {
             rx_buf: Vec::with_capacity(64),
             layout,
@@ -76,7 +77,7 @@ impl ZotekProtocol {
                 stability: Stability::Experimental,
                 supported_commands: keys::commands(layout),
                 max_aux_values: layout.max_aux_values,
-                verification_issue: None,
+                verification_issue: Some(issue),
                 meter_keys: keys::meter_keys(layout),
             },
             warned_layout: false,
@@ -85,19 +86,19 @@ impl ZotekProtocol {
     }
 
     pub(crate) fn new_zt300ab() -> Self {
-        Self::new(&layout::ZT300AB)
+        Self::new(&layout::ZT300AB, 28)
     }
 
     pub(crate) fn new_zt5566se() -> Self {
-        Self::new(&layout::ZT5566SE)
+        Self::new(&layout::ZT5566SE, 29)
     }
 
     pub(crate) fn new_zt5bq() -> Self {
-        Self::new(&layout::ZT5BQ)
+        Self::new(&layout::ZT5BQ, 30)
     }
 
     pub(crate) fn new_zt5b() -> Self {
-        Self::new(&layout::ZT5B)
+        Self::new(&layout::ZT5B, 31)
     }
 
     /// The layout a packet of `type_byte` is in, the first time it is not

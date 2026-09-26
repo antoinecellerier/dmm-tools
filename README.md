@@ -101,7 +101,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | VC-880/VC650BT | Voltcraft VC-880, VC650BT | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/13) |
 | VC-890 | Voltcraft VC-890 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/14) |
 | VC920/VC940/VC960 | Voltcraft VC920, VC940, VC960 | [🧪 Experimental](https://github.com/antoinecellerier/dmm-tools/issues/23) |
-| ZOTEK (ZOYI, BSIDE, ANENG), Bluetooth built in | ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | 🧪 Experimental |
+| ZOTEK (ZOYI, BSIDE, ANENG), Bluetooth built in | ZT-300AB / AN9002, ZT-5566SE / AN999S, ZT-5BQ / ST207, ZT-5B / V05B | 🧪 Experimental (ZT-300AB [#28](https://github.com/antoinecellerier/dmm-tools/issues/28), ZT-5566SE [#29](https://github.com/antoinecellerier/dmm-tools/issues/29), ZT-5BQ [#30](https://github.com/antoinecellerier/dmm-tools/issues/30), ZT-5B [#31](https://github.com/antoinecellerier/dmm-tools/issues/31)) |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware. Click either to help verify.
