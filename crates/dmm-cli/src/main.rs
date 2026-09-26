@@ -2409,7 +2409,18 @@ fn cmd_debug(
     while running.load(Ordering::SeqCst) && (count == 0 || i < count) {
         match stream.tick() {
             Ok(StreamEvent::Measurement(m)) => {
-                let display = m.display_raw.as_deref().unwrap_or("(none)");
+                // A frame without a main reading has its digits on the
+                // sub-value it carries instead.
+                let absent = matches!(m.value, dmm_lib::measurement::MeasuredValue::Absent);
+                let display = m
+                    .display_raw
+                    .as_deref()
+                    .or_else(|| {
+                        absent
+                            .then(|| m.aux_values.iter().find_map(|a| a.display_raw.as_deref()))
+                            .flatten()
+                    })
+                    .unwrap_or("(none)");
                 println!(
                     "{} mode_raw={:04X} display={:?} progress={:?} flags={} raw={:02X?} \u{2192} {}",
                     style(format!("[{i}]")).dim(),
@@ -2421,8 +2432,9 @@ fn cmd_debug(
                     style(format!("{m}")).green(),
                 );
                 // The secondary displays a UT181A or UT171 sends alongside
-                // the reading; nothing else in the debug line shows them.
-                if !m.aux_values.is_empty() {
+                // the reading; nothing else in the debug line shows them. A
+                // frame without a main reading printed them after the arrow.
+                if !m.aux_values.is_empty() && !absent {
                     println!("    {} {}", style("sub-values:").dim(), m.aux_summary());
                 }
             }

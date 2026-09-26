@@ -263,7 +263,14 @@ impl SeriesStats {
     /// integration interval, as an overload does: the time the meter
     /// measured nothing has no value to integrate, and bridging it with a
     /// trapezoid between the readings either side would make one up.
+    ///
+    /// A [`MeasuredValue::Absent`] frame is skipped outright: the main
+    /// reading went on in frames of its own either side of it, so the series,
+    /// the figures and the integration interval all carry on across it.
     pub fn push(&mut self, m: &Measurement) -> Option<SeriesChange> {
+        if let MeasuredValue::Absent = m.value {
+            return None;
+        }
         if let MeasuredValue::NoReading(_) = m.value {
             if self.integrate {
                 self.integrator.push_gap();
@@ -309,9 +316,9 @@ impl SeriesStats {
                 }
             }
             // A detection level is not a measured quantity — neither
-            // accumulator has anything to do with it. A no-reading word
-            // returned above and never gets here.
-            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => {}
+            // accumulator has anything to do with it. A no-reading word and a
+            // frame without a main reading returned above and never get here.
+            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) | MeasuredValue::Absent => {}
         }
         change
     }
@@ -715,6 +722,38 @@ mod tests {
         // across it, and it is not counted as an overload.
         assert_eq!(s.integrator.count, 2);
         assert_eq!(s.integrator.value(), 0.0);
+        assert_eq!(s.integrator.overload_gaps, 0);
+    }
+
+    /// A UT61E+ in AC+DC V sends its DC and AC components in turn, the AC
+    /// frames without a main reading. Those frames are not a break: the DC
+    /// series, its figures and the integral carry on across them.
+    #[test]
+    fn a_frame_without_a_main_reading_is_skipped_outright() {
+        let t0 = Instant::now();
+        let mut s = SeriesStats::new(true);
+        s.push(&reading("AC+DC V", "V", 1.0, t0));
+
+        let mut ac = Measurement::test_fixture(
+            MeasuredValue::Absent,
+            "V",
+            crate::flags::StatusFlags::default(),
+        );
+        ac.mode = "AC+DC V".into();
+        ac.timestamp = t0 + Duration::from_millis(500);
+        assert_eq!(s.push(&ac), None);
+
+        s.push(&reading(
+            "AC+DC V",
+            "V",
+            3.0,
+            t0 + Duration::from_millis(1000),
+        ));
+        assert_eq!(s.stats.count, 2);
+        assert_eq!(s.stats.avg(), Some(2.0));
+        // Bridged DC to DC: one trapezoid over the whole second.
+        assert_eq!(s.integrator.count, 2);
+        assert!((s.integrator.value() - 2.0).abs() < 1e-9);
         assert_eq!(s.integrator.overload_gaps, 0);
     }
 

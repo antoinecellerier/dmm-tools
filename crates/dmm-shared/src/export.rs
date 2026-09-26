@@ -32,8 +32,9 @@ pub fn measurement_json(
         MeasuredValue::NcvLevel(l) => json!({"ncv_level": l}),
         // Null rather than a missing key or the word: every line keeps its
         // "value" key, as `display_raw` and `progress` stay present as null
-        // when absent, and "mode" already carries the word.
-        MeasuredValue::NoReading(_) => Value::Null,
+        // when absent, and "mode" already carries the word. A frame without
+        // a main reading has its sub-values in "aux".
+        MeasuredValue::NoReading(_) | MeasuredValue::Absent => Value::Null,
     };
     // Built from StatusFlags::as_pairs rather than a hand-written list: the
     // old list had drifted and was missing `loz` and `void`, so a VC-890
@@ -66,7 +67,7 @@ pub fn measurement_json(
                     let unit = aux.unit_or(&m.unit);
                     // Null for a no-reading word, as for the main value.
                     let value = match aux.value {
-                        MeasuredValue::NoReading(_) => Value::Null,
+                        MeasuredValue::NoReading(_) | MeasuredValue::Absent => Value::Null,
                         _ => json!(aux.value_export_str()),
                     };
                     json!({
@@ -201,6 +202,38 @@ mod tests {
         let v: Value = serde_json::from_str(&line).expect("valid JSON");
         assert_eq!(v["aux"][0]["value"], Value::Null);
         assert_eq!(v["aux"][0]["label"], json!("Raw"));
+    }
+
+    /// A frame carrying only the AC component of an AC+DC reading: a null
+    /// main value, the component in "aux", and a transform's `Raw` beside it
+    /// null too.
+    #[test]
+    fn a_frame_without_a_main_reading_exports_a_null_value() {
+        let mut m = Measurement::test_fixture(MeasuredValue::Absent, "V", StatusFlags::default());
+        m.mode = "AC+DC V".into();
+        m.display_raw = None;
+        m.aux_values = vec![
+            dmm_lib::measurement::AuxValue {
+                label: "AC".into(),
+                value: MeasuredValue::Normal(0.0123),
+                unit: "".into(),
+                display_raw: Some(" 0.0123".to_string()),
+                elapsed_secs: None,
+            },
+            dmm_lib::measurement::AuxValue {
+                label: "Raw".into(),
+                value: MeasuredValue::Absent,
+                unit: "V".into(),
+                display_raw: None,
+                elapsed_secs: None,
+            },
+        ];
+        let v = measurement_json(&m, "2026-09-26T14:35:03+02:00", false, None);
+        assert_eq!(v["value"], Value::Null);
+        assert_eq!(v["aux"][0]["label"], json!("AC"));
+        assert_eq!(v["aux"][0]["value"], json!("0.0123"));
+        assert_eq!(v["aux"][0]["unit"], json!("V"));
+        assert_eq!(v["aux"][1]["value"], Value::Null);
     }
 
     /// A model or mode name goes into the file name as one word: the dialog

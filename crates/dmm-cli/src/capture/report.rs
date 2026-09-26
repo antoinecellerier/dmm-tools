@@ -421,27 +421,32 @@ impl SampleData {
     /// — and the sample's own `flags:` map — showed the high-voltage warning.
     pub(crate) fn summary(&self) -> String {
         let flags = StatusFlags::from(&self.flags).to_string();
-        let value = self.display_raw.trim();
-        let mut out = if flags.is_empty() {
-            format!("{value} {}", self.unit)
-        } else {
-            format!("{value} {} [{flags}]", self.unit)
-        };
         // Sub-values are on the meter's screen too, so the operator has to
         // see them to confirm the sample — a UT181A in MIN/MAX or with the
         // frequency display up otherwise confirms against half the screen.
         // Appended, so single-display meters keep the line they had, and
         // rendered by the same helper `dmm-cli read` uses so the two can't
         // describe the same reading differently.
-        if !self.aux.is_empty() {
-            let aux = dmm_lib::measurement::aux_summary_line(self.aux.iter().map(|a| {
+        let aux = (!self.aux.is_empty()).then(|| {
+            dmm_lib::measurement::aux_summary_line(self.aux.iter().map(|a| {
                 (
                     a.label.as_str(),
                     a.value.as_str(),
                     a.unit.as_str(),
                     a.elapsed_secs,
                 )
-            }));
+            }))
+        });
+        // A frame without a main reading: its sub-values take the value's
+        // place, as `dmm-cli read` prints them.
+        let (mut out, aux) = match aux {
+            Some(aux) if self.value.is_empty() => (aux, None),
+            aux => (format!("{} {}", self.display_raw.trim(), self.unit), aux),
+        };
+        if !flags.is_empty() {
+            out.push_str(&format!(" [{flags}]"));
+        }
+        if let Some(aux) = aux {
             out.push_str(&format!(" ({aux})"));
         }
         out
@@ -910,6 +915,23 @@ mod tests {
         assert!(summary.contains("V"));
         assert!(summary.contains("AUTO"));
         assert!(summary.contains("HOLD"));
+    }
+
+    /// A frame carrying only the AC component of an AC+DC reading is
+    /// confirmed against the component, not a blank value and a lone unit.
+    #[test]
+    fn summary_of_a_frame_without_a_main_reading() {
+        let mut m = make_test_measurement(0x19, 0x00, b" 0.0000", (0x00, 0x00), (0x00, 0x00, 0x08));
+        m.value = MeasuredValue::Absent;
+        m.aux_values = vec![dmm_lib::measurement::AuxValue {
+            label: "AC".into(),
+            value: MeasuredValue::Normal(0.0),
+            unit: "".into(),
+            display_raw: m.display_raw.take(),
+            elapsed_secs: None,
+        }];
+        let s = SampleData::from_measurement(&m);
+        assert_eq!(s.summary(), "AC 0.0000 V [AUTO]");
     }
 
     #[test]

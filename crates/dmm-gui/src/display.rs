@@ -83,6 +83,9 @@ fn format_value_display(m: &Measurement) -> String {
         // Where the digits would be, like OL: never "OL", which would claim
         // an overload the meter is not showing.
         MeasuredValue::NoReading(word) => format!("{word:>7}"),
+        // No main reading in this frame: blank digits at the usual width,
+        // its sub-values in the rows below.
+        MeasuredValue::Absent => format!("{:>7}", ""),
     }
 }
 
@@ -103,19 +106,25 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
                 MeasuredValue::NcvLevel(l) => format!("NCV level {l}"),
                 MeasuredValue::NoReading(word) => spoken_no_reading(word),
                 MeasuredValue::Normal(_) => format_value_display(m).trim().to_string(),
+                // Nothing to say before the mode: the sub-values carry it.
+                MeasuredValue::Absent => String::new(),
             };
             let mut parts = String::with_capacity(96);
-            parts.push_str(&value);
-            if !m.unit.is_empty() {
-                parts.push(' ');
-                parts.push_str(&spoken_unit(&m.unit));
+            if !value.is_empty() {
+                parts.push_str(&value);
+                if !m.unit.is_empty() {
+                    parts.push(' ');
+                    parts.push_str(&spoken_unit(&m.unit));
+                }
             }
             // "Auto" with no function lit is both the word and the mode;
             // saying it twice reads as two things.
             let mode_is_the_word =
                 matches!(m.value, MeasuredValue::NoReading(word) if word == m.mode);
             if !m.mode.is_empty() && !mode_is_the_word {
-                parts.push_str(", ");
+                if !parts.is_empty() {
+                    parts.push_str(", ");
+                }
                 parts.push_str(&m.mode);
             }
             // Sub-values sit between the mode and the flags, matching the
@@ -124,6 +133,9 @@ fn live_region_label(measurement: Option<&Measurement>, scaled: bool, no_reading
             // hears only the live value and never the extremes the meter is
             // actually displaying.
             for aux in &m.aux_values {
+                if matches!(aux.value, MeasuredValue::Absent) {
+                    continue;
+                }
                 parts.push_str(", ");
                 parts.push_str(&aux.label);
                 parts.push(' ');
@@ -312,6 +324,7 @@ fn live_region_fingerprint(
                     3u8.hash(&mut h);
                     word.hash(&mut h);
                 }
+                MeasuredValue::Absent => 4u8.hash(&mut h),
             }
             m.unit.hash(&mut h);
             m.mode.hash(&mut h);
@@ -337,6 +350,7 @@ fn live_region_fingerprint(
                         3u8.hash(&mut h);
                         word.hash(&mut h);
                     }
+                    MeasuredValue::Absent => 4u8.hash(&mut h),
                 }
                 aux.unit.hash(&mut h);
                 aux.elapsed_secs.hash(&mut h);
@@ -453,7 +467,7 @@ fn value_display(ui: &Ui, m: &Measurement, tc: &ThemeColors) -> (String, Color32
     match &m.value {
         MeasuredValue::Normal(_) => (format_value_display(m), ui.visuals().text_color()),
         MeasuredValue::Overload => (format_value_display(m), tc.status_error()),
-        MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => {
+        MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) | MeasuredValue::Absent => {
             (format_value_display(m), ui.visuals().text_color())
         }
     }
@@ -1846,6 +1860,24 @@ mod tests {
         let freq = label.find("Frequency").expect("sub-value announced");
         let auto = label.find("auto range").expect("flags still announced");
         assert!(mode < freq && freq < auto, "got {label:?}");
+    }
+
+    /// A frame carrying only the AC component of an AC+DC reading: blank
+    /// digits at the usual width, and a spoken label that opens on the mode
+    /// rather than on a lone unit, with no word for a `Raw` that has nothing.
+    #[test]
+    fn a_frame_without_a_main_reading_shows_blank_digits() {
+        let mut m = Measurement::test_fixture(MeasuredValue::Absent, "V", StatusFlags::default());
+        m.mode = "AC+DC V".into();
+        m.display_raw = None;
+        let mut raw = aux("Raw", "", "V");
+        raw.value = MeasuredValue::Absent;
+        raw.display_raw = None;
+        m.aux_values = vec![aux("AC", " 0.0123", ""), raw];
+
+        assert_eq!(format_value_display(&m), "       ");
+        let label = live_region_label(Some(&m), false, NO_READING_TITLE);
+        assert_eq!(label, "AC+DC V, AC 0.0123 V");
     }
 
     /// A MIN/MAX extreme is only half a reading without the moment it was

@@ -494,7 +494,10 @@ pub(crate) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
     // so we must not pad to a resolution the protocol never told us.
     let display_raw = match value {
         MeasuredValue::Normal(_) => Some(format!("{main_float}")),
-        MeasuredValue::Overload | MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => None,
+        MeasuredValue::Overload
+        | MeasuredValue::NcvLevel(_)
+        | MeasuredValue::NoReading(_)
+        | MeasuredValue::Absent => None,
     };
 
     // Aux float32 at payload[11..15]. gulux/Uni-T-CP2110 (capture-driven)

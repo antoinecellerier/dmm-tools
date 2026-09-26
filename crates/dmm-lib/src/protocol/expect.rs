@@ -204,10 +204,12 @@ impl Expect {
 
 /// The value as a failed check names it: the export form, which reads back
 /// as the number the parser produced, or the word a meter shows instead of a
-/// reading, whose export form is empty.
+/// reading, whose export form is empty — as is a frame's without a main
+/// reading.
 fn shown(m: &Measurement) -> std::borrow::Cow<'_, str> {
     match m.value {
         MeasuredValue::NoReading(word) => std::borrow::Cow::Borrowed(word),
+        MeasuredValue::Absent => std::borrow::Cow::Borrowed("no main reading"),
         _ => m.value_export_str(),
     }
 }

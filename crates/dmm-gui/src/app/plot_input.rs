@@ -29,7 +29,7 @@ pub(super) struct PlotInput<'a> {
 /// What a measured value contributes to a plot: `Some(Some(v))` for a
 /// reading, `Some(None)` for an over-range one or a word the meter shows
 /// instead of a reading (a break in the trace, but still a measurement),
-/// `None` for something with no place on a value axis.
+/// `None` for something with no place on a value axis or no value at all.
 fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
     match v {
         MeasuredValue::Normal(v) => Some(Some(*v)),
@@ -37,6 +37,9 @@ fn plottable_value(v: &MeasuredValue) -> Option<Option<f64>> {
         // NCV is a bar-graph level, not a quantity — plotting it against a
         // volt axis would be meaningless.
         MeasuredValue::NcvLevel(_) => None,
+        // Nothing in this frame for that series: the frame is skipped, and
+        // the trace carries on from its neighbours.
+        MeasuredValue::Absent => None,
     }
 }
 

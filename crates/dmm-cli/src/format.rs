@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use dmm_lib::WallClock;
 use dmm_lib::export::CsvLayout;
-use dmm_lib::measurement::Measurement;
+use dmm_lib::measurement::{MeasuredValue, Measurement};
 use std::io::Write;
 use std::time::Instant;
 
@@ -137,7 +137,11 @@ fn format_text(
     // Sub-values, indented under the reading they belong to. The UT181A
     // produces these in REL (Reference/Absolute), MIN/MAX (Max/Average/Min
     // with timestamps) and peak modes, and the UT171 for the AC frequency
-    // aux; before this they were parsed and discarded.
+    // aux; before this they were parsed and discarded. A frame without a main
+    // reading already printed its sub-values in the value's place.
+    if matches!(m.value, MeasuredValue::Absent) {
+        return Ok(());
+    }
     let label_w = m
         .aux_values
         .iter()
@@ -210,7 +214,7 @@ fn format_json(
 mod tests {
     use super::*;
     use dmm_lib::flags::StatusFlags;
-    use dmm_lib::measurement::MeasuredValue;
+    use dmm_lib::measurement::{AuxValue, MeasuredValue};
 
     /// One reading, as `output` writes it.
     fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
@@ -263,7 +267,6 @@ mod tests {
     }
 
     fn with_aux(m: &mut Measurement) {
-        use dmm_lib::measurement::AuxValue;
         m.aux_values = vec![
             AuxValue {
                 label: "Reference".into(),
@@ -296,6 +299,31 @@ mod tests {
         let csv = rendered(Output::Csv(CsvLayout::default()), &m, None);
         let cells: Vec<&str> = csv.trim_end().split(',').collect();
         assert_eq!(&cells[1..4], ["AC A", "", "A"]);
+    }
+
+    /// A frame carrying only the AC component of an AC+DC reading prints the
+    /// component where the value goes, once — not again as an indented
+    /// sub-value line.
+    #[test]
+    fn a_frame_without_a_main_reading_prints_one_line() {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Absent,
+            "V",
+            StatusFlags {
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        m.mode = "AC+DC V".into();
+        m.display_raw = None;
+        m.aux_values = vec![AuxValue {
+            label: "AC".into(),
+            value: MeasuredValue::Normal(0.0),
+            unit: "".into(),
+            display_raw: Some(" 0.0000".to_string()),
+            elapsed_secs: None,
+        }];
+        assert_eq!(text_for(&m), "AC 0.0000 V [AUTO]\n");
     }
 
     /// UT181A REL/MIN-MAX sub-values were parsed and then discarded by every

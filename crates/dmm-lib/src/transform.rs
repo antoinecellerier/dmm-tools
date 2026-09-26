@@ -195,13 +195,17 @@ impl Transform {
                 m.value = MeasuredValue::Normal(value);
                 m.display_raw = Some(display);
             }
-            // Overload, NCV and a no-reading word have no digits to scale
-            // (`display_raw` is only meaningful for `Normal`), so the reading
-            // passes through with its own display string restored. The Raw
-            // sub-value is still appended below: a sub-value count that stays
-            // constant across an overload keeps the GUI's series bookkeeping
-            // and the CSV's aux columns stable.
-            MeasuredValue::Overload | MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => {
+            // Overload, NCV, a no-reading word and a frame without a main
+            // reading have no digits to scale (`display_raw` is only
+            // meaningful for `Normal`), so the reading passes through with its
+            // own display string restored. The Raw sub-value is still appended
+            // below: a sub-value count that stays constant across an overload
+            // keeps the GUI's series bookkeeping and the CSV's aux columns
+            // stable, and keeps Raw out of the meter's own slots.
+            MeasuredValue::Overload
+            | MeasuredValue::NcvLevel(_)
+            | MeasuredValue::NoReading(_)
+            | MeasuredValue::Absent => {
                 m.display_raw = raw_display.clone();
             }
         }
@@ -570,6 +574,30 @@ mod tests {
             display_raw: Some(display.to_string()),
             elapsed_secs: None,
         }
+    }
+
+    /// A UT61E+ AC+DC V frame carrying only the AC component: the component
+    /// is scaled like any same-unit sub-value, and the Raw appended after it
+    /// has no value either, so it keeps the trailing CSV slot instead of
+    /// sliding into the meter's own.
+    #[test]
+    fn a_frame_without_a_main_reading_keeps_raw_in_its_slot() {
+        let t = Transform::linear(10.0, 0.0, None);
+        let mut m = Measurement::test_fixture(MeasuredValue::Absent, "V", StatusFlags::default());
+        m.display_raw = None;
+        m.aux_values.push(aux("AC", 0.1234, "", " 0.1234"));
+        t.apply(&mut m);
+
+        assert!(matches!(m.value, MeasuredValue::Absent));
+        assert_eq!(m.display_raw, None);
+        let labels: Vec<&str> = m.aux_values.iter().map(|a| a.label.as_ref()).collect();
+        assert_eq!(labels, ["AC", RAW_LABEL]);
+        assert_eq!(normal(&m.aux_values[0].value), 1.234);
+        assert!(matches!(m.aux_values[1].value, MeasuredValue::Absent));
+
+        let slots = m.export_aux_slots(1, t.extra_aux_count());
+        assert_eq!(slots[0].map(|a| a.label.as_ref()), Some("AC"));
+        assert_eq!(slots[1].map(|a| a.label.as_ref()), Some(RAW_LABEL));
     }
 
     /// The UT181A's dual-thermocouple frame: both probes measure the same

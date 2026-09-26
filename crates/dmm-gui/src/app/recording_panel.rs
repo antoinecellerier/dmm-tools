@@ -324,11 +324,16 @@ impl App {
                         } else {
                             format!("  {summary}")
                         };
+                        // A frame without a main reading has no value for the
+                        // unit to follow; its sub-values carry their own.
+                        let unit = match s.measurement.value {
+                            dmm_lib::measurement::MeasuredValue::Absent => "",
+                            _ => s.unit(),
+                        };
                         ui.label(
                             RichText::new(format!(
                                 "{time}  {val:>10} {unit}{flags}{aux}",
                                 val = s.value_str(),
-                                unit = s.unit(),
                             ))
                             .font(egui::FontId::monospace(11.0)),
                         );

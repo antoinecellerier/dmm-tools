@@ -19,6 +19,14 @@ pub enum MeasuredValue {
     /// says there is nothing to measure yet. Carries no number, so it starts
     /// no series, feeds no statistics and exports an empty value cell.
     NoReading(&'static str),
+    /// This frame carries no main reading, only sub-values: the meter sends
+    /// the parts of one reading in frames of their own, and this is one of
+    /// the others.
+    ///
+    /// Not a gap and not a break — the main reading simply has no new value
+    /// in this frame. It feeds no statistics, exports an empty value cell and
+    /// leaves the plotted trace untouched.
+    Absent,
 }
 
 /// The parsed value's canonical string — the form the capture report and the
@@ -36,6 +44,7 @@ impl std::fmt::Display for MeasuredValue {
             MeasuredValue::Overload => write!(f, "OL"),
             MeasuredValue::NcvLevel(level) => write!(f, "NCV:{level}"),
             MeasuredValue::NoReading(word) => f.write_str(word),
+            MeasuredValue::Absent => Ok(()),
         }
     }
 }
@@ -47,7 +56,8 @@ impl std::fmt::Display for MeasuredValue {
 /// decides OL/NCV first, the meter's own digits are preferred over the
 /// re-formatted float, and any space the meter puts between the sign and the
 /// digits is removed. A [`MeasuredValue::NoReading`] exports empty: the word
-/// is not a value, and the mode column already carries it.
+/// is not a value, and the mode column already carries it. So does a
+/// [`MeasuredValue::Absent`], which has nothing to export.
 fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) -> Cow<'a, str> {
     match value {
         MeasuredValue::Normal(_) => match display_raw {
@@ -63,7 +73,7 @@ fn export_value_str<'a>(value: &'a MeasuredValue, display_raw: Option<&'a str>) 
         },
         MeasuredValue::Overload => Cow::Borrowed("OL"),
         MeasuredValue::NcvLevel(_) => Cow::Owned(value.to_string()),
-        MeasuredValue::NoReading(_) => Cow::Borrowed(""),
+        MeasuredValue::NoReading(_) | MeasuredValue::Absent => Cow::Borrowed(""),
     }
 }
 
@@ -309,9 +319,10 @@ impl Measurement {
     /// - `"Max 5.0123 V @12s, Average 4.9902 V @12s, Min 4.9654 V @3s"`
     ///
     /// Empty when the measurement has no sub-values, so callers can print it
-    /// unconditionally and get nothing for single-display meters.
+    /// unconditionally and get nothing for single-display meters. A
+    /// [`MeasuredValue::Absent`] sub-value is left out: it has nothing to say.
     pub fn aux_summary(&self) -> String {
-        aux_summary_line(self.aux_values.iter().map(|aux| {
+        aux_summary_line(self.present_aux().map(|aux| {
             (
                 aux.label.as_ref(),
                 aux.value_str(),
@@ -319,6 +330,14 @@ impl Measurement {
                 aux.elapsed_secs,
             )
         }))
+    }
+
+    /// The sub-values that carry something, [`MeasuredValue::Absent`] ones
+    /// left out.
+    fn present_aux(&self) -> impl Iterator<Item = &AuxValue> {
+        self.aux_values
+            .iter()
+            .filter(|aux| !matches!(aux.value, MeasuredValue::Absent))
     }
 
     /// Lay the sub-values out for a fixed-column export.
@@ -388,9 +407,16 @@ impl Measurement {
     }
 }
 
+/// `"{value} {unit} [{flags}]"`, or for a frame without a main reading
+/// ([`MeasuredValue::Absent`]) its sub-values in the value's place:
+/// `"AC 0.0000 V [AUTO]"`.
 impl std::fmt::Display for Measurement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.value_display_str(), self.unit)?;
+        if matches!(self.value, MeasuredValue::Absent) {
+            f.write_str(&self.aux_summary())?;
+        } else {
+            write!(f, "{} {}", self.value_display_str(), self.unit)?;
+        }
         let flags_str = self.flags.to_string();
         if !flags_str.is_empty() {
             write!(f, " [{flags_str}]")?;
@@ -410,6 +436,52 @@ mod tests {
         let s = m.to_string();
         assert!(s.contains("5.678"));
         assert!(s.contains("V"));
+    }
+
+    /// An AC+DC V frame carrying only the AC component, as the UT61E+ sends
+    /// every other frame.
+    fn ac_component_frame() -> Measurement {
+        let mut m = Measurement::test_fixture(
+            MeasuredValue::Absent,
+            "V",
+            StatusFlags {
+                auto_range: true,
+                ..Default::default()
+            },
+        );
+        m.display_raw = None;
+        m.aux_values = vec![AuxValue {
+            label: "AC".into(),
+            value: MeasuredValue::Normal(0.0),
+            unit: "".into(),
+            display_raw: Some(" 0.0000".to_string()),
+            elapsed_secs: None,
+        }];
+        m
+    }
+
+    #[test]
+    fn a_frame_without_a_main_reading_shows_its_sub_values_in_its_place() {
+        let m = ac_component_frame();
+        assert_eq!(m.to_string(), "AC 0.0000 V [AUTO]");
+        assert_eq!(m.value_export_str(), "");
+        assert_eq!(m.value.to_string(), "");
+    }
+
+    /// A transform's `Raw` beside such a frame has nothing to say either, so
+    /// the summary leaves it out rather than printing a label and a blank.
+    #[test]
+    fn the_summary_leaves_out_a_sub_value_without_a_value() {
+        let mut m = ac_component_frame();
+        m.aux_values.push(AuxValue {
+            label: "Raw".into(),
+            value: MeasuredValue::Absent,
+            unit: "V".into(),
+            display_raw: None,
+            elapsed_secs: None,
+        });
+        assert_eq!(m.aux_summary(), "AC 0.0000 V");
+        assert_eq!(m.aux_values[1].value_export_str(), "");
     }
 
     #[test]

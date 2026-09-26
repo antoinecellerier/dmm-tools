@@ -256,6 +256,24 @@ mod tests {
         assert_eq!(row, ["ts", "Auto", "", "", "", ""]);
     }
 
+    /// A frame carrying only the AC component of an AC+DC reading: the value
+    /// cell stays empty and the component fills its sub-value slot, so each
+    /// row still stands for one frame at its own time.
+    #[test]
+    fn a_frame_without_a_main_reading_fills_only_its_sub_value_slot() {
+        let mut m = reading();
+        m.mode = "AC+DC V".into();
+        m.value = MeasuredValue::Absent;
+        m.display_raw = None;
+        m.range_label = "2.2V".into();
+        m.aux_values = vec![aux("AC", 0.0123, "")];
+        let row = layout(1, 0, false).row(&m, "ts", None, 0);
+        assert_eq!(
+            row,
+            ["ts", "AC+DC V", "", "V", "2.2V", "", "AC", "0.0123", "V"]
+        );
+    }
+
     #[test]
     fn integral_cells_follow_the_flags_column() {
         let m = reading();

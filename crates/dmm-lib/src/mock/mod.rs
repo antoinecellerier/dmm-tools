@@ -504,8 +504,11 @@ impl MockProtocol {
             }
             MeasuredValue::Overload => Some("    OL ".to_string()),
             // The UT61E+ the mock imitates never shows a word instead of a
-            // reading; the arm is here for exhaustiveness only.
-            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => None,
+            // reading, and no mock scenario sends a frame without one; the
+            // arm is here for exhaustiveness only.
+            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) | MeasuredValue::Absent => {
+                None
+            }
         }
     }
 
@@ -528,7 +531,9 @@ impl MockProtocol {
             }
             // Over-range pins the bar full.
             MeasuredValue::Overload => Some(Self::BAR_GRAPH_SEGMENTS as u16),
-            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) => None,
+            MeasuredValue::NcvLevel(_) | MeasuredValue::NoReading(_) | MeasuredValue::Absent => {
+                None
+            }
         }
     }
 }
