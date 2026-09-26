@@ -26,7 +26,8 @@ use super::layout::{Meaning, Prefix, Unit, ZT5B};
 use crate::clock::Clock;
 use crate::error::{Error, Result};
 use crate::measurement::Measurement;
-use crate::protocol::{DeviceProfile, Protocol, Stability};
+use crate::protocol::registry::{SelectableDevice, factory};
+use crate::protocol::{DeviceFamily, DeviceProfile, Protocol, Stability};
 use crate::transport::Transport;
 use log::debug;
 use std::cell::RefCell;
@@ -35,6 +36,24 @@ use std::time::{Duration, Instant};
 
 /// The registry id of the simulated meter.
 pub(crate) const MOCK_ID: &str = "mock-zt5b";
+
+/// A ZT-5B for trying the ZOTEK driver and its remote keys on; never
+/// detected and never looked for over Bluetooth.
+pub(crate) static MOCK_ZT5B: SelectableDevice = SelectableDevice {
+    id: MOCK_ID,
+    display_name: "Mock ZT-5B / V05B (simulated)",
+    aliases: &[],
+    requires_hardware: false,
+    activation_instructions: crate::mock::devices::ACTIVATION,
+    family: DeviceFamily::Mock,
+    new_protocol: factory::<MockZt5b>,
+    fingerprint: None,
+    manual_url: Some(
+        "https://github.com/antoinecellerier/dmm-tools/blob/main/docs/cli-reference.md#zotek-mock",
+    ),
+    bluetooth_only: false,
+    bluetooth_names: &[],
+};
 
 /// What the simulated meter is set to.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

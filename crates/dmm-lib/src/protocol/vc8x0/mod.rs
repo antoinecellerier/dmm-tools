@@ -14,6 +14,7 @@
 //! [`resolve_function`], [`main_display`], [`common_flags`] and
 //! [`parse_value`] for the steps of [`parse_measurement`].
 
+pub(crate) mod devices;
 pub(crate) mod vc880;
 pub(crate) mod vc890;
 

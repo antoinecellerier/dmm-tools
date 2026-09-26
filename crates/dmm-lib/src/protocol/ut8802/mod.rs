@@ -12,6 +12,8 @@
 //! UT8803E Programming Manual V1.1.
 //! See docs/research/uci-bench-family/reverse-engineered-protocol.md
 
+pub(crate) mod devices;
+
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};

@@ -26,6 +26,7 @@
 //! - Bargraph value extraction (detected but not exposed)
 
 mod command;
+pub(crate) mod devices;
 pub(crate) mod mode;
 // `parse` is `pub(crate)` only so `crate::detect`'s tests can reuse the real
 // frames pinned in this module's own tests; every item inside it stays

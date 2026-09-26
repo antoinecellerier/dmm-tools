@@ -9,6 +9,8 @@
 //! Based on reverse engineering of uci.dll (Ghidra decompilation).
 //! See docs/research/ut8803/reverse-engineered-protocol.md
 
+pub(crate) mod devices;
+
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{MeasuredValue, Measurement};

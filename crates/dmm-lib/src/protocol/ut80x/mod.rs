@@ -59,6 +59,7 @@ use log::debug;
 use std::borrow::Cow;
 use std::fmt;
 
+pub(crate) mod devices;
 mod specs_ut803;
 mod specs_ut804;
 

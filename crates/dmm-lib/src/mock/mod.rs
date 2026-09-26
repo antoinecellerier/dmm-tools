@@ -10,6 +10,7 @@
 //!
 //! [`scenarios`] holds what it measures, [`state`] what its buttons do.
 
+pub(crate) mod devices;
 mod scenarios;
 mod state;
 

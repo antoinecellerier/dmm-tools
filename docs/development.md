@@ -65,7 +65,7 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 1. Create `crates/dmm-lib/src/protocol/<family>/tables/new_model.rs`
 2. Implement `ModeTables`: one `entry` match returning the range table per mode (`DeviceTable` is derived), and give the model's spec tables a `SpecModel` variant. Spec tables sit in the family module: `ut61eplus/specs/`, `ut80x/specs_ut803.rs` and `specs_ut804.rs`, `ut181a/specs.rs`.
 3. Register in the family's `tables/mod.rs`
-4. Add `SelectableDevice` entry in `protocol/registry.rs`
+4. Add a `SelectableDevice` entry in the family's `devices.rs` and list it in `DEVICES` in `protocol/registry.rs`, which sets the picker order
 
 **New protocol family:**
 
@@ -73,7 +73,7 @@ See **[`adding-devices.md`](adding-devices.md)** for the complete end-to-end gui
 2. Implement the `Protocol` trait (`init`, `request_measurement`, `send_command`, `get_name`, `profile`, `capture_steps`)
 3. Add variant to `DeviceFamily` enum in `protocol/mod.rs`
 4. Name the links the family is seen on in `preferred_transports()` in `lib.rs` — its USB cables (the transports themselves are in `KNOWN_TRANSPORTS`), and `BLUETOOTH` if a UT-D07B carries it
-5. Add `SelectableDevice` entry in `protocol/registry.rs` (`bluetooth_only` and the `bluetooth_names` it advertises, for a meter with the radio built in and no cable)
+5. Add a `SelectableDevice` entry in `protocol/newfamily/devices.rs` (`bluetooth_only` and the `bluetooth_names` it advertises, for a meter with the radio built in and no cable) and list it in `DEVICES` in `protocol/registry.rs`
 6. Create research docs in `docs/research/newfamily/`
 7. Mark as experimental until verified against real hardware (the CLI prints a warning for every model short of `Stability::Verified`)
 
@@ -152,7 +152,7 @@ tests, so a family has no golden directory until its first hardware run.
 
 Both device tables sit between `<!-- devices:start -->` and `<!-- devices:end -->`
 markers, and a `dmm-cli` test guards each. The one in `docs/cli-reference.md` is
-rendered from the registry: after changing `registry.rs` run
+rendered from the registry: after changing an entry or the `DEVICES` order run
 `UPDATE_DOCS=1 cargo test -p dmm-cli` to rewrite it rather than editing it by
 hand, or the test fails with a diff. The one in `README.md` is hand-written on
 purpose — the test only checks that every protocol family and every

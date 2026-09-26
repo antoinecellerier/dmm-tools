@@ -17,6 +17,7 @@
 //! - `sim.rs`: a simulated ZT-5B, the `mock-zt5b` device
 
 mod capture;
+pub(crate) mod devices;
 mod frame;
 mod glyph;
 mod keys;

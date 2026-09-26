@@ -1,4 +1,5 @@
 pub mod command;
+pub(crate) mod devices;
 pub mod mode;
 pub(crate) mod specs;
 pub mod tables;

@@ -155,7 +155,7 @@ Follow the code-level steps in `docs/development.md`:
 **Key rules:**
 - Set `Stability::Experimental` in `DeviceProfile` until verified against real hardware
 - Set `max_aux_values` in `DeviceProfile` to the most sub-values one frame can carry (0 for single-display meters) — the CLI and GUI size their fixed sub-value columns from it
-- Add `SelectableDevice` entry in `protocol/registry.rs` — CLI/GUI pick it up automatically
+- Add a `SelectableDevice` entry in the family's `devices.rs` and list it in `DEVICES` in `protocol/registry.rs` — CLI/GUI pick it up automatically
 - Export a `Fingerprint` from the family module — what its probe sends, whether its extractor checks a checksum, which families the probe has to follow, and the rule that identifies the meter from its frames — and point every one of the family's registry entries at it, with a test beside the rule over the bytes it accepts — real ones where hardware exists, the vendor trace otherwise. Nothing is added to `crates/dmm-lib/src/detect.rs`; `docs/detection-design.md` has the evidence ranking the rule has to hold its own in
 - Implement `capture_steps()` on the `Protocol` trait — this defines the guided verification workflow for the device. Each step has an `id`, a user-facing `instruction` (e.g., "Set meter to DC V mode"), an optional remote `command` to send, and a `samples` count. The default implementation returns an empty list, so the capture tool will have nothing to walk through unless you define steps. Cover all measurement modes, flag states, and remote commands the device supports. This decouples implementation from testing — someone without the device can define exactly what needs verifying, and someone with the device can run `capture` and walk through it without needing to understand the protocol.
 - Where the parser meets data its spec doesn't cover — display text, a mode or range code, an undefined bit, a frame type — call `protocol::unrecognised::report_unknown`, which asks the user for a report once per session; documented values, benign or not, stay silent
@@ -243,7 +243,7 @@ to this list):
 | Protocol implementation | `crates/dmm-lib/src/protocol/<family>/` |
 | Device tables (mode/range) | `crates/dmm-lib/src/protocol/<family>/tables/` |
 | Spec data (accuracy/resolution) | `crates/dmm-lib/src/protocol/<family>/`: `specs/`, `specs_<model>.rs` or `specs.rs` |
-| Device registry entry | `crates/dmm-lib/src/protocol/registry.rs` |
+| Device registry entry | `crates/dmm-lib/src/protocol/<family>/devices.rs`, ordered in `protocol/registry.rs` |
 | Detection fingerprint | the family module, referenced from its registry entry |
 | Golden test files | `crates/dmm-lib/tests/golden/<device id>/` |
 | Verification status | `docs/verification-backlog.md` |

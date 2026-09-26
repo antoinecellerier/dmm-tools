@@ -12,6 +12,8 @@
 //! Based on Ghidra decompilation of UT171C.exe and USB captures.
 //! See docs/research/ut171/reverse-engineered-protocol.md
 
+pub(crate) mod devices;
+
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
 use crate::measurement::{AuxValue, MeasuredValue, Measurement};
