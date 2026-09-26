@@ -4,7 +4,8 @@ Scope: the Brymen BM78xBT Bluetooth LE multimeters, the BM788BT and the
 BM787BT that EEVblog sells, from the advertisement to the packets they send
 and the commands they accept. Nothing is implemented; this pair of documents
 records what the meters do on the wire. §1-11 of the spec come from vendor
-sources only; the community cross-reference has not been opened.
+sources only; §12 compares them with community sources, read after the
+boundary was opened.
 
 Brymen publishes the protocol, so the question was not what the packets are
 but how far the published document can be taken at its word. The answer:
@@ -23,7 +24,9 @@ password digit orders where r4 states none; each is left open in the spec
 All Brymen's own, or linked from EEVblog's BM787BT store page; source 8 is
 general platform reference material. Fetched and analysed 2026-09-26.
 Provenance — URL, date, SHA-256, signer — is in
-`references/bm78xbt/SOURCE.txt` (gitignored); the five reader reports are in
+`references/bm78xbt/SOURCE.txt` (gitignored); the five reader reports
+(`protocol-doc.md`, `protocol-r2-vs-r4.md`, `manual-bm788bt.md`,
+`manual-bm787bt-diff.md`, `app.md`) are in
 `references/bm78xbt/analysis/findings/`.
 
 ### Primary (clean-room RE)
@@ -104,13 +107,30 @@ Not searched for or opened while §1-11 of the spec were written:
   work, and were kept out of every reader's brief and out of the drafting of
   both documents
 
-Boundary state: **community cross-reference not yet opened (2026-09-26).**
+### Cross-referenced (clean-room boundary opened 2026-09-26)
 
-### Cross-reference
+The user opened the boundary on **2026-09-26**, after §1-11 were written,
+grounding-checked and committed, for code repositories only: no forums, no
+LastDigit. The findings are §12 of the spec, marked [COMMUNITY]; nothing was
+merged into §1-11 beyond pointers. Provenance is in
+`references/bm78xbt/community/SOURCE.txt` (gitignored). The repositories are
+cited as their files stand at the commits below. No community code was copied.
 
-Pending. When the user opens the boundary, the sources read, their commits
-and licences, and the date go here; the findings go to spec §12, marked
-[COMMUNITY], with each disputed point re-read in the vendor sources alone.
+| Source | Commit | Licence | Notes |
+|---|---|---|---|
+| [milksplash/brymenble](https://github.com/milksplash/brymenble) | `02e28b6` (2026-08-31) | MIT © 2026 Martin Chan | Python SDK on bleak, with capture and probe tools |
+| [milksplash/brymenble-tc-bridge](https://github.com/milksplash/brymenble-tc-bridge) | `6355bbd` (2026-08-31) | MIT, same holder | forwards SDK readings to TestController |
+| [milksplash/brymenble-overlay](https://github.com/milksplash/brymenble-overlay) | `af59fec` (2026-08-31) | MIT, same holder | video overlay built on the SDK |
+
+All three are one author's. Their protocol source is r2, by the author's own
+file name for it (`brymenble/.gitignore:18`), and their command set lacks
+r4's 0x0040, as r2 does (spec §12). Searched on 2026-09-26 with nothing
+further found: GitHub repository search for "BM78xBT" (only the three above)
+and for "BM788BT OR BM787BT OR BM786BT", GitHub code search for the
+characteristic UUIDs, and libsigrok code search for "BM78" and "cdd5".
+
+Still not opened: forums of any kind, LastDigit, and the three in-repo files
+listed above, which were also kept out of the drafting of §12.
 
 ### Model-recall disclosure
 
@@ -118,7 +138,9 @@ The assistant that wrote these documents may have been trained on community
 write-ups of this protocol. Recall was never used as a source: every fact in
 §1-11 of `reverse-engineered-protocol.md` cites a page of a Brymen document
 or a file and lines of Brymen's app, a general platform reference is named
-where one is used, and a fact without either is tagged [UNVERIFIED].
+where one is used, and a fact without either is tagged [UNVERIFIED]. Every
+fact in §12 cites a file and line of a community repository at the commit
+above.
 
 ## Methodology
 
@@ -164,6 +186,20 @@ where one is used, and a fact without either is tagged [UNVERIFIED].
    result is unused), the value formula for [24] = 0, the list of main IDs
    outside r4, tags on deduced statements, and absences rephrased as dated
    search results.
+6. **Community cross-reference** (boundary opened 2026-09-26, above). A
+   fresh reader compared each claim of spec §1-11 with the three
+   repositories. The main session then re-read every cited line at the
+   commits above, sorted each fact by what it rests on (the author's
+   statement, or the SDK working at all, since no bytes a meter sent were
+   found in the repositories' files), and re-read the vendor source
+   for each disputed point: r4 p.1, p.7, p.10 and p.15 and the app. No
+   verdict in §1-11 changed; eleven open questions were narrowed and two
+   added (spec §11).
+7. **§12 check.** A fresh reader checked the §12 changes against the same
+   commits and the vendor sources. Each item was re-read in the source before
+   it was applied: chiefly exact quotes and cites, evidence labels ("author"
+   against "SDK"), the body's pointers cut to bare references to §12, and
+   absences rephrased as dated search results.
 
 Resolved disagreements:
 
@@ -208,4 +244,5 @@ As used in `reverse-engineered-protocol.md`:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter
 - **[HARDWARE]** — seen on a real meter: none yet
-- **[COMMUNITY]** — from a community source, spec §12 only: none yet
+- **[COMMUNITY]** — stated in or implied by a community source, spec §12
+  only; not a vendor fact
