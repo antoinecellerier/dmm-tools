@@ -1496,6 +1496,45 @@ fn an_overlay_breaks_across_a_long_silence() {
     );
 }
 
+/// A sub-value that stops while frames keep coming — REL switched off for a
+/// while — breaks its trace rather than being drawn straight across the
+/// stretch it was not sent in.
+#[test]
+fn an_overlay_that_stops_and_resumes_breaks() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_aux(&mut g, 20.0, at(0), None, &[("Reference", Some(10.0))]);
+    for i in 1..20 {
+        push_aux(&mut g, 20.0, at(i * 250), None, &[]);
+    }
+    push_aux(&mut g, 20.0, at(5000), None, &[("Reference", Some(12.0))]);
+    assert_eq!(
+        g.overlay_segments("Reference"),
+        vec![vec![[0.0, 10.0]], vec![[5.0, 12.0]]]
+    );
+    assert_eq!(g.all_segments().len(), 1, "the plotted trace went on");
+}
+
+/// HOLD on the UT61E+'s AC component sends AC frames only. When DC comes
+/// back its trace breaks, so neither the line nor the cursor integral runs
+/// across the held stretch.
+#[test]
+fn the_plotted_series_breaks_across_a_run_without_it() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_acdc(&mut g, at(0), Some(1.6), None);
+    for i in 1..=15 {
+        push_acdc(&mut g, at(i * 667), None, Some(0.0092));
+    }
+    push_acdc(&mut g, at(16 * 667), Some(1.6), None);
+    assert_eq!(g.all_segments().len(), 2);
+    assert_eq!(g.visible_gaps(), vec![(0.0, 10.672, GapKind::NoData)]);
+    assert_eq!(g.cursor_integral(0.0, 11.0), None);
+    assert_eq!(g.overlay_segments("AC").len(), 1, "AC went on throughout");
+}
+
 /// The Buffer size estimate charges this much per overlay point.
 #[test]
 fn an_overlay_point_fits_its_memory_estimate() {

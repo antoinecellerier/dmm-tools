@@ -809,10 +809,11 @@ impl App {
                     // plot, so that the frame the graph finally gives the
                     // selection up on is also the one that plots the main
                     // reading again, not the one after it. Until then a frame
-                    // missing the selected sub-value resolves to nothing and
-                    // is skipped, leaving the trace intact.
-                    // A sub-value frame without the main reading (the UT61E+'s
-                    // AC+DC V AC component) carries nothing to offer for it.
+                    // of the plotted mode missing the selected sub-value adds
+                    // no point to its trace, only to the ones beside it (see
+                    // `resolve_plot_input`). A sub-value with no value in this
+                    // frame (a scale's Raw beside the UT61E+'s AC+DC V AC
+                    // component) is not offered.
                     let options: Vec<(&str, &str)> = m
                         .aux_values
                         .iter()

@@ -121,6 +121,9 @@ pub(super) struct OverlayPoint {
 struct OverlaySeries {
     label: String,
     points: VecDeque<OverlayPoint>,
+    /// Frames since the last one that carried this sub-value; see
+    /// [`Graph::stopped_for`].
+    missing_frames: u32,
 }
 
 impl OverlaySeries {
@@ -243,6 +246,9 @@ pub struct Graph {
     /// Timestamp of the newest frame of any kind: a point, a frame of
     /// sub-values only, an overload or a word shown instead of a reading.
     last_heard: Option<Instant>,
+    /// Frames of sub-values only since the last point of the plotted series;
+    /// see [`Graph::stopped_for`].
+    main_missing_frames: u32,
     /// A non-plottable sample arrived since the last plotted point, so the
     /// next one starts a new segment. Time-based gap detection can't see
     /// this: an over-range excursion shorter than the threshold leaves no
@@ -343,6 +349,7 @@ impl Graph {
             gap_threshold_secs: GAP_MINIMUM_SECS,
             silences: VecDeque::new(),
             last_heard: None,
+            main_missing_frames: 0,
             pending_break: None,
             pending_data_loss: false,
             pending_break_since: None,
@@ -550,23 +557,67 @@ impl Graph {
             self.pushed_total = 0;
             self.last_display_raw = None;
             self.silences.clear();
+            self.main_missing_frames = 0;
         }
         self.heard(now);
         self.register_overlays(sample.overlays);
-        if let Some(value) = value {
-            self.push_point(value, now, display_raw);
-        }
-        for o in &mut self.overlays {
-            if let Some(&(_, v)) = sample.overlays.iter().find(|(label, _)| *label == o.label) {
-                o.push(
-                    OverlayPoint {
-                        time: now,
-                        value: v,
-                    },
-                    self.max_points,
-                );
+        match value {
+            Some(value) => {
+                let last = self.history.back().map(|p| p.time);
+                if self.stopped_for(self.main_missing_frames, last, now)
+                    && self.pending_break.is_none()
+                {
+                    self.pending_break = Some(GapKind::NoData);
+                }
+                self.main_missing_frames = 0;
+                self.push_point(value, now, display_raw);
             }
+            None => self.main_missing_frames += 1,
         }
+        for i in 0..self.overlays.len() {
+            let label = self.overlays[i].label.as_str();
+            let Some(&(_, v)) = sample.overlays.iter().find(|(l, _)| *l == label) else {
+                self.overlays[i].missing_frames += 1;
+                continue;
+            };
+            let o = &self.overlays[i];
+            let last = o.points.back().copied();
+            if self.stopped_for(o.missing_frames, last.map(|p| p.time), now)
+                && let Some(OverlayPoint {
+                    time,
+                    value: Some(_),
+                }) = last
+            {
+                self.overlays[i].push(OverlayPoint { time, value: None }, self.max_points);
+            }
+            let o = &mut self.overlays[i];
+            o.missing_frames = 0;
+            o.push(
+                OverlayPoint {
+                    time: now,
+                    value: v,
+                },
+                self.max_points,
+            );
+        }
+    }
+
+    /// Whether a series that last had a point at `last`, and has been missing
+    /// from `missing` frames since, stopped rather than paused: its trace
+    /// breaks before its next point instead of being drawn across.
+    ///
+    /// Frames kept coming, so no silence says so — a UT181A with REL off for
+    /// half a minute, or a held UT61E+ sending only its AC component. Both a
+    /// run of frames and a stretch past the gap threshold are needed, as for
+    /// dropping a series option: the frames alone would break a part the
+    /// meter sends every other frame at a slow interval, and the time alone
+    /// one it sends every other frame at 0.67 s.
+    fn stopped_for(&self, missing: u32, last: Option<Instant>, now: Instant) -> bool {
+        missing >= SERIES_DROP_FRAMES
+            && last.is_some_and(|last| {
+                now.checked_duration_since(last)
+                    .is_some_and(|d| d.as_secs_f64() > self.gap_threshold_secs)
+            })
     }
 
     /// Note that a frame arrived at `t`, recording the silence before it if
@@ -666,7 +717,9 @@ impl Graph {
                 .take()
                 .unwrap_or_else(|| self.main_name().to_string()),
             points: outgoing,
+            missing_frames: 0,
         };
+        self.main_missing_frames = 0;
         self.current_series = series.map(str::to_owned);
         self.minimap_level = None;
         self.pushed_total = self.history.len() as u64;
@@ -687,6 +740,7 @@ impl Graph {
             self.overlays.push(OverlaySeries {
                 label: label.to_string(),
                 points: VecDeque::new(),
+                missing_frames: 0,
             });
         }
     }
@@ -918,6 +972,7 @@ impl Graph {
         self.pending_band_from = None;
         self.silences.clear();
         self.last_heard = None;
+        self.main_missing_frames = 0;
         self.current_mode = None;
         self.current_unit.clear();
         self.last_display_raw = None;
