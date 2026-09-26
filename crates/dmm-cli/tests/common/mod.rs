@@ -1,6 +1,21 @@
-//! Helpers shared by the doc-checking tests (`docs_tables`, `docs_snippets`).
+//! Helpers shared by the integration tests. Each test compiles its own copy
+//! and uses only some of them, hence the `dead_code` allowance.
+#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// The `dmm-cli` binary, run with its settings lookup pointed at an empty
+/// directory, so a developer's own `settings.json` (a pinned meter, say)
+/// cannot change what the tests see. `XDG_CONFIG_HOME` covers Linux and
+/// `HOME` macOS; Windows reads the known-folder API, which no variable moves.
+pub fn dmm_cli() -> Command {
+    let config = Path::new(env!("CARGO_TARGET_TMPDIR")).join("dmm-cli-no-settings");
+    std::fs::create_dir_all(&config).expect("create the empty config dir");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_dmm-cli"));
+    cmd.env("XDG_CONFIG_HOME", &config).env("HOME", &config);
+    cmd
+}
 
 /// The repository root, from this crate's manifest directory.
 pub fn repo_root() -> PathBuf {

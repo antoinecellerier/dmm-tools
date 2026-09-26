@@ -7,14 +7,13 @@
 //! themselves, so the arms were removed — and only a run of the binary
 //! covers the dispatch, which no unit test can reach.
 
-use std::process::Command;
+mod common;
+
+use common::dmm_cli;
 use std::time::Instant;
 
 fn run(args: &[&str]) -> (String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_dmm-cli"))
-        .args(args)
-        .output()
-        .expect("run dmm-cli");
+    let out = dmm_cli().args(args).output().expect("run dmm-cli");
     (
         String::from_utf8(out.stdout).expect("utf-8 stdout"),
         String::from_utf8(out.stderr).expect("utf-8 stderr"),

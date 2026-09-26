@@ -11,9 +11,11 @@
 //!
 //! `--format replay` against a meter has no test here: it needs the cable.
 
+mod common;
+
 use chrono::{DateTime, Local, TimeDelta, Utc};
+use common::dmm_cli;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// The `# recorded:` line every recording below carries.
 const RECORDED: &str = "2026-09-02T10:00:00Z";
@@ -117,7 +119,7 @@ fn run(args: &[&str]) -> (String, String, bool) {
 
 /// The same, from `dir` — where a file the run names itself lands.
 fn run_in(dir: &Path, args: &[&str]) -> (String, String, bool) {
-    let out = Command::new(env!("CARGO_BIN_EXE_dmm-cli"))
+    let out = dmm_cli()
         .args(args)
         .current_dir(dir)
         .env("NO_COLOR", "1")
@@ -393,7 +395,7 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
 
     let dir = dir_for("no-readings");
     let path = recording_of(&dir, RECORDING_ALL_CORRUPT);
-    let mut child = Command::new(env!("CARGO_BIN_EXE_dmm-cli"))
+    let mut child = dmm_cli()
         .args([
             "read",
             "--replay",
@@ -417,7 +419,7 @@ fn a_bare_output_with_no_readings_says_no_file_was_written() {
     let mut lines = std::io::BufReader::new(child.stderr.take().expect("piped stderr")).lines();
     let first = lines.next().expect("a line").expect("utf-8 stderr");
     assert!(first.contains("invalid response"), "got {first}");
-    let killed = Command::new("kill")
+    let killed = std::process::Command::new("kill")
         .args(["-INT", &child.id().to_string()])
         .status()
         .expect("send an interrupt");

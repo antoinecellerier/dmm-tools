@@ -21,9 +21,8 @@
 
 mod common;
 
-use common::{repo_root, unified_diff};
+use common::{dmm_cli, repo_root, unified_diff};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// The docs whose snippets are generated. Every marker pair in each is checked.
 const DOCS: [&str; 2] = ["README.md", "docs/cli-reference.md"];
@@ -136,7 +135,7 @@ fn output_of(command: &str, via: &Via, where_: &str) -> String {
         ]),
     }
 
-    let out = Command::new(env!("CARGO_BIN_EXE_dmm-cli"))
+    let out = dmm_cli()
         .args(&args)
         .current_dir(repo_root())
         .env("NO_COLOR", "1")
