@@ -153,7 +153,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **LIVE** | Auto-scroll to latest data (filled when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading; **DC** for the UT61E+ in AC+DC V) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching restarts the graph; if the meter stops sending the chosen sub-value, the graph returns to **Main**. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading; **DC** for the UT61E+ in AC+DC V) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching to a series in the plotted one's unit swaps the two traces and keeps both; one in another unit restarts the graph. If the meter stops sending the chosen sub-value, the graph returns to **Main**. |
 | **Show:** | One chip per sub-value in the plotted series' unit: click to draw or hide its trace beside the plotted series. Hidden traces are still recorded. Session-only. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |
@@ -175,8 +175,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
   duration; the crosshair reports `overload` inside one
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
-  dropped). A change of mode, unit or plotted series clears the graph —
-  including auto-range crossing a decade (Ω→kΩ)
+  dropped). A change of mode or unit clears the graph — including auto-range
+  crossing a decade (Ω→kΩ) — and so does plotting a series in another unit
 - Sub-values in the plotted series' unit are drawn beside it as dashed or
   dotted lines, named in a key in the plot's top-left corner; the toolbar's
   **Show:** chips pick which. Each keeps going where the plotted series is

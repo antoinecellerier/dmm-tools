@@ -159,8 +159,10 @@ pub struct PlotSample<'a> {
     pub unit: &'a str,
     pub display_raw: Option<&'a str>,
     /// Label of the sub-value being plotted, or `None` for the meter's main
-    /// reading. A change here restarts the trace: two sub-values can share a
-    /// mode and a unit (T1 and T2), so nothing else would tell them apart.
+    /// reading. A change here swaps the plotted trace with the one of that
+    /// name beside it, or restarts the graph when there is none: two
+    /// sub-values can share a mode and a unit (T1 and T2), so nothing else
+    /// would tell them apart.
     pub series: Option<&'a str>,
     /// The meter's name for its main reading ("DC" beside an "AC" part), or
     /// `None` for [`MAIN_SERIES`].
@@ -517,11 +519,13 @@ impl Graph {
         // A change of plotted series restarts the trace for the same reason:
         // two sub-values can share a mode *and* a unit (T1 and T2 are both
         // "DC V"/"°C"), so switching from one to the other would otherwise
-        // append onto the previous one's trace with nothing to mark the join.
-        if self.current_mode.as_deref() != Some(mode)
-            || self.current_unit != unit
-            || self.current_series.as_deref() != sample.series
-        {
+        // append onto the previous one's trace with nothing to mark the join —
+        // unless the new series is already drawn beside the old one, in the
+        // same unit, and the two traces only change places.
+        let same_scale = self.current_mode.as_deref() == Some(mode) && self.current_unit == unit;
+        let series_changed = self.current_series.as_deref() != sample.series;
+        let swapped = same_scale && series_changed && self.swap_plotted_series(sample.series);
+        if !swapped && (!same_scale || series_changed) {
             self.history.clear();
             self.overlays.clear();
             self.current_mode = Some(mode.to_string());
@@ -599,6 +603,75 @@ impl Graph {
     /// [`MAIN_SERIES`].
     pub(crate) fn main_name(&self) -> &'static str {
         self.main_label.unwrap_or(MAIN_SERIES)
+    }
+
+    /// Plot `series` in place of the current one by swapping the two traces:
+    /// the one of that name drawn beside the plotted series becomes the
+    /// plotted one, and the plotted one is drawn beside it under its own
+    /// name. `false`, touching nothing, when no such trace is drawn — a
+    /// series in another unit, whose past values were never kept.
+    ///
+    /// The time axis, the unit, the Y range and the cursors all still apply.
+    /// A break in a sub-value's trace carries no reason, so on becoming the
+    /// plotted series it is drawn as a gap, an over-range stretch included.
+    fn swap_plotted_series(&mut self, series: Option<&str>) -> bool {
+        let incoming_name = series.unwrap_or(self.main_name());
+        let Some(i) = self.overlays.iter().position(|o| o.label == incoming_name) else {
+            return false;
+        };
+        let incoming = std::mem::take(&mut self.overlays[i].points);
+
+        let mut outgoing: VecDeque<OverlayPoint> = VecDeque::with_capacity(self.history.len());
+        let mut prev: Option<Instant> = None;
+        for p in self.history.drain(..) {
+            if let (Some(_), Some(time)) = (p.break_before, prev) {
+                outgoing.push_back(OverlayPoint { time, value: None });
+            }
+            outgoing.push_back(OverlayPoint {
+                time: p.time,
+                value: Some(p.value),
+            });
+            prev = Some(p.time);
+        }
+        if let (Some(_), Some(time)) = (self.pending_break, prev) {
+            outgoing.push_back(OverlayPoint { time, value: None });
+        }
+        while outgoing.len() > self.max_points.max(1) {
+            outgoing.pop_front();
+        }
+
+        let mut pending = None;
+        for p in incoming {
+            match p.value {
+                Some(value) => self.history.push_back(DataPoint {
+                    time: p.time,
+                    value,
+                    break_before: pending.take(),
+                    break_last_sample: None,
+                    break_had_data_loss: false,
+                    break_band_late: false,
+                }),
+                None => pending = Some(GapKind::NoData),
+            }
+        }
+        self.pending_break = pending;
+        self.pending_data_loss = false;
+        self.pending_break_since = None;
+        self.pending_heard_until = None;
+        self.pending_band_from = None;
+
+        self.overlays[i] = OverlaySeries {
+            label: self
+                .current_series
+                .take()
+                .unwrap_or_else(|| self.main_name().to_string()),
+            points: outgoing,
+        };
+        self.current_series = series.map(str::to_owned);
+        self.minimap_level = None;
+        self.pushed_total = self.history.len() as u64;
+        self.last_display_raw = None;
+        true
     }
 
     /// Start a trace for each sub-value seen for the first time, up to

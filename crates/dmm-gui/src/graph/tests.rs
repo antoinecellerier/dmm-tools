@@ -1264,6 +1264,22 @@ fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
     });
 }
 
+/// The same frames with the AC component plotted, as the App hands them
+/// over once **Plot:** AC is picked: the DC reading drawn beside it.
+fn push_acdc_plotting_ac(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
+    let overlays = [("DC", dc)];
+    g.push_sample(PlotSample {
+        value: ac,
+        timestamp: t,
+        mode: "AC+DC V",
+        unit: "V",
+        display_raw: None,
+        series: Some("AC"),
+        main_label: Some("DC"),
+        overlays: if dc.is_some() { &overlays } else { &[] },
+    });
+}
+
 /// Every point of a sub-value trace sits at the time of the frame that
 /// carried it.
 #[test]
@@ -1315,6 +1331,80 @@ fn alternating_component_frames_draw_two_unbroken_traces() {
         vec!["DC", "AC"],
         "the meter's name for its reading"
     );
+}
+
+/// Picking AC under **Plot:** keeps everything already drawn: the AC trace
+/// becomes the plotted one and the DC one is drawn beside it, both with
+/// their past points, and picking DC again swaps them back.
+#[test]
+fn switching_between_same_unit_series_keeps_their_past() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_acdc(&mut g, at(0), Some(1.6112), None);
+    push_acdc(&mut g, at(667), None, Some(0.0));
+    push_acdc(&mut g, at(1334), Some(1.6111), None);
+    push_acdc(&mut g, at(2000), None, Some(0.0022));
+
+    // The first frame after the switch is a DC one: nothing for AC, the DC
+    // reading beside it.
+    push_acdc_plotting_ac(&mut g, at(2667), Some(1.6110), None);
+    assert_eq!(g.current_series.as_deref(), Some("AC"));
+    assert_eq!(g.all_segments(), vec![vec![[0.667, 0.0], [2.0, 0.0022]]]);
+    assert_eq!(
+        g.overlay_segments("DC"),
+        vec![vec![[0.0, 1.6112], [1.334, 1.6111], [2.667, 1.611]]]
+    );
+    assert_eq!(key_names(&g), vec!["AC", "DC"]);
+    assert_eq!(g.origin, Some(t0), "the time axis stays where it was");
+
+    push_acdc_plotting_ac(&mut g, at(3334), None, Some(0.0031));
+    push_acdc(&mut g, at(4000), Some(1.6109), None);
+    assert_eq!(g.current_series, None);
+    assert_eq!(
+        g.len(),
+        4,
+        "every DC point, before and after the round trip"
+    );
+    assert_eq!(
+        g.overlay_values("AC"),
+        vec![Some(0.0), Some(0.0022), Some(0.0031)]
+    );
+}
+
+/// A break in the plotted series moves with it into the trace beside it,
+/// and one in a sub-value's trace becomes a gap when it is plotted.
+#[test]
+fn a_swap_keeps_the_breaks_of_both_traces() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_acdc(&mut g, at(0), Some(1.0), Some(0.1));
+    g.push_break(at(300));
+    push_acdc(&mut g, at(600), Some(1.0), None);
+    push_acdc(&mut g, at(700), None, None);
+    g.push_sample(PlotSample {
+        value: None,
+        timestamp: at(800),
+        mode: "AC+DC V",
+        unit: "V",
+        display_raw: None,
+        series: None,
+        main_label: Some("DC"),
+        overlays: &[("AC", None)],
+    });
+    push_acdc(&mut g, at(900), None, Some(0.2));
+
+    push_acdc_plotting_ac(&mut g, at(1000), None, Some(0.3));
+    assert_eq!(
+        g.overlay_segments("DC"),
+        vec![vec![[0.0, 1.0]], vec![[0.6, 1.0]]]
+    );
+    assert_eq!(
+        g.all_segments(),
+        vec![vec![[0.0, 0.1]], vec![[0.9, 0.2], [1.0, 0.3]]]
+    );
+    assert_eq!(g.visible_gaps(), vec![(0.0, 0.9, GapKind::NoData)]);
 }
 
 /// A held meter sends one component only. The AC trace is drawn alone and
@@ -1523,10 +1613,10 @@ fn only_a_lost_link_splits_the_overlays_with_the_plotted_series() {
 }
 
 /// T1 and T2 share a mode *and* a unit, so nothing but the series label
-/// distinguishes them — switching would otherwise append onto the
-/// previous sub-value's trace.
+/// distinguishes them. Switching to T2 plots its own past points, drawn
+/// beside T1 until then, rather than appending onto T1's trace.
 #[test]
-fn a_series_change_restarts_the_trace() {
+fn a_same_unit_series_change_swaps_the_traces() {
     let mut g = Graph::new();
     let t0 = Instant::now();
     push_aux(&mut g, 20.0, t0, None, &[("T2", Some(30.0))]);
@@ -1537,7 +1627,6 @@ fn a_series_change_restarts_the_trace() {
         None,
         &[("T2", Some(31.0))],
     );
-    assert_eq!(g.len(), 2);
 
     push_aux(
         &mut g,
@@ -1546,9 +1635,39 @@ fn a_series_change_restarts_the_trace() {
         Some("T2"),
         &[("Main", Some(21.5))],
     );
-    assert_eq!(g.len(), 1, "switching series must clear the history");
-    assert_eq!(g.overlay_labels(), vec!["Main"]);
     assert_eq!(g.current_series.as_deref(), Some("T2"));
+    assert_eq!(g.len(), 3, "T2's past points and the new one");
+    assert_eq!(g.overlay_labels(), vec!["Main"]);
+    assert_eq!(
+        g.overlay_values("Main"),
+        vec![Some(20.0), Some(21.0), Some(21.5)]
+    );
+}
+
+/// A series in another unit was never drawn, so there is nothing to keep:
+/// the graph restarts on it.
+#[test]
+fn a_series_change_to_another_unit_restarts_the_trace() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    g.push(230.0, t0, "V AC Hz", "VAC", None);
+    g.push(230.1, t0 + Duration::from_secs(1), "V AC Hz", "VAC", None);
+    g.push_sample(PlotSample {
+        value: Some(50.01),
+        timestamp: t0 + Duration::from_secs(2),
+        mode: "V AC Hz",
+        unit: "Hz",
+        display_raw: None,
+        series: Some("Frequency"),
+        main_label: None,
+        overlays: &[],
+    });
+    assert_eq!(
+        g.len(),
+        1,
+        "switching to another unit must clear the history"
+    );
+    assert_eq!(g.current_series.as_deref(), Some("Frequency"));
 }
 
 /// Same series, same mode, same unit: nothing to reset.
