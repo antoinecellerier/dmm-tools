@@ -78,9 +78,9 @@ pub(crate) mod test_support {
     /// excluded (it is `Instant::now()`) and the raw payload appears as a
     /// length — it is the test's own input.
     ///
-    /// `progress` and the per-sub-value lines are printed only where the
-    /// parser produced them, so a family whose wire carries neither keeps the
-    /// shorter snapshot.
+    /// `progress`, `main_label` and the per-sub-value lines are printed only
+    /// where the parser produced them, so a family whose wire carries none
+    /// keeps the shorter snapshot.
     pub(crate) fn snapshot(m: &Measurement) -> String {
         let flags: Vec<&str> = m
             .flags
@@ -91,6 +91,10 @@ pub(crate) mod test_support {
             .collect();
         let progress = match m.progress {
             Some(p) => format!("progress={p}\n"),
+            None => String::new(),
+        };
+        let main_label = match m.main_label {
+            Some(label) => format!("main_label={}\n", label.as_str()),
             None => String::new(),
         };
         let aux: String = m
@@ -118,6 +122,7 @@ pub(crate) mod test_support {
              range_label={}\n\
              {progress}\
              display_raw={:?}\n\
+             {main_label}\
              flags={}\n\
              aux={}{aux}\n\
              raw_payload={}",

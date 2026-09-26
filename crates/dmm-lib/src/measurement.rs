@@ -204,12 +204,24 @@ impl AuxValue {
 pub enum MainLabel {
     /// The DC component, beside an "AC" one.
     Dc,
+    /// The first thermocouple, beside a "T2" one.
+    T1,
+    /// The second thermocouple, beside a "T1" one.
+    T2,
+    /// The difference from a reference, beside "Reference" and "Absolute".
+    Relative,
+    /// The highest peak, beside a "Peak Min" one.
+    PeakMax,
 }
 
 impl MainLabel {
     pub fn as_str(self) -> &'static str {
         match self {
             MainLabel::Dc => "DC",
+            MainLabel::T1 => "T1",
+            MainLabel::T2 => "T2",
+            MainLabel::Relative => "Relative",
+            MainLabel::PeakMax => "Peak Max",
         }
     }
 }
@@ -256,11 +268,12 @@ pub struct Measurement {
     /// Auxiliary values (e.g. relative reference/absolute, min/max/avg sub-values).
     /// Empty for normal single-value measurements.
     pub aux_values: Vec<AuxValue>,
-    /// What the main reading is called beside sub-values that are parts of
-    /// the same reading, or `None` for the plain "main reading". The UT61E+
-    /// names its AC+DC V reading "DC" beside the "AC" sub-value — on the
-    /// frames without a main reading too, so the name is known from the
-    /// first frame.
+    /// What the main reading is called beside sub-values of the same
+    /// quantity, or `None` for the plain "main reading": the UT61E+'s AC+DC V
+    /// reading is "DC" beside the "AC" sub-value — on the frames without a
+    /// main reading too, so the name is known from the first frame — and the
+    /// UT181A's is "T1", "Relative" or "Peak Max" in the modes that show one
+    /// beside the others.
     pub main_label: Option<MainLabel>,
     /// Raw payload bytes as received (for protocol debugging).
     pub raw_payload: Vec<u8>,

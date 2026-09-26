@@ -4,7 +4,7 @@
 use super::mode;
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
 use crate::protocol::unrecognised::report_unknown;
 use crate::protocol::{check_len, unknown_mode16};
 use log::debug;
@@ -189,6 +189,24 @@ fn aux_labels(mode: u16) -> (&'static str, &'static str) {
     }
 
     POSITIONAL_AUX
+}
+
+/// What the main display shows, where the sub-values beside it make the
+/// plain "main reading" ambiguous: the other probe of a thermocouple pair
+/// (the one [`aux_labels`] does not give the aux slot), the difference in
+/// relative format, the highest peak in peak format. MIN/MAX shows the live
+/// reading, which "main" already names.
+fn main_label(format_type: u8, mode_word: u16) -> Option<MainLabel> {
+    match format_type {
+        0x00 => match aux_labels(mode_word).0 {
+            "T2" => Some(MainLabel::T1),
+            "T1" => Some(MainLabel::T2),
+            _ => None,
+        },
+        0x01 => Some(MainLabel::Relative),
+        0x04 => Some(MainLabel::PeakMax),
+        _ => None,
+    }
 }
 
 /// The labels [`aux_labels`] gives a slot nothing describes.
@@ -677,6 +695,7 @@ pub(super) fn parse_measurement(payload: &[u8]) -> Result<Measurement> {
         display_raw,
         flags,
         aux_values,
+        main_label: main_label(format_type, mode_word),
         ..Measurement::from_payload(payload)
     })
 }
@@ -852,6 +871,13 @@ raw_payload=19"#
         // slot, so the label stays positional.
         assert_eq!(aux_labels(0x4231).0, "Aux1");
         assert_eq!(aux_labels(0x4241).0, "Aux1");
+        // The main display holds the probe the aux slot does not; the
+        // differential arrangements name neither.
+        assert_eq!(main_label(0x00, 0x4211), Some(MainLabel::T1));
+        assert_eq!(main_label(0x00, 0x4221), Some(MainLabel::T2));
+        assert_eq!(main_label(0x00, 0x4231), None);
+        assert_eq!(main_label(0x00, 0x3111), None);
+        assert_eq!(main_label(0x02, 0x3111), None, "MIN/MAX: the live reading");
         // The modes decode_mode_word suffixes with " Hz" carry the frequency
         // and its period.
         assert_eq!(aux_labels(0x1121), ("Frequency", "Period"));
@@ -905,6 +931,7 @@ value=Normal(25.366180419921875)
 unit=°C
 range_label=
 display_raw=Some("25.4")
+main_label=T1
 flags=auto_range
 aux=1
 aux1=T2 value=Normal(24.623119354248047) unit=°C display_raw=Some("24.6") elapsed_secs=None
@@ -1137,6 +1164,7 @@ value=Normal(2.3450000286102295)
 unit=VDC
 range_label=Auto
 display_raw=Some("2.345")
+main_label=Relative
 flags=rel,auto_range
 aux=2
 aux1=Reference value=Normal(10.0) unit=VDC display_raw=Some("10.000") elapsed_secs=None
@@ -1238,6 +1266,7 @@ value=Normal(15.0)
 unit=VDC
 range_label=Auto
 display_raw=Some("15.000")
+main_label=Peak Max
 flags=auto_range,peak_max,peak_min
 aux=1
 aux1=Peak Min value=Normal(-3.0) unit=VDC display_raw=Some("-3.000") elapsed_secs=None
