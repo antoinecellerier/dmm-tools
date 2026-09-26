@@ -6,7 +6,7 @@
 
 ## Name
 
-**dmm-gui** — real-time graphing multimeter display for UNI-T and Voltcraft meters
+**dmm-gui** — real-time graphing multimeter display for USB and Bluetooth meters
 
 ## Synopsis
 
@@ -17,7 +17,7 @@ dmm-gui [OPTIONS]
 ## Description
 
 A desktop GUI for live measurement display, time-series graphing, recording,
-and remote control of UNI-T and Voltcraft multimeters.
+and remote control of digital multimeters over USB or Bluetooth.
 
 ![Wide layout on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](../assets/gui-wide-layout.png)
 
@@ -479,7 +479,7 @@ do not modify the persisted `settings.json`.
 | Option | Description |
 |--------|-------------|
 | `--device <ID>` | Meter model to connect to (e.g., `ut61eplus`, `ut181a`, `mock`), or `auto` (default). `--help` lists them. |
-| `--adapter <SERIAL_PATH_OR_ADDRESS>` | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter, from `dmm-cli list` output. |
+| `--adapter <SERIAL_PATH_OR_ADDRESS>` | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, from `dmm-cli list` output. |
 | `--no-bluetooth` | Turn off Bluetooth scanning for this session, whatever **Look for Bluetooth devices** is set to. |
 | `--mock-mode <MODE>` | Pin mock device to a specific mode (only with `--device mock`). Modes: dcv, acv, ohm, cap, hz, temp, dcma, ohm-ol, ncv, acv-hz, temp2, temp-diff, temp-diff-rev, noise. |
 | `--replay <FILE>` | Play back a replay file — saved by [Export…](#recording) or `dmm-cli read --format replay` — instead of connecting to a meter. |

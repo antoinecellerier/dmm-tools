@@ -459,7 +459,7 @@ fn open_bluetooth_only(
 /// meter not identified yet.
 ///
 /// `preferred` orders the links to try, empty when nothing is known about
-/// the meter; on the radio, any UNI-T adapter or meter is taken, since
+/// the meter; on the radio, any adapter or meter we support is taken, since
 /// detection picks the entry afterwards. The returned name
 /// is the bridge's (`"CP2110"`, `"CH9329"`, `"CH9325"`, [`BLUETOOTH`]), which
 /// [`detect::detect_device`] needs to know which probes are worth sending.
@@ -708,7 +708,7 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
     Ok(devices)
 }
 
-/// The UNI-T Bluetooth adapters and meters with the radio built in that are
+/// The Bluetooth adapters and meters with the radio built in that are
 /// in range, then the known ones the scan did not hear
 /// ([`DeviceInfo::not_heard`]).
 ///

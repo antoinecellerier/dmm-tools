@@ -1,10 +1,10 @@
 # dmm-tools
 
-Rust workspace for communicating with digital multimeters via USB (CP2110, CH9329, and CH9325 HID bridges). Supports UNI-T and Voltcraft meters.
+Rust workspace for communicating with digital multimeters via USB (CP2110, CH9329, and CH9325 HID bridges) and Bluetooth LE. Supports UNI-T, Voltcraft, ZOTEK and EEVblog meters.
 
 ## Project structure
 
-- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut80x` (UT803/UT804, and the UT71 and Voltcraft VC920/940/960 on the UT804's packets), `ut171`, `ut181a`, `vc8x0` (VC-880/VC-890). Protocol internals (framing, per-family parsers) are `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction; only `protocol::registry` and `protocol::ut61eplus` (tables, commands) are `pub` for the CLI/GUI.
+- `crates/dmm-lib/` — library: CP2110/CH9329/CH9325 and Bluetooth LE transports, protocol framing (AB CD and 0xAC extractors), measurement parsing, device tables. Protocol families: `ut61eplus`, `ut8802`, `ut8803`, `ut80x` (UT803/UT804, and the UT71 and Voltcraft VC920/940/960 on the UT804's packets), `ut171`, `ut181a`, `vc8x0` (VC-880/VC-890), `zotek` (ZOTEK's Bluetooth meters, sold as ZOYI, BSIDE and ANENG), `eevblog121gw` (EEVblog 121GW). Protocol internals (framing, per-family parsers) are `pub(crate)` — consumers use the `Dmm` API, not raw frame extraction; only `protocol::registry` and `protocol::ut61eplus` (tables, commands) are `pub` for the CLI/GUI.
 - `crates/dmm-shared/` — app-only things the CLI and GUI must agree on that `dmm-lib` has no business carrying, compile-enforced: the settings schema (`SharedSettings { device_family }`), `write_atomic`, `logging` (the default log levels), and `export` (the JSON reading shape and the `measurements-<meter>-<mode>-<start>.<ext>` file name both binaries write). GUI-only settings fields (colors, panel visibility, theme) live in `dmm-gui` and merge via `#[serde(flatten)]`. Export formats stay identical in both binaries: a new format or field lands in both in one change.
 - `crates/dmm-cli/` — CLI binary `dmm-cli`.
 - `crates/dmm-gui/` — GUI binary `dmm-gui` (eframe/egui).

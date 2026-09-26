@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=dmm-tools
-Comment=Real-time display and plotting for UNI-T multimeters
+Comment=Real-time display and plotting for digital multimeters
 Exec=dmm-tools-gui
 Icon=dmm-tools
 Categories=Utility;Electronics;

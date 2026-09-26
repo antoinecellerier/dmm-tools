@@ -4,7 +4,7 @@ publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "GUI application for UNI-T and Voltcraft digital multimeters"
+description = "GUI application for USB and Bluetooth digital multimeters"
 
 [dependencies]
 dmm-lib = { path = "../dmm-lib" }

@@ -1,8 +1,9 @@
 //! Bluetooth LE transport for UNI-T's UT-D07 adapters and the meters with
-//! the radio built in (the UT60BT and UT202BT), called peers here.
+//! the radio built in (the UT60BT, UT202BT, ZOTEK's meters and the EEVblog
+//! 121GW), called peers here.
 //!
 //! The UT-D07B is a transparent BLE-to-UART bridge: the bytes it carries are
-//! the ones the USB cable carries. The built-in meters send the same UT61+
+//! the ones the USB cable carries. The UT60BT and UT202BT send the same UT61+
 //! frames over the same ISSC service (`docs/research/new-device-candidates.md`,
 //! Bluetooth section). So no parser or framing code knows about Bluetooth.
 //! Everything Bluetooth-specific is here

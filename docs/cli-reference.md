@@ -5,7 +5,7 @@
 
 ## Name
 
-**dmm-cli** — command-line tool for UNI-T and Voltcraft multimeters
+**dmm-cli** — command-line tool for USB and Bluetooth multimeters
 
 ## Synopsis
 
@@ -15,7 +15,7 @@ dmm-cli <COMMAND> [OPTIONS]
 
 ## Description
 
-Communicates with UNI-T and Voltcraft multimeters over USB or Bluetooth. Supports live
+Communicates with digital multimeters over USB or Bluetooth. Supports live
 measurement reading, button commands, settings switching, protocol debugging, and
 guided data capture for verification. See [supported devices](supported-devices.md) for
 the full compatibility list.
@@ -27,7 +27,7 @@ Set `NO_COLOR=1` to disable colored output.
 | Option | Default | Description |
 |---|---|---|
 | `--device <DEVICE>` | `auto` | Meter model to connect to, or `auto` to work out which meter is connected. See [Devices](#devices) below. |
-| `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter, from `list` output. |
+| `--adapter <SERIAL_PATH_OR_ADDRESS>` | | Select a specific adapter when more than one is reachable. Use the serial number or HID path of a USB cable, or the address of a Bluetooth adapter or meter, from `list` output. |
 | `--no-bluetooth` | | Turn off Bluetooth scanning for this run. Overrides the `bluetooth` setting in the settings file; an address given to `--adapter` is still opened. |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |

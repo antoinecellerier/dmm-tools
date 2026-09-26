@@ -31,7 +31,7 @@ pub fn version_label() -> String {
 #[command(
     name = "dmm-gui",
     version = version_string(),
-    about = "GUI application for UNI-T and Voltcraft digital multimeters",
+    about = "GUI application for USB and Bluetooth digital multimeters",
     after_long_help = "Help / GitHub: https://github.com/antoinecellerier/dmm-tools"
 )]
 struct Args {
@@ -53,7 +53,7 @@ struct Args {
 
     /// Select a specific adapter when more than one is reachable.
     /// Use the serial number or HID path of a USB cable, or the address of a
-    /// Bluetooth adapter, as 'dmm-cli list' prints them.
+    /// Bluetooth adapter or meter, as 'dmm-cli list' prints them.
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
@@ -369,7 +369,7 @@ fn install_desktop_integration() {
             "[Desktop Entry]\n\
              Type=Application\n\
              Name=dmm-tools\n\
-             Comment=Real-time display and plotting for UNI-T multimeters\n\
+             Comment=Real-time display and plotting for digital multimeters\n\
              Exec={}\n\
              Icon=dmm-tools\n\
              Categories=Utility;Electronics;\n\

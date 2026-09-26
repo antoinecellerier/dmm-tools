@@ -3,7 +3,7 @@ name = "dmm-lib"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Library for communicating with UNI-T and Voltcraft digital multimeters via CP2110, CH9329, and CH9325 HID bridges"
+description = "Library for communicating with digital multimeters via CP2110, CH9329, and CH9325 HID bridges and Bluetooth LE"
 
 [dependencies]
 thiserror = "2"

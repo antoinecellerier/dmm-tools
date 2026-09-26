@@ -318,7 +318,9 @@ fn keep_matches(mut matched: Vec<Candidate>, want: Match) -> Vec<Candidate> {
     if want == Match::First {
         let tied = tied_for_best(&matched.iter().map(|c| c.standing).collect::<Vec<_>>());
         if tied > 1 {
-            warn!("Multiple UNI-T Bluetooth devices found ({tied}). Pass --adapter to pick one.");
+            warn!(
+                "Multiple Bluetooth adapters or meters found ({tied}). Pass --adapter to pick one."
+            );
         }
         matched.truncate(1);
     }

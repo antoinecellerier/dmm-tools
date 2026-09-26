@@ -160,7 +160,7 @@ pub(crate) fn read_uart_bytes(
     Ok(0)
 }
 
-/// Header bytes shared across all UNI-T protocols.
+/// Header bytes the `AB CD` families share, UNI-T's and Voltcraft's.
 pub const HEADER: [u8; 2] = [0xAB, 0xCD];
 
 /// Minimum valid response length: header(2) + length(1) + checksum(2) = 5

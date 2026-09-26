@@ -4,7 +4,7 @@ publish = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "CLI tool for UNI-T and Voltcraft digital multimeters"
+description = "CLI tool for USB and Bluetooth digital multimeters"
 
 [[bin]]
 name = "dmm-cli"

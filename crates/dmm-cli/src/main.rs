@@ -30,7 +30,7 @@ fn version_string() -> &'static str {
 #[command(
     name = "dmm-cli",
     version = version_string(),
-    about = "CLI tool for UNI-T and Voltcraft digital multimeters",
+    about = "CLI tool for USB and Bluetooth digital multimeters",
     after_help = "Run with --help for the full list of supported devices and the \
                   shared-settings file path.\n\n\
                   Set NO_COLOR=1 to disable colored output.\n\
@@ -49,7 +49,7 @@ struct Cli {
 
     /// Select a specific adapter when more than one is reachable.
     /// Use the serial number or HID path of a USB cable, or the address of a
-    /// Bluetooth adapter, as 'dmm-cli list' prints them.
+    /// Bluetooth adapter or meter, as 'dmm-cli list' prints them.
     #[arg(long, value_name = "SERIAL_PATH_OR_ADDRESS")]
     adapter: Option<String>,
 
