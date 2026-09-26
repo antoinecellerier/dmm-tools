@@ -77,7 +77,7 @@ impl Bm78xbtProtocol {
                 // r4 has no key or function command (spec §7.1).
                 supported_commands: &[],
                 max_aux_values: 0,
-                verification_issue: None,
+                verification_issue: Some(33),
                 meter_keys: MeterKeys::NONE,
             },
         }
@@ -263,7 +263,7 @@ mod tests {
         let proto = (entry.new_protocol)();
         assert_eq!(proto.profile().model_name, entry.display_name);
         assert_eq!(proto.profile().max_aux_values, 0);
-        assert_eq!(proto.profile().verification_issue, None);
+        assert_eq!(proto.profile().verification_issue, Some(33));
         assert!(std::ptr::eq(entry.fingerprint.unwrap(), &FINGERPRINT));
         assert!(
             entry.activation_instructions.contains(reset_gesture!()),

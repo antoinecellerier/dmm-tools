@@ -1950,7 +1950,7 @@ and the BM788BT and BM787BT manuals
 questions); the community cross-reference (spec §12) came after and narrows
 several items below without being our verification. Implemented 2026-09-26
 as the `bm78xbt` family, experimental, one registry entry `bm78xbt` for
-both models; its verification issue is still to be opened. Nobody on the
+both models, with verification issue [#33](https://github.com/antoinecellerier/dmm-tools/issues/33). Nobody on the
 project owns one, so each item notes the driver's choice. Spec tables wait
 for a first real-device confirmation, as for every new meter; both manuals
 carry them, and the BM787BT's AC V and AC+DC V accuracy is lower outside

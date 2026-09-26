@@ -191,8 +191,8 @@ dial to any function but Auto V/LoZ, and hold Δ for one second or more until
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| BM788BT | 60000 | 🧪 Experimental | — |
-| BM787BT | 60000 | 🧪 Experimental | sold by [EEVblog](https://eevblog.store/products/eevblog-bm787bt-bluetooth-multimeter); no T2, T1-T2 or %4-20mA |
+| BM788BT | 60000 | 🧪 Experimental ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)) | — |
+| BM787BT | 60000 | 🧪 Experimental ([#33](https://github.com/antoinecellerier/dmm-tools/issues/33)) | sold by [EEVblog](https://eevblog.store/products/eevblog-bm787bt-bluetooth-multimeter); no T2, T1-T2 or %4-20mA |
 
 Not run on a meter yet: the decoding comes from Brymen's protocol document,
 Brymen's app and the two manuals. Nothing the meter sends tells the two
