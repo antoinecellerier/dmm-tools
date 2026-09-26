@@ -3,7 +3,7 @@
 //! nothing to show into the help text the reading column renders.
 
 use dmm_lib::binary_help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{MainLabel, MeasuredValue, Measurement};
 use dmm_lib::mock::MockMode;
 use dmm_lib::protocol::{MeterKeys, registry};
 use eframe::egui::{self, RichText, Ui};
@@ -850,6 +850,7 @@ impl App {
                             unit,
                             display_raw,
                             series,
+                            main_label: m.main_label.map(MainLabel::as_str),
                             overlays: &overlays,
                         };
                         match plotted {

@@ -1,9 +1,9 @@
 //! Reducing one measurement to what the graph should plot: which series is
 //! drawn, in which unit, and which same-unit sub-values ride along beside it.
 
-use dmm_lib::measurement::{MeasuredValue, Measurement};
+use dmm_lib::measurement::{MainLabel, MeasuredValue, Measurement};
 
-use crate::graph::MAX_OVERLAYS;
+use crate::graph::{MAIN_SERIES, MAX_OVERLAYS};
 
 /// What a frame holds for the plotted series.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -127,7 +127,7 @@ pub(super) fn resolve_plot_input<'a>(
         && overlays.len() < MAX_OVERLAYS
         && let Some(v) = overlay_value(&m.value)
     {
-        overlays.push(("Main", v));
+        overlays.push((m.main_label.map_or(MAIN_SERIES, MainLabel::as_str), v));
     }
 
     if plotted == Plotted::Absent && overlays.is_empty() {
@@ -305,6 +305,16 @@ mod tests {
         // With nothing in the plotted unit beside it, there is nothing to do.
         let plot = resolve_plot_input(&m, Some(("Frequency", "Hz")), Some("DC V"));
         assert!(plot.is_none());
+    }
+
+    /// Beside a plotted AC component, the UT61E+'s AC+DC V reading is drawn
+    /// under its own name, the one the key and the **Plot:** chip give it.
+    #[test]
+    fn a_named_main_reading_is_drawn_under_its_name() {
+        let mut m = meter(1.6112, "V", vec![]);
+        m.main_label = Some(MainLabel::Dc);
+        let plot = resolve(&m, Some("AC")).expect("DC is drawn");
+        assert_eq!(plot.overlays, vec![("DC", Some(1.6112))]);
     }
 
     /// Another mode's frame without the selection is skipped: the graph gives

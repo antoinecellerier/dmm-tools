@@ -16,7 +16,7 @@
 
 ### Bug fixes
 
-- **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; AC now fills the `aux1` CSV columns.
+- **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
 
 ## v0.7.0 — Auto-Detection, Meter Control and Newly Verified Models
 

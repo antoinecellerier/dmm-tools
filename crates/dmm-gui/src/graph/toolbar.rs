@@ -75,6 +75,8 @@ fn group_caption(ui: &mut Ui, text: &str) {
 /// chip and a **Show:** chip identically ("T2, button"). egui 0.36 never
 /// calls AccessKit's `set_description`, so the hover text cannot carry the
 /// distinction — it has to be in the name.
+/// `series` is the chip's series by name: a sub-value's label, or the name
+/// the meter gives its main reading; `None` for an unnamed main reading.
 pub(super) fn series_chip_label(series: Option<&str>) -> String {
     match series {
         Some(label) => format!("Plot {label}"),
@@ -404,10 +406,14 @@ impl Graph {
             // widgets to that role with a toggled state, so AT handling of the
             // pairing is proven.
             let main_selected = self.selected_series.is_none();
+            let main_hover = match self.main_label {
+                Some(name) => format!("Plot the meter's {name} reading"),
+                None => "Plot the meter's main reading".to_string(),
+            };
             if ui
-                .selectable_label(main_selected, "Main")
-                .on_hover_text("Plot the meter's main reading")
-                .a11y_label(&series_chip_label(None))
+                .selectable_label(main_selected, self.main_name())
+                .on_hover_text(main_hover)
+                .a11y_label(&series_chip_label(self.main_label))
                 .a11y_role(egui::accesskit::Role::RadioButton)
                 .clicked()
             {

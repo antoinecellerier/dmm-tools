@@ -1647,8 +1647,6 @@ Open:
   can reach back about twice as far as the History buffer before either drops.
 - **A software offset** is applied to the AC component as to any same-unit
   sub-value, which means nothing for an RMS value.
-- **Key label.** The DC trace is named "Main" in the plot key and chips;
-  naming it "DC" needs a main-series label on the reading.
 
 ### UT216XD: the UT61+ deck specifies a clamp meter we do not list
 

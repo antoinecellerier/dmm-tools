@@ -272,6 +272,11 @@ pub(crate) struct SampleData {
     /// reports are unchanged.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub aux: Vec<AuxSample>,
+    /// The reading's name beside sub-values of the same quantity ("DC" in
+    /// the UT61E+'s AC+DC V, "T1" or "Peak Max" on a UT181A), omitted when
+    /// it has none.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub main_label: Option<String>,
 }
 
 /// One sub-value in a captured sample.
@@ -409,6 +414,7 @@ impl SampleData {
                     elapsed_secs: a.elapsed_secs,
                 })
                 .collect(),
+            main_label: m.main_label.map(|l| l.as_str().to_string()),
         }
     }
 
@@ -441,7 +447,17 @@ impl SampleData {
         // place, as `dmm-cli read` prints them.
         let (mut out, aux) = match aux {
             Some(aux) if self.value.is_empty() => (aux, None),
-            aux => (format!("{} {}", self.display_raw.trim(), self.unit), aux),
+            aux => {
+                let name = self
+                    .main_label
+                    .as_deref()
+                    .map(|l| format!("{l} "))
+                    .unwrap_or_default();
+                (
+                    format!("{name}{} {}", self.display_raw.trim(), self.unit),
+                    aux,
+                )
+            }
         };
         if !flags.is_empty() {
             out.push_str(&format!(" [{flags}]"));
@@ -925,6 +941,15 @@ mod tests {
         assert!(matches!(m.value, MeasuredValue::Absent));
         let s = SampleData::from_measurement(&m);
         assert_eq!(s.summary(), "AC 0.0000 V [AUTO]");
+    }
+
+    /// The DC frame of the same pair is confirmed against its name too, as
+    /// `dmm-cli read` prints it.
+    #[test]
+    fn summary_names_a_named_reading() {
+        let m = make_test_measurement(0x19, 0x00, b" 1.6113", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let s = SampleData::from_measurement(&m);
+        assert_eq!(s.summary(), "DC 1.6113 V [AUTO]");
     }
 
     #[test]

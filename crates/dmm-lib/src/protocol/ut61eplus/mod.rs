@@ -6,7 +6,7 @@ pub mod tables;
 
 use crate::error::{Error, ErrorKind, Result};
 use crate::flags::StatusFlags;
-use crate::measurement::{AuxValue, MeasuredValue, Measurement};
+use crate::measurement::{AuxValue, MainLabel, MeasuredValue, Measurement};
 use crate::protocol::framing::{self, FrameErrorRecovery, UT61EPLUS_MEASUREMENT_PAYLOAD_LEN};
 use crate::protocol::registry;
 use crate::protocol::unrecognised::report_unknown;
@@ -1400,11 +1400,19 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
 
     // §2.7: in AC+DC V the meter sends its DC and AC components in frames of
     // their own, in turn, flag3 bit 3 set on the AC one. The DC frame is the
-    // reading; the AC frame carries its component as a sub-value in the
-    // reading's unit and no main reading, so each keeps its own time and
-    // frame. Only where the model's dial reaches the mode: the deck's AC+DC
-    // current modes have no ranges, and nothing has shown how they send.
-    if mode == Mode::AcDcV && range_info.is_some() && !m.flags.dc {
+    // reading, named for its component; the AC frame carries its component
+    // as a sub-value in the reading's unit and no main reading, so each keeps
+    // its own time and frame. Only where the model's dial reaches the mode:
+    // the deck's AC+DC current modes have no ranges, and nothing has shown
+    // how they send.
+    if mode != Mode::AcDcV || range_info.is_none() {
+        return Ok(m);
+    }
+    let m = Measurement {
+        main_label: Some(MainLabel::Dc),
+        ..m
+    };
+    if !m.flags.dc {
         let ac = AuxValue {
             label: Cow::Borrowed(AC_COMPONENT_LABEL),
             value: m.value,
@@ -1422,8 +1430,8 @@ pub fn parse_measurement(payload: &[u8], table: &dyn DeviceTable) -> Result<Meas
     Ok(m)
 }
 
-/// Label of the AC component an AC+DC V frame carries (see
-/// `parse_measurement`).
+/// Label of the AC component an AC+DC V frame carries, beside the reading
+/// named [`MainLabel::Dc`] (see `parse_measurement`).
 const AC_COMPONENT_LABEL: &str = "AC";
 
 /// The value a 7-char display field shows in `mode`, the same for a main
@@ -2060,6 +2068,8 @@ mod tests {
         assert!(matches!(m.value, MeasuredValue::Normal(v) if v == 1.6113));
         assert!(m.flags.dc);
         assert!(m.aux_values.is_empty());
+        assert_eq!(m.main_label, Some(MainLabel::Dc));
+        assert_eq!(m.to_string(), "DC 1.6113 V [AUTO]");
 
         let ac = [
             0x19, 0x30, 0x20, 0x30, 0x2E, 0x30, 0x30, 0x30, 0x30, 0x00, 0x00, 0x30, 0x30, 0x39,
@@ -2071,6 +2081,11 @@ mod tests {
         assert_eq!(m.range_label, "2.2V");
         assert!(!m.flags.dc);
         assert_eq!(m.raw_payload, ac, "the frame stays the AC frame's own");
+        assert_eq!(
+            m.main_label,
+            Some(MainLabel::Dc),
+            "named from the first frame"
+        );
         assert_eq!(m.aux_values.len(), 1);
         let aux = &m.aux_values[0];
         assert_eq!((aux.label.as_ref(), aux.unit.as_ref()), ("AC", ""));

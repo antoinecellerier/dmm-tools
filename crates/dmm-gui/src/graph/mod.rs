@@ -37,6 +37,11 @@ use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 /// the ceiling the wire imposes rather than a display choice.
 pub(crate) const MAX_OVERLAYS: usize = 4;
 
+/// What the meter's main reading is called when the meter gives it no name
+/// of its own: on the **Plot:** chip, in the key, and as the trace drawn
+/// beside a plotted sub-value.
+pub(crate) const MAIN_SERIES: &str = "Main";
+
 /// Consecutive frames without a sub-value before it is no longer offered —
 /// and, if it was selected, before the selection is dropped. The gap
 /// threshold has to pass too: see [`Graph::set_series_options`].
@@ -157,6 +162,9 @@ pub struct PlotSample<'a> {
     /// reading. A change here restarts the trace: two sub-values can share a
     /// mode and a unit (T1 and T2), so nothing else would tell them apart.
     pub series: Option<&'a str>,
+    /// The meter's name for its main reading ("DC" beside an "AC" part), or
+    /// `None` for [`MAIN_SERIES`].
+    pub main_label: Option<&'static str>,
     /// Sub-values sharing the plotted series' unit, as (label, value).
     /// `None` for an over-range sub-value — it breaks that trace without
     /// breaking the others.
@@ -184,6 +192,9 @@ pub struct Graph {
     overlays: Vec<OverlaySeries>,
     current_mode: Option<String>,
     current_unit: String,
+    /// The meter's name for its main reading, from the latest sample; `None`
+    /// for [`MAIN_SERIES`].
+    main_label: Option<&'static str>,
     /// Label of the series `history` was recorded from; `None` for the main
     /// reading. Distinct from `selected_series`: this one only moves when a
     /// sample actually arrives for the new choice.
@@ -318,6 +329,7 @@ impl Graph {
             current_mode: None,
             current_unit: String::new(),
             current_series: None,
+            main_label: None,
             selected_series: None,
             hidden_overlays: HashSet::new(),
             series_options: Vec::new(),
@@ -469,6 +481,7 @@ impl Graph {
             unit,
             display_raw,
             series: None,
+            main_label: None,
             overlays: &[],
         });
     }
@@ -495,6 +508,7 @@ impl Graph {
         if self.origin.is_none() {
             self.origin = Some(now);
         }
+        self.main_label = sample.main_label;
 
         // A unit change is as much a scale change as a mode change. Auto-range
         // keeps the mode string fixed while the unit moves a decade (Ω→kΩ,
@@ -579,6 +593,12 @@ impl Graph {
                 end.checked_duration_since(start)
                     .is_some_and(|d| d.as_secs_f64() > self.gap_threshold_secs)
             })
+    }
+
+    /// What the main reading goes by: the meter's name for it, or
+    /// [`MAIN_SERIES`].
+    pub(crate) fn main_name(&self) -> &'static str {
+        self.main_label.unwrap_or(MAIN_SERIES)
     }
 
     /// Start a trace for each sub-value seen for the first time, up to

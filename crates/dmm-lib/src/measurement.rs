@@ -195,6 +195,25 @@ impl AuxValue {
     }
 }
 
+/// The name of a main reading that is one part of what the meter measures,
+/// beside sub-values that are the others.
+///
+/// An enum rather than a string: it is carried on every reading, and one
+/// byte fits in padding the struct already has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MainLabel {
+    /// The DC component, beside an "AC" one.
+    Dc,
+}
+
+impl MainLabel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MainLabel::Dc => "DC",
+        }
+    }
+}
+
 /// A fully parsed measurement from the meter.
 ///
 /// This is the unified measurement type used by all protocol implementations.
@@ -237,6 +256,12 @@ pub struct Measurement {
     /// Auxiliary values (e.g. relative reference/absolute, min/max/avg sub-values).
     /// Empty for normal single-value measurements.
     pub aux_values: Vec<AuxValue>,
+    /// What the main reading is called beside sub-values that are parts of
+    /// the same reading, or `None` for the plain "main reading". The UT61E+
+    /// names its AC+DC V reading "DC" beside the "AC" sub-value — on the
+    /// frames without a main reading too, so the name is known from the
+    /// first frame.
+    pub main_label: Option<MainLabel>,
     /// Raw payload bytes as received (for protocol debugging).
     pub raw_payload: Vec<u8>,
     /// Per-range resolution/accuracy for this mode+range, if the protocol provides specs.
@@ -270,6 +295,7 @@ impl Measurement {
             display_raw: None,
             flags: StatusFlags::default(),
             aux_values: vec![],
+            main_label: None,
             raw_payload: payload.to_vec(),
             spec: None,
             mode_spec: None,
@@ -400,6 +426,7 @@ impl Measurement {
             display_raw: Some("  5.678".to_string()),
             flags,
             aux_values: vec![],
+            main_label: None,
             raw_payload: vec![],
             spec: None,
             mode_spec: None,
@@ -407,7 +434,8 @@ impl Measurement {
     }
 }
 
-/// `"{value} {unit} [{flags}]"`, or for a frame without a main reading
+/// `"{value} {unit} [{flags}]"`, led by the reading's name when it has one
+/// (`"DC 1.6112 V [AUTO]"`), or for a frame without a main reading
 /// ([`MeasuredValue::Absent`]) its sub-values in the value's place:
 /// `"AC 0.0000 V [AUTO]"`.
 impl std::fmt::Display for Measurement {
@@ -415,6 +443,9 @@ impl std::fmt::Display for Measurement {
         if matches!(self.value, MeasuredValue::Absent) {
             f.write_str(&self.aux_summary())?;
         } else {
+            if let Some(label) = self.main_label {
+                write!(f, "{} ", label.as_str())?;
+            }
             write!(f, "{} {}", self.value_display_str(), self.unit)?;
         }
         let flags_str = self.flags.to_string();

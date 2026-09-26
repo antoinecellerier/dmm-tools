@@ -153,7 +153,7 @@ Three components stacked vertically: toolbar, main plot, and minimap.
 | **LIVE** | Auto-scroll to latest data (filled when active) |
 | **Y:Auto / Y:Fixed** | Auto-scale Y axis, or enter fixed min/max values |
 | **Reset Zoom** | Return to live follow with auto Y (enabled when the view has been zoomed or paused) |
-| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching restarts the graph; if the meter stops sending the chosen sub-value, the graph returns to **Main**. |
+| **Plot:** | Choose which series the graph draws: **Main** (the meter's reading; **DC** for the UT61E+ in AC+DC V) or a sub-value the meter is sending. Shown for meters that send sub-values (UT181A, UT171, the UT61E+ in AC+DC V) and while a software [scale](#scale) is active, which adds **Raw**. Switching restarts the graph; if the meter stops sending the chosen sub-value, the graph returns to **Main**. |
 | **Show:** | One chip per sub-value in the plotted series' unit: click to draw or hide its trace beside the plotted series. Hidden traces are still recorded. Session-only. |
 | **Mean** | Dashed horizontal line at visible window average, labeled with value |
 | **Min/Max** | Sliding-window envelope band showing value range. Window duration is configurable (default 1s). |

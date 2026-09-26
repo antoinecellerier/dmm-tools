@@ -1243,6 +1243,7 @@ fn push_aux(
         unit: "\u{00B0}C",
         display_raw: None,
         series,
+        main_label: None,
         overlays,
     });
 }
@@ -1258,6 +1259,7 @@ fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
         unit: "V",
         display_raw: None,
         series: None,
+        main_label: Some("DC"),
         overlays: if ac.is_some() { &overlays } else { &[] },
     });
 }
@@ -1308,7 +1310,11 @@ fn alternating_component_frames_draw_two_unbroken_traces() {
         vec![vec![[0.667, 0.0], [2.0, 0.0022]]]
     );
     assert!(g.visible_gaps().is_empty());
-    assert_eq!(key_names(&g), vec!["Main", "AC"]);
+    assert_eq!(
+        key_names(&g),
+        vec!["DC", "AC"],
+        "the meter's name for its reading"
+    );
 }
 
 /// A held meter sends one component only. The AC trace is drawn alone and

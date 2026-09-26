@@ -210,8 +210,8 @@ timestamp,mode,value,unit,range,flags,aux1_label,aux1_value,aux1_unit,aux2_label
 <!-- /snippet -->
 
 A UT61E+ in AC+DC V sends its DC and AC components in turn, each in a frame of
-its own. A DC frame is the reading; an AC frame carries only the `AC`
-sub-value, printed where the reading goes, with an empty CSV value cell and a
+its own. A DC frame is the reading, printed as `DC 1.6112 V`; an AC frame
+carries only the `AC` sub-value, printed where the reading goes, with an empty CSV value cell and a
 `null` JSON value. `--count` counts frames, while the summary covers the DC
 readings.
 
@@ -220,11 +220,11 @@ dmm-cli read --count 6
 -->
 ```
 $ dmm-cli read --count 6
-1.6112 V [AUTO]
+DC 1.6112 V [AUTO]
 AC 0.0000 V [AUTO]
-0.2045 V [AUTO]
+DC 0.2045 V [AUTO]
 AC 0.4406 V [AUTO]
-0.0264 V [AUTO]
+DC 0.0264 V [AUTO]
 AC 0.3376 V [AUTO]
 
 --- 3 samples | Min: 0.0264 V | Max: 1.6112 V | Avg: 0.6140 V

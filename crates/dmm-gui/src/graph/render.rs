@@ -293,7 +293,7 @@ impl Graph {
     fn plotted_series_name(&self) -> String {
         self.current_series
             .clone()
-            .unwrap_or_else(|| "Main".to_string())
+            .unwrap_or_else(|| self.main_name().to_string())
     }
 
     /// Rows of the plot key: the plotted series when it is drawn, then each
@@ -738,6 +738,7 @@ impl Graph {
             // Which series is plotted, and what is drawn beside it, are both
             // spoken below — so both have to bust the cache.
             self.current_series.as_deref().unwrap_or("").hash(&mut h);
+            self.main_label.hash(&mut h);
             shown_labels.hash(&mut h);
             // Mode + display_raw drive the spoken last-reading; if either
             // changes (e.g. mode switch during paused playback) the label
@@ -782,7 +783,7 @@ impl Graph {
             // The plot draws several traces at once for a multi-display
             // meter, and which one the axis belongs to is otherwise purely
             // visual — the key painted in its corner.
-            let of_series = match self.current_series.as_deref() {
+            let of_series = match self.current_series.as_deref().or(self.main_label) {
                 Some(label) => format!(" of {label}"),
                 None => String::new(),
             };
