@@ -122,7 +122,7 @@ impl Eevblog121gwProtocol {
                 // operands and then whatever else it shows (see
                 // `decode::secondary`).
                 max_aux_values: 3,
-                verification_issue: None,
+                verification_issue: Some(32),
                 meter_keys: MeterKeys {
                     functions: &[],
                     context: std::slice::from_ref(&LPF_KEY),

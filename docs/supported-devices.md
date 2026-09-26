@@ -175,7 +175,7 @@ Handheld. Bluetooth built in, no cable; the meter shows up as "121GW"
 
 | Model | Counts | Status | Notes |
 |---|---|---|---|
-| EEVblog 121GW | 55000 | 🧪 Experimental | update the firmware from the SD card if the tool asks (manual p.72) |
+| EEVblog 121GW | 55000 | 🧪 Experimental ([#32](https://github.com/antoinecellerier/dmm-tools/issues/32)) | update the firmware from the SD card if the tool asks (manual p.72) |
 
 Not run on a meter yet: the decoding comes from EEVblog's packet-format
 documents, EEVblog's and UEi's apps and the manual, and the remote keys from

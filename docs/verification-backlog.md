@@ -1846,7 +1846,7 @@ app and the manual (`docs/research/121gw/reverse-engineered-protocol.md`,
 §14 for the open questions); the community cross-reference (spec §15) came
 after, and answers several items below without being our verification.
 Implemented 2026-09-26 as the `eevblog121gw` family, experimental, registry
-id `121gw`; its verification issue is still to be opened. Nobody on the
+id `121gw`, with verification issue [#32](https://github.com/antoinecellerier/dmm-tools/issues/32). Nobody on the
 project owns one, so where an item below is open the driver's choice is
 noted with it. Spec tables wait for a first real-device confirmation, as
 for every new meter; the manual carries them (p.17-23). One capture settles

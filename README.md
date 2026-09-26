@@ -109,7 +109,7 @@ WARNING: UNI-T UT8803 support is experimental (unverified against real hardware)
 | ZOTEK ZT-5566SE (ANENG AN999S) | — | 🧪 Experimental (built in) | [#29](https://github.com/antoinecellerier/dmm-tools/issues/29) |
 | ZOTEK ZT-5BQ (ANENG ST207) | — | 🧪 Experimental (built in) | [#30](https://github.com/antoinecellerier/dmm-tools/issues/30) |
 | ZOTEK ZT-5B (ANENG V05B) | — | 🧪 Experimental (built in) | [#31](https://github.com/antoinecellerier/dmm-tools/issues/31) |
-| EEVblog 121GW | — | 🧪 Experimental (built in) | — |
+| EEVblog 121GW | — | 🧪 Experimental (built in) | [#32](https://github.com/antoinecellerier/dmm-tools/issues/32) |
 <!-- devices:end -->
 
 ✅ = confirmed on real hardware. 🟡 = connection and the main modes confirmed, the rest still to verify. 🧪 = reverse-engineered from vendor software, not yet tested on real hardware over that link. — = not supported over that link.
