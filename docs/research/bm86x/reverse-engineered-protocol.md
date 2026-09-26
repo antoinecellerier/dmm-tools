@@ -11,10 +11,11 @@ as 7-segment patterns, and function, unit, prefix, sign and decimal point as
 annunciator bits, in one layout for the BM860s and another for the BM820s
 and BM520s. The BM521s and BM525s also answer three commands that page out
 their logged memory. Not implemented. No meter from this group has been on
-our bench: every fact below comes from Brymen's protocol documents, Brymen's
-two Windows programs and their READMEs, and the two user manuals. The
-approach doc beside it records the sources, the method and the clean-room
-boundary.
+our bench: every fact in §1-11, and each question of §12, comes from
+Brymen's protocol documents, Brymen's two Windows programs and their
+READMEs, and the two user manuals; §13 compares them with community
+sources, and §12's "Community:" notes summarise §13. The approach doc
+beside it records the sources, the method and the clean-room boundary.
 
 Based on:
 - Brymen's protocol sheets "Protocol for 500000-count professional dual
@@ -32,6 +33,8 @@ Based on:
   rendered pages
 - For §1.3 only: Brymen's BM250/BM250s protocol sheet and its Bs25x V5003
   program and README
+- For §13 only: six community code repositories and TestController's
+  supported-equipment list, opened 2026-09-27
 
 Citation keys (paths under `references/bm86x/`, gitignored):
 - **BM860 p.N** — `protocol/BM860-BM860s-protocol.pdf`
@@ -53,6 +56,14 @@ Citation keys (paths under `references/bm86x/`, gitignored):
   functions re-decompiled, string literals filled in); **Bs86x `@ 0xADDR`**
   — an address in `app/Bs86xV6003s.exe`, read with objdump. **Bs8252x**
   likewise for `ghidra/Bs8252xV6009sA-*` and `app/Bs8252xV6009sA.exe`
+- **Community sources**, §13 only — paths under
+  `references/bm86x/community/` at the commits of §13.1; a bare `bm86x.c`,
+  `bm52x.c` or `api.c` is in `libsigrok/src/dmm/` or
+  `libsigrok/src/hardware/serial-dmm/`, a bare `BM869S.py` in
+  `BM869S-remote-access/`, `brymen-BM869s.py` in `Brymen-BM869s/`,
+  `Brymen869.cpp` in `Brymen869s-XmlLib/Source/Brymen869/`, `main.S` in
+  `869log/firmware/`, and `decoder.cpp`, `main.cpp` or `config.h` in
+  `brymen-867-interface-cable/firmware/BrymenConnector_new/`
 
 The protocol sheets name no model, only a count and a series title; the
 series names come from the file names and Brymen's download pages
@@ -80,6 +91,9 @@ Confidence levels:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter (all in §12)
 - **[HARDWARE]** — seen on a real meter: none yet
+- **[COMMUNITY]** — stated in or implied by a community source, §13 only
+  (opened 2026-09-27), summarised in §12's "Community:" notes; not a vendor
+  fact
 
 ---
 
@@ -102,7 +116,8 @@ Brymen's BM820s and BM520s manual pages, while the Bs82-52x zip is linked
 from the BM820s software page (`SOURCE.txt`) [KNOWN]. The BM820 sheet ships again inside
 the BM520s zip, byte-identical (`SOURCE.txt`) [KNOWN]. The Bs82-52x README
 names the program "Bs82-52x Data Recording System" and its import function
-"for datalogging series only" (README-8252x §3-2-1-4) [KNOWN].
+"for datalogging series only" (README-8252x §3-2-1-4) [KNOWN]. Community:
+see §13.8.
 
 ### 1.2 The cable
 
@@ -118,6 +133,7 @@ names the program "Bs82-52x Data Recording System" and its import function
 All [KNOWN]. The BM820s manual contradicts itself; Brymen's program for the
 BM820s and BM520s names only BC-86X, so three sources to one point to the
 BU-86X kit [INFERRED]; which cable a BM820s actually needs is open (§12).
+Community: see §13.3.
 That a BU-86X kit contains the BC-86X cable is [INFERRED from the names]:
 the manuals name the kit, the READMEs the cable.
 
@@ -129,7 +145,7 @@ manual p.13), labelled "PC-Comm" on the panel drawings (BM860s manual p.12
 figures; BM820s manual p.1, p.4) [KNOWN]. A key, key combination or menu
 step to start PC output: none found in either manual, 2026-09-26. Whether
 the cable relays each request to the meter or answers from a reading it
-holds is not stated in any source [UNVERIFIED].
+holds is not stated in any source [UNVERIFIED]. Community: see §13.6.
 
 ### 1.3 BM250s: a separate serial protocol
 
@@ -166,7 +182,7 @@ enumerating as 0x0082:0x0001 [VENDOR]. The sheets' "0x82" is the programs'
 value short of one hex digit; whether it is a typo or shorthand is not
 stated [INFERRED]. The value the cable enumerates with is [UNVERIFIED]; the
 programs' value is the stronger evidence, since they run against real
-cables.
+cables. Community: see §13.2.
 
 **Report shape** [INFERRED from the Windows HID class convention: one
 whole report per `ReadFile`/`WriteFile`, the report-ID byte first, `00`
@@ -174,7 +190,7 @@ when the device does not number its reports]: input reports are 8 data
 bytes and output reports 3, unnumbered. The sheets' "Report ID= I", "II",
 "III" name the three reads, not three IDs. On the USB wire the reports then
 carry no ID byte. The HID report descriptor, endpoints and polling interval
-are not given in any source [UNVERIFIED].
+are not given in any source [UNVERIFIED]. Community: see §13.2.
 
 ## 3. Requests and timing
 
@@ -200,7 +216,7 @@ Brymen's programs expect a BM521s or BM525s to answer `82 66`, with `52` in
 byte 23. Whether it also answers `52 66`, as its own sheet says, and whether
 a BM860s answers `82 66` or a BM820s `86 66`, are [UNVERIFIED]. Bs86x sends
 its `82 66` probe to whatever is on the cable, a BM860s included (§10.4)
-[VENDOR].
+[VENDOR]. Community: see §13.3.
 
 ### 3.2 The sheets' flowchart
 
@@ -272,7 +288,7 @@ take longer than the programs' 4 s [INFERRED from the READMEs]. The display
 updates 5 times a second nominal, 1.25 in the BM860s 500000-count mode
 (BM860s manual p.17; BM820s manual p.19), and REC runs at "fast 20/s" on the
 BM820s (BM820s manual p.13) [KNOWN]. How the reply rate relates to these is
-[UNVERIFIED].
+[UNVERIFIED]. Community: see §13.4.
 
 ### 3.4 No meter, meter off
 
@@ -289,7 +305,7 @@ filler — is [UNVERIFIED]. The import probe maps a byte 23 of `FF`, `F7`,
 `@ 0x42273a-0x4227c2`), and the disabled Bs8252x reader accepts byte 23 only
 in {`82`, `52`, `FF`, `F7`, `F3`, `F1`, `F0`, `E0`, `C0`, `80`, `00`}
 (Bs8252x `@ 0x424f75-0x425051`) [VENDOR]. Why these values: not stated
-[UNVERIFIED].
+[UNVERIFIED]. Community, on the cable with the meter off: see §13.4.
 
 ## 4. The 27-byte reply
 
@@ -309,6 +325,7 @@ in {`82`, `52`, `FF`, `F7`, `F3`, `F1`, `F0`, `E0`, `C0`, `80`, `00`}
 [KNOWN]. The live decoders copy R[2..8], R[10..17] and R[19..23] into a
 20-byte buffer and read nothing else: bytes 1, 2, 10, 19 and 25-27 are
 never looked at (Bs86x `:110297-110322`; Bs8252x `:21836-21861`) [VENDOR].
+Community: see §13.3.
 
 ### 4.2 Model bytes
 
@@ -323,7 +340,7 @@ sheets, and it equals the request's Command 2 [INFERRED from the tables].
 The live path of either program reads no model byte; only the import probe
 reads byte 23 (§10.4) [VENDOR]. Nothing tells models within a series apart,
 2026-09-26 (sheets and programs) [KNOWN], [VENDOR]; the functions a meter
-shows are the only hint (§11.1) [INFERRED].
+shows are the only hint (§11.1) [INFERRED]. Community: see §13.3.
 
 ### 4.3 Where report II starts in a BM820s/BM520s reply
 
@@ -346,7 +363,7 @@ ID (Bs8252x `:21836-21861`, `:22207-22424`) [VENDOR]: it decodes the BM820
 Table 1 layout. Read with that decoder, the BM820 example's secondary
 display comes out as " 0.12" instead of 50.12 (§9.2). The meter's layout is
 [UNVERIFIED]; the example and the BM520-ML table look like a drafting error
-[INFERRED].
+[INFERRED]. Community: see §13.2.
 
 ---
 
@@ -400,6 +417,7 @@ encodes no dial position, function code or range code (BM860 p.1) [KNOWN].
   4, and its sub code (14.0, 15.0, 16.0 as 4, 2, 1) after sub digit 1, 2 or
   3; any other combination gives no point (Bs86x `:110484-111077`)
   [VENDOR]. The worked example is the one place that disagrees (§9.1).
+  Community: see §13.5.
 - **Digit 6.** In the 50000-count mode the sixth digit is blank in the
   example (byte 11 = `00h`, BM860 p.1), and the manual's temperature
   figures print the unit letter there ("0250.8C", "0483.4F", BM860s manual
@@ -417,7 +435,7 @@ LCD drawing has a minus bar at both places (BM860s manual p.1), and Bs86x
 reads 4.7 as the main "-" and 12.4 as the sub "-" (Bs86x `:110484-110857`,
 `:110861-111077`) [VENDOR]. A small "1" printed just left of segment 1g,
 beside the ① bar, is neither a table cell nor explained (BM860 p.1)
-[UNVERIFIED].
+[UNVERIFIED]. Community: see §13.5.
 
 ### 5.4 Bar graph
 
@@ -428,7 +446,8 @@ bar bits are 4.4 "bar scale" and 4.5 (▭ ④), which is the bar's minus by its
 circled number [INFERRED]. 4.4 lights the scale numerals [INFERRED: it is
 set in the example, whose figure highlights the numerals]. Neither program
 reads 4.4 or 4.5, or draws a bar from any byte (both decoders; the raw
-27-byte copy is never read, Bs86x `:110065`) [VENDOR].
+27-byte copy is never read, Bs86x `:110065`) [VENDOR]. Community: see
+§13.5, §13.6.
 
 ### 5.5 Annunciators Bs86x does not read
 
@@ -447,6 +466,7 @@ reads 4.4 or 4.5, or draws a bar from any byte (both decoders; the raw
 [KNOWN] for the labels (BM860 p.1). A dBm reference annunciator or a CREST
 peak marker other than [C] and MAX/MIN: none in Table 1, 2026-09-26. Bs86x
 reads 12.3 %4~20mA, but only as the sub unit "%" (§8.1) [VENDOR].
+Community: see §13.5.
 
 ## 6. BM820s and BM520s LCD map
 
@@ -514,7 +534,8 @@ and Bs8252x reading them as main and sub "-" (Bs8252x `:21986-22424`)
 [VENDOR]. Bs8252x also keeps a separate "sub negative" flag, taken from
 12.4, which is the 5P point; its recorder uses that flag (Bs8252x
 `:21610`, `:10862`, `:11158`) [VENDOR]; that this is a leftover from the
-BM860 decoder, where 12.4 is the sub minus, is [INFERRED].
+BM860 decoder, where 12.4 is the sub minus, is [INFERRED]. Community: see
+§13.5.
 
 ### 6.4 Bar graph
 
@@ -524,7 +545,7 @@ figure draws a scale "0" at the left, "6" and "10" at the right, a ▷ and a
 [KNOWN]. No bar bit exists in this map at all; neither program draws a bar
 [VENDOR]. In EF detection the bar shows the field strength, and while
 logging it becomes a swinging pointer (BM820s manual p.12, p.16) [KNOWN];
-neither is in the data [INFERRED from the map].
+neither is in the data [INFERRED from the map]. Community: see §13.5.
 
 ### 6.5 Annunciators Bs8252x does not read
 
@@ -545,7 +566,7 @@ neither is in the data [INFERRED from the map].
 [KNOWN] for the labels (BM820 p.1). The disabled Bs8252x reader rejects a
 reply with 9.4 (@) set, with both 15.7 and 15.6 (sub m and µ) set, or with
 both 17.7 and 17.6 (main µ and m) set (Bs8252x `@ 0x424f75-0x425051`)
-[VENDOR].
+[VENDOR]. Community: see §13.5.
 
 ## 7. Seven-segment characters
 
@@ -567,7 +588,7 @@ None of the sheets has a digit or letter table, 2026-09-26 [KNOWN]. Brymen's
 programs have one each; an unlisted pattern becomes `?` (Bs86x
 `:109403-109540`; Bs8252x `:22573-22716`) [VENDOR]. The two tables give the
 same segments for every character (cross-checked against §7.1)
-[INFERRED].
+[INFERRED]. Community: see §13.5.
 
 | Char | Segments | Bs86x byte & `FE` | Bs8252x byte & `EF` | In a sheet's example |
 |---|---|---|---|---|
@@ -765,7 +786,7 @@ the protocol reader and again for this spec]:
 3. The hex sets 7p (after digit 7), and the table highlights 7p; the example
    figure lights **8p**, giving the caption's 60.11. Fig 1 and Bs86x put 7p
    after digit 7, so the hex and the figure disagree, not the labels
-   [INFERRED].
+   [INFERRED]. Community: see §13.5.
 
 The figure lights 26 bar pointers, about 3.13 of the 0-5 scale, with no bit
 in the data [INFERRED, count by the protocol reader].
@@ -835,6 +856,7 @@ Both programs compare the 16-bit sum of the 24 data bytes with byte 29 +
 byte 30 × 256: byte 29 low, byte 30 high (Bs86x `@ 0x422dcc-0x422de4`)
 [VENDOR]. Unlike the live path, byte 2 is data here (Model_Id, §10.5)
 [KNOWN], and the programs read it (R[1..8], R[10..17], R[19..26]) [VENDOR].
+Community: see §13.7.
 
 ### 10.3 MRAD's flowchart
 
@@ -905,7 +927,7 @@ Then data sets of 6 bytes (ML_0-2, SL_0-2, dual) or 3 (ML_0-2, single); a
 page ends with DLE `EE`, ETX `C0`, and the next page repeats the header
 from DLE/STX. Suffix `_0` is the low byte: the programs read the lengths so
 [VENDOR], and NS1_Addr2 is the most significant by MRAD's notation
-[INFERRED].
+[INFERRED]. Community: see §13.7.
 
 **Table 3, function encoder** (MRAD p.8) [KNOWN]:
 
@@ -926,6 +948,7 @@ only); bit 4 "0" °C, "1" °F (temperature only); low nibble the logging
 interval, Table 3-1 [KNOWN]. An AutoCheck, dBm or EF code: none in Table 3,
 2026-09-27 [KNOWN]; the BM521s and BM525s have AutoCheck (BM820s manual
 p.6), so what a session logged in AutoCheck carries is [UNVERIFIED].
+Community: see §13.7 D3.
 
 **Tables 4 and 5, data sets** (MRAD p.9) [KNOWN]: ML_0 bit 7 "+"/"-", bit 6
 OL, bit 5 LB ("logged at low-battery status"), bit 4 x, bits 3-0 MLRange;
@@ -933,6 +956,7 @@ SL_0 the same with bit 5 x; ML_1 and SL_1 hold D1 (bits 7-4) and D0 (bits
 3-0), ML_2 and SL_2 D3 and D2. MRAD does not say whether D3-D0 are decimal
 digits or the nibbles of a binary count; the programs read ML_2:ML_1 as one
 binary integer (§10.4) [VENDOR]; which the meter stores is [UNVERIFIED].
+Community: see §13.7.
 
 **Table 6, range bits** (MRAD p.9) [KNOWN]:
 
@@ -1085,6 +1109,7 @@ the BM820s (BM860s manual p.13; BM820s manual p.13) [KNOWN].
   significant reading; SELECT at power-on disables it until OFF [KNOWN].
   Linked to a PC it is disabled (README-86x §2-5) [KNOWN]; a statement on
   PC communication and APO: none found in either manual, 2026-09-26.
+  Community: see §13.4.
 - Logging at intervals of 30 s or more enters a 50 % power-down mode about
   4.2 min after the start (BM820s manual p.16) [KNOWN]; what a real-time
   request gets meanwhile is [UNVERIFIED].
@@ -1118,52 +1143,259 @@ What the wire requires of any decoder:
 
 ## 12. Open questions — [UNVERIFIED]
 
+Each question comes from Brymen's sources. Its "Community:" note, where
+there is one, summarises §13 [COMMUNITY] with the strength of the evidence;
+"settled" there means community evidence, not a meter on our bench, so
+every item stays on this list.
+
 1. **VID:PID**: 0x0820:0x0001 (programs) or 0x82/0x01 as printed (sheets)
-   (§2).
+   (§2). Community: settled toward 0x0820:0x0001 (code+hw, three
+   projects, and DawOp's code), §13.2.
 2. **Report shape on the wire**: 8-byte input and 3-byte output reports,
-   unnumbered; the report descriptor (§2).
+   unnumbered; the report descriptor (§2). Community: the shape is settled
+   (code+hw, one capture); the descriptor stays open, §13.2.
 3. **Report II position** in a BM820s/BM520s reply: byte 10 (BM820 Table
    1, MRAD, the program) or byte 11 (BM820 example, BM520-ML) (§4.3).
+   Community: settled toward byte 10 (code+hw, BM525s and BM829s), §13.2.
 4. **BM52x real-time request**: whether a BM521s/BM525s answers `52 66`
    (its sheet), `82 66` (Brymen's programs) or both, and with which byte 23
-   (§3.1).
+   (§3.1). Community: narrowed; a BM525s answers `52 66` with `52` in bytes
+   20-23 (code+hw); `82 66` is in dispute, §13.3 D1.
 5. **Cross-series requests**: what a BM860s does with `82 66` (Bs86x's
-   import probe sends it) and a BM820s with `86 66` (§3.1).
+   import probe sends it) and a BM820s with `86 66` (§3.1). Community: none
+   found in these sources, 2026-09-27; the series code is the cable's to
+   interpret [INFERRED], §13.6.
 6. **Cable name for the BM820s/BM520s**: BU-86X/BC-86X (manual p.20,
-   READMEs) or BU-82X (manual p.13) (§1.2).
+   READMEs) or BU-82X (manual p.13) (§1.2). Community: settled toward the
+   BU-86X (code+hw), §13.3.
 7. **Timing**: whether a reply waits for a fresh measurement; the reply rate
    against the 5/s, 1.25/s and 20/s display rates; whether the device must
    be reopened per reading as the sheets' flowchart does, or can be polled
    continuously as the programs do; capacitance replies beyond 4 s (§3.2,
-   §3.3).
+   §3.3). Community: narrowed; no reopen is needed (code+hw), and about 5
+   replies a second [INFERRED from capture timestamps]; the 1.25/s and
+   20/s modes and capacitance stay open, §13.4.
 8. **No meter, meter off, APO**: what the cable sends without a meter; the
    byte 23 values the programs map to `82`; whether linking really disables
-   APO (§3.4, §11.6).
+   APO (§3.4, §11.6). Community: narrowed; nothing with the meter off
+   (comment, [INFERRED]); APO in dispute (§13.4 D2); the byte 23 values
+   stay open.
 9. **Model bytes**: bytes 20-22 on a BM860s; whether any byte tells models
-   within a series apart (§4.2).
+   within a series apart (§4.2). Community: bytes 20-22 settled as `86`
+   (captures); telling models apart stays open, §13.3.
 10. **BM860 secondary point**: the example's hex (7p, "6.011") against its
     figure (8p, "60.11"); the main V bit absent in the example (§9.1).
+    Community: narrowed; the BU-86X decoders follow Table 1 (code+hw); the
+    captures fit it but do not record the LCD; the V bit stays open, §13.5.
 11. **500000-count mode**: how the six main digits and the points are used
     (§5.2).
 12. **Minus segments**: 4.7 and 12.4 (BM860s), 4.7 and 9.5 (BM820s/BM520s)
-    identified by position and program use (§5.3, §6.3).
+    identified by position and program use (§5.3, §6.3). Community:
+    corroborated (code+hw, one capture), §13.5.
 13. **Byte 18 bit 3** on the BM820s/BM520s: the programs' "mV" variant,
     "don't care" in the sheet (§8.1).
 14. **Unexplained segments**: △ (5.0; 4.6), "%" (4.5), Hi/Lo, LPF, @, the
     ③/④/⑤ dashes, the BM860s "bar scale" bit and the small "1" beside 1g
-    (§5.3-§5.5, §6.5).
+    (§5.3-§5.5, §6.5). Community: narrowed; △ as relative zero and ⑤ as
+    the MAX-MIN dash (code+hw); ③ as the T1-T2 dash (code+hw, one
+    project); "%", Hi/Lo and @ reported unsupported on a BM525s (comment);
+    LPF, ④, bar scale and the "1" stay open, §13.5.
 15. **Bar graph**: that no byte carries it, in any mode (§5.4, §6.4).
+    Community: no data; the two BM860s captures are near-zero readings with
+    bar-scale off, so they don't show where the bar is, §13.5.
 16. **Glyphs**: how the meter draws I (InEr), _ (C_Er), the points of
-    "E.F." and the EF dashes (§7.3).
+    "E.F." and the EF dashes (§7.3). Community: InEr is shown on a BM525s
+    (comment); the glyphs stay open, §13.5.
 17. **Don't-care bytes**: what the BM860s sends in bytes 2, 20-22 and
     24-27, and the BM820s/BM520s in bytes 2, 18, 24 bits 3-0 and 25-27
-    (§4.1, §5.1, §6.1).
+    (§4.1, §5.1, §6.1). Community: BM860s narrowed; byte 2 `00` (`FF` in
+    resistance, comment), 20-22 `86` and 24-27 `00` (captures); the
+    BM820s/BM520s bytes stay open, §13.3.
 18. **T1 + T2 against T1 − T2**: the dash bit as the only difference (§8.2).
+    Community: the projects disagree; open, §13.5.
 19. **Memory download**: checksum byte order on the meter; D3-D0 as digits
     or a binary count; MRAD's pointer and address inconsistencies; the
     Model_Id values 00h/01h; the 60.00A range against the manual's 10.00A;
     AutoCheck sessions; behaviour in capacitance and during 50 % power-down
-    (§10).
+    (§10). Community: narrowed; checksum low byte first, TotalBytes from
+    Model_Id, addresses low byte first and Model_Id `01` on a BM525s
+    (capture); the rest stays open, §13.7.
 20. **Manual gaps**: the BM867s, 821s, 822s and 827s dials; DC+AC current
     on the 821s/822s; the VFD SELECT order; the BM820s manual's "1V range"
     Hz sensitivity (p.7), a range the meter does not have (§11).
+
+---
+
+## 13. Cross-reference with community sources [COMMUNITY]
+
+Read 2026-09-27, after §1-12 were written from Brymen's sources,
+grounding-checked and committed; nothing here was merged into §1-12 beyond
+pointers. The boundary covered code repositories and TestController's
+supported-equipment list, no forums (`reverse-engineering-approach.md`).
+Community paths below are relative to `references/bm86x/community/`, at the
+commits of §13.1.
+
+How the sources were made matters more than how many agree:
+
+- **Most restate the BM860 sheet.** The copy DawOp ships
+  (`Brymen869s-XmlLib/Docs/500000count-professional-dual-display-DMMs-protocol.pdf`)
+  is byte-identical to our BM860 sheet (same SHA-256); sigrok names the
+  BM860 sheet and the BM520s zip as its sources
+  (`libsigrok/src/dmm/bm86x.c:24-29`, `bm52x.c:24-29`); 869log thanks
+  Brymen for it (`869log/README.md:12`); freedaun credits DawOp
+  (`Brymen-BM869s/README.md:41`). Where their LCD maps match §5-§6 they
+  restate Table 1; what they add is that the code was run against meters.
+- **Two ways in.** sigrok, TheHWcave, freedaun and DawOp talk to a real
+  BU-86X (hidapi, or the AHid library). 869log and MartinD-CZ replace the
+  cable with a DIY board on the meter's infrared port: the only view below
+  the cable.
+- **Three captures.** Bytes a meter sent, at the commits of §13.1: one live
+  BM869s reply in a code comment (`Brymen-BM869s/brymen-BM869s.py:295`);
+  one optical frame from a BM867/869, printed raw six times, with
+  timestamped decoded lines (`brymen-867-interface-cable/console.png`); and
+  an excerpt of one memory download (`libsigrok/src/dmm/bm52x.c:556-592`),
+  from the BM525s the file names as its test meter. None records what the
+  LCD showed.
+- **Meters named**: BM869s (TheHWcave, freedaun, DawOp, 869log), BM867/869
+  (MartinD-CZ), BM525s and BM829s (sigrok, `bm52x.c:31-39`). A BM867s,
+  821s, 822s, 827s or 521s named as tested: none found in these sources,
+  2026-09-27.
+
+Strength, per finding: **capture** (bytes above), **code+hw** (code its
+author ran on a named meter), **code** (no hardware claim for that point),
+**comment** (the author's prose).
+
+### 13.1 Sources
+
+| Source | Commit | What it is | Link to the meter | Licence |
+|---|---|---|---|---|
+| [sigrokproject/libsigrok](https://github.com/sigrokproject/libsigrok), sparse: `src/serial_hid_bu86x.c`, `src/serial_hid.c`, `src/dmm/bm86x.c`, `src/dmm/bm52x.c`, `src/hardware/serial-dmm/`, `README.devices`, `NEWS` | `0bc2487` (2025-11-20) | C drivers brymen-bm86x, brymen-bm52x, brymen-bm82x | BU-86X, hidapi | GPL-3.0-or-later |
+| [TheHWcave/BM869S-remote-access](https://github.com/TheHWcave/BM869S-remote-access) | `b4d6aa4` (2021-11-05) | Python class and logger | BU-86X, hidapi | MIT |
+| [freedaun/Brymen-BM869s](https://github.com/freedaun/Brymen-BM869s) | `ccd693d` (2021-07-09) | Python logger, up to two meters | BU-86X, hidapi | none stated |
+| [DawOp/Brymen869s-XmlLib](https://github.com/DawOp/Brymen869s-XmlLib) | `516592c` (2023-05-08) | C++ DLL, readings to XML | BU-86X, AHid | MIT |
+| [kittennbfive/869log](https://github.com/kittennbfive/869log) | `f612bdf` (2024-09-19) | ATtiny25 firmware and a Linux decoder | DIY infrared board | AGPL-3.0+ (code) |
+| [MartinD-CZ/brymen-867-interface-cable](https://github.com/MartinD-CZ/brymen-867-interface-cable) | `8ea4f0b` (2021-04-28) | ATtiny45 firmware | DIY infrared board | GPL-3.0 (LICENSE file); the `main.cpp` header says CC BY-SA 4.0 |
+| TestController supported equipment, `testcontroller-supported-equipment.html` | fetched 2026-09-27 | model list | not stated | — |
+
+### 13.2 USB, reports and reply layout
+
+| Spec § | Community | Evidence | Verdict |
+|---|---|---|---|
+| §2 VID:PID | 0x0820:0x0001 in all four BU-86X projects (`libsigrok/src/serial_hid_bu86x.c:56-59`; `BM869S-remote-access/BM869S.py:34-35`; `Brymen-BM869s/brymen-BM869s.py:196-198`; `Brymen869s-XmlLib/Source/Brymen869/Brymen869.cpp:19-20`) | code+hw (sigrok, TheHWcave, freedaun); code (DawOp) | agrees with the programs |
+| §2 strings | the enumerated cable prints as "Brymen Superior DMM", manufacturer and product string joined (`Brymen-BM869s/README.md:14-15`; `brymen-BM869s.py:246`); which part is which: none found in these sources, 2026-09-27 | comment (program output) | new: the cable has string descriptors |
+| §2 report shape | "only report number 0 is involved, which carries a mere byte stream in 8 byte chunks each" (`libsigrok/src/serial_hid_bu86x.c:22-25`); reads of at most 8 bytes (`:54`, `:66-68`); the request goes to `hid_write` as `00 00 86 66`, report ID 0 and three bytes (`bm86x.c:43`; `libsigrok/src/serial_hid.c:572-585`; `BM869S.py:101`, `:236`); DawOp writes three bytes (`Brymen869.cpp:338-340`). The freedaun capture is 24 bytes with no report-ID bytes | code+hw; capture | agrees: unnumbered 8-byte input and 3-byte output reports |
+| §2 stream | "slight offsets, which were seen in the field": sigrok resynchronizes on the four model bytes (`bm86x.c:63-78`) | comment | new: the 24-byte stream can arrive misaligned |
+| §4.3 report II | sigrok's BM52x parser takes the secondary sign and annunciators from stream byte 7 and the secondary digits from bytes 8-11, the first four data bytes of report II, i.e. Table 1's bytes 9 and 11-14 (`bm52x.c:315-320`, `:450-453`), tested on a BM525s and a BM829s | code+hw | supports BM820 Table 1: byte 10 is the report ID |
+
+### 13.3 Requests and model bytes
+
+| Spec § | Community | Evidence | Verdict |
+|---|---|---|---|
+| §3.1 BM52x request | sigrok sends `52 66` to a BM52x and `82 66` to a BM82x (`bm52x.c:123-124`, `:154-162`; `libsigrok/src/hardware/serial-dmm/api.c:384-397`); a BM52x reply is taken only with `52` in bytes 20-23 (`bm52x.c:172-184`) | code+hw (BM525s) | new: a BM525s answers `52 66` |
+| §3.1 cross-series | "the 'wrong' packet request will end up without a response" (`bm52x.c:34-37`) | comment | **D1**, below |
+| §4.2 bytes 20-23 | BM860s: `86 86 86 86` in the freedaun capture (BM869s) and in the MartinD-CZ capture (BM867/869); "The devices that we have seen in the field do provide four bytes" (`bm86x.c:63-78`). BM82x: four `82`, BM52x: four `52` (`bm52x.c:172-198`) | capture; code+hw | new: the BM860 sheet's "don't care" bytes 20-22 carry `86` |
+| §4.1 bytes 2, 24-27 | freedaun capture: byte 2 `00`, bytes 24-27 `00`; MartinD-CZ capture: byte 24 `00`. Byte 2 is `00`, and `FF` in resistance mode (`869log/software/decoder.c:23`, `:331-333`; `869log/software/uart_worker.c:119-121`) | capture; comment | new |
+| §1.2 cable | sigrok's BU-86X driver serves the BM52x and BM82x drivers, tested with a BM525s and a BM829s (`bm52x.c:31-39`; `api.c:384-397`) | code+hw | supports BU-86X for the BM820s and BM520s |
+
+**D1.** Brymen's Bs82-52x writes `00 00 82 66` in its live loop (Bs8252x
+`:21520-21533`, re-read) and gates the import on byte 23 = `52` in the reply
+to `82 66` (§10.4), so it expects a BM521s or BM525s to answer `82 66`.
+sigrok's comment says a request of the other series goes unanswered, without
+saying which direction was tried. Verdict: unresolved; a vendor design
+assumption against an author's statement.
+
+### 13.4 Timing, meter off, APO
+
+| Spec § | Community | Evidence | Verdict |
+|---|---|---|---|
+| §3.2-3.3 | every BU-86X project keeps one handle open and polls: TheHWcave with a 4000 ms read timeout, once a second (`BM869S.py:236-248`, `:264-265`, `:297-299`); sigrok re-requests after 500 ms and waits 100 ms after a reply on the BM86x, 4000 ms and 500 ms on the BM52x and BM82x (`api.c:384-417`; `libsigrok/src/hardware/serial-dmm/protocol.h:38-47`) | code+hw (DawOp: code) | new: reopening per reading, as the sheets' flowchart does, is not needed |
+| §3.3 rate | MartinD-CZ's board with no pause between reads ("F - 5 samples per second", `brymen-867-interface-cable/firmware/BrymenConnector_new/main.cpp:34`) logs a reading about every 195 ms; with its 920 ms pause (`:48-49`), every 1.18 s (`brymen-867-interface-cable/console.png`) | capture (timestamps) | the meter answers at about 5 per second, waiting about 100-180 ms for its next measurement [INFERRED from the timestamps less the board's known delays] |
+| §3.4 meter off | "The software will hang if you turn the meter off" (`BM869S-remote-access/README.md:44`); sigrok treats a timed-out read as no data (`libsigrok/src/serial_hid_bu86x.c:68-70`) | comment | new: with the meter off the cable sends nothing [INFERRED from the hang: the logger loops on empty reads] |
+| §11.6 APO | the same sentence goes on: "(or if it turns itself off after being idle for too long!)" | comment | **D2**, below |
+
+**D2.** Both READMEs say "The meter Auto-Power-Off (APO) feature is disabled
+when linked." (README-86x §2-5, README-8252x §2-5, re-read). TheHWcave
+reports the meter powering off while its logger polls once a second.
+Brymen's programs poll back to back (§3.3), which may matter [INFERRED].
+Verdict: unresolved; needs a meter.
+
+### 13.5 LCD maps
+
+| Spec § | Community | Evidence | Verdict |
+|---|---|---|---|
+| §7 segments and characters | BM86x: b g c d a f e in bits 7-1 (`bm86x.c:82-125`; `BM869S.py:55-88`; `brymen-BM869s.py:35-60`; `Brymen869.cpp:153-175`; `869log/software/decoder.c:174-193`); BM52x: b g c, point, a f e d (`bm52x.c:200-248`). Every pattern they list (0-9, -, C, F, L, d, i, o, n, E, r, A, u, t) matches §7.2 byte for byte | code+hw | agrees |
+| §5.2, §6.2 points | Np in bit 0 of digit N+1's byte, 5.0, 11.0 and 13.0 excluded (`bm86x.c:139-157`; `BM869S.py:195-222`); bit 4 of the digit's own byte on the BM52x (`bm52x.c:275-279`). The captures fit this reading (freedaun: "-00.001" mA DC main, "00.00" mA AC secondary; MartinD-CZ: "00.000" Hz, "0.009" V), but the LCD was not recorded | code+hw; capture | agrees with Table 1 and the programs |
+| §5.3, §6.3 minus | 4.7 and 12.4 on the BM86x (`bm86x.c:191-195`, `:302-305`; `BM869S.py:184-192`); 4.7 and 9.5 on the BM52x (`bm52x.c:319-320`, `:452-453`); 4.7 is set in the freedaun capture | code+hw; capture | agrees |
+| §5.5, §6.5 annunciators | △ (5.0; BM52x 4.6) is relative zero (`bm86x.c:263-264`; `bm52x.c:410-411`; `869log/software/decoder.c:202-203`, code; `brymen-867-interface-cable/firmware/BrymenConnector_new/decoder.cpp:81-82`). BM860s 3.0 AUTO, 3.3 HOLD (`bm86x.c:249-256`), 3.1 REC, 3.2 CREST (`decoder.cpp:67-80`). BM52x 24.4 AUTO, 24.7 HOLD (`bm52x.c:400-403`); 3.2 is the MAX-MIN (Vp-p) dash (`bm52x.c:371-393`, `:55`). "@, 4-20mA loop, % (main display, left hand side), Hi/Lo" are not supported by the BM525s (`bm52x.c:59-63`) | code+hw; code | agrees with §5.5 and §6.5's readings; new: @, % and Hi/Lo reported unused on the BM525s (comment) |
+| §5.5 T1-T2 | TheHWcave reads 4.2 (the ③ dash) as T1-T2 (`BM869S.py:141`); freedaun, DawOp and 869log read T1 and T2 lit together as T1-T2 (`brymen-BM869s.py:108`; `Brymen869.cpp:225`; `869log/software/decoder.c:54-61`) | code+hw (TheHWcave, freedaun); code (DawOp, 869log) | the community disagrees with itself; open |
+| §8.1 %4-20mA | 12.3 (BM86x, `bm86x.c:316-318`; `libsigrok/NEWS:413-414`), 14.4 (BM52x, `bm52x.c:467-472`) | code | agrees |
+| §7.3 words | "0L"/"0.L" is overload (`bm86x.c:196`; `bm52x.c:321`); "diod" on the secondary is diode (`bm86x.c:191-193`); "Auto" is AutoCheck (`bm52x.c:318`); "---C" and "---F" are skipped as no temperature (`bm52x.c:322-323`, `:456-461`); "InEr" shows on the BM525s secondary (`bm52x.c:69-70`) | code+hw; comment | agrees; new: "---C"/"---F" on the BM525s |
+| §5.4, §6.4 bar graph | both BM860s captures are near-zero readings (-00.001 mA; 00.000 Hz) with bar-scale 4.4 `0`, where a bar would light nothing; bytes 24-27 are `00` in the freedaun capture. Byte 2 (`FF` in resistance, §13.3) and byte 24 are in the optical window (§13.6) and unexplained. sigrok guesses the BM52x's undocumented bits are the bar (`bm52x.c:64-65`) | capture; comment | the captures don't show where the bar is; byte 2 and byte 24 stay candidates; open for both maps |
+
+Three points in the community code are errors, not findings: sigrok's BM52x
+secondary duty reads 14.3, segment 8a (`bm52x.c:493-495`), where BM820 p.1
+has ② D% at 15.3; DawOp names 12.7 "+-" (`Brymen869.cpp:125-129`), which
+BM860 p.1 draws as a battery with + and − in it; 869log takes bit 0 of
+digits 2-6 as the main point (`869log/software/decoder.c:200-209`), so it
+reads V ① (11.0) as a point before digit 6. 869log's PC decoder is, by its
+author, "almost untested" (`869log/software/decoder.c:19`;
+`869log/README.md:59`), so its mappings count as code.
+
+### 13.6 The link under the cable
+
+Seen only through the two DIY boards [COMMUNITY, code+hw]:
+
+- The meter's port is infrared, 940 nm (`869log/README.md:16`).
+- It is not a UART. The host lights its LED for 10 ms or more, waits for
+  the meter's LED (timeouts 300 ms, `869log/firmware/main.S:79`, `:276-291`;
+  about 510 ms, `decoder.cpp:32-42`), then sends 160 light pulses and reads
+  one bit per pulse, least significant bit first: 20 bytes
+  (`869log/README.md:22`; `main.S:298-316`, 250 µs half-periods;
+  `decoder.cpp:12-28` with `config.h:23`, 100 µs). The 115200 and 9600
+  baud figures in the two projects are their own serial links to the PC.
+- Window: 869log's 20 bytes are Table 1's bytes 2-9, 11-18 and 20-23, the
+  model byte last and checked (`869log/software/decoder.c:332-366`;
+  `869log/software/uart_worker.c:119-121`);
+  MartinD-CZ's are bytes 3-9, 11-18 and 20-24 (`decoder.cpp:66-180`;
+  `brymen-867-interface-cable/console.png`, byte 24 `00`). The two differ
+  by one byte; unresolved.
+
+What follows [INFERRED]: the model byte comes from the meter, not the
+cable; the report-ID bytes and at least bytes 25-27 are the cable's; and a
+live request carries no data to the meter, so the series code in the HID
+request is the cable's to interpret. Whether the cable asks the meter once per
+request or answers from a frame it holds (§1.2) stays open. How the memory
+commands (§10) reach a BM52x: not shown by these sources, 2026-09-27.
+
+### 13.7 Logged-memory download
+
+| Spec § | Community | Evidence | Verdict |
+|---|---|---|---|
+| §10.2 checksum | the 16-bit sum of the 24 data bytes, low byte first (`bm52x.c:637-647`, `:709-718`); the capture's blocks carry `7c 05`, `80 03`, `00 03`, `ae 04`, which are their sums | capture | agrees with the programs; settles MRAD's byte order |
+| §10.5 header | capture: Model_Id `01` (the BM525s), TotalBytes `e6 02 00` (742), one session, `ee a0`, PS1 `8a 03 a0`, NS1 `60 03 a0`, Bfunction/Bselect/Bstatus `02 00 00`, page length `d0 02 00` (720), samples `00 00 00` and `80 00 00`, `ee c0`. "Recording session total byte counts … include this field and the model ID" (`bm52x.c:43-45`) | capture | new: TotalBytes counts from Model_Id (6 + 736 = 742); addresses are 24-bit, low byte first, `A0` the high byte, and NS1 = A0_0080h + 736 is the next session's head; Model_Id `01` on a BM525s |
+| §10.5 samples | the value is read as one binary 16-bit integer (`bm52x.c:849-878`); the capture's samples are all zero | code | digits or binary: open |
+| §10.5 Table 3 | Bfunction `05`: Bselect `01` Siemens, `02` continuity (`bm52x.c:1056-1073`); the recording code is "mostly untested" (`bm52x.c:71-76`) | code | **D3**, below |
+| §10.4 intervals | the same 16 values as MRAD Table 3-1 (`bm52x.c:598-618`) | code | agrees |
+
+**D3.** MRAD p.8, re-read from the render: `05` `01` is Continuity and `02`
+nS. Bs8252x `FUN_00434c78` agrees, mapping `01` to `0x180` (continuity) and
+`02` to `0x1000` (S) (Bs8252x `:21132-21150`, re-read). Verdict: Brymen's
+order stands; sigrok's differs from both with no capture behind it.
+
+### 13.8 Models and rebrands
+
+- TestController lists the eight models of §1.1 under Brymen
+  (`testcontroller-supported-equipment.html:113`), and "Elma BM525s, Elma
+  BM821s, Elma BM829s, Elma BM869s" (`:163`): Elma-branded units of the same
+  model names [INFERRED from the names]. It lists Greenlee DM-210A, DM-810A,
+  DM-820A, DM-830A, DM-860A and DML-430A (`:165`) with no Brymen model or
+  interface named; a link to this group: none found in these sources,
+  2026-09-27.
+- sigrok names its drivers "BM86x", "BM52x" and "BM82x", all on the BU-86X
+  (`api.c:384-417`), and lists no key press to start PC output for them
+  (`libsigrok/README.devices:445-447` lists one for the BM257s).
+
+Not answered by the community sources (none found in these sources,
+2026-09-27): §12.5 beyond the inference of §13.6, §12.11, §12.13, §12.15,
+§12.16's glyphs, §12.20, and every question about the BM867s, 821s, 822s,
+827s and 521s.

@@ -5,8 +5,10 @@ series (BM867s, BM869s), the BM820s series (BM821s, BM822s, BM827s,
 BM829s) and the BM520s mobile-logging series (BM521s, BM525s) — from the
 USB device to the LCD-segment reply and the BM520s logged-memory download.
 Nothing is implemented; this pair of documents records what the meters and
-the cable do on the wire. Every fact in the spec comes from vendor sources:
-no community source was opened.
+the cable do on the wire. Every fact in §1-11 of the spec, and each
+question of §12, comes from vendor sources; §13 compares them with
+community sources, opened 2026-09-27 after §1-12 were committed, and §12's
+"Community:" notes summarise §13.
 
 Brymen publishes the protocol, as two-page sheets per series and a
 nine-page memory document, so the question was how far the sheets can be
@@ -101,9 +103,9 @@ The hashes of the Bs86x and Bs82-52x READMEs and of hid.dll are in
 page for a Prolific PL23XX driver installer was seen and not fetched
 (`SOURCE.txt`).
 
-### Avoided
+### Avoided during the vendor analysis
 
-Not searched for or opened for either document:
+Not searched for or opened while §1-12 of the spec were written:
 
 - sigrok (the libsigrok brymen-bm86x driver and the wiki)
 - code repositories of any kind for these meters, the cable or Brymen's
@@ -126,11 +128,48 @@ manuals' text, the READMEs and the programs' string tables for chip and
 vendor names found none, 2026-09-27; the READMEs say only
 "microprocessor embedded cable".
 
+### Cross-referenced (clean-room boundary opened 2026-09-27)
+
+The user opened the boundary on **2026-09-27**, after §1-12 were written,
+grounding-checked and committed, for code repositories and TestController's
+supported-equipment list only. The findings are §13 of the spec, marked
+[COMMUNITY]; nothing was merged into §1-11 beyond pointers, and §12's
+questions gained only "Community:" notes that summarise §13. Provenance is in
+`references/bm86x/community/SOURCE.txt` (gitignored).
+
+| Source | Commit | Licence | Notes |
+|---|---|---|---|
+| [sigrokproject/libsigrok](https://github.com/sigrokproject/libsigrok), sparse clone | `0bc2487` (2025-11-20) | GPL-3.0-or-later | the BU-86X HID transport and the brymen-bm86x, -bm52x, -bm82x parsers |
+| [TheHWcave/BM869S-remote-access](https://github.com/TheHWcave/BM869S-remote-access) | `b4d6aa4` (2021-11-05) | MIT | Python, BU-86X |
+| [freedaun/Brymen-BM869s](https://github.com/freedaun/Brymen-BM869s) | `ccd693d` (2021-07-09) | none stated | Python, BU-86X |
+| [DawOp/Brymen869s-XmlLib](https://github.com/DawOp/Brymen869s-XmlLib) | `516592c` (2023-05-08) | MIT | C++ DLL, BU-86X |
+| [kittennbfive/869log](https://github.com/kittennbfive/869log) | `f612bdf` (2024-09-19) | AGPL-3.0+ (code) | DIY infrared board and decoder |
+| [MartinD-CZ/brymen-867-interface-cable](https://github.com/MartinD-CZ/brymen-867-interface-cable) | `8ea4f0b` (2021-04-28) | GPL-3.0 (LICENSE file); the `main.cpp` header says CC BY-SA 4.0 | DIY infrared board |
+| TestController supported-equipment page (lygte-info.dk) | fetched 2026-09-27, SHA-256 in `SOURCE.txt` | — | model list only |
+
+- **Licences.** The community sources are cited, never copied: no code or
+  table of theirs is in this repository, and the spec quotes only short
+  phrases, each with its file and line. sigrok is GPL, so its code is not
+  transcribed into dmm-lib; freedaun states no licence, so its capture is
+  cited by file and line, not reproduced.
+- **Tip state only.** The repositories are cited as their files stand at
+  the commits above. Files an author deleted, present only in a
+  repository's history, were listed to keep them out and classified for
+  offline validation only; the spec does not cite, quote or describe them.
+- **Still not opened**: forums of any kind (EEVblog included) and the
+  articles and pages the repositories link to; TestController beyond its
+  supported-equipment list, and `references/testcontroller.md`;
+  `docs/research/new-device-candidates.md` and
+  `docs/research/non-unit-candidates.md`; the web in general.
+
 **Model-recall disclosure.** The assistant that wrote these documents may
 have been trained on community write-ups of this protocol. Recall was never
-used as a source: every fact in the spec cites a page of a Brymen document
-or a line or address of a Brymen program, a platform convention is named
-where one is used, and a fact without either is tagged [UNVERIFIED].
+used as a source: every fact in §1-11 and every question of §12 cites a
+page of a Brymen document or a line or address of a Brymen program, a
+platform convention is named where one is used, and a fact without either
+is tagged [UNVERIFIED]. Every fact in §13, and so every "Community:" note in
+§12, cites a community file (and line where it has one) at the commit or
+fetch date above, or a re-read of a vendor source.
 
 ## Methodology
 
@@ -250,3 +289,5 @@ As used in `reverse-engineered-protocol.md`:
 - **[UNVERIFIED]** — no source confirms it, or the sources disagree; needs a
   real meter
 - **[HARDWARE]** — seen on a real meter: none yet
+- **[COMMUNITY]** — stated in or implied by a community source, spec §13
+  only, summarised in §12's "Community:" notes; not a vendor fact
