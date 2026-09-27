@@ -15,7 +15,7 @@
 
 ### GUI
 
-- **Mark moments with `N` or `Ctrl+N` and write notes on them** — drawn on the graph and minimap, and included in CSV and JSON exports.
+- **Mark moments with `N`, `Ctrl+N`, a log row's `+` or the graph's right-click menu, and write notes on them** — drawn on the graph and minimap, and included in CSV and JSON exports.
 - **The recording log scrolls back through the whole recording** — it showed only the last 500 samples.
 - **The top bar names the link the meter is on** — `UT61E+ · USB cable` or `UT61E+ · Bluetooth`.
 - **Switching Plot: between series in one unit keeps the graph** — such as T1 and T2, or DC and AC; it restarted empty.

@@ -327,6 +327,14 @@ pub struct Graph {
     /// The marker whose flag was clicked this frame, for the app to open its
     /// note — see [`Graph::take_clicked_marker`].
     clicked_marker: Option<u32>,
+    /// The reading nearest the right-click that opened the plot's menu, and
+    /// its value: what "Add marker here" marks, fixed as the menu opens.
+    menu_reading: Option<(Instant, f64)>,
+    /// The reading "Add marker here" was picked for — see
+    /// [`Graph::take_mark_request`].
+    mark_request: Option<(Instant, f64)>,
+    /// Put the focus on the menu's entry again next frame.
+    menu_focus_pending: bool,
 }
 
 impl Graph {
@@ -382,6 +390,9 @@ impl Graph {
             a11y_label: String::new(),
             a11y_label_sig: 0,
             clicked_marker: None,
+            menu_reading: None,
+            mark_request: None,
+            menu_focus_pending: false,
         }
     }
 
@@ -1200,6 +1211,12 @@ impl Graph {
     /// The number of the marker whose flag was clicked since the last call.
     pub(crate) fn take_clicked_marker(&mut self) -> Option<u32> {
         self.clicked_marker.take()
+    }
+
+    /// The reading "Add marker here" was picked for since the last call,
+    /// with its value on the trace.
+    pub(crate) fn take_mark_request(&mut self) -> Option<(Instant, f64)> {
+        self.mark_request.take()
     }
 
     /// Whether the graph still shows the reading taken at `at`.

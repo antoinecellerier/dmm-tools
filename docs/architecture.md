@@ -245,7 +245,7 @@ methods to it, so no panel owns state of its own.
 | `app/meter_fit.rs` | Big-meter sizing arithmetic: minimum window size, panel margin, the wide/narrow threshold, and the re-measure cache |
 | `app/stats_panel.rs` | Session and visible-window min/max/avg/count and the running integral |
 | `app/recording_panel.rs` | Record/Export/Discard row, sample log or the line saying Export… saves the graph's samples, discard prompt, and the graph/recording split |
-| `app/marker_list.rs` | What `N` and `Ctrl+N` mark, the per-frame marker trim, and the Markers list where notes are written |
+| `app/marker_list.rs` | What `N`, `Ctrl+N`, a log row's `+` and the plot's menu mark, the per-frame marker trim, and the recording log — markers among the samples, only the rows in view drawn — where notes are written |
 | `app/export.rs` | Export: which format the menu picked, rendering the sample buffer, the save dialog and write off the UI thread, and the result toast |
 | `app/transform_ui.rs` | The **Scale** row and its editor for the software transform |
 | `app/shortcuts.rs` | The keyboard binding table, its dispatcher, and the rows the help modal shows |

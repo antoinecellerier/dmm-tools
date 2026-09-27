@@ -160,6 +160,30 @@ impl Graph {
         crossings
     }
 
+    /// The reading nearest `t` seconds among those in view, with its value.
+    /// Only those in view: a right-click in a gap names a reading on screen,
+    /// not one minutes away. Only the plotted series too: where only
+    /// sub-values are drawn there is none to offer.
+    pub(super) fn nearest_reading_in_view(&self, t: f64) -> Option<(Instant, f64)> {
+        let (view_min, view_max) = self.view_bounds();
+        let (start, end) = self.visible_index_range(view_min, view_max);
+        let after = self
+            .history
+            .partition_point(|p| self.elapsed_secs(p.time) <= t)
+            .clamp(start, end);
+        [
+            after.checked_sub(1).filter(|&i| i >= start),
+            Some(after).filter(|&i| i < end),
+        ]
+        .into_iter()
+        .flatten()
+        .min_by(|&a, &b| {
+            let distance = |i: usize| (self.elapsed_secs(self.history[i].time) - t).abs();
+            distance(a).total_cmp(&distance(b))
+        })
+        .map(|i| (self.history[i].time, self.history[i].value))
+    }
+
     /// Find the nearest data point to the given time via binary search.
     /// Returns (snapped_time, value).
     pub(super) fn nearest_point(&self, t: f64) -> Option<(f64, f64)> {

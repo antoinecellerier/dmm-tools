@@ -40,6 +40,17 @@ fn log_font() -> egui::FontId {
     egui::FontId::monospace(11.0)
 }
 
+/// Where a marker's tag goes in `slot`: the graph's flag turned to point
+/// left at its reading, right-aligned and as wide as a label `label_width`
+/// wide needs. Its body, and the tip of its point.
+fn tag_shape(slot: egui::Rect, label_width: f32) -> (egui::Rect, egui::Pos2) {
+    let body = egui::Rect::from_min_max(
+        egui::pos2(slot.right() - label_width - 2.0 * TAG_PAD, slot.top()),
+        slot.right_bottom(),
+    );
+    (body, egui::pos2(body.left() - TAG_TIP, body.center().y))
+}
+
 /// The list's own state, between frames.
 #[derive(Debug, Default)]
 pub(super) struct MarkerList {
@@ -220,17 +231,28 @@ impl App {
     /// The reading on screen rather than the moment of the key press: paused
     /// or disconnected, that reading is the moment the user is looking at.
     pub(super) fn add_marker(&mut self, write_note: bool) {
-        let Some(m) = self
-            .last_measurement
-            .as_ref()
-            .filter(|m| reading_held(&self.graph, &self.recording, m.timestamp))
-        else {
+        let Some(m) = self.last_measurement.as_ref() else {
             self.toast = Some((NO_READING.to_string(), false, Instant::now()));
             return;
         };
-        let at = m.timestamp;
+        let (at, reading) = (m.timestamp, log_line(m));
+        self.mark_reading(at, reading, write_note);
+    }
+
+    /// Mark the reading taken at `at`, which `reading` shows; with
+    /// `write_note`, put the cursor in its note, the one already there if the
+    /// reading has a marker.
+    ///
+    /// A reading neither the graph nor the buffer holds any more — cleared,
+    /// or gone with a graph restart while the plot's menu was open — gets no
+    /// marker: the next frame's trim would take it away unseen.
+    fn mark_reading(&mut self, at: Instant, reading: String, write_note: bool) {
+        if !reading_held(&self.graph, &self.recording, at) {
+            self.toast = Some((NO_READING.to_string(), false, Instant::now()));
+            return;
+        }
         let wall_time = self.wall_clock.wall_time_for(at).into();
-        let (number, added) = match self.markers.add(at, wall_time, log_line(m)) {
+        let (number, added) = match self.markers.add(at, wall_time, reading) {
             Ok(number) => (number, true),
             // Ctrl+N opens the note already there.
             Err(number) if write_note => (number, false),
@@ -257,9 +279,35 @@ impl App {
         }
     }
 
+    /// What the graph asked of the markers this frame: the note of a flag
+    /// that was clicked, or a marker on the reading its menu offered.
+    pub(super) fn take_graph_marker_actions(&mut self) {
+        if let Some(number) = self.graph.take_clicked_marker() {
+            self.open_marker_note(number);
+        }
+        if let Some((at, value)) = self.graph.take_mark_request() {
+            // The sample's line when the buffer has it; otherwise all the
+            // graph knows, its trace's value — without the meter's own
+            // digits, its flags or its sub-values.
+            let reading = match self
+                .recording
+                .samples
+                .binary_search_by_key(&at, |s| s.measurement.timestamp)
+            {
+                Ok(k) => log_line(&self.recording.samples[k].measurement),
+                Err(_) => format!(
+                    "{:>10} {}",
+                    format!("{value:.4}"),
+                    self.graph.plotted_unit()
+                ),
+            };
+            self.mark_reading(at, reading, true);
+        }
+    }
+
     /// A marker's flag was clicked on the graph: put the cursor in its note,
     /// or say how to bring back the panel it is written in.
-    pub(super) fn open_marker_note(&mut self, number: u32) {
+    fn open_marker_note(&mut self, number: u32) {
         match self.where_notes_are_written() {
             None => self.marker_list.focus = Some(number),
             Some(how) => self.toast = Some((how.to_string(), false, Instant::now())),
@@ -406,6 +454,7 @@ impl App {
         let mut labels = labels.into_iter();
         let mut reveal = None;
         let mut delete = None;
+        let mut mark = None;
 
         let mut area = egui::ScrollArea::vertical()
             .id_salt("recording_log")
@@ -460,6 +509,10 @@ impl App {
             drawn.dedup();
             let origin = ui.max_rect().min;
             let width = ui.available_width();
+            // Where the marker column starts, the same on every row.
+            let column = reading_width
+                .min(width - number_width - delete_width - 3.0 * spacing - gutter - MIN_NOTE_WIDTH)
+                .max(0.0);
             let row_spacing = ui.spacing().item_spacing.y;
             for r in drawn {
                 let row = rows.row(r);
@@ -482,14 +535,68 @@ impl App {
                 let i = match row {
                     Row::Sample(k) => {
                         let s = &samples[k];
-                        ui.label(
-                            RichText::new(format!(
-                                "{}  {}",
-                                s.wall_time.format("%H:%M:%S%.3f"),
-                                log_line(&s.measurement)
-                            ))
-                            .font(log_font()),
+                        let time = s.wall_time.format("%H:%M:%S%.3f");
+                        let row_rect = ui.max_rect();
+                        // One line, cut short of the tag it may offer: a
+                        // wrapped line would run into the row below.
+                        ui.set_max_width((row_rect.width() - number_width - spacing).max(0.0));
+                        let label = ui.add(
+                            egui::Label::new(
+                                RichText::new(format!("{time}  {}", log_line(&s.measurement)))
+                                    .font(log_font()),
+                            )
+                            .truncate(),
                         );
+                        // A hovered row offers a marker: a faint tag where a
+                        // marker's would be, or past a longer reading. Over
+                        // the row's share of the gaps too, so the tag doesn't
+                        // flicker off between rows.
+                        let pitch_rect = row_rect.expand2(egui::vec2(0.0, row_spacing / 2.0));
+                        if ui.rect_contains_pointer(pitch_rect) {
+                            let column = if narrow { 0.0 } else { column };
+                            let x = (label.rect.width().max(column) + spacing)
+                                .min(row_rect.width() - number_width);
+                            let slot = egui::Rect::from_min_size(
+                                row_rect.min + egui::vec2(x, 0.0),
+                                egui::vec2(number_width, line),
+                            );
+                            let plus = ui.painter().layout_no_wrap("+".into(), log_font(), color);
+                            let (body, tip) = tag_shape(slot, plus.size().x);
+                            let add = format!("Add a marker at {time}");
+                            let response = ui
+                                .interact(
+                                    egui::Rect::from_min_max(
+                                        egui::pos2(tip.x, body.top()),
+                                        body.max,
+                                    ),
+                                    egui::Id::new(("marker_add", s.measurement.timestamp)),
+                                    egui::Sense::CLICK,
+                                )
+                                .on_hover_text(&add)
+                                .on_hover_cursor(egui::CursorIcon::PointingHand);
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &add)
+                            });
+                            let stroke = egui::Stroke::new(
+                                if response.hovered() { 1.5 } else { 1.0 },
+                                color,
+                            );
+                            ui.painter().add(egui::Shape::closed_line(
+                                vec![
+                                    tip,
+                                    body.left_top(),
+                                    body.right_top(),
+                                    body.right_bottom(),
+                                    body.left_bottom(),
+                                ],
+                                stroke,
+                            ));
+                            ui.painter()
+                                .galley(body.center() - plus.size() / 2.0, plus, color);
+                            if response.clicked() {
+                                mark = Some((s.measurement.timestamp, log_line(&s.measurement)));
+                            }
+                        }
                         continue;
                     }
                     Row::Marker(i) | Row::Marked(_, i) => i,
@@ -548,11 +655,7 @@ impl App {
                         let galley =
                             ui.painter()
                                 .layout_no_wrap(number.to_string(), log_font(), tag_text);
-                        let body = egui::Rect::from_min_max(
-                            egui::pos2(slot.right() - galley.size().x - 2.0 * TAG_PAD, slot.top()),
-                            slot.right_bottom(),
-                        );
-                        let tip = egui::pos2(body.left() - TAG_TIP, body.center().y);
+                        let (body, tip) = tag_shape(slot, galley.size().x);
                         let response = ui.interact(
                             egui::Rect::from_min_max(egui::pos2(tip.x, body.top()), body.max),
                             egui::Id::new(("marker_tag", at)),
@@ -638,9 +741,7 @@ impl App {
                 } else {
                     ui.horizontal(|ui| {
                         let fixed = number_width + delete_width + 3.0 * spacing + gutter;
-                        let width = reading_width
-                            .min(ui.available_width() - fixed - MIN_NOTE_WIDTH)
-                            .max(0.0);
+                        let width = column;
                         // Its own rect, whatever the reading's text: a child
                         // ui would hand back only as much as its text took.
                         let (rect, _) =
@@ -709,6 +810,9 @@ impl App {
         }
         if let Some(number) = delete {
             self.markers.remove(number);
+        }
+        if let Some((at, reading)) = mark {
+            self.mark_reading(at, reading, true);
         }
     }
 }
@@ -817,6 +921,33 @@ mod tests {
         }
         assert_eq!(geometry.height(3), 20.0);
         assert_eq!(geometry.height(4), 10.0);
+    }
+
+    /// Marking a reading that has a marker, from the log or the graph's
+    /// menu, opens the note already there.
+    #[test]
+    fn marking_a_marked_reading_opens_its_note() {
+        let mut app = app();
+        let at = Instant::now();
+        send(&mut app, "DC V", at);
+        app.add_marker(false);
+        app.mark_reading(at, "1.234 V".into(), true);
+        assert_eq!(numbers(&app), [1]);
+        assert_eq!(app.marker_list.focus, Some(1));
+    }
+
+    /// A reading gone from both stores by the time it is marked — the plot's
+    /// menu open across a graph restart — says so rather than adding a
+    /// marker the next trim takes away.
+    #[test]
+    fn marking_a_reading_no_longer_held_says_so() {
+        let mut app = app();
+        let at = Instant::now();
+        send(&mut app, "DC V", at);
+        send(&mut app, "AC V", at + Duration::from_secs(1));
+        app.mark_reading(at, "1.234 V".into(), true);
+        assert!(app.markers.is_empty());
+        assert_eq!(toast(&app), Some(NO_READING));
     }
 
     /// The log draws the rows in view, so a frame costs no more for a

@@ -258,6 +258,14 @@ Use cases: test reports, lab notebooks, sharing results.
 
 The GUI marks readings (`N`, `Ctrl+N`) and exports the markers as `marker,note` CSV columns and JSON keys; `dmm-cli read` cannot place any yet. Pressing Enter, with optional typed text, would mark the latest reading through the same shared writers. Replay files drop markers: `# marker:` comment lines would keep them, once `--replay` reads them back.
 
+### More entries in the plot's right-click menu
+
+**Complexity:** Small
+
+The plot's right-click menu only offers **Add marker here**. Candidates: **Delete marker N** when right-clicking a flag (flags are widgets of their own over the plot, so each needs its menu and a way to report the delete), **Place cursor here**, and **Back to live** / **Reset zoom**, which repeat the double-click and `End`.
+
+Neither the menu nor the log row's `+` is reachable from the keyboard, so only `N` and `Ctrl+N` mark readings without a pointer. Opening the menu with `Shift+F10` or the Menu key on the focused plot would give the keyboard a way to earlier readings. The menu also searches only the plotted series: where only sub-values are drawn it has no reading to offer.
+
 ### Rendering the meter's other reported conditions
 
 **Complexity:** Medium
@@ -354,15 +362,11 @@ Use cases: multi-day environmental monitoring, production line logging.
 
 **Complexity:** Low
 
-Three colours stay on egui's shipped values on purpose, as egui's own idiom
-rather than the app's: the text caret, hyperlinks, and egui_plot's right-drag
-box-zoom rectangle. Should it ever be wanted: the light hyperlink colour is
-2.77:1 on the panel, and caret and links could follow Accent the way the
-selection does (7.80:1 dark / 5.41:1 light in the Default preset). The
-box-zoom rectangle is hardcoded `DARK_BLUE` + `WHITE` inside egui_plot 0.37,
-so it needs either `allow_boxed_zoom(false)` at the call site or an
-`egui-upstream-opportunities.md` item asking egui_plot to read
-`Visuals::selection`.
+Two colours stay on egui's shipped values on purpose, as egui's own idiom
+rather than the app's: the text caret and hyperlinks. Should it ever be
+wanted: the light hyperlink colour is 2.77:1 on the panel, and caret and links
+could follow Accent the way the selection does (7.80:1 dark / 5.41:1 light in
+the Default preset).
 
 Use cases: matching a bench's colour conventions, high-contrast setups, colour-vision needs beyond the two stock themes.
 

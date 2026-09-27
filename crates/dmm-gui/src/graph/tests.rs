@@ -3343,3 +3343,148 @@ fn clicking_a_flag_reports_its_marker() {
         "the click is the flag's, not the plot's"
     );
 }
+
+// ── The plot's right-click menu ─────────────────────────────────────────────
+
+/// One frame of the main graph with AccessKit on; the tree it produced.
+fn menu_frame(
+    g: &mut Graph,
+    ctx: &egui::Context,
+    events: Vec<egui::Event>,
+) -> Vec<(egui::accesskit::NodeId, egui::accesskit::Node)> {
+    let tc = ThemeColors::new(true, ColorPreset::Default, &PaletteOverrides::default());
+    let input = egui::RawInput {
+        screen_rect: Some(gesture_screen()),
+        events,
+        ..Default::default()
+    };
+    let mut out = ctx.run_ui(input, |ui| {
+        g.show_main(ui, &tc, &crate::markers::Markers::default())
+    });
+    out.textures_delta.clear();
+    out.platform_output
+        .accesskit_update
+        .map(|update| update.nodes)
+        .unwrap_or_default()
+}
+
+fn node_rect(
+    tree: &[(egui::accesskit::NodeId, egui::accesskit::Node)],
+    label: impl Fn(&str) -> bool,
+) -> Option<egui::Rect> {
+    tree.iter()
+        .find(|(_, n)| n.label().is_some_and(&label))
+        .and_then(|(_, n)| n.bounds())
+        .map(|b| {
+            egui::Rect::from_min_max(
+                egui::pos2(b.x0 as f32, b.y0 as f32),
+                egui::pos2(b.x1 as f32, b.y1 as f32),
+            )
+        })
+}
+
+/// A press and release of `button` at `pos`, on frames of their own.
+fn menu_click(g: &mut Graph, ctx: &egui::Context, pos: egui::Pos2, button: egui::PointerButton) {
+    let event = |pressed| egui::Event::PointerButton {
+        pos,
+        button,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    menu_frame(g, ctx, vec![egui::Event::PointerMoved(pos)]);
+    menu_frame(g, ctx, vec![egui::Event::PointerMoved(pos), event(true)]);
+    menu_frame(g, ctx, vec![egui::Event::PointerMoved(pos), event(false)]);
+}
+
+/// Right-click at `x` across the plot (0 its left edge, 1 its right), then
+/// pick "Add marker here"; what the graph asks to mark. `between` runs after
+/// the menu opens, before the pick.
+fn mark_from_menu(
+    g: &mut Graph,
+    x: f32,
+    between: impl FnOnce(&mut Graph),
+) -> Option<(Instant, f64)> {
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    menu_frame(g, &ctx, vec![]);
+    let tree = menu_frame(g, &ctx, vec![]);
+    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    let at = egui::pos2(plot.left() + x * plot.width(), plot.center().y);
+    menu_click(g, &ctx, at, egui::PointerButton::Secondary);
+    assert!(egui::Popup::is_any_open(&ctx), "the menu opened");
+    between(g);
+    let tree = menu_frame(g, &ctx, vec![]);
+    let entry = node_rect(&tree, |l| l == "Add marker here").expect("the entry");
+    menu_click(g, &ctx, entry.center(), egui::PointerButton::Primary);
+    assert!(!egui::Popup::is_any_open(&ctx), "picking closes it");
+    g.take_mark_request()
+}
+
+/// "Add marker here" marks the reading nearest the right-click.
+#[test]
+fn the_menu_marks_the_reading_right_clicked() {
+    let (mut g, t0) = graph_over(30);
+    let (at, value) = mark_from_menu(&mut g, 0.98, |_| {}).expect("a mark");
+    assert_eq!(at, t0 + Duration::from_secs(30), "the newest, at the right");
+    assert_eq!(value, 1.0);
+}
+
+/// Live, the view moves on while the menu is open; the mark stays on the
+/// reading that was right-clicked.
+#[test]
+fn a_live_view_moving_on_leaves_the_menus_reading() {
+    let (mut g, t0) = graph_over(30);
+    let (at, _) = mark_from_menu(&mut g, 0.98, |g| {
+        for i in 31..=40 {
+            g.push(2.0, t0 + Duration::from_secs(i), "DC V", "V", None);
+        }
+    })
+    .expect("a mark");
+    assert_eq!(at, t0 + Duration::from_secs(30));
+}
+
+/// A right-click names a reading in view, even when one out of view is
+/// nearer the time it landed on.
+#[test]
+fn the_menu_marks_a_reading_in_view() {
+    let (mut g, t0) = graph_over(30);
+    g.live = false;
+    // A view from 5.2 s to 15.2 s: at its left edge, 5 s is nearer than
+    // 6 s, and out of view.
+    g.view_center = 10.2;
+    let (at, _) = mark_from_menu(&mut g, 0.005, |_| {}).expect("a mark");
+    assert_eq!(at, t0 + Duration::from_secs(6));
+}
+
+/// Esc closes the menu and leaves the focus with nothing, so the graph's
+/// keys still work.
+#[test]
+fn esc_closes_the_menu_and_leaves_no_focus() {
+    let (mut g, _) = graph_over(30);
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    menu_frame(&mut g, &ctx, vec![]);
+    let tree = menu_frame(&mut g, &ctx, vec![]);
+    let plot = node_rect(&tree, |l| l.contains("last reading")).expect("the plot");
+    menu_click(&mut g, &ctx, plot.center(), egui::PointerButton::Secondary);
+    menu_frame(&mut g, &ctx, vec![]);
+    assert!(
+        ctx.memory(|m| m.focused()).is_some(),
+        "the entry has the focus"
+    );
+    let esc = |pressed| egui::Event::Key {
+        key: egui::Key::Escape,
+        physical_key: None,
+        pressed,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    menu_frame(&mut g, &ctx, vec![esc(true), esc(false)]);
+    menu_frame(&mut g, &ctx, vec![]);
+    assert!(!egui::Popup::is_any_open(&ctx), "Esc closed it");
+    assert!(
+        ctx.memory(|m| m.focused()).is_none(),
+        "nothing keeps the focus"
+    );
+    assert!(g.take_mark_request().is_none());
+}

@@ -491,9 +491,7 @@ impl App {
             ui.allocate_ui(egui::vec2(ui.available_width(), graph_height), |ui| {
                 self.graph.show(ui, &tc, &self.markers);
             });
-            if let Some(number) = self.graph.take_clicked_marker() {
-                self.open_marker_note(number);
-            }
+            self.take_graph_marker_actions();
 
             let sep = ui.separator();
             let sep_id = ui.id().with("rec_resize");
@@ -530,9 +528,7 @@ impl App {
             self.show_recording_section(ui, compact);
         } else if self.settings.show_graph {
             self.graph.show(ui, &tc, &self.markers);
-            if let Some(number) = self.graph.take_clicked_marker() {
-                self.open_marker_note(number);
-            }
+            self.take_graph_marker_actions();
         } else if self.settings.show_recording {
             self.show_recording_section(ui, compact);
         }
@@ -559,6 +555,8 @@ mod tests {
         /// same frame (`Context::get_response`).
         tree: Vec<(egui::accesskit::NodeId, egui::accesskit::Node)>,
         focus: Option<egui::accesskit::NodeId>,
+        /// The window's width.
+        width: f32,
     }
 
     impl MenuRun {
@@ -574,6 +572,7 @@ mod tests {
                 seconds: 0.0,
                 tree: Vec::new(),
                 focus: None,
+                width: 800.0,
             }
         }
 
@@ -583,7 +582,7 @@ mod tests {
             let app = &mut self.app;
             let mut out = self.ctx.run_ui(
                 egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0))),
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(self.width, 400.0))),
                     events,
                     time: Some(self.seconds),
                     ..Default::default()
@@ -1187,6 +1186,49 @@ mod tests {
         }
     }
 
+    /// In a log too narrow for a reading's line, the line is cut short
+    /// rather than wrapped into the row below.
+    #[test]
+    fn a_narrow_log_keeps_one_line_per_row() {
+        let mut run = MenuRun::new();
+        run.app.toggle_recording();
+        let wall_clock = run.app.wall_clock;
+        let t0 = Instant::now();
+        for i in 0..50 {
+            let mut m = reading();
+            m.timestamp = t0 + std::time::Duration::from_secs(i);
+            // Sub-values long enough to need three lines at this width.
+            m.aux_values = ["Max", "Min", "Average", "Peak Max", "Peak Min"]
+                .into_iter()
+                .map(|label| dmm_lib::measurement::AuxValue {
+                    label: label.into(),
+                    value: dmm_lib::measurement::MeasuredValue::Normal(1.234),
+                    unit: "".into(),
+                    display_raw: Some("1.234".into()),
+                    elapsed_secs: None,
+                })
+                .collect();
+            run.app.recording.push(&m, &wall_clock, 0);
+        }
+        run.width = 300.0;
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        let mut rows: Vec<Rect> = run
+            .tree
+            .iter()
+            .filter(|(_, n)| n.value().is_some_and(|v| v.contains(':')))
+            .filter_map(|(_, n)| n.bounds())
+            .map(to_rect)
+            .collect();
+        rows.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        // A label and its text run share a rect.
+        rows.dedup();
+        assert!(rows.len() > 3, "{rows:?}");
+        for pair in rows.windows(2) {
+            assert!(pair[0].bottom() <= pair[1].top(), "rows overlap: {pair:?}");
+        }
+    }
+
     /// The marker column lines up on every row: a marker placed before
     /// Record, whose row says so, and one on a recorded sample.
     #[test]
@@ -1226,6 +1268,61 @@ mod tests {
         let bar = egui::Style::default().spacing.scroll.bar_width;
         let cross = run.node_rect("Delete marker 1");
         assert!(cross.right() + bar <= 800.0, "{cross:?}");
+    }
+
+    /// Where the log drew the row of the sample taken at `at`.
+    fn sample_rect(run: &MenuRun, at: Instant) -> Rect {
+        let sample = run
+            .app
+            .recording
+            .samples
+            .iter()
+            .find(|s| s.measurement.timestamp == at)
+            .expect("a buffered sample");
+        let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
+        run.tree
+            .iter()
+            .find(|(_, n)| n.value().is_some_and(|v| v.starts_with(&time)))
+            .and_then(|(_, n)| n.bounds())
+            .map(to_rect)
+            .expect("the row is drawn")
+    }
+
+    /// Hovering a sample's row offers a marker; clicking it marks that
+    /// sample and puts the cursor in its note.
+    #[test]
+    fn a_hovered_row_offers_a_marker() {
+        let mut run = run_with_markers(300, &[], true);
+        let at = run.app.recording.samples[295].measurement.timestamp;
+        let time = run.app.recording.samples[295]
+            .wall_time
+            .format("%H:%M:%S%.3f")
+            .to_string();
+        let add = format!("Add a marker at {time}");
+        assert!(!run.shows_widget(&add), "only on a hovered row");
+        let row = sample_rect(&run, at);
+        run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);
+        run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);
+        let plus = run.node_rect(&add);
+        run.click(plus.center());
+        let marker = run.app.markers.iter().next().expect("a marker");
+        assert_eq!(marker.at, at, "on the row clicked");
+        assert_eq!(focused_label(&run).as_deref(), Some("Note for marker 1"));
+    }
+
+    /// A marked row has its marker's tag, and offers no other.
+    #[test]
+    fn a_marked_row_offers_no_marker() {
+        let mut run = run_with_markers(300, &[295], true);
+        let sample = &run.app.recording.samples[295];
+        let (at, time) = (
+            sample.measurement.timestamp,
+            sample.wall_time.format("%H:%M:%S%.3f").to_string(),
+        );
+        let row = sample_rect(&run, at);
+        run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);
+        run.frame(1.0, vec![egui::Event::PointerMoved(row.center())]);
+        assert!(!run.shows_widget(&format!("Add a marker at {time}")));
     }
 
     /// N places no marker under the discard prompt: the prompt would be

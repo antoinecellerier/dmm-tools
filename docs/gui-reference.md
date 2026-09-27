@@ -176,7 +176,8 @@ Three components stacked vertically: toolbar, main plot, and minimap.
   duration; the crosshair reports `overload` inside one
 - [Markers](#recording) shown as dotted vertical lines, each with a flag at
   the bottom carrying its number and as much of its note as fits; click a
-  flag to write its note
+  flag to write its note. Right-click the plot and pick **Add marker here** to
+  mark the reading nearest the click
 - Timeline is continuous across reconnects (data is not cleared)
 - History buffer holds up to the configured [buffer size](#settings) (oldest
   dropped). A change of mode or unit clears the graph — including auto-range
@@ -253,9 +254,11 @@ A thin strip below the main plot showing the full capture history.
   recorded, it lists the markers alone
 - **Markers** — `N` marks the reading on screen, `Ctrl+N` marks it and puts
   the cursor in its note, and clicking a marker's flag on the graph opens its
-  note. A marker's row ends with its number, note and `×` to delete it;
-  `Enter` keeps a note, `Esc` puts back what it said before. Pressing the
-  number, or clicking or typing in the note, scrolls the graph to the marker
+  note. To mark an earlier reading, hover its row and click the `+` that
+  appears, or use the plot's right-click menu. A marker's row ends with its
+  number, note and `×` to delete it; `Enter` keeps a note, `Esc` puts back
+  what it said before. Pressing the number, or clicking or typing in the
+  note, scrolls the graph to the marker
 - Buffer holds up to the configured [buffer size](#settings). Recording
   auto-stops when the buffer is full and shows a toast notification.
 
