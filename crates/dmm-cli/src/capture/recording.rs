@@ -230,6 +230,48 @@ mod tests {
         RecordingTransport::new(Box::new(FakeTransport { response }))
     }
 
+    /// A meter with the radio built in, as the open found it.
+    struct PeerTransport;
+
+    impl Transport for PeerTransport {
+        fn link(&self) -> Option<Link> {
+            Some(Link::Bluetooth)
+        }
+
+        fn write(&self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+
+        fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+            Ok(0)
+        }
+
+        fn transport_name(&self) -> &'static str {
+            "Bluetooth"
+        }
+
+        fn bluetooth_selector(&self) -> Option<&str> {
+            Some("12:34:56:78:9A:BC")
+        }
+
+        fn advertised_name(&self) -> Option<&str> {
+            Some("UT60BT")
+        }
+    }
+
+    /// What the open path and detection ask of the link reaches it through
+    /// the recorder. These methods have defaults, so one the wrapper dropped
+    /// would answer as a link with nothing behind it — and detection on a
+    /// Bluetooth link reads the advertised name through the recorder.
+    #[test]
+    fn the_links_own_answers_pass_through() {
+        let (t, _rec) = RecordingTransport::new(Box::new(PeerTransport));
+        assert_eq!(t.link(), Some(Link::Bluetooth));
+        assert_eq!(t.transport_name(), "Bluetooth");
+        assert_eq!(t.bluetooth_selector(), Some("12:34:56:78:9A:BC"));
+        assert_eq!(t.advertised_name(), Some("UT60BT"));
+    }
+
     #[test]
     fn records_both_directions_with_the_active_step() {
         let (t, rec) = recording(vec![0xAB, 0xCD]);
