@@ -19,7 +19,7 @@ The library crate handles all device communication and data parsing. It has no U
 
 | Module | Responsibility |
 |--------|---------------|
-| `transport/mod.rs` | `Transport` trait abstracting a link's byte I/O, plus `set_baud` for a meter that talks at another rate than the link set up (unsupported by default; each HID bridge's feature reports stay inside its own transport); `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
+| `transport/mod.rs` | `Transport` trait abstracting a link's byte I/O, plus `set_baud` for a meter that talks at another rate than the link set up (unsupported by default; each HID bridge's feature reports stay inside its own transport) and the required `link()`, the USB cable or Bluetooth link a transport is on (`None` for the mock and a replay), which protocol behaviour keys on — `transport_name()` is the bridge's name for display only; `Box<dyn Transport>` delegation for runtime transport selection; `MockTransport` for tests |
 | `transport/cp2110.rs` | CP2110 HID transport: open device, init UART, read/write interrupt reports |
 | `transport/ch9329.rs` | CH9329 HID transport: open device, read/write 65-byte HID reports |
 | `transport/ch9325.rs` | CH9325 HID transport: 8-byte reports with 0xF0+len framing, dual baud rate probing (2400/19200), and `set_baud` as the same feature report |

@@ -190,7 +190,7 @@ fn establish_connection<T: Transport>(
     let max_aux_values = profile.max_aux_values;
     let meter_keys = profile.meter_keys;
     let model_name = profile.model_name.to_string();
-    let link = recorded_link.or_else(|| Link::from_bridge(dmm.transport().transport_name()));
+    let link = recorded_link.or_else(|| dmm.transport().link());
     let device_id = detected
         .as_ref()
         .map(|d| d.device)
@@ -814,6 +814,10 @@ mod tests {
     }
 
     impl Transport for Dropout {
+        fn link(&self) -> Option<Link> {
+            self.1.map(|_| Link::Bluetooth)
+        }
+
         fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
             Ok(())
         }

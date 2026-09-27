@@ -28,7 +28,7 @@ use crate::error::{Error, Result};
 use crate::measurement::Measurement;
 use crate::protocol::registry::{SelectableDevice, factory};
 use crate::protocol::{DeviceFamily, DeviceProfile, Protocol, Stability};
-use crate::transport::Transport;
+use crate::transport::{Link, Transport};
 use log::debug;
 use std::cell::RefCell;
 use std::f64::consts::TAU;
@@ -505,6 +505,11 @@ impl Transport for SimulatedMeter {
         buf[..n].copy_from_slice(&pending[..n]);
         pending.drain(..n);
         Ok(n)
+    }
+
+    /// The meter is in the process, on no link.
+    fn link(&self) -> Option<Link> {
+        None
     }
 }
 

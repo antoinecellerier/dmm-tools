@@ -685,6 +685,10 @@ mod tests {
     }
 
     impl dmm_lib::transport::Transport for QueuedTransport {
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            None
+        }
+
         fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
             Ok(())
         }
@@ -1143,6 +1147,10 @@ mod tests {
         }
 
         impl dmm_lib::transport::Transport for PressesEnter {
+            fn link(&self) -> Option<dmm_lib::transport::Link> {
+                self.queue.link()
+            }
+
             fn write(&self, data: &[u8]) -> dmm_lib::error::Result<()> {
                 self.queue.write(data)
             }

@@ -4,7 +4,7 @@
 //! layer rejected, so a step that decoded nothing still carries evidence.
 
 use dmm_lib::error::Result;
-use dmm_lib::transport::Transport;
+use dmm_lib::transport::{Link, Transport};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
@@ -188,6 +188,10 @@ impl Transport for RecordingTransport {
         self.inner.transport_name()
     }
 
+    fn link(&self) -> Option<Link> {
+        self.inner.link()
+    }
+
     fn bluetooth_selector(&self) -> Option<&str> {
         self.inner.bluetooth_selector()
     }
@@ -207,6 +211,10 @@ mod tests {
     }
 
     impl Transport for FakeTransport {
+        fn link(&self) -> Option<Link> {
+            None
+        }
+
         fn write(&self, _data: &[u8]) -> Result<()> {
             Ok(())
         }

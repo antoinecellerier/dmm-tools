@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::transport::Transport;
+use crate::transport::{Link, Transport};
 use hidapi::HidDevice;
 use log::{debug, trace};
 
@@ -135,6 +135,10 @@ impl Transport for Ch9329 {
 
     fn transport_name(&self) -> &'static str {
         NAME
+    }
+
+    fn link(&self) -> Option<Link> {
+        Some(Link::UsbCable)
     }
 }
 

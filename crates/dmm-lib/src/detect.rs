@@ -542,6 +542,10 @@ mod tests {
     }
 
     impl Transport for ScriptedMeter {
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
+
         fn write(&self, data: &[u8]) -> Result<()> {
             for (trigger, reply) in &self.script {
                 if data == trigger.as_slice() {
@@ -579,6 +583,10 @@ mod tests {
     }
 
     impl Transport for PacedStream {
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
+
         fn write(&self, _data: &[u8]) -> Result<()> {
             Ok(())
         }
@@ -723,6 +731,10 @@ mod tests {
     }
 
     impl Transport for Advertising {
+        fn link(&self) -> Option<crate::transport::Link> {
+            self.inner.link()
+        }
+
         fn write(&self, data: &[u8]) -> Result<()> {
             self.inner.write(data)
         }

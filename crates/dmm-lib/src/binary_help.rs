@@ -80,30 +80,11 @@ pub fn mock_mode_help(intro: &str, example: &str) -> String {
     )
 }
 
-/// The link a meter is on, as the user knows it.
-///
-/// Never the bridge chip: someone plugged in a USB cable or switched a
-/// Bluetooth adapter on, and has no reason to know which chip is inside it.
-/// The error text, the CLI help and the GUI's connection messages all take
-/// their wording from here so the three cannot drift.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Link {
-    UsbCable,
-    Bluetooth,
-}
+/// A transport says which it is on ([`crate::transport::Transport::link`]);
+/// the words for it are here.
+pub use crate::transport::Link;
 
 impl Link {
-    /// The link a bridge is on, by the name its transport gives, and `None`
-    /// for a transport with nothing on the far end: the mock and a replay
-    /// answer from inside the process.
-    pub fn from_bridge(bridge: &str) -> Option<Self> {
-        match bridge {
-            crate::transport::NO_LINK => None,
-            crate::BLUETOOTH => Some(Self::Bluetooth),
-            _ => Some(Self::UsbCable),
-        }
-    }
-
     /// The name for a status line that already names the meter, and what a
     /// replay file's `# link:` line records.
     ///
@@ -142,11 +123,16 @@ impl Link {
     }
 }
 
-/// The full name of the link `bridge` is on, and "link" for a transport with
-/// none — an error about it still reads as a sentence. `built_in_radio` as
-/// for [`Link::full_name`].
+/// The full name of the link a bridge is on, by the bridge's name in an
+/// error: Bluetooth or a USB cable. `built_in_radio` as for
+/// [`Link::full_name`].
 pub fn bridge_link_name(bridge: &str, built_in_radio: bool) -> &'static str {
-    Link::from_bridge(bridge).map_or("link", |link| link.full_name(built_in_radio))
+    let link = if bridge == crate::BLUETOOTH {
+        Link::Bluetooth
+    } else {
+        Link::UsbCable
+    };
+    link.full_name(built_in_radio)
 }
 
 /// The meters on a bridge, grouped by the steps that switch their
@@ -718,7 +704,6 @@ mod tests {
             "Bluetooth adapter"
         );
         for bridge in ["CP2110", "CH9329", "CH9325", "BU-86X"] {
-            assert_eq!(Link::from_bridge(bridge), Some(Link::UsbCable));
             for built_in in [false, true] {
                 assert_eq!(bridge_link_name(bridge, built_in), "USB cable");
             }
@@ -745,16 +730,6 @@ mod tests {
             gui_bluetooth_off_hint(),
             "Tick \"Look for Bluetooth devices\" in Settings (\u{2699})."
         );
-    }
-
-    /// A transport with nothing on the far end, such as the mock's, is on no
-    /// link — not on a cable by default.
-    #[test]
-    fn a_transport_with_no_link_names_none() {
-        use crate::transport::Transport;
-        let bridge = crate::transport::NullTransport.transport_name();
-        assert_eq!(Link::from_bridge(bridge), None);
-        assert_eq!(bridge_link_name(bridge, false), "link");
     }
 
     /// The short form drops the word the status line no longer needs; the

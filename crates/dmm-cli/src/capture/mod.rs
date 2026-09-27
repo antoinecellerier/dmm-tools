@@ -237,6 +237,10 @@ mod tests {
     struct Chunks(RefCell<Vec<Vec<u8>>>);
 
     impl Transport for Chunks {
+        fn link(&self) -> Option<dmm_lib::transport::Link> {
+            None
+        }
+
         fn write(&self, _data: &[u8]) -> dmm_lib::error::Result<()> {
             Ok(())
         }

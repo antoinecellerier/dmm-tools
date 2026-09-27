@@ -195,6 +195,10 @@ pub(super) mod tests {
     }
 
     impl Transport for ScriptedCable {
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
+
         fn write(&self, data: &[u8]) -> Result<()> {
             self.written.borrow_mut().push(data.to_vec());
             if data == self.request {

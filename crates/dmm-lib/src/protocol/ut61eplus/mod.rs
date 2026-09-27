@@ -14,7 +14,7 @@ use crate::protocol::{
     Choice, DeviceFamily, DeviceProfile, Evidence, Fingerprint, MeterKeys, Probing, Protocol,
     Setting, Stability, check_len, cycle, unknown_mode, unknown_mode16, unsupported_setting,
 };
-use crate::transport::Transport;
+use crate::transport::{Link, Transport};
 use command::Command;
 use log::{debug, warn};
 use mode::Mode;
@@ -393,7 +393,7 @@ impl Protocol for Ut61PlusProtocol {
         // over the radio (adapter spec §3, §5).
         // A model that wants its name asked first has had it by now
         // (`name_before_init`).
-        if transport.transport_name() == crate::BLUETOOTH {
+        if transport.link() == Some(Link::Bluetooth) {
             debug!("starting the adapter's readings stream");
             transport.write(&Command::StartStream.encode())?;
             self.streaming = true;
@@ -469,7 +469,7 @@ impl Protocol for Ut61PlusProtocol {
     /// is reported to ignore 0x5D until it has answered 0x5F (family spec
     /// §6.4). The wait is `get_name`'s, a few frames of at most 2 s each.
     fn name_before_init(&self, transport: &dyn Transport) -> bool {
-        transport.transport_name() == crate::BLUETOOTH && self.table.name_before_stream()
+        transport.link() == Some(Link::Bluetooth) && self.table.name_before_stream()
     }
 
     fn profile(&self) -> &DeviceProfile {
@@ -1817,7 +1817,7 @@ mod tests {
         ))
     }
 
-    /// A mock that says it is the Bluetooth link, for the adapter-only paths.
+    /// A mock on the Bluetooth link, for the adapter-only paths.
     struct BluetoothMock(MockTransport);
 
     impl Transport for BluetoothMock {
@@ -1830,8 +1830,8 @@ mod tests {
         fn set_baud(&self, baud: u32) -> Result<()> {
             self.0.set_baud(baud)
         }
-        fn transport_name(&self) -> &'static str {
-            crate::BLUETOOTH
+        fn link(&self) -> Option<Link> {
+            Some(Link::Bluetooth)
         }
     }
 
@@ -1939,8 +1939,8 @@ mod tests {
             fn set_baud(&self, baud: u32) -> Result<()> {
                 self.mock.set_baud(baud)
             }
-            fn transport_name(&self) -> &'static str {
-                crate::BLUETOOTH
+            fn link(&self) -> Option<Link> {
+                Some(Link::Bluetooth)
             }
         }
         let name = test_frame_be16(b"UT60BT");
@@ -2359,6 +2359,10 @@ mod tests {
     }
 
     impl Transport for VoltsDial {
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
+
         fn write(&self, data: &[u8]) -> Result<()> {
             match data.get(3) {
                 Some(&0x5E) => self
@@ -2489,6 +2493,10 @@ mod tests {
     }
 
     impl Transport for RangeDial {
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
+
         fn write(&self, data: &[u8]) -> Result<()> {
             match data.get(3) {
                 Some(&0x5E) => {
@@ -2757,6 +2765,10 @@ mod tests {
     }
 
     impl Transport for FlagDial {
+        fn link(&self) -> Option<crate::transport::Link> {
+            None
+        }
+
         fn write(&self, data: &[u8]) -> Result<()> {
             let Some(&cmd) = data.get(3) else {
                 return Ok(());

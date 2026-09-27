@@ -25,11 +25,12 @@ pub trait Transport: Send {
 
     /// Move the meter's serial line to `baud`, for a meter that talks at
     /// another rate than the one the link set up. Default: unsupported, for a
-    /// link that cannot change its rate.
+    /// link that cannot change its rate. The error names the link, not the
+    /// chip.
     fn set_baud(&self, baud: u32) -> Result<()> {
+        let link = self.link().map_or("link", |link| link.full_name(false));
         Err(crate::error::Error::UnsupportedCommand(format!(
-            "the {} link cannot change its rate to {baud} baud",
-            self.transport_name()
+            "the {link} cannot change its rate to {baud} baud"
         )))
     }
 
@@ -49,10 +50,19 @@ pub trait Transport: Send {
         ))
     }
 
-    /// Human-readable transport name (e.g. "CP2110", "CH9329").
+    /// The bridge's name, for display and logs (e.g. "CP2110", "CH9329").
+    /// Default: "unknown", for a transport with no bridge behind it.
+    ///
+    /// What the meter is on is [`Transport::link`]'s to say; nothing should
+    /// branch on this text.
     fn transport_name(&self) -> &'static str {
-        NO_LINK
+        "unknown"
     }
+
+    /// The link the meter is on, and `None` for a transport with nothing on
+    /// the far end: the mock and a replay answer from inside the process.
+    /// Required, so a wrapper cannot forget to pass it on.
+    fn link(&self) -> Option<Link>;
 
     /// For a Bluetooth link, the [`crate::OpenOptions::adapter`] value that
     /// opens this same adapter again by address, with no scan. `None` for
@@ -102,13 +112,17 @@ pub(crate) fn name_matches(prefix: &str, name: &str) -> bool {
         .starts_with(&prefix.to_ascii_uppercase())
 }
 
-/// What a transport with no link behind it calls itself.
+/// The link a meter is on, as the user knows it.
 ///
-/// The mock and a replay produce their readings in the process, so there is
-/// no cable or radio to name — [`crate::binary_help::Link::from_bridge`] reads
-/// this back as no link rather than guessing a cable. What a replay says it
-/// is on comes from the file instead, not from here.
-pub(crate) const NO_LINK: &str = "unknown";
+/// Never the bridge chip: someone plugged in a USB cable or switched a
+/// Bluetooth adapter on, and has no reason to know which chip is inside it.
+/// The error text, the CLI help and the GUI's connection messages all take
+/// their wording from `binary_help`, so the three cannot drift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Link {
+    UsbCable,
+    Bluetooth,
+}
 
 /// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`
 /// works for runtime transport selection (CP2110 vs CH9329).
@@ -137,6 +151,10 @@ impl Transport for Box<dyn Transport> {
         (**self).transport_name()
     }
 
+    fn link(&self) -> Option<Link> {
+        (**self).link()
+    }
+
     fn bluetooth_selector(&self) -> Option<&str> {
         (**self).bluetooth_selector()
     }
@@ -161,6 +179,10 @@ impl Transport for NullTransport {
     fn set_baud(&self, _baud: u32) -> Result<()> {
         Ok(())
     }
+
+    fn link(&self) -> Option<Link> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -174,6 +196,7 @@ mod tests {
         let mut buf = [0u8; 64];
         assert_eq!(t.read_timeout(&mut buf, 1000).unwrap(), 0);
         assert!(t.set_baud(19200).is_ok());
+        assert_eq!(t.link(), None);
     }
 
     /// A wrapper that let the rate fall to the default would fail every
@@ -182,6 +205,59 @@ mod tests {
     fn a_boxed_transport_forwards_the_rate() {
         let t: Box<dyn Transport> = Box::new(NullTransport);
         assert!(t.set_baud(19200).is_ok());
+    }
+
+    /// A link with no rate to set says so by the link the user plugged in,
+    /// never the bridge chip inside it.
+    #[test]
+    fn the_default_rate_change_names_the_link() {
+        struct Cable(Option<Link>);
+        impl Transport for Cable {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                Ok(0)
+            }
+            fn transport_name(&self) -> &'static str {
+                "CP2110"
+            }
+            fn link(&self) -> Option<Link> {
+                self.0
+            }
+        }
+        let reason = |t: Cable| match t.set_baud(19200) {
+            Err(crate::error::Error::UnsupportedCommand(reason)) => reason,
+            other => panic!("expected UnsupportedCommand, got {other:?}"),
+        };
+        assert_eq!(
+            reason(Cable(Some(Link::UsbCable))),
+            "the USB cable cannot change its rate to 19200 baud"
+        );
+        assert_eq!(
+            reason(Cable(None)),
+            "the link cannot change its rate to 19200 baud"
+        );
+    }
+
+    /// The UT61+ protocol streams or polls by the link, so a box must pass
+    /// on a transport's link, not stand in for it.
+    #[test]
+    fn a_boxed_transport_forwards_the_link() {
+        struct Radio;
+        impl Transport for Radio {
+            fn write(&self, _data: &[u8]) -> Result<()> {
+                Ok(())
+            }
+            fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+                Ok(0)
+            }
+            fn link(&self) -> Option<Link> {
+                Some(Link::Bluetooth)
+            }
+        }
+        let t: Box<dyn Transport> = Box::new(Radio);
+        assert_eq!(t.link(), Some(Link::Bluetooth));
     }
 }
 
@@ -238,6 +314,10 @@ pub mod mock {
         fn set_baud(&self, baud: u32) -> Result<()> {
             self.bauds.borrow_mut().push(baud);
             Ok(())
+        }
+
+        fn link(&self) -> Option<Link> {
+            None
         }
     }
 }

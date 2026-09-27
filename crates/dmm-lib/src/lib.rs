@@ -1028,6 +1028,13 @@ mod tests {
         fn transport_name(&self) -> &'static str {
             self.name
         }
+        fn link(&self) -> Option<transport::Link> {
+            Some(if self.name == BLUETOOTH {
+                transport::Link::Bluetooth
+            } else {
+                transport::Link::UsbCable
+            })
+        }
     }
 
     /// What a caller does with the name once the session is open.

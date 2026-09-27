@@ -34,7 +34,7 @@ mod search;
 
 use crate::DeviceInfo;
 use crate::error::{Error, Result};
-use crate::transport::{BluetoothPeers, Transport};
+use crate::transport::{BluetoothPeers, Link, Transport};
 use btleplug::api::{
     Central, CentralState, Characteristic, Manager as _, Peripheral as _, ValueNotification,
 };
@@ -650,6 +650,10 @@ impl Transport for Ble {
 
     fn transport_name(&self) -> &'static str {
         crate::BLUETOOTH
+    }
+
+    fn link(&self) -> Option<Link> {
+        Some(Link::Bluetooth)
     }
 
     fn bluetooth_selector(&self) -> Option<&str> {

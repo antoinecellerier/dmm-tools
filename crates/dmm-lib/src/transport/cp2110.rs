@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::transport::Transport;
+use crate::transport::{Link, Transport};
 use hidapi::HidDevice;
 use log::{debug, trace};
 
@@ -217,6 +217,10 @@ impl Transport for Cp2110 {
 
     fn transport_name(&self) -> &'static str {
         NAME
+    }
+
+    fn link(&self) -> Option<Link> {
+        Some(Link::UsbCable)
     }
 }
 

@@ -602,7 +602,8 @@ Rigol/Siglent" wording meant that.
   (`request_measurement`) and fits SCPI query/response as it is; the
   `Transport` trait (`crates/dmm-lib/src/transport/mod.rs`) is a byte
   stream whose one link setting, `set_baud`, is optional, so a network
-  transport fits it as it is. The SCPI text replies
+  transport fits it but for `link()`: `Link` has only `UsbCable` and
+  `Bluetooth`, so it needs a network variant. The SCPI text replies
   need a new protocol family; no existing frame parser applies.
 - Transports, cheapest first: (1) **VXI-11 over `std::net`** — portmapper
   plus core channel, a few hundred lines of XDR, std only, cross-platform,

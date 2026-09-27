@@ -1233,7 +1233,7 @@ fn cmd_read(
             .flatten();
         // The link these readings come over, so a session played back from
         // the file says what it was recorded on rather than nothing.
-        let link = dmm_lib::binary_help::Link::from_bridge(dmm.transport().transport_name());
+        let link = dmm.transport().link();
         let out = read_output(format, &dmm, transform, integrate, || {
             dmm_lib::replay::header(device.id, &recorded_now(), model.as_deref(), link)
         });
