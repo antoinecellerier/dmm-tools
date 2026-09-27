@@ -2,7 +2,8 @@
 //! (`docs/research/zotek/reverse-engineered-protocol.md` §2): one
 //! characteristic carries both directions.
 
-use super::GattProfile;
+use super::{BringUp, GattProfile};
+use btleplug::api::CharPropFlags;
 
 /// The service the data characteristic sits in (§2).
 const SERVICE: &str = "0000fff0-0000-1000-8000-00805f9b34fb";
@@ -17,6 +18,15 @@ pub(super) const FFF0: GattProfile = GattProfile {
     service: SERVICE,
     notify: DATA_CHARACTERISTIC,
     write: DATA_CHARACTERISTIC,
+    // FFF0 is a common service on generic modules, so it is held to what
+    // the stream needs: notifications or indications, which btleplug's
+    // subscribe takes either of, as ZOTEK's current app does, and a write
+    // of either kind (§2).
+    notify_needs: CharPropFlags::NOTIFY.union(CharPropFlags::INDICATE),
+    write_needs: CharPropFlags::WRITE.union(CharPropFlags::WRITE_WITHOUT_RESPONSE),
+    always_unacknowledged: false,
+    bring_up: BringUp::Subscribe,
+    min_mtu: None,
     strips_adapter_heartbeat: false,
 };
 

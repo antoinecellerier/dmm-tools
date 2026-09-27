@@ -7,13 +7,13 @@
 //! §5). The packets, and what a reply says, are the protocol's
 //! (`protocol/bm78xbt/login.rs`).
 
-use super::{GattProfile, SetupFailure, link_error};
+use super::{BringUp, GattProfile, SetupFailure, link_error};
 use crate::error::Result;
 use crate::protocol::bm78xbt::login::{self, LoginReply, Mac, UNKNOWN_MAC};
 use crate::protocol::bm78xbt::packet::NOTIFICATION_LEN;
-use btleplug::api::{BDAddr, Characteristic, Peripheral as _, WriteType};
+use btleplug::api::{BDAddr, CharPropFlags, Characteristic, Peripheral as _, WriteType};
 use btleplug::platform::Peripheral;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use std::time::Duration;
 
 /// The meter's service (§2).
@@ -31,6 +31,15 @@ pub(super) const BRYMEN: GattProfile = GattProfile {
     service: SERVICE,
     notify: READING_CHARACTERISTIC,
     write: COMMAND_CHARACTERISTIC,
+    // The readings come by notification, and the command characteristic
+    // has to take an acknowledged write, the only kind the login sends;
+    // whether it reads, for the login's reply, is left to the login (§2,
+    // §3.2).
+    notify_needs: CharPropFlags::NOTIFY,
+    write_needs: CharPropFlags::WRITE,
+    always_unacknowledged: false,
+    bring_up: BringUp::BrymenLogin,
+    min_mtu: Some(WHOLE_OUTPUT_MTU),
     strips_adapter_heartbeat: false,
 };
 
@@ -47,18 +56,6 @@ fn wire_mac(address: BDAddr) -> Mac {
     let mut mac = address.into_inner();
     mac.reverse();
     mac
-}
-
-/// Log the MTU, warning when a notification cannot carry a whole output.
-pub(super) fn check_mtu(mtu: u16) {
-    if mtu < WHOLE_OUTPUT_MTU {
-        warn!(
-            "Bluetooth: the link's MTU is {mtu} bytes, under the {WHOLE_OUTPUT_MTU} the meter's \
-             readings need; they may arrive cut short; if no readings arrive, report it"
-        );
-    } else {
-        debug!("Bluetooth: MTU {mtu}");
-    }
 }
 
 /// Log in, so the meter streams once its readings are subscribed to

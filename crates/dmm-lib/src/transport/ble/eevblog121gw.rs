@@ -2,7 +2,8 @@
 //! (`docs/research/121gw/reverse-engineered-protocol.md` §2): one
 //! characteristic, in a service of the meter's own, carries both directions.
 
-use super::GattProfile;
+use super::{BringUp, GattProfile};
+use btleplug::api::CharPropFlags;
 
 /// The service the data characteristic sits in (§2).
 const SERVICE: &str = "0bd51666-e7cb-469b-8e4d-2742f1ba77cc";
@@ -17,6 +18,14 @@ pub(super) const EEVBLOG_121GW: GattProfile = GattProfile {
     service: SERVICE,
     notify: DATA_CHARACTERISTIC,
     write: DATA_CHARACTERISTIC,
+    // The service is the meter's own, so the stream alone says it is the
+    // meter: the characteristic has to notify or indicate, and which of
+    // those it offers and which write it takes are not known (§2).
+    notify_needs: CharPropFlags::NOTIFY.union(CharPropFlags::INDICATE),
+    write_needs: CharPropFlags::empty(),
+    always_unacknowledged: false,
+    bring_up: BringUp::Subscribe,
+    min_mtu: None,
     strips_adapter_heartbeat: false,
 };
 

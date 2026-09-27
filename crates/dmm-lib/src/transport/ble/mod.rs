@@ -89,9 +89,43 @@ struct GattProfile {
     notify: &'static str,
     /// Host → meter: commands are written here.
     write: &'static str,
+    /// The properties the notify characteristic must offer one of for the
+    /// profile to be taken; empty asks nothing.
+    notify_needs: CharPropFlags,
+    /// The same for the write characteristic.
+    write_needs: CharPropFlags,
+    /// Whether every write goes unacknowledged, whatever the
+    /// characteristic lists ([`write_type`]).
+    always_unacknowledged: bool,
+    /// What runs between discovery and the subscribe.
+    bring_up: BringUp,
+    /// The smallest ATT MTU the peer's notifications fit whole in, when one
+    /// is known: under it the open warns.
+    min_mtu: Option<u16>,
     /// Whether UNI-T's adapter heartbeat is taken off the stream.
     strips_adapter_heartbeat: bool,
 }
+
+/// What a profile's bring-up does before the subscribe.
+#[derive(Debug, PartialEq, Eq)]
+enum BringUp {
+    /// Nothing: subscribe and go.
+    Subscribe,
+    /// The BM78xBT's password login (`brymen.rs`).
+    BrymenLogin,
+}
+
+/// The profiles, in the order a peer's services are tried
+/// ([`choose_profile`]).
+///
+/// ISSC first, as before there was a second profile: no known ISSC peer has
+/// any other of these services (`docs/research/ut-d07b/reverse-engineered-protocol.md`
+/// §2), and one that carried any would be read over ISSC. Then the meters'
+/// own services, the 121GW's and Brymen's, whose UUIDs alone say which meter
+/// it is; the order between those two never meets a real peer. FFF0 last:
+/// it is a common service on generic modules, so a peer that also carries a
+/// meter's own service is read over that.
+const PROFILES: [&GattProfile; 4] = [&ISSC_UART, &EEVBLOG_121GW, &BRYMEN, &FFF0];
 
 /// A peer, open and subscribed.
 pub(crate) struct Ble {
@@ -331,8 +365,13 @@ async fn connect(target: Target<'_>) -> Result<Opened> {
         disconnect(&peripheral).await;
         return Err(Error::LinkLost);
     };
-    if profile == &BRYMEN {
-        brymen::check_mtu(mtu);
+    match profile.min_mtu {
+        Some(min_mtu) if mtu < min_mtu => warn!(
+            "Bluetooth: the link's MTU is {mtu} bytes, under the {min_mtu} the meter's \
+             readings need; they may arrive cut short; if no readings arrive, report it"
+        ),
+        Some(_) => debug!("Bluetooth: MTU {mtu}"),
+        None => {}
     }
 
     let selector = candidate.selector();
@@ -389,9 +428,9 @@ fn read_mtu(peripheral: &Peripheral) -> Option<u16> {
 ///   but a peer that was already linked skips the connect, and one whose
 ///   connect timed out with the link up goes on without it.
 ///
-/// So one look can miss a service the peer has. ISSC is taken the moment it
-/// is complete, as before there was a second profile: it comes first, so
-/// nothing that arrives later can change the choice. Any other profile is
+/// So one look can miss a service the peer has. The first of [`PROFILES`],
+/// ISSC, is taken the moment it is complete: nothing that arrives later can
+/// change the choice. Any other profile is
 /// taken once two looks in a row saw the same tree — one that stopped
 /// changing, so a service that outranks it still resolving had its chance —
 /// or at the deadline.
@@ -415,7 +454,7 @@ async fn subscribe_profile(
         let characteristics = peripheral.characteristics();
         let past_deadline = tokio::time::Instant::now() >= deadline;
         match choose_profile(&characteristics) {
-            Ok(chosen) if chosen.profile == &ISSC_UART => break chosen,
+            Ok(chosen) if chosen.profile == PROFILES[0] => break chosen,
             Ok(chosen) if past_deadline || last_look.as_ref() == Some(&characteristics) => {
                 break chosen;
             }
@@ -427,32 +466,37 @@ async fn subscribe_profile(
     };
     debug!("Bluetooth: {} profile", chosen.profile.name);
 
-    // Bring-up is subscribe and go on every profile but Brymen's: nothing is
-    // written to any other characteristic first (research doc §3;
-    // `docs/research/zotek/reverse-engineered-protocol.md` §3;
-    // `docs/research/121gw/reverse-engineered-protocol.md` §3). A BM78xBT
-    // streams only once logged in, which comes first in r4's order
-    // (`docs/research/bm78xbt/reverse-engineered-protocol.md` §3.1).
-    if chosen.profile == &BRYMEN {
-        let now = tokio::time::Instant::now();
-        let login_deadline = deadline
-            .max(now + LOGIN_TIMEOUT)
-            .min(deadline + LOGIN_TIMEOUT);
-        if login_deadline <= now {
-            // The first try's login spent the bound; the stream shows
-            // whether the meter took it.
-            debug!("Bluetooth: no time left for the login; waiting for readings");
-        } else {
-            match tokio::time::timeout_at(login_deadline, brymen::log_in(peripheral, &chosen.write))
+    match chosen.profile.bring_up {
+        // Nothing is written to any characteristic first (research doc §3;
+        // `docs/research/zotek/reverse-engineered-protocol.md` §3;
+        // `docs/research/121gw/reverse-engineered-protocol.md` §3).
+        BringUp::Subscribe => {}
+        // A BM78xBT streams only once logged in, which comes first in r4's
+        // order (`docs/research/bm78xbt/reverse-engineered-protocol.md` §3.1).
+        BringUp::BrymenLogin => {
+            let now = tokio::time::Instant::now();
+            let login_deadline = deadline
+                .max(now + LOGIN_TIMEOUT)
+                .min(deadline + LOGIN_TIMEOUT);
+            if login_deadline <= now {
+                // The first try's login spent the bound; the stream shows
+                // whether the meter took it.
+                debug!("Bluetooth: no time left for the login; waiting for readings");
+            } else {
+                match tokio::time::timeout_at(
+                    login_deadline,
+                    brymen::log_in(peripheral, &chosen.write),
+                )
                 .await
-            {
-                Ok(logged_in) => logged_in?,
-                // The stream shows whether the meter took it.
-                Err(_) => warn!(
-                    "Bluetooth: the meter did not answer the login in time; waiting for readings"
-                ),
+                {
+                    Ok(logged_in) => logged_in?,
+                    // The stream shows whether the meter took it.
+                    Err(_) => warn!(
+                        "Bluetooth: the meter did not answer the login in time; waiting for readings"
+                    ),
+                }
+                tokio::time::sleep(brymen::SETTLE).await;
             }
-            tokio::time::sleep(brymen::SETTLE).await;
         }
     }
     peripheral
@@ -488,21 +532,11 @@ struct Chosen {
 /// The profile a peer's discovered characteristics carry, or the role
 /// (`"write"` or `"notify"`) that is missing.
 ///
-/// ISSC first, by its two characteristics alone, as before there was a
-/// second profile. Then the 121GW, whose one characteristic only has to
-/// notify or indicate: its service UUID is the meter's own, so the stream
-/// alone says it is the meter
-/// (`docs/research/121gw/reverse-engineered-protocol.md` §2). Then Brymen's,
-/// whose reading characteristic has to notify and whose command one has to
-/// take an acknowledged write, the only kind the login sends; whether the
-/// command one reads, for the login's reply, is left to the login
-/// (`docs/research/bm78xbt/reverse-engineered-protocol.md` §2, §3.2). Then
-/// FFF0, whose one characteristic has to both notify and take a write: FFF0
-/// is a common service on generic modules, so it is held to what the stream
-/// needs, and a peer that also carries the 121GW's or Brymen's service is
-/// read over that. No known ISSC peer has an FFF0, a 121GW or a Brymen
-/// service (`docs/research/ut-d07b/reverse-engineered-protocol.md` §2); one
-/// that carried any would be read over ISSC.
+/// The first of [`PROFILES`] whose two characteristics are there, under its
+/// service, and offer what the profile needs of them. Failing that, the
+/// error names what the closest profile lacks: the first whose service
+/// carries either of its characteristics, else ISSC, which is what a peer
+/// with no known profile always heard.
 fn choose_profile(
     characteristics: &BTreeSet<Characteristic>,
 ) -> std::result::Result<Chosen, &'static str> {
@@ -511,64 +545,42 @@ fn choose_profile(
             .iter()
             .find(|c| c.service_uuid.to_string() == service && c.uuid.to_string() == uuid)
     };
-    let chosen = |profile, notify: &Characteristic, write: &Characteristic| Chosen {
-        profile,
-        notify: notify.clone(),
-        write: write.clone(),
+    let found = |profile: &GattProfile| {
+        (
+            find(profile.service, profile.notify),
+            find(profile.service, profile.write),
+        )
     };
 
-    let issc_notify = find(ISSC_UART.service, ISSC_UART.notify);
-    let issc_write = find(ISSC_UART.service, ISSC_UART.write);
-    if let (Some(notify), Some(write)) = (issc_notify, issc_write) {
-        return Ok(chosen(&ISSC_UART, notify, write));
+    for profile in PROFILES {
+        if let (Some(notify), Some(write)) = found(profile)
+            && fits(notify.properties, profile.notify_needs)
+            && fits(write.properties, profile.write_needs)
+        {
+            return Ok(Chosen {
+                profile,
+                notify: notify.clone(),
+                write: write.clone(),
+            });
+        }
     }
 
-    let gw = find(EEVBLOG_121GW.service, EEVBLOG_121GW.notify);
-    if let Some(data) = gw.filter(|c| {
-        c.properties
-            .intersects(CharPropFlags::NOTIFY | CharPropFlags::INDICATE)
-    }) {
-        return Ok(chosen(&EEVBLOG_121GW, data, data));
-    }
+    let closest = PROFILES
+        .into_iter()
+        .find(|profile| {
+            let (notify, write) = found(profile);
+            notify.is_some() || write.is_some()
+        })
+        .unwrap_or(PROFILES[0]);
+    let (_, write) = found(closest);
+    let writable = write.is_some_and(|c| fits(c.properties, closest.write_needs));
+    Err(if writable { "notify" } else { "write" })
+}
 
-    let brymen_notify = find(BRYMEN.service, BRYMEN.notify);
-    let brymen_write = find(BRYMEN.service, BRYMEN.write);
-    if let (Some(notify), Some(write)) = (
-        brymen_notify.filter(|c| c.properties.contains(CharPropFlags::NOTIFY)),
-        brymen_write.filter(|c| c.properties.contains(CharPropFlags::WRITE)),
-    ) {
-        return Ok(chosen(&BRYMEN, notify, write));
-    }
-
-    let fff0_notify = find(FFF0.service, FFF0.notify).filter(|c| {
-        // Indications carry the stream as well: btleplug's subscribe takes
-        // whichever the characteristic offers, as ZOTEK's current app does
-        // (spec §2).
-        c.properties
-            .intersects(CharPropFlags::NOTIFY | CharPropFlags::INDICATE)
-    });
-    let fff0_write = find(FFF0.service, FFF0.write).filter(|c| {
-        c.properties
-            .intersects(CharPropFlags::WRITE | CharPropFlags::WRITE_WITHOUT_RESPONSE)
-    });
-    if let (Some(notify), Some(write)) = (fff0_notify, fff0_write) {
-        return Ok(chosen(&FFF0, notify, write));
-    }
-
-    // Name what the closer profile lacks; ISSC when none has anything,
-    // which is what a peer with no known profile always heard. A 121GW
-    // characteristic that got this far cannot stream.
-    let no_issc = issc_notify.is_none() && issc_write.is_none();
-    if gw.is_some() && no_issc {
-        return Err("notify");
-    }
-    if (brymen_notify.is_some() || brymen_write.is_some()) && no_issc {
-        let writable = brymen_write.is_some_and(|c| c.properties.contains(CharPropFlags::WRITE));
-        return Err(if writable { "notify" } else { "write" });
-    }
-    let fff0_closer = no_issc && (fff0_notify.is_some() || fff0_write.is_some());
-    let write = if fff0_closer { fff0_write } else { issc_write };
-    Err(if write.is_none() { "write" } else { "notify" })
+/// Whether a characteristic with `properties` offers any of `needs`; empty
+/// `needs` asks nothing.
+fn fits(properties: CharPropFlags, needs: CharPropFlags) -> bool {
+    needs.is_empty() || properties.intersects(needs)
 }
 
 /// Take the link down, bounded: a stack that does not answer must not hold
@@ -631,16 +643,16 @@ fn link_error(e: btleplug::Error) -> Error {
 ///
 /// An acknowledged write costs a round trip per poll (0.8 s against 0.63 s
 /// per reading on our adapter), and a dead link is caught by `read_timeout`
-/// instead. ISSC peers are always written that way. Any other characteristic
-/// that lists only acknowledged writes gets those, as ZOTEK's current app and
-/// both 121GW apps write with the characteristic's own type
-/// (`docs/research/zotek/reverse-engineered-protocol.md` §2;
+/// instead. A profile that says so, ISSC, is always written that way. Any
+/// other characteristic that lists only acknowledged writes gets those, as
+/// ZOTEK's current app and both 121GW apps write with the characteristic's
+/// own type (`docs/research/zotek/reverse-engineered-protocol.md` §2;
 /// `docs/research/121gw/reverse-engineered-protocol.md` §2). One that lists
 /// no write at all is still sent an unacknowledged one, for the platform or
 /// the peer to refuse.
 fn write_type(profile: &GattProfile, write_char: &Characteristic) -> WriteType {
     let props = write_char.properties;
-    if *profile == ISSC_UART
+    if profile.always_unacknowledged
         || props.contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
         || !props.contains(CharPropFlags::WRITE)
     {

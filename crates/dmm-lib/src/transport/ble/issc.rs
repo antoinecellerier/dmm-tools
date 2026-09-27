@@ -1,7 +1,8 @@
 //! The ISSC transparent-UART profile, and what UNI-T's UT-D07 adapters add
 //! to it.
 
-use super::GattProfile;
+use super::{BringUp, GattProfile};
+use btleplug::api::CharPropFlags;
 use std::collections::VecDeque;
 
 /// The profile. Every peer on it gets the adapter's heartbeat stripped: a
@@ -11,6 +12,15 @@ pub(super) const ISSC_UART: GattProfile = GattProfile {
     service: UART_SERVICE,
     notify: UART_TX_CHARACTERISTIC,
     write: UART_RX_CHARACTERISTIC,
+    // Taken by its two characteristics alone, as before there was a second
+    // profile.
+    notify_needs: CharPropFlags::empty(),
+    write_needs: CharPropFlags::empty(),
+    // Our adapter takes an unacknowledged write, the faster one (research
+    // doc §2, §5); what the other ISSC peers list is not known.
+    always_unacknowledged: true,
+    bring_up: BringUp::Subscribe,
+    min_mtu: None,
     strips_adapter_heartbeat: true,
 };
 
