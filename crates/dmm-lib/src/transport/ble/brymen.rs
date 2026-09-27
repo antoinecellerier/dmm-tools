@@ -7,7 +7,8 @@
 //! §5). The packets, and what a reply says, are the protocol's
 //! (`protocol/bm78xbt/login.rs`).
 
-use super::{BringUp, GattProfile, SetupFailure, link_error};
+use super::profile::{BringUp, GattProfile};
+use super::{SetupFailure, link_error};
 use crate::error::Result;
 use crate::protocol::bm78xbt::login::{self, LoginReply, Mac, UNKNOWN_MAC};
 use crate::protocol::bm78xbt::packet::NOTIFICATION_LEN;

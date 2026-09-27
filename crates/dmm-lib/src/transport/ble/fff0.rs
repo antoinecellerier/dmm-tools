@@ -2,7 +2,7 @@
 //! (`docs/research/zotek/reverse-engineered-protocol.md` §2): one
 //! characteristic carries both directions.
 
-use super::{BringUp, GattProfile};
+use super::profile::{BringUp, GattProfile};
 use btleplug::api::CharPropFlags;
 
 /// The service the data characteristic sits in (§2).

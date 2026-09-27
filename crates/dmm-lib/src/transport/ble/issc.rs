@@ -1,7 +1,7 @@
 //! The ISSC transparent-UART profile, and what UNI-T's UT-D07 adapters add
 //! to it.
 
-use super::{BringUp, GattProfile};
+use super::profile::{BringUp, GattProfile};
 use btleplug::api::CharPropFlags;
 use std::collections::VecDeque;
 
