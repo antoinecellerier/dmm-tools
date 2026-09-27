@@ -238,10 +238,10 @@ impl App {
             // marked a UT181A connected after Record as a verified protocol.
             self.recording_layout.experimental = (self.connection.state
                 != ConnectionState::Disconnected)
-                .then(|| !self.connection.stability.is_verified());
+                .then(|| !self.connection.stability().is_verified());
             // Empty while disconnected for the same reason; the export then
             // falls back to whatever link answers during the recording.
-            self.recording_layout.link = self.connection.link;
+            self.recording_layout.link = self.connection.link();
             self.recording_layout.aux_slots = self.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
             // after the meter's — see `extra_slots`.

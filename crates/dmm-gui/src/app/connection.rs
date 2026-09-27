@@ -94,35 +94,63 @@ fn handle_control(ctrl_rx: &mpsc::Receiver<ThreadControl>, paused: &mut bool) ->
     }
 }
 
+/// What a newly opened meter told us about itself: sent once per connection,
+/// reconnects included, and kept by the UI as [`super::Connection::meter`]
+/// until the user disconnects.
+pub(crate) struct ConnectedMeter {
+    /// The name the meter gave for itself, when it was asked or had already
+    /// said. `None` when it gave none.
+    pub(crate) name: Option<String>,
+    /// Model the connected protocol reports. Names the meter in the
+    /// experimental warning, where the registry entry's display name would
+    /// be second-hand.
+    pub(crate) model_name: String,
+    /// Registry entry behind that protocol — what detection settled on, or
+    /// the entry the user picked. Under Auto-detect it is the only thing
+    /// that knows which meter is on the cable.
+    pub(crate) device: Option<&'static SelectableDevice>,
+    /// How far the protocol is verified; anything short of `Verified` shows
+    /// the badge, and the level words its hover text.
+    pub(crate) stability: Stability,
+    /// URL for reporting feedback on experimental protocols.
+    pub(crate) feedback_url: String,
+    /// What the meter answered over, for the status line — for a replay, the
+    /// link its recording was made on. `None` for the mock, which is on no
+    /// link at all.
+    pub(crate) link: Option<Link>,
+    /// Commands the connected protocol supports.
+    pub(crate) supported_commands: Vec<String>,
+    /// The function and context keys the protocol lists, drawn as the mode
+    /// readout's list and as chips beside HOLD.
+    pub(crate) meter_keys: MeterKeys,
+    /// Sub-value slots this meter family can report, from its profile.
+    /// Fixes the CSV export's aux column count for the whole recording.
+    pub(crate) max_aux_values: usize,
+}
+
+#[cfg(test)]
+impl ConnectedMeter {
+    /// A meter that said nothing about itself beyond which entry it is: no
+    /// name, no link, no commands, verified.
+    pub(crate) fn test_fixture(device_id: Option<&str>) -> Self {
+        Self {
+            name: None,
+            model_name: String::new(),
+            device: device_id.and_then(dmm_lib::protocol::registry::find_device),
+            stability: Stability::Verified,
+            feedback_url: String::new(),
+            link: None,
+            supported_commands: Vec::new(),
+            meter_keys: MeterKeys::NONE,
+            max_aux_values: 0,
+        }
+    }
+}
+
 /// Messages from the background thread to the UI.
 pub(crate) enum DmmMessage {
     Measurement(Measurement),
-    Connected {
-        name: String,
-        /// Model the connected protocol reports. Names the meter in the
-        /// experimental warning, where the registry entry's display name
-        /// would be second-hand.
-        model_name: String,
-        /// Registry entry behind that protocol — what detection settled on,
-        /// or the entry the user picked. `None` only if a protocol ever
-        /// reports a model no entry claims.
-        device_id: Option<&'static str>,
-        /// How far the protocol is verified; anything short of `Verified`
-        /// shows the badge, and the level words its hover text.
-        stability: Stability,
-        /// URL for reporting feedback on experimental protocols.
-        feedback_url: String,
-        /// What the meter answered over, for the status line — for a replay,
-        /// the link its recording was made on. `None` for the mock, which is
-        /// on no link at all.
-        link: Option<Link>,
-        supported_commands: Vec<String>,
-        /// Function and context keys, from the profile.
-        meter_keys: MeterKeys,
-        /// Sub-value slots this meter family can report, from its profile.
-        /// Fixes the CSV export's aux column count for the whole recording.
-        max_aux_values: usize,
-    },
+    Connected(ConnectedMeter),
     /// Link lost mid-acquisition; the thread is about to start reconnecting.
     Disconnected(dmm_lib::error::Error),
     /// Reconnect attempt in progress — `attempt` is 1-based.
@@ -182,11 +210,7 @@ fn establish_connection<T: Transport>(
     let model_name = profile.model_name.to_string();
     // A replay's transport reports the link its file was recorded over.
     let link = dmm.transport().link();
-    let device_id = detected
-        .as_ref()
-        .map(|d| d.device)
-        .or(selected)
-        .map(|d| d.id);
+    let device = detected.as_ref().map(|d| d.device).or(selected);
     // A name the meter already gave on this link — to detection, say — is
     // shown either way: it costs nothing more. Asking is what beeps.
     let name = if query_name {
@@ -194,18 +218,17 @@ fn establish_connection<T: Transport>(
     } else {
         dmm.known_name().map(str::to_owned)
     };
-    let name = name.unwrap_or_default();
-    let _ = msg_tx.send(DmmMessage::Connected {
-        name,
+    let _ = msg_tx.send(DmmMessage::Connected(ConnectedMeter {
+        name: name.filter(|n| !n.is_empty()),
         model_name,
-        device_id,
+        device,
         stability,
         feedback_url,
         link,
         supported_commands: cmds,
         meter_keys,
         max_aux_values,
-    });
+    }));
     ctx.request_repaint();
 }
 
@@ -912,10 +935,10 @@ mod tests {
         assert!(
             matches!(
                 first,
-                DmmMessage::Connected {
+                DmmMessage::Connected(ConnectedMeter {
                     link: Some(Link::Bluetooth),
                     ..
-                }
+                })
             ),
             "the replay did not connect on its recorded link"
         );

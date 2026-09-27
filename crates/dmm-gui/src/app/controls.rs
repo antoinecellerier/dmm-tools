@@ -201,7 +201,7 @@ impl App {
         // Only show controls when connected with measurement data and supported commands
         if self.connection.state != ConnectionState::Connected
             || self.last_measurement.is_none()
-            || self.connection.supported_commands.is_empty()
+            || self.connection.supported_commands().is_empty()
         {
             // No button row to join: Scale keeps its own, so an active
             // scale can still be turned off while disconnected.
@@ -217,7 +217,12 @@ impl App {
             return;
         }
         let flags = self.last_measurement.as_ref().map(|m| m.flags);
-        let has_cmd = |cmd: &str| self.connection.supported_commands.iter().any(|c| c == cmd);
+        let has_cmd = |cmd: &str| {
+            self.connection
+                .supported_commands()
+                .iter()
+                .any(|c| c == cmd)
+        };
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         let active_color = tc.accent();
 
@@ -322,7 +327,7 @@ impl App {
             // 121GW's 1kHz in AC), each only while the reading is one it
             // applies to.
             let reading = self.last_measurement.as_ref();
-            for key in self.connection.meter_keys.context {
+            for key in self.connection.meter_keys().context {
                 if !reading.is_some_and(|m| (key.applies)(m)) {
                     continue;
                 }
@@ -1584,11 +1589,14 @@ mod tests {
         };
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         app.connection.state = super::super::ConnectionState::Connected;
-        app.connection.supported_commands = vec!["hold".to_string(), "zero".to_string()];
-        app.connection.meter_keys = dmm_lib::protocol::MeterKeys {
-            functions: &[],
-            context: ZERO_IN_FARADS,
-        };
+        app.connection.meter = Some(crate::app::ConnectedMeter {
+            supported_commands: vec!["hold".to_string(), "zero".to_string()],
+            meter_keys: dmm_lib::protocol::MeterKeys {
+                functions: &[],
+                context: ZERO_IN_FARADS,
+            },
+            ..crate::app::ConnectedMeter::test_fixture(None)
+        });
         app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
             dmm_lib::measurement::MeasuredValue::Normal(1.234),
             unit,

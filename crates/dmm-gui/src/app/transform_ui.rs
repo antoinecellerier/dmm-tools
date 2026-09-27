@@ -264,11 +264,14 @@ mod tests {
         };
         let mut app = App::from_settings(settings, dmm_lib::Clock::real());
         app.connection.state = super::super::ConnectionState::Connected;
-        app.connection.supported_commands = [
-            "hold", "rel", "range", "auto", "minmax", "peak", "select", "light",
-        ]
-        .map(String::from)
-        .to_vec();
+        app.connection.meter = Some(super::super::ConnectedMeter {
+            supported_commands: [
+                "hold", "rel", "range", "auto", "minmax", "peak", "select", "light",
+            ]
+            .map(String::from)
+            .to_vec(),
+            ..super::super::ConnectedMeter::test_fixture(None)
+        });
         app.last_measurement = Some(dmm_lib::measurement::Measurement::test_fixture(
             dmm_lib::measurement::MeasuredValue::Normal(1.234),
             "V",

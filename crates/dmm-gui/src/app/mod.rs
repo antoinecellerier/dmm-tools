@@ -64,7 +64,7 @@ const SIDE_PANEL_DEFAULT_WIDTH: f32 = 240.0;
 const SIDE_PANEL_MIN_WIDTH: f32 = 180.0;
 const SIDE_PANEL_MAX_WIDTH: f32 = 400.0;
 
-use connection::{DmmMessage, ThreadControl};
+use connection::{ConnectedMeter, DmmMessage, ThreadControl};
 
 /// Big meter display mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
@@ -252,29 +252,11 @@ fn named_device(family: &str) -> Option<&'static registry::SelectableDevice> {
 /// thread.
 pub(super) struct Connection {
     pub(super) state: ConnectionState,
-    pub(super) device_name: Option<String>,
-    /// The registry entry actually connected — the one the user named, or the
-    /// one detection settled on. `None` while nothing is connected, so under
-    /// Auto-detect this is the only thing that knows which meter is on the
-    /// cable. Cleared on disconnect.
-    pub(super) detected: Option<&'static registry::SelectableDevice>,
-    /// Model name the connected protocol reports, for the text that has to
-    /// name it (the experimental warning). Empty while disconnected.
-    pub(super) model_name: String,
-    /// How far the connected protocol is verified; the badge shows for
-    /// anything short of `Verified`.
-    pub(super) stability: dmm_lib::protocol::Stability,
-    /// URL for reporting feedback on experimental protocols.
-    pub(super) feedback_url: String,
-    /// What the meter is answering over — for a replay, what its recording
-    /// was made over. `None` while disconnected, and for the mock, which is
-    /// on no link at all.
-    pub(super) link: Option<dmm_lib::transport::Link>,
-    /// Commands supported by the connected protocol.
-    pub(super) supported_commands: Vec<String>,
-    /// The function and context keys the connected protocol lists, drawn
-    /// as the mode readout's list and as chips beside HOLD.
-    pub(super) meter_keys: MeterKeys,
+    /// What the connected meter told us about itself. Kept through a lost
+    /// link until the reconnect reports afresh; `None` once the user
+    /// disconnects, so under Auto-detect the next connect asks the cable
+    /// again.
+    pub(super) meter: Option<ConnectedMeter>,
     /// Values the meter can be switched to for each setting the readout
     /// draws, as last listed by the acquisition thread.
     pub(super) choices: SettingChoices,
@@ -303,14 +285,7 @@ impl Default for Connection {
     fn default() -> Self {
         Self {
             state: ConnectionState::Disconnected,
-            device_name: None,
-            detected: None,
-            model_name: String::new(),
-            stability: dmm_lib::protocol::Stability::Verified,
-            feedback_url: String::new(),
-            link: None,
-            supported_commands: Vec::new(),
-            meter_keys: MeterKeys::NONE,
+            meter: None,
             choices: SettingChoices::default(),
             paused: false,
             last_error: None,
@@ -333,8 +308,43 @@ impl Connection {
         display::ReadoutChoices {
             mode: &self.choices.mode,
             range: &self.choices.range,
-            keys: self.meter_keys.functions,
+            keys: self.meter_keys().functions,
         }
+    }
+
+    /// The registry entry actually connected — the one the user named, or
+    /// the one detection settled on. `None` while nothing is connected.
+    pub(super) fn detected(&self) -> Option<&'static registry::SelectableDevice> {
+        self.meter.as_ref().and_then(|m| m.device)
+    }
+
+    /// How far the connected protocol is verified; `Verified` while nothing
+    /// is connected, so no badge shows.
+    pub(super) fn stability(&self) -> dmm_lib::protocol::Stability {
+        self.meter
+            .as_ref()
+            .map_or(dmm_lib::protocol::Stability::Verified, |m| m.stability)
+    }
+
+    /// What the meter is answering over. `None` while disconnected, and for
+    /// the mock.
+    pub(super) fn link(&self) -> Option<dmm_lib::transport::Link> {
+        self.meter.as_ref().and_then(|m| m.link)
+    }
+
+    /// Commands the connected protocol supports; none while disconnected.
+    pub(super) fn supported_commands(&self) -> &[String] {
+        self.meter
+            .as_ref()
+            .map_or(&[], |m| m.supported_commands.as_slice())
+    }
+
+    /// The connected protocol's function and context keys; none while
+    /// disconnected.
+    pub(super) fn meter_keys(&self) -> MeterKeys {
+        self.meter
+            .as_ref()
+            .map_or(MeterKeys::NONE, |m| m.meter_keys)
     }
 }
 
@@ -613,7 +623,7 @@ impl App {
     /// named, else the one detection found. `None` until a meter answers
     /// under Auto-detect.
     fn active_device(&self) -> Option<&'static registry::SelectableDevice> {
-        self.selected_device().or(self.connection.detected)
+        self.selected_device().or(self.connection.detected())
     }
 
     fn manual_url(&self) -> Option<&'static str> {
@@ -1137,7 +1147,7 @@ mod tests {
 
         // What `DmmMessage::Connected` does: the meter that answered is the
         // one the top bar names from then on.
-        app.connection.detected = registry::find_device("ut8803");
+        app.connection.meter = Some(ConnectedMeter::test_fixture(Some("ut8803")));
         assert_eq!(app.active_device().map(|d| d.id), Some("ut8803"));
 
         // And picking a model back out of the picker restores its profile.

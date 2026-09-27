@@ -145,8 +145,13 @@ impl App {
             let mut link_drawn = false;
             let (dot_color, status_text) = match &self.connection.state {
                 ConnectionState::Connected => {
-                    let name = self.connection.device_name.as_deref().unwrap_or("Connected");
-                    let link = self.connection.link.filter(|_| show_link);
+                    let name = self
+                        .connection
+                        .meter
+                        .as_ref()
+                        .and_then(|m| m.name.as_deref())
+                        .unwrap_or("Connected");
+                    let link = self.connection.link().filter(|_| show_link);
                     link_drawn = link.is_some();
                     let text = connected_status(name, link, self.connection.paused);
                     if self.connection.paused {
@@ -179,9 +184,9 @@ impl App {
                 if self.connection.state == ConnectionState::Connected {
                     // The connected entry, live or recorded: a meter with the
                     // radio built in is on no adapter.
-                    let built_in_radio = self.connection.detected.is_some_and(|d| d.bluetooth_only());
+                    let built_in_radio = self.connection.detected().is_some_and(|d| d.bluetooth_only());
                     hover.push(link_tooltip(
-                        self.connection.link,
+                        self.connection.link(),
                         built_in_radio,
                         self.replay.is_some(),
                     ));
@@ -208,13 +213,11 @@ impl App {
                 // that is the only thing that names a meter at all — and from
                 // the selected entry's profile otherwise.
                 let badge = if self.connection.state == ConnectionState::Connected {
-                    (!self.connection.stability.is_verified()).then(|| {
-                        (
-                            self.connection.model_name.clone(),
-                            self.connection.stability,
-                            self.connection.feedback_url.clone(),
-                        )
-                    })
+                    self.connection
+                        .meter
+                        .as_ref()
+                        .filter(|m| !m.stability.is_verified())
+                        .map(|m| (m.model_name.clone(), m.stability, m.feedback_url.clone()))
                 } else {
                     self.selected_profile
                         .as_ref()
@@ -238,7 +241,7 @@ impl App {
             // bar: what the row needs without the link, and what the link
             // would add. Only the first reaches the window's minimum size.
             let link_w = if self.connection.state == ConnectionState::Connected {
-                link_suffix_width(ui, self.connection.link)
+                link_suffix_width(ui, self.connection.link())
             } else {
                 0.0
             };

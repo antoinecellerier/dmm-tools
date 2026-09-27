@@ -246,7 +246,7 @@ impl App {
                     // What the samples came over, latched with the rest of
                     // the provenance; the live link only where a recording
                     // started before a meter answered.
-                    let link = self.export_layout().link.or(self.connection.link);
+                    let link = self.export_layout().link.or(self.connection.link());
                     render_replay(samples(), id, Some(device_model), link)
                 })
                 .ok_or_else(|| {
@@ -329,7 +329,7 @@ impl App {
     pub(super) fn experimental(&self) -> bool {
         self.export_layout()
             .experimental
-            .unwrap_or_else(|| !self.connection.stability.is_verified())
+            .unwrap_or_else(|| !self.connection.stability().is_verified())
     }
 
     /// The meter whose frames a replay file would carry: the one the
@@ -367,6 +367,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::connection::ConnectedMeter;
     use crate::settings::Settings;
     use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
@@ -597,17 +598,12 @@ mod tests {
 
         // The meter answers, on a protocol no report has confirmed.
         let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(DmmMessage::Connected {
-            name: "UT181A".to_string(),
+        tx.send(DmmMessage::Connected(ConnectedMeter {
+            name: Some("UT181A".to_string()),
             model_name: "UNI-T UT181A".to_string(),
-            device_id: Some("ut181a"),
             stability: Stability::Experimental,
-            feedback_url: String::new(),
-            link: None,
-            supported_commands: Vec::new(),
-            meter_keys: dmm_lib::protocol::MeterKeys::NONE,
-            max_aux_values: 0,
-        })
+            ..ConnectedMeter::test_fixture(Some("ut181a"))
+        }))
         .expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();

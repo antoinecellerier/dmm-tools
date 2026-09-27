@@ -4,7 +4,7 @@
 
 use dmm_lib::measurement::{MainLabel, Measurement};
 use dmm_lib::mock::MockMode;
-use dmm_lib::protocol::{MeterKeys, registry};
+use dmm_lib::protocol::registry;
 use dmm_shared::help::{ConnectedAdapters, LinksSearched, SetupSection, connected_adapters};
 use eframe::egui::{self, RichText, Ui};
 use log::{error, info, warn};
@@ -585,16 +585,9 @@ impl App {
         self.connection.rx = None;
         self.connection.cmd_tx = None;
         self.connection.state = ConnectionState::Disconnected;
-        self.connection.device_name = None;
         // Nothing is connected, so nothing is identified: under Auto-detect
         // the next connect asks the cable again.
-        self.connection.detected = None;
-        self.connection.model_name.clear();
-        self.connection.stability = dmm_lib::protocol::Stability::Verified;
-        self.connection.feedback_url.clear();
-        self.connection.link = None;
-        self.connection.supported_commands.clear();
-        self.connection.meter_keys = MeterKeys::NONE;
+        self.connection.meter = None;
         self.connection.choices.clear();
         self.connection.paused = false;
         self.connection.reconnect_attempt = 0;
@@ -634,7 +627,7 @@ impl App {
         // effect at the next connect, and this reading may still be the old
         // meter's. A file names one meter, so another one starts another
         // history.
-        let meter = self.connection.detected.map(|d| d.display_name);
+        let meter = self.connection.detected().map(|d| d.display_name);
         if meter != self.history_layout.device {
             self.recording.clear_history();
         }
@@ -653,15 +646,15 @@ impl App {
     /// from the connection its first reading arrived on — the history's
     /// counterpart of what Record latches.
     fn latch_history_layout(&mut self) {
-        let meter = self.connection.detected;
+        let meter = self.connection.detected();
         self.history_layout.device = meter.map(|d| d.display_name);
         // Only a meter's frames can be replayed; the mock has none.
         self.history_layout.device_id = meter.filter(|d| d.requires_hardware).map(|d| d.id);
         // A reading only arrives on a live connection, so this stability and
         // this link are the meter's rather than the defaults a disconnect
         // leaves behind.
-        self.history_layout.experimental = Some(!self.connection.stability.is_verified());
-        self.history_layout.link = self.connection.link;
+        self.history_layout.experimental = Some(!self.connection.stability().is_verified());
+        self.history_layout.link = self.connection.link();
         self.history_layout.aux_slots = self.device_aux_slots;
         // A scale change clears the history, so the transform in force now is
         // the one every sample in it went through.
@@ -691,62 +684,42 @@ impl App {
 
         for msg in messages {
             match msg {
-                DmmMessage::Connected {
-                    name,
-                    model_name,
-                    device_id,
-                    stability,
-                    feedback_url,
-                    link,
-                    supported_commands: cmds,
-                    meter_keys,
-                    max_aux_values,
-                } => {
+                DmmMessage::Connected(meter) => {
                     self.connection.state = ConnectionState::Connected;
                     self.held.clear();
-                    // Which meter this actually is. Under Auto-detect it is
-                    // the only thing that knows — nothing named one.
-                    self.connection.detected =
-                        device_id.and_then(dmm_lib::protocol::registry::find_device);
-                    self.connection.model_name = model_name;
-                    self.connection.stability = stability;
-                    self.device_aux_slots = max_aux_values;
+                    self.device_aux_slots = meter.max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
                     // in-flight capture picks the slot count back up — it was
                     // 0 before the first Connected of the session.
                     if self.recording.active {
-                        self.recording_layout.aux_slots = max_aux_values;
+                        self.recording_layout.aux_slots = meter.max_aux_values;
                         // The meter Record was pressed ahead of: the first one
                         // to answer during this recording is the one its
                         // samples come from, and the only one the export can
                         // still name once the cable is out.
                         self.recording_layout
                             .experimental
-                            .get_or_insert(!stability.is_verified());
+                            .get_or_insert(!meter.stability.is_verified());
                     }
-                    self.connection.feedback_url = feedback_url;
-                    self.connection.link = link;
-                    self.connection.supported_commands = cmds;
-                    self.connection.meter_keys = meter_keys;
                     // A reconnect may find the dial elsewhere; the thread
                     // re-lists the choices with its first reading.
                     self.connection.choices.clear();
-                    self.connection.device_name = if name.is_empty() {
-                        None
-                    } else {
-                        Some(name.clone())
-                    };
+                    let device_id = meter.device.map(|d| d.id);
+                    let reported = meter.name.clone().unwrap_or_default();
+                    self.connection.meter = Some(meter);
                     // Under Auto-detect the meter that just named itself
                     // becomes the saved device, so the next session opens it
                     // pinned instead of probing the cable again.
-                    self.remember_detected_device(device_id, &name);
+                    self.remember_detected_device(device_id, &reported);
                     self.connection.last_error = None;
                     self.connection.reconnect_attempt = 0;
                     self.connection.reconnect_last_error = None;
-                    info!(
-                        "UI: connected to {} (meter reports {:?})",
-                        self.connection.model_name, self.connection.device_name
-                    );
+                    if let Some(meter) = &self.connection.meter {
+                        info!(
+                            "UI: connected to {} (meter reports {:?})",
+                            meter.model_name, meter.name
+                        );
+                    }
                 }
                 DmmMessage::WaitingForMeter(count) => {
                     self.connection.waiting_timeouts = count;
@@ -1106,7 +1079,7 @@ impl App {
             let built_in_radio = self.active_device().is_some_and(|d| d.bluetooth_only());
             let link = self
                 .connection
-                .link
+                .link()
                 .map_or("link", |link| link.full_name(built_in_radio));
             let instructions = match self.active_device() {
                 Some(entry) => format!(
@@ -1211,6 +1184,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::connection::ConnectedMeter;
     use crate::settings::Settings;
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::MeasuredValue;
@@ -1751,7 +1725,10 @@ mod tests {
     fn a_quiet_meter_names_its_bluetooth_link() {
         for (id, link) in [("ut61eplus", "adapter"), ("ut60bt", "link")] {
             let mut app = app(id, false);
-            app.connection.link = Some(dmm_lib::transport::Link::Bluetooth);
+            app.connection.meter = Some(ConnectedMeter {
+                link: Some(dmm_lib::transport::Link::Bluetooth),
+                ..ConnectedMeter::test_fixture(None)
+            });
             let n = notice_for(&mut app, ConnectionIssue::Other("timed out".to_string()));
             assert_eq!(n.kind, NoticeKind::NoResponse);
             assert!(
@@ -1870,17 +1847,11 @@ mod tests {
         stability: Stability,
         max_aux_values: usize,
     ) -> DmmMessage {
-        DmmMessage::Connected {
-            name: String::new(),
-            model_name: String::new(),
-            device_id: Some(device_id),
+        DmmMessage::Connected(ConnectedMeter {
             stability,
-            feedback_url: String::new(),
-            link: None,
-            supported_commands: Vec::new(),
-            meter_keys: MeterKeys::NONE,
             max_aux_values,
-        }
+            ..ConnectedMeter::test_fixture(Some(device_id))
+        })
     }
 
     /// Deliver one reading per entry of `modes`, each stamped as it is sent.

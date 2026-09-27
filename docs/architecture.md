@@ -249,7 +249,7 @@ methods to it, so no panel owns state of its own.
 |--------|---------------|
 | `app/mod.rs` | The `App` struct, `ConnectionState`, construction, and the per-frame `eframe::App::ui` that lays the panels out |
 | `app/appearance.rs` | Font chain and text styles, theme and colour overrides, zoom levels, always-on-top and decoration commands |
-| `app/connection.rs` | The background acquisition thread: open, poll, reconnect, the per-setting choice lists (re-listed only when the reading they are keyed on moves), and the `DmmMessage`/`ThreadControl` channel types |
+| `app/connection.rs` | The background acquisition thread: open, poll, reconnect, the per-setting choice lists (re-listed only when the reading they are keyed on moves), the `DmmMessage`/`ThreadControl` channel types, and `ConnectedMeter` — what a meter reports on connecting, kept until Disconnect |
 | `app/messages.rs` | The UI side of that channel: connect/disconnect, the message drain, and the connection-help text |
 | `app/plot_input.rs` | Reducing one measurement to what the graph plots — series, unit, and the other series kept beside it, each with its unit |
 | `app/held_reading.rs` | Keeping the reading on screen whole when a meter sends its parts in frames of their own: the last main reading and sub-values stand in for the ones a frame lacks, for the display only |
