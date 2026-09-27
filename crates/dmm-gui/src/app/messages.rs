@@ -13,8 +13,7 @@ use std::sync::{Arc, mpsc};
 use std::time::SystemTime;
 
 use super::connection::{
-    self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, ThreadControl,
-    handle_thread_panic, run_device_thread,
+    self, DmmMessage, RECONNECT_INTERVAL, RemoteCommand, ThreadContext, spawn_acquisition,
 };
 use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
 use super::toast::Toast;
@@ -418,13 +417,22 @@ impl App {
         self.connection.ctrl_tx = Some(ctrl_tx);
         self.connection.stop_flag = Some(Arc::clone(&stop_flag));
         self.connection.cmd_tx = Some(cmd_tx);
-        let ctx_clone = ctx.clone();
-        let query_name = self.settings.query_device_name;
         let sample_interval_ms = self.settings.sample_interval_ms;
         // `None` = Auto-detect: nothing names the meter, so the opener works
         // it out from the bytes it sends.
         let device_entry = self.selected_device();
         self.graph.set_sample_interval_ms(sample_interval_ms);
+        let mut thread_ctx = ThreadContext {
+            msg_tx,
+            ctrl_rx,
+            cmd_rx,
+            ctx: ctx.clone(),
+            selected: device_entry,
+            query_name: self.settings.query_device_name,
+            sample_interval_ms,
+            reconnect_interval: RECONNECT_INTERVAL,
+            stop_flag,
+        };
 
         let source = self
             .replay
@@ -434,41 +442,21 @@ impl App {
             self.pin_replay_origin(recorded);
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
-            let selected = Some(replay.device);
+            // No interval floor: the recording's own spacing is the cadence,
+            // and the protocol sleeps until each frame is due rather than
+            // returning at once.
+            thread_ctx.selected = Some(replay.device);
             let clock = self.clock.clone();
-            std::thread::spawn(move || {
-                let panic_tx = msg_tx.clone();
-                let panic_ctx = ctx_clone.clone();
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_device_thread(
-                        // A replay cannot fail once it is open, so the retry
-                        // loop never re-runs this; a manual Disconnect then
-                        // Connect does. The origin the first Connect pinned
-                        // stands for the rest of the session, so re-opening
-                        // picks the recording up where the session has got to
-                        // instead of starting it again. Nothing to detect —
-                        // the file names it.
-                        move |_| replay.open(clock.clone()).map(|dmm| (dmm, None)),
-                        ThreadContext {
-                            msg_tx,
-                            ctrl_rx,
-                            cmd_rx,
-                            ctx: ctx_clone,
-                            selected,
-                            query_name,
-                            // No floor: the recording's own spacing is the
-                            // cadence, and the protocol sleeps until each
-                            // frame is due rather than returning at once.
-                            sample_interval_ms,
-                            reconnect_interval: RECONNECT_INTERVAL,
-                            stop_flag,
-                        },
-                    );
-                }));
-                if let Err(panic) = result {
-                    handle_thread_panic(panic, &panic_tx, &panic_ctx);
-                }
-            });
+            spawn_acquisition(
+                // A replay cannot fail once it is open, so the retry loop
+                // never re-runs this; a manual Disconnect then Connect does.
+                // The origin the first Connect pinned stands for the rest of
+                // the session, so re-opening picks the recording up where the
+                // session has got to instead of starting it again. Nothing to
+                // detect — the file names it.
+                move |_| replay.open(clock.clone()).map(|dmm| (dmm, None)),
+                thread_ctx,
+            );
         } else if let Some(device) = device_entry.filter(|d| !d.requires_hardware) {
             let mock_mode: Option<MockMode> = if self.settings.mock_mode.is_empty() {
                 None
@@ -491,82 +479,44 @@ impl App {
             // Mock returns instantly — enforce a floor to avoid busy-looping.
             // This is session time now, which is what lets a preseed burst
             // hand out tick-spaced history without waiting for it.
-            let mock_interval = sample_interval_ms.max(100);
+            thread_ctx.sample_interval_ms = sample_interval_ms.max(100);
             let clock = self.clock.clone();
-            std::thread::spawn(move || {
-                let panic_tx = msg_tx.clone();
-                let panic_ctx = ctx_clone.clone();
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_device_thread(
-                        // Cloned inside: this closure is re-run on every
-                        // reconnect, and the session clock outlives each
-                        // `Dmm` it opens. Nothing to detect — the mock is
-                        // what it says it is.
-                        move |_| {
-                            dmm_lib::mock::open_simulated(device, mock_mode, clock.clone())
-                                .map(|dmm| (dmm, None))
-                        },
-                        ThreadContext {
-                            msg_tx,
-                            ctrl_rx,
-                            cmd_rx,
-                            ctx: ctx_clone,
-                            selected: device_entry,
-                            query_name,
-                            sample_interval_ms: mock_interval,
-                            reconnect_interval: RECONNECT_INTERVAL,
-                            stop_flag,
-                        },
-                    );
-                }));
-                if let Err(panic) = result {
-                    handle_thread_panic(panic, &panic_tx, &panic_ctx);
-                }
-            });
+            spawn_acquisition(
+                // Cloned inside: this closure is re-run on every reconnect,
+                // and the session clock outlives each `Dmm` it opens. Nothing
+                // to detect — the mock is what it says it is.
+                move |_| {
+                    dmm_lib::mock::open_simulated(device, mock_mode, clock.clone())
+                        .map(|dmm| (dmm, None))
+                },
+                thread_ctx,
+            );
         } else {
             let device_id = device_entry.map(|d| d.id);
             let adapter = self.settings.overrides.adapter.clone();
             let bluetooth = self.settings.shared.bluetooth;
-            std::thread::spawn(move || {
-                let panic_tx = msg_tx.clone();
-                let panic_ctx = ctx_clone.clone();
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run_device_thread(
-                        // Re-run on every reconnect, detection included: a
-                        // meter that comes back is identified again rather
-                        // than assumed to be the one that left. `reopen_at`
-                        // is the Bluetooth adapter a lost link was on, opened
-                        // by address like `--adapter`, which wins if given.
-                        move |reopen_at| {
-                            let opts = dmm_lib::OpenOptions {
-                                adapter: adapter.as_deref().or(reopen_at),
-                                bluetooth,
-                            };
-                            match device_id {
-                                Some(id) => {
-                                    dmm_lib::open_device_by_id_auto(id, opts).map(|dmm| (dmm, None))
-                                }
-                                None => dmm_lib::open_auto(opts)
-                                    .map(|(dmm, detected)| (dmm, Some(detected))),
-                            }
-                        },
-                        ThreadContext {
-                            msg_tx,
-                            ctrl_rx,
-                            cmd_rx,
-                            ctx: ctx_clone,
-                            selected: device_entry,
-                            query_name,
-                            sample_interval_ms,
-                            reconnect_interval: RECONNECT_INTERVAL,
-                            stop_flag,
-                        },
-                    );
-                }));
-                if let Err(panic) = result {
-                    handle_thread_panic(panic, &panic_tx, &panic_ctx);
-                }
-            });
+            spawn_acquisition(
+                // Re-run on every reconnect, detection included: a meter that
+                // comes back is identified again rather than assumed to be the
+                // one that left. `reopen_at` is the Bluetooth adapter a lost
+                // link was on, opened by address like `--adapter`, which wins
+                // if given.
+                move |reopen_at| {
+                    let opts = dmm_lib::OpenOptions {
+                        adapter: adapter.as_deref().or(reopen_at),
+                        bluetooth,
+                    };
+                    match device_id {
+                        Some(id) => {
+                            dmm_lib::open_device_by_id_auto(id, opts).map(|dmm| (dmm, None))
+                        }
+                        None => {
+                            dmm_lib::open_auto(opts).map(|(dmm, detected)| (dmm, Some(detected)))
+                        }
+                    }
+                },
+                thread_ctx,
+            );
         }
     }
 
@@ -574,14 +524,13 @@ impl App {
         // Data stops here. The graph keeps its history across a reconnect, so
         // the resulting hole needs marking as a genuine gap.
         self.graph.push_data_loss();
-        // Raise the flag before the message: the thread may be mid-sleep, and
-        // the flag is what cuts that short.
+        // Raise the flag, then hang up: the thread may be mid-sleep, and the
+        // flag is what cuts that short; dropping the control sender ends any
+        // wait on the channel and the loop itself.
         if let Some(flag) = self.connection.stop_flag.take() {
             flag.store(true, Ordering::Relaxed);
         }
-        if let Some(tx) = self.connection.ctrl_tx.take() {
-            let _ = tx.send(ThreadControl::Stop);
-        }
+        self.connection.ctrl_tx = None;
         self.connection.rx = None;
         self.connection.cmd_tx = None;
         self.connection.state = ConnectionState::Disconnected;
@@ -732,6 +681,19 @@ impl App {
                     if count >= dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
                         self.graph.push_data_loss();
                     }
+                    // Crossing the threshold is a failure, recorded once. A
+                    // gap in a recording plays back as timeouts and reaches
+                    // it too. It is not a quiet meter: there is no device
+                    // selection to check, no USB mode to switch on, and the
+                    // file carries on by itself once the gap is over.
+                    if count == dmm_lib::stream::NO_RESPONSE_TIMEOUTS && self.replay.is_none() {
+                        error!("UI: error: {}", connection::NO_RESPONSE);
+                        self.connection.last_error =
+                            Some(ConnectionIssue::Other(connection::NO_RESPONSE.to_string()));
+                        if self.connection.state == ConnectionState::Disconnected {
+                            clear_channel = true;
+                        }
+                    }
                 }
                 DmmMessage::Reconnecting {
                     attempt,
@@ -874,20 +836,6 @@ impl App {
                     self.connection.last_error = Some(ConnectionIssue::Other(msg));
                     if self.connection.state == ConnectionState::Disconnected {
                         clear_channel = true;
-                    }
-                }
-                DmmMessage::NoResponse => {
-                    // A gap in a recording plays back as timeouts and reaches
-                    // this threshold too. It is not a quiet meter: there is no
-                    // device selection to check, no USB mode to switch on, and
-                    // the file carries on by itself once the gap is over.
-                    if self.replay.is_none() {
-                        error!("UI: error: {}", connection::NO_RESPONSE);
-                        self.connection.last_error =
-                            Some(ConnectionIssue::Other(connection::NO_RESPONSE.to_string()));
-                        if self.connection.state == ConnectionState::Disconnected {
-                            clear_channel = true;
-                        }
                     }
                 }
                 DmmMessage::CommandFailed(msg) => {
@@ -1426,8 +1374,10 @@ mod tests {
     fn a_replay_gap_is_not_a_quiet_meter() {
         let mut app = app("ut61eplus", false);
         app.replay = Some(crate::ReplaySource::fixture());
-        app.connection.waiting_timeouts = dmm_lib::stream::NO_RESPONSE_TIMEOUTS;
-        deliver(&mut app, DmmMessage::NoResponse);
+        deliver(
+            &mut app,
+            DmmMessage::WaitingForMeter(dmm_lib::stream::NO_RESPONSE_TIMEOUTS),
+        );
 
         assert!(app.connection.last_error.is_none(), "no failure on record");
         let n = app.connection_notice().expect("the gap is still reported");
@@ -1440,8 +1390,10 @@ mod tests {
     #[test]
     fn a_quiet_meter_still_gets_the_no_response_help() {
         let mut app = app("ut61eplus", false);
-        app.connection.waiting_timeouts = dmm_lib::stream::NO_RESPONSE_TIMEOUTS;
-        deliver(&mut app, DmmMessage::NoResponse);
+        deliver(
+            &mut app,
+            DmmMessage::WaitingForMeter(dmm_lib::stream::NO_RESPONSE_TIMEOUTS),
+        );
 
         let n = app.connection_notice().expect("a quiet meter is a failure");
         assert_eq!(n.kind, NoticeKind::NoResponse);

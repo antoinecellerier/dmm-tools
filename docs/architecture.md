@@ -228,9 +228,9 @@ The capture workflow's design — detectors, trust tiers, report schema — is i
 
 `eframe`/`egui` application. Runs a background `std::thread` for device I/O,
 communicates with the UI via three `mpsc` channels: measurements and
-connection events out of the thread, a `ThreadControl` channel in (stop and
-pause — pause halts polling in the thread, it is not a UI-side freeze), and a
-device-command channel in. Main graph via `egui_plot`,
+connection events out of the thread, a `ThreadControl` channel in (pause —
+pause halts polling in the thread, it is not a UI-side freeze; the UI stops
+the thread by dropping its sender), and a device-command channel in. Main graph via `egui_plot`,
 minimap via custom painter. Uses `clap` for CLI argument parsing (`--device`,
 `--theme`, `--mock-mode`) — overrides are session-only and don't persist to
 `settings.json`. Features: responsive layout with resizable panels,

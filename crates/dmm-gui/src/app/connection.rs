@@ -3,7 +3,7 @@ use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{Choice, MeterKeys, Setting, Stability};
-use dmm_lib::stream::{MeasurementStream, NO_RESPONSE_TIMEOUTS, StreamEvent};
+use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transport::Link;
 use dmm_lib::transport::Transport;
 use eframe::egui;
@@ -14,9 +14,11 @@ use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 /// Control messages from the UI to the background thread.
+///
+/// There is no stop message: the UI stops the thread by dropping its sender,
+/// which every wait on this channel sees at once, and by raising the stop
+/// flag, which the pacing sleep sees.
 pub(crate) enum ThreadControl {
-    /// Exit the loop and release the device.
-    Stop,
     /// Halt (`true`) or resume (`false`) acquisition. Halting stops the meter
     /// being polled at all — it is not a display-side freeze.
     SetPaused(bool),
@@ -67,11 +69,11 @@ pub(super) const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Apply pending control messages, blocking while paused.
 ///
-/// Returns `false` when the thread should exit: an explicit `Stop`, or a
-/// hung-up channel. The hang-up case matters — the UI dropping its sender
-/// without stopping us (a panic on the UI thread, or a `connect()` that
-/// replaced the channel) used to be indistinguishable from "no messages", so
-/// the thread kept the USB handle open and polled the meter forever.
+/// Returns `false` when the thread should exit: the channel hung up. That is
+/// how the UI stops the thread — Disconnect, a `connect()` that replaced the
+/// channel, or a panic on the UI thread all drop the sender — and it used to
+/// be indistinguishable from "no messages", so the thread kept the USB handle
+/// open and polled the meter forever.
 fn handle_control(ctrl_rx: &mpsc::Receiver<ThreadControl>, paused: &mut bool) -> bool {
     loop {
         let msg = if *paused {
@@ -88,7 +90,6 @@ fn handle_control(ctrl_rx: &mpsc::Receiver<ThreadControl>, paused: &mut bool) ->
             }
         };
         match msg {
-            ThreadControl::Stop => return false,
             ThreadControl::SetPaused(p) => *paused = p,
         }
     }
@@ -166,10 +167,6 @@ pub(crate) enum DmmMessage {
     /// A failure the GUI itself diagnosed, such as a panicking thread. No
     /// library error stands behind these.
     ErrorText(String),
-    /// Nothing has been read for [`NO_RESPONSE_TIMEOUTS`] polls running. Its
-    /// own message rather than an [`DmmMessage::ErrorText`]: a replay's gaps
-    /// come through here too, and they are not a meter to go looking for.
-    NoResponse,
     /// A command the user sent was refused or could not be sent. Shown as a
     /// toast, not as a connection issue: the link is fine and the meter is
     /// still streaming, so neither the help text nor a reconnect applies.
@@ -178,7 +175,9 @@ pub(crate) enum DmmMessage {
     /// Sent when the reading they depend on changes and after a successful
     /// switch; empty for families that cannot drive the setting.
     Choices(Setting, Vec<Choice>),
-    /// Waiting for meter response (consecutive timeout count).
+    /// Waiting for meter response (consecutive timeout count). The count
+    /// reaching [`dmm_lib::stream::NO_RESPONSE_TIMEOUTS`] is what the UI
+    /// calls no response.
     WaitingForMeter(u32),
 }
 
@@ -425,10 +424,6 @@ where
                 warn!("background thread: measurement timeout ({consecutive})");
                 let _ = msg_tx.send(DmmMessage::WaitingForMeter(consecutive));
                 ctx.request_repaint();
-                if consecutive == NO_RESPONSE_TIMEOUTS {
-                    let _ = msg_tx.send(DmmMessage::NoResponse);
-                    ctx.request_repaint();
-                }
             }
             Err(e) if e.kind() == ErrorKind::Protocol => {
                 // A frame we couldn't parse is not a dead link. Either line
@@ -481,13 +476,12 @@ where
                     });
                     ctx.request_repaint();
 
-                    // Sleep, but wake early on a control message. A pause that
-                    // arrives mid-reconnect is recorded and takes effect once
-                    // the link is back: there is nothing to halt until then.
+                    // Sleep, but wake early on a control message or the UI
+                    // hanging up. A pause that arrives mid-reconnect is
+                    // recorded and takes effect once the link is back: there
+                    // is nothing to halt until then.
                     match ctrl_rx.recv_timeout(reconnect_interval) {
-                        Ok(ThreadControl::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                            return;
-                        }
+                        Err(mpsc::RecvTimeoutError::Disconnected) => return,
                         Ok(ThreadControl::SetPaused(p)) => paused = p,
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
@@ -548,7 +542,28 @@ fn bluetooth_selector<T: Transport>(dmm: &dmm_lib::Dmm<T>) -> Option<String> {
     dmm.transport().bluetooth_selector().map(str::to_owned)
 }
 
-pub(super) fn handle_thread_panic(
+/// Run [`run_device_thread`] on a thread of its own, turning a panic in it
+/// into an error message for the UI rather than a silently dead channel.
+pub(super) fn spawn_acquisition<T, F>(open_fn: F, thread_ctx: ThreadContext)
+where
+    T: Transport + Send + 'static,
+    F: Fn(Option<&str>) -> dmm_lib::error::Result<(dmm_lib::Dmm<T>, Option<Detected>)>
+        + Send
+        + 'static,
+{
+    std::thread::spawn(move || {
+        let panic_tx = thread_ctx.msg_tx.clone();
+        let panic_ctx = thread_ctx.ctx.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_device_thread(open_fn, thread_ctx);
+        }));
+        if let Err(panic) = result {
+            handle_thread_panic(panic, &panic_tx, &panic_ctx);
+        }
+    });
+}
+
+fn handle_thread_panic(
     panic: Box<dyn std::any::Any + Send>,
     tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
@@ -579,17 +594,9 @@ mod tests {
         assert!(!paused);
     }
 
-    #[test]
-    fn stop_ends_the_loop() {
-        let (tx, rx) = mpsc::channel();
-        tx.send(ThreadControl::Stop).unwrap();
-        let mut paused = false;
-        assert!(!handle_control(&rx, &mut paused));
-    }
-
-    /// The UI dropping its sender without sending Stop (a panic on the UI
-    /// thread, or a reconnect that replaced the channel) has to end the
-    /// thread too — otherwise it keeps the USB handle and polls forever.
+    /// The UI dropping its sender (Disconnect, a panic on the UI thread, or
+    /// a reconnect that replaced the channel) has to end the thread —
+    /// otherwise it keeps the USB handle and polls forever.
     #[test]
     fn hung_up_channel_ends_the_loop() {
         let (tx, rx) = mpsc::channel::<ThreadControl>();
@@ -612,15 +619,7 @@ mod tests {
     }
 
     /// While paused the thread waits rather than spinning, but it still has
-    /// to notice a Stop.
-    #[test]
-    fn stop_is_honoured_while_paused() {
-        let (tx, rx) = mpsc::channel();
-        tx.send(ThreadControl::Stop).unwrap();
-        let mut paused = true;
-        assert!(!handle_control(&rx, &mut paused));
-    }
-
+    /// to notice the UI hanging up.
     #[test]
     fn hung_up_channel_ends_the_loop_while_paused() {
         let (tx, rx) = mpsc::channel::<ThreadControl>();
@@ -897,7 +896,7 @@ mod tests {
         let open_at_reopen = seen_rx
             .recv_timeout(Duration::from_secs(10))
             .expect("the thread reconnects");
-        ctrl_tx.send(ThreadControl::Stop).unwrap();
+        drop(ctrl_tx);
         thread.join().unwrap();
         assert_eq!(open_at_reopen, 0, "the old link was still open");
     }
@@ -930,7 +929,7 @@ mod tests {
         let first = msg_rx
             .recv_timeout(Duration::from_secs(10))
             .expect("the replay connects");
-        ctrl_tx.send(ThreadControl::Stop).unwrap();
+        drop(ctrl_tx);
         thread.join().unwrap();
         assert!(
             matches!(
@@ -978,7 +977,7 @@ mod tests {
                     .expect("the thread keeps reconnecting")
             })
             .collect();
-        ctrl_tx.send(ThreadControl::Stop).unwrap();
+        drop(ctrl_tx);
         thread.join().unwrap();
         assert_eq!(
             reopens,
