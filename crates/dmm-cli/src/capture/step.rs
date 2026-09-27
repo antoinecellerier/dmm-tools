@@ -908,16 +908,16 @@ mod tests {
     /// one whose ranges and flags nobody walks. The UT61+ list lost the AC V,
     /// DC mV and AC mV ladders that way (issue #19) and has been reordered.
     ///
-    /// The four below still are, for two different reasons:
-    /// - `ut181a`, `vc880`, `vc650bt`, `vc890` declare `choices`, so they do
+    /// The ones below still are, for two different reasons:
+    /// - `vc880`, `vc650bt`, `vc890` declare `choices`, so they do
     ///   lose coverage. Each fix needs that family's own dial order and a
     ///   hardware run — tracked in `docs/verification-backlog.md`.
     /// - `ut8802`, `ut8803`, `ut803`, `ut804`, `ut71ab`, `ut71cde`, `vc920`,
     ///   `ut171` declare no `choices`, so nothing is swept whatever the order
     ///   and they cost nothing.
     const SPLIT_GATE: &[&str] = &[
-        "ut8802", "ut8803", "ut803", "ut804", "ut71ab", "ut71cde", "vc920", "ut171", "ut181a",
-        "vc880", "vc650bt", "vc890",
+        "ut8802", "ut8803", "ut803", "ut804", "ut71ab", "ut71cde", "vc920", "ut171", "vc880",
+        "vc650bt", "vc890",
     ];
 
     #[test]

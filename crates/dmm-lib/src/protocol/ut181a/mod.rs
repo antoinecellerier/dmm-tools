@@ -325,11 +325,26 @@ impl Protocol for Ut181aProtocol {
             ),
         );
 
-        // Core UT181A modes
+        // Core UT181A modes. The gate closes before any other step, so every
+        // step after it gets swept.
         vec![
             vdc,
             dcv_short,
             dcv_negative,
+            ohm,
+            ohm_body,
+            ohm_short,
+            // A gate step is never swept — the step after it assumes the state
+            // it left — so the Ω and V DC ladders each get a plain step.
+            CaptureStep::basic(
+                "ohm_ranges",
+                "Set meter to Resistance. Leads open or shorted, either will do.",
+            )
+            .samples(3)
+            .expect(Expect::mode("\u{03A9}")),
+            CaptureStep::basic("vdc_ranges", "Set meter to V DC. Leave leads open.")
+                .samples(3)
+                .expect(Expect::mode("V DC")),
             // Each dial family reaches several mode words (spec §6.1); the
             // steps below name them as the meter reports them, one per word,
             // because SET_MODE only ever moves inside the family the dial is
@@ -352,17 +367,10 @@ impl Protocol for Ut181aProtocol {
             CaptureStep::basic("mvac_hz", "Set meter to mV AC Hz").expect(Expect::mode("mV AC Hz")),
             CaptureStep::basic("mvac_peak", "Set meter to mV AC Peak")
                 .expect(Expect::mode("mV AC Peak")),
-            // The vendor UI offers this one but its own decoder has no label
-            // for it, so whether the meter has it is open (spec §6.1
-            // "Caveats").
-            CaptureStep::basic(
-                "mvac_acdc",
-                "Set meter to mV AC AC+DC (if the meter has it)",
-            )
-            .expect(Expect::mode("mV AC AC+DC")),
-            ohm,
-            ohm_body,
-            ohm_short,
+            // The vendor UI offers this one though its own decoder has no
+            // label for it (spec §6.1 "Caveats"); a real meter reports it.
+            CaptureStep::basic("mvac_acdc", "Set meter to mV AC AC+DC")
+                .expect(Expect::mode("mV AC AC+DC")),
             CaptureStep::basic("cont", "Set meter to Continuity")
                 .expect(Expect::mode("Continuity")),
             // Nibble 0 = 2 is a second function on these two families, not
@@ -452,7 +460,29 @@ impl Protocol for Ut181aProtocol {
             )
             .needs(&[Need::Thermocouple])
             .expect(Expect::mode("°F T2-T1")),
-            // Remote command steps
+            // Format and command steps, all on V DC: the REL key by hand, then
+            // the tool's own commands. `manual_range` is a command step so no
+            // sweep puts the meter back on auto before `auto` checks the way
+            // back.
+            CaptureStep::basic(
+                "rel",
+                "V DC mode: long-press REL to enable relative. \
+                              The report should list Reference and Absolute \
+                              sub-values under each sample.",
+            )
+            .expect(Expect::new().flags(&[(Flag::Rel, true)])),
+            CaptureStep::basic("rel_off", "Long-press REL again to disable relative mode.")
+                .samples(3)
+                .expect(Expect::new().flags(&[(Flag::Rel, false)])),
+            CaptureStep::with_command(
+                "manual_range",
+                "V DC mode: we will switch to a manual range.",
+                "range",
+                3,
+            )
+            .expect(Expect::new().range(RangeExpect::Manual)),
+            CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3)
+                .expect(Expect::new().range(RangeExpect::Auto)),
             CaptureStep::with_command("hold", "V DC mode: we will send HOLD.", "hold", 3)
                 .expect(Expect::new().flags(&[(Flag::Hold, true)])),
             CaptureStep::with_command(
@@ -466,19 +496,6 @@ impl Protocol for Ut181aProtocol {
                 .expect(Expect::new().flags(&[(Flag::Min, true), (Flag::Max, true)])),
             CaptureStep::with_command("minmax_off", "We will disable MIN/MAX.", "exit_minmax", 3)
                 .expect(Expect::new().flags(&[(Flag::Min, false), (Flag::Max, false)])),
-            CaptureStep::with_command("auto", "We will set auto-range.", "auto", 3)
-                .expect(Expect::new().range(RangeExpect::Auto)),
-            // Format variant verification steps
-            CaptureStep::basic(
-                "rel",
-                "V DC mode: long-press REL to enable relative. \
-                              The report should list Reference and Absolute \
-                              sub-values under each sample.",
-            )
-            .expect(Expect::new().flags(&[(Flag::Rel, true)])),
-            CaptureStep::basic("rel_off", "Long-press REL again to disable relative mode.")
-                .samples(3)
-                .expect(Expect::new().flags(&[(Flag::Rel, false)])),
             CaptureStep::basic(
                 "peak",
                 "V AC mode: enable Peak mode (FUNC button). \
@@ -489,13 +506,6 @@ impl Protocol for Ut181aProtocol {
             CaptureStep::basic("peak_off", "Disable Peak mode.")
                 .samples(3)
                 .expect(Expect::new().flags(&[(Flag::PeakMax, false), (Flag::PeakMin, false)])),
-            CaptureStep::basic(
-                "manual_range",
-                "V DC mode: press RANGE to switch to manual range. \
-                              Verify range_label shows the selected range (e.g. 60V).",
-            )
-            .samples(3)
-            .expect(Expect::new().range(RangeExpect::Manual)),
         ]
     }
 }

@@ -556,11 +556,11 @@ lost the AC V, DC mV and AC mV ladders in the 2026-09-10 UT61B+ run (issue
 #19) before being reordered; `ohm_ranges` and `dcv_ranges` were added so the
 two ladders the gate steps sit on get swept as well.
 
+The UT181A's list was reordered on 2026-09-27, after @diego351's full run
+(issue #5) showed its dial order; its gate now closes before any other step.
+
 Still split, each needing that family's own dial order and a hardware run:
 
-- **UT181A** — `vdc_acdc`, `vdc_peak`, `vac`, `vac_hz`, `vac_lpf`, `vac_dbv`,
-  `vac_dbm`, `mvdc`, `mvdc_peak`, `mvac`, `mvac_hz`, `mvac_peak`, `mvac_acdc`.
-  Issue #5.
 - **VC-880 / VC650BT / VC-890** — `acv`, `acdcv`, `dcmv`, `dcua`, `acua`,
   `dcma`, `acma`, `dca`, `aca`.
 
