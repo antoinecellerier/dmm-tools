@@ -486,7 +486,7 @@ pub struct Choice {
 
 /// The [`Setting::Range`] choice id that means autorange, listed first and
 /// reached by a command of its own rather than by pressing RANGE.
-pub(crate) const AUTO_RANGE_ID: u16 = 0;
+pub const AUTO_RANGE_ID: u16 = 0;
 
 /// Label of the autorange choice, in the vocabulary of
 /// `Measurement::range_label`.

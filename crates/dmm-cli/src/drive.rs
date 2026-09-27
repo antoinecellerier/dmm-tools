@@ -32,6 +32,7 @@ const SWEPT: [Setting; 5] = [
 ];
 
 /// The choice id every swept setting returns to: auto range, or the flag off.
+/// Not the library's `AUTO_RANGE_ID`, which names the range case only.
 const RESET_ID: u16 = 0;
 
 /// How many refused commands end the sweeps for the rest of the run. A meter

@@ -11,7 +11,7 @@ use clap_complete::Shell;
 use console::style;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
-use dmm_lib::protocol::{Choice, Setting};
+use dmm_lib::protocol::{AUTO_RANGE_ID, Choice, Setting};
 use dmm_lib::stream::{MeasurementStream, StreamEvent};
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::help::{ConnectedAdapters, LinksSearched};
@@ -1755,11 +1755,6 @@ const SWITCH_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Gap between polls while waiting for that frame.
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
-
-/// The [`Setting::Range`] choice id the library gives autorange. The CLI needs
-/// it to know which row carries the live-range note and which sentence a
-/// switch to it gets.
-const AUTO_RANGE_ID: u16 = 0;
 
 /// Shown in place of the live value when the meter is on something the list
 /// does not name — a manual range outside the family's ladder, say.
