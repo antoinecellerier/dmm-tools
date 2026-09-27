@@ -1722,9 +1722,16 @@ mod tests {
         let ConnectionIssue::NotIdentified { help } = issue else {
             panic!("expected NotIdentified, got {issue:?}");
         };
-        assert!(help.contains("BM869s"), "got {help}");
+        for model in ["BM869s", "BM829s", "BM525s"] {
+            assert!(help.contains(model), "{model}: got {help}");
+        }
         assert!(help.contains("USB cable"), "got {help}");
-        assert!(help.contains("optical PC-Comm port"), "got {help}");
+        // The three series share their steps, printed once.
+        assert_eq!(
+            help.matches("optical PC-Comm port").count(),
+            1,
+            "got {help}"
+        );
         assert!(!help.contains("UT61E+"), "got {help}");
     }
 

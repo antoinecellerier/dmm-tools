@@ -985,7 +985,8 @@ mod tests {
         ];
         let meter = ScriptedMeter::answering(&REQUEST, reply);
         assert_eq!(detect_device(&meter, "BU-86X").unwrap().device.id, "bm86x");
-        // Nothing answers: the request went out, and nothing else did.
+        // Nothing answers: each series' request went out, in registry
+        // order, and nothing else did.
         let silent = MockTransport::new(Vec::new());
         assert!(matches!(
             detect_device(&silent, "BU-86X"),
@@ -994,7 +995,42 @@ mod tests {
                 built_in_radio: false
             })
         ));
-        assert_eq!(silent.written.borrow().as_slice(), [REQUEST.to_vec()]);
+        assert_eq!(
+            silent.written.borrow().as_slice(),
+            [
+                REQUEST.to_vec(),
+                vec![0x00, 0x82, 0x66],
+                vec![0x00, 0x52, 0x66]
+            ]
+        );
+    }
+
+    /// The BM820 sheet's example (bm86x spec §9.2, report II's ID at byte
+    /// 10), its model bytes `code`.
+    fn bm820_reply(code: u8) -> Vec<u8> {
+        vec![
+            0x00, 0x10, 0x00, 0xE9, 0xEF, 0xBF, 0xA0, 0x00, 0x6D, 0xBF, 0xA0, 0xCB, 0x00, 0x01,
+            0x20, 0x00, code, code, code, code, 0x10, 0x00, 0x00, 0x00,
+        ]
+    }
+
+    /// A BM52x answers its own sheet's request (bm86x spec §3.1), after the
+    /// other two series' have gone unanswered; a BM82x answers the second.
+    #[test]
+    fn a_bm82x_or_bm52x_answers_its_own_request() {
+        let bm52x = ScriptedMeter::answering(&[0x00, 0x52, 0x66], bm820_reply(0x52));
+        assert_eq!(detect_device(&bm52x, "BU-86X").unwrap().device.id, "bm52x");
+        let bm82x = ScriptedMeter::answering(&[0x00, 0x82, 0x66], bm820_reply(0x82));
+        assert_eq!(detect_device(&bm82x, "BU-86X").unwrap().device.id, "bm82x");
+    }
+
+    /// Brymen's programs expect a BM52x to answer the BM82x's request with
+    /// its own model bytes (bm86x spec §3.1, §12.4): the model bytes decide,
+    /// whichever request drew them.
+    #[test]
+    fn model_bytes_decide_whichever_request_drew_them() {
+        let meter = ScriptedMeter::answering(&[0x00, 0x82, 0x66], bm820_reply(0x52));
+        assert_eq!(detect_device(&meter, "BU-86X").unwrap().device.id, "bm52x");
     }
 
     /// The CH9325 window sends nothing at all, and the UT80x family is the
@@ -1160,9 +1196,16 @@ mod tests {
         }
         // The BU-86X carries Brymen's meters that speak its protocol, and
         // they are on no other link.
-        assert_eq!(families("BU-86X"), vec![DeviceFamily::Bm86x]);
+        let brymen = [
+            DeviceFamily::Bm86x,
+            DeviceFamily::Bm82x,
+            DeviceFamily::Bm52x,
+        ];
+        assert_eq!(families("BU-86X"), brymen);
         for bridge in ["CP2110", "CH9329", "CH9325", crate::BLUETOOTH] {
-            assert!(!families(bridge).contains(&DeviceFamily::Bm86x), "{bridge}");
+            for family in brymen {
+                assert!(!families(bridge).contains(&family), "{bridge}");
+            }
         }
         assert!(fingerprints_on("no such bridge", &[]).is_empty());
     }

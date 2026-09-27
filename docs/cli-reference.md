@@ -78,6 +78,8 @@ A detected run prints one dim stderr line naming the meter and the `--device <id
 | `121gw` | `eevblog121gw`, `eevblog-121gw` | EEVblog 121GW (experimental) |
 | `bm78xbt` | `bm788bt`, `bm787bt`, `brymen-bm788bt`, `brymen-bm787bt` | Brymen BM788BT/BM787BT (experimental) |
 | `bm86x` | `bm869s`, `bm867s`, `brymen-bm869s`, `brymen-bm867s` | Brymen BM869s/BM867s (experimental) |
+| `bm82x` | `bm829s`, `bm827s`, `bm822s`, `bm821s`, `brymen-bm829s`, `brymen-bm827s`, `brymen-bm822s`, `brymen-bm821s` | Brymen BM829s/BM827s/BM822s/BM821s (experimental) |
+| `bm52x` | `bm525s`, `bm521s`, `brymen-bm525s`, `brymen-bm521s` | Brymen BM525s/BM521s (experimental) |
 | `mock` |  | Mock (simulated, no hardware required) |
 | `mock-zt5b` |  | Mock ZT-5B / V05B (simulated, no hardware required) |
 <!-- devices:end -->
@@ -512,10 +514,9 @@ what a key did.
 | `light` | Long MODE: toggle backlight |
 | `lpf` | Long REL: 1 kHz low-pass filter; AC modes only |
 
-#### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960 / BM788BT / BM787BT / BM869s / BM867s
+#### UT8802 / UT8803 / UT803 / UT804 / UT71 / VC920 / VC940 / VC960 / Brymen
 
-No remote commands — the meters stream continuously once their output is on,
-and the BM869s and BM867s answer each reading request on their cable
+No remote commands: these meters only send readings
 ([supported devices](supported-devices.md)).
 
 **Example:**

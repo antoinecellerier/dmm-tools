@@ -1573,11 +1573,11 @@ mod tests {
         let on_bridge: Vec<&str> = devices_on_bridge("BU-86X").iter().map(|d| d.id).collect();
         let brymen: Vec<&str> = registry::DEVICES
             .iter()
-            .filter(|d| matches!(d.family, F::Bm86x))
+            .filter(|d| matches!(d.family, F::Bm86x | F::Bm82x | F::Bm52x))
             .map(|d| d.id)
             .collect();
         assert_eq!(on_bridge, brymen);
-        assert_eq!(on_bridge, ["bm86x"]);
+        assert_eq!(on_bridge, ["bm86x", "bm82x", "bm52x"]);
         for id in on_bridge {
             assert_eq!(registry::find_device(id).unwrap().links, ["BU-86X"], "{id}");
         }

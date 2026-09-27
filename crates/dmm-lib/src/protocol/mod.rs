@@ -287,6 +287,10 @@ pub enum DeviceFamily {
     Bm78xbt,
     /// Brymen BM869s / BM867s, on the BU-86X cable
     Bm86x,
+    /// Brymen BM829s / BM827s / BM822s / BM821s, on the BU-86X cable
+    Bm82x,
+    /// Brymen BM525s / BM521s, on the BU-86X cable
+    Bm52x,
     /// Simulated device for testing and demos
     Mock,
 }
@@ -306,6 +310,8 @@ impl std::fmt::Display for DeviceFamily {
             DeviceFamily::Eevblog121gw => write!(f, "EEVblog 121GW"),
             DeviceFamily::Bm78xbt => write!(f, "Brymen BM78xBT"),
             DeviceFamily::Bm86x => write!(f, "Brymen BM86x"),
+            DeviceFamily::Bm82x => write!(f, "Brymen BM82x"),
+            DeviceFamily::Bm52x => write!(f, "Brymen BM52x"),
             DeviceFamily::Mock => write!(f, "mock"),
         }
     }

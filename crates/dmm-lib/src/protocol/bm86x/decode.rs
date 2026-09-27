@@ -1,20 +1,21 @@
 //! A reply's segments → [`Measurement`]
-//! (`docs/research/bm86x/reverse-engineered-protocol.md` §5, §7, §8).
+//! (`docs/research/bm86x/reverse-engineered-protocol.md` §5-§8).
 //!
 //! The reply is the LCD: digits as seven-segment patterns, and function,
 //! unit, prefix, sign and decimal point as annunciators, with no function
-//! or range code (spec §5.1). The reading is rebuilt from what is lit, as
-//! Brymen's programs do (spec §8): the value in the unit the display shows,
-//! the function from the unit and coupling annunciators, and the secondary
-//! display as one sub-value.
+//! or range code (spec §5.1, §6.1). The reading is rebuilt from what is
+//! lit, as Brymen's programs do (spec §8): the value in the unit the
+//! display shows, the function from the unit and coupling annunciators, and
+//! the secondary display as one sub-value.
 //!
 //! Every bit lands in one of three places: the reading; silence, for what
-//! the sheet documents and no reading shows (the bar graph, the T1-T2 dash,
-//! the "don't care" bytes); or a report, for what the spec does not cover.
+//! the sheets document and no reading shows (the bar graph, the dashes
+//! between symbols, Hi, Lo, LPF, @, the "don't care" bytes); or a report,
+//! for what the spec does not cover.
 
 use super::glyph::{self, Cell, Readout, UNKNOWN};
 use super::map::{Ann, Lit, MODEL, Map, Row};
-use super::reply::REPLY_LEN;
+use super::reply::{self, MODEL_RUN, REPLY_LEN};
 use super::{Series, report};
 use crate::error::{Error, Result};
 use crate::flags::StatusFlags;
@@ -31,11 +32,11 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
             data,
         ));
     }
-    if data[MODEL] != series.code() {
+    if reply::find_reply(data, series).is_none() {
         return Err(Error::invalid_response(
             format!(
-                "{id} reply's model byte is {:02X}, expected {:02X}",
-                data[MODEL],
+                "{id} reply's model bytes are {:02X?}, expected {:02X}",
+                &data[MODEL_RUN..=MODEL],
                 series.code()
             ),
             data,
@@ -46,18 +47,32 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
     let report = |what| report(series, data, what);
 
     let mut main_cells = cells(map, &map.main, data);
-    let letter = temperature_letter(&mut main_cells);
-    let main = glyph::read(&main_cells, map.main.minus.lit(data));
-    if let Some(odd) = main.odd {
-        report(odd);
-    }
-    let shown = main_shown(&main, letter.is_some(), &report);
-
-    let prefix = main_prefix(lit, &report);
-    let function = function(lit, letter);
+    let probe = lit.has(Ann::T1) || lit.has(Ann::T2);
+    let letter = temperature_letter(&mut main_cells, probe);
     let mode_raw = function_word(lit, letter);
-    let (mode, unit) = match function {
-        Some(function) => {
+
+    // Recall on a logging model lights R and C together (BM820s manual
+    // p.16, spec §6.5): what shows is logged data or its page and item
+    // numbers, not a reading.
+    if series.logs() && lit.has(Ann::Record) && lit.has(Ann::Crest) {
+        return Ok(Measurement {
+            mode: Cow::Borrowed(MODE_RECALL),
+            mode_raw,
+            value: MeasuredValue::NoReading(RECALL),
+            unit: Cow::Borrowed(""),
+            display_raw: None,
+            ..Measurement::from_payload(data)
+        });
+    }
+
+    let main = glyph::read(&main_cells, map.main.minus.lit(data));
+    let shown = main_shown(&main, letter.is_some(), lit, series, &report);
+
+    let function = function(lit, letter);
+    let (mode, unit) = match (shown.mode(), function) {
+        (Some(mode), _) => (Cow::Borrowed(mode), ""),
+        (None, Some(function)) => {
+            let prefix = main_prefix(lit, &report);
             let unit = unit(function.base, prefix).unwrap_or_else(|| {
                 report("prefix annunciators");
                 function.base.bare()
@@ -66,9 +81,16 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
                 Mode::Named(mode) => mode,
                 Mode::Coupled(coupling) => coupled(coupling, unit),
             };
-            (Cow::Borrowed(mode), unit)
+            if !lit.has(Ann::LoZ) {
+                (Cow::Borrowed(mode), unit)
+            } else if let Some(loz) = low_impedance(mode) {
+                (Cow::Borrowed(loz), unit)
+            } else {
+                report("function annunciators");
+                (unknown_mode16(mode_raw), "")
+            }
         }
-        None => {
+        (None, None) => {
             // A word the manuals show explains itself, whatever is lit.
             if !matches!(shown, Shown::Word(_)) {
                 report("function annunciators");
@@ -77,14 +99,17 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
         }
     };
 
-    let sub = glyph::read(
-        &cells(map, &map.secondary, data),
-        map.secondary.minus.lit(data),
-    );
-    let aux = secondary(lit, &sub, letter, &report);
+    let mut sub_cells = cells(map, &map.secondary, data);
+    // The BM820s puts a temperature's own letter in the last secondary
+    // digit; the BM860s none, and its T2 takes the main one's (spec §6.2).
+    let sub_probe = probe || lit.has(Ann::T1Sub) || lit.has(Ann::T2Sub);
+    let sub_letter = temperature_letter(&mut sub_cells, sub_probe);
+    let sub = glyph::read(&sub_cells, map.secondary.minus.lit(data));
+    let aux = secondary(lit, &sub, sub_letter.or(letter), &report);
     let main_label = match (&aux, function.map(|f| f.mode)) {
         (Some(a), Some(Mode::Coupled(Coupling::Dc))) if a.label == LABEL_AC => Some(MainLabel::Dc),
         (Some(a), Some(Mode::Named(MODE_T1))) if a.label == LABEL_T2 => Some(MainLabel::T1),
+        (Some(a), Some(Mode::Named(MODE_T2))) if a.label == LABEL_T1 => Some(MainLabel::T2),
         _ => None,
     };
 
@@ -92,6 +117,7 @@ pub(super) fn decode(data: &[u8], series: Series) -> Result<Measurement> {
     let (value, display_raw) = match shown {
         Shown::Number(v, text) => (MeasuredValue::Normal(v), Some(text)),
         Shown::Overload => (MeasuredValue::Overload, None),
+        Shown::Field(level) => (MeasuredValue::NcvLevel(level), None),
         Shown::Word(word) | Shown::Unread(word) => (MeasuredValue::NoReading(word), None),
     };
     Ok(Measurement {
@@ -126,9 +152,14 @@ fn cells(map: &Map, row: &Row, data: &[u8]) -> Vec<Cell> {
         .collect()
 }
 
-/// A `C` or `F` in the last main cell, after something else lit, is the
-/// temperature unit (spec §5.2): taken off the row, it is returned.
-fn temperature_letter(cells: &mut Vec<Cell>) -> Option<char> {
+/// A `C` or `F` in a row's last cell, after something else lit, is the
+/// temperature unit (spec §5.2, §6.2): taken off the row, it is returned.
+/// Only with a `probe`, T1 or T2, lit: EF's word may end in its F (spec
+/// §7.3).
+fn temperature_letter(cells: &mut Vec<Cell>, probe: bool) -> Option<char> {
+    if !probe {
+        return None;
+    }
     let (last, rest) = cells.split_last()?;
     let letter = glyph::char_of(last.segments);
     if matches!(letter, 'C' | 'F') && rest.iter().any(|c| c.segments != 0) {
@@ -142,46 +173,116 @@ fn temperature_letter(cells: &mut Vec<Cell>) -> Option<char> {
 /// The Beep-Jack warning, as the manual spells it (spec §7.3).
 const INPUT_ERROR: &str = "InEr";
 
+/// AutoCheck waiting for an input (spec §7.3, §11.3).
+const AUTO: &str = "Auto";
+
+/// A logging model in Recall, or showing a session page (spec §7.3).
+const RECALL: &str = "Recall";
+const MODE_RECALL: &str = "Recall";
+
 /// What the main display shows.
 enum Shown {
     Number(f64, String),
     Overload,
+    /// EF detection: 0 for "E.F.", ready; else the dashes lit.
+    Field(u8),
     /// A word the manuals show (spec §7.3).
     Word(&'static str),
     /// Something no source shows, already reported.
     Unread(&'static str),
 }
 
+impl Shown {
+    /// The mode a word names on its own, whatever is lit.
+    fn mode(&self) -> Option<&'static str> {
+        match self {
+            Shown::Word(AUTO) => Some("Auto V"),
+            Shown::Field(_) => Some("EF"),
+            Shown::Word(RECALL) => Some(MODE_RECALL),
+            _ => None,
+        }
+    }
+}
+
 /// Read the main display: a number, or a word in the manuals' spelling
 /// (spec §7.3). `letter` says a temperature unit followed the row.
-fn main_shown(main: &Readout, letter: bool, report: &impl Fn(&'static str)) -> Shown {
+fn main_shown(
+    main: &Readout,
+    letter: bool,
+    lit: Lit,
+    series: Series,
+    report: &impl Fn(&'static str),
+) -> Shown {
+    let word = main.word.as_str();
+    // "E.F.": which digits and points the meter lights is open (spec
+    // §7.3), so the points are not read.
+    if series.detects_fields() && word == "EF" {
+        return Shown::Field(0);
+    }
+    if let Some(odd) = main.odd {
+        report(odd);
+    }
     if let Some(v) = main.number {
         return Shown::Number(v, main.text.clone());
     }
     if main.odd == Some("blank digit") {
         return Shown::Unread("?");
     }
-    match main.word.as_str() {
+    let dashes = !word.is_empty() && word.chars().all(|c| c == '-');
+    match word {
         // OL, or .OL (BM860s manual p.10): the letters themselves (spec
         // §8.4).
         "0L" => Shown::Overload,
         // How the meter draws the I is open: either reading of it (spec
         // §7.3).
         "?nEr" | "1nEr" => Shown::Word(INPUT_ERROR),
-        // The power-on self-diagnosis (BM860s manual p.15).
+        // The power-on self-diagnosis (BM860s manual p.15, BM820s manual
+        // p.17).
         "rE-0" => Shown::Word("rE-O"),
         "C_Er" => Shown::Word("C_Er"),
+        // AutoCheck with no input, LoZ lit (BM820s manual p.6).
+        "Auto" if lit.has(Ann::LoZ) => Shown::Word(AUTO),
         // Dashes where a temperature would be.
-        w if letter && !w.is_empty() && w.chars().all(|c| c == '-') => Shown::Word("---"),
-        w if w.contains(UNKNOWN) => {
-            report("digit glyph");
-            Shown::Unread("?")
+        _ if dashes && letter => Shown::Word("---"),
+        // The field strength, the minus counted with the dashes after it
+        // (BM820s manual p.13); how many light at each strength is open
+        // (spec §7.3).
+        _ if dashes && series.detects_fields() => {
+            let marks = main.text.chars().filter(|c| *c == '-').count();
+            Shown::Field(u8::try_from(marks).unwrap_or(u8::MAX))
         }
-        _ => {
-            report("display text");
-            Shown::Unread("?")
-        }
+        _ => match logging_word(word).filter(|_| series.logs()) {
+            Some(logged) => Shown::Word(logged),
+            None => {
+                report(if word.contains(UNKNOWN) {
+                    "digit glyph"
+                } else {
+                    "display text"
+                });
+                Shown::Unread("?")
+            }
+        },
     }
+}
+
+/// A logging model's word, in the manual's spelling (BM820s manual
+/// p.14-16, spec §7.3): the logging states, the interval ("t0.05") and a
+/// Recall session page ("P.001").
+fn logging_word(word: &str) -> Option<&'static str> {
+    let number_after = |lead: char| {
+        word.strip_prefix(lead)
+            .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    };
+    Some(match word {
+        "LEFt" => "LEFt",
+        "5trt" => "Strt",
+        "PAU5" => "PAUS",
+        "Cont" => "Cont",
+        "5toP" => "StoP",
+        _ if number_after('t') => "interval",
+        _ if number_after('P') => RECALL,
+        _ => return None,
+    })
 }
 
 /// A metric prefix annunciator.
@@ -265,7 +366,7 @@ impl Base {
     }
 }
 
-/// The unit a reading shows with `prefix`, for the ranges the manual lists
+/// The unit a reading shows with `prefix`, for the ranges the manuals list
 /// (spec §11.5); `None` for a prefix none of them has. µ is U+00B5 and Ω
 /// U+03A9, the characters `transform::si_prefix` reads.
 fn unit(base: Base, prefix: Option<Prefix>) -> Option<&'static str> {
@@ -288,7 +389,7 @@ fn unit(base: Base, prefix: Option<Prefix>) -> Option<&'static str> {
     })
 }
 
-/// The main display's coupling, ⎓ and ∿ (spec §5.1).
+/// The main display's coupling, ⎓ and ∿ (spec §5.1, §6.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Coupling {
     None,
@@ -321,6 +422,8 @@ const fn named(mode: &'static str, base: Base) -> Function {
 }
 
 const MODE_T1: &str = "T1";
+const MODE_T2: &str = "T2";
+const LABEL_T1: &str = "T1";
 const LABEL_T2: &str = "T2";
 const LABEL_AC: &str = "AC";
 
@@ -346,14 +449,23 @@ fn coupled(coupling: Coupling, unit: &'static str) -> &'static str {
     }
 }
 
+/// AutoCheck's readings, LoZ lit: DC V, AC V or Ω, the continuity beep
+/// with it (BM820s manual p.6, spec §6.5). `None` for any other function.
+fn low_impedance(mode: &str) -> Option<&'static str> {
+    Some(match mode {
+        "DC V" => "LoZ DC V",
+        "AC V" => "LoZ AC V",
+        "Ω" | "Continuity" => "LoZ Ω",
+        _ => return None,
+    })
+}
+
 /// The function what is lit shows, by the first rule that matches (spec
 /// §8.1, §8.2); `None` for a combination no source gives. `letter` is the
 /// temperature unit in the digits.
 fn function(lit: Lit, letter: Option<char>) -> Option<Function> {
     use Ann::*;
-    let units: Vec<Ann> = lit
-        .among([V1, A1, Ohm1, Farad1, Hz1, Siemens1, Duty1, Db])
-        .collect();
+    const UNITS: [Ann; 8] = [V1, A1, Ohm1, Farad1, Hz1, Siemens1, Duty1, Db];
     let coupling = match (lit.has(Dc1), lit.has(Ac1)) {
         (false, false) => Coupling::None,
         (true, false) => Coupling::Dc,
@@ -368,37 +480,40 @@ fn function(lit: Lit, letter: Option<char>) -> Option<Function> {
         } else {
             Base::Fahrenheit
         };
-        if !units.is_empty() {
+        if lit.among(UNITS).next().is_some() {
             return None;
         }
         return match (lit.has(Ann::T1), lit.has(Ann::T2)) {
             (true, true) => Some(named("T1-T2", base)),
             (true, false) => Some(named(MODE_T1, base)),
-            (false, true) => Some(named("T2", base)),
+            (false, true) => Some(named(MODE_T2, base)),
             (false, false) => None,
         };
     }
-    Some(match units.as_slice() {
-        // The reference impedance, shown for a second as dBm starts ("600"
-        // with Ω and dBm lit; BM860s manual p.7, spec §8.2 `0x2080`).
-        [Ohm1, Db] => named("dBm reference", Base::Ohm),
-        [Db] => named("dBm", Base::Dbm),
-        [Hz1] if lit.has(Vfd) => named("VFD Hz", Base::Hertz),
-        [V1] if lit.has(Vfd) && coupling == Coupling::Ac => named("VFD AC V", Base::Volt),
-        [Ohm1] if lit.has(Continuity) => named("Continuity", Base::Ohm),
-        [Ohm1] => named("Ω", Base::Ohm),
-        [Siemens1] => named("nS", Base::Siemens),
-        [Farad1] => named("Capacitance", Base::Farad),
+    // The reference impedance, shown for a second as dBm starts ("600" with
+    // Ω and dBm lit; BM860s manual p.7, BM820s manual p.8, spec §8.2
+    // `0x2080`).
+    if lit.among(UNITS).eq([Ohm1, Db]) {
+        return Some(named("dBm reference", Base::Ohm));
+    }
+    Some(match lit.one_of(UNITS)? {
+        Db => named("dBm", Base::Dbm),
+        Hz1 if lit.has(Vfd) => named("VFD Hz", Base::Hertz),
+        V1 if lit.has(Vfd) && coupling == Coupling::Ac => named("VFD AC V", Base::Volt),
+        Ohm1 if lit.has(Continuity) => named("Continuity", Base::Ohm),
+        Ohm1 => named("Ω", Base::Ohm),
+        Siemens1 => named("nS", Base::Siemens),
+        Farad1 => named("Capacitance", Base::Farad),
         // Line and logic frequency look the same on the LCD.
-        [Hz1] => named("Hz", Base::Hertz),
-        [Duty1] => named("Duty %", Base::Percent),
+        Hz1 => named("Hz", Base::Hertz),
+        Duty1 => named("Duty %", Base::Percent),
         // V with neither coupling: the diode test (spec §8.2).
-        [V1] if coupling == Coupling::None => named("Diode", Base::Volt),
-        [V1] => Function {
+        V1 if coupling == Coupling::None => named("Diode", Base::Volt),
+        V1 => Function {
             mode: Mode::Coupled(coupling),
             base: Base::Volt,
         },
-        [A1] if coupling != Coupling::None => Function {
+        A1 if coupling != Coupling::None => Function {
             mode: Mode::Coupled(coupling),
             base: Base::Amp,
         },
@@ -436,8 +551,10 @@ fn function_word(lit: Lit, letter: Option<char>) -> u16 {
 }
 
 /// The secondary display as a sub-value, where a unit is lit on it (spec
-/// §5.1): the frequency, the AC component, T2, or the loop current's
-/// percentage. Blank, or the "diod" label (spec §7.3), is none.
+/// §5.1, §6.1): the frequency, the AC or DC component, T1 or T2, or the
+/// loop current's percentage. Blank, or a label word — "diod" (spec §7.3),
+/// "Auto" in AutoCheck (BM820s manual p.6) — is none. `letter` is the
+/// temperature unit, the secondary display's own or the main one's.
 fn secondary(
     lit: Lit,
     sub: &Readout,
@@ -445,10 +562,11 @@ fn secondary(
     report: &impl Fn(&'static str),
 ) -> Option<AuxValue> {
     use Ann::*;
-    let units: Vec<Ann> = lit.among([Hz2, V2, A2, T2Sub, Loop]).collect();
+    const UNITS: [Ann; 9] = [Hz2, V2, A2, T2Sub, T1Sub, Loop, Ohm2, Farad2, Siemens2];
     let prefix = one_prefix(
         lit,
         &[
+            (Nano2, Prefix::Nano),
             (Micro2, Prefix::Micro),
             (Milli2, Prefix::Milli),
             (Kilo2, Prefix::Kilo),
@@ -462,30 +580,37 @@ fn secondary(
             base.bare()
         })
     };
-    let (label, unit) = match units.as_slice() {
-        [] if sub.word.is_empty() || sub.word == "diod" => return None,
-        [Hz2] => ("Frequency", prefixed(Base::Hertz)),
-        [V2] if lit.has(Ac2) => (LABEL_AC, prefixed(Base::Volt)),
-        [A2] if lit.has(Ac2) => (LABEL_AC, prefixed(Base::Amp)),
-        // The secondary display has no letter of its own: T2 is in the
-        // main one's unit.
-        [T2Sub] => match letter {
-            Some('C') => (LABEL_T2, "°C"),
-            Some(_) => (LABEL_T2, "°F"),
-            None => {
-                report("secondary annunciators");
-                return None;
-            }
-        },
-        [Loop] => ("4-20mA", "%"),
-        [] => {
+    let temperature = |label| match letter {
+        Some('C') => Some((label, "°C")),
+        Some(_) => Some((label, "°F")),
+        None => None,
+    };
+    let label_word =
+        sub.word.is_empty() || sub.word == "diod" || (sub.word == AUTO && lit.has(LoZ));
+    if lit.among(UNITS).next().is_none() {
+        if !label_word {
             report("secondary display");
-            return None;
         }
-        _ => {
-            report("secondary annunciators");
-            return None;
+        return None;
+    }
+    let found = match lit.one_of(UNITS) {
+        Some(Hz2) => Some(("Frequency", prefixed(Base::Hertz))),
+        Some(unit @ (V2 | A2)) => {
+            let base = if unit == V2 { Base::Volt } else { Base::Amp };
+            match (lit.has(Ac2), lit.has(Dc2)) {
+                (true, false) => Some((LABEL_AC, prefixed(base))),
+                (false, true) => Some(("DC", prefixed(base))),
+                _ => None,
+            }
         }
+        Some(T2Sub) => temperature(LABEL_T2),
+        Some(T1Sub) => temperature(LABEL_T1),
+        Some(Loop) => Some(("4-20mA", "%")),
+        _ => None,
+    };
+    let Some((label, unit)) = found else {
+        report("secondary annunciators");
+        return None;
     };
     if let Some(odd) = sub.odd {
         report(odd);
@@ -507,9 +632,10 @@ fn secondary(
     })
 }
 
-/// The annunciators that are flags (spec §5.1, §5.5). CREST shows its MAX
-/// or MIN beside [C] (BM860s manual p.12); [R] and [C] together are no
-/// state the BM860s manual gives.
+/// The annunciators that are flags (spec §5.1, §5.5, §6.1, §6.5). CREST
+/// shows its MAX or MIN beside [C] (BM860s manual p.12, BM820s manual
+/// p.13); [R] and [C] together are Recall on a logging model, which
+/// `decode` reads first, and no state any other series' manual gives.
 fn flags(lit: Lit, report: &impl Fn(&'static str)) -> StatusFlags {
     let crest = lit.has(Ann::Crest);
     let record = lit.has(Ann::Record);
@@ -528,13 +654,20 @@ fn flags(lit: Lit, report: &impl Fn(&'static str)) -> StatusFlags {
         peak_max: max && crest,
         peak_min: min && crest,
         low_battery: lit.has(Ann::LowBattery),
+        loz: lit.has(Ann::LoZ),
         ..StatusFlags::default()
     }
 }
 
 /// Every mode the decoder names, for the capture-step test.
 #[cfg(test)]
-pub(super) const MODES: [&str; 29] = [
+pub(super) const MODES: [&str; 35] = [
+    "Recall",
+    "Auto V",
+    "EF",
+    "LoZ DC V",
+    "LoZ AC V",
+    "LoZ Ω",
     "T1",
     "T2",
     "T1-T2",
@@ -569,7 +702,8 @@ pub(super) const MODES: [&str; 29] = [
 #[cfg(test)]
 pub(super) mod tests {
     use super::super::glyph::tests::cells as glyph_cells;
-    use super::super::map::BM860;
+    use super::super::map::{at, data_index};
+    use super::super::reply::tests::bm820_example;
     use super::*;
     use crate::protocol::capture_reports;
     use crate::protocol::test_support::snapshot;
@@ -592,7 +726,7 @@ pub(super) mod tests {
 
     /// A row's digit bytes for `text` (see `glyph::tests::cells`; `?` is an
     /// unlisted pattern, e and f), `negative` its minus.
-    fn put_row(data: &mut [u8], row: &Row, text: &str, negative: bool) {
+    fn put_row(data: &mut [u8], map: &Map, row: &Row, text: &str, negative: bool) {
         let cells = if text.contains('?') {
             text.chars()
                 .map(|c| match c {
@@ -609,7 +743,7 @@ pub(super) mod tests {
         assert_eq!(cells.len(), row.digits.len(), "{text:?}");
         for (i, cell) in cells.iter().enumerate() {
             let byte = &mut data[row.digits[i]];
-            for (s, mask) in BM860.segments.iter().enumerate() {
+            for (s, mask) in map.segments.iter().enumerate() {
                 if cell.segments & 1 << s != 0 {
                     *byte |= mask;
                 }
@@ -635,12 +769,26 @@ pub(super) mod tests {
     }
 
     fn lcd_signed(main: &str, main_neg: bool, sub: &str, sub_neg: bool, anns: &[Ann]) -> Vec<u8> {
+        lcd_on(Series::Bm86x, main, main_neg, sub, sub_neg, anns)
+    }
+
+    /// A reply of `series` showing `main` and `sub` with `anns` lit, the
+    /// model bytes 20-23 the series code.
+    fn lcd_on(
+        series: Series,
+        main: &str,
+        main_neg: bool,
+        sub: &str,
+        sub_neg: bool,
+        anns: &[Ann],
+    ) -> Vec<u8> {
+        let map = series.map();
         let mut data = vec![0u8; REPLY_LEN];
-        data[16..20].fill(0x86);
-        put_row(&mut data, &BM860.main, main, main_neg);
-        put_row(&mut data, &BM860.secondary, sub, sub_neg);
+        data[MODEL_RUN..=MODEL].fill(series.code());
+        put_row(&mut data, map, &map.main, main, main_neg);
+        put_row(&mut data, map, &map.secondary, sub, sub_neg);
         for ann in anns {
-            let (_, bit) = BM860.annunciators.iter().find(|(a, _)| a == ann).unwrap();
+            let (_, bit) = map.annunciators.iter().find(|(a, _)| a == ann).unwrap();
             data[bit.index] |= bit.mask;
         }
         data
@@ -648,22 +796,30 @@ pub(super) mod tests {
 
     const BLANK: &str = "    ";
 
-    fn decoded(data: &[u8]) -> (Measurement, Vec<String>) {
-        let (m, reports) = capture_reports(|| decode(data, Series::Bm86x));
+    fn decoded_as(data: &[u8], series: Series) -> (Measurement, Vec<String>) {
+        let (m, reports) = capture_reports(|| decode(data, series));
         (m.unwrap(), reports)
     }
 
     fn quiet(data: &[u8]) -> Measurement {
-        let (m, reports) = decoded(data);
+        quiet_as(data, Series::Bm86x)
+    }
+
+    fn quiet_as(data: &[u8], series: Series) -> Measurement {
+        let (m, reports) = decoded_as(data, series);
         assert!(reports.is_empty(), "{reports:?}");
         m
     }
 
     fn reported(data: &[u8], what: &str) -> Measurement {
-        let (m, reports) = decoded(data);
+        reported_as(data, Series::Bm86x, what)
+    }
+
+    fn reported_as(data: &[u8], series: Series, what: &str) -> Measurement {
+        let (m, reports) = decoded_as(data, series);
         assert_eq!(reports.len(), 1, "{reports:?}");
         assert!(
-            reports[0].starts_with(&format!("bm86x: unrecognised {what}: reply [")),
+            reports[0].starts_with(&format!("{}: unrecognised {what}: reply [", series.id())),
             "{reports:?}"
         );
         m
@@ -771,8 +927,14 @@ pub(super) mod tests {
             assert_eq!(m.mode, "T1-T2");
             assert_eq!(m.main_label, None);
         }
-        // A letter with neither probe named, or a unit lit beside it.
-        reported(&lcd("0250.8C", BLANK, &[]), "function annunciators");
+        // A letter with neither probe lit is no unit: the row is text.
+        let (m, reports) = decoded_as(&lcd("0250.8C", BLANK, &[]), Series::Bm86x);
+        assert!(matches!(m.value, MeasuredValue::NoReading("?")));
+        assert!(
+            reports.iter().any(|r| r.contains("display text")),
+            "{reports:?}"
+        );
+        // A unit lit beside it.
         reported(&lcd("0250.8C", BLANK, &[T1, V1]), "function annunciators");
         // T2 on the secondary display with no letter to take a unit from.
         reported(
@@ -1128,14 +1290,444 @@ pub(super) mod tests {
     #[test]
     fn arbitrary_bytes_never_panic() {
         let mut seed = 0x9E37_79B9_7F4A_7C15;
-        for _ in 0..20_000 {
-            let mut data = example();
-            for (i, byte) in data.iter_mut().enumerate() {
-                if i != MODEL {
-                    *byte = pseudo_random(&mut seed) as u8;
-                }
+        for series in Series::ALL {
+            for _ in 0..20_000 {
+                let mut data: Vec<u8> = (0..REPLY_LEN)
+                    .map(|_| pseudo_random(&mut seed) as u8)
+                    .collect();
+                data[MODEL_RUN..=MODEL].fill(series.code());
+                let _ = capture_reports(|| decode(&data, series));
             }
-            let _ = capture_reports(|| decode(&data, Series::Bm86x));
         }
+    }
+
+    // The BM820 map: the BM82x and the BM52x.
+
+    const BM820_SERIES: [Series; 2] = [Series::Bm82x, Series::Bm52x];
+
+    fn lcd8(series: Series, main: &str, sub: &str, anns: &[Ann]) -> Vec<u8> {
+        lcd_on(series, main, false, sub, false, anns)
+    }
+
+    /// Set Brymen's bit `byte.bit` in `data`, as the sheet numbers it.
+    fn set(data: &mut [u8], byte: usize, bit: u32) {
+        let bit = at(byte, bit);
+        data[bit.index] |= bit.mask;
+    }
+
+    /// The BM820 sheet's example (spec §9.2) with digit 5 in byte 11, as
+    /// Table 1 has it (spec §4.3): AC 380.1 V and 50.12 Hz, AUTO lit.
+    #[test]
+    fn bm820_example_with_report_ii_at_byte_10() {
+        for series in BM820_SERIES {
+            let m = quiet_as(&bm820_example(series.code()), series);
+            assert_eq!(
+                snapshot(&m),
+                "mode=AC V\n\
+                 mode_raw=0x05\n\
+                 range_raw=0x00\n\
+                 value=Normal(380.1)\n\
+                 unit=V\n\
+                 range_label=\n\
+                 display_raw=Some(\"380.1\")\n\
+                 flags=auto_range\n\
+                 aux=1\n\
+                 aux1=Frequency value=Normal(50.12) unit=Hz display_raw=Some(\"50.12\") elapsed_secs=None\n\
+                 raw_payload=24",
+                "{series:?}"
+            );
+        }
+    }
+
+    /// A BM820 reply read as another series' is refused.
+    #[test]
+    fn a_bm820_reply_needs_its_own_model_bytes() {
+        let bm82x = bm820_example(0x82);
+        assert!(decode(&bm82x, Series::Bm52x).is_err());
+        assert!(decode(&bm82x, Series::Bm86x).is_err());
+        let mut three = bm82x.clone();
+        three[MODEL_RUN] = 0x00;
+        assert!(decode(&three, Series::Bm82x).is_err());
+    }
+
+    /// Brymen's function word from the BM820 bits at their sheet
+    /// positions (spec §8.1, the Bs8252x column), and the mode each gives.
+    #[test]
+    fn bm820_function_bits_are_table_1s() {
+        for (bits, word, mode, unit) in [
+            (&[(3, 5), (17, 5)][..], 0x0006, "DC V", "V"),
+            (&[(3, 4), (17, 5)], 0x0005, "AC V", "V"),
+            (&[(3, 4), (3, 5), (17, 5)], 0x0007, "AC+DC V", "V"),
+            (&[(3, 4), (3, 5), (17, 4)], 0x0203, "AC+DC A", "A"),
+            (&[(17, 0), (17, 3)], 0x0008, "Capacitance", "nF"),
+            (&[(16, 5)], 0x0080, "Ω", "Ω"),
+            (&[(16, 5), (9, 0)], 0x0180, "Continuity", "Ω"),
+            (&[(16, 4)], 0x0400, "Hz", "Hz"),
+            (&[(17, 2)], 0x0800, "Duty %", "%"),
+            (&[(17, 1), (17, 3)], 0x1000, "nS", "nS"),
+            (&[(8, 4), (17, 6)], 0x2000, "dBm", "dBm"),
+            (&[(17, 5)], 0x0004, "Diode", "V"),
+        ] {
+            for series in BM820_SERIES {
+                let mut data = lcd8(series, "50.10", BLANK, &[]);
+                for (byte, bit) in bits {
+                    set(&mut data, *byte, *bit);
+                }
+                let m = quiet_as(&data, series);
+                assert_eq!(
+                    (m.mode.as_ref(), m.unit.as_ref(), m.mode_raw),
+                    (mode, unit, word),
+                    "{bits:?}"
+                );
+                assert_eq!(normal(&m), Some(50.1));
+            }
+        }
+    }
+
+    /// The prefix bits at their sheet positions (spec §8.3, the Bs8252x
+    /// rows), and the minus signs (spec §6.3).
+    #[test]
+    fn bm820_prefix_and_sign_bits_are_table_1s() {
+        let s = Series::Bm82x;
+        for (bits, unit) in [
+            (&[(16, 5), (16, 7)][..], "kΩ"),
+            (&[(16, 5), (16, 6)], "MΩ"),
+            (&[(3, 5), (17, 5), (17, 6)], "mV"),
+            (&[(3, 5), (17, 4), (17, 7)], "µA"),
+            (&[(17, 0), (17, 3)], "nF"),
+        ] {
+            let mut data = lcd8(s, "50.10", BLANK, &[]);
+            for (byte, bit) in bits {
+                set(&mut data, *byte, *bit);
+            }
+            assert_eq!(quiet_as(&data, s).unit, unit, "{bits:?}");
+        }
+        for (bits, unit) in [
+            (&[(16, 0), (16, 2)][..], "kHz"),
+            (&[(16, 0), (16, 3)], "MHz"),
+            (&[(9, 6), (15, 4), (15, 7)], "mV"),
+            (&[(9, 6), (15, 5), (15, 6)], "µA"),
+        ] {
+            let mut data = lcd8(s, "50.10", "1.234", &[Dc1, V1]);
+            for (byte, bit) in bits {
+                set(&mut data, *byte, *bit);
+            }
+            assert_eq!(quiet_as(&data, s).aux_values[0].unit, unit, "{bits:?}");
+        }
+        // n on the small display is a prefix no frequency takes.
+        let mut nano = lcd8(s, "50.10", "1.234", &[Dc1, V1]);
+        set(&mut nano, 16, 0);
+        set(&mut nano, 15, 2);
+        reported_as(&nano, s, "secondary annunciators");
+        let mut negative = lcd8(s, "50.10", "1.234", &[Dc1, V1, Hz2]);
+        set(&mut negative, 4, 7);
+        set(&mut negative, 9, 5);
+        let m = quiet_as(&negative, s);
+        assert_eq!(normal(&m), Some(-50.1));
+        assert_eq!(m.aux_values[0].display_raw.as_deref(), Some("-1.234"));
+    }
+
+    /// The BM820 flags at their sheet positions (spec §6.1, §6.5).
+    #[test]
+    fn bm820_flag_bits_are_table_1s() {
+        let f = |bits: &[(usize, u32)]| {
+            let mut data = lcd8(Series::Bm82x, "12.34", BLANK, &[Dc1, V1]);
+            for (byte, bit) in bits {
+                set(&mut data, *byte, *bit);
+            }
+            quiet_as(&data, Series::Bm82x).flags
+        };
+        assert!(f(&[(24, 4)]).auto_range && !f(&[]).auto_range);
+        assert!(f(&[(24, 7)]).hold);
+        assert!(f(&[(4, 6)]).rel);
+        assert!(f(&[(9, 3)]).low_battery);
+        assert!(f(&[(4, 4)]).loz && !f(&[]).loz);
+        let rec = f(&[(24, 5), (3, 0), (3, 3), (3, 1)]);
+        assert!(rec.record && rec.max && rec.min && rec.avg);
+        // MAX-MIN: both, and the dash between them silent.
+        let max_min = f(&[(24, 5), (3, 0), (3, 3), (3, 2)]);
+        assert!(max_min.record && max_min.max && max_min.min && !max_min.avg);
+        let cmax = f(&[(24, 6), (3, 0)]);
+        assert!(cmax.peak_max && !cmax.max && !cmax.record);
+        let cmin = f(&[(24, 6), (3, 3)]);
+        assert!(cmin.peak_min && !cmin.min);
+        assert!(f(&[]).dc);
+    }
+
+    /// Documented bits no reading shows stay silent: Hi, Lo, the MAX-MIN
+    /// and T1-T2 dashes, %, LPF, @, the small D%, the programs' "mV" bit
+    /// 18.3 and every "don't care" bit (spec §6.1, §6.5, §8.1).
+    #[test]
+    fn bm820_documented_bits_stay_silent() {
+        for series in BM820_SERIES {
+            let plain_data = lcd8(series, "12.34", BLANK, &[Dc1, V1]);
+            let plain = quiet_as(&plain_data, series);
+            for (byte, bit) in [
+                (3, 7),
+                (3, 6),
+                (3, 2),
+                (4, 5),
+                (4, 2),
+                (4, 1),
+                (9, 4),
+                (15, 3),
+                (18, 3),
+                (24, 0),
+                (24, 3),
+            ] {
+                let mut data = plain_data.clone();
+                set(&mut data, byte, bit);
+                assert_eq!(
+                    snapshot(&quiet_as(&data, series)),
+                    snapshot(&plain),
+                    "{byte}.{bit}"
+                );
+            }
+            for byte in [2, 18, 25, 26, 27] {
+                let mut data = plain_data.clone();
+                data[data_index(byte).unwrap()] = 0xFF;
+                let m = quiet_as(&data, series);
+                assert_eq!(m.mode, "DC V", "{byte}");
+                assert_eq!(m.display_raw.as_deref(), Some("12.34"), "{byte}");
+            }
+        }
+    }
+
+    /// The BM820s manual's temperature figures (p.11): the unit letter in
+    /// the last digit of each display.
+    #[test]
+    fn bm820_temperatures() {
+        let s = Series::Bm52x;
+        let t1 = quiet_as(&lcd8(s, "205C", BLANK, &[T1]), s);
+        assert_eq!((t1.mode.as_ref(), t1.unit.as_ref()), ("T1", "°C"));
+        assert_eq!(
+            (t1.display_raw.as_deref(), normal(&t1)),
+            (Some("205"), Some(205.0))
+        );
+        let t2 = quiet_as(&lcd8(s, "325F", BLANK, &[T2]), s);
+        assert_eq!((t2.mode.as_ref(), t2.unit.as_ref()), ("T2", "°F"));
+        // T1 +T2: the small display's own letter.
+        let both = quiet_as(&lcd8(s, "401F", "325F", &[T1, T2Sub]), s);
+        assert_eq!(both.mode, "T1");
+        assert_eq!(both.main_label, Some(MainLabel::T1));
+        let aux = &both.aux_values[0];
+        assert_eq!((aux.label.as_ref(), aux.unit.as_ref()), ("T2", "°F"));
+        assert_eq!(aux.display_raw.as_deref(), Some("325"));
+        // (T1-T2) +T2, dash lit or not (spec §8.2).
+        for dash in [&[T1, T2, T2Sub][..], &[T1, T1T2Dash, T2, T2Sub]] {
+            let m = quiet_as(&lcd8(s, "076F", "325F", dash), s);
+            assert_eq!(m.mode, "T1-T2");
+            assert_eq!(m.main_label, None);
+        }
+        // T1 on the small display beside T2 on the main one.
+        let swapped = quiet_as(&lcd8(s, "325F", "401F", &[T2, T1Sub]), s);
+        assert_eq!(swapped.main_label, Some(MainLabel::T2));
+        assert_eq!(swapped.aux_values[0].label, "T1");
+        // A small T1 with no letter to take a unit from.
+        reported_as(
+            &lcd8(s, "12.34", "401 ", &[Dc1, V1, T1Sub]),
+            s,
+            "secondary annunciators",
+        );
+    }
+
+    /// The BM829s's dBm figures (BM820s manual p.7-9).
+    #[test]
+    fn bm820_dbm_and_its_reference_impedance() {
+        let s = Series::Bm82x;
+        let dbm = quiet_as(&lcd8(s, "64.62", "60.08", &[Db, Milli1, Hz2]), s);
+        assert_eq!((dbm.mode.as_ref(), dbm.unit.as_ref()), ("dBm", "dBm"));
+        assert_eq!(normal(&dbm), Some(64.62));
+        assert_eq!(dbm.aux_values[0].label, "Frequency");
+        let reference = quiet_as(&lcd8(s, "  50", BLANK, &[Db, Milli1, Ohm1]), s);
+        assert_eq!(
+            (reference.mode.as_ref(), reference.unit.as_ref()),
+            ("dBm reference", "Ω")
+        );
+    }
+
+    /// The small display's AC and DC components (spec §6.1): DCV +ACV
+    /// (BM820s manual p.8), and DC on the small display, which the map has.
+    #[test]
+    fn bm820_secondary_components() {
+        let s = Series::Bm82x;
+        let m = quiet_as(
+            &lcd_on(s, "003.5", true, "109.8", false, &[Dc1, V1, Ac2, V2]),
+            s,
+        );
+        assert_eq!(
+            (m.mode.as_ref(), m.main_label),
+            ("DC V", Some(MainLabel::Dc))
+        );
+        assert_eq!(m.display_raw.as_deref(), Some("-003.5"));
+        let aux = &m.aux_values[0];
+        assert_eq!((aux.label.as_ref(), aux.unit.as_ref()), ("AC", "V"));
+        let dc = quiet_as(&lcd8(s, "109.8", "003.5", &[Ac1, V1, Dc2, V2]), s);
+        assert_eq!(dc.aux_values[0].label, "DC");
+        assert_eq!(dc.main_label, None);
+        let ma = quiet_as(&lcd8(s, "20.60", "50.18", &[Ac1, A1, Milli1, Hz2]), s);
+        assert_eq!(
+            (ma.mode.as_ref(), ma.aux_values[0].unit.as_ref()),
+            ("AC mA", "Hz")
+        );
+        reported_as(
+            &lcd8(s, "109.8", "003.5", &[Ac1, V1, Ac2, Dc2, V2]),
+            s,
+            "secondary annunciators",
+        );
+        reported_as(
+            &lcd8(s, "109.8", "003.5", &[Ac1, V1, Ohm2]),
+            s,
+            "secondary annunciators",
+        );
+    }
+
+    /// AutoCheck (BM820s manual p.6): "Auto" and LoZ while it waits, then
+    /// the function it picks, LoZ lit and "Auto" on the small display.
+    #[test]
+    fn autocheck() {
+        for series in BM820_SERIES {
+            let idle = quiet_as(&lcd8(series, "Auto", BLANK, &[LoZ]), series);
+            assert_eq!(idle.mode, "Auto V");
+            assert!(matches!(idle.value, MeasuredValue::NoReading("Auto")));
+            assert!(idle.flags.loz);
+            for (anns, mode, unit) in [
+                (&[LoZ, Ac1, V1][..], "LoZ AC V", "V"),
+                (&[LoZ, Dc1, V1], "LoZ DC V", "V"),
+                (&[LoZ, Ohm1, Kilo1], "LoZ Ω", "kΩ"),
+                (&[LoZ, Ohm1, Continuity], "LoZ Ω", "Ω"),
+            ] {
+                let m = quiet_as(&lcd8(series, "220.8", "Auto", anns), series);
+                assert_eq!((m.mode.as_ref(), m.unit.as_ref()), (mode, unit), "{anns:?}");
+                assert_eq!(normal(&m), Some(220.8));
+                assert!(m.flags.loz && m.aux_values.is_empty());
+            }
+            // A function AutoCheck does not pick.
+            reported_as(
+                &lcd8(series, "220.8", "Auto", &[LoZ, Dc1, V1, Milli1]),
+                series,
+                "function annunciators",
+            );
+            // "Auto" without LoZ is no word the manual shows.
+            reported_as(
+                &lcd8(series, "Auto", BLANK, &[Dc1, V1]),
+                series,
+                "display text",
+            );
+            reported_as(
+                &lcd8(series, "220.8", "Auto", &[Dc1, V1]),
+                series,
+                "secondary display",
+            );
+        }
+    }
+
+    /// EF detection (BM820s manual p.12-13): "E.F." when ready, then the
+    /// minus and dashes for the field.
+    #[test]
+    fn ef_detection() {
+        let s = Series::Bm82x;
+        // Where the word sits is open (spec §7.3): an F in the last digit
+        // is no °F while neither T1 nor T2 is lit.
+        for text in ["E.F.  ", "  EF", "  E.F"] {
+            let ready = quiet_as(&lcd8(s, text, BLANK, &[]), s);
+            assert_eq!(
+                (ready.mode.as_ref(), ready.unit.as_ref()),
+                ("EF", ""),
+                "{text}"
+            );
+            assert!(matches!(ready.value, MeasuredValue::NcvLevel(0)), "{text}");
+        }
+        for (text, minus, level) in [
+            (" ---", true, 4),
+            ("----", true, 5),
+            ("--- ", false, 3),
+            ("-   ", false, 1),
+        ] {
+            let m = quiet_as(&lcd_on(s, text, minus, BLANK, false, &[]), s);
+            assert_eq!(m.mode, "EF", "{text}");
+            assert!(
+                matches!(m.value, MeasuredValue::NcvLevel(l) if l == level),
+                "{text}: {:?}",
+                m.value
+            );
+        }
+        // The logging models have no EF (spec §11.1).
+        let (m, reports) = decoded_as(&lcd8(Series::Bm52x, "E.F.  ", BLANK, &[]), Series::Bm52x);
+        assert!(matches!(m.value, MeasuredValue::NoReading("?")));
+        assert!(
+            reports.iter().any(|r| r.contains("display text")),
+            "{reports:?}"
+        );
+        reported_as(
+            &lcd_on(Series::Bm52x, " ---", true, BLANK, false, &[Dc1, V1]),
+            Series::Bm52x,
+            "display text",
+        );
+    }
+
+    /// The logging models' words (BM820s manual p.14-16), in the manual's
+    /// spelling, and a session page read as Recall.
+    #[test]
+    fn logging_words() {
+        let s = Series::Bm52x;
+        for (text, word) in [
+            ("LEFt", "LEFt"),
+            ("5trt", "Strt"),
+            ("PAU5", "PAUS"),
+            ("Cont", "Cont"),
+            ("5toP", "StoP"),
+            ("t0.05", "interval"),
+            ("t0.1 ", "interval"),
+        ] {
+            let m = quiet_as(&lcd8(s, text, BLANK, &[]), s);
+            assert!(
+                matches!(m.value, MeasuredValue::NoReading(w) if w == word),
+                "{text}: {:?}",
+                m.value
+            );
+            assert_eq!(m.mode, "Unknown(0x0000)");
+        }
+        let page = quiet_as(&lcd8(s, "P.028", BLANK, &[]), s);
+        assert_eq!(page.mode, "Recall");
+        assert!(matches!(page.value, MeasuredValue::NoReading("Recall")));
+        // Only the logging models log.
+        for text in ["LEFt", "P.028", "t0.05"] {
+            reported_as(
+                &lcd8(Series::Bm82x, text, BLANK, &[Dc1, V1]),
+                Series::Bm82x,
+                "display text",
+            );
+        }
+    }
+
+    /// R and C lit together are Recall on a logging model (BM820s manual
+    /// p.16): logged data, whatever shows. On the other series no
+    /// manual gives the state.
+    #[test]
+    fn recall_per_series() {
+        for (main, sub, anns) in [
+            ("223.7", "59.98", &[Record, Crest, Ac1, V1, Hz2][..]),
+            ("0206", "   1", &[Record, Crest]),
+            ("12?4", "HELP", &[Record, Crest, Max, Hold]),
+        ] {
+            let m = quiet_as(&lcd8(Series::Bm52x, main, sub, anns), Series::Bm52x);
+            assert_eq!(m.mode, "Recall", "{main}");
+            assert!(matches!(m.value, MeasuredValue::NoReading("Recall")));
+            assert_eq!(m.flags, StatusFlags::default(), "{main}");
+            assert!(m.aux_values.is_empty() && m.display_raw.is_none());
+        }
+        let live = reported_as(
+            &lcd8(
+                Series::Bm82x,
+                "223.7",
+                "59.98",
+                &[Record, Crest, Ac1, V1, Hz2],
+            ),
+            Series::Bm82x,
+            "REC and CREST annunciators",
+        );
+        assert_eq!(live.mode, "AC V");
+        assert!(live.flags.record);
     }
 }

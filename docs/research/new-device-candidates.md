@@ -24,14 +24,15 @@ connectivity.
 
 ## USB HID Candidates
 
-### Brymen BM52x / BM82x / BM86x — BM86x SUPPORTED (EXPERIMENTAL) SINCE 2026-09-27
+### Brymen BM52x / BM82x / BM86x — SUPPORTED (EXPERIMENTAL) SINCE 2026-09-27
 
-**The BM860s (BM869s, BM867s) is implemented as `bm86x`** — see
-[supported devices](../supported-devices.md) and the spec in
+**The BM860s (BM869s, BM867s), BM820s (BM829s, BM827s, BM822s, BM821s) and
+BM520s (BM525s, BM521s) are implemented as `bm86x`, `bm82x` and `bm52x`** —
+see [supported devices](../supported-devices.md) and the spec in
 [research/bm86x](bm86x/reverse-engineered-protocol.md), written from Brymen's
-protocol sheets, programs and manuals; the BM820s and BM520s are specified
-there and not yet implemented. The analysis below is as it stood before,
-corrected where the spec contradicts it.
+protocol sheets, programs and manuals; the BM520s logged-memory download is
+specified there and not implemented. The analysis below is as it stood
+before, corrected where the spec contradicts it.
 
 **Strongest USB HID candidate. Clear software gap. Officially documented protocol.**
 
@@ -705,7 +706,7 @@ the same transport.
 | Candidate | Transport | Why | Gap |
 |-----------|-----------|-----|-----|
 | **UNI-T UT71A–E** — implemented 2026-09-21 | USB HID (CH9325) | Lowest cost of any candidate: the cable, the bridge and the 11-byte packet shape are already implemented, UNI-T publishes the protocol, and the Tenma and Voltcraft VC9x0 rebrands come with it | Done, experimental: `ut71ab`, `ut71cde`, `vc920` await a hardware report ([supported devices](../supported-devices.md)) |
-| **Brymen BM86x** — implemented 2026-09-27 | USB HID (BU-86X) | Official protocol docs, strong community, no cross-platform GUI exists; specified from Brymen's protocol sheets, programs and manuals ([research/bm86x](bm86x/reverse-engineered-protocol.md)) | Done for the BM860s, experimental: `bm86x` awaits a hardware report; the BM82x and BM52x are specified, not implemented |
+| **Brymen BM86x / BM82x / BM52x** — implemented 2026-09-27 | USB HID (BU-86X) | Official protocol docs, strong community, no cross-platform GUI exists; specified from Brymen's protocol sheets, programs and manuals ([research/bm86x](bm86x/reverse-engineered-protocol.md)) | Done, experimental: `bm86x`, `bm82x` and `bm52x` await a hardware report; the BM52x logged-memory download is specified, not implemented |
 | **UNI-T via UT-D07B** — implemented 2026-09-22 | BLE | Reuses existing protocol parsers, #1 recommended logging meter on EEVBlog 2024, no desktop BLE tool | Done, verified on a UT61E+: the UT171 and UT181 series UNI-T lists on the adapter await a hardware report ([supported devices](../supported-devices.md)) |
 | **UNI-T UT60BT / UT202BT** — implemented 2026-09-25 | BLE (built in) | The UT61+ protocol over the Bluetooth transport we have; the UT60BT is the #1 logging pick on EEVBlog 2024 | Done, experimental: `ut60bt`, `ut202bt` await a hardware report |
 | **Fluke 287/289** | USB serial (IR) | Officially documented ASCII protocol, millions of units, $200 Windows-only software is terrible | Large |

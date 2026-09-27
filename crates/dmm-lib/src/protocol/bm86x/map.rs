@@ -1,5 +1,5 @@
 //! Where each LCD segment sits in a reply
-//! (`docs/research/bm86x/reverse-engineered-protocol.md` §5.1, §7.1).
+//! (`docs/research/bm86x/reverse-engineered-protocol.md` §5.1, §6.1, §7.1).
 //!
 //! A reply is 24 data bytes: Brymen's bytes 2-9, 11-18 and 20-27, bytes 1,
 //! 10 and 19 being the report IDs the wire does not carry (spec §4.1). Every
@@ -54,10 +54,10 @@ const fn byte(byte: usize) -> usize {
 /// names (spec §4.2).
 pub(super) const MODEL: usize = byte(23);
 
-/// Every annunciator of Table 1 but the minus signs and the decimal
-/// points, which belong to their rows (spec §5.1). A `1` suffix is the
-/// main display's symbol (circled ① in the sheet), a `2` the secondary
-/// display's (②).
+/// Every annunciator of either Table 1 but the minus signs and the decimal
+/// points, which belong to their rows (spec §5.1, §6.1). A `1` suffix is
+/// the main display's symbol (circled ① in the sheets), a `2` the
+/// secondary display's (②).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Ann {
     Auto,
@@ -105,6 +105,25 @@ pub(super) enum Ann {
     Mega1,
     Kilo1,
     Duty1,
+    // The BM820 map's own (spec §6.1, §6.5).
+    Hi,
+    Lo,
+    /// The dash of "MAX-MIN" (spec §6.5).
+    MaxMinDash,
+    /// The "%" beside △ (spec §6.5).
+    Percent,
+    /// Low impedance, lit in AutoCheck (spec §6.5).
+    LoZ,
+    Lpf,
+    /// "@" (spec §6.5).
+    At,
+    Dc2,
+    T1Sub,
+    Duty2,
+    Nano2,
+    Siemens2,
+    Farad2,
+    Ohm2,
 }
 
 impl Ann {
@@ -133,6 +152,13 @@ impl Lit {
     /// Those of `anns` that are lit.
     pub(super) fn among<const N: usize>(self, anns: [Ann; N]) -> impl Iterator<Item = Ann> {
         anns.into_iter().filter(move |a| self.has(*a))
+    }
+
+    /// The one of `anns` lit; `None` for none or several.
+    pub(super) fn one_of<const N: usize>(self, anns: [Ann; N]) -> Option<Ann> {
+        let mut on = self.among(anns);
+        let first = on.next();
+        on.next().is_none().then_some(first).flatten()
     }
 }
 
@@ -232,6 +258,85 @@ pub(super) static BM860: Map = Map {
     ],
 };
 
+/// The BM820s and BM520s: BM820 Table 1, report II's ID in byte 10 (spec
+/// §4.3, §6.1). Segments b g c in bits 7-5 and a f e d in bits 3-0 of each
+/// digit byte, bit 4 the point after that digit or an annunciator (spec
+/// §6.2, §7.1).
+pub(super) static BM820: Map = Map {
+    // a, b, c, d, e, f, g.
+    segments: [0x08, 0x80, 0x20, 0x01, 0x02, 0x04, 0x40],
+    main: Row {
+        digits: &[byte(5), byte(6), byte(7), byte(8)],
+        // 1P-3P, each in its own digit's byte; 8.4 is dB (spec §6.2).
+        points: &[(0, at(5, 4)), (1, at(6, 4)), (2, at(7, 4))],
+        // ① ▭ (spec §6.3).
+        minus: at(4, 7),
+    },
+    secondary: Row {
+        digits: &[byte(11), byte(12), byte(13), byte(14)],
+        // 4P-6P; 14.4 is %4~20mA (spec §6.2).
+        points: &[(0, at(11, 4)), (1, at(12, 4)), (2, at(13, 4))],
+        // ② ▭ (spec §6.3).
+        minus: at(9, 5),
+    },
+    annunciators: &[
+        (Ann::Hi, at(3, 7)),
+        (Ann::Lo, at(3, 6)),
+        (Ann::Dc1, at(3, 5)),
+        (Ann::Ac1, at(3, 4)),
+        (Ann::Min, at(3, 3)),
+        (Ann::MaxMinDash, at(3, 2)),
+        (Ann::Avg, at(3, 1)),
+        (Ann::Max, at(3, 0)),
+        (Ann::Rel, at(4, 6)),
+        (Ann::Percent, at(4, 5)),
+        (Ann::LoZ, at(4, 4)),
+        (Ann::T2, at(4, 3)),
+        (Ann::Lpf, at(4, 2)),
+        (Ann::T1T2Dash, at(4, 1)),
+        (Ann::T1, at(4, 0)),
+        (Ann::Db, at(8, 4)),
+        (Ann::Dc2, at(9, 7)),
+        (Ann::Ac2, at(9, 6)),
+        (Ann::At, at(9, 4)),
+        (Ann::LowBattery, at(9, 3)),
+        (Ann::T1Sub, at(9, 2)),
+        (Ann::T2Sub, at(9, 1)),
+        (Ann::Continuity, at(9, 0)),
+        (Ann::Loop, at(14, 4)),
+        (Ann::Milli2, at(15, 7)),
+        (Ann::Micro2, at(15, 6)),
+        (Ann::A2, at(15, 5)),
+        (Ann::V2, at(15, 4)),
+        (Ann::Duty2, at(15, 3)),
+        (Ann::Nano2, at(15, 2)),
+        (Ann::Siemens2, at(15, 1)),
+        (Ann::Farad2, at(15, 0)),
+        (Ann::Kilo1, at(16, 7)),
+        (Ann::Mega1, at(16, 6)),
+        (Ann::Ohm1, at(16, 5)),
+        (Ann::Hz1, at(16, 4)),
+        (Ann::Mega2, at(16, 3)),
+        (Ann::Kilo2, at(16, 2)),
+        (Ann::Ohm2, at(16, 1)),
+        (Ann::Hz2, at(16, 0)),
+        (Ann::Micro1, at(17, 7)),
+        (Ann::Milli1, at(17, 6)),
+        (Ann::V1, at(17, 5)),
+        (Ann::A1, at(17, 4)),
+        (Ann::Nano1, at(17, 3)),
+        (Ann::Duty1, at(17, 2)),
+        (Ann::Siemens1, at(17, 1)),
+        (Ann::Farad1, at(17, 0)),
+        // Byte 18 is "don't care": the programs' "mV" bit 18.3 stays out
+        // (spec §8.1).
+        (Ann::Hold, at(24, 7)),
+        (Ann::Crest, at(24, 6)),
+        (Ann::Record, at(24, 5)),
+        (Ann::Auto, at(24, 4)),
+    ],
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,11 +358,39 @@ mod tests {
 
     #[test]
     fn no_bit_is_named_twice() {
-        let bits = every_bit(&BM860);
-        for (i, bit) in bits.iter().enumerate() {
-            assert!(bit.mask.is_power_of_two(), "{bit:?}");
-            assert!(!bits[i + 1..].contains(bit), "{bit:?} is named twice");
+        for map in [&BM860, &BM820] {
+            let bits = every_bit(map);
+            for (i, bit) in bits.iter().enumerate() {
+                assert!(bit.mask.is_power_of_two(), "{bit:?}");
+                assert!(!bits[i + 1..].contains(bit), "{bit:?} is named twice");
+            }
         }
+    }
+
+    /// BM820 Table 1 fills bytes 3-9 and 11-17 to the last bit, and the
+    /// top half of byte 24; 2, 18, 20-23 (the model bytes), the rest of 24
+    /// and 25-27 are "don't care" (spec §6.1).
+    #[test]
+    fn the_bm820_map_is_table_1_whole() {
+        let bits = every_bit(&BM820);
+        let mut named = [0u8; 24];
+        for bit in &bits {
+            named[bit.index] |= bit.mask;
+        }
+        for byte in (3..=9).chain(11..=17) {
+            assert_eq!(named[data_index(byte).unwrap()], 0xFF, "byte {byte}");
+        }
+        assert_eq!(named[data_index(24).unwrap()], 0xF0);
+        for byte in [2, 18].into_iter().chain(20..=23).chain(25..=27) {
+            assert_eq!(named[data_index(byte).unwrap()], 0x00, "byte {byte}");
+        }
+        assert_eq!(bits.len(), 14 * 8 + 4);
+    }
+
+    /// `Lit` keeps one bit per annunciator in a `u64`.
+    #[test]
+    fn every_annunciator_fits_lit() {
+        assert!((Ann::Ohm2 as u32) < u64::BITS);
     }
 
     /// Table 1 fills bytes 3-9 and 11-18 to the last bit; 2 and 20-27 hold
@@ -281,9 +414,11 @@ mod tests {
     /// No two annunciators share a name, so `Lit` cannot confuse them.
     #[test]
     fn each_annunciator_is_named_once() {
-        let anns: Vec<Ann> = BM860.annunciators.iter().map(|(a, _)| *a).collect();
-        for (i, ann) in anns.iter().enumerate() {
-            assert!(!anns[i + 1..].contains(ann), "{ann:?}");
+        for map in [&BM860, &BM820] {
+            let anns: Vec<Ann> = map.annunciators.iter().map(|(a, _)| *a).collect();
+            for (i, ann) in anns.iter().enumerate() {
+                assert!(!anns[i + 1..].contains(ann), "{ann:?}");
+            }
         }
     }
 
@@ -324,5 +459,9 @@ mod tests {
         assert_eq!(BM860.segments(0xBE), 0b011_1111);
         assert_eq!(BM860.segments(0xBF), 0b011_1111, "bit 0 is no segment");
         assert_eq!(BM860.segments(0x40), 0b100_0000);
+        // BM820: `AF` is 0, and bit 4 is no segment.
+        assert_eq!(BM820.segments(0xAF), 0b011_1111);
+        assert_eq!(BM820.segments(0xBF), 0b011_1111);
+        assert_eq!(BM820.segments(0x01), 0b000_1000);
     }
 }

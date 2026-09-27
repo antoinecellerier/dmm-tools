@@ -265,6 +265,51 @@ pub(super) mod tests {
         }
     }
 
+    /// §7.2's Bs8252x column, BM820 digit bytes with bit 4 clear, read
+    /// through the BM820 map; bit 4, a point or an annunciator, changes
+    /// nothing.
+    #[test]
+    fn bm820_digit_bytes_read_as_brymen_reads_them() {
+        use super::super::map::BM820;
+        for (byte, c) in [
+            (0x00, ' '),
+            (0xAF, '0'),
+            (0xA0, '1'),
+            (0xCB, '2'),
+            (0xE9, '3'),
+            (0xE4, '4'),
+            (0x6D, '5'),
+            (0x6F, '6'),
+            (0xA8, '7'),
+            (0xEF, '8'),
+            (0xED, '9'),
+            (0x40, '-'),
+            (0x07, 'L'),
+            (0x0F, 'C'),
+            (0x4E, 'F'),
+            (0x4F, 'E'),
+            (0x42, 'r'),
+            (0x62, 'n'),
+            (0x63, 'o'),
+            (0x20, 'i'),
+            (0x47, 't'),
+            (0x67, 'b'),
+            (0xA7, 'U'),
+            (0xCE, 'P'),
+            (0xE6, 'H'),
+            (0xEC, 'g'),
+            (0xEE, 'A'),
+            (0xE3, 'd'),
+            (0xE5, 'y'),
+            (0x23, 'u'),
+            // In no Bs8252x table: d alone (spec §7.2).
+            (0x01, '_'),
+        ] {
+            assert_eq!(char_of(BM820.segments(byte)), c, "{byte:#04x}");
+            assert_eq!(char_of(BM820.segments(byte | 0x10)), c, "{byte:#04x}");
+        }
+    }
+
     #[test]
     fn an_unlisted_pattern_is_unknown() {
         // I as e f, one guess at how the meter draws InEr's I (spec §7.3).

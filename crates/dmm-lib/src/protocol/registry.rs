@@ -114,6 +114,8 @@ pub static DEVICES: &[&SelectableDevice] = &[
     // Brymen
     &bm78xbt::devices::BM78XBT,
     &bm86x::devices::BM86X,
+    &bm86x::devices::BM82X,
+    &bm86x::devices::BM52X,
     // Mock
     &mock::devices::MOCK,
     &zotek::sim::MOCK_ZT5B,
@@ -436,7 +438,7 @@ mod tests {
         const VERIFIED: &[&str] = &["ut61eplus", "ut61b+", "ut804"];
         const PARTLY_VERIFIED: &[&str] = &["ut181a"];
         // Experimental, with their verification issues still to be opened.
-        const ISSUE_TO_OPEN: &[&str] = &["bm86x"];
+        const ISSUE_TO_OPEN: &[&str] = &["bm86x", "bm82x", "bm52x"];
         for device in DEVICES {
             if !device.requires_hardware {
                 continue;
