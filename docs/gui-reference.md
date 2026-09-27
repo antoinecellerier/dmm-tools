@@ -247,7 +247,8 @@ A thin strip below the main plot showing the full capture history.
 - **Discard** button — drops a stopped recording, asking first if it holds
   samples you haven't exported; Export… then saves the graph's readings again
 - Sample counter and duration shown while recording
-- Scrollable log of the last 500 samples showing timestamp, value, unit, flags
+- Scrollable log of the whole recording (past about a million samples, the
+  latest million; export for the rest) showing timestamp, value, unit, flags
   and any sub-values, with each marker on its reading's row; with nothing
   recorded, it lists the markers alone
 - **Markers** — `N` marks the reading on screen, `Ctrl+N` marks it and puts
@@ -541,7 +542,7 @@ Screen reader support is built on [AccessKit](https://accesskit.dev/) and expose
 
 ### Known limitations
 
-- There is no per-sample keyboard navigation inside the graph — you can't step from one data point to the next and hear each value spoken. Use the Statistics panel for min/max/average and the Recording panel's sample list for point-level readings; the sample list is a scrollable text log that screen readers read row by row.
+- There is no per-sample keyboard navigation inside the graph — you can't step from one data point to the next and hear each value spoken. Use the Statistics panel for min/max/average and the Recording panel's sample list for point-level readings; the sample list is a scrollable text log that screen readers read row by row, for the rows scrolled into view.
 - Graph measurement cursors (A/B) can only be placed by clicking on the plot.
 - In the **Customize colors** popup, the RGBA fields need Enter to enter edit mode, then Up/Down to change the value; mouse drag remains the fastest way to pick a color.
 - The graph plot's X and Y axes are separate Tab stops that don't show a focus ring.

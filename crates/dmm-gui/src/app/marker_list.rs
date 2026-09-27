@@ -3,6 +3,8 @@
 //! at its reading and its note is written.
 
 use eframe::egui::{self, Key, RichText, Ui};
+use std::collections::VecDeque;
+use std::ops::Range;
 use std::time::Instant;
 
 use super::{App, BigMeterMode};
@@ -24,8 +26,9 @@ const NARROW_ROW_WIDTH: f32 = 460.0;
 /// The note keeps at least this much room beside its reading.
 const MIN_NOTE_WIDTH: f32 = 120.0;
 
-/// Samples the log shows, newest last.
-const LOG_ROWS: usize = 500;
+/// Past this many pixels an `f32` position steps by more than one, so the log
+/// shows no more rows than fit in it.
+const LOG_MAX_HEIGHT: f32 = 16_777_216.0;
 
 /// Space between a marker tag's edge and its number.
 const TAG_PAD: f32 = 3.0;
@@ -92,35 +95,102 @@ fn log_line(m: &Measurement) -> String {
     format!("{val:>10} {unit}{flags}{aux}", val = m.value_display_str())
 }
 
-/// One row of the log: a sample, a marker, or a marked sample.
-enum Row<'a> {
-    Sample(&'a Sample),
+/// One row of the log: a sample, a marker, or a marked sample. Samples by
+/// their index in the buffer, markers by theirs in the caller's list.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Row {
+    Sample(usize),
     Marker(usize),
-    Marked(&'a Sample, usize),
+    Marked(usize, usize),
 }
 
-/// The log's rows in time order: `samples` with each marker on its sample's
-/// row, and the markers with no sample in the log — placed before Record,
-/// or older than the samples shown — in rows of their own. `markers` index
-/// into the caller's list.
-fn log_rows<'a>(samples: impl Iterator<Item = &'a Sample>, markers: &[Instant]) -> Vec<Row<'a>> {
-    let mut rows = Vec::new();
-    let mut next = 0;
-    for s in samples {
-        let at = s.measurement.timestamp;
-        while next < markers.len() && markers[next] < at {
-            rows.push(Row::Marker(next));
-            next += 1;
+/// The log's rows in time order: the samples it shows with each marker on
+/// its sample's row, and the markers whose sample it doesn't show — placed
+/// before Record, or older than the samples shown — in rows of their own.
+///
+/// Worked out by binary search, so a frame costs the markers, not the
+/// samples: a recording can hold half a million.
+struct LogRows {
+    /// The buffer's samples the log shows.
+    shown: Range<usize>,
+    /// Each marker's row, its index and the sample it sits on, in order.
+    markers: Vec<(usize, usize, Option<usize>)>,
+    /// The rows of the markers without a sample shown, in order.
+    own: Vec<usize>,
+}
+
+impl LogRows {
+    /// `markers` are the markers' readings, in time order.
+    fn new(samples: &VecDeque<Sample>, shown: Range<usize>, markers: &[Instant]) -> Self {
+        let mut rows = Vec::with_capacity(markers.len());
+        let mut own = Vec::new();
+        for (i, &at) in markers.iter().enumerate() {
+            let p = samples.partition_point(|s| s.measurement.timestamp < at);
+            // Every earlier own row comes before this marker: they are in
+            // time order.
+            let row = p.clamp(shown.start, shown.end) - shown.start + own.len();
+            if shown.contains(&p) && samples[p].measurement.timestamp == at {
+                rows.push((row, i, Some(p)));
+            } else {
+                own.push(row);
+                rows.push((row, i, None));
+            }
         }
-        if next < markers.len() && markers[next] == at {
-            rows.push(Row::Marked(s, next));
-            next += 1;
-        } else {
-            rows.push(Row::Sample(s));
+        Self {
+            shown,
+            markers: rows,
+            own,
         }
     }
-    rows.extend((next..markers.len()).map(Row::Marker));
-    rows
+
+    fn len(&self) -> usize {
+        self.shown.len() + self.own.len()
+    }
+
+    fn row(&self, r: usize) -> Row {
+        let n = self.markers.partition_point(|&(row, ..)| row < r);
+        match self.markers.get(n) {
+            Some(&(row, i, None)) if row == r => Row::Marker(i),
+            Some(&(row, i, Some(k))) if row == r => Row::Marked(k, i),
+            _ => Row::Sample(self.shown.start + r - self.own.partition_point(|&row| row < r)),
+        }
+    }
+}
+
+/// Where the log's rows sit: a pitch each, and two for the `tall` ones — a
+/// marker's row in a narrow panel, its controls on a line of their own.
+struct RowGeometry {
+    pitch: f32,
+    tall: Vec<usize>,
+    /// Where each tall row ends, in pitches.
+    ends: Vec<usize>,
+}
+
+impl RowGeometry {
+    fn new(pitch: f32, tall: Vec<usize>) -> Self {
+        let ends = tall.iter().enumerate().map(|(m, &t)| t + m + 2).collect();
+        Self { pitch, tall, ends }
+    }
+
+    fn top(&self, r: usize) -> f32 {
+        (r + self.tall.partition_point(|&t| t < r)) as f32 * self.pitch
+    }
+
+    fn height(&self, r: usize) -> f32 {
+        let pitches = if self.tall.binary_search(&r).is_ok() {
+            2.0
+        } else {
+            1.0
+        };
+        pitches * self.pitch
+    }
+
+    /// The row at `y`.
+    fn row_at(&self, y: f32) -> usize {
+        let above = self.ends.partition_point(|&e| e as f32 * self.pitch <= y);
+        let r = ((y.max(0.0) / self.pitch) as usize).saturating_sub(above);
+        self.tall.get(above).map_or(r, |&tall| r.min(tall))
+    }
 }
 
 /// Whether the graph or the sample buffer still holds the reading taken at
@@ -208,10 +278,13 @@ impl App {
         }
     }
 
-    /// The log under the Record row: while recording, the last samples with
-    /// each marker on its reading's row; otherwise just the markers. One
-    /// scroller, to the end of the panel, following the newest row while
+    /// The log under the Record row: while recording, the whole recording
+    /// with each marker on its reading's row; otherwise just the markers.
+    /// One scroller, to the end of the panel, following the newest row while
     /// scrolled to it. Nothing when there is nothing to list.
+    ///
+    /// Only the rows in view are drawn, and every marker's, wherever it is:
+    /// Tab reaches each note, and brings it into view.
     ///
     /// A marker's number, note and `×` sit in a column of their own at the
     /// right, so they line up whatever the reading's line says.
@@ -226,14 +299,10 @@ impl App {
             // ends the edit is gone, so the edit ends here.
             self.marker_list.refollow = edit.following;
         }
-        let shown: Vec<&Sample> = match self.recording.role() {
-            BufferRole::Recording => {
-                let start = self.recording.samples.len().saturating_sub(LOG_ROWS);
-                self.recording.samples.range(start..).collect()
-            }
-            BufferRole::History => Vec::new(),
-        };
-        if shown.is_empty() && self.markers.is_empty() {
+        let recording_role = self.recording.role() == BufferRole::Recording;
+        let samples = &self.recording.samples;
+        let recorded = if recording_role { samples.len() } else { 0 };
+        if recorded == 0 && self.markers.is_empty() {
             return;
         }
         if let Some(n) = self.marker_list.focus
@@ -246,7 +315,20 @@ impl App {
         // Every row is one line of the log font tall, a marked one too, so
         // the controls on a marker's row are sized down to it.
         let line = ui.fonts_mut(|f| f.row_height(&log_font()));
+        let pitch = line + ui.spacing().item_spacing.y;
         let delete_width = ui.spacing().interact_size.y;
+        let weak = ui.visuals().weak_text_color();
+        let first = recorded.saturating_sub((LOG_MAX_HEIGHT / pitch) as usize);
+        if first > 0 {
+            ui.label(
+                RichText::new(format!(
+                    "Export to see the samples before {}.",
+                    samples[first].wall_time.format("%H:%M:%S")
+                ))
+                .small()
+                .color(weak),
+            );
+        }
         // The rest of the panel, floored: past it, the column scrolls.
         let rest = ui.available_height().max(0.0).floor();
         let max_height = if compact { rest.min(80.0) } else { rest };
@@ -262,7 +344,6 @@ impl App {
             ));
         }
 
-        let weak = ui.visuals().weak_text_color();
         let tc = self.settings.theme_colors(ui.visuals().dark_mode);
         // The graph's flag colours, a pair its contrast test covers.
         let (color, tag_text) = (tc.graph_marker(), tc.plot_background());
@@ -271,21 +352,16 @@ impl App {
         let list = &mut self.marker_list;
         let mut markers: Vec<&mut Marker> = self.markers.iter_mut().collect();
         let times: Vec<Instant> = markers.iter().map(|m| m.at).collect();
-        let rows = log_rows(shown.into_iter(), &times);
-        let recording_role = recording.role() == BufferRole::Recording;
+        let rows = LogRows::new(samples, first..recorded, &times);
         // Each marker row's reading, and what the row says of a reading the
         // graph or the recording has dropped.
         let labels: Vec<(String, Option<&'static str>)> = rows
+            .markers
             .iter()
-            .filter_map(|row| match *row {
-                Row::Sample(_) => None,
-                Row::Marker(i) => Some((i, None)),
-                Row::Marked(s, i) => Some((i, Some(s))),
-            })
-            .map(|(i, sample)| {
+            .map(|&(_, i, sample)| {
                 let m = &markers[i];
                 let reading = match sample {
-                    Some(s) => log_line(&s.measurement),
+                    Some(k) => log_line(&samples[k].measurement),
                     None => m.reading.clone(),
                 };
                 let tag = if !graph.holds(m.at) {
@@ -345,16 +421,67 @@ impl App {
             // arithmetic with it before clamping.
             area = area.vertical_scroll_offset(1.0e9);
         }
-        let output = area.show(ui, |ui| {
+        let output = area.show_viewport(ui, |ui, viewport| {
             ui.spacing_mut().interact_size.y = line;
             ui.spacing_mut().button_padding.y = 0.0;
             let narrow = ui.available_width() < NARROW_ROW_WIDTH;
             // A tag with room for three digits, so the notes line up.
             let number_width =
                 TAG_TIP + 2.0 * TAG_PAD + 3.0 * ui.fonts_mut(|f| f.glyph_width(&log_font(), '0'));
-            for row in rows {
+            let marker_rows = rows.markers.iter().map(|&(row, ..)| row);
+            let geometry = RowGeometry::new(
+                pitch,
+                if narrow {
+                    marker_rows.clone().collect()
+                } else {
+                    Vec::new()
+                },
+            );
+            let height = geometry.top(rows.len()) - ui.spacing().item_spacing.y;
+            // The rows are children placed by rect, which the content's own
+            // rect doesn't grow to hold: it is set here, whole, as
+            // `scroll_to_focus` checks a focused widget against it.
+            ui.set_min_size(egui::vec2(ui.available_width(), height.max(0.0)));
+            // The rows at last frame's offset, which this frame is drawn at
+            // — clamped, as a jump to the end asks for past it. While
+            // following, the last screenful too: `stick_to_bottom` moves down
+            // to it only once this frame is drawn. Only a screenful, however
+            // many rows came in while the log was hidden.
+            let screen = |top: f32| {
+                geometry.row_at(top).saturating_sub(1)
+                    ..(geometry.row_at(top + viewport.height()) + 2).min(rows.len())
+            };
+            let last = (height - viewport.height()).max(0.0);
+            let in_view = screen(viewport.min.y.min(last));
+            let newest = if list.following { screen(last) } else { 0..0 };
+            // In row order, so Tab goes through the notes in time order.
+            let mut drawn: Vec<usize> = in_view.chain(newest).chain(marker_rows).collect();
+            drawn.sort_unstable();
+            drawn.dedup();
+            let origin = ui.max_rect().min;
+            let width = ui.available_width();
+            let row_spacing = ui.spacing().item_spacing.y;
+            for r in drawn {
+                let row = rows.row(r);
+                let at = match row {
+                    Row::Sample(k) | Row::Marked(k, _) => samples[k].measurement.timestamp,
+                    Row::Marker(i) => markers[i].at,
+                };
+                // Its own id, so the ids of the widgets in it don't shift as
+                // rows scroll in and out of view: a salt alone would still
+                // be mixed with a count of the rows drawn before it.
+                let ui = &mut ui.new_child(
+                    egui::UiBuilder::new()
+                        .id(egui::Id::new(("log_row", at)))
+                        .max_rect(egui::Rect::from_min_size(
+                            origin + egui::vec2(0.0, geometry.top(r)),
+                            egui::vec2(width, geometry.height(r) - row_spacing),
+                        ))
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
                 let i = match row {
-                    Row::Sample(s) => {
+                    Row::Sample(k) => {
+                        let s = &samples[k];
                         ui.label(
                             RichText::new(format!(
                                 "{}  {}",
@@ -611,14 +738,10 @@ mod tests {
         assert_eq!(m.value_export_str(), "NCV:2");
     }
 
-    /// A marker's own row and a marked sample's row read alike, and each
-    /// marker lands at its reading: on a shown sample's row, or in time order
-    /// among them when the log doesn't show its sample.
-    #[test]
-    fn markers_sit_among_the_samples_in_time_order() {
-        let t0 = Instant::now();
+    /// Samples at `seconds` after `t0`.
+    fn samples_at(t0: Instant, seconds: impl Iterator<Item = u64>) -> VecDeque<Sample> {
         let wc = dmm_lib::WallClock::new();
-        let samples: Vec<Sample> = (1..=3)
+        seconds
             .map(|i| {
                 let mut m = Measurement::test_fixture(
                     MeasuredValue::Normal(1.0),
@@ -628,19 +751,120 @@ mod tests {
                 m.timestamp = secs(t0, i);
                 Sample::from_measurement(&m, &wc, 0)
             })
-            .collect();
-        let markers = [t0, secs(t0, 2), secs(t0, 9)];
-        let rows: Vec<String> = log_rows(samples.iter(), &markers)
-            .into_iter()
-            .map(|row| match row {
-                Row::Sample(s) => format!("s{}", (s.measurement.timestamp - t0).as_secs()),
+            .collect()
+    }
+
+    /// Every row of `rows`, as `s<seconds>` for a sample, `m<index>` for a
+    /// marker, and both for a marked sample.
+    fn row_names(rows: &LogRows, samples: &VecDeque<Sample>, t0: Instant) -> Vec<String> {
+        let at = |k: usize| (samples[k].measurement.timestamp - t0).as_secs();
+        (0..rows.len())
+            .map(|r| match rows.row(r) {
+                Row::Sample(k) => format!("s{}", at(k)),
                 Row::Marker(i) => format!("m{i}"),
-                Row::Marked(s, i) => {
-                    format!("s{}m{i}", (s.measurement.timestamp - t0).as_secs())
-                }
+                Row::Marked(k, i) => format!("s{}m{i}", at(k)),
             })
-            .collect();
-        assert_eq!(rows, ["m0", "s1", "s2m1", "s3", "m2"]);
+            .collect()
+    }
+
+    /// Each marker lands at its reading: on a shown sample's row, or in time
+    /// order among them when the log doesn't show its sample.
+    #[test]
+    fn markers_sit_among_the_samples_in_time_order() {
+        let t0 = Instant::now();
+        let samples = samples_at(t0, 1..=3);
+        let markers = [t0, secs(t0, 2), secs(t0, 9)];
+        let rows = LogRows::new(&samples, 0..3, &markers);
+        assert_eq!(
+            row_names(&rows, &samples, t0),
+            ["m0", "s1", "s2m1", "s3", "m2"]
+        );
+    }
+
+    /// A marker on a sample the log doesn't show, older than its first,
+    /// gets a row of its own at the top; with no samples shown, the
+    /// markers are the log.
+    #[test]
+    fn a_marker_before_the_samples_shown_gets_its_own_row() {
+        let t0 = Instant::now();
+        let samples = samples_at(t0, 1..=4);
+        let markers = [secs(t0, 1), secs(t0, 3)];
+        let rows = LogRows::new(&samples, 2..4, &markers);
+        assert_eq!(row_names(&rows, &samples, t0), ["m0", "s3m1", "s4"]);
+
+        let rows = LogRows::new(&samples, 0..0, &markers);
+        assert_eq!(row_names(&rows, &samples, t0), ["m0", "m1"]);
+    }
+
+    /// Two-pitch rows push the rows under them down, and a position inside
+    /// one finds it.
+    #[test]
+    fn tall_rows_take_two_pitches() {
+        let geometry = RowGeometry::new(10.0, vec![1, 3]);
+        let tops: Vec<f32> = (0..5).map(|r| geometry.top(r)).collect();
+        assert_eq!(tops, [0.0, 10.0, 30.0, 40.0, 60.0]);
+        for (y, row) in [
+            (0.0, 0),
+            (9.0, 0),
+            (10.0, 1),
+            (29.0, 1),
+            (30.0, 2),
+            (45.0, 3),
+            (59.0, 3),
+            (60.0, 4),
+        ] {
+            assert_eq!(geometry.row_at(y), row, "at {y}");
+        }
+        assert_eq!(geometry.height(3), 20.0);
+        assert_eq!(geometry.height(4), 10.0);
+    }
+
+    /// The log draws the rows in view, so a frame costs no more for a
+    /// longer recording.
+    #[test]
+    #[ignore = "timing-sensitive; run with --release"]
+    fn a_log_frame_costs_the_same_however_long_the_recording() {
+        fn measure(samples: u64) -> Duration {
+            let mut app = app();
+            app.recording.set_max_samples(samples as usize);
+            app.toggle_recording();
+            let wall_clock = app.wall_clock;
+            let t0 = Instant::now();
+            let mut m = Measurement::test_fixture(
+                MeasuredValue::Normal(1.234),
+                "V",
+                StatusFlags::default(),
+            );
+            for i in 0..samples {
+                m.timestamp = t0 + Duration::from_millis(i * 10);
+                app.recording.push(&m, &wall_clock, 0);
+            }
+            let ctx = egui::Context::default();
+            let frame = |app: &mut App| {
+                let mut out = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(800.0, 400.0))),
+                        ..Default::default()
+                    },
+                    |ui| app.show_log(ui, false),
+                );
+                out.textures_delta.clear();
+            };
+            for _ in 0..3 {
+                frame(&mut app);
+            }
+            let start = Instant::now();
+            for _ in 0..50 {
+                frame(&mut app);
+            }
+            start.elapsed()
+        }
+
+        let short = measure(5_000);
+        let long = measure(500_000);
+        let ratio = long.as_secs_f64() / short.as_secs_f64().max(1e-9);
+        println!("5K: {short:?}, 500K: {long:?}, ratio {ratio:.2}x");
+        assert!(ratio < 2.0, "a log frame's cost grew with the recording");
     }
 
     fn app() -> App {

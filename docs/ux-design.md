@@ -245,7 +245,7 @@ Three components stacked vertically:
 - Shows sample count and duration while recording
 - Records to in-memory buffer, exported on demand
 - With nothing recorded, Export… saves the samples the graph holds; a dimmed line under the row says so, with their count, and points to Record for capturing across mode changes. One buffer serves both roles — it follows the graph until Record empties it for the recording — so full samples are paid for once, and the graph's are kept only while no recording exists, the only time Export… saves them.
-- Scrollable sample log showing recent samples (timestamp, value, unit, flags, and any sub-values) in monospace. Auto-scrolls to bottom, caps at last 500 entries. Shown for a recording only.
+- Scrollable sample log showing the whole recording (timestamp, value, unit, flags, and any sub-values) in monospace, markers on their readings' rows. Auto-scrolls to bottom. Only the rows in view are drawn, plus every marker's row so Tab reaches each note; past about a million rows f32 positions lose pixel precision, so a longer recording's log starts later and says to export for the rest. With nothing recorded it lists the markers alone.
 
 ### Accessibility
 

@@ -992,25 +992,174 @@ mod tests {
     /// buffer — a recording with `record` — and a marker on the one at
     /// `marked` seconds, out of the default one-minute window.
     fn run_with_a_marker_at(marked: u64, record: bool) -> MenuRun {
+        run_with_markers(181, &[marked], record)
+    }
+
+    /// `count` readings a second apart, on the graph and in the buffer — a
+    /// recording with `record` — with a marker on those at `marked` seconds.
+    fn run_with_markers(count: u64, marked: &[u64], record: bool) -> MenuRun {
         let mut run = MenuRun::new();
         if record {
             run.app.toggle_recording();
         }
         let t0 = Instant::now();
-        let wall_clock = run.app.wall_clock;
-        for i in 0..=180 {
-            let mut m = reading();
-            m.timestamp = t0 + std::time::Duration::from_secs(i);
-            run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
-            run.app.recording.push(&m, &wall_clock, 0);
-            if i == marked {
-                run.app.last_measurement = Some(m);
+        for i in 0..count {
+            push_reading(&mut run, t0 + std::time::Duration::from_secs(i));
+            if marked.contains(&i) {
                 run.app.add_marker(false);
             }
         }
         run.frame(1.0, vec![]);
         run.frame(1.0, vec![]);
         run
+    }
+
+    /// A reading taken at `at`, on the graph, in the buffer and on screen.
+    fn push_reading(run: &mut MenuRun, at: Instant) {
+        let mut m = reading();
+        m.timestamp = at;
+        let wall_clock = run.app.wall_clock;
+        run.app.graph.push(1.234, m.timestamp, "DC V", "V", None);
+        run.app.recording.push(&m, &wall_clock, 0);
+        run.app.last_measurement = Some(m);
+    }
+
+    /// Whether the log drew the row of the sample taken at `at`.
+    fn shows_sample(run: &MenuRun, at: Instant) -> bool {
+        let sample = run
+            .app
+            .recording
+            .samples
+            .iter()
+            .find(|s| s.measurement.timestamp == at)
+            .expect("a buffered sample");
+        let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
+        run.tree
+            .iter()
+            .any(|(_, n)| n.value().is_some_and(|v| v.starts_with(&time)))
+    }
+
+    /// The label of the widget holding the keyboard focus.
+    fn focused_label(run: &MenuRun) -> Option<String> {
+        let focus = run.focus?;
+        run.tree
+            .iter()
+            .find(|(id, _)| *id == focus)
+            .and_then(|(_, n)| n.label().map(str::to_string))
+    }
+
+    /// The log holds the whole recording, not only its last rows: Tab
+    /// reaches a marker far above the ones in view and brings it, with the
+    /// samples around it, into view.
+    #[test]
+    fn tab_reaches_a_marker_at_the_start_of_a_long_recording() {
+        let mut run = run_with_markers(2_000, &[10], true);
+        let t0 = run.app.recording.samples[0].measurement.timestamp;
+        let at = |i: u64| t0 + std::time::Duration::from_secs(i);
+        assert!(shows_sample(&run, at(1_999)), "following the newest row");
+        assert!(!shows_sample(&run, at(9)), "the start is out of view");
+        for _ in 0..10 {
+            if focused_label(&run).as_deref() == Some("Show marker 1 on the graph") {
+                break;
+            }
+            run.key(Key::Tab);
+        }
+        assert_eq!(
+            focused_label(&run).as_deref(),
+            Some("Show marker 1 on the graph")
+        );
+        run.frame(1.0, vec![]);
+        run.frame(1.0, vec![]);
+        assert!(shows_sample(&run, at(9)), "the rows around it are drawn");
+        let tag = run.node_rect("Show marker 1 on the graph");
+        assert!(
+            tag.top() >= 0.0 && tag.bottom() <= 400.0,
+            "in view: {tag:?}"
+        );
+    }
+
+    /// Readings that arrive together are all drawn in the frame they arrive
+    /// in, while the log follows its newest row — and so are the rows on
+    /// screen, which that frame still shows before it moves down to them.
+    #[test]
+    fn the_newest_rows_are_drawn_as_they_arrive() {
+        let mut run = run_with_markers(300, &[], true);
+        let times: Vec<Instant> = run
+            .app
+            .recording
+            .samples
+            .iter()
+            .map(|s| s.measurement.timestamp)
+            .collect();
+        let on_screen: Vec<Instant> = times
+            .iter()
+            .copied()
+            .filter(|&at| shows_sample(&run, at))
+            .collect();
+        let last = *times.last().expect("samples");
+        let new: Vec<Instant> = (1..=3)
+            .map(|i| last + std::time::Duration::from_secs(i))
+            .collect();
+        for &at in &new {
+            push_reading(&mut run, at);
+        }
+        run.frame(1.0, vec![]);
+        for at in new {
+            assert!(shows_sample(&run, at));
+        }
+        // The first is the row of margin above the view.
+        for &at in &on_screen[1..] {
+            assert!(shows_sample(&run, at), "a row on screen went blank");
+        }
+    }
+
+    /// Readings that came in while the log wasn't drawn — big meter mode, or
+    /// the panel off — cost the frame it comes back in a screenful of rows,
+    /// not one row each.
+    #[test]
+    fn readings_that_arrive_unseen_cost_a_screenful() {
+        let mut run = run_with_markers(300, &[], true);
+        let last = run.app.recording.samples.back().expect("samples");
+        let last = last.measurement.timestamp;
+        for i in 1..=2_000 {
+            push_reading(&mut run, last + std::time::Duration::from_secs(i));
+        }
+        run.frame(1.0, vec![]);
+        let rows = run
+            .tree
+            .iter()
+            .filter(|(_, n)| n.value().is_some_and(|v| v.contains(" V")))
+            .count();
+        assert!(rows < 100, "{rows} rows drawn");
+        let newest = run.app.recording.samples.back().expect("samples");
+        assert!(shows_sample(&run, newest.measurement.timestamp));
+    }
+
+    /// A marker's × keeps the focus while the log scrolls under it: its row
+    /// keeps its id whichever rows are drawn before it.
+    #[test]
+    fn a_focused_cross_keeps_the_focus_as_the_log_scrolls() {
+        let mut run = run_with_markers(300, &[290], true);
+        for _ in 0..12 {
+            if focused_label(&run).as_deref() == Some("Delete marker 1") {
+                break;
+            }
+            run.key(Key::Tab);
+        }
+        assert_eq!(focused_label(&run).as_deref(), Some("Delete marker 1"));
+        let over_log = run.node_rect("Note for marker 1").center();
+        for delta in [-4.0, 4.0] {
+            for _ in 0..30 {
+                let wheel = egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::vec2(0.0, delta),
+                    phase: egui::TouchPhase::Move,
+                    modifiers: Modifiers::NONE,
+                };
+                run.frame(0.1, vec![egui::Event::PointerMoved(over_log), wheel]);
+            }
+            assert_eq!(focused_label(&run).as_deref(), Some("Delete marker 1"));
+        }
     }
 
     /// A marked row is as tall as any other: its number, note and × are sized
