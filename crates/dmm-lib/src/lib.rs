@@ -204,8 +204,40 @@ struct KnownTransport {
     vid: u16,
     pid: u16,
     name: &'static str,
+    /// The cable passes the meter's UART bytes through, so any UART meter
+    /// can be tried on it. A cable that speaks a meter's protocol itself does
+    /// not, and is opened only for a meter that lists it or for `auto`.
+    relays_uart: bool,
     /// Open the HID device, initialise the bridge, return a boxed Transport.
     init: fn(hidapi::HidDevice) -> Result<Box<dyn Transport>>,
+}
+
+/// The cables of `table` an open tries, in order, for a meter whose links
+/// are `preferred` (empty when the meter is not named yet).
+///
+/// The meter's own cables come first, in its link order. A meter on a
+/// relaying cable falls back to the other relaying ones, so an unusual
+/// pairing still connects; it never falls back to a cable that does not
+/// relay, which could not carry it and would stand in the way of its
+/// Bluetooth fallback. A meter listing only non-relaying cables gets exactly
+/// those. With nothing named, every cable is tried, the relaying ones first.
+fn usb_candidates<'a>(table: &'a [KnownTransport], preferred: &[&str]) -> Vec<&'a KnownTransport> {
+    let mut ordered: Vec<&KnownTransport> = preferred
+        .iter()
+        .filter_map(|name| table.iter().find(|kt| kt.name == *name))
+        .collect();
+    let others = |relays: bool| {
+        table
+            .iter()
+            .filter(move |kt| kt.relays_uart == relays && !preferred.contains(&kt.name))
+    };
+    if preferred.is_empty() || ordered.iter().any(|kt| kt.relays_uart) {
+        ordered.extend(others(true));
+    }
+    if preferred.is_empty() {
+        ordered.extend(others(false));
+    }
+    ordered
 }
 
 /// The Bluetooth peers an open for `device` takes, by name: UNI-T's adapters
@@ -278,6 +310,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
         vid: cp2110::VID,
         pid: cp2110::PID,
         name: cp2110::NAME,
+        relays_uart: true,
         init: |dev| {
             let cp = cp2110::Cp2110::new(dev);
             cp.init_uart()?;
@@ -288,6 +321,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
         vid: ch9329::VID,
         pid: ch9329::PID,
         name: ch9329::NAME,
+        relays_uart: true,
         init: |dev| {
             let ch = ch9329::Ch9329::new(dev);
             ch.init()?;
@@ -298,6 +332,7 @@ const KNOWN_TRANSPORTS: &[KnownTransport] = &[
         vid: ch9325::VID,
         pid: ch9325::PID,
         name: ch9325::NAME,
+        relays_uart: true,
         init: |dev| {
             let mut ch = ch9325::Ch9325::new(dev);
             ch.init()?;
@@ -633,10 +668,11 @@ fn open_first_match(
     api: &hidapi::HidApi,
     preferred: &[&'static str],
 ) -> Result<(hidapi::HidDevice, &'static KnownTransport)> {
+    let candidates = usb_candidates(KNOWN_TRANSPORTS, preferred);
     let match_count: usize = api
         .device_list()
         .filter(|dev| {
-            KNOWN_TRANSPORTS
+            candidates
                 .iter()
                 .any(|kt| dev.vendor_id() == kt.vid && dev.product_id() == kt.pid)
         })
@@ -655,18 +691,7 @@ fn open_first_match(
         );
     }
 
-    // Preferred cables first, then everything else as a fallback so an
-    // unusual pairing still connects.
-    let ordered = preferred
-        .iter()
-        .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
-        .chain(
-            KNOWN_TRANSPORTS
-                .iter()
-                .filter(|kt| !preferred.contains(&kt.name)),
-        );
-
-    for kt in ordered {
+    for kt in candidates {
         if let Ok(device) = api.open(kt.vid, kt.pid) {
             return Ok((device, kt));
         }
@@ -1198,28 +1223,80 @@ mod tests {
         }
     }
 
-    /// The preferred cable must come first, but the others stay reachable so an
-    /// unusual pairing still connects.
+    /// The preferred cable must come first, but the other relaying ones stay
+    /// reachable so an unusual pairing still connects.
     #[test]
     fn preference_orders_without_excluding() {
         let preferred = registry::find_device("ut804").unwrap().links;
-        let ordered: Vec<&str> = preferred
+        let ordered: Vec<&str> = usb_candidates(KNOWN_TRANSPORTS, preferred)
             .iter()
-            .filter_map(|name| KNOWN_TRANSPORTS.iter().find(|kt| kt.name == *name))
-            .chain(
-                KNOWN_TRANSPORTS
-                    .iter()
-                    .filter(|kt| !preferred.contains(&kt.name)),
-            )
             .map(|kt| kt.name)
             .collect();
 
         assert_eq!(ordered[0], "CH9325", "the UT80x family uses the CH9325");
-        assert_eq!(
-            ordered.len(),
-            KNOWN_TRANSPORTS.len(),
-            "every transport must stay reachable as a fallback"
-        );
+        for kt in KNOWN_TRANSPORTS.iter().filter(|kt| kt.relays_uart) {
+            assert!(
+                ordered.contains(&kt.name),
+                "{} must stay reachable as a fallback",
+                kt.name
+            );
+        }
+    }
+
+    /// A table with a cable that does not relay UART bytes between two that
+    /// do, for the candidate-order tests.
+    fn table_with_non_relaying_cable() -> [KnownTransport; 3] {
+        fn cable(name: &'static str, relays_uart: bool) -> KnownTransport {
+            KnownTransport {
+                vid: 0,
+                pid: 0,
+                name,
+                relays_uart,
+                init: |_| {
+                    Err(Error::NoTransportFound {
+                        bluetooth_searched: false,
+                    })
+                },
+            }
+        }
+        [cable("A", true), cable("OWN", false), cable("B", true)]
+    }
+
+    fn candidate_names(table: &[KnownTransport], preferred: &[&str]) -> Vec<&'static str> {
+        usb_candidates(table, preferred)
+            .iter()
+            .map(|kt| kt.name)
+            .collect()
+    }
+
+    /// With no meter named, every cable is tried, the non-relaying ones last.
+    #[test]
+    fn candidates_for_auto_try_every_cable() {
+        let table = table_with_non_relaying_cable();
+        assert_eq!(candidate_names(&table, &[]), ["A", "B", "OWN"]);
+    }
+
+    /// A UART meter falls back to the relaying cables only, never to one that
+    /// could not carry it; a Bluetooth link in its list changes nothing.
+    #[test]
+    fn candidates_for_a_uart_meter_skip_non_relaying_cables() {
+        let table = table_with_non_relaying_cable();
+        assert_eq!(candidate_names(&table, &["A", BLUETOOTH]), ["A", "B"]);
+    }
+
+    /// A meter listing only a non-relaying cable gets exactly that one.
+    #[test]
+    fn candidates_for_a_non_relaying_meter_are_its_cables() {
+        let table = table_with_non_relaying_cable();
+        assert_eq!(candidate_names(&table, &["OWN"]), ["OWN"]);
+    }
+
+    /// The meter's link order wins over the table order.
+    #[test]
+    fn candidates_keep_the_link_order_first() {
+        let table = table_with_non_relaying_cable();
+        assert_eq!(candidate_names(&table, &["B", "A"]), ["B", "A"]);
+        assert_eq!(candidate_names(&table, &["B"]), ["B", "A"]);
     }
 
     /// Every bridge carries meters, so the "no meter answered" help always has

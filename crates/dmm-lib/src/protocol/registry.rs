@@ -33,18 +33,22 @@ pub struct SelectableDevice {
     /// their transport's `NAME`, and [`crate::BLUETOOTH`]. Each family's
     /// `devices` module says where its list comes from.
     ///
-    /// Two things read it. Opening only orders the candidates —
-    /// `open_first_match` still falls back to the remaining transports, so an
-    /// unusual cable keeps working; without the order, selecting a UT803 on a
-    /// bench that also has a UT61E+ attached opens the UT61E+'s CP2110 and
-    /// every read times out. Detection takes it literally: a bridge is probed
-    /// only with the fingerprints of the meters listed on it, and the "no
-    /// meter answered" help lists those same meters — so a cable a meter is
-    /// seen on belongs here, whether or not it is the likely one.
+    /// Two things read it. Opening mostly orders the candidates —
+    /// `open_first_match` still falls back to the remaining cables that relay
+    /// UART bytes, so an unusual cable keeps working. It never falls back to
+    /// a cable that speaks a meter's protocol itself, and a meter that lists
+    /// only such non-relaying cables gets exactly those. Without the order,
+    /// selecting a UT803 on a bench that also has a UT61E+ attached opens the
+    /// UT61E+'s CP2110 and every read times out. Detection takes it
+    /// literally: a bridge is probed only with the fingerprints of the meters
+    /// listed on it, and the "no meter answered" help lists those same
+    /// meters — so a cable a meter is seen on belongs here, whether or not it
+    /// is the likely one.
     ///
-    /// A link left off still opens a named meter: any USB bridge, the listed
-    /// ones tried first; the USB adapter `--adapter` names by serial or path;
-    /// and the radio at a Bluetooth address given as `--adapter`. Only three
+    /// A link left off still opens a named meter: any relaying USB bridge
+    /// when the meter lists one, its listed cables tried first; the USB adapter
+    /// `--adapter` names by serial or path; and the radio at a Bluetooth
+    /// address given as `--adapter`. Only three
     /// things follow the list strictly: the automatic Bluetooth fallback when
     /// no cable answers, `auto` detection's fingerprints on each link, and a
     /// meter with the radio built in, listed on Bluetooth alone, never

@@ -110,6 +110,15 @@ Open questions, each needing a meter:
   receives SET_MONITOR twice and a UT171 its connect frame twice per auto
   open. Harmless on paper — both are what the meter was already sent — but
   no meter has been watched doing it.
+- **Relaying UART bytes is necessary, not sufficient, for a cable to carry a
+  meter.** A named meter falls back to any cable that relays UART bytes
+  (`architecture.md`, USB open path), but the cable's head must also fit the
+  meter's optical port and its bridge must run the meter's line settings: our
+  init sets the CP2110 to 9600 baud and the CH9325 to 2400, then 19200. A
+  fallback that can't fit costs an open and a timeout, not a wrong reading.
+  Describing each cable by chip, head and line settings, and each entry by
+  the heads it fits, would let the fallback and detection skip cables that
+  can't carry the meter. Not needed while the fallback only costs time.
 
 ## Pending Verification
 

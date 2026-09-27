@@ -125,7 +125,10 @@ types directly. That opener returns a `Box<dyn Transport>`, trying the cables th
 lists first (its `links`, set in the family's `devices.rs` from the cable table in
 `supported-devices.md`) and falling back to the remaining bridges. The preference only matters
 when more than one adapter is plugged in — without it a UT803 selection would open a UT61E+'s
-CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. An
+CP2110 and time out on every read — and the fallback keeps unusual cable pairings working. The
+fallback reaches only cables that relay the meter's UART bytes: a cable that speaks a meter's
+protocol itself is tried only for `auto`, last, or for an entry that lists it, and an entry
+listing only such cables is tried on exactly those. An
 entry that advertises `bluetooth_names`, a meter with the radio built in, is looked for over Bluetooth alone,
 and fails with its own error (`Error::BluetoothOnly`): not in range, or the radio not searched.
 
