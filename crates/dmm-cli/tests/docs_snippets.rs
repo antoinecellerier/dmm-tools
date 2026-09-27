@@ -10,9 +10,10 @@
 //!
 //! `via=mock[:<mock-mode>]` runs the command against the mock device,
 //! `via=<name>.replay` against `assets/replays/<name>.replay`, so a block is
-//! the same on every machine and needs no meter. The doc shows the command as
-//! a user with a meter on the cable would type it — neither flag appears in
-//! the block.
+//! the same on every machine and needs no meter. A replay runs on virtual
+//! time, so what it prints does not hang on how promptly the runner wakes a
+//! sleep. The doc shows the command as a user with a meter on the cable would
+//! type it — none of these flags appears in the block.
 //!
 //! `UPDATE_DOCS=1 cargo test -p dmm-cli` rewrites a stale block; a plain run
 //! fails with a diff. The run pins `TZ=UTC`, which chrono's `Local` ignores on
@@ -129,9 +130,17 @@ fn output_of(command: &str, via: &Via, where_: &str) -> String {
                 args.extend(["--mock-mode".to_string(), mode]);
             }
         }
+        // A replay is paced by the clock, and on real time a slow runner's
+        // late wake-up lands a poll on a later frame. The burst covers every
+        // sleep and the scale shrinks a stall to a sliver of session time, so
+        // each poll falls on its tick whatever the machine is doing.
         Via::Replay(path) => args.extend([
             "--replay".to_string(),
             path.to_str().expect("utf-8 path").to_string(),
+            "--mock-clock-scale".to_string(),
+            "0.001".to_string(),
+            "--mock-clock-preseed".to_string(),
+            "86400".to_string(),
         ]),
     }
 
