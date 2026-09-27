@@ -2,9 +2,17 @@
 //! only names steps that device declares.
 
 use super::step::FREEFORM_STEP_ID;
-use crate::StepListFormat;
+use clap::ValueEnum;
 use console::style;
 use dmm_lib::protocol::registry::SelectableDevice;
+
+/// How `capture --list-steps` prints the step list. `Md` is the checklist the
+/// device verification issues carry, so the issue and the code can't drift.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
+pub(crate) enum StepListFormat {
+    Text,
+    Md,
+}
 
 /// Print the step IDs `--steps` accepts for the selected device.
 ///

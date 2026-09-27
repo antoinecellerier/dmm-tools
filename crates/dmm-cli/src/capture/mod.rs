@@ -8,7 +8,7 @@ mod session;
 mod step;
 
 pub(crate) use input::{ErrorLog, Input};
-pub(crate) use listing::list_steps;
+pub(crate) use listing::{StepListFormat, list_steps};
 pub(crate) use report::{
     CaptureReport, SampleData, StepResult, StepStatus, needs_attention, save_report, upsert_step,
 };

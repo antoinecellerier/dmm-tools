@@ -1,11 +1,10 @@
 use chrono::{DateTime, Local};
+use clap::ValueEnum;
 use dmm_lib::WallClock;
 use dmm_lib::measurement::Measurement;
 use dmm_shared::export::CsvLayout;
 use std::io::Write;
 use std::time::Instant;
-
-use crate::OutputFormat;
 
 /// Derive a wall-clock RFC3339 string from the measurement's monotonic
 /// timestamp using the session's `WallClock` origin. Keeps exported
@@ -15,6 +14,47 @@ fn timestamp_rfc3339(m: &Measurement, wall_clock: &WallClock) -> String {
     let sys_time = wall_clock.wall_time_for(m.timestamp);
     let dt: DateTime<Local> = sys_time.into();
     dt.to_rfc3339()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, ValueEnum)]
+pub enum OutputFormat {
+    Text,
+    Csv,
+    Json,
+    /// The meter's own frames, for --replay to play back
+    Replay,
+}
+
+impl OutputFormat {
+    /// What `--format` calls this format, for a message that quotes the flag
+    /// back at the user.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Csv => "csv",
+            Self::Json => "json",
+            Self::Replay => "replay",
+        }
+    }
+
+    /// The extension a file of this format carries: what a bare `-o` names its
+    /// file with, and what picks the format when `-o` names a file and
+    /// `--format` doesn't.
+    pub(crate) fn extension(self) -> &'static str {
+        match self {
+            Self::Text => "txt",
+            Self::Csv => "csv",
+            Self::Json => "json",
+            Self::Replay => "replay",
+        }
+    }
+
+    /// The format a file extension names, if it names one.
+    pub(crate) fn from_extension(extension: &str) -> Option<Self> {
+        [Self::Text, Self::Csv, Self::Json, Self::Replay]
+            .into_iter()
+            .find(|f| f.extension().eq_ignore_ascii_case(extension))
+    }
 }
 
 /// What a `read` run writes, with whatever that format needs for the whole
@@ -217,6 +257,7 @@ mod tests {
     use super::*;
     use dmm_lib::flags::StatusFlags;
     use dmm_lib::measurement::{AuxValue, MeasuredValue};
+    use dmm_lib::protocol::make_test_measurement;
 
     /// One reading, as `output` writes it.
     fn rendered(mut output: Output, m: &Measurement, integral: Option<(f64, &str)>) -> String {
@@ -716,5 +757,159 @@ mod tests {
         assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
         assert!(e.to_string().contains("DC V"), "got {e}");
         assert!(file.is_empty(), "nothing is written: {file:?}");
+    }
+
+    fn csv_of(m: &dmm_lib::measurement::Measurement) -> String {
+        rendered(Output::Csv(CsvLayout::default()), m, None)
+    }
+
+    fn json_of(m: &dmm_lib::measurement::Measurement, experimental: bool) -> serde_json::Value {
+        serde_json::from_str(&rendered(Output::Json { experimental }, m, None)).unwrap()
+    }
+
+    #[test]
+    fn format_text_output() {
+        let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let output = rendered(Output::Text, &m, None);
+        assert!(output.contains("5.678"));
+        assert!(output.contains("V"));
+    }
+
+    #[test]
+    fn format_csv_output() {
+        let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let output = csv_of(&m);
+        let fields: Vec<&str> = output.trim().split(',').collect();
+        assert!(fields.len() >= 6);
+        assert_eq!(fields[1], "DC V");
+        assert_eq!(fields[2], "5.678");
+        assert_eq!(fields[3], "V");
+    }
+
+    /// A meter that can report sub-values gets one column group per slot,
+    /// sized by the family's `max_aux_values` so every row of a file lines up
+    /// even when a mode reports fewer than the family can.
+    #[test]
+    fn format_csv_with_aux_slots() {
+        use dmm_lib::measurement::AuxValue;
+
+        let mut m = make_test_measurement(0x02, 0x01, b"239.22 ", (0x00, 0x00), (0x00, 0x00, 0x00));
+        m.aux_values = vec![AuxValue {
+            label: "Frequency".into(),
+            value: MeasuredValue::Normal(50.01),
+            unit: "Hz".into(),
+            display_raw: Some("50.01".to_string()),
+            elapsed_secs: None,
+        }];
+        let layout = dmm_shared::export::CsvLayout {
+            family_slots: 2,
+            ..Default::default()
+        };
+        let output = rendered(Output::Csv(layout), &m, None);
+        let fields: Vec<&str> = output.trim_end().split(',').collect();
+        assert_eq!(fields.len(), 6 + 2 * 3, "got {output}");
+        assert_eq!(&fields[6..9], ["Frequency", "50.01", "Hz"]);
+        // The unused second slot is present but empty.
+        assert_eq!(&fields[9..12], ["", "", ""]);
+        assert_eq!(layout.header().len(), fields.len());
+    }
+
+    /// The UT61E+ separates the sign from the digits on some ranges. That
+    /// space must not reach the CSV, or the whole column parses as text.
+    #[test]
+    fn format_csv_negative_value_is_numeric() {
+        let m = make_test_measurement(0x02, 0x01, b"- 55.79", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let output = csv_of(&m);
+        let fields: Vec<&str> = output.trim().split(',').collect();
+        assert_eq!(fields[2], "-55.79");
+        assert_eq!(fields[2].parse::<f64>().unwrap(), -55.79);
+    }
+
+    #[test]
+    fn format_json_output() {
+        // flag1=0x02 (HOLD), flag2=0x00 (AUTO on, inverted logic)
+        let m = make_test_measurement(0x02, 0x01, b"  5.678", (0x00, 0x00), (0x02, 0x00, 0x00));
+        let parsed = json_of(&m, false);
+        assert_eq!(parsed["mode"], "DC V");
+        assert_eq!(parsed["value"], 5.678);
+        assert_eq!(parsed["unit"], "V");
+        assert_eq!(parsed["flags"]["hold"], true);
+        assert_eq!(parsed["flags"]["auto_range"], true);
+        assert_eq!(parsed["experimental"], false);
+    }
+
+    #[test]
+    fn format_json_experimental_flag() {
+        let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x00, 0x00, 0x00));
+        assert_eq!(json_of(&m, true)["experimental"], true);
+    }
+
+    #[test]
+    fn format_csv_overload() {
+        let m = make_test_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
+        assert!(csv_of(&m).contains(",OL,"));
+    }
+
+    #[test]
+    fn format_json_overload() {
+        let m = make_test_measurement(0x06, 0x00, b"    OL ", (0x00, 0x00), (0x00, 0x00, 0x00));
+        assert_eq!(json_of(&m, false)["value"], "OL");
+    }
+
+    #[test]
+    fn format_csv_ncv() {
+        let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
+        assert!(csv_of(&m).contains("NCV:3"));
+    }
+
+    #[test]
+    fn format_json_ncv() {
+        let m = make_test_measurement(0x14, 0x00, b"      3", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let parsed = json_of(&m, false);
+        assert_eq!(parsed["value"]["ncv_level"], 3);
+        assert_eq!(parsed["mode"], "NCV");
+    }
+
+    #[test]
+    fn format_text_includes_flags() {
+        let m = make_test_measurement(0x02, 0x00, b"  1.234", (0x00, 0x00), (0x0F, 0x00, 0x00));
+        let output = rendered(Output::Text, &m, None);
+        assert!(output.contains("HOLD"));
+        assert!(output.contains("REL"));
+    }
+
+    #[test]
+    fn format_json_negative_value() {
+        let m = make_test_measurement(0x02, 0x01, b"-12.345", (0x00, 0x00), (0x00, 0x00, 0x00));
+        let parsed = json_of(&m, false);
+        assert!((parsed["value"].as_f64().unwrap() - (-12.345)).abs() < 1e-6);
+    }
+
+    /// Every format names the file it writes, and every one of those names
+    /// picks it back out of an `-o` file name.
+    #[test]
+    fn a_format_and_its_file_extension_name_each_other() {
+        for format in [
+            OutputFormat::Text,
+            OutputFormat::Csv,
+            OutputFormat::Json,
+            OutputFormat::Replay,
+        ] {
+            assert_eq!(
+                OutputFormat::from_extension(format.extension()),
+                Some(format),
+                "{}",
+                format.name()
+            );
+            // The name a message quotes back is the one `--format` takes.
+            assert_eq!(
+                format
+                    .to_possible_value()
+                    .expect("a --format value")
+                    .get_name(),
+                format.name()
+            );
+        }
+        assert_eq!(OutputFormat::from_extension("dat"), None);
     }
 }
