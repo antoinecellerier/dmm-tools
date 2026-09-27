@@ -190,12 +190,13 @@ launch() {
 }
 
 # The app on Auto-detect with nothing to detect, for the pictures that must
-# show the settings and the help a user meets before any meter answers. The
-# grant is what lets --device name something other than the mock gui-display
-# would otherwise pass; the guard every caller runs first has already made
-# sure there is no meter to open.
+# show the settings and the help a user meets before any meter answers. No
+# --device, so the Device row reads as a user sees it rather than marked as a
+# command-line choice: the grant stops gui-display passing its mock and the
+# app opens what the scene's settings.json names; the guard every caller runs
+# first has already made sure there is no meter to open.
 launch_without_meter() {
-	VERIFY_GUI_ALLOW_HW=1 "$GUI" run --device auto >/dev/null
+	VERIFY_GUI_ALLOW_HW=1 "$GUI" run >/dev/null
 }
 
 # Three pictures are of the app before any meter answers: the two settings

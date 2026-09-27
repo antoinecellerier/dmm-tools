@@ -12,6 +12,9 @@ export LC_ALL=C
 
 # No /tmp fallback: a predictable, world-writable path could be pre-planted.
 STATE="${VERIFY_GUI_STATE:-${XDG_RUNTIME_DIR:?verify-gui needs XDG_RUNTIME_DIR}/verify-gui}"
+# A relative XDG_CONFIG_HOME is ignored by the app, which then reads the
+# user's real settings.json.
+case "$STATE" in /*) ;; *) echo "gui-display: VERIFY_GUI_STATE must be absolute" >&2; exit 1 ;; esac
 CONFIG="$STATE/config" # private XDG_CONFIG_HOME so the user's settings.json is untouched
 LOG="$STATE/gui.log"
 # Root window WxHxDEPTH. 'start' reuses a running Xvfb, so change this only
@@ -149,7 +152,9 @@ cmd_run() {
 		--replay | --replay=*) replay=1 ;;
 		esac
 	done
-	if [ -z "$dev" ] && [ "$replay" = 0 ]; then
+	# With the hardware grant and no --device, the app opens what settings.json
+	# names, as a user's launch does — no "(--device)" mark on the Device row.
+	if [ -z "$dev" ] && [ "$replay" = 0 ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		args=(--device mock ${args[@]+"${args[@]}"})
 	elif [ -n "$dev" ] && [ "${VERIFY_GUI_ALLOW_HW:-0}" != 1 ]; then
 		# Real meters need the user's go-ahead (CLAUDE.md); this grant is prompt-free.
