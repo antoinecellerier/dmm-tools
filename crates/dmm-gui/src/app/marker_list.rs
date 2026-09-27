@@ -289,13 +289,9 @@ impl App {
             // The sample's line when the buffer has it; otherwise all the
             // graph knows, its trace's value — without the meter's own
             // digits, its flags or its sub-values.
-            let reading = match self
-                .recording
-                .samples
-                .binary_search_by_key(&at, |s| s.measurement.timestamp)
-            {
-                Ok(k) => log_line(&self.recording.samples[k].measurement),
-                Err(_) => format!(
+            let reading = match self.recording.sample_at(at) {
+                Some(s) => log_line(&s.measurement),
+                None => format!(
                     "{:>10} {}",
                     format!("{value:.4}"),
                     self.graph.plotted_unit()
@@ -348,9 +344,8 @@ impl App {
             self.marker_list.refollow = edit.following;
         }
         let recording_role = self.recording.role() == BufferRole::Recording;
-        let samples = &self.recording.samples;
-        let recorded = if recording_role { samples.len() } else { 0 };
-        if recorded == 0 && self.markers.is_empty() {
+        let (samples, recorded) = self.recording.recording_slice();
+        if recorded.is_empty() && self.markers.is_empty() {
             return;
         }
         if let Some(n) = self.marker_list.focus
@@ -366,8 +361,11 @@ impl App {
         let pitch = line + ui.spacing().item_spacing.y;
         let delete_width = ui.spacing().interact_size.y;
         let weak = ui.visuals().weak_text_color();
-        let first = recorded.saturating_sub((LOG_MAX_HEIGHT / pitch) as usize);
-        if first > 0 {
+        let first = recorded
+            .end
+            .saturating_sub((LOG_MAX_HEIGHT / pitch) as usize)
+            .max(recorded.start);
+        if first > recorded.start {
             ui.label(
                 RichText::new(format!(
                     "Export to see the samples before {}.",
@@ -400,7 +398,7 @@ impl App {
         let list = &mut self.marker_list;
         let mut markers: Vec<&mut Marker> = self.markers.iter_mut().collect();
         let times: Vec<Instant> = markers.iter().map(|m| m.at).collect();
-        let rows = LogRows::new(samples, first..recorded, &times);
+        let rows = LogRows::new(samples, first..recorded.end, &times);
         // Each marker row's reading, and what the row says of a reading the
         // graph or the recording has dropped.
         let labels: Vec<(String, Option<&'static str>)> = rows
@@ -414,7 +412,7 @@ impl App {
                 };
                 let tag = if !graph.holds(m.at) {
                     Some("not on the graph")
-                } else if recording_role && !recording.holds(m.at) {
+                } else if recording_role && !recording.in_recording(m.at) {
                     Some("not in the recording")
                 } else {
                     None
@@ -1128,7 +1126,7 @@ mod tests {
             "not in the recording, so not in its export"
         );
         assert!(
-            !app.recording.has_unsaved_markers(&app.markers),
+            app.recording.unsaved_marker_count(&app.markers) == 0,
             "a marker outside the recording is not the recording's to lose"
         );
 
@@ -1176,7 +1174,10 @@ mod tests {
             ))
         };
         app.recording.mark_exported(epoch, 1, saved(&app));
-        let asks = |app: &App| app.recording.needs_discard_prompt(&app.markers);
+        let asks = |app: &App| {
+            app.recording.unexported_count() > 0
+                || app.recording.unsaved_marker_count(&app.markers) > 0
+        };
         assert!(!asks(&app));
 
         app.markers.iter_mut().next().unwrap().note = "before Record".into();

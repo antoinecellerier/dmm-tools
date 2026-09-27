@@ -7,6 +7,7 @@ use dmm_lib::measurement::Measurement;
 use dmm_lib::replay;
 use std::collections::{HashSet, VecDeque};
 use std::io::Write;
+use std::ops::Range;
 use std::time::Instant;
 
 /// Render samples as a CSV document, provenance header included.
@@ -24,7 +25,7 @@ use std::time::Instant;
 /// `marked` are the markers on buffered samples, oldest first (see
 /// [`Recording::marked`]), written when `layout` has marker columns.
 pub fn render_csv(
-    samples: &VecDeque<Sample>,
+    samples: std::collections::vec_deque::Iter<'_, Sample>,
     marked: &[&Marker],
     device_model: &str,
     layout: CsvLayout,
@@ -61,7 +62,7 @@ pub fn render_csv(
 /// `marked` are the markers on buffered samples, oldest first, as for
 /// [`render_csv`].
 pub(crate) fn render_json(
-    samples: &VecDeque<Sample>,
+    samples: std::collections::vec_deque::Iter<'_, Sample>,
     marked: &[&Marker],
     device_model: &str,
     experimental: bool,
@@ -132,20 +133,21 @@ impl<'a> MarkCursor<'a> {
 /// `None` when any sample has an empty payload: the mock synthesises its
 /// readings, so there is no frame to hand a parser.
 pub(crate) fn render_replay(
-    samples: &VecDeque<Sample>,
+    samples: std::collections::vec_deque::Iter<'_, Sample>,
     device_id: &str,
     model: Option<&str>,
     link: Option<dmm_lib::binary_help::Link>,
 ) -> Option<String> {
-    let first = samples.front()?;
+    let mut rest = samples.peekable();
+    let first = *rest.peek()?;
     let recorded = first
         .wall_time
         .to_rfc3339_opts(SecondsFormat::Millis, false);
     let mut out = replay::header(device_id, &recorded, model, link);
     // Offset digits and a newline, plus three characters per payload byte.
     // Frame length is fixed per family, so the first sample sizes the rest.
-    out.reserve(samples.len() * (10 + 3 * first.measurement.raw_payload.len()));
-    for s in samples {
+    out.reserve(rest.len() * (10 + 3 * first.measurement.raw_payload.len()));
+    for s in rest {
         if s.measurement.raw_payload.is_empty() {
             return None;
         }
@@ -192,57 +194,76 @@ impl Sample {
     }
 }
 
-/// What the sample buffer is holding samples for.
+/// What Export… saves: a recording, when there is one, or else the graph's
+/// history.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BufferRole {
-    /// Nothing recorded: the buffer follows the graph, so Export… has the
-    /// readings the graph holds to save. Disposable, as the graph is.
+    /// Nothing recorded: Export… saves the readings the graph holds.
+    /// Disposable, as the graph is.
     History,
-    /// Record was pressed: the buffer is that recording, kept until the next
-    /// one starts.
+    /// Record was pressed: Export… saves that recording, kept until the next
+    /// one starts or it is discarded.
     Recording,
 }
 
-/// In-memory sample buffer: the graph's history until Record is pressed,
-/// then the recording.
+/// A recording's samples, by the sequence number each got as it was pushed.
+#[derive(Debug)]
+enum Span {
+    /// In the store: from `start`, up to `end` once stopped (exclusive).
+    InStore { start: u64, end: Option<u64> },
+    /// Stopped and left behind by the history: its samples, moved out of the
+    /// store so the store can let go of what came between.
+    Detached(VecDeque<Sample>),
+}
+
+/// The full readings: the graph's history, and a recording as a slice of
+/// the same store.
 ///
-/// One buffer rather than two, so a session pays for its samples once. The
-/// history is only ever exported while there is no recording, which is also
-/// the only time it is kept.
+/// One store, so a reading both hold is paid for once. The history is the
+/// store from `history_start` on, following the graph: it restarts with the
+/// graph, on Clear and on a new meter. A recording is the samples pushed
+/// between Record and Stop, and carries on across those restarts. While it
+/// runs, both end at the newest reading and the store is the longer of the
+/// two. Once stopped and passed by the history — the graph restarted, or
+/// dropped its oldest — it moves out into a buffer of its own, so memory is
+/// at most the recording plus the history.
 #[derive(Debug)]
 pub struct Recording {
     pub active: bool,
-    pub samples: VecDeque<Sample>,
-    role: BufferRole,
+    /// Time-ordered, as readings arrive.
+    store: VecDeque<Sample>,
+    /// The sequence number of `store`'s first sample: one per push, counted
+    /// from the start of the session, so a position survives the front being
+    /// trimmed.
+    front_seq: u64,
+    /// Where the history starts; `None` for "at the next reading", after
+    /// Clear or a new meter.
+    history_start: Option<u64>,
+    span: Option<Span>,
     /// Session time the current recording started at, from the caller's
     /// [`Clock`](dmm_lib::Clock). Session time rather than wall time so a
     /// mock run on a bent clock shows a duration its samples agree with.
     pub start_time: Option<Instant>,
-    /// How many samples are known to have reached a file, of either export
-    /// format. Compared against `samples.len()` to tell whether discarding the
-    /// buffer would lose anything the user hasn't saved.
+    /// How many of the recording's samples are known to have reached a file,
+    /// of either export format: always its first ones, as a recording's front
+    /// is never trimmed.
     exported_count: usize,
-    /// Which filling of the buffer the samples belong to, bumped whenever it
-    /// is emptied for a new one. An export names the epoch it rendered, so a
-    /// save dialog that outlives its buffer cannot mark the next one saved.
+    /// Which recording the samples belong to, bumped whenever one starts or
+    /// is discarded. An export names the epoch it rendered, so a save dialog
+    /// that outlives its recording cannot mark the next one saved.
     epoch: u64,
-    /// Most sub-values any buffered sample carries. The export sizes its aux
-    /// columns from the device profile, but a profile is only known while
-    /// connected — this is the floor that keeps a capture exportable in full
-    /// after the meter is unplugged. Only grows until the buffer empties.
-    max_aux_seen: usize,
-    /// Samples the buffer holds, from the Buffer size setting (which bounds
-    /// the graph history by the same number): the history drops its oldest
-    /// past it, a recording stops at it.
+    /// Samples the history holds, and a recording stops at, from the Buffer
+    /// size setting (which bounds the graph history by the same number).
     ///
     /// A sample carrying only the meter's main reading is roughly 340 bytes —
     /// about 240 inline, plus the `display_raw` heap string and the meter's
     /// own frame — so the default 500K is on the order of 170 MB. Each
     /// sub-value the meter sends adds another ~140 bytes, which puts a
     /// four-sub-value meter (UT181A) at ~900 bytes per sample, or ~450 MB at
-    /// the same bound.
+    /// the same bound. A stopped recording kept beside the history can take
+    /// as much again.
     max_samples: usize,
-    /// The markers the last CSV or JSON export of this filling wrote, each
+    /// The markers the last CSV or JSON export of this recording wrote, each
     /// as its [`marker_key`]: a marker, or a note, missing from it exists in
     /// no file. Bounded by the markers, one per sample at most.
     saved_markers: HashSet<u64>,
@@ -257,127 +278,274 @@ fn marker_key(m: &Marker) -> u64 {
     h.finish()
 }
 
+/// The sample of `samples` taken at `at`.
+fn find_sample(samples: &VecDeque<Sample>, at: Instant) -> Option<&Sample> {
+    position(samples, at).map(|i| &samples[i])
+}
+
+/// Where in `samples` the reading taken at `at` is. Samples are in time
+/// order, so this is a binary search.
+fn position(samples: &VecDeque<Sample>, at: Instant) -> Option<usize> {
+    let i = samples.partition_point(|s| s.measurement.timestamp < at);
+    samples
+        .get(i)
+        .is_some_and(|s| s.measurement.timestamp == at)
+        .then_some(i)
+}
+
+/// Whether `range` of `samples` holds the reading taken at `at`.
+fn slice_holds(samples: &VecDeque<Sample>, range: Range<usize>, at: Instant) -> bool {
+    position(samples, at).is_some_and(|i| range.contains(&i))
+}
+
 impl Recording {
     pub fn new() -> Self {
         Self {
             active: false,
-            samples: VecDeque::new(),
-            role: BufferRole::History,
+            store: VecDeque::new(),
+            front_seq: 0,
+            history_start: None,
+            span: None,
             start_time: None,
             exported_count: 0,
             epoch: 0,
-            max_aux_seen: 0,
             max_samples: DEFAULT_MAX_SAMPLES,
             saved_markers: HashSet::new(),
         }
     }
 
     pub fn role(&self) -> BufferRole {
-        self.role
+        if self.span.is_some() {
+            BufferRole::Recording
+        } else {
+            BufferRole::History
+        }
+    }
+
+    /// The sequence number the next pushed sample gets.
+    fn next_seq(&self) -> u64 {
+        self.front_seq + self.store.len() as u64
+    }
+
+    /// Where `seq` sits in the store, clamped to it.
+    fn index(&self, seq: u64) -> usize {
+        (seq.saturating_sub(self.front_seq) as usize).min(self.store.len())
+    }
+
+    /// The recording's samples: a buffer, and the range of it that is the
+    /// recording. Empty with no recording.
+    pub(crate) fn recording_slice(&self) -> (&VecDeque<Sample>, Range<usize>) {
+        match &self.span {
+            None => (&self.store, 0..0),
+            Some(Span::Detached(samples)) => (samples, 0..samples.len()),
+            Some(Span::InStore { start, end }) => (
+                &self.store,
+                self.index(*start)..end.map_or(self.store.len(), |end| self.index(end)),
+            ),
+        }
+    }
+
+    /// The history's samples, as [`Recording::recording_slice`].
+    pub(crate) fn history_slice(&self) -> (&VecDeque<Sample>, Range<usize>) {
+        let start = self
+            .history_start
+            .map_or(self.store.len(), |seq| self.index(seq));
+        (&self.store, start..self.store.len())
+    }
+
+    /// What Export… saves: the recording, or with none, the history.
+    pub(crate) fn export_slice(&self) -> (&VecDeque<Sample>, Range<usize>) {
+        match self.role() {
+            BufferRole::Recording => self.recording_slice(),
+            BufferRole::History => self.history_slice(),
+        }
+    }
+
+    /// The recording's samples, oldest first.
+    pub(crate) fn recording_samples(&self) -> std::collections::vec_deque::Iter<'_, Sample> {
+        let (samples, range) = self.recording_slice();
+        samples.range(range)
+    }
+
+    /// The history's samples, oldest first.
+    pub(crate) fn history_samples(&self) -> std::collections::vec_deque::Iter<'_, Sample> {
+        let (samples, range) = self.history_slice();
+        samples.range(range)
+    }
+
+    /// The samples Export… saves, oldest first.
+    pub(crate) fn export_samples(&self) -> std::collections::vec_deque::Iter<'_, Sample> {
+        let (samples, range) = self.export_slice();
+        samples.range(range)
+    }
+
+    fn recording_len(&self) -> usize {
+        self.recording_slice().1.len()
     }
 
     /// Change the sample bound. Returns `true` if an active recording was
     /// stopped because it already held at least `n` samples.
     ///
     /// A recording never throws away what it has captured, so lowering the
-    /// bound past a running capture ends it rather than truncating it. The
-    /// history drops its oldest samples at once and gives the memory back,
-    /// as the graph does.
+    /// bound past a running capture ends it rather than truncating it, and a
+    /// stopped one is kept whole. The history drops its oldest samples at
+    /// once and gives the memory back, as the graph does.
     pub fn set_max_samples(&mut self, n: usize) -> bool {
         self.max_samples = n;
-        match self.role {
-            BufferRole::History => {
-                if let Some(excess) = self.samples.len().checked_sub(n) {
-                    self.samples.drain(..excess);
-                    self.samples.shrink_to_fit();
-                }
-                false
-            }
-            BufferRole::Recording => {
-                let stopped = self.active && self.samples.len() >= n;
-                if stopped {
-                    self.active = false;
-                }
-                stopped
-            }
+        let stopped = self.active && self.recording_len() >= n;
+        if stopped {
+            self.stop();
         }
+        let held = self.store.len();
+        self.settle();
+        // Only when samples went: after a raise, giving back the spare
+        // capacity would copy the store now and again as it regrows.
+        if self.store.len() < held {
+            self.store.shrink_to_fit();
+        }
+        stopped
     }
 
     /// Start or stop recording, `now` being the session time it happens at.
     ///
-    /// Starting drops the history: it is the graph's, and the graph still
-    /// shows it. A recording stopped before it captured anything leaves
-    /// nothing to keep, so the buffer goes back to following the graph.
+    /// Starting drops the previous recording but leaves the history alone.
+    /// A recording stopped before it captured anything leaves nothing to
+    /// keep, so Export… goes back to the history.
     pub fn toggle(&mut self, now: Instant) {
-        self.active = !self.active;
         if self.active {
-            self.role = BufferRole::Recording;
-            self.empty();
+            self.stop();
+            if self.recording_len() == 0 {
+                self.span = None;
+            }
+        } else {
+            self.active = true;
+            self.start_new(Some(Span::InStore {
+                start: self.next_seq(),
+                end: None,
+            }));
             self.start_time = Some(now);
-        } else if self.samples.is_empty() {
-            self.role = BufferRole::History;
-            self.empty();
         }
+        self.settle();
     }
 
-    /// Drop the recording and go back to following the graph. The graph's
-    /// earlier samples are gone with it: the history starts at the next
-    /// reading.
-    pub fn discard(&mut self) {
+    /// End a running recording at the samples it has.
+    fn stop(&mut self) {
         self.active = false;
-        self.role = BufferRole::History;
-        self.empty();
-    }
-
-    /// Drop the history, as the graph's Clear drops its points. A recording
-    /// is left alone: Clear has never discarded a capture.
-    pub fn clear_history(&mut self) {
-        if self.role == BufferRole::History {
-            self.empty();
-        }
-    }
-
-    /// Drop history samples taken before `start`, the graph's oldest point,
-    /// so the history holds what the graph does. A recording spans the
-    /// graph's resets and is left alone.
-    ///
-    /// `start` itself is kept: it is the reading the graph restarted on.
-    pub fn trim_before(&mut self, start: Instant) {
-        if self.role != BufferRole::History {
-            return;
-        }
-        while self
-            .samples
-            .front()
-            .is_some_and(|s| s.measurement.timestamp < start)
+        let next = self.next_seq();
+        if let Some(Span::InStore {
+            end: end @ None, ..
+        }) = &mut self.span
         {
-            self.samples.pop_front();
-        }
-        if self.samples.is_empty() {
-            self.max_aux_seen = 0;
+            *end = Some(next);
         }
     }
 
-    fn empty(&mut self) {
-        self.samples.clear();
+    /// Put `span` in place of the recording, with nothing of it exported.
+    fn start_new(&mut self, span: Option<Span>) {
+        self.span = span;
         self.exported_count = 0;
         self.epoch += 1;
-        self.max_aux_seen = 0;
         self.saved_markers.clear();
     }
 
-    /// Whether the buffer holds the reading taken at `at`. Samples arrive in
-    /// time order, so this is a binary search.
-    pub(crate) fn holds(&self, at: Instant) -> bool {
-        self.samples
-            .binary_search_by_key(&at, |s| s.measurement.timestamp)
-            .is_ok()
+    /// Drop the recording. The history is left as it is: Export… saves the
+    /// readings the graph holds, the recording's among them.
+    pub fn discard(&mut self) {
+        self.active = false;
+        self.start_new(None);
+        self.settle();
     }
 
-    /// The markers of `markers` that sit on buffered samples, oldest first:
-    /// what an export of the buffer writes.
+    /// Restart the history at the next reading, as the graph's Clear drops
+    /// its points. A recording is left alone: Clear has never discarded a
+    /// capture.
+    pub fn clear_history(&mut self) {
+        self.history_start = None;
+        self.settle();
+    }
+
+    /// Start the history no earlier than `start`, the graph's oldest point,
+    /// so the history holds what the graph does. Only ever forward: a new
+    /// meter restarts the history while the graph keeps its older trace, and
+    /// those readings are the other meter's. A recording spans the graph's
+    /// resets and is left alone.
+    ///
+    /// `start` itself is kept: it is the reading the graph restarted on.
+    pub fn trim_before(&mut self, start: Instant) {
+        let Some(current) = self.history_start else {
+            return;
+        };
+        let at = self
+            .store
+            .partition_point(|s| s.measurement.timestamp < start);
+        self.history_start = Some(current.max(self.front_seq + at as u64));
+        self.settle();
+    }
+
+    /// Whether the history holds nothing yet: it restarts with the next
+    /// reading, which is when the caller latches what it will export under.
+    pub(crate) fn history_is_empty(&self) -> bool {
+        self.history_slice().1.is_empty()
+    }
+
+    /// Hold the history to its bound, drop what neither the history nor the
+    /// recording holds, and move a stopped recording the history has left
+    /// behind out of the store.
+    fn settle(&mut self) {
+        let next = self.next_seq();
+        if let Some(start) = &mut self.history_start {
+            *start = (*start).max(next.saturating_sub(self.max_samples as u64));
+        }
+        let history_from = self.history_start.unwrap_or(next);
+        if let Some(Span::InStore {
+            start,
+            end: Some(end),
+        }) = self.span
+            && end <= history_from
+        {
+            let from = self.index(start);
+            let to = self.index(end);
+            let recorded: VecDeque<Sample> = self.store.drain(..to).skip(from).collect();
+            self.front_seq += to as u64;
+            self.span = Some(Span::Detached(recorded));
+            // The store grew to hold both; it holds the history alone now.
+            self.store.shrink_to_fit();
+        }
+        let keep_from = match self.span {
+            Some(Span::InStore { start, .. }) => start.min(history_from),
+            _ => history_from,
+        };
+        let drop = self.index(keep_from);
+        self.store.drain(..drop);
+        self.front_seq += drop as u64;
+    }
+
+    /// Whether the history or the recording holds the reading taken at `at`.
+    pub(crate) fn holds(&self, at: Instant) -> bool {
+        self.sample_at(at).is_some()
+    }
+
+    /// The reading taken at `at`, if the history or the recording holds it.
+    pub(crate) fn sample_at(&self, at: Instant) -> Option<&Sample> {
+        find_sample(&self.store, at).or_else(|| match &self.span {
+            Some(Span::Detached(samples)) => find_sample(samples, at),
+            _ => None,
+        })
+    }
+
+    /// Whether the recording holds the reading taken at `at`.
+    pub(crate) fn in_recording(&self, at: Instant) -> bool {
+        let (samples, range) = self.recording_slice();
+        slice_holds(samples, range, at)
+    }
+
+    /// The markers of `markers` that sit on samples Export… saves, oldest
+    /// first: what an export writes.
     pub(crate) fn marked<'a>(&self, markers: impl Iterator<Item = &'a Marker>) -> Vec<&'a Marker> {
-        markers.filter(|m| self.holds(m.at)).collect()
+        let (samples, range) = self.export_slice();
+        markers
+            .filter(|m| slice_holds(samples, range.clone(), m.at))
+            .collect()
     }
 
     /// `marked` — the markers on buffered samples, from
@@ -387,47 +555,81 @@ impl Recording {
         marked.iter().map(|m| marker_key(m)).collect()
     }
 
-    /// Whether the recording holds a marker, or a note, that its last CSV
-    /// or JSON export doesn't — a marker deleted since loses nothing. Never
-    /// for the history, which is not asked about.
-    pub(crate) fn has_unsaved_markers(&self, markers: &Markers) -> bool {
-        self.role == BufferRole::Recording
-            && self
-                .marked(markers.iter())
-                .into_iter()
-                .any(|m| !self.saved_markers.contains(&marker_key(m)))
+    /// The recording's markers that its last CSV or JSON export doesn't hold
+    /// — a marker deleted since loses nothing.
+    fn unsaved_markers<'a>(&'a self, markers: &'a Markers) -> impl Iterator<Item = &'a Marker> {
+        let (samples, range) = self.recording_slice();
+        markers.iter().filter(move |m| {
+            slice_holds(samples, range.clone(), m.at)
+                && !self.saved_markers.contains(&marker_key(m))
+        })
     }
 
-    /// Whether dropping the buffer would lose something no file holds: the
-    /// check behind the Record and Discard prompt.
-    pub(crate) fn needs_discard_prompt(&self, markers: &Markers) -> bool {
-        self.unexported_count() > 0 || self.has_unsaved_markers(markers)
+    /// How many of the recording's markers, or their notes, its last CSV or
+    /// JSON export doesn't hold. None with no recording.
+    ///
+    /// With [`Recording::unexported_count`], what starting a new recording
+    /// would lose: Export… saves the recording while there is one, so all of
+    /// it counts, even what the graph still holds.
+    pub(crate) fn unsaved_marker_count(&self, markers: &Markers) -> usize {
+        self.unsaved_markers(markers).count()
     }
 
-    /// The buffer's current filling — see `epoch`.
+    /// What Discard would lose that no file holds: the recording's unexported
+    /// samples the history no longer holds, and the unsaved markers on them.
+    /// The rest stays for Export… to save as the graph's readings.
+    pub(crate) fn lost_on_discard(&self, markers: &Markers) -> (usize, usize) {
+        let history_from = self.history_start.unwrap_or(self.next_seq());
+        let left_behind = match &self.span {
+            None => 0..0,
+            Some(Span::Detached(samples)) => self.exported_count..samples.len(),
+            Some(Span::InStore { start, end }) => {
+                let end = end.unwrap_or(self.next_seq()).min(history_from);
+                let first = (start + self.exported_count as u64).min(end);
+                self.index(first)..self.index(end)
+            }
+        };
+        let samples = left_behind.len();
+        let markers = match &self.span {
+            Some(Span::Detached(_)) => self.unsaved_markers(markers).count(),
+            _ => {
+                let history = self.history_slice().1.start;
+                self.unsaved_markers(markers)
+                    .filter(|m| position(&self.store, m.at).is_some_and(|i| i < history))
+                    .count()
+            }
+        };
+        (samples, markers)
+    }
+
+    /// The recording's current run — see `epoch`.
     pub fn epoch(&self) -> u64 {
         self.epoch
     }
 
-    /// Most sub-values any buffered sample carries — see `max_aux_seen`.
+    /// Most sub-values any sample Export… saves carries. The export sizes its
+    /// aux columns from the device profile, but a profile is only known while
+    /// connected — this is the floor that keeps a capture exportable in full
+    /// after the meter is unplugged.
     pub fn max_aux_seen(&self) -> usize {
-        self.max_aux_seen
+        self.export_samples()
+            .map(|s| s.measurement.aux_values.len())
+            .max()
+            .unwrap_or(0)
     }
 
     /// Samples captured since the last successful export.
     ///
-    /// Non-zero means clearing the buffer would destroy data that exists
-    /// nowhere else, which is what the Record confirmation prompt checks.
-    /// Always zero for the history, which the graph shows and which goes
-    /// with the graph's resets unasked.
+    /// Non-zero means starting a new recording would destroy data that
+    /// exists nowhere else, which is what the Record confirmation prompt
+    /// checks. Always zero with no recording: the history goes with the
+    /// graph's resets unasked.
     pub fn unexported_count(&self) -> usize {
-        match self.role {
-            BufferRole::History => 0,
-            BufferRole::Recording => self.samples.len().saturating_sub(self.exported_count),
-        }
+        self.recording_len().saturating_sub(self.exported_count)
     }
 
-    /// Record that the first `count` samples of `epoch` reached a file.
+    /// Record that the first `count` samples of the recording of `epoch`
+    /// reached a file.
     ///
     /// Takes the count that was actually written rather than the current
     /// length: samples arriving while the export ran are not in that file and
@@ -440,45 +642,37 @@ impl Recording {
     /// none of them.
     pub fn mark_exported(&mut self, epoch: u64, count: usize, markers: Option<HashSet<u64>>) {
         if epoch == self.epoch {
-            self.exported_count = count.min(self.samples.len());
+            self.exported_count = count.min(self.recording_len());
             if let Some(keys) = markers {
                 self.saved_markers = keys;
             }
         }
     }
 
-    /// Push a sample. Returns `true` if the buffer just became full (auto-stops recording).
+    /// Push a sample. Returns `true` if the recording just became full, which
+    /// stops it.
     ///
-    /// The history takes every sample and drops its oldest at the bound; a
-    /// recording takes samples only while it runs.
+    /// Every reading joins the history; a running recording takes it too,
+    /// up to the bound.
     ///
     /// `extra_aux` is the caller's current [`Sample::extra_aux`]: how many of
     /// this reading's trailing sub-values software appended.
     pub fn push(&mut self, m: &Measurement, wall_clock: &WallClock, extra_aux: usize) -> bool {
-        match self.role {
-            BufferRole::History => {
-                while !self.samples.is_empty() && self.samples.len() >= self.max_samples {
-                    self.samples.pop_front();
-                }
-            }
-            BufferRole::Recording => {
-                if !self.active || self.samples.len() >= self.max_samples {
-                    return false;
-                }
-            }
-        }
-        self.max_aux_seen = self.max_aux_seen.max(m.aux_values.len());
-        self.samples
+        let seq = self.next_seq();
+        self.history_start.get_or_insert(seq);
+        self.store
             .push_back(Sample::from_measurement(m, wall_clock, extra_aux));
-        if self.role == BufferRole::Recording && self.samples.len() >= self.max_samples {
-            self.active = false;
-            return true;
+        let full = self.active && self.recording_len() >= self.max_samples;
+        if full {
+            self.stop();
         }
-        false
+        self.settle();
+        full
     }
 
+    /// Whether the recording holds as many samples as it can.
     pub fn is_full(&self) -> bool {
-        self.samples.len() >= self.max_samples
+        self.recording_len() >= self.max_samples
     }
 
     /// How long the current recording has been running, in session seconds.
@@ -524,7 +718,7 @@ mod tests {
     fn recording_inactive_by_default() {
         let r = Recording::new();
         assert!(!r.active);
-        assert!(r.samples.is_empty());
+        assert_eq!(r.export_samples().len(), 0);
     }
 
     #[test]
@@ -551,27 +745,30 @@ mod tests {
         assert_eq!(r.duration_secs(start - Duration::from_secs(1)), 0.0);
     }
 
-    /// Before any Record the buffer is the graph's history, and takes every
-    /// sample; Record empties it for the recording.
+    /// The history takes every sample, and keeps them through Record: the
+    /// recording is the samples from there on.
     #[test]
-    fn the_history_takes_samples_until_record_empties_it() {
+    fn record_keeps_the_history() {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
         assert_eq!(r.role(), BufferRole::History);
         r.push(&m, &wc, 0);
         r.push(&m, &wc, 0);
-        assert_eq!(r.samples.len(), 2);
+        assert_eq!(r.history_samples().len(), 2);
         assert_eq!(r.unexported_count(), 0, "the history never prompts");
 
         r.toggle(Instant::now()); // start
         assert_eq!(r.role(), BufferRole::Recording);
-        assert!(r.samples.is_empty(), "the history is the graph's to keep");
+        assert_eq!(r.recording_samples().len(), 0);
+        assert_eq!(r.history_samples().len(), 2, "the graph's, still");
         r.push(&m, &wc, 0);
-        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.recording_samples().len(), 1);
+        assert_eq!(r.history_samples().len(), 3);
     }
 
-    /// A stopped recording is kept as it is: later readings go nowhere.
+    /// A stopped recording is kept as it is: later readings go to the
+    /// history only.
     #[test]
     fn a_stopped_recording_takes_no_samples() {
         let mut r = Recording::new();
@@ -582,11 +779,12 @@ mod tests {
         r.toggle(Instant::now()); // stop
         assert_eq!(r.role(), BufferRole::Recording);
         assert!(!r.push(&m, &wc, 0));
-        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.recording_samples().len(), 1);
+        assert_eq!(r.history_samples().len(), 2, "the history takes it");
     }
 
     /// A recording stopped before it captured anything has nothing to keep,
-    /// so the buffer follows the graph again.
+    /// so Export… saves the history again.
     #[test]
     fn an_empty_recording_hands_the_buffer_back_to_the_history() {
         let mut r = Recording::new();
@@ -596,7 +794,7 @@ mod tests {
         r.toggle(Instant::now()); // stop, nothing captured
         assert_eq!(r.role(), BufferRole::History);
         r.push(&m, &wc, 0);
-        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.export_samples().len(), 1);
     }
 
     /// The history drops its oldest sample at the bound, as the graph does;
@@ -612,7 +810,10 @@ mod tests {
             m.timestamp = base + Duration::from_millis(i);
             assert!(!r.push(&m, &wc, 0), "the history never fills up");
         }
-        let kept: Vec<Instant> = r.samples.iter().map(|s| s.measurement.timestamp).collect();
+        let kept: Vec<Instant> = r
+            .history_samples()
+            .map(|s| s.measurement.timestamp)
+            .collect();
         assert_eq!(
             kept,
             [2, 3, 4].map(|i| base + Duration::from_millis(i)),
@@ -630,9 +831,14 @@ mod tests {
             r.push(&m, &wc, 0);
         }
         assert!(!r.set_max_samples(4), "no recording to stop");
-        assert_eq!(r.samples.len(), 4);
+        assert_eq!(r.history_samples().len(), 4);
+        assert_eq!(r.store.len(), 4, "given up, not only hidden");
         assert!(!r.set_max_samples(100));
-        assert_eq!(r.samples.len(), 4, "raising it brings nothing back");
+        assert_eq!(
+            r.history_samples().len(),
+            4,
+            "raising it brings nothing back"
+        );
     }
 
     /// The history holds what the graph does: a graph restarted on a reading
@@ -653,22 +859,23 @@ mod tests {
             m.timestamp = base + Duration::from_millis(i);
             r.push(&m, &wc, 0);
         }
+        assert_eq!(r.max_aux_seen(), 1);
         r.trim_before(base + Duration::from_millis(2));
-        assert_eq!(r.samples.len(), 2);
+        assert_eq!(r.history_samples().len(), 2);
         assert_eq!(
-            r.samples[0].measurement.timestamp,
-            base + Duration::from_millis(2)
+            r.history_samples().next().map(|s| s.measurement.timestamp),
+            Some(base + Duration::from_millis(2))
         );
-        assert_eq!(r.max_aux_seen(), 1, "a floor, until the buffer empties");
+        assert_eq!(r.max_aux_seen(), 0, "the widest sample went with the trim");
         r.trim_before(base + Duration::from_millis(10));
-        assert!(r.samples.is_empty());
-        assert_eq!(r.max_aux_seen(), 0);
+        assert_eq!(r.history_samples().len(), 0);
+        assert!(r.store.is_empty(), "nothing else holds them");
     }
 
-    /// Discarding a recording hands the buffer back to the history, which
-    /// takes the next reading.
+    /// Discarding a recording leaves its readings to the history, as long as
+    /// the graph holds them: Export… saves them from there.
     #[test]
-    fn discarding_a_recording_hands_the_buffer_back_to_the_history() {
+    fn discarding_a_recording_keeps_its_readings_in_the_history() {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let m = make_measurement(b"  1.234");
@@ -680,11 +887,11 @@ mod tests {
         r.discard();
         assert_eq!(r.role(), BufferRole::History);
         assert!(!r.active);
-        assert!(r.samples.is_empty());
+        assert_eq!(r.export_samples().len(), 1, "the graph's, still");
         assert_eq!(r.unexported_count(), 0);
         assert_ne!(r.epoch(), epoch, "an export of it marks nothing now");
         r.push(&m, &wc, 0);
-        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.export_samples().len(), 2);
     }
 
     /// A recording outlives the graph's resets and its Clear.
@@ -697,28 +904,146 @@ mod tests {
         r.push(&m, &wc, 0);
         r.trim_before(m.timestamp + Duration::from_secs(1));
         r.clear_history();
-        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.recording_samples().len(), 1);
         let epoch = r.epoch();
 
         r.toggle(Instant::now()); // stop, one sample kept
         r.clear_history();
-        assert_eq!(r.samples.len(), 1);
+        assert_eq!(r.recording_samples().len(), 1);
+        assert_eq!(r.history_samples().len(), 0);
         assert_eq!(r.epoch(), epoch);
     }
 
     /// Clear drops the history, and with it the export's view of it.
     #[test]
-    fn clearing_the_history_starts_a_new_epoch() {
+    fn clearing_the_history_empties_it() {
         let mut r = Recording::new();
         let wc = WallClock::new();
         let mut wide = make_measurement(b"  1.234");
         wide.aux_values = vec![aux("Frequency", "50.01", "Hz")];
         r.push(&wide, &wc, 0);
-        let epoch = r.epoch();
         r.clear_history();
-        assert!(r.samples.is_empty());
+        assert_eq!(r.history_samples().len(), 0);
+        assert!(r.store.is_empty());
         assert_eq!(r.max_aux_seen(), 0);
-        assert_ne!(r.epoch(), epoch);
+    }
+
+    /// `n` readings a millisecond apart from `base`, pushed.
+    fn push_at(r: &mut Recording, base: Instant, from: u64, n: u64) {
+        let wc = WallClock::new();
+        for i in from..from + n {
+            let mut m = make_measurement(b"  1.234");
+            m.timestamp = base + Duration::from_millis(i);
+            r.push(&m, &wc, 0);
+        }
+    }
+
+    /// A graph restart mid-recording restarts the history; the recording
+    /// keeps its whole span, and the store holds both.
+    #[test]
+    fn a_restart_mid_recording_keeps_the_recording_whole() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        push_at(&mut r, base, 0, 3);
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 3, 4);
+        r.trim_before(base + Duration::from_millis(5));
+        assert_eq!(r.recording_samples().len(), 4);
+        assert_eq!(r.history_samples().len(), 2);
+        assert_eq!(r.store.len(), 4, "the pre-Record readings went");
+    }
+
+    /// Once the history leaves a stopped recording behind, the recording
+    /// moves out of the store, and the store holds the history only.
+    #[test]
+    fn a_stopped_recording_left_behind_moves_out() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 3);
+        r.toggle(Instant::now()); // stop
+        push_at(&mut r, base, 3, 3);
+        r.trim_before(base + Duration::from_millis(4));
+        assert!(matches!(r.span, Some(Span::Detached(_))));
+        assert_eq!(r.recording_samples().len(), 3);
+        assert_eq!(r.history_samples().len(), 2);
+        assert_eq!(r.store.len(), 2, "the reading between went");
+        assert!(r.holds(base + Duration::from_millis(1)));
+        assert!(!r.holds(base + Duration::from_millis(3)));
+        // Discarding it leaves the history as it was.
+        r.discard();
+        assert_eq!(r.export_samples().len(), 2);
+    }
+
+    /// Lowering the bound caps the history but keeps a stopped recording
+    /// whole.
+    #[test]
+    fn lowering_the_bound_keeps_a_stopped_recording_whole() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 100);
+        r.toggle(Instant::now()); // stop
+        push_at(&mut r, base, 100, 20);
+        assert!(!r.set_max_samples(10), "nothing running to stop");
+        assert_eq!(r.recording_samples().len(), 100);
+        assert_eq!(r.history_samples().len(), 10);
+        assert_eq!(r.store.len(), 10);
+    }
+
+    /// Discard loses only what the history no longer holds: samples the
+    /// graph still has stay for Export… to save as its readings.
+    #[test]
+    fn discard_loses_only_what_left_the_graph() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 5);
+        r.toggle(Instant::now()); // stop
+        let markers = Markers::default();
+        assert_eq!(r.lost_on_discard(&markers), (0, 0), "the graph holds all");
+        assert_eq!(r.unexported_count(), 5, "starting over would still ask");
+        r.trim_before(base + Duration::from_millis(2));
+        assert_eq!(r.lost_on_discard(&markers), (2, 0));
+        r.mark_exported(r.epoch(), 1, None);
+        assert_eq!(
+            r.lost_on_discard(&markers),
+            (1, 0),
+            "the first is in a file"
+        );
+        r.trim_before(base + Duration::from_millis(9));
+        assert_eq!(r.lost_on_discard(&markers), (4, 0), "moved out, all left");
+    }
+
+    /// The history only ever starts later: a graph whose oldest point is
+    /// older than the history — a new meter restarted it, the graph kept
+    /// its trace — takes none of the old readings back.
+    #[test]
+    fn the_history_only_moves_forward() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        push_at(&mut r, base, 0, 3);
+        r.clear_history();
+        push_at(&mut r, base, 3, 2);
+        r.trim_before(base);
+        assert_eq!(r.history_samples().len(), 2);
+    }
+
+    /// An export of a discarded recording, finishing after the next one
+    /// started, marks nothing of the new one.
+    #[test]
+    fn an_export_of_a_discarded_recording_marks_nothing() {
+        let mut r = Recording::new();
+        let base = Instant::now();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 0, 3);
+        let exporting = r.epoch();
+        r.toggle(Instant::now()); // stop
+        r.discard();
+        r.toggle(Instant::now());
+        push_at(&mut r, base, 3, 2);
+        r.mark_exported(exporting, 3, None);
+        assert_eq!(r.unexported_count(), 2);
     }
 
     #[test]
@@ -729,11 +1054,12 @@ mod tests {
         let m = make_measurement(b"  1.234");
         r.push(&m, &wc, 0);
         r.push(&m, &wc, 0);
-        assert_eq!(r.samples.len(), 2);
+        assert_eq!(r.recording_samples().len(), 2);
 
         r.toggle(Instant::now()); // stop
         r.toggle(Instant::now()); // start again — should clear
-        assert!(r.samples.is_empty());
+        assert_eq!(r.recording_samples().len(), 0);
+        assert_eq!(r.history_samples().len(), 2, "the graph's, still");
     }
 
     /// The Record button clears the buffer, so this is what decides whether
@@ -846,7 +1172,7 @@ mod tests {
         // The push that hits capacity should auto-stop and return true
         assert!(r.push(&m, &wc, 0));
         assert!(!r.active);
-        assert_eq!(r.samples.len(), 100);
+        assert_eq!(r.recording_samples().len(), 100);
         assert!(r.is_full());
     }
 
@@ -863,7 +1189,7 @@ mod tests {
         assert!(!r.active);
         // Further pushes should be no-ops
         assert!(!r.push(&m, &wc, 0));
-        assert_eq!(r.samples.len(), 100);
+        assert_eq!(r.recording_samples().len(), 100);
     }
 
     /// Lowering the Buffer size setting under a running recording ends it —
@@ -883,7 +1209,11 @@ mod tests {
             "the running capture had to be stopped"
         );
         assert!(!r.active);
-        assert_eq!(r.samples.len(), 50, "captured samples are never discarded");
+        assert_eq!(
+            r.recording_samples().len(),
+            50,
+            "captured samples are never discarded"
+        );
         assert!(r.is_full());
     }
 
@@ -901,7 +1231,7 @@ mod tests {
         assert!(r.active);
         assert!(!r.is_full());
         assert!(!r.push(&m, &wc, 0));
-        assert_eq!(r.samples.len(), 51);
+        assert_eq!(r.recording_samples().len(), 51);
     }
 
     #[test]
@@ -935,7 +1265,7 @@ mod tests {
             .map(|_| Sample::from_measurement(&m, &wc, 0))
             .collect();
 
-        let bytes = render_csv(&samples, &[], "UNI-T UT61E+", layout(0, 0)).unwrap();
+        let bytes = render_csv(samples.iter(), &[], "UNI-T UT61E+", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -948,7 +1278,7 @@ mod tests {
 
     #[test]
     fn render_csv_of_an_empty_buffer_is_just_the_headers() {
-        let bytes = render_csv(&VecDeque::new(), &[], "mock", layout(0, 0)).unwrap();
+        let bytes = render_csv(VecDeque::new().iter(), &[], "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(text.lines().count(), 2);
     }
@@ -959,7 +1289,7 @@ mod tests {
     /// exporter alone breaks a test.
     #[test]
     fn gui_and_cli_single_display_headers_agree() {
-        let bytes = render_csv(&VecDeque::new(), &[], "mock", layout(0, 0)).unwrap();
+        let bytes = render_csv(VecDeque::new().iter(), &[], "mock", layout(0, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         assert_eq!(
             text.lines().nth(1).unwrap(),
@@ -991,7 +1321,13 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&VecDeque::from([s]), &[], "UNI-T UT181A", layout(4, 0)).unwrap();
+        let bytes = render_csv(
+            VecDeque::from([s]).iter(),
+            &[],
+            "UNI-T UT181A",
+            layout(4, 0),
+        )
+        .unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -1024,7 +1360,13 @@ mod tests {
         m.aux_values = vec![max];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&VecDeque::from([s]), &[], "UNI-T UT181A", layout(1, 0)).unwrap();
+        let bytes = render_csv(
+            VecDeque::from([s]).iter(),
+            &[],
+            "UNI-T UT181A",
+            layout(1, 0),
+        )
+        .unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let row = text.lines().nth(2).unwrap();
         assert!(row.ends_with(",Max,5.9010,V"), "got {row:?}");
@@ -1041,7 +1383,7 @@ mod tests {
         ];
         let s = Sample::from_measurement(&m, &WallClock::new(), 0);
 
-        let bytes = render_csv(&VecDeque::from([s]), &[], "mock", layout(1, 0)).unwrap();
+        let bytes = render_csv(VecDeque::from([s]).iter(), &[], "mock", layout(1, 0)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert!(
@@ -1086,7 +1428,7 @@ mod tests {
             .map(|(m, extra)| Sample::from_measurement(m, &wc, extra))
             .collect();
 
-        let bytes = render_csv(&samples, &[], "UNI-T UT181A", layout(2, 1)).unwrap();
+        let bytes = render_csv(samples.iter(), &[], "UNI-T UT181A", layout(2, 1)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
 
@@ -1189,7 +1531,7 @@ mod tests {
     fn render_replay_round_trips_through_the_parser() {
         let samples = replay_samples();
         let text = render_replay(
-            &samples,
+            samples.iter(),
             "ut61eplus",
             Some("UNI-T UT61E+"),
             Some(dmm_lib::binary_help::Link::Bluetooth),
@@ -1222,7 +1564,7 @@ mod tests {
     /// must not produce an empty one the parser would have to skip.
     #[test]
     fn render_replay_leaves_out_an_unknown_model() {
-        let text = render_replay(&replay_samples(), "ut61eplus", None, None).expect("frames");
+        let text = render_replay(replay_samples().iter(), "ut61eplus", None, None).expect("frames");
         assert!(!text.contains("# model:"), "{text}");
         assert!(!text.contains("# link:"), "{text}");
         assert_eq!(
@@ -1238,8 +1580,8 @@ mod tests {
     fn render_replay_refuses_a_sample_without_a_frame() {
         let mut samples = replay_samples();
         samples[1].measurement.raw_payload = Vec::new();
-        assert!(render_replay(&samples, "ut61eplus", None, None).is_none());
-        assert!(render_replay(&VecDeque::new(), "ut61eplus", None, None).is_none());
+        assert!(render_replay(samples.iter(), "ut61eplus", None, None).is_none());
+        assert!(render_replay(VecDeque::new().iter(), "ut61eplus", None, None).is_none());
     }
 
     /// The layout of a file carrying markers.
@@ -1270,7 +1612,7 @@ mod tests {
     fn render_csv_writes_each_marker_on_its_sample() {
         let (samples, markers) = marked_samples();
         let marked: Vec<&Marker> = markers.iter().collect();
-        let bytes = render_csv(&samples, &marked, "UNI-T UT61E+", marked_layout()).unwrap();
+        let bytes = render_csv(samples.iter(), &marked, "UNI-T UT61E+", marked_layout()).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(
@@ -1304,7 +1646,7 @@ mod tests {
         let (samples, mut markers) = marked_samples();
         markers[0].at -= std::time::Duration::from_millis(1);
         let marked: Vec<&Marker> = markers.iter().collect();
-        let bytes = render_csv(&samples, &marked, "UNI-T UT61E+", marked_layout()).unwrap();
+        let bytes = render_csv(samples.iter(), &marked, "UNI-T UT61E+", marked_layout()).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         assert!(lines[3].ends_with(",,"), "{:?}", lines[3]);
@@ -1315,7 +1657,7 @@ mod tests {
     fn render_json_writes_each_marker_on_its_sample() {
         let (samples, markers) = marked_samples();
         let marked: Vec<&Marker> = markers.iter().collect();
-        let text = render_json(&samples, &marked, "UNI-T UT61E+", false);
+        let text = render_json(samples.iter(), &marked, "UNI-T UT61E+", false);
         let lines: Vec<serde_json::Value> = text
             .lines()
             .skip(1)
@@ -1334,7 +1676,8 @@ mod tests {
     fn marked_keeps_the_markers_on_buffered_samples() {
         let (samples, mut markers) = marked_samples();
         let mut r = Recording::new();
-        r.samples = samples;
+        r.store = samples;
+        r.history_start = Some(0);
         markers[1].at += std::time::Duration::from_secs(9);
         let marked: Vec<u32> = r.marked(markers.iter()).iter().map(|m| m.number).collect();
         assert_eq!(marked, [4]);
@@ -1347,7 +1690,7 @@ mod tests {
     fn render_json_is_the_metadata_line_and_one_object_per_sample() {
         let mut samples = replay_samples();
         samples.truncate(2);
-        let text = render_json(&samples, &[], "UNI-T UT61E+", true);
+        let text = render_json(samples.iter(), &[], "UNI-T UT61E+", true);
 
         let mut expected = dmm_shared::export::metadata_line("UNI-T UT61E+");
         for s in &samples {

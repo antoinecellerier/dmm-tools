@@ -238,15 +238,18 @@ A thin strip below the main plot showing the full capture history.
 
 ## Recording
 
-- **Record (●) / Stop (■)** toggle button — starting clears the buffer,
-  asking first if a recording holds samples you haven't exported
+- **Record (●) / Stop (■)** toggle button — starting replaces the previous
+  recording, asking first if it holds samples you haven't exported; the
+  graph's readings are kept
 - **Export…** button — saves the recording as a CSV, named after the meter,
   the mode it stayed in and the recording's start time; with nothing
   recorded, it saves the readings the graph holds. The arrow beside it
   offers JSON instead, or a replay file that
   [`--replay`](#command-line-options) plays back
-- **Discard** button — drops a stopped recording, asking first if it holds
-  samples you haven't exported; Export… then saves the graph's readings again
+- **Discard** button — drops a stopped recording; Export… then saves the
+  graph's readings, the recording's among them while the graph still holds
+  them. It asks first only for unexported samples and markers the graph has
+  dropped
 - Sample counter and duration shown while recording
 - Scrollable log of the whole recording (past about a million samples, the
   latest million; export for the rest) showing timestamp, value, unit, flags
@@ -259,14 +262,16 @@ A thin strip below the main plot showing the full capture history.
   number, note and `×` to delete it; `Enter` keeps a note, `Esc` puts back
   what it said before. Pressing the number, or clicking or typing in the
   note, scrolls the graph to the marker
-- Buffer holds up to the configured [buffer size](#settings). Recording
-  auto-stops when the buffer is full and shows a toast notification.
+- The graph's readings and a recording each hold up to the configured
+  [buffer size](#settings). Recording auto-stops when it is full and shows a
+  toast notification.
 
 A marker lasts as long as its reading is on the graph or in the recording.
 With nothing recorded, markers go with the readings the graph drops (a mode
 change, Clear); a recording keeps its markers across mode changes. Markers
 placed before Record stay on the graph but are not part of the recording or
-its export. Replay files carry no markers.
+its export; Export… saves them with the graph's readings once the recording
+is discarded. Replay files carry no markers.
 
 **CSV format:**
 
@@ -415,7 +420,7 @@ Opened via the gear icon. Persisted to `~/.config/dmm-tools/settings.json` on Li
 | **Auto-connect on start** | on | Connect to meter automatically on startup |
 | **Show device name on connect (beeps)** | on | Ask meter for its name on connect. Skipped when Auto-detect already has the name. |
 | **Sample interval** | 0 ms | Delay between measurements: 0 (as fast as the link delivers: on a UT61E+, about 10 a second over USB, 3 over Bluetooth), 100, 200, 300, 500, 1000, 2000 ms. Requires reconnect. |
-| **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys. `settings.json` accepts any size from 1K to 50M. |
+| **Buffer size** | 500K | Samples kept by the graph and for export alike: 100K, 500K, 1M, 2M, 5M. Applies immediately; lowering it drops the oldest points and stops a recording already past the new size. Hover shows the memory and hours each size buys; a stopped recording kept beside the graph's readings can take as much memory again. `settings.json` accepts any size from 1K to 50M. |
 | **Device** | Auto-detect | Auto-detect finds the meter and saves it here; the other chips pick a model directly. Requires reconnect. |
 | **Look for Bluetooth devices** | on | When off, nothing scans for adapters or meters and the connection help offers no Bluetooth steps. An address given to `--adapter` is still opened. Takes effect on the next connect. |
 | **Mock mode** | Auto (cycle) | Only shown when Device is Mock. Pins the mock to one of the scenarios listed under [Command-Line Options](#command-line-options), or cycles through all of them. Requires reconnect. |

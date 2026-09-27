@@ -637,7 +637,8 @@ impl App {
                         label: format_sample_count(n),
                         tooltip: format!(
                             "Keep up to {} samples in the graph and for export \u{2014} {memory}, \
-                             about {span} at the current sample interval",
+                             about {span} at the current sample interval. A stopped recording \
+                             kept beside them can take as much again",
                             format_sample_count(n)
                         ),
                     }

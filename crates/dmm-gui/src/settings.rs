@@ -58,9 +58,11 @@ pub(crate) fn format_sample_count(n: usize) -> String {
 /// `aux` sub-values with `overlays` of them drawn beside the plotted series.
 ///
 /// Both copies of the stream are counted, and both are always kept: the
-/// graph's history, and the sample buffer Export… saves — the graph's samples
-/// in full, or a recording. The sample buffer dominates, and it grows with
-/// the meter: a UT181A's four sub-values roughly triple its per-sample cost.
+/// graph's history, and its readings in full, which Export… saves and a
+/// running recording shares. The full readings dominate, and they grow with
+/// the meter: a UT181A's four sub-values roughly triple their per-sample cost.
+/// A stopped recording kept beside the history can take as much again; the
+/// estimate is for the usual case, and the tooltip says so.
 ///
 /// Decimal MB, matching the figures quoted in the docs.
 pub(crate) fn buffer_memory_estimate(n: usize, overlays: usize, aux: usize) -> String {

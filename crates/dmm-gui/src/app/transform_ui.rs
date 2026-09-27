@@ -236,8 +236,8 @@ impl App {
             // A scale switched on mid-capture still needs its trailing CSV
             // column. Only grows: switching back off leaves the group empty
             // rather than shifting every column the file already promised.
-            self.capture_layout.extra_slots = self
-                .capture_layout
+            self.recording_layout.extra_slots = self
+                .recording_layout
                 .extra_slots
                 .max(self.transform.extra_aux_count());
         }
@@ -398,16 +398,19 @@ mod tests {
         app.recording.push(&reading(), &app.wall_clock, 0);
 
         app.set_transform(Transform::linear(2.0, 0.0, None));
-        assert!(app.recording.samples.is_empty());
+        assert_eq!(app.recording.export_samples().len(), 0);
 
         let (tx, rx) = std::sync::mpsc::channel();
         tx.send(DmmMessage::Measurement(reading()))
             .expect("the channel is open");
         app.connection.rx = Some(rx);
         app.drain_messages();
-        assert_eq!(app.recording.samples.len(), 1);
-        assert_eq!(app.recording.samples[0].extra_aux, 1);
-        assert_eq!(app.capture_layout.extra_slots, 1);
+        assert_eq!(app.recording.export_samples().len(), 1);
+        assert_eq!(
+            app.recording.export_samples().next().map(|s| s.extra_aux),
+            Some(1)
+        );
+        assert_eq!(app.history_layout.extra_slots, 1);
     }
 
     /// A negative scale is a legitimate probe polarity flip, not an error.

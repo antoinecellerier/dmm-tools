@@ -189,10 +189,6 @@ struct CaptureLayout {
     /// disconnect clears the connection's link, and a file exported after
     /// unplugging would then claim the cable every unmarked file is read as.
     link: Option<dmm_lib::binary_help::Link>,
-    /// Sub-value slots the connected meter family can report, from its
-    /// profile. 0 until the first `Connected`, and kept on disconnect so a
-    /// capture stays exportable with its full column layout.
-    device_aux_slots: usize,
     /// Sub-value slots the meter itself can fill in the buffered samples,
     /// taken alongside `device` and for the same reason: the CSV column layout has to describe the meter the
     /// samples came from, not whatever is selected at export time.
@@ -387,7 +383,14 @@ pub struct App {
     /// the settings as an override, so nothing about a playback is saved.
     replay: Option<crate::ReplaySource>,
 
-    capture_layout: CaptureLayout,
+    /// What the recording's export names and lays out, latched at Record.
+    recording_layout: CaptureLayout,
+    /// The same for the graph's history, latched as it starts.
+    history_layout: CaptureLayout,
+    /// Sub-value slots the connected meter family can report, from its
+    /// profile. 0 until the first `Connected`, and kept on disconnect so a
+    /// capture stays exportable with its full column layout.
+    device_aux_slots: usize,
     /// Profile of the selected device, refreshed only when the selection
     /// changes. Two render paths need it every frame, and building a protocol
     /// to read it allocates — the UT61E+ factory lowercases its model string,
@@ -494,7 +497,9 @@ impl App {
             wall_clock: dmm_lib::WallClock::from_clock(&clock),
             clock,
             replay: None,
-            capture_layout: CaptureLayout::default(),
+            recording_layout: CaptureLayout::default(),
+            history_layout: CaptureLayout::default(),
+            device_aux_slots: 0,
             selected_profile: initial_device.map(|d| *(d.new_protocol)().profile()),
             selected_profile_id: initial_device.map_or(registry::AUTO_DEVICE_ID, |d| d.id),
             recording_panel: RecordingPanel::default(),

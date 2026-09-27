@@ -19,7 +19,6 @@ use super::connection::{
 use super::plot_input::{PlotInput, Plotted, resolve_plot_input};
 use super::{App, ConnectionState, named_device};
 use crate::graph::PlotSample;
-use crate::recording::BufferRole;
 use crate::settings::format_sample_count;
 
 /// Why the GUI currently has no readings to show.
@@ -375,7 +374,7 @@ impl App {
     /// every sample it took, so quoting the bound would read as if the
     /// difference had been thrown away.
     pub(super) fn buffer_shrunk_toast(&mut self) {
-        let kept = format_sample_count(self.recording.samples.len());
+        let kept = format_sample_count(self.recording.recording_samples().len());
         self.toast = Some((
             format!(
                 "Recording stopped \u{2014} its {kept} samples are kept, Export\u{2026} saves them"
@@ -636,30 +635,28 @@ impl App {
         self.held.clear();
     }
 
-    /// Keep a reading in the sample buffer: the recording's next sample, or
-    /// — with nothing recorded — the history Export… falls back to, cut to
-    /// what the graph holds.
+    /// Keep a reading: in the graph's history, which Export… saves with
+    /// nothing recorded, cut to what the graph holds — and in a running
+    /// recording.
     ///
     /// Runs after the graph has taken the reading, so a mode change the graph
     /// restarted on already shows as its first point. An empty graph cuts
     /// nothing: NCV and over-range readings add no point, and are still
     /// readings to export.
     fn keep_sample(&mut self, m: &Measurement, extra_aux: usize) {
-        if self.recording.role() == BufferRole::History {
-            // `detected`, not the selection: a device picked in Settings
-            // takes effect at the next connect, and this reading may still
-            // be the old meter's. A file names one meter, so another one
-            // starts another history.
-            let meter = self.connection.detected.map(|d| d.display_name);
-            if meter != self.capture_layout.device {
-                self.recording.clear_history();
-            }
-            if let Some(start) = self.graph.first_point_time() {
-                self.recording.trim_before(start);
-            }
-            if self.recording.samples.is_empty() {
-                self.latch_history_layout();
-            }
+        // `detected`, not the selection: a device picked in Settings takes
+        // effect at the next connect, and this reading may still be the old
+        // meter's. A file names one meter, so another one starts another
+        // history.
+        let meter = self.connection.detected.map(|d| d.display_name);
+        if meter != self.history_layout.device {
+            self.recording.clear_history();
+        }
+        if let Some(start) = self.graph.first_point_time() {
+            self.recording.trim_before(start);
+        }
+        if self.recording.history_is_empty() {
+            self.latch_history_layout();
         }
         if self.recording.push(m, &self.wall_clock, extra_aux) {
             self.buffer_full_toast();
@@ -671,18 +668,18 @@ impl App {
     /// counterpart of what Record latches.
     fn latch_history_layout(&mut self) {
         let meter = self.connection.detected;
-        self.capture_layout.device = meter.map(|d| d.display_name);
+        self.history_layout.device = meter.map(|d| d.display_name);
         // Only a meter's frames can be replayed; the mock has none.
-        self.capture_layout.device_id = meter.filter(|d| d.requires_hardware).map(|d| d.id);
+        self.history_layout.device_id = meter.filter(|d| d.requires_hardware).map(|d| d.id);
         // A reading only arrives on a live connection, so this stability and
         // this link are the meter's rather than the defaults a disconnect
         // leaves behind.
-        self.capture_layout.experimental = Some(!self.connection.stability.is_verified());
-        self.capture_layout.link = self.connection.link;
-        self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
+        self.history_layout.experimental = Some(!self.connection.stability.is_verified());
+        self.history_layout.link = self.connection.link;
+        self.history_layout.aux_slots = self.device_aux_slots;
         // A scale change clears the history, so the transform in force now is
         // the one every sample in it went through.
-        self.capture_layout.extra_slots = self.transform.extra_aux_count();
+        self.history_layout.extra_slots = self.transform.extra_aux_count();
     }
 
     pub(super) fn drain_messages(&mut self) {
@@ -727,17 +724,17 @@ impl App {
                         device_id.and_then(dmm_lib::protocol::registry::find_device);
                     self.connection.model_name = model_name;
                     self.connection.stability = stability;
-                    self.capture_layout.device_aux_slots = max_aux_values;
+                    self.device_aux_slots = max_aux_values;
                     // A reconnect mid-recording is the same meter, so the
                     // in-flight capture picks the slot count back up — it was
                     // 0 before the first Connected of the session.
                     if self.recording.active {
-                        self.capture_layout.aux_slots = max_aux_values;
+                        self.recording_layout.aux_slots = max_aux_values;
                         // The meter Record was pressed ahead of: the first one
                         // to answer during this recording is the one its
                         // samples come from, and the only one the export can
                         // still name once the cable is out.
-                        self.capture_layout
+                        self.recording_layout
                             .experimental
                             .get_or_insert(!stability.is_verified());
                     }
@@ -1917,8 +1914,7 @@ mod tests {
 
     fn modes(app: &App) -> Vec<&str> {
         app.recording
-            .samples
-            .iter()
+            .export_samples()
             .map(|s| s.measurement.mode.as_ref())
             .collect()
     }
@@ -1939,9 +1935,14 @@ mod tests {
     fn an_over_range_reading_stays_in_the_history() {
         let mut app = connected_app();
         deliver_readings(&mut app, &[DC, ("DC V", MeasuredValue::Overload), DC]);
-        assert_eq!(app.recording.samples.len(), 3);
+        assert_eq!(app.recording.export_samples().len(), 3);
         assert_eq!(
-            app.recording.samples[1].measurement.value_export_str(),
+            app.recording
+                .export_samples()
+                .nth(1)
+                .expect("a sample")
+                .measurement
+                .value_export_str(),
             "OL"
         );
     }
@@ -1961,7 +1962,15 @@ mod tests {
         assert!(first.is_some());
         assert_eq!(app.graph.first_point_time(), first);
         assert_eq!(app.session.stats.count, 2);
-        assert_eq!(app.recording.samples[1].measurement.value_export_str(), "");
+        assert_eq!(
+            app.recording
+                .export_samples()
+                .nth(1)
+                .expect("a sample")
+                .measurement
+                .value_export_str(),
+            ""
+        );
     }
 
     /// A UT61E+ in AC+DC V sends its DC and AC components in turn, the AC
@@ -2012,12 +2021,12 @@ mod tests {
         let mut app = connected_app();
         deliver_readings(&mut app, &[DC, DC]);
         app.clear_session();
-        assert!(app.recording.samples.is_empty());
+        assert!((app.recording.export_samples().len() == 0));
 
         app.toggle_recording();
         deliver_readings(&mut app, &[DC, DC]);
         app.clear_session();
-        assert_eq!(app.recording.samples.len(), 2);
+        assert_eq!(app.recording.export_samples().len(), 2);
     }
 
     /// A recording spans the dial turns the graph restarts on.
@@ -2035,7 +2044,7 @@ mod tests {
         let mut app = connected_app();
         app.connection.paused = true;
         deliver_readings(&mut app, &[DC]);
-        assert!(app.recording.samples.is_empty());
+        assert!((app.recording.export_samples().len() == 0));
     }
 
     /// The history's file names the meter it came from, as a recording's
@@ -2047,10 +2056,10 @@ mod tests {
         deliver_readings(&mut app, &[DC]);
 
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.capture_layout.device, Some(ut181a.display_name));
-        assert_eq!(app.capture_layout.device_id, Some("ut181a"));
-        assert_eq!(app.capture_layout.experimental, Some(true));
-        assert_eq!(app.capture_layout.aux_slots, 4);
+        assert_eq!(app.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.history_layout.device_id, Some("ut181a"));
+        assert_eq!(app.history_layout.experimental, Some(true));
+        assert_eq!(app.history_layout.aux_slots, 4);
 
         app.disconnect();
         assert!(app.experimental(), "the samples are still that meter's");
@@ -2063,7 +2072,7 @@ mod tests {
         let mut app = app("mock", false);
         deliver(&mut app, connected("mock", Stability::Verified, 0));
         deliver_readings(&mut app, &[DC]);
-        assert_eq!(app.capture_layout.device_id, None);
+        assert_eq!(app.history_layout.device_id, None);
         assert_eq!(app.replay_device_id(), None);
     }
 
@@ -2080,13 +2089,35 @@ mod tests {
         );
         deliver(&mut app, connected("ut61eplus", Stability::Verified, 0));
         deliver_readings(&mut app, &[DC]);
-        assert_eq!(app.recording.samples.len(), 3, "the same meter came back");
+        assert_eq!(
+            app.recording.export_samples().len(),
+            3,
+            "the same meter came back"
+        );
 
         deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
         deliver_readings(&mut app, &[DC]);
-        assert_eq!(app.recording.samples.len(), 1);
+        assert_eq!(app.recording.export_samples().len(), 1);
         let ut181a = registry::find_device("ut181a").expect("a registry entry");
-        assert_eq!(app.capture_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.history_layout.device, Some(ut181a.display_name));
+    }
+
+    /// Another meter answering mid-recording restarts the history under its
+    /// name; the recording carries on under the one it started with.
+    #[test]
+    fn a_new_meter_mid_recording_restarts_only_the_history() {
+        let mut app = connected_app();
+        app.toggle_recording();
+        deliver_readings(&mut app, &[DC]);
+        deliver(&mut app, connected("ut181a", Stability::Experimental, 4));
+        deliver_readings(&mut app, &[DC]);
+
+        let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
+        let ut181a = registry::find_device("ut181a").expect("a registry entry");
+        assert_eq!(app.recording_layout.device, Some(ut61eplus.display_name));
+        assert_eq!(app.history_layout.device, Some(ut181a.display_name));
+        assert_eq!(app.recording.recording_samples().len(), 2);
+        assert_eq!(app.recording.history_samples().len(), 1);
     }
 
     /// A device picked in Settings only takes effect at the next connect;
@@ -2098,9 +2129,9 @@ mod tests {
         app.settings.shared.device_family = "ut181a".to_string();
         deliver_readings(&mut app, &[DC]);
 
-        assert_eq!(app.recording.samples.len(), 2);
+        assert_eq!(app.recording.export_samples().len(), 2);
         let ut61eplus = registry::find_device("ut61eplus").expect("a registry entry");
-        assert_eq!(app.capture_layout.device, Some(ut61eplus.display_name));
+        assert_eq!(app.history_layout.device, Some(ut61eplus.display_name));
     }
 
     /// With nothing recorded every reading is also kept for export — cut to
@@ -2133,10 +2164,10 @@ mod tests {
                 elapsed
             };
             send(&mut app, 0..points);
-            assert_eq!(app.recording.samples.len(), points as usize);
+            assert_eq!(app.recording.export_samples().len(), points as usize);
             let elapsed = send(&mut app, points..points + 1_000);
             assert_eq!(
-                app.recording.samples.len(),
+                app.recording.export_samples().len(),
                 points as usize,
                 "still bounded"
             );

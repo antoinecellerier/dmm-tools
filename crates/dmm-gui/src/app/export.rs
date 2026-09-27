@@ -7,7 +7,7 @@ use chrono::{DateTime, Local};
 use dmm_lib::export::CsvLayout;
 use dmm_lib::measurement::MeasuredValue;
 use log::{error, info, warn};
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::Instant;
 
@@ -63,9 +63,8 @@ impl ExportFormat {
 /// A word the meter shows instead of a reading ("Auto" with the probes
 /// lifted) comes under a mode of its own but is no switch, so it is left out
 /// — as `dmm-cli read -o` leaves it out of the name it picks.
-fn single_mode(samples: &VecDeque<Sample>) -> Option<&str> {
+fn single_mode(samples: std::collections::vec_deque::Iter<'_, Sample>) -> Option<&str> {
     let mut modes = samples
-        .iter()
         .filter(|s| !matches!(s.measurement.value, MeasuredValue::NoReading(_)))
         .map(|s| s.measurement.mode.as_ref());
     let first = modes.next()?;
@@ -176,12 +175,12 @@ impl App {
     /// own trailing column.
     fn csv_layout(&self) -> CsvLayout {
         CsvLayout {
-            family_slots: self.capture_layout.aux_slots.max(
+            family_slots: self.export_layout().aux_slots.max(
                 self.recording
                     .max_aux_seen()
-                    .saturating_sub(self.capture_layout.extra_slots),
+                    .saturating_sub(self.export_layout().extra_slots),
             ),
-            extra_slots: self.capture_layout.extra_slots,
+            extra_slots: self.export_layout().extra_slots,
             // Integrating is a CLI-only run mode.
             integral: false,
             // Set per export, from the markers it writes.
@@ -195,9 +194,11 @@ impl App {
     /// Kept apart from the dialog so what an export writes can be checked
     /// without opening one.
     pub(super) fn prepare_export(&self, format: ExportFormat) -> Result<PreparedExport, String> {
-        let samples = &self.recording.samples;
+        // A fresh walk over the samples for each pass that reads them: a
+        // borrowed iterator, nothing copied.
+        let samples = || self.recording.export_samples();
         let role = self.recording.role();
-        let Some(first) = samples.front() else {
+        let Some(first) = samples().next() else {
             // Returning silently made the button and Ctrl+E look broken:
             // no file dialog, no message, nothing in the log. Say why.
             info!("export skipped: sample buffer is empty");
@@ -208,7 +209,7 @@ impl App {
         // toggled on before a meter answered — so the file says so rather
         // than crediting the samples to a model that was only selected later.
         let device_model = self
-            .capture_layout
+            .export_layout()
             .device
             .or_else(|| self.active_device().map(|d| d.display_name))
             .unwrap_or(UNKNOWN_DEVICE);
@@ -222,7 +223,8 @@ impl App {
         //
         // The name is built here too, rather than in the dialog thread: the
         // first sample is where the file starts.
-        let default_name = format.default_name(device_model, single_mode(samples), first.wall_time);
+        let default_name =
+            format.default_name(device_model, single_mode(samples()), first.wall_time);
         let marked = self.recording.marked(self.markers.iter());
         let bytes = match format {
             ExportFormat::Csv => {
@@ -230,13 +232,13 @@ impl App {
                     markers: !marked.is_empty(),
                     ..self.csv_layout()
                 };
-                render_csv(samples, &marked, device_model, layout).map_err(|e| {
+                render_csv(samples(), &marked, device_model, layout).map_err(|e| {
                     error!("CSV export failed: {e}");
                     format!("Export failed: {e}")
                 })?
             }
             ExportFormat::Json => {
-                render_json(samples, &marked, device_model, self.experimental()).into_bytes()
+                render_json(samples(), &marked, device_model, self.experimental()).into_bytes()
             }
             ExportFormat::Replay => self
                 .replay_device_id()
@@ -244,8 +246,8 @@ impl App {
                     // What the samples came over, latched with the rest of
                     // the provenance; the live link only where a recording
                     // started before a meter answered.
-                    let link = self.capture_layout.link.or(self.connection.link);
-                    render_replay(samples, id, Some(device_model), link)
+                    let link = self.export_layout().link.or(self.connection.link);
+                    render_replay(samples(), id, Some(device_model), link)
                 })
                 .ok_or_else(|| {
                     warn!("replay export refused: the buffered samples carry no meter frames");
@@ -257,13 +259,22 @@ impl App {
             format,
             default_name,
             bytes,
-            sample_count: samples.len(),
+            sample_count: samples().len(),
             mark: (role == BufferRole::Recording).then(|| SavedMark {
                 epoch: self.recording.epoch(),
                 markers: (format != ExportFormat::Replay).then(|| Recording::marker_keys(&marked)),
             }),
             drops_markers: format == ExportFormat::Replay && !marked.is_empty(),
         })
+    }
+
+    /// What the samples Export… saves came from and are laid out as: the
+    /// recording's, or with none, the history's.
+    fn export_layout(&self) -> &super::CaptureLayout {
+        match self.recording.role() {
+            BufferRole::Recording => &self.recording_layout,
+            BufferRole::History => &self.history_layout,
+        }
     }
 
     /// Why an empty buffer has nothing to save, as what to do about it.
@@ -316,7 +327,7 @@ impl App {
     /// what the recording latched from the meter it ran against, else the
     /// connection as it stands, as the meter's name falls back.
     pub(super) fn experimental(&self) -> bool {
-        self.capture_layout
+        self.export_layout()
             .experimental
             .unwrap_or_else(|| !self.connection.stability.is_verified())
     }
@@ -325,7 +336,7 @@ impl App {
     /// recording named, else the one selected or detected now, as the CSV's
     /// provenance falls back. `None` for the mock, which has no wire format.
     pub(super) fn replay_device_id(&self) -> Option<&'static str> {
-        self.capture_layout.device_id.or_else(|| {
+        self.export_layout().device_id.or_else(|| {
             self.active_device()
                 .filter(|d| d.requires_hardware)
                 .map(|d| d.id)
@@ -355,6 +366,7 @@ mod tests {
     use crate::settings::Settings;
     use chrono::TimeZone;
     use dmm_lib::measurement::{AuxValue, MeasuredValue, Measurement};
+    use std::collections::VecDeque;
 
     /// A 1.234 V reading carrying `aux` sub-values of its own.
     fn measurement(aux: usize) -> Measurement {
@@ -377,8 +389,8 @@ mod tests {
     /// `aux_counts`.
     fn app_holding(aux_slots: usize, extra_slots: usize, aux_counts: &[usize]) -> App {
         let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-        app.capture_layout.aux_slots = aux_slots;
-        app.capture_layout.extra_slots = extra_slots;
+        app.recording_layout.aux_slots = aux_slots;
+        app.recording_layout.extra_slots = extra_slots;
         app.recording.toggle(std::time::Instant::now());
         for &aux in aux_counts {
             app.recording
@@ -387,10 +399,67 @@ mod tests {
         app
     }
 
+    /// Readings `i` seconds after `t0`, pushed as a frame drains them.
+    fn push_at(app: &mut App, t0: Instant, seconds: std::ops::Range<u64>) -> Vec<Instant> {
+        let wall_clock = app.wall_clock;
+        seconds
+            .map(|i| {
+                let mut m = measurement(0);
+                m.timestamp = t0 + std::time::Duration::from_secs(i);
+                app.recording.push(&m, &wall_clock, 0);
+                m.timestamp
+            })
+            .collect()
+    }
+
+    /// Discard leaves the recording's readings to the history, and Export…
+    /// saves them with the ones before, markers included.
+    #[test]
+    fn export_after_discard_saves_the_graphs_readings_and_markers() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let t0 = Instant::now();
+        let before = push_at(&mut app, t0, 0..2);
+        app.markers
+            .add(before[1], chrono::Local::now(), "1.234 V".into())
+            .expect("a new marker");
+        app.recording.toggle(t0);
+        push_at(&mut app, t0, 2..4);
+        app.recording.toggle(t0);
+        app.recording.discard();
+
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
+        assert_eq!(prepared.sample_count, 4);
+        assert!(prepared.mark.is_none(), "the history marks nothing saved");
+        let text = String::from_utf8(prepared.bytes).expect("CSV is UTF-8");
+        let mut lines = text.lines().skip(1);
+        assert!(lines.next().expect("a header").ends_with(",marker,note"));
+        assert_eq!(lines.filter(|l| l.ends_with(",1,")).count(), 1, "{text}");
+    }
+
+    /// A stopped recording is what Export… saves, not the readings the
+    /// history took after it.
+    #[test]
+    fn a_stopped_recording_exports_only_itself() {
+        let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
+        let t0 = Instant::now();
+        push_at(&mut app, t0, 0..3);
+        app.recording.toggle(t0);
+        push_at(&mut app, t0, 3..5);
+        app.recording.toggle(t0);
+        push_at(&mut app, t0, 5..8);
+        let prepared = app.prepare_export(ExportFormat::Csv).expect("samples");
+        assert_eq!(prepared.sample_count, 2);
+    }
+
     /// The header and every row, as comma-separated cells.
     fn exported(app: &App) -> Vec<Vec<String>> {
-        let bytes = render_csv(&app.recording.samples, &[], "mock", app.csv_layout())
-            .expect("rendering the fixture buffer");
+        let bytes = render_csv(
+            app.recording.export_samples(),
+            &[],
+            "mock",
+            app.csv_layout(),
+        )
+        .expect("rendering the fixture buffer");
         String::from_utf8(bytes)
             .expect("CSV is UTF-8")
             .lines()
@@ -483,20 +552,22 @@ mod tests {
     /// a buffer that crossed a function switch is no one mode's.
     #[test]
     fn the_mode_names_the_file_only_while_the_buffer_holds_one() {
-        let mut app = app_holding(0, 0, &[0, 0]);
-        assert_eq!(single_mode(&app.recording.samples), Some("DC V"));
-        app.recording.samples[1].measurement.mode = "AC V".into();
-        assert_eq!(single_mode(&app.recording.samples), None);
+        let app = app_holding(0, 0, &[0, 0]);
+        let mut samples: VecDeque<Sample> = app.recording.export_samples().cloned().collect();
+        assert_eq!(single_mode(samples.iter()), Some("DC V"));
+        samples[1].measurement.mode = "AC V".into();
+        assert_eq!(single_mode(samples.iter()), None);
     }
 
     /// A no-reading word between two readings of one mode is no switch.
     #[test]
     fn a_no_reading_leaves_the_mode_in_the_name() {
-        let mut app = app_holding(0, 0, &[0, 0, 0]);
-        let idle = &mut app.recording.samples[1].measurement;
+        let app = app_holding(0, 0, &[0, 0, 0]);
+        let mut samples: VecDeque<Sample> = app.recording.export_samples().cloned().collect();
+        let idle = &mut samples[1].measurement;
         idle.mode = "Auto".into();
         idle.value = MeasuredValue::NoReading("Auto");
-        assert_eq!(single_mode(&app.recording.samples), Some("DC V"));
+        assert_eq!(single_mode(samples.iter()), Some("DC V"));
     }
 
     /// Record works with nothing connected, and `disconnect()` puts the
@@ -515,7 +586,7 @@ mod tests {
 
         app.toggle_recording();
         assert_eq!(
-            app.capture_layout.experimental, None,
+            app.recording_layout.experimental, None,
             "nothing was connected to take a stability from"
         );
 
@@ -537,10 +608,10 @@ mod tests {
         app.drain_messages();
         app.recording.push(&measurement(0), &app.wall_clock, 0);
 
-        assert_eq!(app.capture_layout.experimental, Some(true));
+        assert_eq!(app.recording_layout.experimental, Some(true));
         assert!(app.experimental(), "the recording ran against that meter");
         let json = render_json(
-            &app.recording.samples,
+            app.recording.export_samples(),
             &[],
             "UNI-T UT181A",
             app.experimental(),
@@ -593,7 +664,7 @@ mod tests {
         assert_eq!(
             prepared.bytes,
             render_csv(
-                &app.recording.samples,
+                app.recording.export_samples(),
                 &[],
                 UNKNOWN_DEVICE,
                 app.csv_layout()
@@ -648,7 +719,7 @@ mod tests {
         );
         assert!(prepared.default_name.ends_with(".csv"));
         let rendered = render_csv(
-            &app.recording.samples,
+            app.recording.export_samples(),
             &[],
             UNKNOWN_DEVICE,
             app.csv_layout(),
@@ -662,11 +733,15 @@ mod tests {
     #[test]
     fn a_replay_export_leaves_the_markers_out() {
         let mut app = app_holding(0, 0, &[0, 0]);
-        app.capture_layout.device_id = Some("ut61eplus");
+        app.recording_layout.device_id = Some("ut61eplus");
         let prepared = app.prepare_export(ExportFormat::Replay).expect("frames");
         assert!(!prepared.drops_markers, "no markers to leave out");
 
-        app.last_measurement = app.recording.samples.back().map(|s| s.measurement.clone());
+        app.last_measurement = app
+            .recording
+            .export_samples()
+            .last()
+            .map(|s| s.measurement.clone());
         app.add_marker(false);
         let prepared = app.prepare_export(ExportFormat::Replay).expect("frames");
         assert!(prepared.drops_markers);

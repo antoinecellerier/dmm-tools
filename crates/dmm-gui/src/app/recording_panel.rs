@@ -47,27 +47,49 @@ fn history_hint(samples: usize) -> String {
     )
 }
 
-/// The discard prompt's heading and text, for `unexported` samples and,
-/// with `markers`, marker changes no file holds.
-fn discard_prompt(action: DiscardFor, unexported: usize, markers: bool) -> (&'static str, String) {
-    const MARKER_CHANGES: &str = "marker changes made since the last export";
-    let lost = match (unexported, markers) {
-        (0, _) => MARKER_CHANGES.to_string(),
-        (n, false) => format!("{n} unexported {}", noun(n)),
-        (n, true) => format!("{n} unexported {} and {MARKER_CHANGES}", noun(n)),
-    };
+/// The prompt's heading and text before `action` loses `samples` and
+/// `markers` no file holds — for Discard, only those on readings that have
+/// left the graph: Export… still saves the rest, as the graph's.
+fn discard_prompt(action: DiscardFor, samples: usize, markers: usize) -> (&'static str, String) {
+    let changes = format!(
+        "unsaved changes to {markers} {}",
+        if markers == 1 { "marker" } else { "markers" }
+    );
+    let samples_noun = noun(samples);
     let text = match action {
-        DiscardFor::Record => format!("Starting a new recording will discard {lost}."),
-        DiscardFor::Discard => format!("Discarding the recording will lose {lost}."),
+        DiscardFor::Record => {
+            let lost = match (samples, markers) {
+                (0, _) => changes,
+                (n, 0) => format!("{n} unexported {samples_noun}"),
+                (n, _) => format!("{n} unexported {samples_noun} and {changes}"),
+            };
+            // Only the recording goes: its markers stay while the graph
+            // holds their readings, and Export… saves them once it is
+            // discarded.
+            let stay = if markers > 0 {
+                " Markers stay on the graph while it holds their readings."
+            } else {
+                ""
+            };
+            format!("Starting a new recording will discard {lost}.{stay}")
+        }
+        DiscardFor::Discard => {
+            let lost = match (samples, markers) {
+                (0, _) => format!("{changes} on readings that have left the graph"),
+                (n, 0) => format!("{n} {samples_noun} that have left the graph"),
+                (n, _) => {
+                    format!("{n} {samples_noun} that have left the graph, and {changes} on them")
+                }
+            };
+            format!("Discarding the recording will lose {lost}.")
+        }
     };
-    if unexported == 0 {
-        (
-            "Discard unexported markers?",
-            format!("{text} Markers still on the graph stay there, but in no recording."),
-        )
+    let heading = if samples == 0 {
+        "Discard unexported markers?"
     } else {
-        ("Discard unexported samples?", text)
-    }
+        "Discard unexported samples?"
+    };
+    (heading, text)
 }
 
 fn noun(n: usize) -> &'static str {
@@ -127,12 +149,12 @@ impl App {
 
     /// Start or stop recording.
     ///
-    /// Starting clears the buffer, so if it holds samples that were never
-    /// exported this asks first — a second Record press (or a mistyped
+    /// Starting replaces a kept recording, so if it holds samples that were
+    /// never exported this asks first — a second Record press (or a mistyped
     /// Ctrl+R) used to destroy an unexported capture with no prompt, no
     /// toast, and nothing in the log.
     pub(super) fn toggle_recording(&mut self) {
-        if !self.recording.active && self.recording.needs_discard_prompt(&self.markers) {
+        if !self.recording.active && self.discard_losses(DiscardFor::Record) != (0, 0) {
             self.ask_before_discarding(DiscardFor::Record);
             return;
         }
@@ -142,11 +164,22 @@ impl App {
     /// Drop a stopped recording, asking first if it holds samples that were
     /// never exported.
     fn discard_recording(&mut self) {
-        if self.recording.needs_discard_prompt(&self.markers) {
+        if self.discard_losses(DiscardFor::Discard) != (0, 0) {
             self.ask_before_discarding(DiscardFor::Discard);
             return;
         }
         self.apply_discard();
+    }
+
+    /// The samples and markers no file holds that `action` would lose.
+    fn discard_losses(&self, action: DiscardFor) -> (usize, usize) {
+        match action {
+            DiscardFor::Record => (
+                self.recording.unexported_count(),
+                self.recording.unsaved_marker_count(&self.markers),
+            ),
+            DiscardFor::Discard => self.recording.lost_on_discard(&self.markers),
+        }
     }
 
     fn ask_before_discarding(&mut self, action: DiscardFor) {
@@ -164,10 +197,19 @@ impl App {
     }
 
     fn apply_discard(&mut self) {
-        let count = self.recording.samples.len();
+        let count = self.recording.recording_samples().len();
         self.recording.discard();
         info!("discarded a recording of {count} samples");
-        self.toast = Some(("Recording discarded".to_string(), false, Instant::now()));
+        let left = self.recording.history_samples().len();
+        let message = if left == 0 {
+            "Recording discarded".to_string()
+        } else {
+            format!(
+                "Recording discarded. Export\u{2026} saves the graph's {}.",
+                sample_count(left)
+            )
+        };
+        self.toast = Some((message, false, Instant::now()));
     }
 
     /// Flip the recording state, remembering which meter the samples came
@@ -184,26 +226,26 @@ impl App {
             // The meter picked, or the one detection found; under Auto-detect
             // with nothing connected there is no meter to name, and the export
             // falls back to its own placeholder.
-            self.capture_layout.device = self.active_device().map(|d| d.display_name);
+            self.recording_layout.device = self.active_device().map(|d| d.display_name);
             // Only a meter's frames can be replayed, so the mock names no
             // device here and the export offers no replay file for it.
-            self.capture_layout.device_id = self
+            self.recording_layout.device_id = self
                 .active_device()
                 .filter(|d| d.requires_hardware)
                 .map(|d| d.id);
             // Only from a live connection: disconnected, `stability` is the
             // Verified default `disconnect()` restored, and latching that
             // marked a UT181A connected after Record as a verified protocol.
-            self.capture_layout.experimental = (self.connection.state
+            self.recording_layout.experimental = (self.connection.state
                 != ConnectionState::Disconnected)
                 .then(|| !self.connection.stability.is_verified());
             // Empty while disconnected for the same reason; the export then
             // falls back to whatever link answers during the recording.
-            self.capture_layout.link = self.connection.link;
-            self.capture_layout.aux_slots = self.capture_layout.device_aux_slots;
+            self.recording_layout.link = self.connection.link;
+            self.recording_layout.aux_slots = self.device_aux_slots;
             // The transform's Raw sub-value needs a fixed column of its own,
             // after the meter's — see `extra_slots`.
-            self.capture_layout.extra_slots = self.transform.extra_aux_count();
+            self.recording_layout.extra_slots = self.transform.extra_aux_count();
         }
     }
 
@@ -213,9 +255,8 @@ impl App {
         let Some(action) = self.recording_panel.pending_discard else {
             return;
         };
-        let unexported = self.recording.unexported_count();
-        let markers = self.recording.has_unsaved_markers(&self.markers);
-        if unexported == 0 && !markers {
+        let (unexported, markers) = self.discard_losses(action);
+        if unexported == 0 && markers == 0 {
             // An export completed while the prompt was up — nothing left to
             // warn about.
             self.apply_pending_discard(action);
@@ -276,7 +317,7 @@ impl App {
                 self.toggle_recording();
             }
             self.show_export_button(ui);
-            let count = self.recording.samples.len();
+            let count = self.recording.recording_samples().len();
             let recorded = self.recording.role() == BufferRole::Recording;
             if recorded && !self.recording.active && count > 0 {
                 let discard = ui.button("Discard").on_hover_text(
@@ -306,10 +347,11 @@ impl App {
             }
         });
 
-        if self.recording.role() == BufferRole::History && !self.recording.samples.is_empty() {
+        let history = self.recording.history_samples().len();
+        if self.recording.role() == BufferRole::History && history > 0 {
             ui.add(
                 egui::Label::new(
-                    RichText::new(history_hint(self.recording.samples.len()))
+                    RichText::new(history_hint(history))
                         .small()
                         .color(ui.visuals().weak_text_color()),
                 )
@@ -562,8 +604,8 @@ mod tests {
     impl MenuRun {
         fn new() -> Self {
             let mut app = App::from_settings(Settings::default(), dmm_lib::Clock::real());
-            // A meter's recording, so the Replay… entry is enabled.
-            app.capture_layout.device_id = Some("ut61eplus");
+            // A meter's readings, so the Replay… entry is enabled.
+            app.history_layout.device_id = Some("ut61eplus");
             let ctx = egui::Context::default();
             ctx.enable_accesskit();
             Self {
@@ -753,7 +795,7 @@ mod tests {
     #[test]
     fn down_skips_a_disabled_entry() {
         let mut run = MenuRun::new();
-        run.app.capture_layout.device_id = None;
+        run.app.history_layout.device_id = None;
         run.frame(1.0, vec![]);
         run.frame(1.0, vec![]);
         let arrow = run.node_rect("Export file type");
@@ -896,24 +938,32 @@ mod tests {
         assert!(run.shows_widget("Discard"));
     }
 
-    /// Discarding samples that reached no file asks first, as Record does;
-    /// Cancel keeps them, confirming hands the buffer back to the graph.
+    /// Discarding samples that reached no file and have left the graph asks
+    /// first, as Record does; Cancel keeps them.
     #[test]
     fn discarding_an_unexported_recording_asks_first() {
         let mut run = run_with_stopped_recording(2);
+        // Cleared since, so the graph no longer holds them.
+        run.app.clear_session();
         run.click(run.node_rect("Discard").center());
         assert!(
-            run.shows_text("Discarding the recording will lose 2 unexported samples."),
+            run.shows_text(
+                "Discarding the recording will lose 2 samples that have left the graph."
+            ),
             "the prompt says what is lost"
         );
         run.click(run.node_rect("Cancel").center());
         assert!(!run.shows_widget("Discard recording"), "the prompt closed");
-        assert_eq!(run.app.recording.samples.len(), 2, "Cancel keeps them");
+        assert_eq!(
+            run.app.recording.recording_samples().len(),
+            2,
+            "Cancel keeps them"
+        );
 
         run.click(run.node_rect("Discard").center());
         run.click(run.node_rect("Discard recording").center());
         assert_eq!(run.app.recording.role(), BufferRole::History);
-        assert!(run.app.recording.samples.is_empty());
+        assert_eq!(run.app.recording.export_samples().len(), 0);
         assert_eq!(
             run.app.toast.as_ref().map(|(text, _, _)| text.as_str()),
             Some("Recording discarded")
@@ -921,16 +971,32 @@ mod tests {
         assert!(!run.shows_widget("Discard"), "nothing left to discard");
     }
 
-    /// A recording already saved goes without a prompt.
+    /// A recording the graph still holds goes without a prompt: Export…
+    /// saves its samples as the graph's, and the toast says so.
+    #[test]
+    fn discarding_a_recording_the_graph_holds_does_not_ask() {
+        let mut run = run_with_stopped_recording(2);
+        run.click(run.node_rect("Discard").center());
+        assert!(!run.shows_widget("Discard recording"), "no prompt");
+        assert_eq!(run.app.recording.role(), BufferRole::History);
+        assert_eq!(run.app.recording.export_samples().len(), 2);
+        assert_eq!(
+            run.app.toast.as_ref().map(|(text, _, _)| text.as_str()),
+            Some("Recording discarded. Export\u{2026} saves the graph's 2 samples.")
+        );
+    }
+
+    /// A recording already saved goes without a prompt, whatever the graph
+    /// holds.
     #[test]
     fn discarding_an_exported_recording_does_not_ask() {
         let mut run = run_with_stopped_recording(2);
+        run.app.clear_session();
         let epoch = run.app.recording.epoch();
         run.app.recording.mark_exported(epoch, 2, None);
         run.click(run.node_rect("Discard").center());
         assert!(!run.shows_widget("Discard recording"), "no prompt");
         assert_eq!(run.app.recording.role(), BufferRole::History);
-        assert!(run.app.recording.samples.is_empty());
     }
 
     /// Mark the newest buffered sample, as `N` does with it on screen.
@@ -938,26 +1004,28 @@ mod tests {
         run.app.last_measurement = run
             .app
             .recording
-            .samples
-            .back()
+            .export_samples()
+            .last()
             .map(|s| s.measurement.clone());
         run.app.add_marker(false);
         run.frame(1.0, vec![]);
     }
 
-    /// A saved recording whose markers changed since still asks, and says
-    /// that the markers are what it would lose.
+    /// A saved recording whose markers changed since, on readings that have
+    /// left the graph, still asks, and says the markers are what it would
+    /// lose.
     #[test]
     fn discarding_unsaved_markers_asks_first() {
         let mut run = run_with_stopped_recording(2);
         let epoch = run.app.recording.epoch();
         run.app.recording.mark_exported(epoch, 2, None);
         mark_newest(&mut run);
+        run.app.clear_session();
         run.click(run.node_rect("Discard").center());
         assert!(run.shows_text("Discard unexported markers?"));
         assert!(run.shows_text(
-            "Discarding the recording will lose marker changes made since the last export. \
-             Markers still on the graph stay there, but in no recording."
+            "Discarding the recording will lose unsaved changes to 1 marker on readings that \
+             have left the graph."
         ));
         run.click(run.node_rect("Discard recording").center());
         assert_eq!(run.app.recording.role(), BufferRole::History);
@@ -977,13 +1045,18 @@ mod tests {
     #[test]
     fn the_prompt_names_samples_and_markers_together() {
         assert_eq!(
-            discard_prompt(DiscardFor::Record, 94, true),
+            discard_prompt(DiscardFor::Record, 94, 2),
             (
                 "Discard unexported samples?",
-                "Starting a new recording will discard 94 unexported samples and marker \
-                 changes made since the last export."
+                "Starting a new recording will discard 94 unexported samples and unsaved \
+                 changes to 2 markers. Markers stay on the graph while it holds their readings."
                     .to_string()
             )
+        );
+        assert_eq!(
+            discard_prompt(DiscardFor::Discard, 94, 2).1,
+            "Discarding the recording will lose 94 samples that have left the graph, and \
+             unsaved changes to 2 markers on them."
         );
     }
 
@@ -1025,13 +1098,7 @@ mod tests {
 
     /// Whether the log drew the row of the sample taken at `at`.
     fn shows_sample(run: &MenuRun, at: Instant) -> bool {
-        let sample = run
-            .app
-            .recording
-            .samples
-            .iter()
-            .find(|s| s.measurement.timestamp == at)
-            .expect("a buffered sample");
+        let sample = run.app.recording.sample_at(at).expect("a buffered sample");
         let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
         run.tree
             .iter()
@@ -1053,7 +1120,14 @@ mod tests {
     #[test]
     fn tab_reaches_a_marker_at_the_start_of_a_long_recording() {
         let mut run = run_with_markers(2_000, &[10], true);
-        let t0 = run.app.recording.samples[0].measurement.timestamp;
+        let t0 = run
+            .app
+            .recording
+            .recording_samples()
+            .next()
+            .expect("samples")
+            .measurement
+            .timestamp;
         let at = |i: u64| t0 + std::time::Duration::from_secs(i);
         assert!(shows_sample(&run, at(1_999)), "following the newest row");
         assert!(!shows_sample(&run, at(9)), "the start is out of view");
@@ -1086,8 +1160,7 @@ mod tests {
         let times: Vec<Instant> = run
             .app
             .recording
-            .samples
-            .iter()
+            .recording_samples()
             .map(|s| s.measurement.timestamp)
             .collect();
         let on_screen: Vec<Instant> = times
@@ -1118,7 +1191,12 @@ mod tests {
     #[test]
     fn readings_that_arrive_unseen_cost_a_screenful() {
         let mut run = run_with_markers(300, &[], true);
-        let last = run.app.recording.samples.back().expect("samples");
+        let last = run
+            .app
+            .recording
+            .recording_samples()
+            .last()
+            .expect("samples");
         let last = last.measurement.timestamp;
         for i in 1..=2_000 {
             push_reading(&mut run, last + std::time::Duration::from_secs(i));
@@ -1130,7 +1208,12 @@ mod tests {
             .filter(|(_, n)| n.value().is_some_and(|v| v.contains(" V")))
             .count();
         assert!(rows < 100, "{rows} rows drawn");
-        let newest = run.app.recording.samples.back().expect("samples");
+        let newest = run
+            .app
+            .recording
+            .recording_samples()
+            .last()
+            .expect("samples");
         assert!(shows_sample(&run, newest.measurement.timestamp));
     }
 
@@ -1272,13 +1355,7 @@ mod tests {
 
     /// Where the log drew the row of the sample taken at `at`.
     fn sample_rect(run: &MenuRun, at: Instant) -> Rect {
-        let sample = run
-            .app
-            .recording
-            .samples
-            .iter()
-            .find(|s| s.measurement.timestamp == at)
-            .expect("a buffered sample");
+        let sample = run.app.recording.sample_at(at).expect("a buffered sample");
         let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
         run.tree
             .iter()
@@ -1293,11 +1370,14 @@ mod tests {
     #[test]
     fn a_hovered_row_offers_a_marker() {
         let mut run = run_with_markers(300, &[], true);
-        let at = run.app.recording.samples[295].measurement.timestamp;
-        let time = run.app.recording.samples[295]
-            .wall_time
-            .format("%H:%M:%S%.3f")
-            .to_string();
+        let sample = run
+            .app
+            .recording
+            .recording_samples()
+            .nth(295)
+            .expect("samples");
+        let at = sample.measurement.timestamp;
+        let time = sample.wall_time.format("%H:%M:%S%.3f").to_string();
         let add = format!("Add a marker at {time}");
         assert!(!run.shows_widget(&add), "only on a hovered row");
         let row = sample_rect(&run, at);
@@ -1314,7 +1394,12 @@ mod tests {
     #[test]
     fn a_marked_row_offers_no_marker() {
         let mut run = run_with_markers(300, &[295], true);
-        let sample = &run.app.recording.samples[295];
+        let sample = run
+            .app
+            .recording
+            .recording_samples()
+            .nth(295)
+            .expect("samples");
         let (at, time) = (
             sample.measurement.timestamp,
             sample.wall_time.format("%H:%M:%S%.3f").to_string(),
@@ -1330,11 +1415,13 @@ mod tests {
     #[test]
     fn n_waits_for_the_discard_prompt() {
         let mut run = run_with_stopped_recording(2);
+        // Cleared since, so Discard has samples to ask about.
+        run.app.clear_session();
         run.app.last_measurement = run
             .app
             .recording
-            .samples
-            .back()
+            .export_samples()
+            .last()
             .map(|s| s.measurement.clone());
         run.click(run.node_rect("Discard").center());
         assert!(run.shows_widget("Discard recording"), "the prompt is up");
@@ -1396,8 +1483,8 @@ mod tests {
         run.app.last_measurement = run
             .app
             .recording
-            .samples
-            .back()
+            .export_samples()
+            .last()
             .map(|s| s.measurement.clone());
         let press = |key, modifiers| egui::Event::Key {
             key,
@@ -1443,6 +1530,6 @@ mod tests {
         assert!(run.shows_text("Starting a new recording will discard 1 unexported sample."));
         run.click(run.node_rect("Discard and record").center());
         assert!(run.app.recording.active);
-        assert!(run.app.recording.samples.is_empty());
+        assert_eq!(run.app.recording.recording_samples().len(), 0);
     }
 }

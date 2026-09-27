@@ -258,6 +258,12 @@ Use cases: test reports, lab notebooks, sharing results.
 
 The GUI marks readings (`N`, `Ctrl+N`) and exports the markers as `marker,note` CSV columns and JSON keys; `dmm-cli read` cannot place any yet. Pressing Enter, with optional typed text, would mark the latest reading through the same shared writers. Replay files drop markers: `# marker:` comment lines would keep them, once `--replay` reads them back.
 
+### The graph's readings in the recording log
+
+**Complexity:** Small
+
+With nothing recorded the log lists only markers, though the graph's full readings are kept for Export…. A toggle showing them there would let the log's `+` mark any of them, as it does a recording's.
+
 ### More entries in the plot's right-click menu
 
 **Complexity:** Small
