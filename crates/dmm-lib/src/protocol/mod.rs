@@ -57,6 +57,12 @@ pub(crate) fn unknown_mode16(code: u16) -> Cow<'static, str> {
     Cow::Owned(format!("Unknown({code:#06x})"))
 }
 
+/// Whether `mode` is the `Unknown(0x..)` fallback a parser writes for a mode
+/// code its family's table doesn't list.
+pub fn is_unknown_mode(mode: &str) -> bool {
+    mode.starts_with("Unknown(")
+}
+
 /// Helpers shared by the per-family parser tests.
 #[cfg(test)]
 pub(crate) mod test_support {
@@ -765,6 +771,13 @@ pub trait Protocol: Send {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_unknown_mode_fallbacks_are_recognised() {
+        assert!(is_unknown_mode(&unknown_mode(0x05)));
+        assert!(is_unknown_mode(&unknown_mode16(0x1234)));
+        assert!(!is_unknown_mode("DC V"));
+    }
 
     /// Every device's capture steps, with the device id for failure messages.
     fn all_steps() -> Vec<(&'static str, Stability, Vec<CaptureStep>)> {

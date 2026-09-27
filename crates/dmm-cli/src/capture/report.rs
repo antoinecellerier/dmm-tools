@@ -623,7 +623,9 @@ pub(crate) fn needs_attention(
 ) -> bool {
     !diagnostics.is_empty()
         || samples.len() < requested
-        || samples.iter().any(|s| s.mode.starts_with("Unknown("))
+        || samples
+            .iter()
+            .any(|s| dmm_lib::protocol::is_unknown_mode(&s.mode))
 }
 
 /// A name reduced to what a file name can safely carry.
