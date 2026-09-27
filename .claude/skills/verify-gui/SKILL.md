@@ -26,7 +26,7 @@ allowed-tools: Bash(${CLAUDE_SKILL_DIR}/scripts/gui-display.sh *)
 
 1. `start` — bring up the private display.
 2. `run [dmm-gui args…]` — build and launch; prints `WID=<window id>` and the log path.
-3. `key <chord>` / `click <x> <y>` / `wheel <x> <y> [up|down] [ctrl]` — drive the window; `resize <width> <height>` to check a layout at another size.
+3. `key <chord>` / `click <x> <y> [left|right]` / `wheel <x> <y> [up|down] [ctrl]` — drive the window; `resize <width> <height>` to check a layout at another size.
 4. `shot <out.png>` — capture the private display.
 5. View the PNG with the Read tool, or sample pixels with python3 + PIL to compute contrast numerically. Write screenshots to the session scratchpad directory.
 6. `stop` — kill dmm-gui and the display.

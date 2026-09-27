@@ -249,19 +249,24 @@ cmd_key() {
 
 cmd_click() {
 	require xdotool
-	local x="${1:-}" y="${2:-}" wid
-	[[ "$x" =~ ^[0-9]+$ ]] && [[ "$y" =~ ^[0-9]+$ ]] || die "usage: click <x> <y>   (window-relative pixels)"
+	local x="${1:-}" y="${2:-}" side="${3:-left}" btn wid
+	[[ "$x" =~ ^[0-9]+$ ]] && [[ "$y" =~ ^[0-9]+$ ]] || die "usage: click <x> <y> [left|right]   (window-relative pixels)"
+	case "$side" in
+	left) btn=1 ;;
+	right) btn=3 ;;
+	*) die "usage: click <x> <y> [left|right]   (window-relative pixels)" ;;
+	esac
 	wid="$(need_wid)"
 	# Hold the button across a frame, as a hand does: a press and release that
 	# land in the same egui frame register as a click but never as the button
 	# being down, which is what the minimap pans on.
-	onx xdotool mousemove --window "$wid" "$x" "$y" mousedown 1 sleep "$CHORD_HOLD" mouseup 1 || {
+	onx xdotool mousemove --window "$wid" "$x" "$y" mousedown "$btn" sleep "$CHORD_HOLD" mouseup "$btn" || {
 		# A chain that failed mid-way can leave the button held, silently turning
 		# every later click on this display into a drag.
-		onx xdotool mouseup 1 >/dev/null 2>&1 || true
+		onx xdotool mouseup "$btn" >/dev/null 2>&1 || true
 		die "click at $x,$y failed"
 	}
-	echo "clicked $x,$y in window $wid"
+	echo "clicked $x,$y ($side) in window $wid"
 }
 
 cmd_wheel() {
@@ -355,5 +360,5 @@ sub="${1:-}"
 shift || true
 case "$sub" in
 start | run | shot | key | click | wheel | resize | stop | status | selftest) "cmd_$sub" "$@" ;;
-*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png>|key <chord>|click <x> <y>|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|stop|status|selftest}" ;;
+*) die "usage: $(basename "$0") {start|run [dmm-gui args...]|shot <out.png>|key <chord>|click <x> <y> [left|right]|wheel <x> <y> [up|down] [ctrl]|resize <width> <height>|stop|status|selftest}" ;;
 esac
