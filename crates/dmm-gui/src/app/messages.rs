@@ -763,7 +763,7 @@ impl App {
                     // an outage during an overload would be drawn as one long
                     // band, claiming over-range for a stretch nothing was
                     // heard in. Same threshold the "no response" notice uses.
-                    if count >= connection::NO_RESPONSE_TIMEOUTS {
+                    if count >= dmm_lib::stream::NO_RESPONSE_TIMEOUTS {
                         self.graph.push_data_loss();
                     }
                 }
@@ -1459,7 +1459,7 @@ mod tests {
     fn a_replay_gap_is_not_a_quiet_meter() {
         let mut app = app("ut61eplus", false);
         app.replay = Some(crate::ReplaySource::fixture());
-        app.connection.waiting_timeouts = connection::NO_RESPONSE_TIMEOUTS;
+        app.connection.waiting_timeouts = dmm_lib::stream::NO_RESPONSE_TIMEOUTS;
         deliver(&mut app, DmmMessage::NoResponse);
 
         assert!(app.connection.last_error.is_none(), "no failure on record");
@@ -1473,7 +1473,7 @@ mod tests {
     #[test]
     fn a_quiet_meter_still_gets_the_no_response_help() {
         let mut app = app("ut61eplus", false);
-        app.connection.waiting_timeouts = connection::NO_RESPONSE_TIMEOUTS;
+        app.connection.waiting_timeouts = dmm_lib::stream::NO_RESPONSE_TIMEOUTS;
         deliver(&mut app, DmmMessage::NoResponse);
 
         let n = app.connection_notice().expect("a quiet meter is a failure");

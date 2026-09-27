@@ -18,6 +18,11 @@ use crate::measurement::Measurement;
 use crate::transport::Transport;
 use std::time::{Duration, Instant};
 
+/// Consecutive read timeouts after which both binaries treat the meter as not
+/// responding: the CLI prints its activation help, the GUI says so and marks
+/// the graph with a genuine loss of data rather than a quiet meter.
+pub const NO_RESPONSE_TIMEOUTS: u32 = 5;
+
 /// Outcome of one stream tick.
 ///
 /// The `Measurement` variant carries the full parsed struct, which is larger

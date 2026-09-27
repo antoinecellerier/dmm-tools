@@ -3,7 +3,7 @@ use dmm_lib::error::ErrorKind;
 use dmm_lib::measurement::Measurement;
 use dmm_lib::protocol::registry::SelectableDevice;
 use dmm_lib::protocol::{Choice, MeterKeys, Setting, Stability};
-use dmm_lib::stream::{MeasurementStream, StreamEvent};
+use dmm_lib::stream::{MeasurementStream, NO_RESPONSE_TIMEOUTS, StreamEvent};
 use dmm_lib::transport::Link;
 use dmm_lib::transport::Transport;
 use eframe::egui;
@@ -50,11 +50,6 @@ impl std::fmt::Display for RemoteCommand {
 /// The UI presets top out at 2 s; this leaves generous room above them while
 /// keeping a mistyped value diagnosable.
 const MAX_SAMPLE_INTERVAL_MS: u32 = 60_000;
-
-/// Consecutive read timeouts after which the meter is treated as not
-/// responding — surfaced to the user, and marked on the graph as a genuine
-/// loss of data rather than a quiet meter.
-pub(super) const NO_RESPONSE_TIMEOUTS: u32 = 5;
 
 /// What the UI records as the failure once that threshold is crossed.
 pub(super) const NO_RESPONSE: &str = "No response from meter \u{2014} check device selection and \

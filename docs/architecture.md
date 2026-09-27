@@ -58,7 +58,7 @@ The library crate handles all device communication and data parsing. It has no U
 | `specs.rs` | Spec metadata types: `SpecInfo` (a range's resolution and `AccuracyBand`s), `ModeSpecInfo` (per-mode impedance, protection, notes), the keyed `ModeSpecs` rows the families' tables are written in, and `SpecSheetTable` for dumping a whole sheet |
 | `clock.rs` | `Clock`: the session time base every reading is stamped with — real, scaled with an instant pre-seed burst, or manual for tests (decision 16) |
 | `wall_clock.rs` | `WallClock`: an `(Instant, SystemTime)` origin pair that turns a reading's monotonic timestamp into the wall time shown and exported |
-| `stream.rs` | `MeasurementStream`: absolute-tick pacing and consecutive-timeout counting around a `Dmm`, the acquisition loop the CLI `read`/`debug` commands and the GUI thread share; cancellation stays with the caller |
+| `stream.rs` | `MeasurementStream`: absolute-tick pacing and consecutive-timeout counting around a `Dmm`, the acquisition loop the CLI `read`/`debug` commands and the GUI thread share, and `NO_RESPONSE_TIMEOUTS`, the run of timeouts after which both call the meter unresponsive; cancellation stays with the caller |
 | `detect.rs` | `detect_device()`: the probe cascade behind `"auto"` — runs the families' `Fingerprint`s on an opened transport and ranks what answers (see below and `docs/detection-design.md`) |
 | `flags.rs` | `StatusFlags`: Hold, Rel, Auto, Min/Max/AVG, Peak, Low Battery |
 | `error.rs` | `Error` enum via `thiserror` |

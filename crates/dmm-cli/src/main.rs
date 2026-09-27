@@ -12,7 +12,7 @@ use console::style;
 use dmm_lib::error::ErrorKind;
 use dmm_lib::protocol::registry::{self, SelectableDevice, Selection};
 use dmm_lib::protocol::{AUTO_RANGE_ID, Choice, Setting};
-use dmm_lib::stream::{MeasurementStream, StreamEvent};
+use dmm_lib::stream::{MeasurementStream, NO_RESPONSE_TIMEOUTS, StreamEvent};
 use dmm_lib::transform::{FactorError, Transform};
 use dmm_shared::help::{ConnectedAdapters, LinksSearched};
 use log::{error, info};
@@ -1594,7 +1594,7 @@ fn run_read_loop<T: dmm_lib::transport::Transport>(
             }
             Ok(StreamEvent::Timeout { consecutive }) => {
                 log::warn!("measurement timeout, retrying");
-                if consecutive == 5
+                if consecutive == NO_RESPONSE_TIMEOUTS
                     && let Some(d) = device
                 {
                     print_no_response_help(d);
