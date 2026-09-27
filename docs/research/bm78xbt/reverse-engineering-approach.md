@@ -2,8 +2,8 @@
 
 Scope: the Brymen BM78xBT Bluetooth LE multimeters, the BM788BT and the
 BM787BT that EEVblog sells, from the advertisement to the packets they send
-and the commands they accept. Nothing is implemented; this pair of documents
-records what the meters do on the wire. §1-11 of the spec come from vendor
+and the commands they accept. It is implemented, experimentally; this pair of
+documents records what the meters do on the wire. §1-11 of the spec come from vendor
 sources only; §12 compares them with community sources, read after the
 boundary was opened.
 
