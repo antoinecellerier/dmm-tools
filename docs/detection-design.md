@@ -143,8 +143,8 @@ bridges' (see [Bridges and adapters](#bridges-and-adapters)).
 
 ## Names and the registry
 
-A name frame resolves through `registry::device_for_reported_name(name)`, which matches
-`display_name` then aliases, case-insensitively, across the UT61+/UT161 entries only. An
+A name frame resolves through `protocol/ut61eplus`'s `device_for_reported_name(name)`, which
+matches `display_name` then aliases, case-insensitively, across the UT61+/UT161 entries only. An
 unrecognised name falls back to `ut61eplus`, keeps the reported name on `Detected`, and warns:
 a UT61D+ or a UT161x still reads, with UT61E+ tables, and the user is told which name to
 report so an alias can absorb it.
