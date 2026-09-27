@@ -185,7 +185,8 @@ These paths are hardware-unverified on three of the four families, so:
   `MAX_DRIVE_SUBSTEPS_PER_STEP` = 24 sub-steps are filed per mode step.
 - The baseline (auto range, flags off) is restored with a read-back before the
   next mode step, even once the budget is spent — a meter left latched in HOLD
-  is worse than one more command. A failed restore prints
+  is worse than one more command. A range with no auto — a UT181A's in
+  Peak — goes back to the rung the sweep started on. A failed restore prints
   `<setting> could not be reset — press the meter's button` and counts a
   failure.
 - Range sweeps go through `choices(Range)` only, which cycles to target with

@@ -235,7 +235,7 @@ fn shows_target(setting: Setting, id: u16, label: &str, s: &SampleData) -> bool 
 
 /// Walk every value the tool can put the meter in after `step` captured, one
 /// sub-step per value, and leave the meter back on auto range with its flags
-/// off.
+/// off — or on the rung it started on, where the mode has no auto range.
 ///
 /// `last` is the reading the step ended on, which is what the family's
 /// `choices` are relative to.
@@ -596,10 +596,16 @@ fn restore(
     driver: &mut Driver,
     charge: bool,
 ) -> Result<Option<Measurement>, Box<dyn std::error::Error>> {
-    let Some(off) = choices.iter().find(|c| c.id == RESET_ID) else {
+    // Back to auto range or off — or, on a setting with no such value (a
+    // UT181A in Peak has no auto range), to the value the sweep started on.
+    let Some(off) = choices
+        .iter()
+        .find(|c| c.id == RESET_ID)
+        .or_else(|| choices.iter().find(|c| c.current))
+    else {
         return Ok(None);
     };
-    let reading = match dmm.select(setting, RESET_ID) {
+    let reading = match dmm.select(setting, off.id) {
         // A failed walk can leave the meter in a mode without this setting
         // (RANGE once flipped a UT61E+ into AC+DC V): nothing to put back,
         // but the next setting is offered from where the meter is now.
@@ -611,7 +617,7 @@ fn restore(
     if let Ok(m) = &reading
         && shows_target(
             setting,
-            RESET_ID,
+            off.id,
             &off.label,
             &SampleData::from_measurement(m),
         )
@@ -1036,6 +1042,9 @@ mod tests {
         /// Every value lands, and the display then has no reading for this
         /// many reads, as a UT181A's does after a switch.
         Blanks(usize),
+        /// The setting offers no reset value, as a UT181A's range in Peak
+        /// offers no auto.
+        NoReset,
     }
 
     struct Fails {
@@ -1108,7 +1117,11 @@ mod tests {
             setting: Setting,
             current: &Measurement,
         ) -> Vec<dmm_lib::protocol::Choice> {
-            self.inner.choices(setting, current)
+            let mut choices = self.inner.choices(setting, current);
+            if setting == self.setting && matches!(self.failure, Failure::NoReset) {
+                choices.retain(|c| c.id != RESET_ID);
+            }
+            choices
         }
         fn select(
             &mut self,
@@ -1121,6 +1134,7 @@ mod tests {
                 return self.inner.select(t, setting, id);
             }
             match self.failure {
+                Failure::NoReset => self.inner.select(t, setting, id),
                 Failure::Blanks(reads) => {
                     self.inner.select(t, setting, id)?;
                     self.blank_reads = reads;
@@ -1262,6 +1276,56 @@ mod tests {
             bench.dmm.request_measurement().unwrap().value,
             MeasuredValue::NoReading(_)
         ));
+    }
+
+    /// A ladder with no auto range — a UT181A's in Peak — is put back on the
+    /// rung the sweep started from, with no failure spent on a reset that
+    /// does not exist.
+    #[test]
+    fn a_ladder_without_auto_goes_back_to_its_rung() {
+        use dmm_lib::transport::{NullTransport, Transport};
+
+        let (transport, recorder) =
+            crate::recording::RecordingTransport::new(Box::new(NullTransport));
+        let mut dmm = dmm_lib::Dmm::new(
+            Box::new(transport) as Box<dyn Transport>,
+            Fails::boxed(
+                dmm_lib::mock::MockMode::DcV,
+                Setting::Range,
+                Failure::NoReset,
+            ),
+        )
+        .unwrap();
+        dmm.select(Setting::Range, 2).unwrap();
+        let last = dmm.request_measurement().unwrap();
+        let start = last.range_label.to_string();
+        let mut driver = Driver::new(true);
+        let mut report = CaptureReport::default();
+        let path = std::env::temp_dir()
+            .join("dmm-cli-test-drive-no-reset.yaml")
+            .to_string_lossy()
+            .to_string();
+        let step = CaptureStep {
+            samples: 1,
+            ..mode_step("DC V")
+        };
+        sweep_step(
+            &mut dmm,
+            &recorder,
+            &step,
+            &last,
+            &mut driver,
+            &mut report,
+            &path,
+        )
+        .unwrap();
+        let _ = std::fs::remove_file(&path);
+
+        assert!(report.steps.iter().any(|s| s.id.contains("/range:")));
+        let now = dmm.request_measurement().unwrap();
+        assert!(!now.flags.auto_range);
+        assert_eq!(now.range_label, start);
+        assert_eq!(driver.failures, 0);
     }
 
     fn minmax_steps(report: &CaptureReport) -> Vec<&String> {

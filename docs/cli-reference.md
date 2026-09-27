@@ -596,8 +596,9 @@ end for review; if any is corrected or skipped, every later step keeps asking.
 
 On meters the tool can drive (UT61+/UT161, UT181A, VC-880/VC-890, mock),
 each mode step is followed by an automatic walk through hold, REL, MIN/MAX,
-Peak and every range, and the meter is left on auto range with its flags
-off. `--no-drive` turns this off.
+Peak and every range, and the meter is left on auto range (or its starting
+range, where the mode has no auto, as a UT181A's Peak) with its flags off.
+`--no-drive` turns this off.
 
 After the device's own steps, capture offers **freeform captures**: describe
 any mode the list doesn't cover and the tool records the samples with your
