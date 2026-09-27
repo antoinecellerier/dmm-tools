@@ -740,16 +740,16 @@ binary:
 
 ### What remains open
 
-- **Everything above is hardware-unverified.** The vendor app's
-  behaviour is evidence about what UNI-T's own software sends, not
-  proof the meter accepts it. `docs/verification-backlog.md` carries
-  the asks.
-- **The reply frame was not traced.** Type `0x01` with `"OK"` / `"ER"`
-  stays community-sourced; how (or whether) the vendor app checks it
-  after a SET_MODE was not followed through.
+- **The vendor app's behaviour is evidence about what UNI-T's own
+  software sends**, not proof the meter accepts it. Phase 4 confirmed
+  much of it on a meter; `docs/verification-backlog.md` carries the
+  rest.
+- **The reply frame was not traced.** How (or whether) the vendor app
+  checks the type `0x01` reply after a SET_MODE was not followed through;
+  the reply itself has since been seen from a meter (Phase 4).
 - **mV AC+DC (`0x2141`).** The vendor UI emits it, but its own label
-  decoder has no case for family `0x21` with `n1 = 4`. Flagged
-  [UNVERIFIED] in §6.1.
+  decoder has no case for family `0x21` with `n1 = 4`. A meter reports
+  the word (Phase 4); whether it takes it from the host is untested.
 - **`n0 = 3`.** A third "Peak" secondary radio exists on every tab but
   is hidden or disabled everywhere, so the vendor app never emits a
   word ending in 3. Whether the meter would accept one is unknown.
@@ -758,6 +758,28 @@ binary:
 - **No trace of COMP.** The `actComp` action is `Visible = False` in the
   form resource, so the vendor app ships COMP mode switched off in the
   UI and there is no call site to read.
+
+## Phase 4: Full hardware capture (2026-09-27)
+
+@diego351 ran `dmm-cli capture` v0.7.0 over every dial position of a
+UT181A on the CH9329 (UT-D09) cable and attached the report to
+[issue #5](https://github.com/antoinecellerier/dmm-tools/issues/5). The
+tool drove SET_MODE, SET_RANGE, HOLD, SET_MIN_MAX and REL itself on many
+positions; the reporter entered COMP, REL and min/max by hand in one step.
+
+Method: the report's raw frames (every chunk read from the cable, per
+step) were reassembled and decoded by an independent script written from
+`reverse-engineered-protocol.md` alone, checking checksums, that each
+format consumes its payload exactly, and the arithmetic between fields
+(REL, AC+DC, dBV/dBm, temperature differences, min/max averages). The
+2,063 distinct payloads were also replayed through the `dmm-lib` parser.
+No new source was consulted; the capture is the only evidence behind the
+"Hardware-confirmed 2026-09-27" notes in the spec.
+
+What it settled is recorded in place in the spec (§4.1, §4.2, §5, §6,
+§6.1, §7, §8). What it left open: 21 REL words, what the LCD shows
+during a blank value, the meaning of misc2 bit 3, manual rungs in Peak,
+the Duty and Pulse rungs, bare `0x12`, and the CP2110 cable.
 
 ## File Inventory
 
@@ -784,3 +806,4 @@ Reference files (in `references/ut181/`):
 | `vendor-software/extracted/UT181A/User Manual.pdf` | Software manual (9 pages) |
 | `vendor-software/CH9329DLL_decompiled.txt` | Ghidra decompilation output |
 | `vendor-software/UT181A_decompiled.txt` | Ghidra decompilation output |
+| `captures-2026-09-27/ut181a-issue5-diego351-v0.7.0.yaml` | Phase 4 capture report, as attached to issue #5 |

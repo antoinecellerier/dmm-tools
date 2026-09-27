@@ -136,6 +136,12 @@ and calls it.
 | 0x05 | Record Data | Recording samples (batched) |
 | 0x72 | Reply Data | Generic data reply (e.g., saved/recording counts) |
 
+Hardware-confirmed 2026-09-27 (issue #5): the meter answers every command
+in §4.2 it was sent with a type 0x01 reply — `AB CD 05 00 01 4F 4B A0 00`
+("OK") or the same frame carrying `45 52` ("ER") — within about 70 ms,
+interleaved with the measurement stream. A SET_MODE's OK can arrive after
+one more frame in the old mode.
+
 ### 4.2 Commands (Host -> Device)
 
 | Code | Command | Parameters | Description |
@@ -157,6 +163,22 @@ and calls it.
 | 0x0F | DEL_RECORDING | uint16 LE index | Delete recording [VENDOR] — confirmed from UT181A.exe decompilation: called after "Are you sure that you want to delete this record?" dialog, followed by GET_REC_COUNT refresh. Not in community implementations. |
 | 0x12 | HOLD (button press) | `0x5A` = HOLD button code | [VENDOR] — wrapper at `0x8703e8` hard-codes a single payload byte `0x5A` (`mov BYTE PTR [esp],0x5a`) and is the Hold action's only call. This matches antage's `toggle_hold`, the only community implementation that transmits 0x12; sigrok defines the opcode but never sends it. Whether bare `[0x12]` also works is untested. |
 
+What a real meter did with them (2026-09-27, issue #5, CH9329 cable):
+
+- **SET_MODE** moved the meter between variants of the dial's family —
+  continuity to its open beeper, diode to its alarm, µA/mA DC to AC+DC and
+  Peak, µA AC to Hz and Peak — and the stream showed the new word about
+  150 ms later. Flipping nibble 0 to 2 entered REL on nS, Duty, Pulse
+  width and the V/µA/mA DC AC+DC variants (§6.1).
+- **SET_RANGE** with index *n* made the meter report range byte *n* with
+  the auto bit clear, on every rung of the Cap, Hz, µA, mA and V DC AC+DC
+  ladders; index 0 set the auto bit again. In a Peak variant it answered
+  ER to index 0 (§7).
+- **HOLD** `12 5A` toggled misc bit 7 on every dial position tried,
+  Peak included.
+- **SET_MIN_MAX** with one payload byte entered (1) and left (0) the
+  min/max format; the meter answered ER to 1 in a Peak variant.
+
 ---
 
 ## 5. Measurement Packet (Type 0x02) -- [KNOWN]
@@ -174,11 +196,17 @@ and calls it.
 
 | Bit | Mask | Meaning |
 |-----|------|---------|
+| 0 | 0x01 | Set in every min/max frame, meaning unknown (see below) |
 | 1 | 0x02 | Has aux1 display value |
 | 2 | 0x04 | Has aux2 display value |
 | 3 | 0x08 | Has bargraph / fast mode |
 | 4-6 | 0x70 | Format: 0x00=normal, 0x10=relative, 0x20=min/max, 0x40=peak |
 | 7 | 0x80 | HOLD active |
+
+In the formats other than normal the presence bits do not describe the
+layout (2026-09-27 capture): relative frames always set bits 1 and 2,
+peak frames bit 1, and min/max frames bits 0, 1 and 2, with bit 3 kept
+from the mode although no min/max frame carries a bargraph.
 
 **misc2 byte**:
 
@@ -189,6 +217,16 @@ and calls it.
 | 3 | 0x08 | Lead error |
 | 4 | 0x10 | COMP (comparator) mode active |
 | 5 | 0x20 | Record mode active |
+
+Hardware-confirmed 2026-09-27: bits 0 (cleared by SET_RANGE, and by
+entering REL, min/max or a Peak variant), 1 (set on a 316 V AC reading
+and on an overloaded mV AC input) and 4 (COMP, below). Bit 3 was set for
+a few frames at a time on the V DC, µA DC and A DC dials and while
+turning to mV DC; which LCD warning, if any, goes with it is
+[UNVERIFIED].
+
+The meter sends a measurement frame every 100 ms; the main reading
+changes at most every 500 ms (2 Sa/s), the frames in between repeat it.
 
 ### 5.2 Value Encoding
 
@@ -215,6 +253,18 @@ and calls it.
 | 1 | Negative overload (-OL) |
 | 4-7 | Decimal places (0-15) |
 
+Hardware-confirmed 2026-09-27 (issue #5):
+
+- An overload sets one bit and keeps the out-of-range float: open leads
+  on Ω read `0x31` with 62.96 MΩ, an overloaded mV AC input `0x21` with
+  690.13 mV, a Peak minimum `0x12` with -959.36 mV.
+- **Both bits set, with a float of 0.0, is a blank value** — the meter
+  has no reading to give. Every value slot goes blank for about five
+  frames after a range, mode or dial change, a capacitance range with
+  nothing connected stays blank, and the min/max and Peak slots are
+  blank until their first reading lands. The capture never showed both
+  bits with any other float.
+
 ### 5.3 Measurement Variants
 
 **Normal (format 0x00)** -- after 5-byte header:
@@ -227,15 +277,35 @@ and calls it.
 Hardware-confirmed 2026-09-02 (issue #5): a V AC frame with all three
 optional fields present has a 57-byte payload, which only accounts as
 6 + 13 + 13 + 13 + 12. The bargraph's missing precision byte is what
-makes the arithmetic close. What its float32 *means* is still open --
-it read 241.02 VAC against a 239.22 VAC main reading in the same frame,
-so it is not the displayed value.
+makes the arithmetic close. It is not the displayed value (241.02 VAC
+beside a 239.22 VAC main reading): it is the meter's fast sample, which
+changes on every 100 ms frame while the main reading holds for 500 ms
+(2026-09-27 capture, Ω and mV readings with a drifting input).
+
+What the aux slots hold depends on the mode word (2026-09-27 capture,
+every variant below seen on a real meter):
+
+| Variant | Aux1 | Aux2 | Main |
+|---|---|---|---|
+| V AC / mV AC / µA, mA, A AC Hz (n1=2) | frequency, `Hz` | period, `ms` | the AC reading |
+| AC+DC (`0x2141`, `0x3121`, `0x8121`, `0x9121`, `0xA121`) | AC part | DC part | √(AC² + DC²), unit `…ac+dc`; no bargraph |
+| V AC dBV (`0x1151`) | the voltage, `VAC` | -- | 20·log10(V / 1 V) |
+| V AC dBm (`0x1161`) | the voltage, `VAC` | reference impedance, 600 `~` | 10·log10(V² / Z / 1 mW) |
+| Temperature T1,T2 / T2,T1 (n1=1/2) | the other probe | -- | T1 / T2 |
+| Temperature T1-T2 / T2-T1 (n1=3/4) | T1 | T2 | T1 − T2 / T2 − T1 |
+
+A probe that is not plugged in reads as a positive overload.
 
 **Relative (format 0x10)**:
 - Relative value: 13 bytes
 - Reference value: 13 bytes
 - Absolute value: 13 bytes
 - Fast value: conditional on misc bit 3
+
+Hardware-confirmed 2026-09-27: 45-byte frames without and 57-byte frames
+with the fast value, relative = absolute − reference to the display's
+resolution. Entering REL — the meter's button or SET_MODE with nibble 0
+= 2 — changes the mode word and the format together (`0x3111` → `0x3112`).
 
 **Min/Max (format 0x20)**:
 - Current: 5 bytes (short value)
@@ -244,9 +314,20 @@ so it is not the displayed value.
 - Min: 5 bytes + uint32 LE timestamp
 - Unit: 8 bytes (shared)
 
+Hardware-confirmed 2026-09-27: 46-byte frames. Max's and min's timestamps
+are the second each was set; the average's counts the seconds elapsed, and
+the average is the running mean of the 2 Sa/s readings. Max, average and
+min are blank (§5.2) until the first reading lands. On the temperature
+dial the first frames carried stale bytes in the average and min slots,
+and for about 300 ms after leaving min/max aux1 and aux2 repeated the
+main value.
+
 **Peak (format 0x40)**:
 - Max: 13 bytes (full value with unit)
 - Min: 13 bytes (full value with unit)
+
+Hardware-confirmed 2026-09-27: 32-byte frames. The maximum fills first
+and the minimum stays blank for up to about 700 ms after entering Peak.
 
 ### 5.4 COMP Mode Extension
 
@@ -260,6 +341,11 @@ When misc2 bit 4 (COMP) is set, after the bargraph unit field:
 | 3 | 4 | High limit (float32 LE) |
 | 7 | 4 | Low limit (float32 LE, only for INNER/OUTER modes) |
 
+Hardware-confirmed 2026-09-27: on V DC, a 42-byte frame (6 + 13 + 12 +
+11) carried INNER, FAIL, digits `0x04` — the V DC 6 V range's four
+decimals, read from the low nibble — high 3.0 and low 1.0, beside a
+0.0033 V reading outside that window.
+
 ---
 
 ## 6. Mode Word Table -- [KNOWN]
@@ -271,25 +357,29 @@ The mode word is uint16 LE with structured nibble encoding:
 - Nibble 0 (LSB): 1=standard, 2=REL variant
 
 79 total modes (count corrected 2026-06: both sigrok and antage define 79).
-Three are hardware-confirmed (marked ✓): 0x3111 (2026-04-07), 0x4211 and
-0x1121 (2026-09-02, issue #5). Selected examples:
+A real meter has sent 58 of them (2026-09-27 capture, issue #5): every
+word with nibble 0 = 1 in §6.1's table, including every row below except
+V AC REL, plus the continuity open beeper `0x5212`, Diode Alarm `0x6112`
+and seven REL words — `0x3112`, `0x3122`, `0x5312`, `0x7212`, `0x7312`,
+`0x8122`, `0x9122`. The 21 never seen are all REL words. No word outside
+§6.1's table appeared. Selected examples:
 
 | Mode | Code | Description |
 |------|------|-------------|
 | V AC | 0x1111 | V AC |
 | V AC REL | 0x1112 | V AC relative |
-| V AC Hz | 0x1121 | V AC frequency ✓ (aux1 = Hz, aux2 = period) |
+| V AC Hz | 0x1121 | V AC frequency (aux1 = Hz, aux2 = period) |
 | V AC Peak | 0x1131 | V AC peak |
 | V AC LPF | 0x1141 | V AC low-pass filter |
 | V AC dBV | 0x1151 | V AC dBV |
 | V AC dBm | 0x1161 | V AC dBm |
 | mV AC | 0x2111 | mV AC |
 | mV AC+DC | 0x2141 | mV AC+DC coupled |
-| V DC | 0x3111 | V DC ✓ |
+| V DC | 0x3111 | V DC |
 | V DC AC+DC | 0x3121 | V DC AC+DC coupled |
 | V DC Peak | 0x3131 | V DC peak |
 | mV DC | 0x4111 | mV DC |
-| Temp C T1(T2) | 0x4211 | Temperature C, T1 main, T2 aux ✓ |
+| Temp C T1(T2) | 0x4211 | Temperature C, T1 main, T2 aux |
 | Temp C T2(T1) | 0x4221 | Temperature C, T2 main, T1 aux |
 | Temp C T1-T2 | 0x4231 | Temperature C, differential |
 | Temp F T1(T2) | 0x4311 | Temperature F, T1 main |
@@ -316,9 +406,9 @@ modes have Hz, Peak, and AC+DC variants.
 Traced out of the Setting dialog (`TfrmSetting`) of the vendor
 application, V1.05. See `reverse-engineering-approach.md`, "Phase 3",
 for how the handlers were recovered and how to reproduce this.
-**No command described here has been sent to a meter.** Some of the
-mode words below have been *observed* coming from one (§6); none has
-been set from the host.
+A real meter has since taken SET_MODE from the host within a family,
+and switched REL through nibble 0 (§4.2, 2026-09-27); which variant
+words it reports is in §6.
 
 #### Composition rule
 
@@ -412,15 +502,17 @@ their secondary group is what the form resource declares.
 
 #### Caveats and vendor quirks
 
-- **mV AC+DC (`0x2141`) — [UNVERIFIED].** The AC+DC radio on the mVAC
+- **mV AC+DC (`0x2141`).** The AC+DC radio on the mVAC
   tab carries `Tag = 4`, so the vendor app does emit `0x2141`, agreeing
   with the community row in §6. Two things undercut it: the radio is
   literally named `rbtnmVDC_M2` with handler `rbtnmVDC_M2Click`
   (`0x86e584`) — a copy-paste from the mVDC tab — and the receive-side
   label decoder `FUN_0085e69c` has **no `0x40` case for family `0x21`**,
   so a meter reporting `0x2141` would show a blank secondary label in
-  the vendor app's own record grid. Whether the meter accepts the word
-  needs hardware.
+  the vendor app's own record grid. A real meter does report `0x2141`
+  for its mV AC+DC function (2026-09-27 capture, set from the meter's own
+  keys, with unit `mVac+dc` and the AC and DC parts in aux1/aux2);
+  whether it takes the word from the host is untested.
 - **Duty tab.** `rbtnDuty_M1` has no `OnClick` at all in the form
   resource, so clicking it never refreshes the cached primary nibble.
   In practice the nibble is already 1 (set from the last received word
@@ -476,6 +568,17 @@ primary radio.
 
 Temperature: fixed range. Current A: fixed at 10A.
 
+Hardware-confirmed 2026-09-27 (issue #5):
+
+- The positions with no manual range — temperature, A DC and A AC,
+  continuity, nS and diode — report range byte 1 with the auto bit set,
+  and so did Duty and Pulse width on auto.
+- A Peak variant enters with the auto bit set and clears it about 600 ms
+  later, keeping the rung it entered on; the meter answers ER to
+  SET_RANGE 0 there. Whether it takes a manual rung in Peak is untested.
+- V AC LPF (`0x1141`) enters on range 4 (1000 V) with the auto bit clear.
+- REL and min/max clear the auto bit and keep the rung.
+
 ### 7.1 Vendor range ladders -- [VENDOR]
 
 The Setting dialog gives each dial family one "Range" combo box, inside
@@ -515,6 +618,12 @@ Cap numbers only line up if read as nF — `6000000` is §7's 6mF entry —
 which is consistent with §8 listing `nF` as the wire unit.) **Duty and
 ms-Pulse are new** — §7 has no column for them. The `±` spans mark the
 DC families' bipolar ranges; they do not imply a separate range code.
+
+Hardware-confirmed 2026-09-27: SET_RANGE with each index of the Cap, Hz,
+µA DC, µA AC and mA DC ladders, and of the V DC ladder on its AC+DC
+variant, made the meter report that index with the matching unit (`nF`
+through `mF`, `Hz` through `MHz`). The Duty and ms-Pulse rungs, and what
+the LCD calls them, are still untested.
 
 **Families with no manual range.** The `Range` group box is
 `Visible = False` on **A DC, A AC, Celsius, Fahrenheit, Beeper, ns and
@@ -568,6 +677,12 @@ null-terminated). The device determines the unit, not the host.
 | `dBm` | decibel-milliwatt | |
 | `\xB0C` | degrees Celsius | 0xB0 = degree symbol (Latin-1); hardware-confirmed 2026-09-02 |
 | `\xB0F` | degrees Fahrenheit | 0xB0 = degree symbol (Latin-1) |
+| `V` | volt | Diode test (no coupling suffix) |
+
+Hardware-confirmed 2026-09-27 (issue #5): every string in this table was
+sent by a real meter. The unit follows the range — `k~` and `M~` on the
+upper Ω rungs, `nF`/`uF`/`mF` and `Hz`/`kHz`/`MHz` along their ladders —
+and `~` is also the unit of dBm's reference impedance (§5.3).
 
 ---
 
@@ -685,13 +800,12 @@ composition and range ladders in §4.2, §6.1 and §7.1 are additionally
 outright correction lives (SET_MIN_MAX takes one byte, not four).
 
 That is agreement between implementations and with the vendor binary,
-not hardware coverage. A real meter has so far confirmed the transport,
-framing, the normal-format value layout and three of the 79 mode words;
-the REL, MIN/MAX, Peak and COMP formats, every remote command and the
-recording protocol have never run against one. The reply frame (type
-0x01, "OK" / "ER") in particular stays community-sourced — the vendor
-app's handling of it was not traced. `docs/verification-backlog.md` is
-the live list.
+not hardware coverage. A real meter has since confirmed (2026-09-27,
+issue #5) the transport, framing, all four measurement formats and the
+COMP extension, 58 of the 79 mode words, every unit string, the OK/ER
+reply, and SET_MODE, SET_RANGE, SET_MIN_MAX and HOLD. The recording and
+saved-measurement protocols, SET_REFERENCE and 21 REL words have never
+run against one. `docs/verification-backlog.md` is the live list.
 
 | Aspect | Status | Sources |
 |--------|--------|---------|
@@ -701,12 +815,12 @@ the live list.
 | SET_MIN_MAX payload is 1 byte, not 4 | [VENDOR] | `UT181A.exe` `0x870588` |
 | Mode word nibble layout (family / primary / secondary) | [VENDOR] | `UT181A.exe` `0x86d700` + `0x86cfc0` |
 | Per-family mode variants and captions (§6.1) | [VENDOR] | `TfrmSetting` resource + click handlers |
-| All 79 mode words | [KNOWN] | antage + sigrok |
+| All 79 mode words | [KNOWN] | antage + sigrok; 58 from a real meter (2026-09-27) |
 | Range bytes 0x00-0x08 | [KNOWN] | 3 implementations |
-| Range ladders per family, 1-based index (§7.1) | [VENDOR] | `TfrmSetting` range combos |
-| Measurement packet (all 4 variants) | [KNOWN] | antage + sigrok |
-| COMP mode extension | [KNOWN] | sigrok driver |
-| Unit strings | [KNOWN] | antage + sigrok |
+| Range ladders per family, 1-based index (§7.1) | [VENDOR] | `TfrmSetting` range combos + real meter, six ladders (2026-09-27) |
+| Measurement packet (all 4 variants) | [KNOWN] | antage + sigrok + real meter (2026-09-27) |
+| COMP mode extension | [KNOWN] | sigrok driver + real meter (2026-09-27) |
+| Unit strings | [KNOWN] | antage + sigrok + real meter (2026-09-27) |
 | Timestamp format | [KNOWN] | 3 implementations |
 | Recording protocol | [KNOWN] | 3 implementations |
 | Transport (9600/8N1 CP2110) | [KNOWN] | 3 implementations |

@@ -131,10 +131,11 @@ Communication → ON; the UT181A forgets this at power-off.
 | UT171A/B/C | — | 🧪 Experimental ([#4](https://github.com/antoinecellerier/dmm-tools/issues/4)) | not yet run on a meter |
 | UT181A | — | 🟡 Partly verified ([#5](https://github.com/antoinecellerier/dmm-tools/issues/5)) | logging meter |
 
-Two reporters have run the UT181A over the CH9329 cable: connection, V DC,
-V AC + Hz and dual-probe temperature are confirmed. The MIN/MAX, REL, Peak
-and COMP formats, the remote commands and the CP2110 cable are still pending
-([backlog](verification-backlog.md)).
+Two reporters have run the UT181A over the CH9329 cable, one through every
+dial position: readings in every mode, MIN/MAX, REL, Peak, COMP and remote
+mode, range, HOLD and MIN/MAX control are confirmed. REL on most dial
+positions and the CP2110 cable are still pending
+([backlog](verification-backlog.md#ut181a--confirmed-on-hardware-rel-words-and-cp2110-open)).
 
 ## Voltcraft VC-880 / VC650BT / VC-890
 

@@ -79,17 +79,13 @@ impl Ut181aProtocol {
             profile: DeviceProfile {
                 family_name: "UT181A",
                 model_name: "UNI-T UT181A",
-                // Two reporters have confirmed V DC, V AC + Hz and dual-thermocouple
-                // temperature on a real meter (issue #5), but the REL / MIN/MAX /
-                // Peak / COMP formats and the CP2110 cable have never run against
-                // one. The remote commands — SET_MODE, SET_RANGE, REL, MIN/MAX —
-                // are traced from the vendor Windows app rather than guessed
-                // (research spec §6.1), but no meter has answered one yet, and the
-                // reply frame that would say whether it did is itself unverified.
-                // PartlyVerified keeps the warning and the badge linking to the
-                // verification issue while listing the meter apart from ones
-                // nobody has run; README and docs/supported-devices.md say the
-                // same.
+                // A real meter has sent every mode and all four measurement
+                // formats and taken SET_MODE, SET_RANGE, HOLD, SET_MIN_MAX and
+                // REL (issue #5, 2026-09-27 capture), but 21 REL words and the
+                // CP2110 cable have never run against one. PartlyVerified keeps
+                // the warning and the badge linking to the verification issue
+                // while listing the meter apart from ones nobody has run; README
+                // and docs/supported-devices.md say the same.
                 stability: Stability::PartlyVerified,
                 supported_commands: UT181A_COMMANDS,
                 // aux1 + aux2 + COMP High + COMP Low.
