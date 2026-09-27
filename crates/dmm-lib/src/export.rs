@@ -16,6 +16,13 @@ pub const CSV_BASE_COLUMNS: [&str; 6] = ["timestamp", "mode", "value", "unit", "
 /// column positions they had before sub-values were exported.
 pub const CSV_INTEGRAL_COLUMNS: [&str; 2] = ["integral", "integral_unit"];
 
+/// The columns added when the file carries markers: the marker's number and
+/// its note.
+///
+/// Last, after the sub-value groups, so a file with markers keeps every
+/// other column where a file without them has it.
+pub(crate) const CSV_MARKER_COLUMNS: [&str; 2] = ["marker", "note"];
+
 /// Provenance comment written before the header: `# device: {model}`.
 ///
 /// Without the terminating newline — callers `writeln!` it.
@@ -39,6 +46,8 @@ pub struct CsvLayout {
     pub extra_slots: usize,
     /// Whether the run writes [`CSV_INTEGRAL_COLUMNS`].
     pub integral: bool,
+    /// Whether the file writes [`CSV_MARKER_COLUMNS`].
+    pub markers: bool,
 }
 
 impl CsvLayout {
@@ -56,6 +65,11 @@ impl CsvLayout {
                 0
             }
             + self.aux_slots() * AUX_EXPORT_COLUMNS.len()
+            + if self.markers {
+                CSV_MARKER_COLUMNS.len()
+            } else {
+                0
+            }
     }
 
     /// The header cells, in column order.
@@ -70,6 +84,9 @@ impl CsvLayout {
                 header.push(Cow::Owned(format!("aux{i}_{suffix}")));
             }
         }
+        if self.markers {
+            header.extend(CSV_MARKER_COLUMNS.into_iter().map(Cow::Borrowed));
+        }
         header
     }
 
@@ -81,13 +98,16 @@ impl CsvLayout {
     /// empty cells when the layout has them but `integral` is `None`);
     /// `extra_aux` is how many trailing sub-values of `m` were appended by
     /// software for this sample — the GUI records it per sample, the CLI
-    /// passes `extra_slots` because its transform is fixed for the run.
+    /// passes `extra_slots` because its transform is fixed for the run;
+    /// `marker` is the number and note of the marker on this reading, written
+    /// when the layout has marker columns (empty cells when it is `None`).
     pub fn row<'a>(
         &self,
         m: &'a Measurement,
         timestamp: &'a str,
         integral: Option<(f64, &'a str)>,
         extra_aux: usize,
+        marker: Option<(u32, &'a str)>,
     ) -> Vec<Cow<'a, str>> {
         let mut cells: Vec<Cow<'a, str>> = Vec::with_capacity(self.column_count());
         cells.push(Cow::Borrowed(timestamp));
@@ -130,6 +150,18 @@ impl CsvLayout {
             Cow::Borrowed(""),
             (self.extra_slots - extra) * AUX_EXPORT_COLUMNS.len(),
         ));
+        if self.markers {
+            match marker {
+                Some((number, note)) => {
+                    cells.push(Cow::Owned(number.to_string()));
+                    cells.push(Cow::Borrowed(note));
+                }
+                None => cells.extend(std::iter::repeat_n(
+                    Cow::Borrowed(""),
+                    CSV_MARKER_COLUMNS.len(),
+                )),
+            }
+        }
         debug_assert_eq!(cells.len(), self.column_count());
         cells
     }
@@ -146,6 +178,7 @@ mod tests {
             family_slots,
             extra_slots,
             integral,
+            markers: false,
         }
     }
 
@@ -179,33 +212,48 @@ mod tests {
             header_line(layout(0, 0, false)),
             "timestamp,mode,value,unit,range,flags"
         );
+        assert_eq!(
+            header_line(CsvLayout {
+                markers: true,
+                ..layout(1, 0, true)
+            }),
+            "timestamp,mode,value,unit,range,flags,integral,integral_unit,\
+             aux1_label,aux1_value,aux1_unit,marker,note"
+        );
     }
 
     /// The header is written once at the top of the file and the rows one at a
     /// time; a mismatch would silently misalign every column.
     #[test]
     fn row_length_matches_header() {
-        for l in [
+        let layouts = [
             layout(0, 0, false),
             layout(2, 0, false),
             layout(2, 1, true),
             layout(4, 1, false),
-        ] {
+        ];
+        for l in layouts
+            .into_iter()
+            .flat_map(|l| [false, true].map(|markers| CsvLayout { markers, ..l }))
+        {
             for aux_count in [0usize, 2, 3] {
                 let mut m = reading();
                 m.aux_values = (0..aux_count).map(|i| aux("Aux", i as f64, "Hz")).collect();
                 for extra_aux in [0usize, 1] {
-                    let row = l.row(
-                        &m,
-                        "2026-01-01T00:00:00+00:00",
-                        Some((1.5, "Vs")),
-                        extra_aux,
-                    );
-                    assert_eq!(
-                        row.len(),
-                        l.header().len(),
-                        "{l:?} aux_count={aux_count} extra_aux={extra_aux}"
-                    );
+                    for marker in [None, Some((3, "load on"))] {
+                        let row = l.row(
+                            &m,
+                            "2026-01-01T00:00:00+00:00",
+                            Some((1.5, "Vs")),
+                            extra_aux,
+                            marker,
+                        );
+                        assert_eq!(
+                            row.len(),
+                            l.header().len(),
+                            "{l:?} aux_count={aux_count} extra_aux={extra_aux} {marker:?}"
+                        );
+                    }
                 }
             }
         }
@@ -219,7 +267,7 @@ mod tests {
             aux("Period", 20.0, "ms"),
             aux("Raw", 123.4, "mV"),
         ];
-        let row = layout(4, 1, false).row(&m, "ts", None, 1);
+        let row = layout(4, 1, false).row(&m, "ts", None, 1, None);
         assert_eq!(&row[6..9], ["Frequency", "50.01", "Hz"]);
         assert_eq!(&row[9..12], ["Period", "20", "ms"]);
         // The meter reported fewer sub-values than the family can, so its
@@ -236,7 +284,7 @@ mod tests {
     fn row_without_a_claimed_extra_leaves_the_trailing_slot_empty() {
         let mut m = reading();
         m.aux_values = vec![aux("Frequency", 50.01, "Hz"), aux("Period", 20.0, "ms")];
-        let row = layout(4, 1, false).row(&m, "ts", None, 0);
+        let row = layout(4, 1, false).row(&m, "ts", None, 0, None);
         assert_eq!(&row[6..9], ["Frequency", "50.01", "Hz"]);
         assert_eq!(&row[9..12], ["Period", "20", "ms"]);
         assert_eq!(&row[18..21], ["", "", ""]);
@@ -252,7 +300,7 @@ mod tests {
         m.value = MeasuredValue::NoReading("Auto");
         m.unit = "".into();
         m.range_label = "".into();
-        let row = layout(0, 0, false).row(&m, "ts", None, 0);
+        let row = layout(0, 0, false).row(&m, "ts", None, 0, None);
         assert_eq!(row, ["ts", "Auto", "", "", "", ""]);
     }
 
@@ -267,21 +315,43 @@ mod tests {
         m.display_raw = None;
         m.range_label = "2.2V".into();
         m.aux_values = vec![aux("AC", 0.0123, "")];
-        let row = layout(1, 0, false).row(&m, "ts", None, 0);
+        let row = layout(1, 0, false).row(&m, "ts", None, 0, None);
         assert_eq!(
             row,
             ["ts", "AC+DC V", "", "V", "2.2V", "", "AC", "0.0123", "V"]
         );
     }
 
+    /// The marker cells close the row, after the sub-value groups; a reading
+    /// without a marker leaves them empty, and a layout without marker
+    /// columns writes neither.
+    #[test]
+    fn marker_cells_come_last() {
+        let mut m = reading();
+        m.aux_values = vec![aux("Frequency", 50.01, "Hz")];
+        let l = CsvLayout {
+            markers: true,
+            ..layout(1, 0, false)
+        };
+        let row = l.row(&m, "ts", None, 0, Some((3, "load on, 2.2 Ω")));
+        assert_eq!(
+            &row[6..],
+            ["Frequency", "50.01", "Hz", "3", "load on, 2.2 Ω"]
+        );
+        let row = l.row(&m, "ts", None, 0, None);
+        assert_eq!(&row[9..], ["", ""]);
+        let row = layout(1, 0, false).row(&m, "ts", None, 0, Some((3, "load on")));
+        assert_eq!(row.len(), 9, "no marker columns to write it in");
+    }
+
     #[test]
     fn integral_cells_follow_the_flags_column() {
         let m = reading();
         let l = layout(0, 0, true);
-        let row = l.row(&m, "ts", Some((0.5, "mAh")), 0);
+        let row = l.row(&m, "ts", Some((0.5, "mAh")), 0, None);
         assert_eq!(row[6], "0.500000");
         assert_eq!(row[7], "mAh");
-        let row = l.row(&m, "ts", None, 0);
+        let row = l.row(&m, "ts", None, 0, None);
         assert_eq!(row[6], "");
         assert_eq!(row[7], "");
     }

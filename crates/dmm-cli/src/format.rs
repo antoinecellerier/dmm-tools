@@ -181,7 +181,8 @@ fn format_csv(
     // Cells resolved ahead of the writer so the borrowed ones outlive the
     // record. `--scale` is fixed for the run, so every row carries the full
     // extra count the layout reserves.
-    let cells = layout.row(m, &ts, integral, layout.extra_slots);
+    // The CLI places no markers.
+    let cells = layout.row(m, &ts, integral, layout.extra_slots, None);
     let mut wtr = csv::WriterBuilder::new()
         // One row per call, so the default 8 KiB buffer is dead weight — a row
         // is well under this.
@@ -206,6 +207,7 @@ fn format_json(
         &timestamp_rfc3339(m, wall_clock),
         experimental,
         integral,
+        None,
     );
     writeln!(w, "{obj}")
 }
@@ -429,6 +431,7 @@ mod tests {
             family_slots: family,
             extra_slots: extra,
             integral,
+            markers: false,
         }
     }
 

@@ -19,12 +19,14 @@ pub fn metadata_line(device_model: &str) -> String {
 ///
 /// `timestamp_rfc3339` is the wall time the reading was taken at, which only
 /// the caller can work out: the CLI derives it from the session's clock
-/// origin, the GUI stamped it onto the sample as it arrived.
+/// origin, the GUI stamped it onto the sample as it arrived. `marker` is the
+/// number and note of the marker the user placed on this reading, if any.
 pub fn measurement_json(
     m: &Measurement,
     timestamp_rfc3339: &str,
     experimental: bool,
     integral: Option<(f64, &str)>,
+    marker: Option<(u32, &str)>,
 ) -> Value {
     let value = match &m.value {
         MeasuredValue::Normal(v) => json!(v),
@@ -83,6 +85,11 @@ pub fn measurement_json(
     if let Some((val, unit)) = integral {
         obj["integral"] = json!(val);
         obj["integral_unit"] = json!(unit);
+    }
+    // Only on the marked readings, so an unmarked line is what it was.
+    if let Some((number, note)) = marker {
+        obj["marker"] = json!(number);
+        obj["note"] = json!(note);
     }
     obj
 }
@@ -160,7 +167,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None).to_string();
+        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None, None).to_string();
         assert_eq!(
             line,
             "{\"timestamp\":\"2026-09-15T14:30:05+02:00\",\"mode\":\"DC V\",\"value\":5.678,\
@@ -191,7 +198,7 @@ mod tests {
             display_raw: None,
             elapsed_secs: None,
         }];
-        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None).to_string();
+        let line = measurement_json(&m, "2026-09-15T14:30:05+02:00", false, None, None).to_string();
         assert!(
             line.starts_with(
                 "{\"timestamp\":\"2026-09-15T14:30:05+02:00\",\"mode\":\"Auto\",\
@@ -228,12 +235,27 @@ mod tests {
                 elapsed_secs: None,
             },
         ];
-        let v = measurement_json(&m, "2026-09-26T14:35:03+02:00", false, None);
+        let v = measurement_json(&m, "2026-09-26T14:35:03+02:00", false, None, None);
         assert_eq!(v["value"], Value::Null);
         assert_eq!(v["aux"][0]["label"], json!("AC"));
         assert_eq!(v["aux"][0]["value"], json!("0.0123"));
         assert_eq!(v["aux"][0]["unit"], json!("V"));
         assert_eq!(v["aux"][1]["value"], Value::Null);
+    }
+
+    /// A marked reading ends with its marker's number and note; an unmarked
+    /// one carries neither key.
+    #[test]
+    fn a_marked_reading_carries_its_marker_last() {
+        let m =
+            Measurement::test_fixture(MeasuredValue::Normal(5.678), "V", StatusFlags::default());
+        let line = measurement_json(&m, "ts", false, None, Some((3, "load on"))).to_string();
+        assert!(
+            line.ends_with(",\"marker\":3,\"note\":\"load on\"}"),
+            "got {line}"
+        );
+        let v = measurement_json(&m, "ts", false, None, None);
+        assert!(v.get("marker").is_none() && v.get("note").is_none(), "{v}");
     }
 
     /// A model or mode name goes into the file name as one word: the dialog

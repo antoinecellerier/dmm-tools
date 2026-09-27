@@ -35,7 +35,7 @@ pub fn render_csv(
         wtr.write_record(layout.header().iter().map(|c| c.as_ref()))?;
         for s in samples {
             let ts = s.wall_time.to_rfc3339();
-            let cells = layout.row(&s.measurement, &ts, None, s.extra_aux);
+            let cells = layout.row(&s.measurement, &ts, None, s.extra_aux, None);
             wtr.write_record(cells.iter().map(|c| c.as_ref()))?;
         }
         wtr.flush()?;
@@ -63,7 +63,7 @@ pub(crate) fn render_json(
     for s in samples {
         let ts = s.wall_time.to_rfc3339();
         out.push_str(
-            &dmm_shared::export::measurement_json(&s.measurement, &ts, experimental, None)
+            &dmm_shared::export::measurement_json(&s.measurement, &ts, experimental, None, None)
                 .to_string(),
         );
         out.push('\n');
@@ -431,6 +431,7 @@ mod tests {
             family_slots,
             extra_slots,
             integral: false,
+            markers: false,
         }
     }
 
@@ -1194,6 +1195,7 @@ mod tests {
                     &s.measurement,
                     &s.wall_time.to_rfc3339(),
                     true,
+                    None,
                     None,
                 )
                 .to_string(),

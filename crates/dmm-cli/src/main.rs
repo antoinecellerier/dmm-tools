@@ -1298,6 +1298,8 @@ fn read_output<T: dmm_lib::transport::Transport>(
         family_slots: dmm.profile().max_aux_values,
         extra_slots: transform.extra_aux_count(),
         integral: integrate,
+        // The CLI places no markers.
+        markers: false,
     };
     let experimental = !dmm.profile().stability.is_verified();
     format::Output::new(format, layout, experimental, replay_header)

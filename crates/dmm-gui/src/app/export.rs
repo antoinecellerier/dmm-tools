@@ -167,6 +167,7 @@ impl App {
             extra_slots: self.capture_layout.extra_slots,
             // Integrating is a CLI-only run mode.
             integral: false,
+            markers: false,
         }
     }
 
