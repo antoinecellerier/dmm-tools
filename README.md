@@ -10,13 +10,13 @@ Read, record and remote-control a digital multimeter over its USB cable, or wire
 
 Includes a CLI with text, CSV and JSON output and a GUI with real-time graphing.
 
-![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence and two cursors read its duration and charge](assets/gui-wide-layout.png)
+![dmm-gui on a DC mA session: the live reading, specifications and statistics beside the graph, where the minimap picks out a sensor's boot sequence, two cursors read its duration and charge, and markers name its stages](assets/gui-wide-layout.png)
 
 ## [GUI](docs/gui-reference.md)
 
 - Live reading with the meter's flags and sub-values, and buttons to switch mode, range, HOLD, REL and MIN/MAX from the screen
 - Time-series graph with minimap, cursors, mean and min/max overlays, and reference lines with threshold triggers
-- Recording for hours at a time, exported as CSV, JSON or a replay file
+- Recording for hours at a time, with notes on marked moments, exported as CSV, JSON or a replay file
 - Software scale, offset and unit relabel for clamps, shunts and sensors
 - Live specifications (resolution, accuracy) for the current range
 - Big meter mode for bench-mount use

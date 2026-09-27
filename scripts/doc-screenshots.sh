@@ -105,6 +105,12 @@ HERO_MINIMAP_X=648; HERO_MINIMAP_Y=925
 # the rise (2.376 s) and B on the first after the fall (29.995 s). A sample is
 # about 4 px wide in this window.
 HERO_CURSOR_A_X=649; HERO_CURSOR_B_X=1834; HERO_CURSOR_Y=700
+# Its markers, each placed from the plot's right-click menu on the sample
+# nearest the click: the first reading of the boot above 0 mA (about 2.5 s,
+# beside cursor A), the dip after the plateau as the radio goes off (about
+# 8.1 s), and the fall to the draw of the e-Paper display refreshing (about
+# 9.9 s). Any height inside the plot does, clear of the cursor and mean labels.
+HERO_BOOT_X=656; HERO_WIFI_X=897; HERO_REFRESH_X=966; HERO_MARK_Y=450
 # The same click in the narrow window's minimap, which starts at x 20 and
 # packs the session into about 5.98 px/s.
 NARROW_MINIMAP_X=119; NARROW_MINIMAP_Y=925
@@ -232,6 +238,25 @@ click() { "$GUI" click "$1" "$2" >/dev/null; sleep 0.5; }
 
 park() { click "$PARK_X" "$PARK_Y"; }
 
+# mark <x> <y> <note> — right-click the plot, pick "Add marker here", which
+# takes the focus as the menu opens, and write the note: one key per
+# character, so letters, digits, spaces and `-` only.
+mark() {
+	"$GUI" click "$1" "$2" right >/dev/null
+	sleep 0.5
+	key Return
+	local i c
+	for ((i = 0; i < ${#3}; i++)); do
+		c="${3:i:1}"
+		case "$c" in
+		" ") c=space ;;
+		-) c=minus ;;
+		esac
+		key "$c"
+	done
+	key Return
+}
+
 # shot <out.png> [crop]
 shot() {
 	local out="$1" crop="${2:-}"
@@ -297,7 +322,8 @@ report() {
 # first refresh cycle. The preseed stops the session inside that cycle, so the
 # reading shows its draw (4.69 mA) and the minimap holds the whole session.
 # [ picks the 30s preset and the minimap click moves the window back onto the
-# boot; M adds the window's mean and C the cursors that span the boot.
+# boot; M adds the window's mean and C the cursors that span the boot. Three
+# markers with notes name the boot's stages, on the graph and in the log.
 scene_wide() {
 	write_settings
 	launch dcma-boot-refresh 160.5
@@ -307,6 +333,9 @@ scene_wide() {
 	key c
 	click "$HERO_CURSOR_A_X" "$HERO_CURSOR_Y"
 	click "$HERO_CURSOR_B_X" "$HERO_CURSOR_Y"
+	mark "$HERO_BOOT_X" "$HERO_MARK_Y" "boot"
+	mark "$HERO_WIFI_X" "$HERO_MARK_Y" "wifi off"
+	mark "$HERO_REFRESH_X" "$HERO_MARK_Y" "e-Paper display refreshing"
 	park
 	capture gui-wide-layout.png
 }
