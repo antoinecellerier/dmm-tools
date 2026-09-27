@@ -5,7 +5,8 @@ use log::{debug, trace};
 
 /// Silicon Labs CP2110 VID.
 pub const VID: u16 = 0x10C4;
-/// UT61E+ PID (CP2110 HID-to-UART bridge).
+/// The CP2110's stock PID, which the cables of the UT61E+ and several other
+/// meters keep.
 pub const PID: u16 = 0xEA80;
 /// The bridge's name in a registry entry's links, in `dmm-cli list` and in
 /// detection.
@@ -51,15 +52,15 @@ impl Cp2110 {
     /// 3. Purge receive FIFO (report 0x43)
     pub(crate) fn open(device: HidDevice) -> Result<Self> {
         let cp = Self { device };
-        debug!("CP2110: enabling UART");
+        debug!("{NAME}: enabling UART");
         cp.send_feature_report(&[0x41, 0x01])?;
 
         // Report 0x50 (AN434 §6.3): baud rate (4 bytes BE) + parity + flow ctl + data bits + stop bits
-        debug!("CP2110: configuring 9600/8N1");
+        debug!("{NAME}: configuring 9600/8N1");
         cp.send_feature_report(&[0x50, 0x00, 0x00, 0x25, 0x80, 0x00, 0x00, 0x03, 0x00])?;
 
         // 0x02 = purge receive FIFO only (TX is empty at init time)
-        debug!("CP2110: purging RX FIFO");
+        debug!("{NAME}: purging RX FIFO");
         cp.send_feature_report(&[0x43, 0x02])?;
 
         Ok(cp)
@@ -67,7 +68,7 @@ impl Cp2110 {
 
     /// Send a HID feature report to the bridge.
     fn send_feature_report(&self, data: &[u8]) -> Result<()> {
-        trace!("CP2110 feature report: {:02X?}", data);
+        trace!("{NAME} feature report: {:02X?}", data);
         self.device.send_feature_report(data).map_err(Error::Hid)?;
         Ok(())
     }
@@ -92,7 +93,7 @@ impl Cp2110 {
             device_version: buf[2],
         };
         debug!(
-            "CP2110: part={:#04x} version={}",
+            "{NAME}: part={:#04x} version={}",
             info.part_number, info.device_version
         );
         Ok(info)
@@ -146,7 +147,7 @@ impl Cp2110 {
     /// diagnostic for a bridge left in a bad state by an interrupted session.
     #[allow(dead_code)]
     pub(crate) fn reset(&self) -> Result<()> {
-        debug!("CP2110: resetting device");
+        debug!("{NAME}: resetting device");
         self.device
             .send_feature_report(&[0x40, 0x00])
             .map_err(Error::Hid)?;
@@ -166,7 +167,7 @@ impl Transport for Cp2110 {
         let mut report = Vec::with_capacity(data.len() + 1);
         report.push(data.len() as u8);
         report.extend_from_slice(data);
-        trace!("CP2110 TX: {:02X?}", report);
+        trace!("{NAME} TX: {:02X?}", report);
         self.device.write(&report)?;
         Ok(())
     }
@@ -192,14 +193,14 @@ impl Transport for Cp2110 {
         let payload_len = raw[0] as usize;
         let actual = payload_len.min(n - 1).min(buf.len());
         buf[..actual].copy_from_slice(&raw[1..1 + actual]);
-        trace!("CP2110 RX ({actual} bytes): {:02X?}", &buf[..actual]);
+        trace!("{NAME} RX ({actual} bytes): {:02X?}", &buf[..actual]);
         Ok(actual)
     }
 
     fn transport_info(&self) -> Result<String> {
         let ver = self.version_info()?;
         Ok(format!(
-            "CP2110 part={:#04x} firmware={}",
+            "{NAME} part={:#04x} firmware={}",
             ver.part_number, ver.device_version
         ))
     }
@@ -228,7 +229,7 @@ mod tests {
     #[test]
     fn vid_pid_constants() {
         assert_eq!(VID, 0x10C4, "Silicon Labs VID");
-        assert_eq!(PID, 0xEA80, "CP2110 PID for UT61E+");
+        assert_eq!(PID, 0xEA80, "stock CP2110 PID");
     }
 
     #[test]

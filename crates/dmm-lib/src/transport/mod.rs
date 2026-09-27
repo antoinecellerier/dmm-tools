@@ -12,7 +12,8 @@ pub(crate) mod open;
 
 use crate::error::Result;
 
-/// Abstraction over HID transport for testability.
+/// Abstraction over a meter link's byte I/O: a USB-HID bridge, Bluetooth LE,
+/// or a mock for tests.
 ///
 /// The `Send` bound enables `Box<dyn Transport>` to be moved across threads
 /// (required by the GUI's background device thread).
@@ -126,7 +127,8 @@ pub enum Link {
 }
 
 /// Delegate trait through `Box<dyn Transport>` so `Dmm<Box<dyn Transport>>`
-/// works for runtime transport selection (CP2110 vs CH9329).
+/// works for runtime transport selection (whichever cable or radio the open
+/// found).
 impl Transport for Box<dyn Transport> {
     fn write(&self, data: &[u8]) -> Result<()> {
         (**self).write(data)

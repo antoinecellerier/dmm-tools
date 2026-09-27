@@ -31,9 +31,9 @@ impl Ch9329 {
     /// come pre-configured at 9600 baud by UNI-T. If data doesn't flow, the
     /// `read_config` / config write sequence may be needed.
     pub(crate) fn open(device: HidDevice) -> Result<Self> {
-        debug!("CH9329: opening device (VID={VID:#06x} PID={PID:#06x})");
-        debug!("CH9329: skipping config init (assumed pre-configured at 9600 baud)");
-        debug!("CH9329: if data doesn't flow, try RUST_LOG=dmm_lib=trace to see raw HID reports");
+        debug!("{NAME}: opening device (VID={VID:#06x} PID={PID:#06x})");
+        debug!("{NAME}: skipping config init (assumed pre-configured at 9600 baud)");
+        debug!("{NAME}: if data doesn't flow, try RUST_LOG=dmm_lib=trace to see raw HID reports");
         Ok(Self { device })
     }
 
@@ -60,7 +60,7 @@ impl Ch9329 {
             cmd[2] = offset;
             cmd[3] = 0x20; // chunk size
 
-            trace!("CH9329 config read cmd[{i}]: {:02X?}", &cmd[..4]);
+            trace!("{NAME} config read cmd[{i}]: {:02X?}", &cmd[..4]);
             self.device.send_feature_report(&cmd).map_err(Error::Hid)?;
 
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -71,7 +71,7 @@ impl Ch9329 {
                 .get_feature_report(&mut resp)
                 .map_err(Error::Hid)?;
             trace!(
-                "CH9329 config read resp[{i}] ({n} bytes): {:02X?}",
+                "{NAME} config read resp[{i}] ({n} bytes): {:02X?}",
                 &resp[..n.min(HID_REPORT_SIZE)]
             );
 
@@ -82,7 +82,7 @@ impl Ch9329 {
                 .copy_from_slice(&resp[src_start..src_start + copy_len]);
         }
 
-        debug!("CH9329 config (128 bytes): {:02X?}", config);
+        debug!("{NAME} config (128 bytes): {:02X?}", config);
         Ok(config)
     }
 }
@@ -91,7 +91,7 @@ impl Transport for Ch9329 {
     fn write(&self, data: &[u8]) -> Result<()> {
         if data.len() > MAX_UART_PAYLOAD {
             return Err(Error::invalid_response_msg(format!(
-                "data too large for single CH9329 HID report: {} bytes (max {MAX_UART_PAYLOAD})",
+                "data too large for single {NAME} HID report: {} bytes (max {MAX_UART_PAYLOAD})",
                 data.len()
             )));
         }
@@ -99,7 +99,7 @@ impl Transport for Ch9329 {
         report[0] = 0x00; // report ID
         report[1] = data.len() as u8; // UART data length
         report[2..2 + data.len()].copy_from_slice(data);
-        trace!("CH9329 TX: {:02X?}", &report[..2 + data.len()]);
+        trace!("{NAME} TX: {:02X?}", &report[..2 + data.len()]);
         self.device.write(&report)?;
         Ok(())
     }
@@ -115,7 +115,7 @@ impl Transport for Ch9329 {
         let actual = payload.len().min(buf.len());
         buf[..actual].copy_from_slice(&payload[..actual]);
         trace!(
-            "CH9329 RX ({actual} bytes, raw[0]={:#04x}): {:02X?}",
+            "{NAME} RX ({actual} bytes, raw[0]={:#04x}): {:02X?}",
             raw[0],
             &buf[..actual]
         );
@@ -123,7 +123,7 @@ impl Transport for Ch9329 {
     }
 
     fn transport_info(&self) -> Result<String> {
-        Ok("CH9329 HID-to-UART bridge (WCH)".to_string())
+        Ok(format!("{NAME} HID-to-UART bridge (WCH)"))
     }
 
     fn transport_name(&self) -> &'static str {

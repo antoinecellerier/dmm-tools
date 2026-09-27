@@ -108,7 +108,7 @@ impl Ch9325 {
         if n == 0 {
             return Ok(None);
         }
-        trace!("CH9325 probe report ({n} bytes): {:02X?}", &raw[..n]);
+        trace!("{NAME} probe report ({n} bytes): {:02X?}", &raw[..n]);
         Ok(Some(rx_payload(&raw, n).map_or(0, |(_, len)| len)))
     }
 
@@ -120,10 +120,10 @@ impl Ch9325 {
     ///
     /// Reference: §4.3–4.4
     fn start_up(&mut self) -> Result<()> {
-        debug!("CH9325: opening device (VID={VID:#06x} PID={PID:#06x})");
+        debug!("{NAME}: opening device (VID={VID:#06x} PID={PID:#06x})");
 
         // Primary init: 2400 baud + 0x5A trigger (§4.3)
-        debug!("CH9325: trying primary init (2400 baud + trigger)");
+        debug!("{NAME}: trying primary init (2400 baud + trigger)");
         self.set_baud(2400)?;
         std::thread::sleep(std::time::Duration::from_millis(100));
 
@@ -132,7 +132,7 @@ impl Ch9325 {
         tx_buf[0] = 0x00; // report ID for hidapi
         tx_buf[1] = 0x01; // 1 byte of UART data
         tx_buf[2] = 0x5A; // trigger byte
-        trace!("CH9325 TX: {:02X?}", &tx_buf[..3]);
+        trace!("{NAME} TX: {:02X?}", &tx_buf[..3]);
         self.device.write(&tx_buf).map_err(Error::Hid)?;
 
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -140,7 +140,7 @@ impl Ch9325 {
         // Probe: try to read data within 300ms (§2.2 step 3d). Any report
         // counts, even one carrying no meter bytes.
         if let Some(bytes) = self.probe()? {
-            debug!("CH9325: primary init got a report carrying {bytes} meter bytes");
+            debug!("{NAME}: primary init got a report carrying {bytes} meter bytes");
             self.startup = Some(Startup {
                 baud: 2400,
                 probe_bytes: Some(bytes),
@@ -149,7 +149,7 @@ impl Ch9325 {
         }
 
         // Fallback init: 19200 baud, no trigger (§4.4)
-        debug!("CH9325: primary init failed, trying fallback (19200 baud)");
+        debug!("{NAME}: primary init failed, trying fallback (19200 baud)");
         self.set_baud(19200)?;
         std::thread::sleep(std::time::Duration::from_millis(500));
 
@@ -157,10 +157,10 @@ impl Ch9325 {
         let probe_bytes = self.probe()?;
         match probe_bytes {
             Some(bytes) => {
-                debug!("CH9325: fallback init got a report carrying {bytes} meter bytes")
+                debug!("{NAME}: fallback init got a report carrying {bytes} meter bytes")
             }
             None => {
-                warn!("CH9325: no data received after init — device may need manual activation")
+                warn!("{NAME}: no data received after init — device may need manual activation")
             }
         }
         self.startup = Some(Startup {
@@ -212,7 +212,7 @@ impl Transport for Ch9325 {
             report[0] = 0x00; // report ID for hidapi
             report[1] = chunk.len() as u8; // UART payload length
             report[2..2 + chunk.len()].copy_from_slice(chunk);
-            trace!("CH9325 TX: {:02X?}", &report[..2 + chunk.len()]);
+            trace!("{NAME} TX: {:02X?}", &report[..2 + chunk.len()]);
             self.device.write(&report).map_err(Error::Hid)?;
         }
         Ok(())
@@ -231,7 +231,7 @@ impl Transport for Ch9325 {
         let Some((payload_start, payload_len)) = rx_payload(&raw, n) else {
             // Unexpected framing — log and return empty
             trace!(
-                "Ch9325 RX: unexpected framing, raw[0]={:#04x}, n={n}, skipping",
+                "{NAME} RX: unexpected framing, raw[0]={:#04x}, n={n}, skipping",
                 raw[0]
             );
             return Ok(0);
@@ -243,7 +243,7 @@ impl Transport for Ch9325 {
 
         let actual = payload_len.min(buf.len());
         buf[..actual].copy_from_slice(&raw[payload_start..payload_start + actual]);
-        trace!("CH9325 RX ({actual} bytes): {:02X?}", &buf[..actual]);
+        trace!("{NAME} RX ({actual} bytes): {:02X?}", &buf[..actual]);
         Ok(actual)
     }
 
@@ -251,7 +251,7 @@ impl Transport for Ch9325 {
     /// rate.
     fn set_baud(&self, baud: u32) -> Result<()> {
         let report = baud_report(baud);
-        trace!("CH9325 feature report: {:02X?}", report);
+        trace!("{NAME} feature report: {:02X?}", report);
         self.device
             .send_feature_report(&report)
             .map_err(Error::Hid)?;
