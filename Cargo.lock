@@ -1080,6 +1080,7 @@ dependencies = [
  "ctrlc",
  "dmm-lib",
  "dmm-shared",
+ "hidapi",
  "log",
  "serde",
  "serde_json",

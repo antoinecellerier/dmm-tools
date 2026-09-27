@@ -204,7 +204,7 @@ fn main() {
         // The activation instructions belong to one meter, so they are only
         // printed once one is settled on: the one named, or the one detection
         // found before the meter went quiet.
-        if msg.contains("timeout")
+        if meter_went_quiet(&*e)
             && let Some(device) = opened_device(selection)
         {
             print_no_response_help(device);
@@ -226,6 +226,19 @@ fn main() {
         }
         std::process::exit(1);
     }
+}
+
+/// Whether `error` is the meter going quiet, which its activation steps
+/// answer. Matched on the variant rather than the message: hidapi names its
+/// `hid_read_timeout` call in the error a pulled cable raises, and some
+/// errors quote the user's own arguments back. Not `ErrorKind::Timeout`
+/// either: detection finding no meter is that kind too, and prints help of
+/// its own.
+fn meter_went_quiet(error: &(dyn std::error::Error + 'static)) -> bool {
+    matches!(
+        error.downcast_ref::<dmm_lib::error::Error>(),
+        Some(dmm_lib::error::Error::Timeout)
+    )
 }
 
 /// The Bluetooth address `--adapter` named, when `error` is the stack failing
@@ -355,6 +368,23 @@ mod tests {
         ] {
             assert!(!bluetooth_switched_off(&*err(miss)), "{miss:?}");
         }
+    }
+
+    /// Only a meter that went quiet gets its activation steps: a pulled cable
+    /// and an argument that happens to say "timeout" keep the plain error.
+    #[test]
+    fn only_a_quiet_meter_gets_the_activation_help() {
+        use dmm_lib::error::Error;
+        let boxed = |e: Error| -> Box<dyn std::error::Error> { Box::new(e) };
+        assert!(meter_went_quiet(&*boxed(Error::Timeout)));
+        // What hidapi's hidraw backend reports when the cable is pulled
+        // mid-read.
+        let pulled = Error::Hid(hidapi::HidError::HidApiError {
+            message: "hid_read_timeout: unexpected poll error (device disconnected)".to_string(),
+        });
+        assert!(!meter_went_quiet(&*boxed(pulled)));
+        let echoed: Box<dyn std::error::Error> = "unknown range: timeout".into();
+        assert!(!meter_went_quiet(&*echoed));
     }
 
     /// A named adapter the stack could not reach is explained by its link;

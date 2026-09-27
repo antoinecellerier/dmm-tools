@@ -32,6 +32,7 @@
 - **UT61E+ AC+DC V keeps its DC and AC components apart** — the graph, statistics and exports mixed them; now labelled DC and AC, with AC in `aux1` CSV columns every UT61E+ export gains.
 - **A UT181A no longer shows OL, or warns, after each switch** — it shows `----` until the new reading arrives.
 - **A UT181A shows Ω, kΩ, MΩ and µ like other meters** — it showed ~, k~, M~ and u, and volts and amps carried AC/DC suffixes.
+- **`dmm-cli` reports a pulled cable as an error, not a silent meter** — it said to switch data transmission on, also for any argument containing "timeout".
 - **A UT181A in Peak no longer sends Auto range or MIN/MAX** — the meter refused both, and `dmm-cli capture` gave up sweeping after three Peak modes.
 - **Disconnect after a reconnect releases the meter at once** — with a sample interval set, it held the link until the next sample.
 - **A UT181A no longer warns in AC+DC, dB, T1-T2 or MIN/MAX**

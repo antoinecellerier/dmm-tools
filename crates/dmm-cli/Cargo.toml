@@ -26,3 +26,6 @@ csv.workspace = true
 
 [dev-dependencies]
 dmm-lib = { path = "../dmm-lib", features = ["test-support"] }
+# Only to build the HID error a pulled cable raises, in a test; no features
+# beyond the ones dmm-lib already enables.
+hidapi = { version = "2.6", default-features = false }
