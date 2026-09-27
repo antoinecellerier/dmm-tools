@@ -194,6 +194,7 @@ CLI binary using `clap`. Its modules:
 |--------|---------------|
 | `main.rs` | Command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug`/`completions` subcommands |
 | `cli.rs` | The clap types, the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
+| `choice.rs` | What `set` takes as a choice: a label or a unique fragment of one, typed without the meter's symbols, and the shortest fragment a listing shows |
 | `capture/mod.rs` | The `capture` command: opens the report, runs the passes, prints the coverage epilogue |
 | `capture/report.rs` | Report schema and serde (`CaptureReport`, `StepResult`, `SampleData`), trust tiers, report file read/write |
 | `capture/step.rs` | One capture step (the library's `CaptureStep`): the wait for the state it asks for, the frames that wait sends |
@@ -206,6 +207,7 @@ CLI binary using `clap`. Its modules:
 | `watch.rs` | Capture step advance logic: when the meter has settled into the state a step asked for, semantic (`expect`) or raw payload diff against the previous step |
 | `format.rs` | What a run writes per reading: text, CSV, JSON, or the meter's own frames as a replay file |
 | `output.rs` | Where it goes: stdout, `-o FILE`, or a file the run names itself once the first reading has arrived |
+| `test_fixtures.rs` | Tests only: the fake meter and the helpers more than one test module uses |
 
 All protocol logic lives in the library crate. The `capture` subcommand provides a guided
 interactive wizard for protocol verification, outputting YAML reports with raw bytes.
