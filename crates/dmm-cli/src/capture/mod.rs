@@ -114,7 +114,11 @@ pub(crate) fn cmd_capture(
         .copied()
         .filter(|s| !(unverified_only && s.verified))
         .collect();
-    let mut trust = Trust::new(sniff, supported, &gate_scope);
+    let mut trust = Trust::new(
+        sniff,
+        supported || gate_already_confirmed(&cli_steps, &gate_scope),
+        &gate_scope,
+    );
     report.tier = Some(trust.tier);
     let mut driver = crate::drive::Driver::new(!no_drive).settling(settle);
     let pass = run_protocol_capture(
@@ -179,6 +183,14 @@ pub(crate) fn cmd_capture(
 /// The way back into a run that left steps undone. A capture that ended on the
 /// first `q` signs off with the same "Capture complete!" as one that walked
 /// every step, and said nothing about the report being resumable.
+/// Whether `--unverified` left out every gate step because hardware has
+/// confirmed them all. The gate then has nothing to rule on, and what it
+/// would have shown is already known, so the run is trusted from the start
+/// the way a verified family's is — otherwise it would sweep nothing.
+fn gate_already_confirmed(steps: &[CaptureStep], in_scope: &[CaptureStep]) -> bool {
+    steps.iter().any(|s| s.gate) && !in_scope.iter().any(|s| s.gate)
+}
+
 fn resume_hint(covered: usize, total: usize, plan: bool) -> Option<String> {
     if covered >= total {
         return None;
@@ -333,6 +345,41 @@ mod tests {
         assert_eq!(
             no_response_path(Some("runs/bench.yaml"), "ut804"),
             std::path::PathBuf::from("runs/bench-no-response.yaml")
+        );
+    }
+
+    fn step(id: &'static str, gate: bool, verified: bool) -> CaptureStep {
+        CaptureStep {
+            id,
+            instruction: "",
+            command: None,
+            samples: 1,
+            expect: None,
+            verified,
+            gate,
+            needs: &[],
+            wait_for_enter: false,
+        }
+    }
+
+    /// `--unverified` on a family whose gate hardware has confirmed must still
+    /// sweep; any other run keeps its gate.
+    #[test]
+    fn a_gate_left_out_as_confirmed_trusts_the_run() {
+        let steps = [step("dcv", true, true), step("acv", false, false)];
+        let unverified: Vec<CaptureStep> = steps.iter().copied().filter(|s| !s.verified).collect();
+        assert!(gate_already_confirmed(&steps, &unverified));
+        assert!(
+            !gate_already_confirmed(&steps, &steps),
+            "the full run keeps its gate"
+        );
+
+        let open_gate = [step("dcv", true, false), step("acv", false, false)];
+        assert!(!gate_already_confirmed(&open_gate, &open_gate));
+        let no_gate = [step("acv", false, false)];
+        assert!(
+            !gate_already_confirmed(&no_gate, &no_gate),
+            "a plan without a gate"
         );
     }
 }
