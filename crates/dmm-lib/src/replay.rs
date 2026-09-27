@@ -31,7 +31,7 @@ use crate::measurement::Measurement;
 use crate::protocol::registry::{self, SelectableDevice};
 use crate::protocol::{CaptureStep, Choice, DeviceProfile, Protocol, Setting};
 use crate::specs::{ModeSpecInfo, SpecInfo};
-use crate::transport::{Link, NullTransport, Transport};
+use crate::transport::{Link, Transport};
 use std::fmt::Write;
 use std::path::Path;
 use std::str::FromStr;
@@ -190,8 +190,10 @@ impl Replay {
     ///
     /// Session zero is the clock's wall origin where it has one, so every
     /// reading lands at the session time it was recorded at even when the
-    /// origin was pinned before any sample was read.
-    pub fn open(&self, clock: Clock) -> Result<Dmm<NullTransport>> {
+    /// origin was pinned before any sample was read. The session's transport
+    /// reports the link the file was recorded over, so a caller names it the
+    /// way it names a live meter's.
+    pub fn open(&self, clock: Clock) -> Result<Dmm<ReplayTransport>> {
         let start = clock
             .wall_origin()
             .map(|(instant, _)| instant)
@@ -228,7 +230,7 @@ impl Replay {
             next_due: self.duration(),
             last_parsed: None,
         };
-        let dmm = Dmm::new(NullTransport, Box::new(protocol))?;
+        let dmm = Dmm::new(ReplayTransport { link: self.link }, Box::new(protocol))?;
         Ok(dmm.with_clock(clock).with_protocol_timestamps())
     }
 
@@ -238,6 +240,32 @@ impl Replay {
             .last()
             .map(|(offset, _)| *offset)
             .unwrap_or(Duration::ZERO)
+    }
+}
+
+/// What a replay session reads through: nothing, like the mock's transport —
+/// the frames come from the file, through the protocol — except that it
+/// reports the link the file was recorded over, where a live transport
+/// reports its own.
+pub struct ReplayTransport {
+    link: Option<Link>,
+}
+
+impl Transport for ReplayTransport {
+    fn write(&self, _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn read_timeout(&self, _buf: &mut [u8], _timeout_ms: i32) -> Result<usize> {
+        Ok(0)
+    }
+
+    fn set_baud(&self, _baud: u32) -> Result<()> {
+        Ok(())
+    }
+
+    fn link(&self) -> Option<Link> {
+        self.link
     }
 }
 
@@ -567,7 +595,7 @@ mod tests {
     }
 
     /// Open a three-frame replay on a clock the test drives by hand.
-    fn open_manual() -> (Dmm<NullTransport>, Clock, Instant) {
+    fn open_manual() -> (Dmm<ReplayTransport>, Clock, Instant) {
         let clock = Clock::manual();
         let start = clock.now();
         let dmm = parsed(&three_frames())
@@ -610,6 +638,25 @@ mod tests {
 
         let unknown = text.replace("# link: Bluetooth", "# link: carrier pigeon");
         assert_eq!(parsed(&unknown).link, None);
+    }
+
+    /// A played-back session is on the link its file names, as far as
+    /// anything asking the transport can tell, and on none when the file
+    /// names one this version does not know.
+    #[test]
+    fn an_opened_replay_reports_the_recorded_link() {
+        let mut text = header("ut61eplus", RECORDED, None, Some(Link::Bluetooth));
+        text.push_str(&sample_line(Duration::ZERO, &payload(DCV_BATTERY)));
+        let link = |text: &str| {
+            let dmm = parsed(text)
+                .open(Clock::manual())
+                .expect("the replay opens");
+            dmm.transport().link()
+        };
+        assert_eq!(link(&text), Some(Link::Bluetooth));
+        assert_eq!(link(&three_frames()), Some(Link::UsbCable));
+        let unknown = text.replace("# link: Bluetooth", "# link: carrier pigeon");
+        assert_eq!(link(&unknown), None);
     }
 
     /// The `# link:` values are the file format: files already written carry

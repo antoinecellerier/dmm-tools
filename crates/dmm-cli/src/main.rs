@@ -1412,8 +1412,8 @@ fn read_replay(
     // A copy keeps the session it came from, so the frames it holds export at
     // the times they were measured at whichever file they are played from.
     let out = read_output(format, &dmm, transform, integrate, || {
-        // The link the file recorded, not the playback's: re-exporting a
-        // recording must not turn a Bluetooth session into a cable one.
+        // The link the file recorded: re-exporting a recording must not turn
+        // a Bluetooth session into a cable one.
         dmm_lib::replay::header(
             replay.device.id,
             &replay.recorded,

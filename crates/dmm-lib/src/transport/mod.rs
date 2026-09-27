@@ -62,7 +62,8 @@ pub trait Transport: Send {
     }
 
     /// The link the meter is on, and `None` for a transport with nothing on
-    /// the far end: the mock and a replay answer from inside the process.
+    /// the far end: the mock answers from inside the process. A replay's
+    /// reports the link its file was recorded over.
     /// Required, so a wrapper cannot forget to pass it on.
     fn link(&self) -> Option<Link>;
 

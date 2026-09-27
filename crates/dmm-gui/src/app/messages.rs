@@ -442,8 +442,6 @@ impl App {
             // The file says which meter its frames came from, so that entry is
             // reported rather than whatever the Settings row currently names.
             let selected = Some(replay.device);
-            // And which link they came over: playback is on none of its own.
-            let recorded_link = replay.link;
             let clock = self.clock.clone();
             std::thread::spawn(move || {
                 let panic_tx = msg_tx.clone();
@@ -465,7 +463,6 @@ impl App {
                             ctx: ctx_clone,
                             selected,
                             query_name,
-                            recorded_link,
                             // No floor: the recording's own spacing is the
                             // cadence, and the protocol sleeps until each
                             // frame is due rather than returning at once.
@@ -523,7 +520,6 @@ impl App {
                             ctx: ctx_clone,
                             selected: device_entry,
                             query_name,
-                            recorded_link: None,
                             sample_interval_ms: mock_interval,
                             reconnect_interval: RECONNECT_INTERVAL,
                             stop_flag,
@@ -568,7 +564,6 @@ impl App {
                             ctx: ctx_clone,
                             selected: device_entry,
                             query_name,
-                            recorded_link: None,
                             sample_interval_ms,
                             reconnect_interval: RECONNECT_INTERVAL,
                             stop_flag,

@@ -165,16 +165,11 @@ pub(crate) enum DmmMessage {
 /// `detected` is what identified the meter when nothing named it; `selected`
 /// is the entry the user picked. Exactly one of them is set, and together they
 /// tell the UI which meter it is now looking at.
-///
-/// `recorded_link` is the link a replay file was recorded over — a playback's
-/// own transport is no link at all, so the recording is the only thing that
-/// can say. `None` everywhere else, where the transport answers.
 fn establish_connection<T: Transport>(
     dmm: &mut dmm_lib::Dmm<T>,
     detected: Option<Detected>,
     selected: Option<&'static SelectableDevice>,
     query_name: bool,
-    recorded_link: Option<Link>,
     msg_tx: &mpsc::Sender<DmmMessage>,
     ctx: &egui::Context,
 ) {
@@ -190,7 +185,8 @@ fn establish_connection<T: Transport>(
     let max_aux_values = profile.max_aux_values;
     let meter_keys = profile.meter_keys;
     let model_name = profile.model_name.to_string();
-    let link = recorded_link.or_else(|| dmm.transport().link());
+    // A replay's transport reports the link its file was recorded over.
+    let link = dmm.transport().link();
     let device_id = detected
         .as_ref()
         .map(|d| d.device)
@@ -229,10 +225,6 @@ pub(super) struct ThreadContext {
     /// so a named meter reaches the UI as a registry entry too.
     pub selected: Option<&'static SelectableDevice>,
     pub query_name: bool,
-    /// The link a replay file was recorded over, for the status line. `None`
-    /// for a meter and for the mock: their transport names their link, or
-    /// says there is none.
-    pub recorded_link: Option<Link>,
     pub sample_interval_ms: u32,
     /// [`RECONNECT_INTERVAL`] outside the tests, which have no meter to wait for.
     pub reconnect_interval: Duration,
@@ -331,7 +323,6 @@ where
         ctx,
         selected,
         query_name,
-        recorded_link,
         sample_interval_ms,
         reconnect_interval,
         stop_flag,
@@ -340,15 +331,7 @@ where
     info!("background thread: connecting to device");
     let mut dmm = match open_fn(None) {
         Ok((mut d, detected)) => {
-            establish_connection(
-                &mut d,
-                detected,
-                selected,
-                query_name,
-                recorded_link,
-                &msg_tx,
-                &ctx,
-            );
+            establish_connection(&mut d, detected, selected, query_name, &msg_tx, &ctx);
             d
         }
         Err(e) => {
@@ -504,13 +487,7 @@ where
                             info!("background thread: reconnected on attempt {attempt}");
                             reopen_at = bluetooth_selector(&d);
                             establish_connection(
-                                &mut d,
-                                detected,
-                                selected,
-                                query_name,
-                                recorded_link,
-                                &msg_tx,
-                                &ctx,
+                                &mut d, detected, selected, query_name, &msg_tx, &ctx,
                             );
                             dmm = d;
                             break;
@@ -869,7 +846,6 @@ mod tests {
             ctx: egui::Context::default(),
             selected: None,
             query_name: false,
-            recorded_link: None,
             sample_interval_ms: 10,
             reconnect_interval: Duration::from_millis(10),
             stop_flag: Arc::new(AtomicBool::new(false)),
@@ -906,6 +882,48 @@ mod tests {
         ctrl_tx.send(ThreadControl::Stop).unwrap();
         thread.join().unwrap();
         assert_eq!(open_at_reopen, 0, "the old link was still open");
+    }
+
+    /// A replay's session names the link its file was recorded over: the
+    /// playback has no cable or radio of its own, and the status line and a
+    /// re-export both take the link from `Connected`.
+    #[test]
+    fn a_replay_connects_on_its_recorded_link() {
+        let mut text = dmm_lib::replay::header(
+            "ut61eplus",
+            "2026-09-16T10:22:31+02:00",
+            None,
+            Some(Link::Bluetooth),
+        );
+        let dcv = [
+            0x02, 0x31, 0x20, 0x20, 0x34, 0x2E, 0x30, 0x30, 0x30, 0x00, 0x08, 0x30, 0x30, 0x30,
+        ];
+        text.push_str(&dmm_lib::replay::sample_line(Duration::ZERO, &dcv));
+        let replay = dmm_lib::replay::Replay::parse(&text).expect("a valid replay");
+        let (msg_tx, msg_rx) = mpsc::channel();
+        let (ctrl_tx, ctrl_rx) = mpsc::channel();
+        let (_cmd_tx, cmd_rx) = mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            run_device_thread(
+                move |_| replay.open(dmm_lib::Clock::manual()).map(|dmm| (dmm, None)),
+                thread_context(msg_tx, ctrl_rx, cmd_rx),
+            )
+        });
+        let first = msg_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the replay connects");
+        ctrl_tx.send(ThreadControl::Stop).unwrap();
+        thread.join().unwrap();
+        assert!(
+            matches!(
+                first,
+                DmmMessage::Connected {
+                    link: Some(Link::Bluetooth),
+                    ..
+                }
+            ),
+            "the replay did not connect on its recorded link"
+        );
     }
 
     /// A lost Bluetooth link is reopened at its own adapter's address, with
