@@ -44,8 +44,7 @@ pub struct SharedSettings {
     /// `"auto"` to ask the binary to work out which meter is on the cable
     /// instead of naming one.
     /// Empty string means "not set" — consumers should fall back to the default
-    /// they hand [`resolve_device_family`] (the CLI prints a notice; the GUI
-    /// fills the device picker in).
+    /// they hand [`resolve_device_family`].
     pub device_family: String,
     /// Whether an open with no cable on it may go on to look for a Bluetooth
     /// adapter. On by default; off, nothing scans the radio and no help offers
@@ -69,31 +68,19 @@ impl Default for SharedSettings {
     }
 }
 
-/// Where the device family a tool ended up with came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DeviceSource {
-    /// A `--device` flag on the command line.
-    Cli,
-    /// `device_family` in the shared settings file.
-    Settings,
-    /// Neither was given, so the caller's default stands.
-    Fallback,
-}
-
-/// Which device family to use, and where the choice came from: a `--device`
-/// flag wins, then `device_family` in the settings file, then `fallback`.
+/// Which device family to use: a `--device` flag wins, then `device_family`
+/// in the settings file, then `fallback`.
 ///
 /// Here rather than in either binary because both apply the same rule to the
-/// same file — the CLI prints a notice when it falls through, the GUI fills the
-/// device picker in. `fallback` is passed in rather than looked up, so the
-/// settings half of this crate does not reach into `dmm-lib`'s registry.
+/// same file. `fallback` is passed in rather than looked up, so the settings
+/// half of this crate does not reach into `dmm-lib`'s registry.
 pub fn resolve_device_family(
     cli_device: Option<&str>,
     saved: Option<&SharedSettings>,
     fallback: &str,
-) -> (String, DeviceSource) {
+) -> String {
     if let Some(device) = cli_device {
-        return (device.to_string(), DeviceSource::Cli);
+        return device.to_string();
     }
     // Empty means "not set": that is what a file written before the field
     // existed deserializes to, and what the GUI writes when nothing is picked.
@@ -101,9 +88,9 @@ pub fn resolve_device_family(
         .map(|s| s.device_family.as_str())
         .filter(|f| !f.is_empty())
     {
-        return (family.to_string(), DeviceSource::Settings);
+        return family.to_string();
     }
-    (fallback.to_string(), DeviceSource::Fallback)
+    fallback.to_string()
 }
 
 /// Return the canonical path to the shared settings file.
@@ -304,25 +291,19 @@ mod tests {
         let s = saved("ut8803");
         assert_eq!(
             resolve_device_family(Some("ut171"), Some(&s), "ut61eplus"),
-            ("ut171".to_string(), DeviceSource::Cli)
+            "ut171"
         );
     }
 
     #[test]
     fn the_settings_file_wins_over_the_fallback() {
         let s = saved("ut8803");
-        assert_eq!(
-            resolve_device_family(None, Some(&s), "ut61eplus"),
-            ("ut8803".to_string(), DeviceSource::Settings)
-        );
+        assert_eq!(resolve_device_family(None, Some(&s), "ut61eplus"), "ut8803");
     }
 
     #[test]
     fn a_missing_settings_file_falls_back() {
-        assert_eq!(
-            resolve_device_family(None, None, "ut61eplus"),
-            ("ut61eplus".to_string(), DeviceSource::Fallback)
-        );
+        assert_eq!(resolve_device_family(None, None, "ut61eplus"), "ut61eplus");
     }
 
     /// A file written before `device_family` existed, or by a GUI where the
@@ -333,7 +314,7 @@ mod tests {
         let s = saved("");
         assert_eq!(
             resolve_device_family(None, Some(&s), "ut61eplus"),
-            ("ut61eplus".to_string(), DeviceSource::Fallback)
+            "ut61eplus"
         );
     }
 
@@ -341,7 +322,7 @@ mod tests {
     fn the_cli_flag_wins_with_no_settings_file() {
         assert_eq!(
             resolve_device_family(Some("ut171"), None, "ut61eplus"),
-            ("ut171".to_string(), DeviceSource::Cli)
+            "ut171"
         );
     }
 

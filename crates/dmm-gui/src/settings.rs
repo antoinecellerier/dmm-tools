@@ -396,7 +396,7 @@ impl Settings {
         // fallback half. A saved id keeps naming its meter; an older config
         // or a fresh install falls through to detection instead of to a
         // model the user never picked.
-        let (family, _) = dmm_shared::resolve_device_family(
+        let family = dmm_shared::resolve_device_family(
             None,
             Some(&s.shared),
             dmm_lib::protocol::registry::AUTO_DEVICE_ID,
@@ -482,7 +482,7 @@ mod tests {
         // And a config file written before the field existed lands there too,
         // rather than on a model the user never picked.
         let s: Settings = serde_json::from_str(r#"{"theme":"Light"}"#).unwrap();
-        let (family, _) = dmm_shared::resolve_device_family(
+        let family = dmm_shared::resolve_device_family(
             None,
             Some(&s.shared),
             dmm_lib::protocol::registry::AUTO_DEVICE_ID,

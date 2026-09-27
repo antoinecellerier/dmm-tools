@@ -373,7 +373,7 @@ fn main() {
     // Nothing named a meter, so none is assumed: detection is the fallback,
     // and `--device` or the settings file pins a model when the user wants
     // one.
-    let (device_id, _source) = dmm_shared::resolve_device_family(
+    let device_id = dmm_shared::resolve_device_family(
         cli.device.as_deref(),
         settings.as_ref(),
         registry::AUTO_DEVICE_ID,
@@ -2651,8 +2651,7 @@ mod tests {
     /// detection rather than a model nobody chose.
     #[test]
     fn no_flag_and_no_setting_detects_the_meter() {
-        let (id, source) = dmm_shared::resolve_device_family(None, None, registry::AUTO_DEVICE_ID);
-        assert_eq!(source, dmm_shared::DeviceSource::Fallback);
+        let id = dmm_shared::resolve_device_family(None, None, registry::AUTO_DEVICE_ID);
         assert!(matches!(
             registry::resolve_selection(&id),
             Some(Selection::Auto)
@@ -2667,20 +2666,17 @@ mod tests {
             device_family: "ut8803".to_string(),
             ..Default::default()
         };
-        let (id, source) =
-            dmm_shared::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
-        assert_eq!(source, dmm_shared::DeviceSource::Settings);
+        let id = dmm_shared::resolve_device_family(None, Some(&saved), registry::AUTO_DEVICE_ID);
         let Some(Selection::Device(device)) = registry::resolve_selection(&id) else {
             panic!("a saved family must resolve to that device");
         };
         assert_eq!(device.id, "ut8803");
 
-        let (id, source) = dmm_shared::resolve_device_family(
+        let id = dmm_shared::resolve_device_family(
             Some("ut61b+"),
             Some(&saved),
             registry::AUTO_DEVICE_ID,
         );
-        assert_eq!(source, dmm_shared::DeviceSource::Cli);
         assert_eq!(selection_id(selection(&id)), "ut61b+");
     }
 
