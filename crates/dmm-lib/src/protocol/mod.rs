@@ -550,6 +550,7 @@ impl Need {
 }
 
 /// A step definition for the guided protocol capture wizard.
+#[derive(Clone, Copy)]
 pub struct CaptureStep {
     /// Unique identifier for this step (e.g. "dcv", "hold_on").
     pub id: &'static str,

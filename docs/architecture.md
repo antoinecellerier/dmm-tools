@@ -195,7 +195,7 @@ CLI binary using `clap`. Its modules:
 | `main.rs` | CLI framework, command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug`/`completions` subcommands |
 | `capture/mod.rs` | The `capture` command: opens the report, runs the passes, prints the coverage epilogue |
 | `capture/report.rs` | Report schema and serde (`CaptureReport`, `StepResult`, `SampleData`), trust tiers, report file read/write |
-| `capture/step.rs` | One capture step: its definition, the wait for the state it asks for, the frames that wait sends |
+| `capture/step.rs` | One capture step (the library's `CaptureStep`): the wait for the state it asks for, the frames that wait sends |
 | `capture/session.rs` | The passes of a run: meter handshake, the device's steps and their equipment, end-of-run review, freeform captures |
 | `capture/input.rs` | Keyboard reader thread polled between readings; per-step log of parse rejections |
 | `capture/listing.rs` | `--list-steps` output (text and issue checklist); validation of `--steps` names |

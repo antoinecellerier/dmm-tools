@@ -9,7 +9,7 @@ use super::report::{
 };
 use super::step::{
     CaptureStep, Confirmed, NO_RESPONSE, PrevState, WHAT_SHOWN, ask_confirmation, capture_samples,
-    frames_for_step, run_capture_step,
+    empty_result, frames_for_step, run_capture_step,
 };
 use crate::recording::{self, SharedRecorder};
 use console::style;
@@ -148,7 +148,11 @@ pub(super) fn run_protocol_capture(
     for (step, label) in &dropped {
         upsert_step(
             report,
-            step.empty_result(StepStatus::Skipped, Some(format!("skipped: no {label}"))),
+            empty_result(
+                step,
+                StepStatus::Skipped,
+                Some(format!("skipped: no {label}")),
+            ),
         );
     }
     if !dropped.is_empty() {

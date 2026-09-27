@@ -10,7 +10,7 @@ use crate::recording::{self, SharedRecorder, WireEvent};
 use crate::watch::{Baseline, STABLE_FRAMES, StateWatcher, Verdict, enter_only};
 use console::{Key, style};
 use dmm_lib::measurement::{MeasuredValue, Measurement};
-use dmm_lib::protocol::{Need, ValueExpect};
+use dmm_lib::protocol::ValueExpect;
 use std::time::{Duration, Instant};
 
 /// Cap on wire events recorded per step, so one chatty step can't grow the
@@ -21,63 +21,29 @@ pub(crate) const MAX_FRAMES_PER_STEP: usize = 500;
 /// pass generates `extra_0`, `extra_1`, … as the user describes each capture.
 pub(crate) const FREEFORM_STEP_ID: &str = "extra";
 
-#[derive(Clone, Copy)]
-pub(crate) struct CaptureStep {
-    pub id: &'static str,
-    pub instruction: &'static str,
-    pub command: Option<&'static str>,
-    pub samples: usize,
-    /// What a correct reading looks like once the instruction is carried out;
-    /// `None` leaves the step watching for any new state.
-    pub expect: Option<dmm_lib::protocol::Expect>,
-    /// Already confirmed on real hardware — `--unverified` skips these.
-    pub verified: bool,
-    /// One of the steps the family's core semantics rest on; flagged in the
-    /// run so an operator knows which ones must not be skipped.
-    pub gate: bool,
-    /// Equipment the instruction asks for, listed before the run so a step
-    /// nobody can do is dropped rather than met halfway through.
-    pub needs: &'static [Need],
-    /// Captures on Enter only: a sequence of presses whose intermediate
-    /// states the watcher would otherwise take.
-    pub wait_for_enter: bool,
+pub(crate) use dmm_lib::protocol::CaptureStep;
+
+/// The line announcing the step. Gate steps say so: skipping one leaves the
+/// rest of the run uninterpretable.
+fn header(step: &CaptureStep) -> String {
+    let id = style(format!("[{}]", step.id)).cyan().bold();
+    let gate = if step.gate {
+        format!(" {}", style("(gate)").dim())
+    } else {
+        String::new()
+    };
+    format!("{id} {}{gate}", step.instruction)
 }
 
-impl From<&dmm_lib::protocol::CaptureStep> for CaptureStep {
-    fn from(ps: &dmm_lib::protocol::CaptureStep) -> Self {
-        CaptureStep {
-            id: ps.id,
-            instruction: ps.instruction,
-            command: ps.command,
-            samples: ps.samples,
-            expect: ps.expect,
-            verified: ps.verified,
-            gate: ps.gate,
-            needs: ps.needs,
-            wait_for_enter: ps.wait_for_enter,
-        }
-    }
-}
-
-impl CaptureStep {
-    /// The line announcing the step. Gate steps say so: skipping one leaves
-    /// the rest of the run uninterpretable.
-    fn header(&self) -> String {
-        let id = style(format!("[{}]", self.id)).cyan().bold();
-        let gate = if self.gate {
-            format!(" {}", style("(gate)").dim())
-        } else {
-            String::new()
-        };
-        format!("{id} {}{gate}", self.instruction)
-    }
-
-    /// Create a StepResult with no samples or screen capture.
-    pub(super) fn empty_result(&self, status: StepStatus, error: Option<String>) -> StepResult {
-        StepResult {
-            error,
-            ..StepResult::new(self.id, self.instruction, status)
-        }
+/// Create a StepResult with no samples or screen capture.
+pub(super) fn empty_result(
+    step: &CaptureStep,
+    status: StepStatus,
+    error: Option<String>,
+) -> StepResult {
+    StepResult {
+        error,
+        ..StepResult::new(step.id, step.instruction, status)
     }
 }
 
@@ -438,7 +404,7 @@ fn left_mode<'a>(
 
 /// File the step as skipped, and say whether the run stops here.
 fn skipped(report: &mut CaptureReport, step: &CaptureStep, quit: bool) -> StepOutcome {
-    upsert_step(report, step.empty_result(StepStatus::Skipped, None));
+    upsert_step(report, empty_result(step, StepStatus::Skipped, None));
     StepOutcome::nothing(quit)
 }
 
@@ -464,7 +430,7 @@ pub(crate) fn run_capture_step(
     if interactive {
         eprintln!();
     }
-    eprintln!("{}", step.header());
+    eprintln!("{}", header(step));
 
     recording::lock(recorder).set_step(Some(step.id));
     let mut errors = ErrorLog::default();
@@ -500,7 +466,7 @@ pub(crate) fn run_capture_step(
 
             if let Err(e) = dmm.send_command(cmd) {
                 eprintln!("  {}", style(format!("Command failed: {e}")).red());
-                let result = step.empty_result(StepStatus::Error, Some(e.to_string()));
+                let result = empty_result(step, StepStatus::Error, Some(e.to_string()));
                 finish_failed_step(recorder, report, step.id, result);
                 return Ok(StepOutcome::nothing(false));
             }
@@ -523,7 +489,7 @@ pub(crate) fn run_capture_step(
                     // is what made a dead command look like a captured state.
                     let error = did_nothing(cmd, last.as_ref());
                     eprintln!("  {}", style(&error).yellow());
-                    let mut result = step.empty_result(StepStatus::Error, Some(error));
+                    let mut result = empty_result(step, StepStatus::Error, Some(error));
                     result.diagnostics = errors.into_diagnostics();
                     finish_failed_step(recorder, report, step.id, result);
                     return Ok(StepOutcome::nothing(false));

@@ -102,7 +102,7 @@ pub(crate) fn cmd_capture(
     // needs checklist and sweeps, but only the steps the maintainer wrote.
     let cli_steps: Vec<CaptureStep> = match &plan_steps {
         Some(steps) => steps.clone(),
-        None => protocol_steps.iter().map(CaptureStep::from).collect(),
+        None => protocol_steps,
     };
     // `--unverified` leaves out the steps hardware has already confirmed,
     // which is the same evidence the gate is looking for: counting one of
