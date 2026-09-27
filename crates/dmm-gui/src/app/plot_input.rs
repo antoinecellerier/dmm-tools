@@ -1,5 +1,5 @@
 //! Reducing one measurement to what the graph should plot: which series is
-//! drawn, in which unit, and which same-unit sub-values ride along beside it.
+//! drawn, in which unit, and the other series kept beside it.
 
 use dmm_lib::measurement::{MainLabel, MeasuredValue, Measurement};
 
@@ -23,7 +23,7 @@ pub(super) enum Plotted {
 /// One measurement reduced to what the graph should plot.
 ///
 /// The graph never sees `dmm_lib` measurement types; this is where the
-/// selected series and its same-unit companions are picked out.
+/// selected series and the ones kept beside it are picked out.
 pub(super) struct PlotInput<'a> {
     pub plotted: Plotted,
     /// Unit of the plotted series — the meter's, or the sub-value's own.
@@ -31,8 +31,9 @@ pub(super) struct PlotInput<'a> {
     pub display_raw: Option<&'a str>,
     /// Label of the plotted sub-value, or `None` for the main reading.
     pub series: Option<&'a str>,
-    /// Same-unit sub-values to draw beside it.
-    pub overlays: Vec<(&'a str, Option<f64>)>,
+    /// The frame's other series, as (label, unit, value): drawn beside it in
+    /// its unit, kept for **Plot:** to switch to in another.
+    pub overlays: Vec<(&'a str, &'a str, Option<f64>)>,
 }
 
 /// What a measured value contributes to the plotted series, or `None` for
@@ -64,10 +65,11 @@ fn overlay_value(v: &MeasuredValue) -> Option<Option<f64>> {
 /// Decide what the graph plots for this measurement, given the toolbar's
 /// series selection as (label, unit) and the mode the graph is plotting.
 ///
-/// Only sub-values sharing the plotted series' unit become overlays. A
-/// frequency in Hz beside an AC voltage measures something else entirely, and
-/// drawing it on the volt axis would invent a relationship that isn't there —
-/// it stays reachable through the selector instead.
+/// Every other series goes along with its unit, but the graph draws only
+/// those sharing the plotted series' unit. A frequency in Hz beside an AC
+/// voltage measures something else entirely, and drawing it on the volt axis
+/// would invent a relationship that isn't there — it is kept, so that picking
+/// it under **Plot:** brings its past along.
 pub(super) fn resolve_plot_input<'a>(
     m: &'a Measurement,
     selected: Option<(&'a str, &'a str)>,
@@ -107,27 +109,30 @@ pub(super) fn resolve_plot_input<'a>(
         ),
     };
 
-    let mut overlays: Vec<(&str, Option<f64>)> = Vec::new();
+    let mut overlays: Vec<(&str, &str, Option<f64>)> = Vec::new();
     for aux in &m.aux_values {
         if overlays.len() >= MAX_OVERLAYS {
             break;
         }
-        if Some(aux.label.as_ref()) == series || aux.unit_or(main_unit) != unit {
+        if Some(aux.label.as_ref()) == series {
             continue;
         }
         if let Some(v) = overlay_value(&aux.value) {
-            overlays.push((aux.label.as_ref(), v));
+            overlays.push((aux.label.as_ref(), aux.unit_or(main_unit), v));
         }
     }
     // Plotting a sub-value: the meter's own reading is the natural companion
-    // whenever it measures the same quantity — choosing T2 should still show
-    // T1 next to it.
+    // — choosing T2 should still show T1 next to it, and choosing Frequency
+    // keeps the voltage to switch back to.
     if series.is_some()
-        && main_unit == unit
         && overlays.len() < MAX_OVERLAYS
         && let Some(v) = overlay_value(&m.value)
     {
-        overlays.push((m.main_label.map_or(MAIN_SERIES, MainLabel::as_str), v));
+        overlays.push((
+            m.main_label.map_or(MAIN_SERIES, MainLabel::as_str),
+            main_unit,
+            v,
+        ));
     }
 
     if plotted == Plotted::Absent && overlays.is_empty() {
@@ -175,9 +180,9 @@ mod tests {
 
     /// A UT181A in V AC + Hz sends the frequency and the period beside the
     /// voltage. Neither measures volts, so neither belongs on the volt axis —
-    /// they are reachable only through the selector.
+    /// they go along in their own units, for the graph to keep but not draw.
     #[test]
-    fn different_unit_sub_values_are_never_overlaid() {
+    fn different_unit_sub_values_go_along_in_their_units() {
         let m = meter(
             239.22,
             "VAC",
@@ -191,7 +196,14 @@ mod tests {
         assert_eq!(plot.plotted, Plotted::Point(239.22));
         assert_eq!(plot.unit, "VAC");
         assert_eq!(plot.series, None);
-        assert_eq!(plot.overlays, vec![("Max", Some(240.5))]);
+        assert_eq!(
+            plot.overlays,
+            vec![
+                ("Frequency", "Hz", Some(50.01)),
+                ("Period", "ms", Some(20.0)),
+                ("Max", "VAC", Some(240.5)),
+            ]
+        );
     }
 
     /// Protocols leave the unit empty when a sub-value shares the main
@@ -205,11 +217,12 @@ mod tests {
             vec![aux("Max", "", MeasuredValue::Normal(5.0123))],
         );
         let plot = resolve(&m, None).expect("plottable");
-        assert_eq!(plot.overlays, vec![("Max", Some(5.0123))]);
+        assert_eq!(plot.overlays, vec![("Max", "V", Some(5.0123))]);
     }
 
     /// Selecting a sub-value in a different unit rescales the whole plot to
-    /// it, and nothing else on the frame shares that unit.
+    /// it. Nothing else on the frame shares that unit, so nothing is drawn
+    /// beside it, but the voltage and the period go along to be kept.
     #[test]
     fn a_selected_different_unit_sub_value_is_plotted_alone() {
         let m = meter(
@@ -224,7 +237,10 @@ mod tests {
         assert_eq!(plot.plotted, Plotted::Point(50.01));
         assert_eq!(plot.unit, "Hz");
         assert_eq!(plot.series, Some("Frequency"));
-        assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
+        assert_eq!(
+            plot.overlays,
+            vec![("Period", "ms", Some(20.0)), ("Main", "VAC", Some(239.22))]
+        );
     }
 
     /// Plotting T2 must still show T1 — the reading the meter calls its main
@@ -239,7 +255,7 @@ mod tests {
         let plot = resolve(&m, Some("T2")).expect("plottable");
         assert_eq!(plot.plotted, Plotted::Point(24.1));
         assert_eq!(plot.series, Some("T2"));
-        assert_eq!(plot.overlays, vec![("Main", Some(23.5))]);
+        assert_eq!(plot.overlays, vec![("Main", "\u{00B0}C", Some(23.5))]);
     }
 
     /// The App picks which series make the cut, so it must hand the graph no
@@ -282,7 +298,7 @@ mod tests {
         assert_eq!(plot.series, Some("Sel"));
         assert_eq!(plot.overlays.len(), MAX_OVERLAYS, "got {:?}", plot.overlays);
         assert!(
-            !plot.overlays.iter().any(|(label, _)| *label == "Main"),
+            !plot.overlays.iter().any(|(label, _, _)| *label == "Main"),
             "got {:?}",
             plot.overlays
         );
@@ -300,11 +316,15 @@ mod tests {
         assert_eq!(plot.plotted, Plotted::Absent);
         assert_eq!(plot.series, Some("AC"));
         assert_eq!(plot.unit, "V");
-        assert_eq!(plot.overlays, vec![("Main", Some(1.6112))]);
+        assert_eq!(plot.overlays, vec![("Main", "V", Some(1.6112))]);
 
-        // With nothing in the plotted unit beside it, there is nothing to do.
-        let plot = resolve_plot_input(&m, Some(("Frequency", "Hz")), Some("DC V"));
-        assert!(plot.is_none());
+        // With nothing in the plotted unit beside it, the reading is still
+        // kept, to switch back to.
+        let plot = resolve_plot_input(&m, Some(("Frequency", "Hz")), Some("DC V"))
+            .expect("Main is still kept");
+        assert_eq!(plot.plotted, Plotted::Absent);
+        assert_eq!(plot.unit, "Hz");
+        assert_eq!(plot.overlays, vec![("Main", "V", Some(1.6112))]);
     }
 
     /// Beside a plotted AC component, the UT61E+'s AC+DC V reading is drawn
@@ -314,7 +334,7 @@ mod tests {
         let mut m = meter(1.6112, "V", vec![]);
         m.main_label = Some(MainLabel::Dc);
         let plot = resolve(&m, Some("AC")).expect("DC is drawn");
-        assert_eq!(plot.overlays, vec![("DC", Some(1.6112))]);
+        assert_eq!(plot.overlays, vec![("DC", "V", Some(1.6112))]);
     }
 
     /// Another mode's frame without the selection is skipped: the graph gives
@@ -336,12 +356,12 @@ mod tests {
         let plot = resolve(&m, None).expect("the AC trace is drawn");
         assert_eq!(plot.plotted, Plotted::Absent);
         assert_eq!(plot.series, None);
-        assert_eq!(plot.overlays, vec![("AC", Some(0.0123))]);
+        assert_eq!(plot.overlays, vec![("AC", "V", Some(0.0123))]);
 
         m.aux_values
             .push(aux(RAW_LABEL, "V", MeasuredValue::Absent));
         let plot = resolve(&m, None).expect("the AC trace is drawn");
-        assert_eq!(plot.overlays, vec![("AC", Some(0.0123))]);
+        assert_eq!(plot.overlays, vec![("AC", "V", Some(0.0123))]);
 
         m.aux_values.clear();
         assert!(resolve(&m, None).is_none(), "nothing to draw");
@@ -375,7 +395,7 @@ mod tests {
     fn an_overloaded_sub_value_overlays_as_a_break() {
         let m = meter(4.9871, "V", vec![aux("Max", "", MeasuredValue::Overload)]);
         let plot = resolve(&m, None).expect("plottable");
-        assert_eq!(plot.overlays, vec![("Max", None)]);
+        assert_eq!(plot.overlays, vec![("Max", "V", None)]);
     }
 
     /// An over-range *plotted* series yields no point at all; the App turns
@@ -402,27 +422,29 @@ mod tests {
         assert_eq!(plot.plotted, Plotted::Point(5.678));
         assert_eq!(plot.overlays.len(), 1, "got {:?}", plot.overlays);
         assert_eq!(plot.overlays[0].0, "Main");
-        let main = plot.overlays[0].1.expect("the scaled reading is plottable");
+        let main = plot.overlays[0].2.expect("the scaled reading is plottable");
         assert!((main - 0.5678).abs() < 1e-9, "got {main}");
     }
 
     /// A 10 mV/A clamp relabelled to amps: `Raw` is still millivolts, so it
-    /// must not be drawn on the amp axis — but it stays selectable.
+    /// goes along in mV, never to be drawn on the amp axis — but it stays
+    /// selectable, and the amps go along the same way once it is plotted.
     #[test]
-    fn a_relabelled_raw_sub_value_is_selectable_but_never_overlaid() {
+    fn a_relabelled_raw_sub_value_goes_along_in_its_own_unit() {
         let mut m = meter(123.4, "mV", vec![]);
         Transform::linear(100.0, 0.0, Some("A".to_string())).apply(&mut m);
         assert_eq!(m.unit, "A");
 
         let plot = resolve(&m, None).expect("plottable");
         assert_eq!(plot.unit, "A");
-        assert!(plot.overlays.is_empty(), "got {:?}", plot.overlays);
+        assert_eq!(plot.overlays, vec![(RAW_LABEL, "mV", Some(123.4))]);
 
         let raw = resolve(&m, Some(RAW_LABEL)).expect("Raw is a series");
         assert_eq!(raw.series, Some(RAW_LABEL));
         assert_eq!(raw.unit, "mV");
         assert_eq!(raw.plotted, Plotted::Point(123.4));
-        assert!(raw.overlays.is_empty(), "got {:?}", raw.overlays);
+        let units: Vec<_> = raw.overlays.iter().map(|&(l, u, _)| (l, u)).collect();
+        assert_eq!(units, vec![("Main", "A")]);
     }
 
     /// "Auto" with the probes lifted breaks the trace like an overload,

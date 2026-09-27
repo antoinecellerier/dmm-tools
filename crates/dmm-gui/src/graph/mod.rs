@@ -32,7 +32,9 @@ use field::{NumberField, NumberListField};
 use level::MinimapLevel;
 use minimap::{MINIMAP_HEIGHT, MinimapDrag};
 
-/// Maximum number of same-unit sub-values drawn beside the plotted series.
+/// Maximum number of sub-value traces the graph keeps beside the plotted
+/// series — the ones drawn in its unit and the ones kept in another unit for
+/// **Plot:** to switch to.
 ///
 /// The protocols send at most four sub-values per frame (UT181A), so this is
 /// the ceiling the wire imposes rather than a display choice.
@@ -111,7 +113,9 @@ pub(super) struct OverlayPoint {
     value: Option<f64>,
 }
 
-/// One sub-value trace drawn beside the plotted series.
+/// One sub-value trace kept beside the plotted series: drawn when it is in
+/// the plotted unit, kept in the background otherwise so that **Plot:** can
+/// switch to it with its past.
 ///
 /// Its points keep their own times rather than riding on the plotted
 /// series' points: a meter that sends the parts of one reading in frames of
@@ -121,6 +125,9 @@ pub(super) struct OverlayPoint {
 /// most of the device table pay nothing.
 struct OverlaySeries {
     label: String,
+    /// What its points measure in. A trace in another unit than the plotted
+    /// series is kept but not drawn.
+    unit: String,
     points: VecDeque<OverlayPoint>,
     /// Frames since the last one that carried this sub-value; see
     /// [`Graph::stopped_for`].
@@ -164,17 +171,18 @@ pub struct PlotSample<'a> {
     pub display_raw: Option<&'a str>,
     /// Label of the sub-value being plotted, or `None` for the meter's main
     /// reading. A change here swaps the plotted trace with the one of that
-    /// name beside it, or restarts the graph when there is none: two
+    /// name kept beside it, or restarts the graph when there is none: two
     /// sub-values can share a mode and a unit (T1 and T2), so nothing else
     /// would tell them apart.
     pub series: Option<&'a str>,
     /// The meter's name for its main reading ("DC" beside an "AC" part), or
     /// `None` for [`MAIN_SERIES`].
     pub main_label: Option<&'static str>,
-    /// Sub-values sharing the plotted series' unit, as (label, value).
-    /// `None` for an over-range sub-value — it breaks that trace without
-    /// breaking the others.
-    pub overlays: &'a [(&'a str, Option<f64>)],
+    /// The frame's other series, as (label, unit, value). Those in `unit`
+    /// are drawn beside the plotted series; the rest are kept for **Plot:**
+    /// to switch to. `None` for an over-range sub-value — it breaks that
+    /// trace without breaking the others.
+    pub overlays: &'a [(&'a str, &'a str, Option<f64>)],
 }
 
 /// Time window presets.
@@ -194,7 +202,8 @@ pub struct Graph {
     /// the recording buffer through the Buffer size setting, and changed
     /// under a running session by [`Graph::set_max_points`].
     max_points: usize,
-    /// Same-unit sub-value traces, each point at its own frame's time.
+    /// Sub-value traces, each point at its own frame's time: the ones in the
+    /// plotted unit drawn, the others kept (see [`Graph::drawn`]).
     overlays: Vec<OverlaySeries>,
     current_mode: Option<String>,
     current_unit: String,
@@ -478,8 +487,8 @@ impl Graph {
         }
     }
 
-    /// Sub-value traces drawn beside the plotted series — what the Buffer
-    /// size hint multiplies its per-point cost by.
+    /// Sub-value traces kept beside the plotted series, drawn or not — what
+    /// the Buffer size hint multiplies its per-point cost by.
     pub fn overlays_len(&self) -> usize {
         self.overlays.len()
     }
@@ -514,9 +523,9 @@ impl Graph {
     /// Push a sample together with the sub-values drawn beside it.
     ///
     /// A sample without a value (a frame carrying only sub-values) records
-    /// its overlay points and restarts the trace on a change of mode, unit or
-    /// series like any other, but leaves the history, the minimap, an open
-    /// break and the spoken last reading alone.
+    /// its overlay points and switches or restarts the trace on a change of
+    /// mode, unit or series like any other, but leaves the history, the
+    /// minimap, an open break and the spoken last reading alone.
     pub fn push_sample(&mut self, sample: PlotSample<'_>) {
         let (value, timestamp, mode, unit, display_raw) = (
             sample.value,
@@ -543,12 +552,17 @@ impl Graph {
         // two sub-values can share a mode *and* a unit (T1 and T2 are both
         // "DC V"/"°C"), so switching from one to the other would otherwise
         // append onto the previous one's trace with nothing to mark the join —
-        // unless the new series is already drawn beside the old one, in the
-        // same unit, and the two traces only change places.
-        let same_scale = self.current_mode.as_deref() == Some(mode) && self.current_unit == unit;
+        // unless the new series is already kept beside the old one, and the
+        // two traces only change places. The kept traces take this frame's
+        // units first, so a switch on the frame a unit steps lands on the one
+        // trace that restarted.
+        self.reconcile_overlay_units(sample.overlays);
+        let incoming = sample.series.unwrap_or(self.main_name());
+        self.restart_on_unit_change(incoming, unit);
+        let same_mode = self.current_mode.as_deref() == Some(mode);
         let series_changed = self.current_series.as_deref() != sample.series;
-        let swapped = same_scale && series_changed && self.swap_plotted_series(sample.series);
-        if !swapped && (!same_scale || series_changed) {
+        let swapped = same_mode && series_changed && self.swap_plotted_series(sample.series, unit);
+        if !swapped && (!same_mode || self.current_unit != unit || series_changed) {
             self.history.clear();
             self.overlays.clear();
             self.current_mode = Some(mode.to_string());
@@ -592,7 +606,7 @@ impl Graph {
         }
         for i in 0..self.overlays.len() {
             let label = self.overlays[i].label.as_str();
-            let Some(&(_, v)) = sample.overlays.iter().find(|(l, _)| *l == label) else {
+            let Some(&(_, _, v)) = sample.overlays.iter().find(|(l, _, _)| *l == label) else {
                 self.overlays[i].missing_frames += 1;
                 continue;
             };
@@ -672,21 +686,27 @@ impl Graph {
         self.main_label.unwrap_or(MAIN_SERIES)
     }
 
-    /// Plot `series` in place of the current one by swapping the two traces:
-    /// the one of that name drawn beside the plotted series becomes the
-    /// plotted one, and the plotted one is drawn beside it under its own
-    /// name. `false`, touching nothing, when no such trace is drawn — a
-    /// series in another unit, whose past values were never kept.
+    /// Plot `series`, in `unit`, in place of the current one by swapping the
+    /// two traces: the one of that name kept beside the plotted series becomes
+    /// the plotted one, and the plotted one is kept beside it under its own
+    /// name. `false`, touching nothing, when no such trace is kept in `unit`.
     ///
-    /// The time axis, the unit, the Y range and the cursors all still apply.
-    /// A break in a sub-value's trace carries no reason, so on becoming the
-    /// plotted series it is drawn as a gap, an over-range stretch included.
-    fn swap_plotted_series(&mut self, series: Option<&str>) -> bool {
+    /// The time axis and the cursors still apply. A switch to another unit
+    /// moves the Y axis to it and releases a pinned Y range, chosen for the
+    /// old unit's scale. A break in a sub-value's trace carries no reason, so
+    /// on becoming the plotted series it is drawn as a gap, an over-range
+    /// stretch included.
+    fn swap_plotted_series(&mut self, series: Option<&str>, unit: &str) -> bool {
         let incoming_name = series.unwrap_or(self.main_name());
-        let Some(i) = self.overlays.iter().position(|o| o.label == incoming_name) else {
+        let Some(i) = self
+            .overlays
+            .iter()
+            .position(|o| o.label == incoming_name && o.unit == unit)
+        else {
             return false;
         };
         let incoming = std::mem::take(&mut self.overlays[i].points);
+        let incoming_missing = self.overlays[i].missing_frames;
 
         let mut outgoing: VecDeque<OverlayPoint> = VecDeque::with_capacity(self.history.len());
         let mut prev: Option<Instant> = None;
@@ -732,10 +752,18 @@ impl Graph {
                 .current_series
                 .take()
                 .unwrap_or_else(|| self.main_name().to_string()),
+            unit: std::mem::replace(&mut self.current_unit, unit.to_string()),
             points: outgoing,
-            missing_frames: 0,
+            // A stop in progress goes along with each trace, or a series
+            // already missing for a few frames would be drawn straight across
+            // the rest of its absence.
+            missing_frames: self.main_missing_frames,
         };
-        self.main_missing_frames = 0;
+        if self.overlays[i].unit != unit {
+            self.y_axis_fixed = false;
+            self.y_user_set = false;
+        }
+        self.main_missing_frames = incoming_missing;
         self.current_series = series.map(str::to_owned);
         self.minimap_level = None;
         self.pushed_total = self.history.len() as u64;
@@ -743,21 +771,56 @@ impl Graph {
         true
     }
 
-    /// Start a trace for each sub-value seen for the first time, up to
-    /// [`MAX_OVERLAYS`]. It begins at its first point: nothing is back-filled.
-    fn register_overlays(&mut self, overlays: &[(&str, Option<f64>)]) {
-        for &(label, _) in overlays {
-            if self.overlays.len() >= MAX_OVERLAYS {
-                break;
-            }
+    /// Whether a kept trace is drawn: it is in the plotted series' unit.
+    fn drawn(&self, o: &OverlaySeries) -> bool {
+        o.unit == self.current_unit
+    }
+
+    /// Restart each kept trace whose unit moved in this frame (a frequency
+    /// auto-ranging Hz→kHz): it drops its points, as the plotted series does
+    /// on a decade step, and restarts alone. The series being plotted is
+    /// checked by the caller: a frame carries it apart from the others.
+    fn reconcile_overlay_units(&mut self, overlays: &[(&str, &str, Option<f64>)]) {
+        for &(label, unit, _) in overlays {
+            self.restart_on_unit_change(label, unit);
+        }
+    }
+
+    /// Restart the kept trace `label` if its unit is no longer `unit`.
+    fn restart_on_unit_change(&mut self, label: &str, unit: &str) {
+        if let Some(o) = self.overlays.iter_mut().find(|o| o.label == label)
+            && o.unit != unit
+        {
+            o.unit = unit.to_string();
+            o.points.clear();
+            o.missing_frames = 0;
+        }
+    }
+
+    /// Start a trace for each sub-value seen for the first time. It begins at
+    /// its first point: nothing is back-filled.
+    ///
+    /// Past [`MAX_OVERLAYS`], a trace that would be drawn takes the place of
+    /// one that isn't: kept Frequency and Period traces must not keep a
+    /// MIN/MAX's Min off the plot. Otherwise the new one is skipped.
+    fn register_overlays(&mut self, overlays: &[(&str, &str, Option<f64>)]) {
+        for &(label, unit, _) in overlays {
             if self.overlays.iter().any(|o| o.label == label) {
                 continue;
             }
-            self.overlays.push(OverlaySeries {
+            let trace = OverlaySeries {
                 label: label.to_string(),
+                unit: unit.to_string(),
                 points: VecDeque::new(),
                 missing_frames: 0,
-            });
+            };
+            if self.overlays.len() < MAX_OVERLAYS {
+                self.overlays.push(trace);
+            } else if unit == self.current_unit
+                && let Some(i) = self.overlays.iter().position(|o| !self.drawn(o))
+            {
+                self.overlays[i] = trace;
+            }
         }
     }
 
@@ -901,7 +964,8 @@ impl Graph {
     ///
     /// Sub-value traces are not split by it: each point keeps its own time,
     /// and an over-range sub-value breaks its own trace. The App records the
-    /// frame's sub-values after this, as a sample without a value.
+    /// frame's sub-values before this, as a sample without a value, so that a
+    /// frame switching the plotted series breaks the series it switched to.
     ///
     /// Arriving after a word shown instead of a reading, it starts the band
     /// here and leaves the word's stretch a gap (`gap_entries`). A word
@@ -1250,13 +1314,19 @@ impl Graph {
     /// graph renders from — so these tests exercise the path that actually
     /// draws the gap markers.
     #[cfg(test)]
-    fn visible_gaps(&self) -> Vec<(f64, f64, GapKind)> {
+    pub(crate) fn visible_gaps(&self) -> Vec<(f64, f64, GapKind)> {
         self.build_segments_for_range(0, self.history.len()).1
     }
 
     #[cfg(test)]
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.history.len()
+    }
+
+    /// Pick a series under **Plot:**, as the toolbar does.
+    #[cfg(test)]
+    pub(crate) fn select_series(&mut self, label: Option<&str>) {
+        self.selected_series = label.map(str::to_owned);
     }
 
     #[cfg(test)]
@@ -1272,7 +1342,7 @@ impl Graph {
     }
 
     #[cfg(test)]
-    fn overlay_values(&self, label: &str) -> Vec<Option<f64>> {
+    pub(crate) fn overlay_values(&self, label: &str) -> Vec<Option<f64>> {
         self.overlay(label).points.iter().map(|p| p.value).collect()
     }
 

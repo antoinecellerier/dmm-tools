@@ -424,9 +424,7 @@ impl Graph {
                 let selected = self.selected_series.as_deref() == Some(label.as_str());
                 if ui
                     .selectable_label(selected, label.as_str())
-                    .on_hover_text(format!(
-                        "Plot the {label} sub-value ({unit}) \u{2014} a different unit restarts the graph"
-                    ))
+                    .on_hover_text(format!("Plot the {label} sub-value ({unit})"))
                     .a11y_label(&series_chip_label(Some(label)))
                     .a11y_role(egui::accesskit::Role::RadioButton)
                     .clicked()
@@ -437,8 +435,8 @@ impl Graph {
         });
 
         // The switch takes effect at the next sample: `push_sample` sees the
-        // new series and clears through the same branch a mode change uses,
-        // releasing the pinned Y range, the cursors and any bbox state.
+        // new series and swaps it with the trace kept under that name, or
+        // restarts the graph when none is kept.
         match choice {
             Some(None) => self.selected_series = None,
             Some(Some(i)) => self.selected_series = Some(self.series_options[i].label.clone()),
@@ -448,15 +446,15 @@ impl Graph {
         ui.add_space(6.0);
     }
 
-    /// Chips choosing which same-unit sub-value traces are drawn beside the
-    /// plotted series.
+    /// Chips choosing which sub-value traces in the plotted unit are drawn
+    /// beside the plotted series.
     ///
     /// The plot key is a key, not a control (`Plot::reset()` wipes egui_plot's
     /// own legend state every frame), so the show/hide affordance lives here
     /// in the toolbar with the rest of them. Hiding a trace stops it being
     /// drawn but not recorded — turning it back on brings its history with it.
     fn show_overlay_toggles(&mut self, ui: &mut Ui) {
-        if self.overlays.is_empty() {
+        if !self.overlays.iter().any(|o| self.drawn(o)) {
             return;
         }
 
@@ -468,7 +466,7 @@ impl Graph {
         frame.show(ui, |ui| {
             group_caption(ui, "Show:");
 
-            for o in &self.overlays {
+            for o in self.overlays.iter().filter(|o| self.drawn(o)) {
                 let label = o.label.as_str();
                 let shown = !self.hidden_overlays.contains(&o.label);
                 let hover = if shown {

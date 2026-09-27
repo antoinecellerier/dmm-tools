@@ -346,14 +346,17 @@ impl Graph {
         segments
     }
 
-    /// The overlays the user has not switched off, paired with their index.
+    /// The drawn overlays the user has not switched off, paired with their
+    /// index.
     ///
-    /// The index is the overlay's position in `self.overlays`, which is what
-    /// keys its colour and line style — stable for the life of the session, so
-    /// hiding one does not reshuffle the palette of the others.
+    /// The index is the overlay's position among the drawn ones, which is what
+    /// keys its colour and line style — stable while the plotted unit is, so
+    /// hiding one does not reshuffle the palette of the others, and traces
+    /// kept in another unit take no colour from the ones drawn.
     pub(super) fn shown_overlays(&self) -> impl Iterator<Item = (usize, &OverlaySeries)> {
         self.overlays
             .iter()
+            .filter(|o| self.drawn(o))
             .enumerate()
             .filter(|(_, o)| !self.hidden_overlays.contains(&o.label))
     }

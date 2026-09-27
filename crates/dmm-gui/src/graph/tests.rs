@@ -1238,6 +1238,7 @@ fn push_aux(
     series: Option<&str>,
     overlays: &[(&str, Option<f64>)],
 ) {
+    let overlays: Vec<_> = overlays.iter().map(|&(l, v)| (l, "\u{00B0}C", v)).collect();
     g.push_sample(PlotSample {
         value: Some(value),
         timestamp: t,
@@ -1246,14 +1247,14 @@ fn push_aux(
         display_raw: None,
         series,
         main_label: None,
-        overlays,
+        overlays: &overlays,
     });
 }
 
 /// A UT61E+ AC+DC V frame: the DC component as the plotted value, or
 /// `None` for a frame carrying only its AC component beside it.
 fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
-    let overlays = [("AC", ac)];
+    let overlays = [("AC", "V", ac)];
     g.push_sample(PlotSample {
         value: dc,
         timestamp: t,
@@ -1269,7 +1270,7 @@ fn push_acdc(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
 /// The same frames with the AC component plotted, as the App hands them
 /// over once **Plot:** AC is picked: the DC reading drawn beside it.
 fn push_acdc_plotting_ac(g: &mut Graph, t: Instant, dc: Option<f64>, ac: Option<f64>) {
-    let overlays = [("DC", dc)];
+    let overlays = [("DC", "V", dc)];
     g.push_sample(PlotSample {
         value: ac,
         timestamp: t,
@@ -1393,7 +1394,7 @@ fn a_swap_keeps_the_breaks_of_both_traces() {
         display_raw: None,
         series: None,
         main_label: Some("DC"),
-        overlays: &[("AC", None)],
+        overlays: &[("AC", "V", None)],
     });
     push_acdc(&mut g, at(900), None, Some(0.2));
 
@@ -1685,30 +1686,198 @@ fn a_same_unit_series_change_swaps_the_traces() {
     );
 }
 
-/// A series in another unit was never drawn, so there is nothing to keep:
-/// the graph restarts on it.
+/// A UT181A V AC + Hz frame as the App hands it over: the voltage plotted
+/// with the frequency and period kept beside it in their own units, or,
+/// with `series` Frequency, the frequency plotted and the voltage kept.
+fn push_vac_hz(g: &mut Graph, t: Instant, series: Option<&str>, v: f64, hz: (f64, &str)) {
+    let (value, unit, overlays) = match series {
+        None => (
+            v,
+            "V",
+            vec![
+                ("Frequency", hz.1, Some(hz.0)),
+                ("Period", "ms", Some(20.0)),
+            ],
+        ),
+        Some(_) => (
+            hz.0,
+            hz.1,
+            vec![("Period", "ms", Some(20.0)), ("Main", "V", Some(v))],
+        ),
+    };
+    g.push_sample(PlotSample {
+        value: Some(value),
+        timestamp: t,
+        mode: "V AC Hz",
+        unit,
+        display_raw: None,
+        series,
+        main_label: None,
+        overlays: &overlays,
+    });
+}
+
+/// Frequency is kept beside the voltage although it is not drawn, so
+/// picking it swaps the two traces like a same-unit switch: both keep their
+/// past, and the Y axis moves to Hz, dropping a range pinned for volts.
 #[test]
-fn a_series_change_to_another_unit_restarts_the_trace() {
+fn a_series_change_to_another_unit_swaps_the_traces() {
     let mut g = Graph::new();
     let t0 = Instant::now();
-    g.push(230.0, t0, "V AC Hz", "VAC", None);
-    g.push(230.1, t0 + Duration::from_secs(1), "V AC Hz", "VAC", None);
-    g.push_sample(PlotSample {
-        value: Some(50.01),
-        timestamp: t0 + Duration::from_secs(2),
-        mode: "V AC Hz",
-        unit: "Hz",
-        display_raw: None,
-        series: Some("Frequency"),
-        main_label: None,
-        overlays: &[],
-    });
-    assert_eq!(
-        g.len(),
-        1,
-        "switching to another unit must clear the history"
-    );
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    for i in 0..3 {
+        push_vac_hz(&mut g, at(i), None, 230.0 + i as f64, (50.0, "Hz"));
+    }
+    assert!(key_names(&g).is_empty(), "Hz and ms are kept, not drawn");
+    g.y_axis_fixed = true;
+    g.y_user_set = true;
+
+    push_vac_hz(&mut g, at(3), Some("Frequency"), 233.0, (50.1, "Hz"));
     assert_eq!(g.current_series.as_deref(), Some("Frequency"));
+    assert_eq!(g.plotted_unit(), "Hz");
+    assert_eq!(
+        g.all_segments(),
+        vec![vec![[0.0, 50.0], [1.0, 50.0], [2.0, 50.0], [3.0, 50.1]]]
+    );
+    assert_eq!(
+        g.overlay_values("Main"),
+        vec![Some(230.0), Some(231.0), Some(232.0), Some(233.0)]
+    );
+    assert!(key_names(&g).is_empty(), "the volts are not drawn on Hz");
+    assert_eq!(g.origin, Some(t0), "the time axis stays where it was");
+    assert!(
+        !g.y_axis_fixed && !g.y_user_set,
+        "a volt range means nothing in Hz"
+    );
+
+    push_vac_hz(&mut g, at(4), None, 234.0, (50.2, "Hz"));
+    assert_eq!(g.plotted_unit(), "V");
+    assert_eq!(g.len(), 5, "every voltage point, before and after");
+    assert_eq!(g.overlay_values("Frequency").len(), 5);
+}
+
+/// A kept trace whose unit steps (a frequency auto-ranging Hz→kHz) starts
+/// over alone; the others and the plotted series keep their past. Switching
+/// on the very frame it steps swaps onto the restarted trace rather than
+/// clearing everything.
+#[test]
+fn a_kept_trace_restarts_alone_on_its_own_unit_change() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |s: u64| t0 + Duration::from_secs(s);
+    for i in 0..3 {
+        push_vac_hz(&mut g, at(i), None, 230.0, (999.0, "Hz"));
+    }
+    push_vac_hz(&mut g, at(3), None, 230.0, (1.001, "kHz"));
+    assert_eq!(g.len(), 4);
+    assert_eq!(g.overlay_values("Frequency"), vec![Some(1.001)]);
+    assert_eq!(g.overlay_values("Period").len(), 4);
+
+    let mut g = Graph::new();
+    for i in 0..3 {
+        push_vac_hz(&mut g, at(i), None, 230.0, (999.0, "Hz"));
+    }
+    push_vac_hz(&mut g, at(3), Some("Frequency"), 230.0, (1.001, "kHz"));
+    assert_eq!(g.plotted_unit(), "kHz");
+    assert_eq!(g.len(), 1, "only the restarted frequency");
+    assert_eq!(g.overlay_values("Main").len(), 4, "the voltage is kept");
+    assert_eq!(g.origin, Some(t0));
+}
+
+/// A held UT61E+ in AC+DC V sends only its AC component. A switch to AC
+/// partway through keeps the DC trace's count of frames without it, so DC
+/// still breaks across the hold instead of being drawn straight over it.
+#[test]
+fn a_swap_hands_each_trace_its_run_of_missing_frames() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    let at = |ms: u64| t0 + Duration::from_millis(ms);
+    push_acdc(&mut g, at(0), Some(1.0), Some(0.1));
+    push_acdc(&mut g, at(300), None, Some(0.1));
+    push_acdc(&mut g, at(600), None, Some(0.1));
+    push_acdc_plotting_ac(&mut g, at(900), None, Some(0.1));
+    push_acdc_plotting_ac(&mut g, at(1200), None, Some(0.1));
+    push_acdc_plotting_ac(&mut g, at(1500), Some(1.0), Some(0.1));
+    assert_eq!(
+        g.overlay_segments("DC"),
+        vec![vec![[0.0, 1.0]], vec![[1.5, 1.0]]],
+        "DC stopped for the hold"
+    );
+}
+
+/// A trace kept in another unit is not drawn, so it must not stretch the
+/// auto Y range: a 50 Hz frequency beside a 230 V reading.
+#[test]
+fn a_kept_trace_in_another_unit_leaves_the_y_range_alone() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    for i in 0..3 {
+        push_vac_hz(
+            &mut g,
+            t0 + Duration::from_secs(i),
+            None,
+            230.0 + i as f64,
+            (50.0, "Hz"),
+        );
+    }
+    let (lo, _) = g
+        .y_min_max_padded(f64::NEG_INFINITY, f64::INFINITY, true)
+        .expect("a range");
+    assert!(lo > 200.0, "got {lo}");
+}
+
+/// Kept traces fill the cap as they come, but must not keep a trace in the
+/// plotted unit off the plot: MIN/MAX's Min, arriving with Frequency and
+/// Period kept and Max and Average already in, takes an undrawn slot.
+#[test]
+fn a_drawn_sub_value_takes_the_slot_of_an_undrawn_one() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    push_vac_hz(&mut g, t0, None, 230.0, (50.0, "Hz"));
+    g.push_sample(PlotSample {
+        value: Some(230.0),
+        timestamp: t0 + Duration::from_secs(1),
+        mode: "V AC Hz",
+        unit: "V",
+        display_raw: None,
+        series: None,
+        main_label: None,
+        overlays: &[
+            ("Max", "V", Some(231.0)),
+            ("Average", "V", Some(230.0)),
+            ("Min", "V", Some(229.0)),
+        ],
+    });
+    assert_eq!(g.overlays_len(), MAX_OVERLAYS);
+    let mut drawn = drawn_overlay_labels(&g);
+    drawn.sort();
+    assert_eq!(drawn, vec!["Average", "Max", "Min"]);
+}
+
+/// Colours and line styles go to the drawn traces in turn: the first one
+/// drawn gets the first style even with traces kept in another unit ahead
+/// of it.
+#[test]
+fn the_overlay_palette_counts_drawn_traces_only() {
+    let mut g = Graph::new();
+    let t0 = Instant::now();
+    push_vac_hz(&mut g, t0, None, 230.0, (50.0, "Hz"));
+    g.push_sample(PlotSample {
+        value: Some(230.0),
+        timestamp: t0 + Duration::from_secs(1),
+        mode: "V AC Hz",
+        unit: "V",
+        display_raw: None,
+        series: None,
+        main_label: None,
+        overlays: &[("Max", "V", Some(231.0))],
+    });
+    let drawn = g.visible_overlay_traces(f64::NEG_INFINITY, f64::INFINITY);
+    let slots: Vec<_> = drawn
+        .iter()
+        .map(|(k, label, _)| (*k, label.as_str()))
+        .collect();
+    assert_eq!(slots, vec![(0, "Max")]);
 }
 
 /// Same series, same mode, same unit: nothing to reset.

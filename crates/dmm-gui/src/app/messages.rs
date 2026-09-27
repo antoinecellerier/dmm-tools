@@ -867,9 +867,12 @@ impl App {
                             // the trace has to break so it isn't drawn
                             // straight through the excursion. The sub-values
                             // beside it are not over range and keep theirs.
+                            // The sample goes first: a frame that switches the
+                            // plotted series swaps it in, and the break lands
+                            // on it.
                             Plotted::OverRange => {
-                                self.graph.push_break(m.timestamp);
                                 self.graph.push_sample(sample(None));
+                                self.graph.push_break(m.timestamp);
                             }
                             Plotted::Absent => self.graph.push_sample(sample(None)),
                         }
@@ -2003,6 +2006,60 @@ mod tests {
         assert_eq!(app.graph.first_point_time(), Some(t0));
         assert_eq!(app.session.stats.count, 2);
         assert_eq!(app.session.stats.min, Some(1.6112));
+    }
+
+    /// A UT181A in V AC + Hz: picking Frequency under **Plot:** keeps the
+    /// voltage's past and plots the frequency's, an over-range frequency on
+    /// the switching frame included, and the graph gives the voltage back
+    /// with its past once the meter stops sending the frequency.
+    #[test]
+    fn switching_plot_to_another_unit_keeps_both_series() {
+        use crate::graph::GapKind;
+        let mut app = app("ut181a", false);
+        deliver(&mut app, connected("ut181a", Stability::PartlyVerified, 4));
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let frame = |ms: u64, hz: Option<MeasuredValue>| {
+            let mut m = reading("V AC Hz", MeasuredValue::Normal(230.0), at(ms));
+            if let Some(hz) = hz {
+                m.aux_values = ["Frequency", "Period"]
+                    .into_iter()
+                    .zip([(hz, "Hz"), (MeasuredValue::Normal(20.0), "ms")])
+                    .map(|(label, (value, unit))| dmm_lib::measurement::AuxValue {
+                        label: label.into(),
+                        value,
+                        unit: unit.into(),
+                        display_raw: None,
+                        elapsed_secs: None,
+                    })
+                    .collect();
+            }
+            DmmMessage::Measurement(m)
+        };
+        for i in 0..3 {
+            deliver(&mut app, frame(i * 100, Some(MeasuredValue::Normal(50.0))));
+        }
+
+        app.graph.select_series(Some("Frequency"));
+        deliver(&mut app, frame(300, Some(MeasuredValue::Overload)));
+        deliver(&mut app, frame(400, Some(MeasuredValue::Normal(50.1))));
+        assert_eq!(app.graph.plotted_unit(), "Hz");
+        assert_eq!(app.graph.len(), 4, "the kept frequency and the new point");
+        assert_eq!(app.graph.overlay_values("Main").len(), 5);
+        assert_eq!(
+            app.graph.visible_gaps(),
+            vec![(0.2, 0.4, GapKind::Overload)],
+            "the over-range frame breaks the frequency, not the voltage"
+        );
+
+        // The meter stops sending the frequency: once the graph gives the
+        // selection up, the voltage comes back with its past.
+        for i in 5..=20 {
+            deliver(&mut app, frame(i * 100, None));
+        }
+        assert_eq!(app.graph.plotted_unit(), "V");
+        assert!(app.graph.len() > 5, "got {}", app.graph.len());
+        assert_eq!(app.graph.first_point_time(), Some(t0));
     }
 
     /// NCV readings are never plotted: an empty graph cuts nothing.
