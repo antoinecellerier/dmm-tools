@@ -192,7 +192,8 @@ CLI binary using `clap`. Its modules:
 
 | Module | Responsibility |
 |--------|---------------|
-| `main.rs` | CLI framework, command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug`/`completions` subcommands |
+| `main.rs` | Command dispatch, `list`/`info`/`read`/`get`/`set`/`command`/`debug`/`completions` subcommands |
+| `cli.rs` | The clap types, the value parsers behind `--scale`/`--offset`, and the help text built at run time (`--device`'s registry table, the settings path) |
 | `capture/mod.rs` | The `capture` command: opens the report, runs the passes, prints the coverage epilogue |
 | `capture/report.rs` | Report schema and serde (`CaptureReport`, `StepResult`, `SampleData`), trust tiers, report file read/write |
 | `capture/step.rs` | One capture step (the library's `CaptureStep`): the wait for the state it asks for, the frames that wait sends |
